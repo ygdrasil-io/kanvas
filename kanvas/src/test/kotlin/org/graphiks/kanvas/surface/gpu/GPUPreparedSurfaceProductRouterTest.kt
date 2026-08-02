@@ -61,7 +61,7 @@ class GPUPreparedSurfaceProductRouterTest {
         }
 
         val compositeRoute = GPUPreparedSurfaceProductRouter.route(
-            listOf(DisplayOp.BeginLayer(null, null)),
+            listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
             4,
             4,
             PixelFormat.RGBA8,
@@ -73,7 +73,7 @@ class GPUPreparedSurfaceProductRouterTest {
         )
 
         assertEquals(
-            "legacy.surface.prepared.family.composites",
+            "legacy.surface.prepared.flush-snapshot",
             assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
         )
         assertEquals("legacy.surface.prepared.pixel-format.bgra8", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(bgraRoute).code)

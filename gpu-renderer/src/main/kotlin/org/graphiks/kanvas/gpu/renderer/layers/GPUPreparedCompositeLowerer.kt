@@ -7,6 +7,7 @@ object GPUPreparedCompositeLowerer {
         rootScopeId: GPUPreparedCompositeScopeId,
         identity: String,
         deviceGeneration: Long = 0L,
+        sceneTargetLabel: String = "root-target",
     ): GPUPreparedCompositeLowering {
         val layerPlans = mutableListOf<GPULayerPlan>()
         val gatePlans = mutableMapOf<String, GPUSaveLayerIsolatedTargetGatePlan>()
@@ -19,7 +20,7 @@ object GPUPreparedCompositeLowerer {
 
             val saveRecord = buildSaveRecord(scope, state)
             val bounds = buildBounds(state)
-            val parentTargetLabel = scope.parentId?.value ?: "root-target"
+            val parentTargetLabel = parentTargetLabel(scope, scopes, sceneTargetLabel)
 
             val request = GPUSaveLayerIsolatedTargetRequest(
                 saveRecord = saveRecord,
@@ -86,11 +87,36 @@ object GPUPreparedCompositeLowerer {
         )
     }
 
-    /** Layer opacity derived from the captured paint color alpha byte. */
-    private fun GPUPreparedPaintSnapshot?.layerAlpha(): Float =
-        this?.let { paint ->
-            ((paint.colorArgb shr 24) and 0xFFu).toFloat() / 255f
-        } ?: 1f
+/** Layer opacity derived from the captured paint color alpha byte. */
+private fun GPUPreparedPaintSnapshot?.layerAlpha(): Float =
+    this?.let { paint ->
+        ((paint.colorArgb shr 24) and 0xFFu).toFloat() / 255f
+    } ?: 1f
+
+/**
+ * Parent render-target label for a saveLayer scope's composite draw.
+ *
+ * A saveLayer whose parent is the root scope composites onto the scene target, so its
+ * parent label must be the real scene target ref (the one the frame preflight declares),
+ * not a scope-id label. A saveLayer nested under another saveLayer composites onto the
+ * parent layer's isolated target (`layer-target:<parentScopeId>`, matching
+ * [GPUSaveLayerIsolatedTargetPlanner]'s target label convention) — the preflight refuses
+ * such frames loudly with `unsupported.prepared-surface.layer-nesting` until nested
+ * materialization lands.
+ */
+private fun parentTargetLabel(
+    scope: GPUPreparedCompositeScope,
+    scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+    sceneTargetLabel: String,
+): String {
+    val parentId = scope.parentId ?: return sceneTargetLabel
+    val parent = scopes[parentId] ?: return sceneTargetLabel
+    return if (parent.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer) {
+        "layer-target:${parentId.value}"
+    } else {
+        sceneTargetLabel
+    }
+}
 
     /** Faithful lossless label for an accepted clip snapshot. */
     private fun GPUPreparedClipSnapshot.clipLabel(): String? =

@@ -48,6 +48,9 @@ internal object GPUPreparedSurfaceFrameGate {
                 is DisplayOp.DrawText,
                 is DisplayOp.DrawVertices,
                 is DisplayOp.DrawMesh,
+                is DisplayOp.DrawPicture,
+                is DisplayOp.BeginLayer,
+                DisplayOp.EndLayer,
                 -> hasVisual = true
 
                 is DisplayOp.SetTransform,
@@ -59,18 +62,6 @@ internal object GPUPreparedSurfaceFrameGate {
                     code = "legacy.surface.prepared.flush-snapshot",
                     operationIndex = operationIndex,
                 )
-
-                is DisplayOp.DrawPicture,
-                is DisplayOp.BeginLayer,
-                DisplayOp.EndLayer,
-                -> {
-                    val family = requireNotNull(GPULegacyImmediatePathAdapter.familyOrNull(operation))
-                    return GPUPreparedSurfaceEligibility.Legacy(
-                        code = family.preparedSurfaceCode(),
-                        operationIndex = operationIndex,
-                        family = family,
-                    )
-                }
             }
         }
         if (!hasVisual) {
@@ -84,8 +75,4 @@ internal object GPUPreparedSurfaceFrameGate {
             color = color,
         )
     }
-}
-
-private fun LegacyDisplayOpFamily.preparedSurfaceCode(): String = when (this) {
-    LegacyDisplayOpFamily.Composites -> "legacy.surface.prepared.family.composites"
 }

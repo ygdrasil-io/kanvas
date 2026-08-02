@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
@@ -97,6 +98,48 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
         assertTrue(
             commandKinds.contains("RenderLayerChildren"),
             "missing RenderLayerChildren in $commandKinds",
+        )
+    }
+
+    @Test
+    fun `composite frame splits children into a layer targeted render`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    rect(),
+                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    rect(),
+                    DisplayOp.EndLayer,
+                ),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.diagnostic?.code?.value.toString(),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val layerRenders = renders.filter { render ->
+            render.target.value.startsWith("layer-target:")
+        }
+        assertEquals(
+            1,
+            layerRenders.size,
+            "expected exactly one layer-targeted children render in $renders",
+        )
+        assertEquals(
+            listOf(1),
+            layerRenders.single().drawPackets.map { packet -> packet.commandIdValue },
+            "the layer children render must carry exactly the captured child packets",
+        )
+        val sceneRender = renders.singleOrNull { render ->
+            render.target.value == "surface-frame-target"
+        }
+        assertEquals(
+            listOf(0),
+            sceneRender?.drawPackets?.map { packet -> packet.commandIdValue },
+            "root visuals must stay on the surface target render",
         )
     }
 

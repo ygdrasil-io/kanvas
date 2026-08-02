@@ -113,3 +113,104 @@ rtk proxy ./gradlew -p ... :kanvas:test :gpu-renderer:test --no-parallel
 - Failure XMLs (flip applied, regenerated during the run): `kanvas/build/test-results/test/TEST-...GPUAllApiBlendSurfaceTest.xml`, `...GPUSaveLayerCompositeRegressionTest.xml`, `...GPUClipCoverageSurfaceTest.xml`, `...GPUClipAdvancedBlendSurfaceTest.xml`.
 - Precondition runs: both `BUILD SUCCESSFUL` (see §1).
 - Reference cutover: `rtk git show 34d64799f` (fp-07 branch).
+
+## 9. Task 17 re-flip (fp-07 cutover applied with evidence-based expectations)
+
+Task 17 re-applied the composite cutover now that Task 15's executor materialization landed:
+the gate routes DrawPicture/BeginLayer/EndLayer to `hasVisual`, the legacy adapter family is
+empty, and the router treats the three ops as terminal-family members. The full-suite triage
+was repeated with the Task 15/16 machinery present; every bounded-saveLayer pixel test now
+renders through the prepared route, and every unsupported topology refuses loudly with a
+documented code.
+
+### 9.1 Precondition (Tasks 1–16 green)
+
+```bash
+rtk proxy ./gradlew :gpu-renderer:test :kanvas:test --no-parallel
+```
+- `:gpu-renderer:test` — green except the pre-existing baseline
+  `GPURendererPackageBoundaryTest` (historical package cycles; unchanged on a clean base).
+- `:kanvas:test` — green.
+
+### 9.2 Real regressions fixed in Task 15/16 code (not remasked)
+
+Post-flip, bounded saveLayer pixel tests refused with `invalid.preflight.resource_undeclared`
+(the composite commands declared a raw scope label as the composite parent) and then
+`invalid.prepared-surface.layer-target` (no layer-targeted children render pass existed in
+the surface path). Root causes and fixes:
+
+1. **Composite parent label** — `GPUPreparedCompositeLowerer` now takes `sceneTargetLabel`
+   (the real surface target ref) and maps saveLayer parents to `layer-target:<scopeId>`;
+   `GPUPreparedSurfaceFrameTaskListBuilder.handleSaveLayer` passes the frame's targetId.
+2. **Layer children renders** — the surface path previously elided every covered operation
+   from the flat pipeline, so the executor never received a `RenderPassStep` targeting each
+   `PrepareLayerTarget` label. The frame builder now maps covered core children as ordinary
+   visuals (`GPUOpMapper` records `commandIdsByOperationIndex`), then
+   `GPUPreparedSurfaceFrameTaskListBuilder.splitCompositeChildrenRenders` partitions the
+   flat render into a scene render plus one `GPUTask.Render(target = layer-target:<scopeId>)`
+   per layer, retargeted to the RGBA8Unorm layer ABI (structural pipeline key, target-state
+   hash, `PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION`) with `layer-composite-order`
+   dependencies; the readback is re-pointed after the final layer render.
+3. **Premultiplied layer composite** — the prepared-image composite shader converts sampled
+   textures to straight alpha (`sampled.rgb * sampled.a`), which double-multiplies premul
+   layer children. The layer composite now uses a new `premultipliedSource` ABI flag
+   (`flags.x == 2u`) so the layer texture is sampled as premultiplied; the image path is
+   unchanged.
+4. **Layer-bounds clipping** — bounded saveLayers clip their children to the layer's device
+   bounds: each layer child's scissor is intersected with the layer bounds (mapped from the
+   captured local bounds through the layer transform at BeginLayer) via a `ScissorOnly` clip
+   plan, with the semantic scissor + `clipExecutionPlanIdentity` updated consistently.
+   Fully-offscreen children are dropped from the layer render.
+5. **Empty layers** — layers with no children or fully offscreen device bounds elide their
+   covered children from the flat mapper (the frame's uniform slab must exactly cover the
+   accepted packets) and drop their composite command triplets, so the parent is untouched.
+6. **Nested layers** — the frame builder refuses nested saveLayer scopes with the preflight's
+   documented `unsupported.prepared-surface.layer-nesting` code at the builder boundary (the
+   capture's expanded-operation indices are sublist-relative, so the split range mapping is
+   only exact for flat topologies).
+
+Executor evidence: `GPUWgpu4kLayerTargetCompositeSmokeTest` (Task 15) stays green with the
+shader change, and the bounded saveLayer pixel tests below now compare CPU vs GPU pixels with
+exact tolerances.
+
+### 9.3 Re-pointed documented refusals (observed terminal codes)
+
+- `GPUSaveLayerCompositeRegressionTest` (27 tests): 10 pass with real pixels
+  (bounded/translated/scaled/partially-offscreen/empty layers + legacy recorder unit tests);
+  17 re-pointed to loud refusals — `unsupported.layer.bounds_unbounded` (unbounded
+  saveLayers), `unsupported.composite.clip` (clips inside layer scopes),
+  `unsupported.composite.operation` (DrawColor children, non-finite transforms),
+  `unsupported.surface.prepared.mixed-composite-topology` (picture topologies the composite
+  route cannot cover), `unsupported.prepared-surface.layer-nesting` (nested layers).
+- `GPUAllApiBlendSurfaceTest` (1864 tests): the SAVE_LAYER blend matrix re-pointed from
+  `Legacy`/`LegacyRefused` to the observed terminal codes — `bounds_unbounded` for
+  DrawRect/DrawRRect/DrawPath/DrawPicture (unbounded fixture layers),
+  `composite.operation` for the remaining APIs (DrawImage/DrawText/DrawColor/Clear/points/
+  DRRect/atlas/vertices inside layer scopes), `mixed-composite-topology` for the painted
+  DrawPicture cases in every clip context; the painted-picture named test re-pointed to the
+  same terminal.
+- `GPUClipCoverageSurfaceTest` (4) + `GPUClipAdvancedBlendSurfaceTest` (2): re-pointed to
+  `composite.clip` / `composite.operation` / `mixed-composite-topology` terminal assertions.
+
+### 9.4 Final verification
+
+```bash
+rtk proxy ./gradlew :kanvas:test :gpu-renderer:test --no-parallel
+```
+- `:kanvas:test` — **green, 3228 tests, 0 failures** (all composite, blend, clip, saveLayer,
+  gate, router, entry, inventory, text-no-fallback, and integration suites).
+- `:gpu-renderer:test` — green except the pre-existing baseline
+  `GPURendererPackageBoundaryTest` (documented in
+  `2026-06-29-gpu-renderer-pre-existing-test-failures.md`; reproduces on a clean base and is
+  not composite-related).
+- Guards: `GPUPreparedSurfaceProductRouterTest` (nested_vertices pin), FP-06 guards,
+  Task 16 elision (`GPUPreparedCompositeFrameRouteIntegrationTest`), Task 15 smoke
+  (`GPUWgpu4kLayerTargetCompositeSmokeTest`) — all green.
+
+### 9.5 Evidence inventory (Task 17)
+
+- Full-suite failure log at flip time: `/tmp/fp17_cutover.log` (581 failures, all loud
+  `GPUPreparedSurfaceTerminalException` refusals; zero silent drops).
+- Post-fix full-suite run: `:kanvas:test` 3228 tests green; `:gpu-renderer:test` 3256 tests
+  with the single pre-existing boundary baseline.
+- Task 15 executor evidence (unchanged, still green): `GPUWgpu4kLayerTargetCompositeSmokeTest`.

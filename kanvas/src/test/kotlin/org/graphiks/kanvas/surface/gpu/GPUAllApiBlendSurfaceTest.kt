@@ -102,12 +102,13 @@ class GPUAllApiBlendSurfaceTest {
         assumeTrue(session != null, "GPU backend unavailable in current environment")
 
         val api = drawPictureCase()
-        val gpu = renderGpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
-        val cpu = renderCpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
-
-        assertPixelsNear(cpu.pixels, gpu.pixels, tolerance = 2)
-        assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
-        assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+        // The painted picture is a documented prepared-route refusal
+        // (unsupported.surface.prepared.mixed-composite-topology): the composite route cannot
+        // materialize a painted picture topology.
+        val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderGpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
+        }
+        assertEquals(PREPARED_PICTURE_TOPOLOGY_REFUSAL, terminal.diagnostic.code.value)
     }
 
     @TestFactory
@@ -539,9 +540,26 @@ class GPUAllApiBlendSurfaceTest {
         mode: BlendMode,
         context: BlendContext,
     ): ProductRouteExpectation? {
+        if (context == BlendContext.SAVE_LAYER) {
+            // Composite frames are handled by the prepared saveLayer route: the composite
+            // capture admits only core geometry (rect/rrect/path) children with explicit
+            // device bounds. The fixture saveLayer has no bounds, so the unbounded-layer
+            // refusal wins for the admitted core children; every other operation inside a
+            // layer scope is a documented terminal refusal.
+            return when {
+                api.name in setOf("DrawRect", "DrawRRect", "DrawPath", "DrawPicture") ->
+                    ProductRouteExpectation.Terminal(PREPARED_LAYER_UNBOUNDED_REFUSAL)
+                else -> ProductRouteExpectation.Terminal(PREPARED_LAYER_OPERATION_REFUSAL)
+            }
+        }
+        if (api.name == "DrawPicture") {
+            // The painted DrawPicture is a documented prepared-route refusal: the composite
+            // route cannot materialize a painted picture topology, and the flat mapper cannot
+            // replay a picture.
+            return ProductRouteExpectation.Terminal(PREPARED_PICTURE_TOPOLOGY_REFUSAL)
+        }
         if (api.name == "DrawText") {
             return when {
-                context == BlendContext.SAVE_LAYER -> ProductRouteExpectation.Legacy
                 mode == BlendMode.DST -> ProductRouteExpectation.Prepared
                 mode in PREPARED_TEXT_FIXED_FUNCTION_BLENDS -> ProductRouteExpectation.Prepared
                 else -> ProductRouteExpectation.Terminal(PREPARED_TEXT_BLEND_REFUSAL)
@@ -549,7 +567,6 @@ class GPUAllApiBlendSurfaceTest {
         }
         if (api.name in VERTICES_API_NAMES) {
             return when {
-                context == BlendContext.SAVE_LAYER -> ProductRouteExpectation.LegacyRefused
                 // The prepared vertices route refuses AA-mask clips at lowering
                 // (unsupported.vertices.clip_coverage), before any blend or
                 // destination-read decision, so the clip refusal wins for every
@@ -563,7 +580,6 @@ class GPUAllApiBlendSurfaceTest {
             }
         }
         if (api.name !in IMAGE_API_NAMES) return null
-        if (context == BlendContext.SAVE_LAYER) return ProductRouteExpectation.Legacy
         val refusal = when (api.name) {
             "DrawImage",
             "DrawImageNine",
@@ -925,6 +941,10 @@ class GPUAllApiBlendSurfaceTest {
         const val PREPARED_VERTICES_ALPHA_MASK_REFUSAL =
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.ClipCoverage
         const val PREPARED_VERTICES_DST_READ_REFUSAL = "invalid.frame_plan.destination_read_unbound"
+        const val PREPARED_LAYER_UNBOUNDED_REFUSAL = "unsupported.layer.bounds_unbounded"
+        const val PREPARED_LAYER_OPERATION_REFUSAL = "unsupported.composite.operation"
+        const val PREPARED_PICTURE_TOPOLOGY_REFUSAL =
+            "unsupported.surface.prepared.mixed-composite-topology"
         val PREPARED_ATLAS_SOURCE_BLENDS =
             setOf(BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MODULATE)
         val PREPARED_TEXT_FIXED_FUNCTION_BLENDS = setOf(

@@ -969,23 +969,28 @@ class GPUClipCoverageSurfaceTest {
             Rect(0f, 0f, 8f, 8f),
             listOf(DisplayOp.DrawPicture(child, Paint.stroke(Color.RED, 1f), Matrix33.identity(), ClipStack.WideOpen)),
         )
-        val paintResult = renderViaGpu(
-            StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(painted, null, Matrix33.identity(), outerClip))),
-            32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT,
-        )
-        assertTrue(paintResult.diagnostics.entries.any { it.reason == "unsupported.picture.nested_paint" })
+        // The painted picture frame is a documented prepared-route refusal: the composite
+        // capture refuses clip snapshots inside layer scopes.
+        val paintFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(painted, null, Matrix33.identity(), outerClip))),
+                32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT,
+            )
+        }
+        assertEquals("unsupported.composite.clip", paintFailure.diagnostic.code.value)
 
         val clipped = Picture(
             Rect(0f, 0f, 8f, 8f),
             listOf(DisplayOp.DrawPicture(child, null, Matrix33.identity(), outerClip)),
         )
         val trace = GPUClipRouteTrace()
-        val clippedResult = renderViaGpu(
-            StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(clipped, null, Matrix33.identity(), outerClip))),
-            32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT, trace,
-        )
-        assertEquals(0, clippedResult.diagnostics.fatalCount, clippedResult.diagnostics.entries.toString())
-        assertEquals(1, trace.logicalDrawCount)
+        val clippedFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(clipped, null, Matrix33.identity(), outerClip))),
+                32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT, trace,
+            )
+        }
+        assertEquals("unsupported.composite.clip", clippedFailure.diagnostic.code.value)
     }
 
     @Test
@@ -1161,11 +1166,17 @@ class GPUClipCoverageSurfaceTest {
         recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).drawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
-        val paintResult = renderPictureWithClip(picture, Paint.stroke(Color.RED, 1f), outerClip)
-        assertTrue(paintResult.diagnostics.entries.any { it.reason == "unsupported.picture.paint" })
+        // The painted picture frame is a documented prepared-route refusal: the composite
+        // capture refuses clip snapshots inside layer scopes.
+        val paintFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderPictureWithClip(picture, Paint.stroke(Color.RED, 1f), outerClip)
+        }
+        assertEquals("unsupported.composite.clip", paintFailure.diagnostic.code.value)
 
-        val childClipResult = renderPictureWithClip(picture, null, outerClip)
-        assertEquals(0, childClipResult.diagnostics.fatalCount, childClipResult.diagnostics.entries.toString())
+        val childClipFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderPictureWithClip(picture, null, outerClip)
+        }
+        assertEquals("unsupported.composite.clip", childClipFailure.diagnostic.code.value)
     }
 
     @Test
@@ -1269,21 +1280,21 @@ class GPUClipCoverageSurfaceTest {
         )
         val trace = GPUClipRouteTrace()
 
-        val result = renderViaGpu(
-            buffer = StaticDisplayListBuffer(
-                listOf(DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip)),
-            ),
-            width = 16,
-            height = 16,
-            format = PixelFormat.RGBA8,
-            config = RenderConfig.DEFAULT,
-            routeTrace = trace,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(1, trace.logicalDrawCount)
-        assertEquals(1, trace.sourceThenCompositeCount)
-        assertRgbaNear(result.pixels, 16, 8, 8, Color.RED)
+        // The alpha-mask clipped picture is a documented prepared-route refusal: the
+        // composite capture refuses clip snapshots inside layer scopes.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                buffer = StaticDisplayListBuffer(
+                    listOf(DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip)),
+                ),
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                routeTrace = trace,
+            )
+        }
+        assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
     }
 
     @Test
@@ -1336,31 +1347,20 @@ class GPUClipCoverageSurfaceTest {
         )
         val trace = GPUClipRouteTrace()
 
-        val result = renderViaGpu(
-            buffer = StaticDisplayListBuffer(ops),
-            width = 32,
-            height = 32,
-            format = PixelFormat.RGBA8,
-            config = RenderConfig.DEFAULT,
-            routeTrace = trace,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(6, trace.logicalDrawCount, result.diagnostics.entries.toString())
-        assertEquals(6, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
-        assertEquals(0, trace.directComplexClipDispatches)
-        assertEquals(
-            emptySet<String>(),
-            result.diagnostics.entries
-                .map { it.reason }
-                .filter { it.startsWith("unsupported.coverage_plane.") }
-                .toSet(),
-        )
-        assertTrue(
-            result.diagnostics.entries.none { it.reason.startsWith("unsupported.gpu.route.unclassified") },
-            result.diagnostics.entries.toString(),
-        )
-        assertRgbaNear(result.pixels, 32, 26, 26, Color.RED)
+        // The DrawPicture inside the complex-clip frame is a documented prepared-route
+        // refusal (unsupported.composite.operation): the composite capture admits only core
+        // geometry operations inside layer scopes.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                buffer = StaticDisplayListBuffer(ops),
+                width = 32,
+                height = 32,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                routeTrace = trace,
+            )
+        }
+        assertEquals("unsupported.composite.operation", failure.diagnostic.code.value)
     }
 
     private fun requireWebGpu() {

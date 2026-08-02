@@ -1476,13 +1476,23 @@ private class WgpuBackendSession(
                     .filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.PrepareLayerTarget>()
                     .map { it.targetLabel }
                     .toSet()
+                // Layer generations are advisory (scene target generation + 1). Seed every
+                // declared layer target directly: the Task 16 elision removes the flat
+                // GPUTask.Render entries for composite-only frames, so a render-target filter
+                // alone would leave declared layer targets without a generation and the
+                // preflight would refuse invalid.preflight.resource_undeclared.
+                declaredLayerTargetLabels.forEach { label ->
+                    generations.putIfAbsent(
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef(label),
+                        targetGeneration + 1L,
+                    )
+                }
                 taskList.tasks.filterIsInstance<GPUTask.Render>()
                     .map { it.target }
                     .filter { it != target && it.value in declaredLayerTargetLabels }
                     .forEach { layerTarget ->
-                        // Layer generations are advisory (scene target generation + 1): when a
-                        // layer target also carries a preparation-derived generation, putIfAbsent
-                        // keeps the preparation value — harmless per-frame, intentional.
+                        // Keep render-derived seeding as a fallback: putIfAbsent keeps the
+                        // declared-label value when both paths agree on the same resource.
                         generations.putIfAbsent(layerTarget, targetGeneration + 1L)
                     }
 

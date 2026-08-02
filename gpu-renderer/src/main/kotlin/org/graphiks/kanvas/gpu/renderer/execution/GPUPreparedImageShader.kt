@@ -45,6 +45,7 @@ internal data class GPUPreparedImageUniformInput(
     val atlasColorPremultipliedRgba: List<Float>?,
     val alphaOnly: Boolean,
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend?,
+    val premultipliedSource: Boolean = false,
 )
 
 internal object GPUPreparedImageUniformAbi {
@@ -80,7 +81,13 @@ internal object GPUPreparedImageUniformAbi {
             }
             input.tintPremultipliedRgba.forEach(::putFloat)
             (input.atlasColorPremultipliedRgba ?: ZERO_RGBA).forEach(::putFloat)
-            putInt(if (input.alphaOnly) 1 else 0)
+            putInt(
+                when {
+                    input.alphaOnly -> 1
+                    input.premultipliedSource -> 2
+                    else -> 0
+                },
+            )
             putInt(input.atlasSourceBlend?.wireCode ?: 0)
             putInt(0)
             putInt(0)
@@ -242,6 +249,29 @@ internal val GPU_PREPARED_IMAGE_WGSL: String = """
         let sampled = textureSample(image_texture, image_sampler, input.uv);
         if (image.flags.x == 0u) {
             let sampled_source = vec4<f32>(sampled.rgb * sampled.a, sampled.a);
+            var combined = sampled_source;
+            if (image.flags.y == 1u) {
+                combined = image.atlas_color;
+            }
+            if (image.flags.y == 2u) {
+                combined = sampled_source;
+            }
+            if (image.flags.y == 3u) {
+                combined = atlas_source_over(image.atlas_color, sampled_source);
+            }
+            if (image.flags.y == 4u) {
+                combined = min(image.atlas_color + sampled_source, vec4<f32>(1.0));
+            }
+            if (image.flags.y == 5u) {
+                combined = image.atlas_color * sampled_source;
+            }
+            return vec4<f32>(combined.rgb * image.tint.rgb, combined.a * image.tint.a);
+        }
+        if (image.flags.x == 2u) {
+            // Premultiplied source: the texture already holds linear premultiplied
+            // colors (layer children render through the premul core pipelines), so
+            // no straight-alpha conversion is applied before the premul srcOver.
+            let sampled_source = sampled;
             var combined = sampled_source;
             if (image.flags.y == 1u) {
                 combined = image.atlas_color;

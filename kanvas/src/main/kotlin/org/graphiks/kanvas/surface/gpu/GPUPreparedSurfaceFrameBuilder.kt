@@ -16,6 +16,13 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
+import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSaveLayerFrameHandling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
@@ -31,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -150,6 +158,24 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val elidedCompositeChildOperationIndices = compositeScheduling?.let {
                 compositeCoveredOperationIndices(request.candidate.operations)
             } ?: emptySet()
+            // The flat mapper cannot replay a DrawPicture, so covered pictures stay elided
+            // (their expanded children ride the composite commands); every other covered op
+            // maps normally so the capture's layer children retain exact packet evidence.
+            // Covered ops of EMPTY layers (no children or fully offscreen device bounds) are
+            // elided too: the frame's uniform slab must exactly cover the accepted packets,
+            // so children that never render into an isolated target cannot ride the scene.
+            val flatElidedOperationIndices = (
+                elidedCompositeChildOperationIndices.filter { index ->
+                    request.candidate.operations[index] is DisplayOp.DrawPicture
+                }
+                ).toSet() + compositeScheduling?.let { ready ->
+                    emptyLayerCoveredOperationIndices(
+                        ready = ready,
+                        operations = request.candidate.operations,
+                        coveredOperationIndices = elidedCompositeChildOperationIndices,
+                        targetBounds = request.targetBounds,
+                    )
+                }.orEmpty()
             if (compositeHandling is CompositeFrameHandling.Ready) {
                 compositeTopologyRefusal(
                     operations = request.candidate.operations,
@@ -201,7 +227,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
                 preparedTextInventory = textPreparation.inventory,
-                mappingBoundary = elidedCompositeChildOperationIndices.let { elided ->
+                mappingBoundary = flatElidedOperationIndices.let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
                         GPUOpMapper.mapOperations(
@@ -237,13 +263,23 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mapping = mapping,
                 operations = request.candidate.operations,
                 inventory = textPreparation.inventory,
-                elidedOperationIndices = elidedCompositeChildOperationIndices,
+                elidedOperationIndices = flatElidedOperationIndices,
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
             }
             preparedImages as PreparedImageVisuals.Ready
             val preparedMapping = mapping.copy(visualCommands = preparedImages.visualCommands)
+            val childrenByTargetLabel = compositeScheduling?.let { ready ->
+                childrenByTargetLabel(
+                    ready = ready,
+                    mapping = mapping,
+                    coveredOperationIndices = elidedCompositeChildOperationIndices,
+                    targetBounds = request.targetBounds,
+                )
+            } ?: emptyMap()
+            val layerChildrenCommandIds = childrenByTargetLabel.values
+                .flatMap(GPUPreparedLayerChildrenSpec::commandIds).toSet()
             val preparedTextSemantics = when (
                 val gathered = GPUPreparedTextSemanticBuilder.gather(
                     visualCommands = preparedMapping.visualCommands,
@@ -374,18 +410,49 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     }
                     val mergedTaskList = (compositeHandling as? CompositeFrameHandling.Ready)
                         ?.let { ready ->
+                            val emptyLayerTargetLabels = childrenByTargetLabel
+                                .filterValues { spec -> spec.bounds.isEmpty }
+                                .keys + childrenByTargetLabel
+                                .filterKeys { targetLabel ->
+                                    childrenByTargetLabel.getValue(targetLabel).commandIds.isEmpty() &&
+                                        !ready.capture.scopes.values.any { scope ->
+                                            scope.id.value ==
+                                                targetLabel.removePrefix("layer-target:") &&
+                                                scope.entries.any { entry ->
+                                                    entry is GPUPreparedCompositeEntry.Draw
+                                                }
+                                        }
+                                }
+                                .keys
                             taskListBuilder.mergeCompositeCommands(
                                 taskList = prepared.taskList,
-                                commands = ready.handling.commands,
+                                commands = if (emptyLayerTargetLabels.isEmpty()) {
+                                    ready.handling.commands
+                                } else {
+                                    dropEmptyLayerCommands(
+                                        ready.handling.commands,
+                                        emptyLayerTargetLabels,
+                                    )
+                                },
                             )
                         }
                         ?: prepared.taskList
-                    val destinationReadEvidence = mergedTaskList
+                    val splitTaskList = if (childrenByTargetLabel.isNotEmpty()) {
+                        taskListBuilder.splitCompositeChildrenRenders(
+                            taskList = mergedTaskList,
+                            childrenPacketsByTargetLabel = childrenByTargetLabel,
+                        )
+                    } else {
+                        mergedTaskList
+                    }
+                    val destinationReadEvidence = splitTaskList
                         .authenticatedDestinationReadEvidence(semantics)
                     GPUPreparedSurfaceFrameBuildResult.Ready(
-                        taskList = mergedTaskList,
+                        taskList = splitTaskList,
                         readbackRequestId = request.readbackRequestId,
-                        visualOperationCount = preparedMapping.visualCommands.size,
+                        visualOperationCount = preparedMapping.visualCommands.count { visual ->
+                            visual.normalized.commandId.value !in layerChildrenCommandIds
+                        },
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
                                 event.kind == GPUFramePathStateKind.Clip ||
@@ -468,6 +535,7 @@ internal class GPUPreparedSurfaceFrameBuildSession(
 private sealed interface CompositeFrameHandling {
     data class Ready(
         val handling: GPUPreparedSaveLayerFrameHandling.Ready,
+        val capture: GPUPreparedCompositeCapture,
     ) : CompositeFrameHandling
 
     data class Refused(
@@ -475,6 +543,175 @@ private sealed interface CompositeFrameHandling {
         val operationIndex: Int?,
         val facts: Map<String, String>,
     ) : CompositeFrameHandling
+}
+
+/**
+ * Drops the per-layer command triplets of empty bounded saveLayers.
+ *
+ * An empty bounded layer has no children to isolate, so its PrepareLayerTarget /
+ * RenderLayerChildren / CompositeLayer stream must not ride the frame: the prepared-surface
+ * preflight requires every declared layer target to retain an exact children render, and a
+ * no-op layer composites nothing (Skia leaves the parent untouched).
+ */
+private fun dropEmptyLayerCommands(
+    commands: List<GPUPassCommand>,
+    emptyTargetLabels: Set<String>,
+): List<GPUPassCommand> {
+    if (emptyTargetLabels.isEmpty()) return commands
+    val kept = mutableListOf<GPUPassCommand>()
+    var skippingTargetLabel: String? = null
+    commands.forEach { command ->
+        when (command) {
+            is GPUPassCommand.PrepareLayerTarget -> {
+                if (command.targetLabel in emptyTargetLabels) {
+                    skippingTargetLabel = command.targetLabel
+                } else {
+                    kept += command
+                }
+            }
+            is GPUPassCommand.CompositeLayer -> {
+                if (skippingTargetLabel != null && command.sourceLabel == skippingTargetLabel) {
+                    skippingTargetLabel = null
+                } else {
+                    kept += command
+                }
+            }
+            else -> if (skippingTargetLabel == null) kept += command
+        }
+    }
+    return kept
+}
+
+/**
+ * Layer-target labels → the children split evidence for a composite frame.
+ *
+ * Children are core operations inside saveLayer scopes (the capture refuses image/text/
+ * vertices children with `unsupported.composite.operation`), so each covered operation
+ * inside a layer's original-operation range resolves to exactly the mapper commandIds its
+ * source operation produced. The capture's expanded-operation indices are sublist-relative
+ * (the capturer restarts indexing per nested list), so the layer's original op range comes
+ * from the scope's save/restore operation indices — exact for top-level layers. Nested
+ * layers are refused earlier with `unsupported.prepared-surface.layer-nesting` (the
+ * preflight's documented contract), so this range mapping only ever sees flat topologies.
+ * The label convention matches [GPUSaveLayerIsolatedTargetPlanner]'s isolated target labels
+ * (`layer-target:<scopeId>`), which the merged composite commands declare and the
+ * prepared-surface native preflight matches against the children renders.
+ */
+private fun childrenByTargetLabel(
+    ready: CompositeFrameHandling.Ready,
+    mapping: GPUOpMapping,
+    coveredOperationIndices: Set<Int>,
+    targetBounds: GPUPixelBounds,
+): Map<String, GPUPreparedLayerChildrenSpec> {
+    val capture = ready.capture
+    val scopesByValue = capture.scopes.entries.associate { (id, scope) -> id.value to scope }
+    return ready.handling.plan.layers.associate { layer ->
+        val scope = scopesByValue[layer.saveRecord.scopeId.value]
+            ?: throw IllegalStateException(
+                "Composite plan layer ${layer.saveRecord.scopeId.value} lost its capture scope",
+            )
+        val saveOperationIndex = requireNotNull(scope.saveOperationIndex) {
+            "Composite layer scope ${scope.id.value} lost its save operation index"
+        }
+        val restoreOperationIndex = requireNotNull(scope.restoreOperationIndex) {
+            "Composite layer scope ${scope.id.value} lost its restore operation index"
+        }
+        val childOperationIndices = (saveOperationIndex + 1)
+            .until(restoreOperationIndex)
+            .filter { operationIndex -> operationIndex in coveredOperationIndices }
+        val childCommandIds = childOperationIndices.flatMap { operationIndex ->
+            mapping.commandIdsByOperationIndex[operationIndex].orEmpty()
+        }.distinct()
+        val state = scope.state
+            ?: throw IllegalStateException(
+                "Composite layer scope ${scope.id.value} lost its capture state",
+            )
+        val localBounds = state.bounds
+            ?: throw IllegalStateException(
+                "Composite layer scope ${scope.id.value} lost its device bounds",
+            )
+        "layer-target:${layer.saveRecord.scopeId.value}" to GPUPreparedLayerChildrenSpec(
+            commandIds = childCommandIds,
+            bounds = layerDeviceBounds(state, localBounds, targetBounds),
+        )
+    }
+}
+
+/**
+ * Covered operation indices of empty saveLayers: layers with no captured children or with
+ * fully offscreen device bounds. Their children never render into an isolated target, so
+ * they must be elided from the flat pipeline (the frame's uniform slab must exactly cover
+ * the accepted packets) and their composite triplets are dropped.
+ */
+private fun emptyLayerCoveredOperationIndices(
+    ready: CompositeFrameHandling.Ready,
+    operations: List<DisplayOp>,
+    coveredOperationIndices: Set<Int>,
+    targetBounds: GPUPixelBounds,
+): Set<Int> {
+    val scopesByValue = ready.capture.scopes.entries.associate { (id, scope) -> id.value to scope }
+    val emptyCovered = mutableSetOf<Int>()
+    ready.handling.plan.layers.forEach { layer ->
+        val scope = scopesByValue[layer.saveRecord.scopeId.value] ?: return@forEach
+        val state = scope.state ?: return@forEach
+        val localBounds = state.bounds ?: return@forEach
+        val save = scope.saveOperationIndex ?: return@forEach
+        val restore = scope.restoreOperationIndex ?: return@forEach
+        val childOperationIndices = (save + 1).until(restore)
+            .filter { operationIndex -> operationIndex in coveredOperationIndices }
+        val hasCoreChild = childOperationIndices.any { operationIndex ->
+            val operation = operations[operationIndex]
+            operation !is DisplayOp.BeginLayer && operation !is DisplayOp.EndLayer
+        }
+        if (layerDeviceBounds(state, localBounds, targetBounds).isEmpty || !hasCoreChild) {
+            emptyCovered += childOperationIndices
+        }
+    }
+    return emptyCovered
+}
+
+/**
+ * Device-space bounds of a saveLayer scope: the captured local bounds mapped through the
+ * layer's transform at BeginLayer, clamped to the surface target. The splitter clips the
+ * layer children's scissors to these bounds, so they must be in the same (device) space
+ * as the children's geometry; the clamp keeps the bounds valid for [GPUPixelBounds] when
+ * the layer extends offscreen.
+ */
+private fun layerDeviceBounds(
+    state: GPUPreparedCompositeScopeState,
+    localBounds: GPUPreparedRectSnapshot,
+    targetBounds: GPUPixelBounds,
+): GPUPixelBounds {
+    val matrix = Matrix33.makeAll(
+        sx = Float.fromBits(state.transform.scaleXBits),
+        kx = Float.fromBits(state.transform.skewXBits),
+        tx = Float.fromBits(state.transform.transXBits),
+        ky = Float.fromBits(state.transform.skewYBits),
+        sy = Float.fromBits(state.transform.scaleYBits),
+        ty = Float.fromBits(state.transform.transYBits),
+        p0 = Float.fromBits(state.transform.persp0Bits),
+        p1 = Float.fromBits(state.transform.persp1Bits),
+        p2 = Float.fromBits(state.transform.persp2Bits),
+    )
+    val left = Float.fromBits(localBounds.leftBits)
+    val top = Float.fromBits(localBounds.topBits)
+    val right = Float.fromBits(localBounds.rightBits)
+    val bottom = Float.fromBits(localBounds.bottomBits)
+    val corners = listOf(
+        matrix * Point(left, top),
+        matrix * Point(right, top),
+        matrix * Point(right, bottom),
+        matrix * Point(left, bottom),
+    )
+    val mappedLeft = kotlin.math.floor(corners.minOf { it.x })
+    val mappedTop = kotlin.math.floor(corners.minOf { it.y })
+    val mappedRight = kotlin.math.ceil(corners.maxOf { it.x })
+    val mappedBottom = kotlin.math.ceil(corners.maxOf { it.y })
+    val leftClamped = maxOf(0, mappedLeft.toInt())
+    val topClamped = maxOf(0, mappedTop.toInt())
+    val rightClamped = maxOf(leftClamped, minOf(targetBounds.right, mappedRight.toInt()))
+    val bottomClamped = maxOf(topClamped, minOf(targetBounds.bottom, mappedBottom.toInt()))
+    return GPUPixelBounds(leftClamped, topClamped, rightClamped, bottomClamped)
 }
 
 /**
@@ -544,6 +781,25 @@ private fun prepareCompositeFrameHandling(
         return CompositeFrameHandling.Refused(capture.code, capture.operationIndex, capture.facts)
     }
     val ready = capture as GPUPreparedCompositeCaptureResult.Ready
+    // Nested saveLayers are a documented refusal: the prepared-surface preflight refuses
+    // them with unsupported.prepared-surface.layer-nesting until nested materialization
+    // lands. Refuse at the builder boundary too so the children split never mis-assigns
+    // sublist-relative scope ranges for nested topologies.
+    val nestedSaveLayer = ready.capture.scopes.values.any { scope ->
+        scope.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer &&
+            scope.parentId?.let { parentId ->
+                ready.capture.scopes[parentId]?.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer
+            } == true
+    }
+    if (nestedSaveLayer) {
+        return CompositeFrameHandling.Refused(
+            code = "unsupported.prepared-surface.layer-nesting",
+            operationIndex = null,
+            facts = mapOf(
+                "reason" to "nested saveLayers require nesting materialization",
+            ),
+        )
+    }
     val handling = taskListBuilder.handleSaveLayer(
         scopes = ready.capture.scopes,
         rootScopeId = ready.capture.rootScopeId,
@@ -555,7 +811,7 @@ private fun prepareCompositeFrameHandling(
         context = context,
     )
     return when (handling) {
-        is GPUPreparedSaveLayerFrameHandling.Ready -> CompositeFrameHandling.Ready(handling)
+        is GPUPreparedSaveLayerFrameHandling.Ready -> CompositeFrameHandling.Ready(handling, ready.capture)
         is GPUPreparedSaveLayerFrameHandling.Refused ->
             CompositeFrameHandling.Refused(handling.code, handling.operationIndex, handling.facts)
     }

@@ -79,7 +79,6 @@ class GPUPreparedSurfaceFrameGateTest {
                     )
                     assertEquals(fixture.expected.code, legacy.code)
                     assertEquals(fixture.expected.operationIndex, legacy.operationIndex)
-                    assertEquals(fixture.expected.family, legacy.family)
                 }
             }
         }
@@ -99,7 +98,6 @@ class GPUPreparedSurfaceFrameGateTest {
             )
             assertEquals("legacy.surface.prepared.empty-frame", legacy.code)
             assertEquals(null, legacy.operationIndex)
-            assertEquals(null, legacy.family)
         }
     }
 
@@ -111,9 +109,9 @@ class GPUPreparedSurfaceFrameGateTest {
         val flush = DisplayOp.FlushAndSnapshot(RECT)
         val cases = listOf(
             listOf(DisplayOp.SetTransform(Matrix33.identity()), visual, image, flush, text) to
-                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 3, null),
+                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 3),
             listOf(visual, flush, image) to
-                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 1, null),
+                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 1),
         )
 
         cases.forEach { (operations, expected) ->
@@ -122,7 +120,6 @@ class GPUPreparedSurfaceFrameGateTest {
             )
             assertEquals(expected.code, legacy.code)
             assertEquals(expected.operationIndex, legacy.operationIndex)
-            assertEquals(expected.family, legacy.family)
         }
     }
 
@@ -142,7 +139,6 @@ class GPUPreparedSurfaceFrameGateTest {
             )
             assertEquals(expectedCode, legacy.code)
             assertEquals(null, legacy.operationIndex)
-            assertEquals(null, legacy.family)
         }
     }
 
@@ -169,7 +165,6 @@ class GPUPreparedSurfaceFrameGateTest {
         data class Legacy(
             val code: String,
             val operationIndex: Int?,
-            val family: LegacyDisplayOpFamily?,
         ) : Expected
     }
 
@@ -181,8 +176,7 @@ class GPUPreparedSurfaceFrameGateTest {
         )
         val path = Path().addRect(RECT)
         val visual = Expected.Candidate
-        fun legacy(code: String, family: LegacyDisplayOpFamily? = null) =
-            Expected.Legacy(code, 0, family)
+        fun legacy(code: String) = Expected.Legacy(code, 0)
 
         return listOf(
             Fixture(visualRect(), visual),
@@ -191,17 +185,13 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.SetTransform(MATRIX), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null, null,
+                "legacy.surface.prepared.empty-frame", null,
             )),
             Fixture(DisplayOp.SetClip(CLIP), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null, null,
+                "legacy.surface.prepared.empty-frame", null,
             )),
-            Fixture(DisplayOp.BeginLayer(null, null), legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
-            )),
-            Fixture(DisplayOp.EndLayer, legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
-            )),
+            Fixture(DisplayOp.BeginLayer(null, null), visual),
+            Fixture(DisplayOp.EndLayer, visual),
             Fixture(DisplayOp.DrawColor(Color.RED, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Clear(Color.RED), visual),
             Fixture(DisplayOp.DrawPoint(1f, 1f, PAINT, MATRIX, CLIP), visual),
@@ -209,14 +199,12 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawDRRect(RRect(RECT, radius = 1f), RRect(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
-            )),
+            Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Annotation(RECT, "key", "value"), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null, null,
+                "legacy.surface.prepared.empty-frame", null,
             )),
             Fixture(DisplayOp.FlushAndSnapshot(RECT), legacy("legacy.surface.prepared.flush-snapshot")),
         )

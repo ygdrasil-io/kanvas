@@ -163,7 +163,7 @@ class GPUPreparedSurfaceProductEntryTest {
             { renderPrepared(execution, legacy) },
             {
                 GPUPreparedSurfaceProductEntry.render(
-                    operations = listOf(DisplayOp.BeginLayer(null, null)),
+                    operations = listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f))),
                     width = 1,
                     height = 1,
                     format = PixelFormat.RGBA8,

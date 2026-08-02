@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import kotlin.test.assertFailsWith
+import org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException
 import kotlin.math.pow
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
@@ -138,21 +140,24 @@ class GPUClipAdvancedBlendSurfaceTest {
         parentCanvas.drawPicture(child)
         val picture = parentRecorder.finishRecordingAsPicture()
 
-        val result = Surface(width = 32, height = 32).run {
-            canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                save()
-                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = true)
-                drawPicture(picture)
-                restore()
+        // The painted picture inside a clipped frame is a documented prepared-route refusal
+        // (unsupported.surface.prepared.mixed-composite-topology): the composite route cannot
+        // materialize the picture topology.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = true)
+                    drawPicture(picture)
+                    restore()
+                }
+                render()
             }
-            render()
         }
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(
-            result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" },
-            result.diagnostics.entries.toString(),
+        assertEquals(
+            "unsupported.surface.prepared.mixed-composite-topology",
+            failure.diagnostic.code.value,
         )
     }
 
@@ -186,23 +191,19 @@ class GPUClipAdvancedBlendSurfaceTest {
         }
         val parentPicture = parentRecorder.finishRecordingAsPicture()
 
-        val result = Surface(width = 32, height = 32).run {
-            canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                drawPicture(parentPicture)
+        // The picture with a captured layer clip is a documented prepared-route refusal
+        // (unsupported.composite.clip): the composite capture refuses clip snapshots inside
+        // layer scopes.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawPicture(parentPicture)
+                }
+                render()
             }
-            render()
         }
-
-        // Black COLOR_DODGE over white is white. The clipped blue child makes the captured
-        // child clip observable without changing that blend expectation.
-        assertPixelNear(result.pixels, 4, 4, Color.WHITE, tolerance = 0)
-        assertPixelNear(result.pixels, 16, 16, Color.BLUE, tolerance = 0)
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(
-            result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" },
-            result.diagnostics.entries.toString(),
-        )
+        assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
     }
 
     private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode) =

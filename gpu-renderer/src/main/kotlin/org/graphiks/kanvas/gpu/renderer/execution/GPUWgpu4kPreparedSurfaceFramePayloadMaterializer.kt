@@ -387,6 +387,10 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     atlasColorPremultipliedRgba = null,
                     alphaOnly = false,
                     atlasSourceBlend = null,
+                    // Layer children render through the premul core pipelines into the
+                    // isolated target, so the composite must sample the layer texture as
+                    // premultiplied (no straight-alpha conversion in the shader).
+                    premultipliedSource = true,
                 )
                 val uniformBytes = GPUPreparedImageUniformAbi.pack(quad)
                 val cached = when (

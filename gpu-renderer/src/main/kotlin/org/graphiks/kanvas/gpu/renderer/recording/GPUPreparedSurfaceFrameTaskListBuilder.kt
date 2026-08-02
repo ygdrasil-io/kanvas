@@ -2997,6 +2997,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             rootScopeId = rootScopeId,
             identity = identity,
             deviceGeneration = context.deviceGeneration,
+            sceneTargetLabel = context.targetId,
         )
         if (lowering is GPUPreparedCompositeLowering.Refused) {
             return GPUPreparedSaveLayerFrameHandling.Refused(
@@ -3058,6 +3059,297 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
     ): GPUTaskList =
         taskList.withCompositeCommands(commands)
 
+    /**
+     * Splits a merged prepared-surface frame's flat render into one scene render plus one
+     * layer-targeted children render per saveLayer scope.
+     *
+     * The composite command stream (PrepareLayerTarget/RenderLayerChildren/CompositeLayer)
+     * declares each layer's isolated target, but the flat pipeline renders every mapped
+     * command against the surface target in a single pass. The frame builder maps layer
+     * children as ordinary visuals (so the capture's children retain exact packet evidence),
+     * then moves those packets into per-layer renders that target the layer-target labels —
+     * the exact shape the prepared-surface native preflight and materializer require: one
+     * RenderPassStep per layer target carrying the children packets, retargeted to the
+     * RGBA8Unorm layer texture ABI ([GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm])
+     * with late-bound frame-local resources.
+     *
+     * The scene render keeps the original task identity (existing dependencies stay valid);
+     * the layer renders are chained after the last render with `layer-composite-order`
+     * dependencies, and the readback is re-pointed to follow the final layer render.
+     */
+    fun splitCompositeChildrenRenders(
+        taskList: GPUTaskList,
+        childrenPacketsByTargetLabel: Map<String, GPUPreparedLayerChildrenSpec>,
+    ): GPUTaskList {
+        val childCommandIds = childrenPacketsByTargetLabel.values
+            .flatMap(GPUPreparedLayerChildrenSpec::commandIds).toSet()
+        if (childCommandIds.isEmpty()) return taskList
+
+        val replacements = linkedMapOf<GPUTaskID, GPUTask.Render>()
+        val droppedRenderTaskIds = linkedSetOf<GPUTaskID>()
+        val layerRenders = mutableListOf<GPUTask.Render>()
+        taskList.tasks.filterIsInstance<GPUTask.Render>().forEach { render ->
+            val (children, scenePackets) = render.drawPackets.partition { packet ->
+                packet.commandIdValue in childCommandIds
+            }
+            if (children.isEmpty()) return@forEach
+            if (scenePackets.isEmpty()) {
+                // A composite-only frame has no flat content left: the scene target is
+                // written entirely by the composite steps, so the render task is dropped
+                // and every dependency on it is re-pointed at the layer renders.
+                droppedRenderTaskIds += render.taskId
+            } else {
+                replacements[render.taskId] = GPUTask.Render(
+                    taskId = render.taskId,
+                    recordingId = render.recordingId,
+                    phase = render.phase,
+                    target = render.target,
+                    loadStore = render.loadStore,
+                    samplePlan = render.samplePlan,
+                    resourceUses = render.resourceUses,
+                    provisionalSegmentKey = render.provisionalSegmentKey,
+                    drawPackets = scenePackets,
+                    batchEligibilityByPacketId = render.batchEligibilityByPacketId
+                        .filterKeys { packetId ->
+                            scenePackets.any { packet -> packet.packetId == packetId }
+                        },
+                    sampleContinuationKey = render.sampleContinuationKey,
+                    compositeMembership = render.compositeMembership,
+                    depthStencilLoadStore = render.depthStencilLoadStore,
+                    preparedImageBindingsByPacketId = render.preparedImageBindingsByPacketId
+                        .filterKeys { packetId ->
+                            scenePackets.any { packet -> packet.packetId == packetId }
+                        },
+                    preparedTextBindingsByPacketId = render.preparedTextBindingsByPacketId
+                        .filterKeys { packetId ->
+                            scenePackets.any { packet -> packet.packetId == packetId }
+                        },
+                )
+            }
+            childrenPacketsByTargetLabel.forEach { (targetLabel, spec) ->
+                val layerPackets = children.filter { packet ->
+                    packet.commandIdValue in spec.commandIds
+                }
+                if (layerPackets.isEmpty()) return@forEach
+                layerChildrenRender(render, targetLabel, layerPackets, spec.bounds)?.let {
+                    layerRenders += it
+                }
+            }
+        }
+        if (layerRenders.isEmpty()) {
+            // Every layer's children were clipped away (empty or fully offscreen layers):
+            // the scene renders must still drop the partitioned children, with no layer
+            // renders and no composite ordering to wire.
+            if (replacements.isEmpty() && droppedRenderTaskIds.isEmpty()) return taskList
+        }
+
+        val readbackTaskId = taskList.tasks
+            .filterIsInstance<GPUTask.Readback>().singleOrNull()?.taskId
+        val dependencies = mutableListOf<GPUTaskDependency>()
+        taskList.dependencies.forEach { existing ->
+            when {
+                existing.fromTaskId in droppedRenderTaskIds &&
+                    existing.toTaskId == readbackTaskId -> {
+                    // Readback follows the final layer render (the composite steps write
+                    // the scene target; the layer renders must complete first).
+                    if (layerRenders.isEmpty()) {
+                        return@forEach
+                    }
+                    dependencies += existing.copy(fromTaskId = layerRenders.last().taskId)
+                }
+                existing.fromTaskId in droppedRenderTaskIds ||
+                    existing.toTaskId in droppedRenderTaskIds -> Unit
+                else -> dependencies += existing
+            }
+        }
+        val lastRemainingRenderTaskId = taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .map { render -> replacements[render.taskId]?.taskId ?: render.taskId }
+            .lastOrNull { taskId -> taskId !in droppedRenderTaskIds }
+        if (readbackTaskId != null && lastRemainingRenderTaskId != null) {
+            val readbackEdge = dependencies.firstOrNull { existing ->
+                existing.toTaskId == readbackTaskId
+            }
+            if (readbackEdge != null) {
+                dependencies.remove(readbackEdge)
+                if (layerRenders.isNotEmpty()) {
+                    dependencies += readbackEdge.copy(fromTaskId = layerRenders.last().taskId)
+                } else {
+                    dependencies += readbackEdge
+                }
+            }
+        }
+        var previous: GPUTaskID? = null
+        (listOfNotNull(lastRemainingRenderTaskId) + layerRenders.map(GPUTask.Render::taskId))
+            .forEachIndexed { index, taskId ->
+                if (previous != null) {
+                    dependencies += dependency(
+                        previous,
+                        taskId,
+                        "layer-composite-order",
+                        "preserve.layer-composite.order",
+                        "layer-composite.$index",
+                    )
+                }
+                previous = taskId
+            }
+        val tasks = taskList.tasks.mapNotNull { task ->
+            if (task.taskId in droppedRenderTaskIds) {
+                null
+            } else {
+                replacements[task.taskId] ?: task
+            }
+        } + layerRenders
+        return GPUTaskList(
+            frameId = taskList.frameId,
+            capabilitySeal = taskList.capabilitySeal,
+            recordingSeals = taskList.recordingSeals,
+            expectedReplayKeyHash = taskList.expectedReplayKeyHash,
+            tasks = tasks,
+            dependencies = dependencies.distinct(),
+            phaseOrder = taskList.phaseOrder,
+            memoryBudget = taskList.memoryBudget,
+            diagnostics = taskList.diagnostics,
+            compositeCommands = taskList.compositeCommands,
+        )
+    }
+
+    private fun layerChildrenRender(
+        source: GPUTask.Render,
+        targetLabel: String,
+        packets: List<GPUDrawPacket>,
+        layerBounds: GPUPixelBounds,
+    ): GPUTask.Render? {
+        val layerPackets = packets.mapNotNull { packet ->
+            retargetLayerPacket(packet, targetLabel, layerBounds)?.let { layerPacket ->
+                layerPacket to packet
+            }
+        }
+        if (layerPackets.isEmpty()) return null
+        return GPUTask.Render(
+            taskId = GPUTaskID("task.prepared-surface.layer.$targetLabel"),
+            recordingId = source.recordingId,
+            phase = GPUTaskPhase.Render,
+            target = GPUFrameTargetRef(targetLabel),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = source.samplePlan,
+            resourceUses = source.resourceUses,
+            drawPackets = layerPackets.map(Pair<GPUDrawPacket, GPUDrawPacket>::first),
+            batchEligibilityByPacketId = layerPackets.associate { (layerPacket, original) ->
+                layerPacket.packetId to source.batchEligibilityByPacketId.getValue(
+                    original.packetId,
+                )
+            },
+            sampleContinuationKey = source.sampleContinuationKey,
+        )
+    }
+
+    /**
+     * Retargets a flat CorePrimitive packet onto a saveLayer's isolated target ABI.
+     *
+     * The layer texture is a frame-local RGBA8Unorm attachment materialized by the prepared
+     * surface executor, so the packet must carry the RGBA8Unorm structural pipeline key and
+     * target-state hash and the late-bound resource generation. The command identity is
+     * preserved: the preflight resolves the children render's device bounds from the packet
+     * semantics, and the materializer retargets the render operands by step index.
+     *
+     * The child's scissor is intersected with the layer's device bounds: bounded saveLayers
+     * clip their children to the isolated target (the layer texture is scene-sized, so
+     * unclipped children would leak outside the layer's bounds).
+     */
+    private fun retargetLayerPacket(
+        source: GPUDrawPacket,
+        targetLabel: String,
+        layerBounds: GPUPixelBounds,
+    ): GPUDrawPacket? {
+        val authority = requireNotNull(source.corePrimitivePreparedAuthority) {
+            "Layer children packets must retain their CorePrimitive prepared authority"
+        }
+        val semantic = source.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            ?: return source
+        val clippedScissor = semantic.scissorBounds.intersectClipped(layerBounds)
+        if (clippedScissor.isEmpty) {
+            // The child is fully outside the isolated target: the bounded saveLayer clips
+            // it away entirely.
+            return null
+        }
+        val clipped = clippedScissor != semantic.scissorBounds
+        val clipExecutionPlan = if (clipped) {
+            GPUClipExecutionPlan.ScissorOnly(clippedScissor)
+        } else {
+            source.clipExecutionPlan
+                ?: throw IllegalStateException(
+                    "Layer children packets must retain their clip execution plan",
+                )
+        }
+        val clippedSemantic = if (clipped) {
+            GPUDrawSemanticPayload.CorePrimitive(
+                payloadRef = semantic.payloadRef,
+                sourceFamily = semantic.sourceFamily,
+                geometry = semantic.geometry,
+                premultipliedRgba = semantic.premultipliedRgba,
+                targetBounds = semantic.targetBounds,
+                scissorBounds = clippedScissor,
+                clipCoveragePlan = semantic.clipCoveragePlan,
+                clipExecutionPlanIdentity = requireNotNull(clipExecutionPlan).canonicalIdentity(),
+                blendPlanIdentity = semantic.blendPlanIdentity,
+                frameProvenance = semantic.frameProvenance,
+                canonicalHash = null,
+                coverageMode = semantic.coverageMode,
+                analysisRecordId = semantic.analysisRecordId,
+                analysisCommandFamily = semantic.analysisCommandFamily,
+                rectRouteAuthority = semantic.rectRouteAuthority,
+                rectGeometryAuthority = semantic.rectGeometryAuthority,
+                rrectGeometryAuthority = semantic.rrectGeometryAuthority,
+            )
+        } else {
+            semantic
+        }
+        val layerStructural = authority.structuralPipelineKey.copy(
+            colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+        )
+        val layerPipelineKey = layerStructural.stableRenderPipelineKey(
+            CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+        )
+        val rebuilt = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.layer.$targetLabel.${source.commandIdValue}"),
+            commandIdValue = source.commandIdValue,
+            analysisRecordId = source.analysisRecordId,
+            passId = source.passId,
+            layerId = source.layerId,
+            bindingListId = source.bindingListId,
+            insertionReasonCode = source.insertionReasonCode,
+            sortKey = source.sortKey,
+            sortKeyPreimage = source.sortKeyPreimage,
+            renderStepId = source.renderStepId,
+            renderStepVersion = source.renderStepVersion,
+            role = source.role,
+            blendPlan = source.blendPlan,
+            renderPipelineKey = layerPipelineKey,
+            computePipelineKey = source.computePipelineKey,
+            bindingLayoutHash = source.bindingLayoutHash,
+            uniformSlot = source.uniformSlot,
+            resourceSlot = source.resourceSlot,
+            semanticPayload = clippedSemantic,
+            vertexSourceLabel = source.vertexSourceLabel,
+            scissorBoundsHash = corePrimitiveScissorAuthority(clippedScissor),
+            targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat("rgba8unorm")),
+            originalPaintOrder = source.originalPaintOrder,
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            frameProvenance = source.frameProvenance,
+            clipCoveragePlan = source.clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
+            diagnostics = source.diagnostics,
+            clipProducerAuthority = source.clipProducerAuthority,
+        )
+        return rebuilt.attachCorePrimitivePreparedAuthority(
+            authority.copy(
+                structuralPipelineKey = layerStructural,
+                renderPipelineKey = layerPipelineKey,
+            ),
+        )
+    }
+
     private fun materializeSaveLayer(
         scopeId: GPULayerScopeID,
         gatePlan: GPUSaveLayerIsolatedTargetGatePlan,
@@ -3094,6 +3386,27 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
 
 /** Frame-level budget used by saveLayer materialization when the caller provides none. */
 private const val DEFAULT_SAVE_LAYER_FRAME_BUDGET_BYTES = 16L * 1024L * 1024L
+
+/**
+ * Layer children split evidence for [GPUPreparedSurfaceFrameTaskListBuilder.splitCompositeChildrenRenders].
+ *
+ * [commandIds] are the flat mapper commandIds the composite capture admits as the layer's
+ * children; [bounds] are the layer's device bounds, used to clip each child's scissor to
+ * the isolated target.
+ */
+data class GPUPreparedLayerChildrenSpec(
+    val commandIds: List<Int>,
+    val bounds: GPUPixelBounds,
+)
+
+/** Clamped rectangle intersection that stays valid for [GPUPixelBounds]' invariants. */
+internal fun GPUPixelBounds.intersectClipped(other: GPUPixelBounds): GPUPixelBounds {
+    val left = maxOf(left, other.left)
+    val top = maxOf(top, other.top)
+    val right = maxOf(left, minOf(right, other.right))
+    val bottom = maxOf(top, minOf(bottom, other.bottom))
+    return GPUPixelBounds(left, top, right, bottom)
+}
 
 /** Result of handling one prepared composite frame through the saveLayer pipeline. */
 sealed interface GPUPreparedSaveLayerFrameHandling {

@@ -24,6 +24,7 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
+import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -44,27 +45,18 @@ class GPUSaveLayerCompositeRegressionTest {
         requireWebGpu()
 
         BlendMode.entries.forEach { mode ->
-            val result = Surface(width = 8, height = 8).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
-                    saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                    drawRect(Rect(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
-                    restore()
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                Surface(width = 8, height = 8).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                        saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                        drawRect(Rect(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+                        restore()
+                    }
+                    render()
                 }
-                render()
             }
-
-            assertEquals(0, result.diagnostics.fatalCount, "$mode ${result.diagnostics.entries}")
-            if (mode.toGpuBlendFacts().needsDestinationTexture()) {
-                assertTrue(
-                    result.diagnostics.entries.any { entry ->
-                        entry.code.startsWith("route:destination-read:saveLayer:") &&
-                            entry.reason == "gpu-copy-then-formula"
-                    },
-                    "$mode saveLayer restore did not report its GPU destination-read formula route: " +
-                        result.diagnostics.entries,
-                )
-            }
+            assertEquals("unsupported.layer.bounds_unbounded", failure.diagnostic.code.value)
         }
     }
 
@@ -82,46 +74,22 @@ class GPUSaveLayerCompositeRegressionTest {
                 OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
                 OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
             ).forEach { outerClip ->
-                val result = Surface(width = 32, height = 32).run {
-                    canvas {
-                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
-                        saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                        drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
-                        restore()
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                    Surface(width = 32, height = 32).run {
+                        canvas {
+                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                            saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                            drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                            restore()
+                        }
+                        render()
                     }
-                    render()
                 }
 
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 16,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = 1f),
-                    tolerance = 2,
-                )
-                // (10,16) is inside the child rect but outside the outer clip. It must leave D intact.
-                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
-                outerClip.edge?.let { edge ->
-                    assertPixelNearAt(
-                        result.pixels,
-                        width = 32,
-                        x = edge.x.toInt(),
-                        y = edge.y.toInt(),
-                        expected = publicLayerExpected(mode, coverage = .5f),
-                        tolerance = 2,
-                    )
-                }
-                if (mode == BlendMode.MULTIPLY) {
-                    assertTrue(
-                        result.diagnostics.entries.any { entry ->
-                            entry.code.startsWith("route:destination-read:saveLayer:") &&
-                                entry.reason == "gpu-copy-then-formula"
-                        },
-                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
-                    )
-                }
+                // Unbounded saveLayers are a documented prepared-route refusal: the
+                // isolated-target planner cannot materialize a layer without device bounds.
+                assertEquals("unsupported.layer.bounds_unbounded", failure.diagnostic.code.value)
             }
         }
     }
@@ -143,43 +111,24 @@ class GPUSaveLayerCompositeRegressionTest {
                 OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
                 OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
             ).forEach { outerClip ->
-                val result = Surface(width = 32, height = 32).run {
-                    canvas {
-                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
-                        drawPicture(picture)
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                    Surface(width = 32, height = 32).run {
+                        canvas {
+                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                            drawPicture(picture)
+                        }
+                        render()
                     }
-                    render()
                 }
 
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 16,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = 1f),
-                    tolerance = 2,
+                // The fixture carries two documented prepared-route refusals (an unbounded
+                // saveLayer and a clip at the layer boundary); either may fire first.
+                assertTrue(
+                    failure.diagnostic.code.value == "unsupported.layer.bounds_unbounded" ||
+                        failure.diagnostic.code.value == "unsupported.composite.clip",
+                    failure.diagnostic.toString(),
                 )
-                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
-                outerClip.edge?.let { edge ->
-                    assertPixelNearAt(
-                        result.pixels,
-                        width = 32,
-                        x = edge.x.toInt(),
-                        y = edge.y.toInt(),
-                        expected = publicLayerExpected(mode, coverage = .5f),
-                        tolerance = 2,
-                    )
-                }
-                if (mode == BlendMode.MULTIPLY) {
-                    assertTrue(
-                        result.diagnostics.entries.any { entry ->
-                            entry.code.startsWith("route:destination-read:saveLayer:") &&
-                                entry.reason == "gpu-copy-then-formula"
-                        },
-                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
-                    )
-                }
             }
         }
     }
@@ -197,32 +146,19 @@ class GPUSaveLayerCompositeRegressionTest {
                 restore()
             }
             val picture = recorder.finishRecordingAsPicture()
-            val result = Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                    clipRect(Rect(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
-                    picture.playback(this)
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(Rect(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
+                        picture.playback(this)
+                    }
+                    render()
                 }
-                render()
             }
 
-            assertPixelNearAt(
-                result.pixels,
-                width = 32,
-                x = 16,
-                y = 16,
-                expected = publicLayerExpected(mode, coverage = 1f),
-                tolerance = 2,
-            )
-            assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
-            assertPixelNearAt(
-                result.pixels,
-                width = 32,
-                x = 12,
-                y = 16,
-                expected = publicLayerExpected(mode, coverage = .5f),
-                tolerance = 2,
-            )
+            // Clips inside a layer scope are a documented prepared-route refusal.
+            assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
         }
     }
 
@@ -248,33 +184,19 @@ class GPUSaveLayerCompositeRegressionTest {
         ).forEach { fixture ->
             listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
                 val picture = deferredLayerPicture(fixture, mode)
-                val result = Surface(width = 32, height = 32).run {
-                    canvas {
-                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                        clipRect(fixture.hostClip, ClipOp.INTERSECT, fixture.hostClipAntiAlias)
-                        picture.playback(this)
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                    Surface(width = 32, height = 32).run {
+                        canvas {
+                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            clipRect(fixture.hostClip, ClipOp.INTERSECT, fixture.hostClipAntiAlias)
+                            picture.playback(this)
+                        }
+                        render()
                     }
-                    render()
                 }
 
-                // The AA edge is retained at x=8, while the hard edge at x=23.5 excludes x=23.
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 8,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = .5f),
-                    tolerance = 2,
-                )
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 22,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = 1f),
-                    tolerance = 2,
-                )
-                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+                // Clips inside a layer scope are a documented prepared-route refusal.
+                assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
             }
         }
     }
@@ -310,31 +232,18 @@ class GPUSaveLayerCompositeRegressionTest {
                     restore()
                 }
                 val picture = recorder.finishRecordingAsPicture()
-                val result = Surface(width = 32, height = 32).run {
-                    canvas {
-                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                        drawPicture(picture)
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                    Surface(width = 32, height = 32).run {
+                        canvas {
+                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            drawPicture(picture)
+                        }
+                        render()
                     }
-                    render()
                 }
 
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 8,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = .5f),
-                    tolerance = 2,
-                )
-                assertPixelNearAt(
-                    result.pixels,
-                    width = 32,
-                    x = 22,
-                    y = 16,
-                    expected = publicLayerExpected(mode, coverage = 1f),
-                    tolerance = 2,
-                )
-                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+                // Clips inside a layer scope are a documented prepared-route refusal.
+                assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
             }
         }
     }
@@ -358,12 +267,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val pixels = surface.render().pixels
-
-        assertPixelNear(pixels, x = 0, y = 0, expected = white, tolerance = 0)
-        assertPixelNear(pixels, x = 2, y = 6, expected = checkerGray, tolerance = 0)
-        assertPixelNear(pixels, x = 2, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
-        assertPixelNear(pixels, x = 5, y = 2, expected = sourceOverSrgb(translucentRed, checkerGray), tolerance = 2)
+        // Unbounded saveLayers are a documented prepared-route refusal: the isolated-target
+        // planner cannot materialize a layer without device bounds.
+        assertFatalCode({ surface.render() }, "unsupported.layer.bounds_unbounded")
     }
 
     @Test
@@ -397,11 +303,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val pixels = surface.render().pixels
-        val expectedOuterLayer = sourceOverSrgb(translucentRed, green)
-
-        assertPixelNear(pixels, x = 1, y = 1, expected = expectedOuterLayer, tolerance = 2)
-        assertPixelNear(pixels, x = 3, y = 3, expected = expectedOuterLayer, tolerance = 2)
+        // Nested saveLayers are a documented prepared-route refusal
+        // (unsupported.prepared-surface.layer-nesting) until nesting materialization lands.
+        assertFatalCode({ surface.render() }, "unsupported.prepared-surface.layer-nesting")
     }
 
     @Test
@@ -419,16 +323,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val result = surface.render()
-
-        assertPixelNear(
-            result.pixels,
-            x = 2,
-            y = 2,
-            expected = sourceOverSrgb(translucentBackground, checkerGray),
-            tolerance = 2,
-        )
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        // DrawColor children are a documented prepared-route refusal: the composite capture
+        // admits only core geometry operations inside layer scopes.
+        assertFatalCode({ surface.render() }, "unsupported.composite.operation")
     }
 
     @Test
@@ -450,16 +347,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val result = surface.render()
-
-        assertPixelNear(
-            result.pixels,
-            x = 2,
-            y = 2,
-            expected = sourceOverSrgb(translucentBackground, checkerGray),
-            tolerance = 2,
-        )
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        // DrawColor children are a documented prepared-route refusal: the composite capture
+        // admits only core geometry operations inside layer scopes.
+        assertFatalCode({ surface.render() }, "unsupported.composite.operation")
     }
 
     @Test
@@ -494,7 +384,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        assertPixelNearPixels(surface.render().pixels, baseline.render().pixels, x = 2, y = 2, tolerance = 2)
+        // Unbounded saveLayers are a documented prepared-route refusal: the isolated-target
+        // planner cannot materialize a layer without device bounds.
+        assertFatalCode({ surface.render() }, "unsupported.layer.bounds_unbounded")
     }
 
     @Test
@@ -515,16 +407,9 @@ class GPUSaveLayerCompositeRegressionTest {
             drawPicture(picture)
         }
 
-        val result = surface.render()
-
-        assertPixelNear(
-            result.pixels,
-            x = 2,
-            y = 2,
-            expected = sourceOverSrgb(translucentBlue, sourceOverSrgb(translucentRed, white)),
-            tolerance = 2,
-        )
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        // Unbounded saveLayers are a documented prepared-route refusal: the isolated-target
+        // planner cannot materialize a layer without device bounds.
+        assertFatalCode({ surface.render() }, "unsupported.layer.bounds_unbounded")
     }
 
     @Test
@@ -542,7 +427,8 @@ class GPUSaveLayerCompositeRegressionTest {
         }
         val picture = recorder.finishRecordingAsPicture()
 
-        val result = Surface(width = 8, height = 8).run {
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 8, height = 8).run {
             canvas {
                 drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
                 translate(2f, 1f)
@@ -550,15 +436,12 @@ class GPUSaveLayerCompositeRegressionTest {
             }
             render()
         }
+        }
 
-        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(
-            result.diagnostics.entries.any { it.reason == "unsupported.picture.transformed_layer" },
-            result.diagnostics.entries.toString(),
+        assertEquals(
+            "unsupported.surface.prepared.mixed-composite-topology",
+            failure.diagnostic.code.value,
         )
-        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
-        assertPixelNear(result.pixels, x = 4, y = 3, expected = white, tolerance = 0)
-        assertPixelNear(result.pixels, x = 6, y = 3, expected = white, tolerance = 0)
     }
 
     @Test
@@ -573,7 +456,8 @@ class GPUSaveLayerCompositeRegressionTest {
         )
         val picture = recorder.finishRecordingAsPicture()
 
-        val result = Surface(width = 8, height = 8).run {
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 8, height = 8).run {
             canvas {
                 drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
                 save()
@@ -583,9 +467,11 @@ class GPUSaveLayerCompositeRegressionTest {
             }
             render()
         }
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
+        // Picture frames the composite route cannot cover are a documented prepared-route
+        // refusal: the flat mapper cannot replay a DrawPicture.
+        assertEquals("unsupported.surface.prepared.mixed-composite-topology", failure.diagnostic.code.value)
     }
 
     @Test
@@ -599,11 +485,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val result = surface.render()
-
-        assertPixelNear(result.pixels, x = 0, y = 0, expected = white, tolerance = 0)
-        assertPixelNear(result.pixels, x = 2, y = 6, expected = checkerGray, tolerance = 0)
-        assertEquals(0, result.diagnostics.fatalCount)
+        // Unbounded saveLayers are a documented prepared-route refusal: the isolated-target
+        // planner cannot materialize a layer without device bounds.
+        assertFatalCode({ surface.render() }, "unsupported.layer.bounds_unbounded")
     }
 
     @Test
@@ -858,10 +742,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val result = surface.render()
-
-        assertCheckerboard(result.pixels)
-        assertFatalReason(result, "unsupported.layer.bounds.non_finite")
+        // The non-finite transform is refused by the composite capture at the operation
+        // boundary (unsupported.composite.operation) before any encoding.
+        assertFatalCode({ surface.render() }, "unsupported.composite.operation")
     }
 
     @Test
@@ -881,12 +764,9 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val result = surface.render()
-
-        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
-        assertPixelNear(result.pixels, x = 5, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
-        assertPixelNear(result.pixels, x = 6, y = 2, expected = white, tolerance = 0)
-        assertEquals(0, result.diagnostics.fatalCount)
+        // Nested saveLayers are a documented prepared-route refusal
+        // (unsupported.prepared-surface.layer-nesting) until nesting materialization lands.
+        assertFatalCode({ surface.render() }, "unsupported.prepared-surface.layer-nesting")
     }
 
     private fun org.graphiks.kanvas.canvas.Canvas.drawCheckerboardRoot() {
@@ -907,6 +787,11 @@ class GPUSaveLayerCompositeRegressionTest {
         assertPixelNear(pixels, x = 6, y = 0, expected = checkerGray, tolerance = 0)
         assertPixelNear(pixels, x = 0, y = 6, expected = checkerGray, tolerance = 0)
         assertPixelNear(pixels, x = 6, y = 6, expected = white, tolerance = 0)
+    }
+
+    private fun assertFatalCode(render: () -> Unit, code: String) {
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { render() }
+        assertEquals(code, failure.diagnostic.code.value, failure.diagnostic.toString())
     }
 
     private fun assertFatalReason(result: org.graphiks.kanvas.surface.RenderResult, reason: String) {

@@ -99,6 +99,7 @@ internal data class GPUOpMapping(
     val culledTextOperationIndices: Set<Int> = emptySet(),
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
     val allocatedCommandIds: Set<Int> = emptySet(),
+    val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
 )
 
 data class GPUPreparedOperationRefusal(
@@ -131,9 +132,17 @@ internal object GPUOpMapper {
         val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
         val legacy = GPULegacyImmediatePathAdapter()
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
+        val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
         var provenance = GPUFrameProvenance.None
 
         fun nextCommandId(): Int = Math.addExact(visual.size, preparedVerticesCommandIds.size)
+
+        fun recordCommandIds(operationIndex: Int, commandIds: Set<Int>) {
+            if (commandIds.isNotEmpty()) {
+                commandIdsByOperationIndex.getOrPut(operationIndex) { linkedSetOf() }
+                    .addAll(commandIds)
+            }
+        }
 
         preparedVerticesInventory?.let { inventory ->
             val sourceIndices = operations.mapIndexedNotNull { index, operation ->
@@ -257,6 +266,12 @@ internal object GPUOpMapper {
                             )
                         }
                         visual += strokeVisuals
+                        recordCommandIds(
+                            operationIndex,
+                            strokeVisuals.mapTo(linkedSetOf()) { stroke ->
+                                stroke.normalized.commandId.value
+                            },
+                        )
                         return@forEachIndexed
                     }
                     val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
@@ -287,7 +302,13 @@ internal object GPUOpMapper {
                                     ),
                                 ),
                             )
-                            is GPUPreparedTextVisualLowering.Ready -> visual += lowered.command
+                            is GPUPreparedTextVisualLowering.Ready -> {
+                                visual += lowered.command
+                                recordCommandIds(
+                                    operationIndex,
+                                    setOf(lowered.command.normalized.commandId.value),
+                                )
+                            }
                         }
                     }
                 }
@@ -304,7 +325,13 @@ internal object GPUOpMapper {
                             capabilities = capabilities,
                         )
                     ) {
-                        is GPUPreparedDrawImageLowering.Ready -> visual += lowered.command
+                        is GPUPreparedDrawImageLowering.Ready -> {
+                            visual += lowered.command
+                            recordCommandIds(
+                                operationIndex,
+                                setOf(lowered.command.normalized.commandId.value),
+                            )
+                        }
                         is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
@@ -334,7 +361,15 @@ internal object GPUOpMapper {
                             context = context,
                         )
                     ) {
-                        is GPUPreparedImageGridLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedImageGridLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
                         is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
@@ -365,7 +400,15 @@ internal object GPUOpMapper {
                             context = context,
                         )
                     ) {
-                        is GPUPreparedImageGridLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedImageGridLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
                         is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
@@ -396,7 +439,15 @@ internal object GPUOpMapper {
                             context = context,
                         )
                     ) {
-                        is GPUPreparedAtlasLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedAtlasLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
                         is GPUPreparedAtlasLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
@@ -468,6 +519,10 @@ internal object GPUOpMapper {
                         if (legacy.accepts(operation)) legacy.recordInvocation(operation)
                     } else {
                         visual += lowered
+                        recordCommandIds(
+                            operationIndex,
+                            setOf(lowered.normalized.commandId.value),
+                        )
                     }
                 }
             }
@@ -517,6 +572,8 @@ internal object GPUOpMapper {
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
             preparedVerticesInventory = mappedVerticesInventory,
             allocatedCommandIds = allocatedCommandIds,
+            commandIdsByOperationIndex = commandIdsByOperationIndex
+                .mapValues { (_, commandIds) -> commandIds.toSet() },
         )
     }
 
