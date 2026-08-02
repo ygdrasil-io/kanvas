@@ -4627,7 +4627,7 @@ class GPUFramePreflighterTest {
             .substringBefore("private fun validateCorePrimitiveRenderAuthority(")
         val perPacketStructuralChecks = directPreflight
             .substringAfter("accepted.indices.forEach { acceptedIndex ->")
-            .substringBefore("val structuralPipelineKey = packetAuthorities.first().structuralPipelineKey")
+            .substringBefore("val structuralPipelineKey = packetAuthorities[sceneAcceptedIndices.first()]")
         assertFalse(
             perPacketStructuralChecks.contains("stableRenderPipelineKey("),
             "pure preflight must not execute SHA-256 key derivation once per draw",

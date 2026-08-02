@@ -5225,6 +5225,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         label == "Kanvas.frame.preparedText.r8-page" ||
                         label == "Kanvas.frame.preparedText.text-atlas" ||
                         label == "Kanvas.frame.colorGlyph.destinationSnapshot" ||
+                        label.startsWith("Kanvas.frame.layerTarget.") ||
                         label.startsWith("Kanvas.frame.preparedText.material-texture.")
                     ) {
                         val imageViewLabel = when {
@@ -5236,6 +5237,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                                 "Kanvas.frame.preparedText.text-atlas-view"
                             label == "Kanvas.frame.colorGlyph.destinationSnapshot" ->
                                 "Kanvas.frame.colorGlyph.destinationSnapshot-view"
+                            label.startsWith("Kanvas.frame.layerTarget.") ->
+                                "$label-view"
                             else -> label.replace("material-texture.", "material-texture-view.")
                         }
                         handle(GPUTexture::class.java, label) { textureMethod ->

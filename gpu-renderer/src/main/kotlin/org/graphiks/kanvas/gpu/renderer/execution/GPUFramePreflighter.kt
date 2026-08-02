@@ -843,7 +843,10 @@ internal class GPUFramePreflighter(
                 diagnostic(
                     "invalid.preflight.prepared_frame",
                     "Prepared frame invariants failed after late acquisition.",
-                    mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    mapOf(
+                        "failureClass" to failure::class.simpleName.orEmpty(),
+                        "failureMessage" to (failure.message.orEmpty()),
+                    ),
                 ),
                 rollback.execute(),
             )
@@ -3223,14 +3226,35 @@ internal class GPUFramePreflighter(
             "invalid.preflight.core_primitive_analytic_shape_uniform_seal",
             message,
         )
-        val targetPreparations = preparations.filter { it.role == GPUFrameResourceRole.SceneTarget }
-            .associateBy(GPUResourcePreparationRequest::resource)
+        val targetPreparations = buildMap<GPUFrameResourceRef, GPUFrameTextureDescriptor> {
+            preparations.filter { it.role == GPUFrameResourceRole.SceneTarget }
+                .forEach { request ->
+                    (request.descriptor as? GPUFrameTextureDescriptor)?.let { descriptor ->
+                        put(request.resource, descriptor)
+                    }
+                }
+            // Layer targets materialize from the pooled RGBA8 attachment; the direct route
+            // authority only needs their exact pooled format for structural-key resolution.
+            framePlan.steps
+                .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+                .map { step -> GPUFrameTargetRef(step.targetLabel) }
+                .forEach { layer ->
+                    put(
+                        layer,
+                        GPUFrameTextureDescriptor(
+                            GPUPixelBounds(0, 0, 1, 1),
+                            GPUColorFormat("rgba8unorm"),
+                            1,
+                        ),
+                    )
+                }
+        }
         val routeResults = coreRenders.flatMap { render ->
             render.drawPackets.mapNotNull { packet ->
                 val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                     ?: return@mapNotNull null
                 val targetFormat = (
-                    targetPreparations[render.target]?.descriptor as? GPUFrameTextureDescriptor
+                    targetPreparations[render.target]
                     )?.format?.value ?: if (strictNativeRoute) {
                     return diagnostic(
                         "unsupported.native-core-primitive.target-format",
@@ -3339,7 +3363,7 @@ internal class GPUFramePreflighter(
         }
         val directRender = coreRenders.first()
         val directTargetDescriptor =
-            targetPreparations[directRender.target]?.descriptor as? GPUFrameTextureDescriptor
+            targetPreparations[directRender.target]
                 ?: return diagnostic(
                     "unsupported.native-core-primitive.target-format",
                     "Direct CorePrimitive native geometry requires an exact prepared target format.",
@@ -3420,8 +3444,17 @@ internal class GPUFramePreflighter(
             entry.packet.corePrimitivePreparedAuthority
                 ?: return refuse("Direct CorePrimitive packet is missing its builder authority seal.")
         }
+        val declaredLayerTargetLabels = framePlan.steps
+            .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+            .map(GPUFrameStep.LayerTargetPrepareStep::targetLabel)
+            .toSet()
         accepted.indices.forEach { acceptedIndex ->
             val entry = accepted[acceptedIndex]
+            if (entry.render.target.value in declaredLayerTargetLabels) {
+                // Layer-target renders route through the pooled RGBA8 attachment; their
+                // structural authority resolves against the pooled format, not the scene target.
+                return@forEach
+            }
             val clipExecutionPlan = entry.packet.clipExecutionPlan
                 ?: return refuse("Direct CorePrimitive packet is missing its builder clip authority.")
             val blendPlan = entry.packet.blendPlan
@@ -3448,13 +3481,20 @@ internal class GPUFramePreflighter(
                 }
             }
         }
-        val structuralPipelineKey = packetAuthorities.first().structuralPipelineKey
-        if (packetAuthorities.any { authority -> authority.structuralPipelineKey != structuralPipelineKey }) {
+        val sceneAcceptedIndices = accepted.indices.filter { acceptedIndex ->
+            accepted[acceptedIndex].render.target.value !in declaredLayerTargetLabels
+        }
+        val structuralPipelineKey = packetAuthorities[sceneAcceptedIndices.first()]
+            .structuralPipelineKey
+        if (sceneAcceptedIndices.any { acceptedIndex ->
+                packetAuthorities[acceptedIndex].structuralPipelineKey != structuralPipelineKey
+            }
+        ) {
             return refuse("Direct CorePrimitive packets must share one structural pipeline authority.")
         }
         val expectedRenderPipelineKey =
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
-        if (accepted.indices.any { acceptedIndex ->
+        if (sceneAcceptedIndices.any { acceptedIndex ->
                 packetAuthorities[acceptedIndex].renderPipelineKey != expectedRenderPipelineKey ||
                     accepted[acceptedIndex].packet.renderPipelineKey != expectedRenderPipelineKey ||
                     accepted[acceptedIndex].packet.renderPipelineKey !=
@@ -4446,9 +4486,12 @@ internal class GPUFramePreflighter(
             .filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
-        return semanticTypes.any {
-            it == "SampledImage" || it == "TextA8" || it == "ColorGlyph" || it == "Vertices"
-        } &&
+        val hasLayerCompositeSteps =
+            framePlan.steps.any { it is GPUFrameStep.LayerCompositeRenderStep }
+        return (hasLayerCompositeSteps ||
+            semanticTypes.any {
+                it == "SampledImage" || it == "TextA8" || it == "ColorGlyph" || it == "Vertices"
+            }) &&
             semanticTypes.all {
                 it == "CorePrimitive" ||
                     it == "SampledImage" ||
@@ -4494,10 +4537,22 @@ internal class GPUFramePreflighter(
             .filter { request -> request.resource == render.target }
         val targetPreparation = targetPreparations.singleOrNull()
         val targetDescriptor = targetPreparation?.descriptor as? GPUFrameTextureDescriptor
-            ?: return diagnostic(
-                "invalid.preflight.core_primitive_target_authority",
-                "Core primitive target preparation must be one exact texture.",
-            )
+            ?: if (render.target.value in framePlan.steps
+                    .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+                    .map(GPUFrameStep.LayerTargetPrepareStep::targetLabel)
+            ) {
+                // Layer targets materialize from the pooled single-sample RGBA8 attachment.
+                GPUFrameTextureDescriptor(
+                    GPUPixelBounds(0, 0, 1, 1),
+                    GPUColorFormat("rgba8unorm"),
+                    1,
+                )
+            } else {
+                return diagnostic(
+                    "invalid.preflight.core_primitive_target_authority",
+                    "Core primitive target preparation must be one exact texture.",
+                )
+            }
         val targetStructuralColorFormat = try {
             targetDescriptor.format.corePrimitiveStructuralColorFormat()
         } catch (_: IllegalArgumentException) {
@@ -4653,7 +4708,20 @@ internal class GPUFramePreflighter(
                 "Core primitive executable packet fields contradict the canonical route authority.",
             )
         }
-        if (!isCanonicalCorePrimitiveTargetPreparation(
+        val declaredLayerTargetLabels = framePlan.steps
+            .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+            .map(GPUFrameStep.LayerTargetPrepareStep::targetLabel)
+            .toSet()
+        if (targetPreparation == null &&
+            render.target.value !in declaredLayerTargetLabels
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_target_authority",
+                "Core primitive target preparation must be one exact texture.",
+            )
+        }
+        if (targetPreparation != null &&
+            !isCanonicalCorePrimitiveTargetPreparation(
                 targetPreparation,
                 render.target,
                 semantic.targetBounds,
@@ -5478,6 +5546,14 @@ internal class GPUFramePreflighter(
             is GPUFrameStep.CopyAsDrawMaterializationStep -> scope(index, GPUEncoderOperationKind.CopyAsDraw, step.sourceTaskIds, listOf("beginRenderPass", "copyAsDraw", "endRenderPass"), labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.ReadbackCopyStep -> scope(index, GPUEncoderOperationKind.Readback, step.sourceTaskIds, listOf("copyTextureToBuffer"), labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.SurfaceBlitRenderPassStep -> scope(index, GPUEncoderOperationKind.SurfaceBlit, step.sourceTaskIds, listOf("beginRenderPass", "surfaceBlit", "endRenderPass"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.LayerCompositeRenderStep -> scope(
+                index,
+                GPUEncoderOperationKind.LayerComposite,
+                step.sourceTaskIds,
+                listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass"),
+                labels,
+                nativeOperandKeys(step, labels),
+            )
             else -> null
         }
         }
@@ -5871,6 +5947,11 @@ internal class GPUFramePreflighter(
                 key(GPUPreparedNativeOperandRole.SurfacePipeline, GPUPreparedNativeOperandKind.RenderPipeline, "surface:${step.output.value}:pipeline"),
                 key(GPUPreparedNativeOperandRole.SurfaceBindGroup, GPUPreparedNativeOperandKind.BindGroup, "surface:${step.output.value}:bind-group"),
             )
+            is GPUFrameStep.LayerCompositeRenderStep -> listOf(
+                key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, resources[0]),
+                key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "layer-composite:${step.tokenLabel}:pipeline"),
+                key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "layer-composite:${step.tokenLabel}:bind-group"),
+            )
             else -> emptyList()
         }
     }
@@ -6001,7 +6082,10 @@ private fun referencedResources(step: GPUFrameStep): List<GPUFrameResourceRef> =
     is GPUFrameStep.RefusedCompositeCommandStep -> emptyList()
     is GPUFrameStep.LayerTargetPrepareStep -> emptyList()
     is GPUFrameStep.LayerChildrenRenderStep -> emptyList()
-    is GPUFrameStep.LayerCompositeRenderStep -> emptyList()
+    is GPUFrameStep.LayerCompositeRenderStep -> listOf(
+        org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef(step.parentTargetLabel),
+        org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef(step.sourceLabel),
+    )
 }
 
 private fun lastUseExclusive(framePlan: GPUFramePlan, resource: GPUFrameResourceRef, preparationStep: Int): Int {

@@ -268,7 +268,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val fullHasDestinationCopy = framePlan.steps.any {
             it is GPUFrameStep.CopyDestinationStep
         }
-        if (
+        val hasLayerCompositeSteps = framePlan.steps.any {
+            it is GPUFrameStep.LayerCompositeRenderStep
+        }
+        if (hasLayerCompositeSteps ||
             selectWgpu4kPreparedFramePayloadRoute(
                 fullSemantics.map { it::class },
                 fullHasDestinationCopy,

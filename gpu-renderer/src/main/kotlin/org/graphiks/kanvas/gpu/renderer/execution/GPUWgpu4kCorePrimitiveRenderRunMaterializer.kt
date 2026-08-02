@@ -433,13 +433,11 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive runs require single-sample clear/load and store authority.",
             )
         }
+        // Layer-composite frames legitimately mix scene and pooled layer targets in one frame.
+        // Every run is still bound to the shared target operand below; the prepared-surface
+        // assembler redirects layer-target runs to their pooled attachments afterwards. The
+        // legacy single-render routes never observe mixed targets.
         val target = plans.first().target
-        if (plans.any { plan -> plan.target != target }) {
-            return refused(
-                "invalid.native-core-primitive.frame-global-target",
-                "Frame-global CorePrimitive runs must share one exact target.",
-            )
-        }
         val uniformAuthorityRoute = routes.first()
         if (routes.any { route ->
                 !route.hasSameUniformAuthority(uniformAuthorityRoute)

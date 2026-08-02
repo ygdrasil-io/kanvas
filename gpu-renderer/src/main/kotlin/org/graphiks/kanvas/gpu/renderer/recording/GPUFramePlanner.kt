@@ -897,10 +897,17 @@ object GPUFramePlanner {
             }
         }
         flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
-        // Prepend is interim: composite steps blend over an empty parent target until token-interleaving
-        // lands (T14/15); nothing materializes these steps yet, and T15's pixel smoke test will catch
-        // ordering failures loudly.
-        steps.addAll(0, lowerCompositeCommands(taskList))
+        // Composite steps must follow every scene/layer render pass (the composite samples the
+        // layer texture over the already-rendered parent target) and precede the readback or
+        // surface suffix. Insert the per-layer triplet after the last render pass step.
+        val layerSteps = lowerCompositeCommands(taskList)
+        if (layerSteps.isNotEmpty()) {
+            val lastRenderIndex = steps.indexOfLast { it is GPUFrameStep.RenderPassStep }
+            steps.addAll(
+                if (lastRenderIndex >= 0) lastRenderIndex + 1 else steps.size,
+                layerSteps,
+            )
+        }
         return Linearization.Planned(steps, diagnostics)
     }
 
@@ -943,7 +950,9 @@ object GPUFramePlanner {
                     tokenLabel = command.tokenLabel,
                     alpha = command.alpha,
                     clipLabel = command.clipLabel,
-                    sourceTaskIds = emptyList(),
+                    // One synthetic task identity keeps the encoder scope task provenance
+                    // non-empty while the layer steps stay outside the prepared resource graph.
+                    sourceTaskIds = listOf(GPUTaskID("task.layer-composite.${command.tokenLabel}")),
                 )
                 else -> null
             }

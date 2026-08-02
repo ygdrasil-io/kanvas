@@ -532,7 +532,7 @@ class GPUFramePlannerTest {
     }
 
     @Test
-    fun `composite commands lower into layer target children and composite steps before scene steps`() {
+    fun `composite commands lower into layer target children and composite steps after scene steps`() {
         val scene = renderTask("task.render.scene", "recording.a", 1)
         val prepare = GPUPassCommand.PrepareLayerTarget(
             targetLabel = "layer-target:test",
@@ -567,24 +567,24 @@ class GPUFramePlannerTest {
         assertFalse(plan.atomicallyRefused, plan.dumpLines().joinToString("\n"))
         assertEquals(
             listOf(
+                GPUFrameStep.RenderPassStep::class,
                 GPUFrameStep.LayerTargetPrepareStep::class,
                 GPUFrameStep.LayerChildrenRenderStep::class,
                 GPUFrameStep.LayerCompositeRenderStep::class,
-                GPUFrameStep.RenderPassStep::class,
             ),
             plan.steps.map { it::class },
         )
-        val prepareStep = assertIs<GPUFrameStep.LayerTargetPrepareStep>(plan.steps[0])
+        val prepareStep = assertIs<GPUFrameStep.LayerTargetPrepareStep>(plan.steps[1])
         assertEquals("layer-target:test", prepareStep.targetLabel)
         assertEquals("sha256:layer-test", prepareStep.descriptorHash)
         assertEquals("render_attachment,texture_binding", prepareStep.usageLabel)
         assertEquals(16384L, prepareStep.byteEstimate)
-        val childrenStep = assertIs<GPUFrameStep.LayerChildrenRenderStep>(plan.steps[1])
+        val childrenStep = assertIs<GPUFrameStep.LayerChildrenRenderStep>(plan.steps[2])
         assertEquals("layer:test", childrenStep.scopeLabel)
         assertEquals("layer-target:test", childrenStep.targetLabel)
         assertEquals("draw.2", childrenStep.childrenLabel)
         assertEquals("token:test", childrenStep.tokenLabel)
-        val compositeStep = assertIs<GPUFrameStep.LayerCompositeRenderStep>(plan.steps[2])
+        val compositeStep = assertIs<GPUFrameStep.LayerCompositeRenderStep>(plan.steps[3])
         assertEquals("layer-target:test", compositeStep.sourceLabel)
         assertEquals("target.scene", compositeStep.parentTargetLabel)
         assertEquals("srcOver", compositeStep.blendModeLabel)
@@ -592,7 +592,7 @@ class GPUFramePlannerTest {
         assertEquals(0.5f, compositeStep.alpha)
         assertEquals(null, compositeStep.clipLabel)
         assertEquals(GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"), compositeStep.blendPlan)
-        assertEquals("target.scene", assertIs<GPUFrameStep.RenderPassStep>(plan.steps[3]).target.value)
+        assertEquals("target.scene", assertIs<GPUFrameStep.RenderPassStep>(plan.steps[0]).target.value)
     }
 
     @Test

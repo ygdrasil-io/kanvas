@@ -67,6 +67,7 @@ enum class GPUEncoderOperationKind {
     CopyAsDraw,
     Readback,
     SurfaceBlit,
+    LayerComposite,
 }
 
 /** One handle-free encoder scope mapped to exactly one encodable semantic step. */
@@ -1873,6 +1874,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyAsDrawMaterializationStep -> GPUEncoderOperationKind.CopyAsDraw
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ReadbackCopyStep -> GPUEncoderOperationKind.Readback
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.SurfaceBlitRenderPassStep -> GPUEncoderOperationKind.SurfaceBlit
+    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.LayerCompositeRenderStep ->
+        GPUEncoderOperationKind.LayerComposite
     else -> error("Non-encodable semantic step has no encoder operation kind")
 }
 
@@ -1936,6 +1939,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ReadbackCopyStep -> listOf("copyTextureToBuffer")
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.SurfaceBlitRenderPassStep ->
             listOf("beginRenderPass", "surfaceBlit", "endRenderPass")
+        is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.LayerCompositeRenderStep ->
+            listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
         else -> error("Non-encodable semantic step has no facade operations")
     }
 
@@ -1988,5 +1993,10 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.preparedRes
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyAsDrawMaterializationStep -> listOf(source, snapshot)
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ReadbackCopyStep -> listOf(source, staging)
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.SurfaceBlitRenderPassStep -> listOf(scene)
+    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.LayerCompositeRenderStep ->
+        listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef(parentTargetLabel),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef(sourceLabel),
+        )
     else -> emptyList()
 }

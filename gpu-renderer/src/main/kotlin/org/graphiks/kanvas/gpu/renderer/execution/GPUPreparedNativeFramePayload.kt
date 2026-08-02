@@ -1003,10 +1003,12 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         semanticPayloads: List<GPUDrawSemanticPayload> = emptyList(),
         val operandLayout: GPUPreparedNativeRenderOperandLayout =
             GPUPreparedNativeRenderOperandLayout.CommandOrder,
+        operationKindOverride: GPUEncoderOperationKind? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
-        override val operationKind = GPUEncoderOperationKind.Render
+        override val operationKind: GPUEncoderOperationKind =
+            operationKindOverride ?: GPUEncoderOperationKind.Render
         override val operands: List<GPUPreparedNativeOperand> =
             immutableList(renderOperands())
 
@@ -1636,14 +1638,19 @@ internal class GPUPreparedNativeFramePayload(
             val handle = operand.nativeHandle()
             val previous = ownershipByHandle[handle]
             require(previous == null || previous == operand.ownership) {
-                "One native handle cannot have multiple ownership categories"
+                "One native handle cannot have multiple ownership categories " +
+                    "(handle=${handle::class.simpleName} previous=$previous current=${operand.ownership})"
             }
             ownershipByHandle[handle] = operand.ownership
         }
         this.auxiliaryOwnedHandles.forEach { auxiliary ->
             val previous = ownershipByHandle[auxiliary.handle]
             require(previous == null || previous == auxiliary.ownership) {
-                "One native handle cannot have multiple ownership categories"
+                "One native handle cannot have multiple ownership categories " +
+                    "(handle=${auxiliary.handle::class.simpleName} previous=$previous current=${auxiliary.ownership})" +
+                    " aux=[${auxiliaryOwnedHandles.joinToString { it.handle::class.simpleName.orEmpty() }}]" +
+                    " operands=[${this.scopeOperands.flatMap(GPUPreparedNativeScopeOperand::operands)
+                        .joinToString { "${it.ownership}:${it.nativeHandle()::class.simpleName.orEmpty()}" }}]"
             }
             ownershipByHandle[auxiliary.handle] = auxiliary.ownership
         }

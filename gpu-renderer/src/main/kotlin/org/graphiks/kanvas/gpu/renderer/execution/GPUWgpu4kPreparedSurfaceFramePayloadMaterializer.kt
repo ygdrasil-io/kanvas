@@ -1,21 +1,33 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.ArrayBuffer
+import io.ygdrasil.webgpu.BindGroupDescriptor
+import io.ygdrasil.webgpu.BindGroupEntry
+import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Extent3D
+import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 
@@ -112,6 +124,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         val setupLedger = GPUPreRegistrationNativeHandleLedger()
         var pendingDraft: GPUPreparedNativeFrameDraft? = null
         var coreMaterializer: GPUWgpu4kCorePrimitiveRenderRunMaterializer? = null
+        val compositeFrameHandles = mutableListOf<AutoCloseable>()
+        val compositeBindGroups = mutableListOf<AutoCloseable>()
         return try {
             val colorGlyphInvariants = accepted.colorGlyphPlan?.let {
                 onCacheAcquire()
@@ -242,6 +256,43 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 result.scopeOperands
             }
 
+            val layerTargetsByLabel = linkedMapOf<
+                String,
+                MaterializedLayerTarget
+                >()
+            val sceneLayerBounds = preparedSurfaceSceneTargetBounds(framePlan)
+            accepted.layerTargets.forEach { layer ->
+                val texture = setupLedger.track(
+                    device.createTexture(
+                        TextureDescriptor(
+                            size = Extent3D(
+                                sceneLayerBounds.width.toUInt(),
+                                sceneLayerBounds.height.toUInt(),
+                                1u,
+                            ),
+                            format = GPUTextureFormat.RGBA8Unorm,
+                            usage = GPUTextureUsage.RenderAttachment or
+                                GPUTextureUsage.TextureBinding,
+                            mipLevelCount = 1u,
+                            sampleCount = 1u,
+                            label = "Kanvas.frame.layerTarget.${layer.targetLabel}",
+                        ),
+                    ),
+                )
+                val view = setupLedger.track(texture.createView())
+                layerTargetsByLabel[layer.targetLabel] = MaterializedLayerTarget(
+                    plan = layer,
+                    texture = texture,
+                    view = view,
+                )
+            }
+            if (layerTargetsByLabel.size != accepted.layerTargets.size) {
+                throw PreparedSurfaceMaterializationFailure(
+                    "invalid.prepared-surface.layer-target-partition",
+                    "Layer target native resources must remain distinct per sealed plan.",
+                )
+            }
+
             val corePlans = accepted.orderedRuns.mapNotNull { run ->
                 (run as? GPUPreparedSurfaceNativeRunPlan.Core)?.plan
             }
@@ -267,6 +318,187 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 }
             }
             coreLifecycle = coreReady?.leaseLifecycle
+            val layerChildrenOperands = coreReady?.renderOperands.orEmpty().map { operand ->
+                val layer = accepted.layerTargets.singleOrNull { layer ->
+                    layer.childrenRenderStepIndex == operand.sourceStepIndex
+                }
+                if (layer == null) {
+                    operand
+                } else {
+                    val native = requireNotNull(layerTargetsByLabel[layer.targetLabel]) {
+                        "Layer children render lost its pooled layer target"
+                    }
+                    GPUPreparedNativeScopeOperand.Render(
+                        sourceStepIndex = operand.sourceStepIndex,
+                        pass = GPUPreparedNativeRenderPassConfig(
+                            colorTarget = GPUPreparedNativeTextureViewOperand(
+                                native.view,
+                                generationSeal.deviceGeneration,
+                                GPUPreparedNativeOperandOwnership.Borrowed,
+                            ),
+                            resolveTarget = operand.pass.resolveTarget,
+                            depthStencilTarget = operand.pass.depthStencilTarget,
+                            loadOperation = operand.pass.loadOperation,
+                            storeOperation = operand.pass.storeOperation,
+                            clearColor = operand.pass.clearColor,
+                            depthClearValue = operand.pass.depthClearValue,
+                            depthLoadOperation = operand.pass.depthLoadOperation,
+                            depthStoreOperation = operand.pass.depthStoreOperation,
+                            depthReadOnly = operand.pass.depthReadOnly,
+                            stencilClearValue = operand.pass.stencilClearValue,
+                            stencilLoadOperation = operand.pass.stencilLoadOperation,
+                            stencilStoreOperation = operand.pass.stencilStoreOperation,
+                            stencilReadOnly = operand.pass.stencilReadOnly,
+                        ),
+                        commands = operand.commands,
+                        semanticPayloads = operand.semanticPayloads,
+                        operandLayout = operand.operandLayout,
+                    )
+                }
+            }
+            val compositeOperands = accepted.compositeRuns.map { run ->
+                val native = requireNotNull(layerTargetsByLabel[run.layerTarget.targetLabel]) {
+                    "Layer composite lost its pooled layer target"
+                }
+                val sceneBounds = preparedSurfaceSceneTargetBounds(framePlan)
+                val left = run.layerTarget.bounds.left.toFloat()
+                val top = run.layerTarget.bounds.top.toFloat()
+                val right = run.layerTarget.bounds.right.toFloat()
+                val bottom = run.layerTarget.bounds.bottom.toFloat()
+                val quad = GPUPreparedImageUniformInput(
+                    positions = listOf(
+                        preparedSurfaceNdc(run.layerTarget.bounds.left, run.layerTarget.bounds.top, sceneBounds),
+                        preparedSurfaceNdc(run.layerTarget.bounds.right, run.layerTarget.bounds.top, sceneBounds),
+                        preparedSurfaceNdc(run.layerTarget.bounds.right, run.layerTarget.bounds.bottom, sceneBounds),
+                        preparedSurfaceNdc(run.layerTarget.bounds.left, run.layerTarget.bounds.bottom, sceneBounds),
+                    ),
+                    uvs = listOf(
+                        left / sceneBounds.width.toFloat() to top / sceneBounds.height.toFloat(),
+                        right / sceneBounds.width.toFloat() to top / sceneBounds.height.toFloat(),
+                        right / sceneBounds.width.toFloat() to bottom / sceneBounds.height.toFloat(),
+                        left / sceneBounds.width.toFloat() to bottom / sceneBounds.height.toFloat(),
+                    ),
+                    tintPremultipliedRgba = listOf(
+                        run.step.alpha,
+                        run.step.alpha,
+                        run.step.alpha,
+                        run.step.alpha,
+                    ),
+                    atlasColorPremultipliedRgba = null,
+                    alphaOnly = false,
+                    atlasSourceBlend = null,
+                )
+                val uniformBytes = GPUPreparedImageUniformAbi.pack(quad)
+                val cached = when (
+                    val acquired = preparedImageCache.acquire(
+                        GPUPreparedImagePipelineKey(
+                            destinationBlendState = "src-over",
+                            targetFormat = "RGBA8UnormSrgb",
+                            bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+                        ),
+                        generationSeal.deviceGeneration,
+                    )
+                ) {
+                    is GPUPreparedImageCacheAcquire.Ready -> acquired.pipeline
+                    is GPUPreparedImageCacheAcquire.Refused ->
+                        throw PreparedSurfaceMaterializationFailure(
+                            acquired.code,
+                            "Layer composite pipeline acquisition was refused: ${acquired.message}.",
+                        )
+                }
+                val uniformBuffer = setupLedger.track(
+                    device.createBuffer(
+                        BufferDescriptor(
+                            size = GPUPreparedImageUniformAbi.BYTE_SIZE.toULong(),
+                            usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                            mappedAtCreation = false,
+                            label = "Kanvas.frame.layerComposite.uniforms",
+                        ),
+                    ),
+                ).also(compositeFrameHandles::add)
+                queue.writeBuffer(
+                    uniformBuffer,
+                    0uL,
+                    ArrayBuffer.of(uniformBytes),
+                    0uL,
+                    uniformBytes.size.toULong(),
+                )
+                val sampler = setupLedger.track(
+                    device.createSampler(
+                        SamplerDescriptor(
+                            addressModeU = GPUAddressMode.ClampToEdge,
+                            addressModeV = GPUAddressMode.ClampToEdge,
+                            addressModeW = GPUAddressMode.ClampToEdge,
+                            magFilter = GPUFilterMode.Nearest,
+                            minFilter = GPUFilterMode.Nearest,
+                            mipmapFilter = GPUMipmapFilterMode.Nearest,
+                            lodMinClamp = 0f,
+                            lodMaxClamp = 0f,
+                            compare = null,
+                            maxAnisotropy = 1u.toUShort(),
+                            label = "Kanvas.frame.layerComposite.sampler",
+                        ),
+                    ),
+                ).also(compositeFrameHandles::add)
+                val bindGroup = setupLedger.track(
+                    device.createBindGroup(
+                        BindGroupDescriptor(
+                            label = "Kanvas.frame.layerComposite.bindGroup",
+                            layout = cached.bindGroupLayout,
+                            entries = listOf(
+                                BindGroupEntry(
+                                    binding = 0u,
+                                    resource = BufferBinding(
+                                        buffer = uniformBuffer,
+                                        offset = 0uL,
+                                        size = GPUPreparedImageUniformAbi.BYTE_SIZE.toULong(),
+                                    ),
+                                ),
+                                BindGroupEntry(binding = 1u, resource = native.view),
+                                BindGroupEntry(binding = 2u, resource = sampler),
+                            ),
+                        ),
+                    ),
+                ).also(compositeBindGroups::add)
+                val commands = buildList {
+                    add(
+                        GPUPreparedNativeRenderCommand.SetPipeline(
+                            GPUPreparedNativeRenderPipelineOperand(
+                                cached.pipeline,
+                                generationSeal.deviceGeneration,
+                                GPUPreparedNativeOperandOwnership.Borrowed,
+                            ),
+                        ),
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            0,
+                            GPUPreparedNativeBindGroupOperand(
+                                bindGroup,
+                                generationSeal.deviceGeneration,
+                                GPUPreparedNativeOperandOwnership.Borrowed,
+                            ),
+                            dynamicOffsets = listOf(0L),
+                        ),
+                    )
+                    preparedSurfaceLayerClipScissor(run.step.clipLabel)?.let { (left, top, width, height) ->
+                        add(
+                            GPUPreparedNativeRenderCommand.SetScissor(left, top, width, height),
+                        )
+                    }
+                    add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(6)))
+                }
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = run.sourceStepIndex,
+                    pass = GPUPreparedNativeRenderPassConfig(
+                        colorTarget = targetViewOperand,
+                        loadOperation = GPUPreparedNativeLoadOperation.Load,
+                        storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    ),
+                    commands = commands,
+                    operationKindOverride = GPUEncoderOperationKind.LayerComposite,
+                )
+            }
             frameLifecycle = combinePreparedFrameLeaseLifecycles(
                 coverageMaskLifecycles + listOfNotNull(coreLifecycle),
             )
@@ -683,8 +915,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             }
 
             val operandsByStep = (
-                coreReady?.renderOperands.orEmpty() +
+                layerChildrenOperands +
                     coverageMaskOperands +
+                    compositeOperands +
                     finalImageOperands +
                     preparedR8Resources?.uploadOperands.orEmpty() +
                     finalTextOperands +
@@ -776,6 +1009,40 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                                 ),
                             )
                         }
+                    compositeFrameHandles.forEach { handle ->
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                handle,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        )
+                    }
+                    compositeBindGroups.takeIf(List<AutoCloseable>::isNotEmpty)?.let { groups ->
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                GPUPreparedNativeCompletionAnchor(groups),
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        )
+                    }
+                    val layerViews = layerTargetsByLabel.values
+                        .map(MaterializedLayerTarget::view)
+                    layerViews.takeIf(List<GPUTextureView>::isNotEmpty)?.let { views ->
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                GPUPreparedNativeCompletionAnchor(views),
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        )
+                    }
+                    layerTargetsByLabel.values.forEach { layer ->
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                layer.texture,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        )
+                    }
                 },
                 leaseLifecycle = frameLifecycle,
                 pathDepthStencilViewAuthority =
@@ -883,6 +1150,70 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         code: String,
         message: String,
     ) = GPUPreparedNativeFramePayloadMaterialization.Refused(code, message)
+}
+
+private class MaterializedLayerTarget(
+    val plan: GPUPreparedSurfaceLayerTargetPlan,
+    val texture: GPUTexture,
+    val view: GPUTextureView,
+)
+
+private fun preparedSurfaceSceneTargetBounds(framePlan: GPUFramePlan): GPUPixelBounds {
+    val descriptor = framePlan.steps
+        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        .single { request -> request.role == GPUFrameResourceRole.SceneTarget }
+        .descriptor as? GPUFrameTextureDescriptor
+        ?: throw PreparedSurfaceMaterializationFailure(
+            "invalid.prepared-surface.scene-target-descriptor",
+            "The prepared scene target lost its exact texture descriptor.",
+        )
+    return descriptor.logicalBounds
+}
+
+private fun preparedSurfaceNdc(
+    x: Int,
+    y: Int,
+    bounds: GPUPixelBounds,
+): Pair<Float, Float> =
+    (x.toFloat() / bounds.width.toFloat() * 2f - 1f) to
+        (1f - y.toFloat() / bounds.height.toFloat() * 2f)
+
+/** Parses the device-rect clip label "l,t,r,b,aa" into a scissor rect, or null when unclipped. */
+private fun preparedSurfaceLayerClipScissor(
+    clipLabel: String?,
+): GPUPreparedNativeRenderCommand.SetScissor? {
+    if (clipLabel == null) return null
+    val parts = clipLabel.split(',')
+    if (parts.size < 4) {
+        throw PreparedSurfaceMaterializationFailure(
+            "invalid.prepared-surface.layer-clip",
+            "Prepared layer clip labels must carry device rect l,t,r,b,aa.",
+        )
+    }
+    val coordinates = parts.take(4).map { part ->
+        part.trim().toIntOrNull()
+            ?: throw PreparedSurfaceMaterializationFailure(
+                "invalid.prepared-surface.layer-clip",
+                "Prepared layer clip coordinates must be integers.",
+            )
+    }
+    val left = coordinates[0]
+    val top = coordinates[1]
+    val right = coordinates[2]
+    val bottom = coordinates[3]
+    if (right <= left || bottom <= top) {
+        throw PreparedSurfaceMaterializationFailure(
+            "invalid.prepared-surface.layer-clip",
+            "Prepared layer clip rect must be non-empty.",
+        )
+    }
+    return GPUPreparedNativeRenderCommand.SetScissor(
+        left,
+        top,
+        right - left,
+        bottom - top,
+    )
 }
 
 private fun GPUPreparedNativeScopeOperand.PreparedImageRenderRun.toTargetBoundRender(

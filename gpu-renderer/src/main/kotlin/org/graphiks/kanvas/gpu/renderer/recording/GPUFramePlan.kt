@@ -564,7 +564,9 @@ sealed interface GPUFrameStep {
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
-        override val executionKind = GPUFrameStepExecutionKind.Encoder
+        // The children pass is realized by the layer-target RenderPassStep; this step is
+        // ordering evidence only, so it must not claim an encoder scope.
+        override val executionKind = GPUFrameStepExecutionKind.DependencyOnly
 
         init {
             require(scopeLabel.isNotBlank()) { "GPUFrameStep.LayerChildrenRenderStep.scopeLabel must not be blank" }

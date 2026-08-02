@@ -472,6 +472,54 @@ internal class GPUPreparedSurfaceCoverageMaskRunPlan(
     }
 }
 
+/**
+ * One declared offscreen layer target with its exact children render pass and pooled bounds.
+ *
+ * The materializer allocates one pooled RGBA8 attachment of [bounds], renders the children
+ * render pass into it, and feeds the sampled layer texture to the composite draw.
+ */
+internal class GPUPreparedSurfaceLayerTargetPlan(
+    val targetLabel: String,
+    val prepareStepIndex: Int,
+    val childrenRenderStepIndex: Int,
+    val compositeStepIndex: Int,
+    val bounds: GPUPixelBounds,
+) {
+    init {
+        require(targetLabel.isNotBlank() &&
+            prepareStepIndex >= 0 &&
+            childrenRenderStepIndex >= 0 &&
+            compositeStepIndex >= 0 &&
+            childrenRenderStepIndex < compositeStepIndex &&
+            !bounds.isEmpty
+        ) {
+            "A prepared layer target must precede its children render and composite steps"
+        }
+    }
+}
+
+/**
+ * One materialized layer composite draw: a textured quad sampling [layerTarget] onto the
+ * parent scene target with the real [GPUBlendPlan] and alpha from the command.
+ */
+internal class GPUPreparedSurfaceLayerCompositeRunPlan(
+    val sourceStepIndex: Int,
+    val step: GPUFrameStep.LayerCompositeRenderStep,
+    val layerTarget: GPUPreparedSurfaceLayerTargetPlan,
+    val exactScopeKey: GPUPreparedNativeScopeKey,
+) {
+    init {
+        require(sourceStepIndex >= 0 &&
+            exactScopeKey.sourceStepIndex == sourceStepIndex &&
+            exactScopeKey.operationKind == GPUEncoderOperationKind.LayerComposite &&
+            step.sourceLabel == layerTarget.targetLabel &&
+            preparedImageAtlasSourceBlend(step.blendPlan.mode) != null
+        ) {
+            "A prepared layer composite must retain its exact layer target and supported blend"
+        }
+    }
+}
+
 private data class GPUPreparedColorGlyphDestinationReadAuthority(
     val copySourceStepIndex: Int,
     val renderSourceStepIndex: Int,
@@ -569,6 +617,8 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     val colorGlyphPlan: GPUPreparedColorGlyphRenderRunPlan?,
     colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan>,
     coverageMaskRuns: List<GPUPreparedSurfaceCoverageMaskRunPlan>,
+    layerTargets: List<GPUPreparedSurfaceLayerTargetPlan>,
+    compositeRuns: List<GPUPreparedSurfaceLayerCompositeRunPlan>,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
 ) {
@@ -579,6 +629,9 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         immutableList(coverageMaskRuns)
     val colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan> =
         immutableList(colorGlyphDestinationReads)
+    val layerTargets: List<GPUPreparedSurfaceLayerTargetPlan> = immutableList(layerTargets)
+    val compositeRuns: List<GPUPreparedSurfaceLayerCompositeRunPlan> =
+        immutableList(compositeRuns)
 
     init {
         require(encoderPlanId.isNotBlank() && contextIdentity.isNotBlank())
@@ -625,6 +678,9 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
                 it.exactCopyScopeKey
             })
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.coverageMaskRuns.map {
+                it.exactScopeKey
+            })
+            addAll(this@GPUPreparedSurfaceNativePreflightPlan.compositeRuns.map {
                 it.exactScopeKey
             })
             readback?.let { add(it.exactScopeKey) }
@@ -792,15 +848,18 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "The mixed prepared route contains an unsupported frame step.",
             )
         }
-        if (renders.anyIndexed { index, render ->
-                render.loadStore.loadOp != (if (index == 0) "clear" else "load") ||
-                    render.loadStore.clearColorLabel != null ||
-                    render.loadStore.storePlan != GPUStorePlan.Store
+        val rendersByTarget = renders.groupBy(GPUFrameStep.RenderPassStep::target)
+        if (rendersByTarget.any { (_, targetRenders) ->
+                targetRenders.anyIndexed { index, render ->
+                    render.loadStore.loadOp != (if (index == 0) "clear" else "load") ||
+                        render.loadStore.clearColorLabel != null ||
+                        render.loadStore.storePlan != GPUStorePlan.Store
+                }
             }
         ) {
             return refused(
                 "invalid.prepared-surface.render-load-store",
-                "The first mixed render must clear and every later render must load; all must store.",
+                "Per target, the first mixed render must clear and every later render must load; all must store.",
             )
         }
         if (renders.any { render ->
@@ -3622,6 +3681,77 @@ internal class GPUPreparedSurfaceNativePreflight(
                 },
             )
         }
+        val layerTargets = framePlan.steps.mapIndexedNotNull { index, step ->
+            val prepare = step as? GPUFrameStep.LayerTargetPrepareStep
+                ?: return@mapIndexedNotNull null
+            val childrenRenderIndex = framePlan.steps.indexOfFirst { candidate ->
+                candidate is GPUFrameStep.RenderPassStep &&
+                    candidate.target.value == prepare.targetLabel
+            }
+            if (childrenRenderIndex < 0) {
+                return refused(
+                    "invalid.prepared-surface.layer-target",
+                    "Every prepared layer target must retain one exact children render pass.",
+                    mapOf("targetLabel" to prepare.targetLabel),
+                )
+            }
+            val compositeIndex = framePlan.steps.indexOfFirst { candidate ->
+                candidate is GPUFrameStep.LayerCompositeRenderStep &&
+                    candidate.sourceLabel == prepare.targetLabel
+            }
+            if (compositeIndex < 0) {
+                return refused(
+                    "invalid.prepared-surface.layer-target",
+                    "Every prepared layer target must retain one exact composite step.",
+                    mapOf("targetLabel" to prepare.targetLabel),
+                )
+            }
+            val childrenRender = framePlan.steps[childrenRenderIndex] as GPUFrameStep.RenderPassStep
+            val bounds = preparedSurfaceLayerChildrenBounds(childrenRender.drawPackets)
+                ?: return refused(
+                    "unsupported.prepared-surface.layer-children-geometry",
+                    "Prepared layer children must resolve to one exact non-empty device bounds union.",
+                    mapOf("targetLabel" to prepare.targetLabel),
+                )
+            GPUPreparedSurfaceLayerTargetPlan(
+                targetLabel = prepare.targetLabel,
+                prepareStepIndex = index,
+                childrenRenderStepIndex = childrenRenderIndex,
+                compositeStepIndex = compositeIndex,
+                bounds = bounds,
+            )
+        }
+        if (layerTargets.map { it.targetLabel }.distinct().size != layerTargets.size) {
+            return refused(
+                "invalid.prepared-surface.layer-target",
+                "Prepared layer targets must remain distinct.",
+            )
+        }
+        val compositeRuns = framePlan.steps.mapIndexedNotNull { index, step ->
+            val composite = step as? GPUFrameStep.LayerCompositeRenderStep
+                ?: return@mapIndexedNotNull null
+            if (preparedImageAtlasSourceBlend(composite.blendPlan.mode) == null) {
+                return refused(
+                    "unsupported.prepared-surface.layer-composite-blend",
+                    "Prepared layer composites admit only the closed atlas source blend set.",
+                    mapOf("blendMode" to composite.blendPlan.mode.name),
+                )
+            }
+            val layer = layerTargets.singleOrNull { it.targetLabel == composite.sourceLabel }
+                ?: return refused(
+                    "invalid.prepared-surface.layer-composite",
+                    "Every prepared layer composite must name one exact declared layer target.",
+                    mapOf("sourceLabel" to composite.sourceLabel),
+                )
+            GPUPreparedSurfaceLayerCompositeRunPlan(
+                sourceStepIndex = index,
+                step = composite,
+                layerTarget = layer,
+                exactScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == index
+                },
+            )
+        }
         return try {
             GPUPreparedSurfaceNativePreflightResult.Accepted(
                 GPUPreparedSurfaceNativePreflightPlan(
@@ -3638,6 +3768,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     colorGlyphPlan = colorGlyphPlan,
                     colorGlyphDestinationReads = colorGlyphDestinationReads,
                     coverageMaskRuns = coverageMaskRuns,
+                    layerTargets = layerTargets,
+                    compositeRuns = compositeRuns,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
                 ),
@@ -3711,7 +3843,11 @@ internal class GPUPreparedSurfaceNativePreflight(
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
             .map { request -> request.resource }
             .toSet()
-        if (generationSeal.resourceGenerations.keys != preparedRefs ||
+        val declaredLayerTargets = framePlan.steps
+            .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+            .map { step -> GPUFrameTargetRef(step.targetLabel) }
+            .toSet()
+        if (generationSeal.resourceGenerations.keys != preparedRefs + declaredLayerTargets ||
             generationSeal.resourceGenerations.values.any { it < 0L } ||
             resources.ordinaryResources.any { evidence ->
                 evidence.deviceGeneration != generationSeal.deviceGeneration ||
@@ -3785,6 +3921,10 @@ internal class GPUPreparedSurfaceNativePreflight(
         val ordinary = requests.filter { it.role != GPUFrameResourceRole.ReadbackStaging }
         val readbacks = requests.filter { it.role == GPUFrameResourceRole.ReadbackStaging }
         val declaredResources = requests.map(GPUResourcePreparationRequest::resource)
+        val declaredLayerTargets = framePlan.steps
+            .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+            .map { step -> GPUFrameTargetRef(step.targetLabel) }
+            .toSet()
         val resourceMismatch = when {
             declaredResources.distinct().size != declaredResources.size ->
                 "Frame preparation declarations contain duplicate logical resources."
@@ -3794,7 +3934,8 @@ internal class GPUPreparedSurfaceNativePreflight(
             readbacks.map(GPUResourcePreparationRequest::resource) !=
                 resources.outputOwnedReadbacks.map(GPUPreparedReadbackOutput::stagingResource) ->
                 "Output-owned readback resources differ from declaration order."
-            generationSeal.resourceGenerations.keys != declaredResources.toSet() ->
+            generationSeal.resourceGenerations.keys !=
+                declaredResources.toSet() + declaredLayerTargets ->
                 "The generation seal does not exactly cover resource declarations."
             !resources.ordinaryResources.zip(ordinary).all { (evidence, request) ->
                 evidence.matchesExactPreparation(request, generationSeal)
@@ -4008,9 +4149,16 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "Mixed prepared surfaces require one exact scene target.",
             )
         val descriptor = sceneRequest.descriptor as? GPUFrameTextureDescriptor
+        val declaredLayerTargetLabels = framePlan.steps
+            .filterIsInstance<GPUFrameStep.LayerTargetPrepareStep>()
+            .map(GPUFrameStep.LayerTargetPrepareStep::targetLabel)
+            .toSet()
         if (descriptor?.format != GPUColorFormat.RGBA8UnormSrgb ||
             descriptor.sampleCount != 1 ||
-            renders.any { render -> render.target != sceneRequest.resource }
+            renders.any { render ->
+                render.target != sceneRequest.resource &&
+                    render.target.value !in declaredLayerTargetLabels
+            }
         ) {
             return refused(
                 "unsupported.prepared-surface.target-color",
@@ -4458,6 +4606,23 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                     GPUPreparedNativeOperandRole.SurfaceBindGroup,
                     GPUPreparedNativeOperandKind.BindGroup,
                     "surface:${step.output.value}:bind-group",
+                ),
+            )
+            is GPUFrameStep.LayerCompositeRenderStep -> listOf(
+                key(
+                    GPUPreparedNativeOperandRole.RenderColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    labels[0],
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderPipeline,
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    "layer-composite:${step.tokenLabel}:pipeline",
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    "layer-composite:${step.tokenLabel}:bind-group",
                 ),
             )
             else -> emptyList()
@@ -5163,6 +5328,9 @@ private fun GPUFrameStep.isPreparedSurfaceStep(): Boolean = when (this) {
     is GPUFrameStep.AcquireSurfaceOutput,
     is GPUFrameStep.SurfaceBlitRenderPassStep,
     is GPUFrameStep.PostSubmitPresentAction,
+    is GPUFrameStep.LayerTargetPrepareStep,
+    is GPUFrameStep.LayerChildrenRenderStep,
+    is GPUFrameStep.LayerCompositeRenderStep,
     -> true
     else -> false
 }
@@ -5174,8 +5342,48 @@ private fun GPUFrameStep.preparedSurfaceOperationKindOrNull(): GPUEncoderOperati
         is GPUFrameStep.CopyDestinationStep -> GPUEncoderOperationKind.CopyDestination
         is GPUFrameStep.ReadbackCopyStep -> GPUEncoderOperationKind.Readback
         is GPUFrameStep.SurfaceBlitRenderPassStep -> GPUEncoderOperationKind.SurfaceBlit
+        is GPUFrameStep.LayerCompositeRenderStep -> GPUEncoderOperationKind.LayerComposite
         else -> null
     }
+
+/**
+ * Resolves the exact device-space layer texture bounds from the children draws.
+ *
+ * Every child must carry a CorePrimitive semantic with either rect geometry or a sealed
+ * triangulated-path cover bounds; the layer texture covers their union, and the composite
+ * quad samples that texture at the same device rect in the parent target.
+ */
+private fun preparedSurfaceLayerChildrenBounds(
+    packets: List<GPUDrawPacket>,
+): GPUPixelBounds? {
+    var union: GPUPixelBounds? = null
+    for (packet in packets) {
+        val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            ?: return null
+        val bounds = when (val geometry = semantic.geometry) {
+            is GPUCorePrimitiveGeometry.Rect -> GPUPixelBounds(
+                geometry.left.toInt(),
+                geometry.top.toInt(),
+                geometry.right.toInt(),
+                geometry.bottom.toInt(),
+            )
+            is GPUCorePrimitiveGeometry.TriangulatedPath -> geometry.coverBounds
+            else -> return null
+        }
+        if (bounds.isEmpty) return null
+        union = if (union == null) {
+            bounds
+        } else {
+            GPUPixelBounds(
+                minOf(union.left, bounds.left),
+                minOf(union.top, bounds.top),
+                maxOf(union.right, bounds.right),
+                maxOf(union.bottom, bounds.bottom),
+            )
+        }
+    }
+    return union
+}
 
 private fun preparedSurfaceSha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
