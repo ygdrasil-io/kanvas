@@ -192,6 +192,21 @@ exact tolerances.
 - `GPUClipCoverageSurfaceTest` (4) + `GPUClipAdvancedBlendSurfaceTest` (2): re-pointed to
   `composite.clip` / `composite.operation` / `mixed-composite-topology` terminal assertions.
 
+**Task 17 follow-up (covered DrawPicture in saveLayer scopes):** an unpainted DrawPicture
+inside a bounded saveLayer scope is refused at the capture boundary with
+`unsupported.composite.operation` (like every other non-core child; FP-06 pattern) instead
+of being expanded into the layer. The expansion silently dropped the picture content — the
+flat mapper never maps picture-expanded children (`commandIdsByOperationIndex` records only
+top-level mapped ops), so the covered children rode no commands — and the picture-only-layer
+case died on the internal `invalid.prepared-surface.layer-target` invariant instead of a
+documented refusal. Re-pointed: `GPUPreparedCompositeFrameRouteIntegrationTest`
+`draw picture in composite frame is not silently dropped` (Ready → `composite.operation`
+refusal) and added the mixed rect+picture route case; `GPUPreparedCompositeCaptureSemanticTest`
+gained picture-only-layer and mixed-layer refusal cases (19 tests). Root-level and painted
+pictures are unchanged (still `mixed-composite-topology` at the builder boundary), so
+`GPUAllApiBlendSurfaceTest` / `GPUClipCoverageSurfaceTest` /
+`GPUSaveLayerCompositeRegressionTest` needed no re-pointing.
+
 ### 9.4 Final verification
 
 ```bash
@@ -210,7 +225,16 @@ rtk proxy ./gradlew :kanvas:test :gpu-renderer:test --no-parallel
 ### 9.5 Evidence inventory (Task 17)
 
 - Full-suite failure log at flip time: `/tmp/fp17_cutover.log` (581 failures, all loud
-  `GPUPreparedSurfaceTerminalException` refusals; zero silent drops).
-- Post-fix full-suite run: `:kanvas:test` 3228 tests green; `:gpu-renderer:test` 3256 tests
-  with the single pre-existing boundary baseline.
+  `GPUPreparedSurfaceTerminalException` refusals; zero silent drops in that log).
+- **Task 17 follow-up correction:** the flip log's "zero silent drops" claim did not cover
+  the covered-unpainted-`DrawPicture`-in-saveLayer shape. That shape rendered fatal=0 with
+  zero diagnostics while the picture content was absent (pixel evidence: pure red, no blue;
+  legacy route rendered it correctly), and the picture-only-layer variant died on the
+  internal `invalid.prepared-surface.layer-target` invariant. Fixed by refusing the shape at
+  the capture boundary (`unsupported.composite.operation`) — it now refuses loudly with a
+  documented code, and the picture-in-layer shape no longer has any silent or
+  internal-invariant path.
+- Post-fix full-suite run: `:kanvas:test` 3228 tests green (including the re-pointed route
+  expectations and the new capture refusal cases); `:gpu-renderer:test` 3256 tests with the
+  single pre-existing boundary baseline.
 - Task 15 executor evidence (unchanged, still green): `GPUWgpu4kLayerTargetCompositeSmokeTest`.

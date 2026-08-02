@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import kotlin.test.fail
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -144,7 +143,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     }
 
     @Test
-    fun `draw picture in composite frame is not silently dropped`() {
+    fun `draw picture inside a saveLayer scope refuses instead of silently dropping`() {
         val picture = org.graphiks.kanvas.picture.Picture(
             Rect.fromLTRB(0f, 0f, 64f, 48f),
             listOf(rect()),
@@ -164,29 +163,46 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
             ),
         )
 
-        // Today the picture-in-layer fixture is Ready: the capturer expands the
-        // picture's children into the layer scope, so RenderLayerChildren covers
-        // them and the composite commands carry the content. Pin that branch — a
-        // future change that refuses this topology must fail loudly and force an
-        // explicit decision, not pass through an open refusal clause.
-        val ready = when (result) {
-            is GPUPreparedSurfaceFrameBuildResult.Ready -> result
-            is GPUPreparedSurfaceFrameBuildResult.Refused -> fail(
-                "DrawPicture inside a layer is expected to render via the composite " +
-                    "commands; a refusal would be an explicit topology decision, " +
-                    "got ${result.diagnostic.code.value}",
-            )
-            is GPUPreparedSurfaceFrameBuildResult.NoOp -> error("a NoOp result silently drops the picture content")
-        }
-        assertTrue(
-            ready.compositeCommandCount > 0,
-            "composite commands must cover the picture content",
+        // Task 17 follow-up: the capturer refuses an unpainted DrawPicture inside a saveLayer
+        // scope at the capture boundary with unsupported.composite.operation (like every
+        // other non-core child). Its expanded children cannot ride the composite commands —
+        // the flat mapper never maps them (commandIdsByOperationIndex records only top-level
+        // mapped ops), so the previous Ready branch silently dropped the picture content
+        // (pixel evidence: pure red, no blue) and the picture-only case died on the internal
+        // invalid.prepared-surface.layer-target invariant. Both must be this loud refusal.
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
+        assertEquals("unsupported.composite.operation", refused.diagnostic.code.value)
+        assertEquals("surface.composite", refused.diagnostic.facts["boundary"])
+    }
+
+    @Test
+    fun `mixed rect and picture inside a saveLayer scope refuses loudly`() {
+        val picture = org.graphiks.kanvas.picture.Picture(
+            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            listOf(rect()),
         )
-        val commandKinds = ready.taskList.compositeCommands.map { it::class.simpleName }.toSet()
-        assertTrue(
-            commandKinds.contains("RenderLayerChildren"),
-            "missing RenderLayerChildren in $commandKinds",
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    rect(),
+                    DisplayOp.DrawPicture(
+                        picture = picture,
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                    DisplayOp.EndLayer,
+                ),
+            ),
         )
+
+        // Same capture-boundary refusal as the picture-only layer: a covered DrawPicture can
+        // never be materialized by the composite commands, so the frame refuses loudly
+        // instead of dropping the blue picture behind the red rect.
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
+        assertEquals("unsupported.composite.operation", refused.diagnostic.code.value)
+        assertEquals("1", refused.diagnostic.facts["operationIndex"])
     }
 
     @Test

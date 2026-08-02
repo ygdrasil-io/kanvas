@@ -424,6 +424,24 @@ internal object GPUPreparedCompositeCapturer {
             activePictureIds += pictureId
             try {
                 if (operation.paint == null) {
+                    // An unpainted DrawPicture inside a saveLayer scope cannot be materialized
+                    // by the composite commands: the flat mapper never maps its expanded
+                    // children (commandIdsByOperationIndex records only top-level mapped ops),
+                    // so the layer children split would carry no commands and the picture
+                    // content would be silently dropped. Refuse like every other non-core
+                    // child in a layer scope (FP-06 pattern) instead of expanding into the
+                    // layer. Painted pictures keep their PaintedPicture scope: they refuse at
+                    // the builder boundary (mixed-composite-topology / layer bounds).
+                    if (parentScope.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer) {
+                        refuse(
+                            GPUPreparedCompositeRefusalCodes.OPERATION,
+                            operationIndex,
+                            mapOf(
+                                "operation" to "DrawPicture",
+                                "reason" to "unpainted picture inside a saveLayer scope",
+                            ),
+                        )
+                    }
                     processOperations(
                         operations = operation.picture.ops,
                         parentScope = parentScope,

@@ -351,6 +351,50 @@ class GPUPreparedCompositeCaptureSemanticTest {
         )
     }
 
+    // Task 17 follow-up: an unpainted DrawPicture inside a saveLayer scope refuses at the
+    // capture boundary (unsupported.composite.operation, like every other non-core child).
+    // Its expanded children cannot ride the composite commands: the flat mapper never maps
+    // them (commandIdsByOperationIndex only records top-level mapped ops), so the old
+    // elision silently dropped the picture content. The refusal must stay loud.
+    @Test
+    fun `unpainted picture inside a saveLayer scope refuses instead of expanding`() {
+        val picture = Picture(
+            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+        )
+        val result = capture(
+            listOf(
+                DisplayOp.BeginLayer(SaveLayerRec(bounds = Rect.fromLTRB(0f, 0f, 10f, 10f))),
+                DisplayOp.DrawPicture(picture, null, identity, open),
+                DisplayOp.EndLayer,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(result)
+        assertEquals("unsupported.composite.operation", refused.code)
+        assertEquals(0, refused.operationIndex)
+    }
+
+    @Test
+    fun `saveLayer with mixed rect and unpainted picture children refuses`() {
+        val picture = Picture(
+            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+        )
+        val result = capture(
+            listOf(
+                DisplayOp.BeginLayer(SaveLayerRec(bounds = Rect.fromLTRB(0f, 0f, 10f, 10f))),
+                DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 4f, 4f), black, identity, open),
+                DisplayOp.DrawPicture(picture, null, identity, open),
+                DisplayOp.EndLayer,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(result)
+        assertEquals("unsupported.composite.operation", refused.code)
+        assertEquals(1, refused.operationIndex)
+    }
+
     // FP-06 boundary: vertices inside composite scopes (layer or picture) are not promoted to
     // prepared vertices — the capturer refuses them via the generic OPERATION code until a
     // dedicated vertices-in-composite scope lands. Do not relax without that scope.

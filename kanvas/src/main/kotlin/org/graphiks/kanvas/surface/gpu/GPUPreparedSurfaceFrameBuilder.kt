@@ -158,12 +158,16 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val elidedCompositeChildOperationIndices = compositeScheduling?.let {
                 compositeCoveredOperationIndices(request.candidate.operations)
             } ?: emptySet()
-            // The flat mapper cannot replay a DrawPicture, so covered pictures stay elided
-            // (their expanded children ride the composite commands); every other covered op
-            // maps normally so the capture's layer children retain exact packet evidence.
-            // Covered ops of EMPTY layers (no children or fully offscreen device bounds) are
-            // elided too: the frame's uniform slab must exactly cover the accepted packets,
-            // so children that never render into an isolated target cannot ride the scene.
+            // A covered DrawPicture never reaches this elision: the capturer refuses unpainted
+            // pictures inside saveLayer scopes (unsupported.composite.operation) and painted
+            // pictures refuse below via compositeTopologyRefusal, so the flat mapper never
+            // sees a picture in a covered range. The DrawPicture filter below is a defensive
+            // guard only — picture-expanded children produce no flat commandIds
+            // (commandIdsByOperationIndex records only top-level mapped ops), so they could
+            // never ride the composite commands. Covered ops of EMPTY layers (no children or
+            // fully offscreen device bounds) are elided too: the frame's uniform slab must
+            // exactly cover the accepted packets, so children that never render into an
+            // isolated target cannot ride the scene.
             val flatElidedOperationIndices = (
                 elidedCompositeChildOperationIndices.filter { index ->
                     request.candidate.operations[index] is DisplayOp.DrawPicture
