@@ -81,7 +81,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
  * Layer-target materialization smoke tests (Task 15).
  *
  * A frame with one saveLayer (one rect child, srcOver, configurable alpha) must:
- * 1. allocate the layer texture (pooled RGBA8 attachment),
+ * 1. allocate the layer texture (frame-local RGBA8 attachment),
  * 2. render the children into the layer texture (clear -> draw -> store),
  * 3. composite the layer texture onto the scene target with the real blend plan and alpha.
  */
@@ -220,7 +220,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     }
 
     @Test
-    fun `materializer produces layer children and composite operands over the pooled layer texture`() = runBlocking {
+    fun `materializer produces layer children and composite operands over the frame-local layer texture`() = runBlocking {
         val context = glfwContextRenderer(4, 4, "kanvas-layer-composite-operands", deferredRendering = true)
         val generation = GPUDeviceGenerationID(10_763)
         val fixture = capturedLayerCompositeInputs(
@@ -315,7 +315,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
             assertEquals(GPUPreparedNativeLoadOperation.Clear, layerChildrenOperand.pass.loadOperation)
             assertTrue(
                 layerChildrenOperand.pass.colorTarget.view !== target.view,
-                "layer children must render into the pooled layer texture, not the scene target",
+                "layer children must render into the frame-local layer texture, not the scene target",
             )
             val sceneOperand = assertIs<GPUPreparedNativeScopeOperand.Render>(
                 payload.scopeOperands.single { it.sourceStepIndex == sceneRenderStepIndex },
@@ -335,7 +335,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     }
 
     @Test
-    fun `executor harness composites the pooled layer onto the scene with real blend`() = runBlocking {
+    fun `executor harness composites the frame-local layer onto the scene with real blend`() = runBlocking {
         val context = glfwContextRenderer(4, 4, "kanvas-layer-composite-executor", deferredRendering = true)
         val generation = GPUDeviceGenerationID(10_764)
         val adapter = GPURuntimeResourceAdapter()
@@ -488,6 +488,365 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
         }
     }
 
+
+    @Test
+    fun `nested layer composite is refused with the stable nesting code`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = backendSession.deviceGeneration
+        val fixture = capturedTwoLayerInputs(
+            generation = generation,
+            capabilities = runtimeCapabilities,
+            nested = true,
+        )
+        try {
+            val result = GPUPreparedSurfaceNativePreflight().validate(
+                fixture.framePlan,
+                fixture.encoderPlan,
+                fixture.resources,
+                fixture.shaderContract,
+                fixture.generationSeal,
+            )
+            assertEquals(
+                "unsupported.prepared-surface.layer-nesting",
+                assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(result).code,
+            )
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `sibling layer composites remain admitted`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = backendSession.deviceGeneration
+        val fixture = capturedTwoLayerInputs(
+            generation = generation,
+            capabilities = runtimeCapabilities,
+            nested = false,
+        )
+        try {
+            val result = GPUPreparedSurfaceNativePreflight().validate(
+                fixture.framePlan,
+                fixture.encoderPlan,
+                fixture.resources,
+                fixture.shaderContract,
+                fixture.generationSeal,
+            )
+            assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+                result,
+                (result as? GPUPreparedSurfaceNativePreflightResult.Refused)?.let {
+                    "refused: ${it.code}: ${it.message}"
+                } ?: "sibling layer composites must pass the prepared-surface preflight",
+            )
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+    private fun twoLayerCompositeTaskList(
+        generation: GPUDeviceGenerationID,
+        capabilities: GPUCapabilities,
+        frameId: GPUFrameID,
+        nested: Boolean,
+    ): GPUTaskList {
+        val recording = GPURecorder(
+            GPURecordingID("recording.layer-composite-two"),
+            frameId,
+            capabilities,
+            deviceGeneration = generation,
+        ).apply {
+            record(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(1),
+                    rect = GPURect(0f, 0f, 4f, 4f),
+                    target = GPUTargetFacts(4, 4, "rgba8unorm"),
+                    material = GPUMaterialDescriptor.SolidColor(0f, 0f, 1f, 1f),
+                    paintOrder = 1,
+                    source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
+                ),
+            )
+            record(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(2),
+                    rect = GPURect(1f, 1f, 3f, 3f),
+                    target = GPUTargetFacts(4, 4, "rgba8unorm"),
+                    material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+                    paintOrder = 2,
+                    source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
+                ),
+            )
+            record(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(3),
+                    rect = GPURect(0f, 0f, 2f, 2f),
+                    target = GPUTargetFacts(4, 4, "rgba8unorm"),
+                    material = GPUMaterialDescriptor.SolidColor(0f, 1f, 0f, 1f),
+                    paintOrder = 3,
+                    source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
+                ),
+            )
+        }.close()
+        val base = recording.taskList
+        val build = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = base,
+                capabilities = capabilities,
+                target = TARGET,
+                targetBounds = TARGET_BOUNDS,
+                semanticsByCommandId = listOf(1, 2, 3).associate { commandId ->
+                    commandId to preparedSurfaceCoreSemantic(base, commandId)
+                },
+                readbackRequestId = GPUReadbackRequestID("readback.prepared.layer-two"),
+                targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+            ),
+        )
+        val recorded = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            build,
+            build.toString(),
+        ).taskList
+        val render = recorded.tasks.filterIsInstance<GPUTask.Render>().single()
+        val background = render.drawPackets.single { it.commandIdValue == 1 }
+        val child = render.drawPackets.single { it.commandIdValue == 2 }
+        val secondChild = render.drawPackets.single { it.commandIdValue == 3 }
+        val recordingId = recorded.recordingSeals.single().recordingId
+        val sceneRender = GPUTask.Render(
+            taskId = render.taskId,
+            recordingId = recordingId,
+            phase = GPUTaskPhase.Render,
+            target = TARGET,
+            loadStore = render.loadStore,
+            samplePlan = render.samplePlan,
+            resourceUses = render.resourceUses,
+            drawPackets = listOf(background),
+            batchEligibilityByPacketId = mapOf(
+                background.packetId to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill,
+                    queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                ),
+            ),
+        )
+        val layerRender = GPUTask.Render(
+            taskId = GPUTaskID("task.render.layer"),
+            recordingId = recordingId,
+            phase = GPUTaskPhase.Render,
+            target = LAYER_TARGET,
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = render.samplePlan,
+            resourceUses = render.resourceUses,
+            drawPackets = listOf(layerBoundPacket(child, "packet.layer.child")),
+            batchEligibilityByPacketId = mapOf(
+                GPUDrawPacketID("packet.layer.child") to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill,
+                    queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                ),
+            ),
+        )
+        val secondLayerRender = GPUTask.Render(
+            taskId = GPUTaskID("task.render.layer.second"),
+            recordingId = recordingId,
+            phase = GPUTaskPhase.Render,
+            target = SECOND_LAYER_TARGET,
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = render.samplePlan,
+            resourceUses = render.resourceUses,
+            drawPackets = listOf(layerBoundPacket(secondChild, "packet.layer.second")),
+            batchEligibilityByPacketId = mapOf(
+                GPUDrawPacketID("packet.layer.second") to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill,
+                    queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                ),
+            ),
+        )
+        val tasks = recorded.tasks.map { task -> if (task === render) sceneRender else task } +
+            layerRender +
+            secondLayerRender
+        val ordered = tasks.sortedBy { task -> task.phase.ordinal }
+        val dependencies = ordered.zipWithNext().mapIndexed { index, (from, to) ->
+            GPUTaskDependency(
+                fromTaskId = from.taskId,
+                toTaskId = to.taskId,
+                dependencyKind = "layer-composite-order",
+                useToken = GPUTaskUseToken("layer-composite.$index"),
+                reasonCode = "preserve.layer-composite.order",
+            )
+        }
+        return GPUTaskList(
+            frameId = recorded.frameId,
+            capabilitySeal = recorded.capabilitySeal,
+            recordingSeals = recorded.recordingSeals,
+            expectedReplayKeyHash = recorded.expectedReplayKeyHash,
+            tasks = tasks,
+            dependencies = dependencies,
+            phaseOrder = recorded.phaseOrder,
+            memoryBudget = recorded.memoryBudget,
+            compositeCommands = listOf(
+                GPUPassCommand.PrepareLayerTarget(
+                    targetLabel = LAYER_TARGET.value,
+                    descriptorHash = "sha256:layer-test",
+                    usageLabel = "render_attachment,texture_binding",
+                    byteEstimate = 16384L,
+                ),
+                GPUPassCommand.RenderLayerChildren(
+                    scopeLabel = "layer:test",
+                    targetLabel = LAYER_TARGET.value,
+                    childrenLabel = "draw.2",
+                    tokenLabel = "token:layer",
+                ),
+                GPUPassCommand.CompositeLayer(
+                    sourceLabel = LAYER_TARGET.value,
+                    parentTargetLabel = TARGET.value,
+                    blendModeLabel = "srcOver",
+                    blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+                    routeLabel = "native.draw_layer.isolated_target",
+                    tokenLabel = "token:layer",
+                    alpha = 1f,
+                    clipLabel = null,
+                ),
+                GPUPassCommand.PrepareLayerTarget(
+                    targetLabel = SECOND_LAYER_TARGET.value,
+                    descriptorHash = "sha256:layer-second",
+                    usageLabel = "render_attachment,texture_binding",
+                    byteEstimate = 16384L,
+                ),
+                GPUPassCommand.RenderLayerChildren(
+                    scopeLabel = "layer:second",
+                    targetLabel = SECOND_LAYER_TARGET.value,
+                    childrenLabel = "draw.3",
+                    tokenLabel = "token:layer.second",
+                ),
+                GPUPassCommand.CompositeLayer(
+                    sourceLabel = SECOND_LAYER_TARGET.value,
+                    parentTargetLabel = if (nested) LAYER_TARGET.value else TARGET.value,
+                    blendModeLabel = "srcOver",
+                    blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+                    routeLabel = "native.draw_layer.isolated_target",
+                    tokenLabel = "token:layer.second",
+                    alpha = 1f,
+                    clipLabel = null,
+                ),
+            ),
+        )
+    }
+
+    private fun layerBoundPacket(
+        source: GPUDrawPacket,
+        packetId: String,
+    ): GPUDrawPacket {
+        val authority = requireNotNull(source.corePrimitivePreparedAuthority)
+        val layerStructural = authority.structuralPipelineKey.copy(
+            colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+        )
+        val layerPipelineKey =
+            layerStructural.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+        return GPUDrawPacket(
+            packetId = GPUDrawPacketID(packetId),
+            commandIdValue = source.commandIdValue,
+            analysisRecordId = source.analysisRecordId,
+            passId = source.passId,
+            layerId = source.layerId,
+            bindingListId = source.bindingListId,
+            insertionReasonCode = source.insertionReasonCode,
+            sortKey = source.sortKey,
+            sortKeyPreimage = source.sortKeyPreimage,
+            renderStepId = source.renderStepId,
+            renderStepVersion = source.renderStepVersion,
+            role = source.role,
+            blendPlan = source.blendPlan,
+            renderPipelineKey = layerPipelineKey,
+            bindingLayoutHash = source.bindingLayoutHash,
+            uniformSlot = source.uniformSlot,
+            resourceSlot = source.resourceSlot,
+            semanticPayload = source.semanticPayload,
+            vertexSourceLabel = source.vertexSourceLabel,
+            scissorBoundsHash = source.scissorBoundsHash,
+            targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat("rgba8unorm")),
+            originalPaintOrder = source.originalPaintOrder,
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            frameProvenance = source.frameProvenance,
+            clipCoveragePlan = source.clipCoveragePlan,
+            clipExecutionPlan = source.clipExecutionPlan,
+            diagnostics = source.diagnostics,
+            clipProducerAuthority = source.clipProducerAuthority,
+        ).also { packet ->
+            packet.attachCorePrimitivePreparedAuthority(
+                authority.copy(
+                    structuralPipelineKey = layerStructural,
+                    renderPipelineKey = layerPipelineKey,
+                ),
+            )
+        }
+    }
+
+    private fun capturedTwoLayerInputs(
+        generation: GPUDeviceGenerationID,
+        capabilities: GPUCapabilities,
+        nested: Boolean,
+    ): CapturedPreparedSurfaceInputs {
+        val taskList = twoLayerCompositeTaskList(
+            generation = generation,
+            capabilities = capabilities,
+            frameId = GPUFrameID(if (nested) 10_765 else 10_766),
+            nested = nested,
+        )
+        val plan = GPUFramePlanner.plan(taskList)
+        assertTrue(!plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        val targetGeneration = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .first()
+            .resourceGeneration
+        val resourceGenerations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .associate { request ->
+                request.resource to if (request.role == GPUFrameResourceRole.SceneTarget) {
+                    targetGeneration
+                } else {
+                    5L
+                }
+            } + mapOf(
+            LAYER_TARGET to (targetGeneration + 1L),
+            SECOND_LAYER_TARGET to (targetGeneration + 2L),
+        )
+        val adapter = GPURuntimeResourceAdapter()
+        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val capture = CapturingPreparedNativeMaterializer()
+        return try {
+            val result = GPUFramePreflighter(
+                context = GPUFramePreflightContext(
+                    targetId = TARGET.value,
+                    deviceGeneration = generation,
+                    targetGeneration = targetGeneration,
+                    resourceGenerations = resourceGenerations,
+                ),
+                capabilities = capabilities,
+                resourceProvider = provider,
+                completionProvider = LayerCompositeCompletionProvider,
+                surfaceProvider = NoNativeSurfaceOutput,
+                nativeBoundary = adapter.bindNativeFrameBoundary(provider, capture),
+            ).preflight(plan)
+            val refused = assertIs<GPUFramePreflightResult.Refused>(result)
+            assertEquals(
+                "test.prepared-surface.boundary",
+                refused.diagnostic.code.value,
+                refused.diagnostic.toString(),
+            )
+            CapturedPreparedSurfaceInputs(
+                framePlan = requireNotNull(capture.capturedFramePlan),
+                encoderPlan = requireNotNull(capture.capturedEncoderPlan),
+                resources = requireNotNull(capture.capturedResources),
+                shaderContract = assertIs<GPUPreparedImageShaderValidationResult.Ready>(
+                    validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL),
+                ).shaderContract,
+                generationSeal = requireNotNull(capture.capturedGenerationSeal),
+            )
+        } finally {
+            adapter.close()
+        }
+    }
     private fun capturedLayerCompositeInputs(
         generation: GPUDeviceGenerationID,
         capabilities: GPUCapabilities,
@@ -781,11 +1140,13 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
         val rect = when (commandId) {
             1 -> GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 4f, 4f)
             2 -> GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 3f, 3f)
+            3 -> GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 2f, 2f)
             else -> error("Unexpected fixture command $commandId")
         }
         val color = when (commandId) {
             1 -> listOf(0f, 0f, 1f, 1f)
             2 -> listOf(1f, 0f, 0f, 1f)
+            3 -> listOf(0f, 1f, 0f, 1f)
             else -> error("Unexpected fixture command $commandId")
         }
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
@@ -867,6 +1228,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     private companion object {
         val TARGET = GPUFrameTargetRef("target.scene")
         val LAYER_TARGET = GPUFrameTargetRef("layer-target:test")
+        val SECOND_LAYER_TARGET = GPUFrameTargetRef("layer-target:second")
         val STAGING = GPUFrameBufferRef("buffer.readback")
         val TARGET_BOUNDS = GPUPixelBounds(0, 0, 4, 4)
     }

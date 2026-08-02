@@ -473,10 +473,11 @@ internal class GPUPreparedSurfaceCoverageMaskRunPlan(
 }
 
 /**
- * One declared offscreen layer target with its exact children render pass and pooled bounds.
+ * One declared offscreen layer target with its exact children render pass and composite bounds.
  *
- * The materializer allocates one pooled RGBA8 attachment of [bounds], renders the children
- * render pass into it, and feeds the sampled layer texture to the composite draw.
+ * The materializer allocates one frame-local RGBA8 attachment, renders the children
+ * render pass into it, and feeds the sampled layer texture to the composite draw. The
+ * coverage-mask frame-pool lease remains a documented follow-up.
  */
 internal class GPUPreparedSurfaceLayerTargetPlan(
     val targetLabel: String,
@@ -513,9 +514,9 @@ internal class GPUPreparedSurfaceLayerCompositeRunPlan(
             exactScopeKey.sourceStepIndex == sourceStepIndex &&
             exactScopeKey.operationKind == GPUEncoderOperationKind.LayerComposite &&
             step.sourceLabel == layerTarget.targetLabel &&
-            preparedImageAtlasSourceBlend(step.blendPlan.mode) != null
+            step.blendPlan.mode == GPUBlendMode.SRC_OVER
         ) {
-            "A prepared layer composite must retain its exact layer target and supported blend"
+            "A prepared layer composite must retain its exact layer target and the materialized srcOver blend"
         }
     }
 }
@@ -3730,10 +3731,11 @@ internal class GPUPreparedSurfaceNativePreflight(
         val compositeRuns = framePlan.steps.mapIndexedNotNull { index, step ->
             val composite = step as? GPUFrameStep.LayerCompositeRenderStep
                 ?: return@mapIndexedNotNull null
-            if (preparedImageAtlasSourceBlend(composite.blendPlan.mode) == null) {
+            if (composite.blendPlan.mode != GPUBlendMode.SRC_OVER) {
                 return refused(
                     "unsupported.prepared-surface.layer-composite-blend",
-                    "Prepared layer composites admit only the closed atlas source blend set.",
+                    "Prepared layer composites admit only SRC_OVER until the remaining " +
+                        "atlas source blends are materialized.",
                     mapOf("blendMode" to composite.blendPlan.mode.name),
                 )
             }
@@ -3743,6 +3745,17 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Every prepared layer composite must name one exact declared layer target.",
                     mapOf("sourceLabel" to composite.sourceLabel),
                 )
+            if (composite.parentTargetLabel in layerTargets.map { it.targetLabel }) {
+                return refused(
+                    "unsupported.prepared-surface.layer-nesting",
+                    "Nested prepared layer composites are not materialized yet; every composite " +
+                        "must target the scene directly.",
+                    mapOf(
+                        "sourceLabel" to composite.sourceLabel,
+                        "parentTargetLabel" to composite.parentTargetLabel,
+                    ),
+                )
+            }
             GPUPreparedSurfaceLayerCompositeRunPlan(
                 sourceStepIndex = index,
                 step = composite,

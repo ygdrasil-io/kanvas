@@ -916,11 +916,12 @@ object GPUFramePlanner {
      * innermost-first order the commands already carry. Only the composite-triplet commands
      * produce steps; render-pass delimiters stay implied by the step kinds.
      *
-     * TODO(T15 nested-layer ordering): the per-layer triplet stream is
+     * Nested-layer ordering support remains deferred: the per-layer triplet stream is
      * [prepare₁, children₁, composite₁, prepare₂, children₂, composite₂] with inner
      * parentTargetLabel = outer layer's target — so composite₁ targets layer₂'s texture before
      * prepare₂ exists; a strict in-order materializer must pre-scan/hoist allocations or regroup
-     * for nested layers.
+     * for nested layers. The prepared-surface preflight refuses such frames loudly
+     * (`unsupported.prepared-surface.layer-nesting`) until that support lands.
      */
     private fun lowerCompositeCommands(taskList: GPUTaskList): List<GPUFrameStep> =
         taskList.compositeCommands.mapNotNull { command ->

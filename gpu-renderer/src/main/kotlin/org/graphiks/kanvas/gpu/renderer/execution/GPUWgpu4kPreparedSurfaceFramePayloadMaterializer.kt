@@ -326,7 +326,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     operand
                 } else {
                     val native = requireNotNull(layerTargetsByLabel[layer.targetLabel]) {
-                        "Layer children render lost its pooled layer target"
+                        "Layer children render lost its frame-local layer target"
                     }
                     GPUPreparedNativeScopeOperand.Render(
                         sourceStepIndex = operand.sourceStepIndex,
@@ -358,7 +358,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             }
             val compositeOperands = accepted.compositeRuns.map { run ->
                 val native = requireNotNull(layerTargetsByLabel[run.layerTarget.targetLabel]) {
-                    "Layer composite lost its pooled layer target"
+                    "Layer composite lost its frame-local layer target"
                 }
                 val sceneBounds = preparedSurfaceSceneTargetBounds(framePlan)
                 val left = run.layerTarget.bounds.left.toFloat()
