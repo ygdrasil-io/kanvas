@@ -10,6 +10,9 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
@@ -252,6 +255,27 @@ class GPUWindowFrameLifecycleTest {
         assertEquals(listOf("completion:arm", "present", "retention:quarantine"), events.filter {
             it in setOf("completion:arm", "present", "retention:quarantine")
         })
+    }
+
+    @Test
+    fun `attachToFrame carries composite commands forward`() {
+        val composite = GPUPassCommand.CompositeLayer(
+            sourceLabel = "layer.1.target",
+            parentTargetLabel = "scene.target",
+            blendModeLabel = "srcOver",
+            blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+            routeLabel = "native.draw_layer.isolated_target",
+            tokenLabel = "token.layer.1",
+            alpha = 1f,
+            clipLabel = null,
+        )
+        val taskList = GPUFrameCoreTestFixture.taskList()
+            .withCompositeCommands(listOf(composite))
+        val output = preparedOutput()
+
+        val attached = output.attachToFrame(taskList, GPUFrameTargetRef("target.scene"))
+
+        assertEquals(listOf(composite), attached.compositeCommands)
     }
 
     @Test

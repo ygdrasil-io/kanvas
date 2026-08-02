@@ -94,7 +94,6 @@ class GPUPreparedWindowOutput internal constructor(
                 targetGeneration = snapshot.surfaceGeneration,
             ),
         )
-        // TODO(Task 9): must carry compositeCommands forward or the merged layer commands are dropped here.
         return GPUTaskList(
             frameId = taskList.frameId,
             capabilitySeal = taskList.capabilitySeal,
@@ -116,6 +115,7 @@ class GPUPreparedWindowOutput internal constructor(
             },
             memoryBudget = taskList.memoryBudget,
             diagnostics = taskList.diagnostics,
+            compositeCommands = taskList.compositeCommands,
         )
     }
 
