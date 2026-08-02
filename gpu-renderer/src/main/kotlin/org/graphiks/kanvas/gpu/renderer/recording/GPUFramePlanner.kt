@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcher
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
@@ -896,8 +897,46 @@ object GPUFramePlanner {
             }
         }
         flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+        steps.addAll(0, lowerCompositeCommands(taskList))
         return Linearization.Planned(steps, diagnostics)
     }
+
+    /**
+     * Lowers the materialized saveLayer command stream into frame steps, preserving the
+     * innermost-first order the commands already carry. Only the composite-triplet commands
+     * produce steps; render-pass delimiters stay implied by the step kinds.
+     */
+    private fun lowerCompositeCommands(taskList: GPUTaskList): List<GPUFrameStep> =
+        taskList.compositeCommands.mapNotNull { command ->
+            when (command) {
+                is GPUPassCommand.PrepareLayerTarget -> GPUFrameStep.LayerTargetPrepareStep(
+                    targetLabel = command.targetLabel,
+                    descriptorHash = command.descriptorHash,
+                    usageLabel = command.usageLabel,
+                    byteEstimate = command.byteEstimate,
+                    sourceTaskIds = emptyList(),
+                )
+                is GPUPassCommand.RenderLayerChildren -> GPUFrameStep.LayerChildrenRenderStep(
+                    scopeLabel = command.scopeLabel,
+                    targetLabel = command.targetLabel,
+                    childrenLabel = command.childrenLabel,
+                    tokenLabel = command.tokenLabel,
+                    sourceTaskIds = emptyList(),
+                )
+                is GPUPassCommand.CompositeLayer -> GPUFrameStep.LayerCompositeRenderStep(
+                    sourceLabel = command.sourceLabel,
+                    parentTargetLabel = command.parentTargetLabel,
+                    blendModeLabel = command.blendModeLabel,
+                    blendPlan = command.blendPlan,
+                    routeLabel = command.routeLabel,
+                    tokenLabel = command.tokenLabel,
+                    alpha = command.alpha,
+                    clipLabel = command.clipLabel,
+                    sourceTaskIds = emptyList(),
+                )
+                else -> null
+            }
+        }
 
     private fun batchRenderSegment(
         slices: List<RenderSlice>,

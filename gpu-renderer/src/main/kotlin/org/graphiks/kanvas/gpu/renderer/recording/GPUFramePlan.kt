@@ -535,6 +535,69 @@ sealed interface GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
     }
+
+    /** Materializes or reuses an offscreen layer target before rendering the layer children. */
+    class LayerTargetPrepareStep(
+        val targetLabel: String,
+        val descriptorHash: String,
+        val usageLabel: String,
+        val byteEstimate: Long,
+        sourceTaskIds: List<GPUTaskID>,
+    ) : GPUFrameStep {
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
+        override val executionKind = GPUFrameStepExecutionKind.Preflight
+
+        init {
+            require(targetLabel.isNotBlank()) { "GPUFrameStep.LayerTargetPrepareStep.targetLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "GPUFrameStep.LayerTargetPrepareStep.descriptorHash must not be blank" }
+            require(usageLabel.isNotBlank()) { "GPUFrameStep.LayerTargetPrepareStep.usageLabel must not be blank" }
+            require(byteEstimate >= 0L) { "GPUFrameStep.LayerTargetPrepareStep.byteEstimate must be non-negative" }
+        }
+    }
+
+    /** Renders the layer children into the isolated layer target scope. */
+    class LayerChildrenRenderStep(
+        val scopeLabel: String,
+        val targetLabel: String,
+        val childrenLabel: String,
+        val tokenLabel: String,
+        sourceTaskIds: List<GPUTaskID>,
+    ) : GPUFrameStep {
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
+        override val executionKind = GPUFrameStepExecutionKind.Encoder
+
+        init {
+            require(scopeLabel.isNotBlank()) { "GPUFrameStep.LayerChildrenRenderStep.scopeLabel must not be blank" }
+            require(targetLabel.isNotBlank()) { "GPUFrameStep.LayerChildrenRenderStep.targetLabel must not be blank" }
+            require(childrenLabel.isNotBlank()) { "GPUFrameStep.LayerChildrenRenderStep.childrenLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUFrameStep.LayerChildrenRenderStep.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Composites an isolated layer source back into its parent target. */
+    class LayerCompositeRenderStep(
+        val sourceLabel: String,
+        val parentTargetLabel: String,
+        val blendModeLabel: String,
+        val blendPlan: GPUBlendPlan,
+        val routeLabel: String,
+        val tokenLabel: String,
+        val alpha: Float,
+        val clipLabel: String?,
+        sourceTaskIds: List<GPUTaskID>,
+    ) : GPUFrameStep {
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
+        override val executionKind = GPUFrameStepExecutionKind.Encoder
+
+        init {
+            require(sourceLabel.isNotBlank()) { "GPUFrameStep.LayerCompositeRenderStep.sourceLabel must not be blank" }
+            require(parentTargetLabel.isNotBlank()) { "GPUFrameStep.LayerCompositeRenderStep.parentTargetLabel must not be blank" }
+            require(blendModeLabel.isNotBlank()) { "GPUFrameStep.LayerCompositeRenderStep.blendModeLabel must not be blank" }
+            require(routeLabel.isNotBlank()) { "GPUFrameStep.LayerCompositeRenderStep.routeLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUFrameStep.LayerCompositeRenderStep.tokenLabel must not be blank" }
+            require(alpha in 0f..1f) { "GPUFrameStep.LayerCompositeRenderStep.alpha must be in 0f..1f" }
+        }
+    }
 }
 
 /** One adjacent batch retained inside a single render-pass step. */
@@ -1060,6 +1123,28 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             list("provenanceTokens", value.provenanceTokens) { string("token", it.value) }
             diagnostic("diagnostic", value.diagnostic)
         }
+        is GPUFrameStep.LayerTargetPrepareStep -> {
+            string("targetLabel", value.targetLabel)
+            string("descriptorHash", value.descriptorHash)
+            string("usageLabel", value.usageLabel)
+            long("byteEstimate", value.byteEstimate)
+        }
+        is GPUFrameStep.LayerChildrenRenderStep -> {
+            string("scopeLabel", value.scopeLabel)
+            string("targetLabel", value.targetLabel)
+            string("childrenLabel", value.childrenLabel)
+            string("tokenLabel", value.tokenLabel)
+        }
+        is GPUFrameStep.LayerCompositeRenderStep -> {
+            string("sourceLabel", value.sourceLabel)
+            string("parentTargetLabel", value.parentTargetLabel)
+            string("blendModeLabel", value.blendModeLabel)
+            blendPlan(value.blendPlan)
+            string("routeLabel", value.routeLabel)
+            string("tokenLabel", value.tokenLabel)
+            long("alphaRawBits", value.alpha.toRawBits().toLong())
+            nullableString("clipLabel", value.clipLabel)
+        }
     }
 }
 
@@ -1391,6 +1476,9 @@ private fun GPUFrameStep.canonicalTypeTag(): String = when (this) {
     is GPUFrameStep.PostSubmitPresentAction -> "PostSubmitPresentAction"
     is GPUFrameStep.RefusedLeafDrawStep -> "RefusedLeafDrawStep"
     is GPUFrameStep.RefusedCompositeCommandStep -> "RefusedCompositeCommandStep"
+    is GPUFrameStep.LayerTargetPrepareStep -> "LayerTargetPrepareStep"
+    is GPUFrameStep.LayerChildrenRenderStep -> "LayerChildrenRenderStep"
+    is GPUFrameStep.LayerCompositeRenderStep -> "LayerCompositeRenderStep"
 }
 
 private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
@@ -1970,6 +2058,14 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.RefusedCompositeCommandStep ->
             "refused-composite command=${commandId.value} " +
                 "provenance=${provenanceTokens.joinToString(",") { it.value }} ${diagnostic.dumpLine("refusal")}"
+        is GPUFrameStep.LayerTargetPrepareStep ->
+            "layer-target-prepare target=$targetLabel descriptor=$descriptorHash " +
+                "usage=$usageLabel bytes=$byteEstimate"
+        is GPUFrameStep.LayerChildrenRenderStep ->
+            "layer-children scope=$scopeLabel target=$targetLabel children=$childrenLabel token=$tokenLabel"
+        is GPUFrameStep.LayerCompositeRenderStep ->
+            "layer-composite source=$sourceLabel parent=$parentTargetLabel blend=$blendModeLabel " +
+                "route=$routeLabel token=$tokenLabel alpha=$alpha clip=${clipLabel ?: "none"}"
     }
     return "step index=$index kind=${executionKind.name} tasks=$tasks $body"
 }

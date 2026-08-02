@@ -5999,6 +5999,9 @@ private fun referencedResources(step: GPUFrameStep): List<GPUFrameResourceRef> =
     is GPUFrameStep.PostSubmitPresentAction -> emptyList()
     is GPUFrameStep.RefusedLeafDrawStep -> emptyList()
     is GPUFrameStep.RefusedCompositeCommandStep -> emptyList()
+    is GPUFrameStep.LayerTargetPrepareStep -> emptyList()
+    is GPUFrameStep.LayerChildrenRenderStep -> emptyList()
+    is GPUFrameStep.LayerCompositeRenderStep -> emptyList()
 }
 
 private fun lastUseExclusive(framePlan: GPUFramePlan, resource: GPUFrameResourceRef, preparationStep: Int): Int {

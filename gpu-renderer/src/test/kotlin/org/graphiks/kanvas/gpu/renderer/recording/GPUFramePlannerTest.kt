@@ -33,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
@@ -531,6 +532,70 @@ class GPUFramePlannerTest {
     }
 
     @Test
+    fun `composite commands lower into layer target children and composite steps before scene steps`() {
+        val scene = renderTask("task.render.scene", "recording.a", 1)
+        val prepare = GPUPassCommand.PrepareLayerTarget(
+            targetLabel = "layer-target:test",
+            descriptorHash = "sha256:layer-test",
+            usageLabel = "render_attachment,texture_binding",
+            byteEstimate = 16384L,
+        )
+        val children = GPUPassCommand.RenderLayerChildren(
+            scopeLabel = "layer:test",
+            targetLabel = "layer-target:test",
+            childrenLabel = "draw.2",
+            tokenLabel = "token:test",
+        )
+        val composite = GPUPassCommand.CompositeLayer(
+            sourceLabel = "layer-target:test",
+            parentTargetLabel = "target.scene",
+            blendModeLabel = "srcOver",
+            blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+            routeLabel = "native.draw_layer.isolated_target",
+            tokenLabel = "token:test",
+            alpha = 0.5f,
+            clipLabel = null,
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(scene),
+                compositeCommands = listOf(prepare, children, composite),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.dumpLines().joinToString("\n"))
+        assertEquals(
+            listOf(
+                GPUFrameStep.LayerTargetPrepareStep::class,
+                GPUFrameStep.LayerChildrenRenderStep::class,
+                GPUFrameStep.LayerCompositeRenderStep::class,
+                GPUFrameStep.RenderPassStep::class,
+            ),
+            plan.steps.map { it::class },
+        )
+        val prepareStep = assertIs<GPUFrameStep.LayerTargetPrepareStep>(plan.steps[0])
+        assertEquals("layer-target:test", prepareStep.targetLabel)
+        assertEquals("sha256:layer-test", prepareStep.descriptorHash)
+        assertEquals("render_attachment,texture_binding", prepareStep.usageLabel)
+        assertEquals(16384L, prepareStep.byteEstimate)
+        val childrenStep = assertIs<GPUFrameStep.LayerChildrenRenderStep>(plan.steps[1])
+        assertEquals("layer:test", childrenStep.scopeLabel)
+        assertEquals("layer-target:test", childrenStep.targetLabel)
+        assertEquals("draw.2", childrenStep.childrenLabel)
+        assertEquals("token:test", childrenStep.tokenLabel)
+        val compositeStep = assertIs<GPUFrameStep.LayerCompositeRenderStep>(plan.steps[2])
+        assertEquals("layer-target:test", compositeStep.sourceLabel)
+        assertEquals("target.scene", compositeStep.parentTargetLabel)
+        assertEquals("srcOver", compositeStep.blendModeLabel)
+        assertEquals("native.draw_layer.isolated_target", compositeStep.routeLabel)
+        assertEquals(0.5f, compositeStep.alpha)
+        assertEquals(null, compositeStep.clipLabel)
+        assertEquals(GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"), compositeStep.blendPlan)
+        assertEquals("target.scene", assertIs<GPUFrameStep.RenderPassStep>(plan.steps[3]).target.value)
+    }
+
+    @Test
     fun `texture preparation keeps complete typed scratch key facts`() {
         val descriptor = GPUFrameTextureDescriptor(
             logicalBounds = GPUPixelBounds(1, 2, 9, 10),
@@ -673,6 +738,7 @@ class GPUFramePlannerTest {
         dependencies: List<GPUTaskDependency> = emptyList(),
         capabilitySeal: GPUFrameCapabilitySeal = frameCapabilitySeal(),
         seals: List<GPURecordingSeal> = listOf(seal("recording.a", 0, capabilitySeal.sealHash)),
+        compositeCommands: List<GPUPassCommand> = emptyList(),
     ): GPUTaskList = GPUTaskList(
         frameId = FRAME_ID,
         capabilitySeal = capabilitySeal,
@@ -682,6 +748,7 @@ class GPUFramePlannerTest {
         dependencies = dependencies,
         phaseOrder = GPUTaskPhase.entries,
         memoryBudget = emptyBudget(),
+        compositeCommands = compositeCommands,
     )
 
     private fun dependency(from: GPUTask, to: GPUTask): GPUTaskDependency =
