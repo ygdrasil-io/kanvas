@@ -2,9 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate `DrawPicture`, `BeginLayer`, `EndLayer` onto the prepared WebGPU frame route (scratch-target-per-saveLayer, native Kanvas filter DAG), completing the missing frame-route wiring and flipping the `GPUPreparedSurfaceFrameGate` only after Phases 1–3 are green, on top of the FP-06 tip (`40a873560`).
+**Goal:** Migrate `DrawPicture`, `BeginLayer`, `EndLayer` onto the prepared WebGPU frame route (scratch-target-per-saveLayer, native Kanvas filter DAG): complete the frame-route wiring (Tasks 1–8), then the **layer-target execution** (Tasks 12–17) that makes the executor actually schedule the merged `compositeCommands`, then flip the `GPUPreparedSurfaceFrameGate` only when consumption works, on top of the FP-06 tip (`40a873560`).
 
-**Architecture:** Scratch-target-per-saveLayer: capture composites (`GPUPreparedCompositeCapturer`) → translate capture into `GPULayerSaveRecord`/`GPUSaveLayerIsolatedTargetRequest` → `GPUSaveLayerIsolatedTargetPlanner.plan(request)` → budget preflight (`GPUPreparedCompositePreflight`) → native executor (`GPUSaveLayerNativeExecutor`) → `ValidatingSaveLayerMaterializer.materialize(request, context)` → pass commands via `GPUFirstRoutePassBuilder.acceptedDrawLayer` → assembled in `GPUPreparedSurfaceFrameTaskListBuilder.handleSaveLayer` and invoked from `GPUPreparedSurfaceFrameBuilder.build()`. CPU oracles (`GPUBlendOracle`, `GPUFilterOracle`) back the blend/filter plans. Filter DAG is native Kanvas (not `skif`). The gate flip is deferred to the last phase, gated on green Phases 1–3.
+**Architecture:** Scratch-target-per-saveLayer: capture composites (`GPUPreparedCompositeCapturer`) → translate capture into `GPULayerSaveRecord`/`GPUSaveLayerIsolatedTargetRequest` → `GPUSaveLayerIsolatedTargetPlanner.plan(request)` → budget preflight (`GPUPreparedCompositePreflight`) → native executor (`GPUSaveLayerNativeExecutor`) → `ValidatingSaveLayerMaterializer.materialize(request, context)` → pass commands via `GPUFirstRoutePassBuilder.acceptedDrawLayer` → assembled in `GPUPreparedSurfaceFrameTaskListBuilder.handleSaveLayer` and invoked from `GPUPreparedSurfaceFrameBuilder.build()`. CPU oracles (`GPUBlendOracle`, `GPUFilterOracle`) back the blend/filter plans. Filter DAG is native Kanvas (not `skif`).
+
+**Execution model (Phase 5, modeled on Graphite/Dawn — evidence from Skia main exploration, 2026-08-02):** one render pass per layer target + one root pass, in a single command encoder: `PrepareLayerTarget` → frame-pool leased texture (RGBA8, `RenderAttachment|TextureBinding` — the A8 coverage-mask template, `GPUWgpu4kCoverageMaskProducerMaterializer`); `RenderLayerChildren` → child render scopes targeting the layer texture in the SAME encoder as the scene pass; `CompositeLayer` → a textured-quad draw sampling the layer texture with the real blend plan + alpha + clip (the `GPUPreparedImageShader`/`preparedImageAtlasSourceBlend` template) into the parent pass. `GPUPreparedWindowOutput.attachToFrame` must carry `compositeCommands` forward; the session validator's single-scene-target invariant is relaxed to admit declared layer targets; the planner lowers the commands into frame steps.
+
+The gate flip (Task 17) is the last step, conditioned on Tasks 1–16 green. **Task 9 was executed and the flip WITHHELD with evidence** (`863e4351e`, see `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-07-composite-route-evidence.md`): 298 composite-frame failures, 100% traced to the executor not consuming `compositeCommands`. That gap is closed by Tasks 12–16 before the flip is retried.
 
 **Tech Stack:** Kotlin, WebGPU via wgpu4k, WGSL generation, Gradle (`rtk proxy ./gradlew`), JUnit (`kotlin.test`).
 
@@ -660,52 +664,9 @@ git commit -m "feat(composite): thread layer blend alpha and clip into draw laye
 
 ## Phase 4 — Conditional gate cutover
 
-### Task 9: Flip `GPUPreparedSurfaceFrameGate` for composites (condition: Phases 1–3 green)
+### Task 9: Gate cutover TRIAL — flip attempted and **WITHHELD** (executor gap, evidence recorded)
 
-**Files:**
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt`
-- Modify (only if needed): `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPULegacyImmediatePathAdapter.kt`
-- Update with evidence: `GPUPreparedSurfaceFrameGateTest`, `GPUFramePathApiInventoryTest`, `GPUPreparedSurfaceProductRouterTest`, `GPUPreparedTextNoFallbackTest`, `GPUAllApiBlendSurfaceTest`, `GPUClipCoverageSurfaceTest`
-
-**Context:** Design condition (design doc): the gate flips ONLY when all Phase 1–3 tests are green. That condition is satisfied after Task 8. The flip changes `DrawPicture`/`BeginLayer`/`EndLayer` from `LegacyDisplayOpFamily.Composites` to eligible `Candidate`; refused composites then surface as stable terminal refusals from the builder (Task 7) — this is the documented stable fallback policy (explicit refusal, never silent).
-
-- [ ] **Step 1: Confirm the precondition**
-
-```bash
-rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :gpu-renderer:test --tests "*GPUPreparedCompositeLowererTest" --tests "*GPUPreparedCompositePreflightTest" --tests "*GPUSaveLayerNativeExecutorTest" --tests "*GPUFilterOracleTest" --tests "*GPUPreparedFilterDAGPlannerTest" --tests "*GPUBlendOracleTest" --tests "*GPUPreparedSaveLayerFrameHandlingTest" --no-parallel
-rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*GPUPreparedCompositeFrameRouteIntegrationTest" --tests "*GPUPreparedCompositeCaptureSemanticTest" --no-parallel
-```
-
-Expected: all green.
-
-- [ ] **Step 2: Flip the gate**
-
-In `GPUPreparedSurfaceFrameGate.kt` l.63–65, change `DrawPicture`/`BeginLayer`/`EndLayer` to count toward `hasVisual` and be eligible (no `Legacy` return). Remove the `LegacyDisplayOpFamily.Composites` branch and its `preparedSurfaceCode()` mapping (l.90) if now unused; keep `LegacyDisplayOpFamily` if other families remain.
-
-- [ ] **Step 3: Run the full surface + renderer suites, triage with evidence**
-
-```bash
-rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test :gpu-renderer:test --no-parallel 2>&1 | tee /tmp/fp07_cutover.log
-```
-
-Expected: failures in two categories:
-1. **Real regressions** (must FIX, not update): saveLayer renders wrong pixels, DrawPicture content dropped, `unsupported.native-core-primitive.blend`/`unsupported.image.native_binding` terminal refusals on previously-working frames, nested-vertices boundary bypass. Investigate each with systematic debugging; fix in the wiring (Tasks 7–8) or the oracle (Tasks 4–6). DO NOT update expectations for real regressions.
-2. **Legacy-pinning expectations** (update with evidence): tests asserting `legacy.surface.prepared.family.composites` routing or legacy composite pixels. For each, capture the route diagnostics (new code/terminal refusal) and update the assertion with a comment referencing the evidence file.
-
-- [ ] **Step 4: Update legacy-pinning expectations with evidence**
-
-For each test in the update category, record in `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-07-composite-route-evidence.md` (new file): test name, old assertion, new assertion, route diagnostic code observed, and the diff/stat of the expectation change. Update the assertions.
-
-- [ ] **Step 5: Run full suites again**
-
-Expected: green (any remaining failures are real regressions — fix, do not mask).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add -A
-git commit -m "feat(composite): flip prepared frame gate for composites with evidence-based expectations"
-```
+**Status: EXECUTED → WITHHELD.** See `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-07-composite-route-evidence.md` (commit `863e4351e`). The flip precondition (Phases 1–3 green) passed; the flip was applied and reverted after full-suite triage showed **298 composite-frame failures, 100% traced to one root cause**: the executor does not consume `compositeCommands` (`GPUPreparedWindowOutput.attachToFrame` drops them at `GPUPreparedWindowOutput.kt:97`; no consumption path in `GPUFrameCoordinator`/`GPUBackendRuntimeNative`). Consequence categories: DrawPicture content dropped (85 wrong-pixel), saveLayer bounds/alpha lost (7), non-core children terminal refusals (203), silent-drop-replacing-loud-refusal (1). The FP-06 guards and the `nested_vertices` pin stayed green. **Decision: the flip ships only after Tasks 12–17 (executor consumption) land.** Task 17 re-attempts this flip in the correct order; Tasks 12–16 are the execution build-out that closes the gap.
 
 ### Task 10: Fix the 4 flaky clip tests (order/state)
 
@@ -729,9 +690,227 @@ git commit -m "fix(surface): stabilize flaky clip tests"
 
 ---
 
-## Phase 5 — Validation & FP-07 closure
+## Phase 5 — Layer-target execution (the cutover enabler)
 
-### Task 11: Full validation, evidence, and closure
+> **Grounding:** Modeled on Graphite/Dawn (Skia main exploration, 2026-08-02, evidence in the plan Context/Architecture): one render pass per layer target + one root pass in a single command encoder; composite = textured-quad draw with the real blend plan + alpha in the parent pass. Kanvas reuse templates: the A8 coverage-mask producer pattern (`GPUWgpu4kCoverageMaskProducerMaterializer`, pooled RGBA8 texture `RenderAttachment|TextureBinding`, render-scope operands in the same encoder, Clear→Load, pool lease) and the prepared image shader (`GPUPreparedImageShader`/`preparedImageAtlasSourceBlend`) for the textured-quad composite.
+>
+> **Reusability verdicts (fp-07 cutover exploration):** NOT reusable — `GPUFilterDAGExecutor` (counting stub, deleted by cutover), filter-contract moves. PARTIALLY reusable — the 4-line `GPUPreparedSurfaceProductRouter.hasTerminalPreparedFamily` delta (adopt LAST, as the loud-refusal safety net), `RectOnlyOffscreenRenderer.materializeSaveLayerScene` (worked example already mirrored in our builder). ALREADY PORTED — `handleSaveLayer`/`materializeSaveLayer`/generation/innermost-first ordering (we have a superset incl. `mergeCompositeCommands` + production caller). The real gaps are OUR TODOs: `RecordingContracts.kt:1104`, `GPUPreparedWindowOutput.kt:97`.
+
+### Task 12: Carry `compositeCommands` through `GPUPreparedWindowOutput.attachToFrame`
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedWindowOutput.kt` (attachToFrame ~l.71-119, TODO at l.97)
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedWindowOutputTest.kt` (find the existing test for this class first — or add the assertion to the closest existing window-output test)
+
+**Context:** `attachToFrame` rebuilds the `GPUTaskList` at l.98-119 and **drops `compositeCommands`** — the merged layer commands never reach the planner/executor. This is the first carriage gap.
+
+- [ ] **Step 1: Write the failing test (red)**
+
+Read `GPUPreparedWindowOutput.kt` first — how `attachToFrame` builds the rebuilt task list (which fields it preserves: tasks, dependencies, readback…). Find the existing test file (`rtk glob kanvas/src/test/**/GPUPreparedWindowOutput*`). Add a test: build a `GPUTaskList` with `withCompositeCommands(listOf(compositeCommand))`, attach it, assert the rebuilt task list carries the same `compositeCommands` (non-empty, same commands).
+
+```kotlin
+@Test
+fun `attachToFrame carries composite commands forward`() {
+    val taskList = GPUTaskList(...) // as the existing tests construct it
+        .withCompositeCommands(listOf(/* a CompositeLayer command from the Task 7/8 test fixtures */))
+    val output = GPUPreparedWindowOutput(...) // existing fixture
+    val attached = output.attachToFrame(taskList, ...)
+    assertEquals(listOf(/* the command */), attached.compositeCommands)
+}
+```
+
+Adapt to the real constructor shapes (read the existing tests). If `attachToFrame`'s signature doesn't take a task list directly, mirror how the existing test drives it.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*GPUPreparedWindowOutput*" --no-parallel`
+Expected: FAIL — rebuilt list has empty `compositeCommands`.
+
+- [ ] **Step 3: Implement**
+
+In `attachToFrame`, preserve the field on the rebuilt task list (pass `compositeCommands = sourceTaskList.compositeCommands` into the rebuild — read the rebuild call at l.98-119 and add the parameter; if `GPUTaskList` is immutable-with-copy, use the existing `withCompositeCommands` accessor to copy). Remove the TODO at l.97.
+
+- [ ] **Step 4: Run to verify it passes + commit**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*GPUPreparedWindowOutput*" --no-parallel
+git add kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedWindowOutput.kt <test file>
+git commit -m "fix(composite): carry composite commands through window output attach"
+```
+
+### Task 13: Planner lowering of `compositeCommands` into frame steps
+
+**Files:**
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanner.kt` (step mapping at l.793-896; multi-target child-scope support at l.270-334)
+- Modify (only if needed): `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/RecordingContracts.kt` (frame-step vocabulary if a new step kind is needed)
+- Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlannerTest.kt` (find existing)
+
+**Context:** `GPUFramePlanner.plan` never reads `compositeCommands` (grep: zero references) — it lowers `tasks` only. The commands must become frame steps: `PrepareLayerTarget` → a layer-target preparation step (texture allocation spec); `RenderLayerChildren` → child render steps targeted at the layer texture; `CompositeLayer` → a composite render step (after children). The planner already supports multi-target child scopes (l.270-334) and `TargetTransitionStep` (l.825) — reuse that machinery.
+
+**Design decision for the implementer (trace and report):** does the existing `GPUFrameStep` vocabulary (RenderPassStep/PrepareResourcesStep/CopyResourceStep/…) already express "render into a non-scene target" (the coverage-mask producer does exactly this — find how its scopes become steps), or does a new step kind (e.g., `LayerTargetRenderStep` / `CompositeRenderStep`) need to be added? Prefer reusing the existing multi-target machinery; add a step kind only if the trace proves necessary.
+
+- [ ] **Step 1: Read first (mandatory)**
+
+Trace how the coverage-mask producer scopes flow: `GPUCorePrimitiveCoverageMaskPreparedExecutionRoute.kt:545-714` (seal pattern) → planner → steps → `GPUPreparedNativeScopeOperand.Render` (per-pass operands with `colorTarget`). Report the exact step types used for "render to mask texture" and whether they can carry layer targets.
+
+- [ ] **Step 2: Write the failing test (red)**
+
+In the planner test: build a task list carrying `compositeCommands` (one `PrepareLayerTarget` + one `RenderLayerChildren` + one `CompositeLayer` — use the real command constructors from PassContracts.kt:656-830, e.g. from the Task 8 test fixtures) and assert the planned steps include the layer-target preparation + child render step targeting the layer + the composite step, in order (children before composite).
+
+- [ ] **Step 3: Run to verify it fails**
+
+Expected: FAIL — planner produces no composite steps.
+
+- [ ] **Step 4: Implement**
+
+In `GPUFramePlanner.plan`, after the task lowering, lower `taskList.compositeCommands` into steps: resolve each command (labels → the layer-target preparation + render + composite steps) using the existing multi-target step machinery. Order: for each layer (innermost-first, as the lowerer already sorts), `PrepareLayerTarget` → its `RenderLayerChildren` step(s) → after all layers, the `CompositeLayer` step(s).
+
+- [ ] **Step 5: Run to verify it passes + commit**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :gpu-renderer:test --tests "*GPUFramePlannerTest" --no-parallel
+git add -A
+git commit -m "feat(composite): plan composite commands into frame steps"
+```
+
+### Task 14: Session validator accepts declared layer targets
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSceneCompatibilityValidator` in `GPUBackendRuntimeNative.kt` (single-scene-target invariant at l.1392-1413; preflight context at l.1486-1491; generation map at l.1433; executor staleness at `GPUFrameExecutor.kt:1024-1045`)
+- Test: the existing validator test (find it: `rtk grep -rln "target-count\|scene-target\|CompatibilityValidator" kanvas/src/test gpu-renderer/src/test`)
+
+**Context:** The validator rejects frames whose render targets exceed the one scene target (`unsupported.prepared-scene-session.target-count`, l.1392-1395). Layer targets are declared via `PrepareLayerTarget` commands (exact bounds, sampleCount 1, format, `RenderAttachment|TextureBinding`). The validator must admit: one scene target + N declared layer targets, and still fail-closed for anything undeclared.
+
+- [ ] **Step 1: Write the failing test (red)**
+
+In the validator test: a frame whose task list carries one scene target + one layer-target render (via `compositeCommands`) must validate; a frame with an undeclared extra target must still refuse with the target-count code.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Expected: FAIL — layer-target frame refused by the target-count check.
+
+- [ ] **Step 3: Implement**
+
+Extend the target-count check: collect the declared layer targets from `taskList.compositeCommands` (`PrepareLayerTarget.targetLabel` + descriptor), admit render targets that are (a) the single scene target OR (b) a declared layer target with compatible descriptor (exact bounds, sampleCount 1, format, `RenderAttachment|TextureBinding` — validate like the scene target does at l.1396-1413). Keep the preflight context + generation map keyed per target (scene target + each layer target).
+
+- [ ] **Step 4: Run to verify it passes + commit**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*CompatibilityValidator*" --no-parallel
+git add -A
+git commit -m "feat(composite): accept declared layer targets in prepared scene validation"
+```
+
+### Task 15: Layer-target materialization — allocation, children render, composite draw
+
+**Files:**
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflight.kt` (image shader preflight at ~l.13-130 — the layer composite reuses `preparedImageAtlasSourceBlend`)
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializer.kt` (the prepared surface frame materializer — where the layer-target scopes and composite draw get encoded)
+- Modify (template reuse): `GPUWgpu4kCoverageMaskProducerMaterializer.kt` pattern (l.115-199) for the layer-target texture; `GPUPreparedImageShader.kt` for the composite quad
+- Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kLayerTargetCompositeSmokeTest.kt` (new — modeled on `GPUWgpu4kDestinationCopyFrameSmokeTest` which proves multi-scope one-submission rendering)
+
+**Context:** This is the core execution task. The prepared runtime already renders multiple scopes in ONE encoder/ONE submit (the mask producer + destination-copy smoke test prove it). The materializer must: (1) allocate each layer texture (pool lease — reuse the coverage-mask pool pattern: RGBA8, sampleCount 1, `RenderAttachment|TextureBinding`, exact bounds); (2) encode child render scopes targeting the layer texture (Clear→children→Store — the mask producer's Clear-white→Load pattern, with the layer's clip applied per child draw); (3) encode the composite render scope: a textured-quad draw sampling the layer texture onto the parent (scene) target with the real `GPUBlendPlan` + `alpha` from the `CompositeLayer` command, clip via scissor or the existing clip machinery.
+
+**Evidence of the textured-quad+blend template:** `GPUPreparedImageShader` (`GPUPreparedImageShader.kt:13-130`) — `preparedImageAtlasSourceBlend(mode)` maps a blend mode to an atlas source blend; `GPUPreparedSurfaceNativePreflight` and `GPUWgpu4kPreparedSurfaceFramePayloadMaterializer` are its consumers. The composite draw reuses this image-shader path with the layer texture as the source.
+
+- [ ] **Step 1: Read first (mandatory)**
+
+Read: `GPUWgpu4kPreparedSurfaceFramePayloadMaterializer` (how render scopes become wgpu4k passes), `GPUWgpu4kCoverageMaskProducerMaterializer` (pool texture + Clear→Load scopes + consumer bind group — l.115-199, 846-867), `GPUPreparedImageShader` + its two consumers (how a textured image draw with blend is encoded today), and `GPUWgpu4kDestinationCopyFrameSmokeTest` (the multi-scope one-submission test template). Report the exact seam where layer-target scopes plug into the materializer (after the coverage-mask producer scopes, before/around the scene pass).
+
+- [ ] **Step 2: Write the failing test (red)**
+
+`GPUWgpu4kLayerTargetCompositeSmokeTest`: a frame with one saveLayer (rect child, srcOver blend, alpha 1) → execute → read back → assert the layer target pass ran and the composite produced the expected pixel (child rect color at the layer's position). Model the fixture on the destination-copy smoke test (offline backend, readback). Also assert a translucent alpha (0.5) case composites correctly over a background rect.
+
+- [ ] **Step 3: Run to verify it fails**
+
+Expected: FAIL — no layer-target scopes encoded (or wrong pixels).
+
+- [ ] **Step 4: Implement**
+
+In the materializer + preflight:
+1. `PrepareLayerTarget` → pool lease for the layer texture (reuse/extend the coverage-mask pool slot machinery — `GPUWgpu4kCorePrimitiveFramePool.kt:846-867` shows the texture+view+bind-group creation).
+2. `RenderLayerChildren` → render scope with `colorTarget = layerTexture`, `loadOp = Clear` (transparent) on the first child scope, `Load` after, `storeOp = Store`; child draws as in the coverage-mask producer (`GPUPreparedNativeScopeOperand.Render`, `GPUWgpu4kFrameEncodingBackend.kt:166-211, 411-450`).
+3. `CompositeLayer` → a textured-quad render scope in the parent pass: bind the layer texture view, use the real `blendPlan` (already on the command) via the image-shader/pipeline path (`preparedImageAtlasSourceBlend`), apply `alpha` (premultiply or blend-factor), apply `clipLabel` (scissor bounds if the clip is a device-rect — the label carries `l,t,r,b,aa`).
+
+- [ ] **Step 5: Run to verify it passes + commit**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :gpu-renderer:test --tests "*GPUWgpu4kLayerTargetCompositeSmokeTest" --tests "*GPUWgpu4kDestinationCopyFrameSmokeTest" --no-parallel
+git add -A
+git commit -m "feat(composite): materialize layer targets and composite draws"
+```
+
+### Task 16: Flat-render elision for composite frames
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilder.kt` (composite-first block, TODO at l.118)
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt` (`mapCoreOperation` returns null for `DrawPicture` — the silent-drop path)
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedCompositeFrameRouteIntegrationTest.kt` (extend) + `GPUAllApiBlendSurfaceTest` regression guard
+
+**Context:** Two defects from the Task 9 triage: (1) composite-only frames double-render (children drawn flat AND via the layer pass); (2) `DrawPicture` content is silently dropped by the flat mapper. With execution in place (Task 15), the elision rule is: when `compositeCommands` are scheduled, elide the flat child render for the composite scope (children render once, into the layer target); a composite-only frame must not emit the flat child draws. Mixed composite+visual frames: explicit topology decision — either full coverage via composite commands or a stable refusal (never a silent drop).
+
+- [ ] **Step 1: Write the failing test (red)**
+
+Extend the integration test: a composite-only frame (BeginLayer + rect + EndLayer) → assert the result does NOT double-emit the child rect as a flat draw (the flat visual command is elided) while `compositeCommandCount > 0`. And: a `DrawPicture` in a composite frame → assert either correct rendering via the composite commands or a stable terminal refusal — NOT a silent drop (assert the refusal code or the composite commands cover it).
+
+- [ ] **Step 2: Run to verify it fails**
+
+Expected: FAIL — flat render still emitted / DrawPicture silently dropped.
+
+- [ ] **Step 3: Implement**
+
+In `build()`: when `compositeHandling` is `Ready` with commands, skip the flat visual lowering for the composite scope's children (elide `mapCoreOperation` for those ops); `DrawPicture` inside a composite frame routes through the composite commands only. If a mixed topology cannot be fully covered, return a stable terminal refusal (documented code) instead of a silent drop.
+
+- [ ] **Step 4: Run to verify it passes + commit**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*GPUPreparedCompositeFrameRouteIntegrationTest" --tests "*GPUAllApiBlendSurfaceTest" --no-parallel
+git add -A
+git commit -m "fix(composite): elide flat child render when composite commands are scheduled"
+```
+
+### Task 17: The gate cutover — flip in the correct order (consumption first)
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt` (flip — recipe from the withheld trial, evidence file §2)
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPULegacyImmediatePathAdapter.kt` (empty `LegacyDisplayOpFamily`, `allowedFamilies = emptySet()`)
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt` (add `DrawPicture`/`BeginLayer`/`EndLayer` to `hasTerminalPreparedFamily()` — the loud-refusal safety net, ADOPTED LAST)
+- Update with evidence: the 5 legacy-pinning test files from the trial (§2 of the evidence file) + re-run the 4 composite classes from the triage (§3)
+- Update: `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-07-composite-route-evidence.md` (append the re-flip results)
+
+**Context:** The precondition is now Tasks 1–16 green (execution works). This re-attempts the Task 9 flip in the correct order — the failure mode of the withheld trial (298 failures, executor gap) is closed. Expected triage after this flip: composite frames render CORRECTLY (Task 15) or refuse LOUDLY via the router's terminal family + the capture's explicit refusals (203 non-core-children cases become documented stable refusals, NOT silent drops — per the evidence file §5 item 3, re-point those expectations to the observed terminal codes with evidence).
+
+- [ ] **Step 1: Confirm the precondition (Tasks 1–16 green)**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :gpu-renderer:test --tests "*GPUPreparedCompositeLowererTest" --tests "*GPUPreparedCompositePreflightTest" --tests "*GPUSaveLayerNativeExecutorTest" --tests "*GPUFilterOracleTest" --tests "*GPUPreparedFilterDAGPlannerTest" --tests "*GPUBlendOracleTest" --tests "*GPUPreparedSaveLayerFrameHandlingTest" --tests "*GPUWgpu4kLayerTargetCompositeSmokeTest" --no-parallel
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test --tests "*GPUPreparedCompositeFrameRouteIntegrationTest" --tests "*GPUPreparedCompositeCaptureSemanticTest" --no-parallel
+```
+
+- [ ] **Step 2: Flip gate + adapter + router as one unit** (recipe from the withheld trial §2; adopt the router terminal-family delta last).
+
+- [ ] **Step 3: Full-suite triage with evidence**
+
+```bash
+rtk proxy ./gradlew -p /Users/chaos/.codex/worktrees/da7e/kanvas :kanvas:test :gpu-renderer:test --no-parallel 2>&1 | tee /tmp/fp17_cutover.log
+```
+
+Classify: (a) real regressions → FIX in Tasks 15–16 code; (b) legacy-pinning expectations → update with evidence (test name, old/new assertion, route diagnostic, diff/stat) appended to the evidence file; (c) non-core-children terminal refusals → re-point expectations to the stable codes with evidence. The `nested_vertices` pin and FP-06 guards must stay green.
+
+- [ ] **Step 4: Run full suites again** — green (no masking).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "feat(composite): flip prepared frame gate for composites with evidence-based expectations"
+```
+
+---
+
+## Phase 6 — Validation & FP-07 closure
+
+### Task 18: Full validation, evidence, and closure
 
 - [ ] **Step 1: Full suite runs**
 
@@ -769,12 +948,14 @@ git commit -m "docs(composite): fp07 composite route evidence and roadmap closur
 
 - [ ] **Step 6: Final state check**
 
-`git log --oneline 40a873560..HEAD | cat` — expected: Task 1..11 commits, no cutover-early commits, no `.superpowers/sdd/` entries in the log.
+`git log --oneline 40a873560..HEAD | cat` — expected: Tasks 1..17 commits (docs → foundation → oracle fixes → wiring → execution → cutover), no early-cutover commits, no `.superpowers/sdd/` entries in the log.
 
 ---
 
 ## Self-review notes (filled at plan time)
 
-- **Spec coverage:** revised design's 5 phases map 1:1 to Tasks 1–11 (Task 0→1, Phase 1→2–3, Phase 2→4–6, Phase 3→7–8, Phase 4→9–10, Phase 5→11). Non-goals (pooling/approx-fit→FP-09, AA→gap, runtime effects→FP-10, monolith debt) are respected: no texture pooling introduced, single-sample textured quads, no dynamic WGSL, no monolith split.
-- **No placeholders:** every task has concrete files, commands, and code. Where a constructor signature must be confirmed against the base (e.g., `GPUPreparedFilterNode`, `GPUTargetPreparationContext`), the task says exactly where to read it and what to verify.
-- **Type consistency:** `GPUPreparedCompositeLowering.Ready/Refused`, `GPUPreparedSaveLayerFrameHandling.Ready/Refused`, `GPUPreparedCompositeCaptureResult.Ready/Refused`, `GPUPreparedSurfaceFrameBuildResult.Ready/Refused` are used consistently throughout; `handleSaveLayer` signature matches the validated port.
+- **Spec coverage:** revised design's 5 phases map to Tasks 1–17: Task 0→1, Phase 1→2–3, Phase 2→4–6, Phase 3→7–8, Phase 4→9–10 (Task 9 trial executed and WITHHELD with evidence — the gate flip moved to Task 17 after the execution phase), Phase 5 (execution, added 2026-08-02 from the Graphite/Dawn grounding)→12–16, cutover→17, validation→18 (renumbered from 11). Non-goals respected: the execution phase deliberately does NOT introduce Graphite's approx-fit (we keep exact-size pool allocation — the coverage-mask pool template), no EdgeAA quad (single-sample textured quad, documented fidelity gap), no dynamic WGSL, no monolith split.
+- **Execution-phase grounding:** Tasks 12–17 are anchored on the Skia main exploration (Graphite layer model + Dawn pass encoding, 2026-08-02) and the Kanvas reuse templates (coverage-mask producer, prepared image shader, destination-copy smoke test). Every task says where to read the template and what the seam is; where a constructor or step kind must be confirmed (e.g., planner step vocabulary, pool-slot API), the task mandates a read-first step with a report.
+- **No placeholders:** every task has concrete files, commands, and code. Where a signature must be confirmed against the base (e.g., `GPUPreparedFilterNode`, `GPUTargetPreparationContext`, planner step kinds, pool-slot API), the task says exactly where to read it and what to verify.
+- **Type consistency:** `GPUPreparedCompositeLowering.Ready/Refused`, `GPUPreparedSaveLayerFrameHandling.Ready/Refused`, `GPUPreparedCompositeCaptureResult.Ready/Refused`, `GPUPreparedSurfaceFrameBuildResult.Ready/Refused` are used consistently throughout; `handleSaveLayer` signature matches the validated port; `CompositeLayer` carries the real `GPUBlendPlan` + `alpha` + `clipLabel` (Tasks 8) that the executor consumes (Task 15).
+- **Known plan corrections recorded:** (1) Task 7's "cutover already contained the merge mechanics" was wrong — the merge design is new and additive (`compositeCommands` carrier); (2) Task 9's flip was executed and WITHHELD with evidence (298 failures, executor gap) — the flip is retried at Task 17 in the correct order; (3) the executor consumption is a real multi-file build-out (validator relaxation, planner lowering, materializer scopes, elision), not a 10-line fix.
