@@ -904,6 +904,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         configuredAggregateBudgetBytes: Long = 1L shl 30,
         taskGraphLimits: GPUPreparedSurfaceTaskGraphLimits =
             GPUPreparedSurfaceTaskGraphLimits(),
+        allowEmptyBaseTaskList: Boolean = false,
     ): GPUPreparedSurfaceFrameResult {
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
@@ -913,7 +914,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
         val semanticOnlyVertices = request.baseTaskList.tasks.filterIsInstance<GPUTask.SemanticOnly>()
-        if ((baseRenders.isEmpty() && semanticOnlyVertices.isEmpty()) ||
+        if ((baseRenders.isEmpty() && semanticOnlyVertices.isEmpty() && !allowEmptyBaseTaskList) ||
             request.baseTaskList.tasks.any { task ->
                 task !is GPUTask.Render && task !is GPUTask.SemanticOnly
             }
@@ -1085,6 +1086,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             )
         }
 
+        // A composite-only prepared frame admits an empty base task list: the
+        // saveLayer command stream (PrepareLayerTarget / RenderLayerChildren /
+        // CompositeLayer) carries the frame's render evidence and is merged in by
+        // the caller. The empty base is validated above (zero packets and zero
+        // semantics biject trivially); it must not route into the per-packet
+        // assemblers, which require at least one base render.
+        if (allowEmptyBaseTaskList && packets.isEmpty()) {
+            return GPUPreparedSurfaceFrameResult.Recorded(request.baseTaskList)
+        }
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
         if (allCore) {

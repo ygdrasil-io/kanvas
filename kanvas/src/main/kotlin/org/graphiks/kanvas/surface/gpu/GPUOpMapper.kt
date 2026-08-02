@@ -123,6 +123,7 @@ internal object GPUOpMapper {
         capabilities: GPUCapabilities,
         preparedTextInventory: PreparedTextFrameInventory? = null,
         preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
+        elidedOperationIndices: Set<Int> = emptySet(),
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
@@ -155,6 +156,9 @@ internal object GPUOpMapper {
         }
 
         operations.forEachIndexed { operationIndex, operation ->
+            if (operationIndex in elidedOperationIndices) {
+                return@forEachIndexed
+            }
             when (operation) {
                 is DisplayOp.Annotation -> {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Annotation)
@@ -431,6 +435,23 @@ internal object GPUOpMapper {
                     preparedVerticesProvenance[commandId] = provenance
                 }
                 else -> {
+                    if (operation is DisplayOp.DrawPicture) {
+                        // The flat mapper has no picture replay: DrawPicture content is
+                        // nested in the Picture and can only be lowered through the
+                        // composite (saveLayer) route. Refuse instead of silently
+                        // dropping the picture from the flat frame.
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = nextCommandId(),
+                                operationIndex = operationIndex,
+                                code = "unsupported.surface.prepared.draw-picture",
+                                facts = mapOf("authority" to "GPUOpMapper"),
+                            ),
+                        )
+                    }
                     val paintOrder = nextCommandId()
                     val lowered = lowerPreparedCoreVisual(
                         operation = operation,

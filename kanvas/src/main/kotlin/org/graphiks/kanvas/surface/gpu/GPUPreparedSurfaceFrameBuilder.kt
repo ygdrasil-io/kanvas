@@ -115,7 +115,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // records BeginLayer/EndLayer into the legacy dump and flat-renders layer
             // children), so a composite frame must either materialize through the real
             // saveLayer pipeline or refuse terminally — never silently fall back.
-            // TODO(Task 8/9): for composite-only frames the flat child render must be elided when composite commands are scheduled; mixed composite+visual frames need explicit topology handling.
+            // Task 16: when composite commands are scheduled, the layer children are
+            // elided from the flat pipeline (they render once into the isolated layer
+            // target via RenderLayerChildren); mixed topologies whose coverage is
+            // ambiguous (a DrawPicture the composite route cannot materialize) refuse
+            // with unsupported.surface.prepared.mixed-composite-topology.
             val compositeHandling = if (hasCompositeOps) {
                 prepareCompositeFrameHandling(
                     operations = request.candidate.operations,
@@ -138,6 +142,21 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         ),
                     ),
                 )
+            }
+            // Composite scheduling evidence is only authoritative while the saveLayer
+            // commands actually carry the frame's render work.
+            val compositeScheduling = (compositeHandling as? CompositeFrameHandling.Ready)
+                ?.takeIf { ready -> ready.handling.commands.isNotEmpty() }
+            val elidedCompositeChildOperationIndices = compositeScheduling?.let {
+                compositeCoveredOperationIndices(request.candidate.operations)
+            } ?: emptySet()
+            if (compositeHandling is CompositeFrameHandling.Ready) {
+                compositeTopologyRefusal(
+                    operations = request.candidate.operations,
+                    coveredOperationIndices = elidedCompositeChildOperationIndices,
+                )?.let { refusal ->
+                    return GPUPreparedSurfaceFrameBuildResult.Refused(refusal)
+                }
             }
             val hasPreparedText = request.candidate.operations.any { operation ->
                 operation is org.graphiks.kanvas.canvas.DisplayOp.DrawText
@@ -182,6 +201,20 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
                 preparedTextInventory = textPreparation.inventory,
+                mappingBoundary = elidedCompositeChildOperationIndices.let { elided ->
+                    GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
+                        textInventory, verticesInventory ->
+                        GPUOpMapper.mapOperations(
+                            operations = operations,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                            preparedTextInventory = textInventory,
+                            preparedVerticesInventory = verticesInventory,
+                            elidedOperationIndices = elided,
+                        )
+                    }
+                },
             )
             if (verticesPreparation is GPUPreparedVerticesFramePreparation.Refused) {
                 val refusal = verticesPreparation.refusal
@@ -204,6 +237,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mapping = mapping,
                 operations = request.candidate.operations,
                 inventory = textPreparation.inventory,
+                elidedOperationIndices = elidedCompositeChildOperationIndices,
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
@@ -230,7 +264,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         ),
                     )
             }
-            if (preparedMapping.visualCommands.isEmpty() && verticesInventory.mappedCommands.isEmpty()) {
+            if (
+                preparedMapping.visualCommands.isEmpty() &&
+                verticesInventory.mappedCommands.isEmpty() &&
+                compositeScheduling == null
+            ) {
                 val textOperationIndices = request.candidate.operations.withIndex()
                     .filter { indexed -> indexed.value is DisplayOp.DrawText }
                     .mapTo(linkedSetOf()) { indexed -> indexed.index }
@@ -328,6 +366,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                 ),
+                allowEmptyBaseTaskList = compositeScheduling != null,
             )) {
                 is GPUPreparedSurfaceFrameResult.Recorded -> {
                     validateEncodedPremulSrgbOutput(request, preparedMapping, semantics)?.let {
@@ -438,6 +477,53 @@ private sealed interface CompositeFrameHandling {
     ) : CompositeFrameHandling
 }
 
+/**
+ * Top-level operation indices whose render evidence is carried by the scheduled
+ * composite commands: every operation between a matched BeginLayer and its
+ * EndLayer renders once into the isolated layer target via RenderLayerChildren,
+ * so the flat pipeline must elide it.
+ */
+private fun compositeCoveredOperationIndices(operations: List<DisplayOp>): Set<Int> {
+    val covered = linkedSetOf<Int>()
+    var openLayers = 0
+    operations.forEachIndexed { operationIndex, operation ->
+        if (openLayers > 0) covered += operationIndex
+        when (operation) {
+            is DisplayOp.BeginLayer -> openLayers++
+            DisplayOp.EndLayer -> openLayers--
+            else -> Unit
+        }
+    }
+    return covered
+}
+
+/**
+ * Fail-closed topology check for a captured composite frame.
+ *
+ * The composite route materializes SaveLayer scopes only; root-scope entries and
+ * PaintedPicture/FilterPictureSource scopes are never covered by composite
+ * commands, and the flat mapper cannot replay a DrawPicture. Any DrawPicture the
+ * composite commands cannot cover refuses terminally instead of being silently
+ * dropped from the frame.
+ */
+private fun compositeTopologyRefusal(
+    operations: List<DisplayOp>,
+    coveredOperationIndices: Set<Int>,
+): GPUDiagnostic? {
+    val uncoveredPicture = operations.withIndex().firstOrNull { (operationIndex, operation) ->
+        operation is DisplayOp.DrawPicture &&
+            (operation.paint != null || operationIndex !in coveredOperationIndices)
+    } ?: return null
+    return diagnostic(
+        code = "unsupported.surface.prepared.mixed-composite-topology",
+        message = "Prepared Surface composite frames cannot cover the picture topology.",
+        facts = mapOf(
+            "boundary" to "surface.composite",
+            "operationIndex" to uncoveredPicture.index.toString(),
+        ),
+    )
+}
+
 private fun prepareCompositeFrameHandling(
     operations: List<DisplayOp>,
     capabilities: GPUCapabilities,
@@ -517,6 +603,7 @@ private fun collectPreparedImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
     inventory: PreparedTextFrameInventory,
+    elidedOperationIndices: Set<Int> = emptySet(),
 ): PreparedImageVisuals {
     val textOperationIndices = operations.withIndex()
         .filter { indexed -> indexed.value is DisplayOp.DrawText }
@@ -560,6 +647,9 @@ private fun collectPreparedImageVisuals(
     }
     val visualSources = operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
+        if (operationIndex in elidedOperationIndices) {
+            return@flatMap emptyList()
+        }
         when (val operation = indexed.value) {
             is DisplayOp.DrawImage ->
                 listOf(PreparedVisualSource.Image(operationIndex, operation.image))

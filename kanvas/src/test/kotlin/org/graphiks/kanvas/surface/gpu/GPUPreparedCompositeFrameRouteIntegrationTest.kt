@@ -74,6 +74,128 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     }
 
     @Test
+    fun `composite only frame elides flat child render`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    rect(),
+                    DisplayOp.EndLayer,
+                ),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.diagnostic?.code?.value.toString(),
+        )
+        assertEquals(0, ready.visualOperationCount)
+        assertTrue(ready.compositeCommandCount > 0)
+        val commandKinds = ready.taskList.compositeCommands.map { it::class.simpleName }.toSet()
+        assertTrue(
+            commandKinds.contains("RenderLayerChildren"),
+            "missing RenderLayerChildren in $commandKinds",
+        )
+    }
+
+    @Test
+    fun `draw picture in composite frame is not silently dropped`() {
+        val picture = org.graphiks.kanvas.picture.Picture(
+            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            listOf(rect()),
+        )
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.DrawPicture(
+                        picture = picture,
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                    DisplayOp.EndLayer,
+                ),
+            ),
+        )
+
+        when (result) {
+            is GPUPreparedSurfaceFrameBuildResult.Ready -> {
+                assertTrue(
+                    result.compositeCommandCount > 0,
+                    "composite commands must cover the picture content",
+                )
+                val commandKinds =
+                    result.taskList.compositeCommands.map { it::class.simpleName }.toSet()
+                assertTrue(
+                    commandKinds.contains("RenderLayerChildren"),
+                    "missing RenderLayerChildren in $commandKinds",
+                )
+            }
+            is GPUPreparedSurfaceFrameBuildResult.Refused -> {
+                val code = result.diagnostic.code.value
+                assertTrue(
+                    code == "unsupported.surface.prepared.mixed-composite-topology" ||
+                        code == "unsupported.surface.prepared.draw-picture",
+                    "expected a stable terminal refusal, got $code",
+                )
+            }
+            is GPUPreparedSurfaceFrameBuildResult.NoOp -> {
+                error("a NoOp result silently drops the picture content")
+            }
+        }
+    }
+
+    @Test
+    fun `mixed composite and visual frame keeps root visuals flat and composites layers`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    rect(),
+                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    rect(),
+                    DisplayOp.EndLayer,
+                ),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.diagnostic?.code?.value.toString(),
+        )
+        assertEquals(1, ready.visualOperationCount)
+        assertTrue(ready.compositeCommandCount > 0)
+    }
+
+    @Test
+    fun `top level draw picture refuses instead of silently dropping`() {
+        val picture = org.graphiks.kanvas.picture.Picture(
+            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            listOf(rect()),
+        )
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawPicture(
+                        picture = picture,
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                ),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
+        assertEquals(
+            "unsupported.surface.prepared.mixed-composite-topology",
+            refused.diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `composite frame build refuses stably when capture fails`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
