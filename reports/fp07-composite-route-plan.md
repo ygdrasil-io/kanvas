@@ -847,6 +847,8 @@ git commit -m "feat(composite): materialize layer targets and composite draws"
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt` (`mapCoreOperation` returns null for `DrawPicture` — the silent-drop path)
 - Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedCompositeFrameRouteIntegrationTest.kt` (extend) + `GPUAllApiBlendSurfaceTest` regression guard
 
+> **Plan deviation (implemented):** composite-only elision also extends `GPUPreparedSurfaceFrameTaskListBuilder.build` with a defaulted `allowEmptyBaseTaskList` flag (plus a validated empty-packet short-circuit before the per-packet assemblers). Justified because composite-only frames genuinely have an empty flat base task list — the saveLayer command stream carries all render evidence.
+
 **Context:** Two defects from the Task 9 triage: (1) composite-only frames double-render (children drawn flat AND via the layer pass); (2) `DrawPicture` content is silently dropped by the flat mapper. With execution in place (Task 15), the elision rule is: when `compositeCommands` are scheduled, elide the flat child render for the composite scope (children render once, into the layer target); a composite-only frame must not emit the flat child draws. Mixed composite+visual frames: explicit topology decision — either full coverage via composite commands or a stable refusal (never a silent drop).
 
 - [ ] **Step 1: Write the failing test (red)**

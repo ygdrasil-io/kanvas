@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -120,31 +121,29 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
             ),
         )
 
-        when (result) {
-            is GPUPreparedSurfaceFrameBuildResult.Ready -> {
-                assertTrue(
-                    result.compositeCommandCount > 0,
-                    "composite commands must cover the picture content",
-                )
-                val commandKinds =
-                    result.taskList.compositeCommands.map { it::class.simpleName }.toSet()
-                assertTrue(
-                    commandKinds.contains("RenderLayerChildren"),
-                    "missing RenderLayerChildren in $commandKinds",
-                )
-            }
-            is GPUPreparedSurfaceFrameBuildResult.Refused -> {
-                val code = result.diagnostic.code.value
-                assertTrue(
-                    code == "unsupported.surface.prepared.mixed-composite-topology" ||
-                        code == "unsupported.surface.prepared.draw-picture",
-                    "expected a stable terminal refusal, got $code",
-                )
-            }
-            is GPUPreparedSurfaceFrameBuildResult.NoOp -> {
-                error("a NoOp result silently drops the picture content")
-            }
+        // Today the picture-in-layer fixture is Ready: the capturer expands the
+        // picture's children into the layer scope, so RenderLayerChildren covers
+        // them and the composite commands carry the content. Pin that branch — a
+        // future change that refuses this topology must fail loudly and force an
+        // explicit decision, not pass through an open refusal clause.
+        val ready = when (result) {
+            is GPUPreparedSurfaceFrameBuildResult.Ready -> result
+            is GPUPreparedSurfaceFrameBuildResult.Refused -> fail(
+                "DrawPicture inside a layer is expected to render via the composite " +
+                    "commands; a refusal would be an explicit topology decision, " +
+                    "got ${result.diagnostic.code.value}",
+            )
+            is GPUPreparedSurfaceFrameBuildResult.NoOp -> error("a NoOp result silently drops the picture content")
         }
+        assertTrue(
+            ready.compositeCommandCount > 0,
+            "composite commands must cover the picture content",
+        )
+        val commandKinds = ready.taskList.compositeCommands.map { it::class.simpleName }.toSet()
+        assertTrue(
+            commandKinds.contains("RenderLayerChildren"),
+            "missing RenderLayerChildren in $commandKinds",
+        )
     }
 
     @Test

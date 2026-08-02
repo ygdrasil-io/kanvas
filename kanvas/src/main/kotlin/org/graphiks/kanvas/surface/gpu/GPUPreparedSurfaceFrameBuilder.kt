@@ -479,9 +479,15 @@ private sealed interface CompositeFrameHandling {
 
 /**
  * Top-level operation indices whose render evidence is carried by the scheduled
- * composite commands: every operation between a matched BeginLayer and its
- * EndLayer renders once into the isolated layer target via RenderLayerChildren,
- * so the flat pipeline must elide it.
+ * composite commands: every index BETWEEN a matched BeginLayer and its EndLayer,
+ * inclusive of the closing EndLayer index (and of any inner BeginLayer index —
+ * desired so nested layer markers are elided too). Those operations render once
+ * into the isolated layer target via RenderLayerChildren, so the flat pipeline
+ * must elide them.
+ *
+ * Requires a balanced input: [GPUPreparedCompositeCapturer] refuses unbalanced
+ * layers (LAYER_UNBALANCED) before this runs, so an orphan EndLayer can never
+ * drive [openLayers] negative here.
  */
 private fun compositeCoveredOperationIndices(operations: List<DisplayOp>): Set<Int> {
     val covered = linkedSetOf<Int>()
