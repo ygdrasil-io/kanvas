@@ -33,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -69,6 +70,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -443,6 +445,63 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             assertEquals("stale.prepared-scene-session.target-identity", substituted.diagnostic?.code?.value)
             assertEquals(1L, session.nativeCounters().submits)
             assertEquals(1L, session.nativeCounters().targetNativeUses)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `prepared scene session admits one scene target with one declared layer target render`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = backendSession.deviceGeneration
+        val session = backendSession.prepareSceneFrameSession(GPUOffscreenTargetRequest(4, 4))
+        try {
+            val accepted = session.renderFrame(
+                layerTargetTaskList(
+                    generation = generation,
+                    capabilities = runtimeCapabilities,
+                    frameId = GPUFrameID(10_516L),
+                ),
+            ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+            // The prepared-scene session validator admits one scene target plus declared layer
+            // targets: a declared layer-target frame must never be refused by a
+            // prepared-scene-session validator code. Layer-target materialization and encoding
+            // land with Task 15 (GPUWgpu4kLayerTargetCompositeSmokeTest); until then such a
+            // frame may refuse downstream inside the native materializer.
+            assertFalse(
+                accepted.diagnostic?.code?.value.orEmpty().startsWith("unsupported.prepared-scene-session"),
+                "The prepared-scene validator refused a declared layer target: " +
+                    "${accepted.diagnostic?.code?.value}: ${accepted.diagnostic?.message}",
+            )
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `prepared scene session refuses an undeclared extra render target`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = backendSession.deviceGeneration
+        val session = backendSession.prepareSceneFrameSession(GPUOffscreenTargetRequest(4, 4))
+        try {
+            val refused = session.renderFrame(
+                layerTargetTaskList(
+                    generation = generation,
+                    capabilities = runtimeCapabilities,
+                    frameId = GPUFrameID(10_517L),
+                    layerTarget = GPUFrameTargetRef("layer-target:undeclared"),
+                ),
+            ).completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+            assertEquals("unsupported.prepared-scene-session.target-count", refused.diagnostic?.code?.value)
+            assertEquals(0L, session.nativeCounters().submits)
         } finally {
             session.close()
             GPUBackendRuntimeNativeFactory.dispose()
@@ -1541,6 +1600,115 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         )
     }
 
+    private fun layerTargetTaskList(
+        generation: GPUDeviceGenerationID,
+        capabilities: GPUCapabilities,
+        frameId: GPUFrameID,
+        layerTarget: GPUFrameTargetRef = LAYER_TARGET,
+    ): GPUTaskList {
+        val base = solidRectTaskList(
+            generation = generation,
+            capabilities = capabilities,
+            frameId = frameId,
+            includeReadback = false,
+            readbackRequestId = GPUReadbackRequestID("readback.layer-frame"),
+        )
+        val recordingId = base.recordingSeals.single().recordingId
+        val sceneRender = base.tasks.filterIsInstance<GPUTask.Render>().single()
+        val layerPackets = sceneRender.drawPackets.map { packet ->
+            GPUDrawPacket(
+                packetId = GPUDrawPacketID("packet.layer.${frameId.value}.${packet.packetId.value}"),
+                commandIdValue = packet.commandIdValue,
+                analysisRecordId = packet.analysisRecordId,
+                passId = packet.passId,
+                layerId = packet.layerId,
+                bindingListId = packet.bindingListId,
+                insertionReasonCode = packet.insertionReasonCode,
+                sortKey = packet.sortKey,
+                sortKeyPreimage = packet.sortKeyPreimage,
+                renderStepId = packet.renderStepId,
+                renderStepVersion = packet.renderStepVersion,
+                role = packet.role,
+                blendPlan = packet.blendPlan,
+                renderPipelineKey = packet.renderPipelineKey,
+                computePipelineKey = packet.computePipelineKey,
+                bindingLayoutHash = packet.bindingLayoutHash,
+                uniformSlot = packet.uniformSlot,
+                resourceSlot = packet.resourceSlot,
+                semanticPayload = packet.semanticPayload,
+                vertexSourceLabel = packet.vertexSourceLabel,
+                scissorBoundsHash = packet.scissorBoundsHash,
+                targetStateHash = packet.targetStateHash,
+                originalPaintOrder = packet.originalPaintOrder,
+                resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+                frameProvenance = packet.frameProvenance,
+                clipCoveragePlan = packet.clipCoveragePlan,
+                clipExecutionPlan = packet.clipExecutionPlan,
+                diagnostics = packet.diagnostics,
+                clipProducerAuthority = packet.clipProducerAuthority,
+            )
+        }
+        val layerRender = GPUTask.Render(
+            taskId = GPUTaskID("task.render.layer.${frameId.value}"),
+            recordingId = recordingId,
+            phase = GPUTaskPhase.Render,
+            target = layerTarget,
+            loadStore = GPULoadStorePlan(loadOp = "clear", storePlan = GPUStorePlan.Store),
+            samplePlan = sceneRender.samplePlan,
+            drawPackets = layerPackets,
+            batchEligibilityByPacketId = layerPackets.associate { packet ->
+                packet.packetId to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill,
+                    queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                )
+            },
+        )
+        val tasks = base.tasks + layerRender
+        val dependencies = tasks.zipWithNext().mapIndexed { index, (from, to) ->
+            GPUTaskDependency(
+                fromTaskId = from.taskId,
+                toTaskId = to.taskId,
+                dependencyKind = "prepared-scene-order",
+                useToken = GPUTaskUseToken("prepared-scene.$index"),
+                reasonCode = "preserve.prepared-scene.order",
+            )
+        }
+        return GPUTaskList(
+            frameId = frameId,
+            capabilitySeal = base.capabilitySeal,
+            recordingSeals = base.recordingSeals,
+            expectedReplayKeyHash = "replay",
+            tasks = tasks,
+            dependencies = dependencies,
+            phaseOrder = base.phaseOrder,
+            memoryBudget = base.memoryBudget,
+            compositeCommands = listOf(
+                GPUPassCommand.PrepareLayerTarget(
+                    targetLabel = LAYER_TARGET.value,
+                    descriptorHash = "sha256:layer-test",
+                    usageLabel = "render_attachment,texture_binding",
+                    byteEstimate = 16384L,
+                ),
+                GPUPassCommand.RenderLayerChildren(
+                    scopeLabel = "layer:test",
+                    targetLabel = LAYER_TARGET.value,
+                    childrenLabel = "draw.2",
+                    tokenLabel = "token:test",
+                ),
+                GPUPassCommand.CompositeLayer(
+                    sourceLabel = LAYER_TARGET.value,
+                    parentTargetLabel = TARGET.value,
+                    blendModeLabel = "srcOver",
+                    blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+                    routeLabel = "native.draw_layer.isolated_target",
+                    tokenLabel = "token:test",
+                    alpha = 0.5f,
+                    clipLabel = null,
+                ),
+            ),
+        )
+    }
+
     private fun batchedSolidRectTaskList(
         generation: GPUDeviceGenerationID,
         capabilities: GPUCapabilities,
@@ -1830,6 +1998,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
     private companion object {
         val TARGET = GPUFrameTargetRef("target.scene")
         val OTHER_TARGET = GPUFrameTargetRef("target.other")
+        val LAYER_TARGET = GPUFrameTargetRef("layer-target:test")
         val SCRATCH = GPUFrameTextureRef("texture.msaa-break-scratch")
         val MSAA_COLOR = GPUFrameTextureRef("texture.msaa-color")
         val STAGING = GPUFrameBufferRef("buffer.readback")

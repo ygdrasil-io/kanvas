@@ -1381,6 +1381,9 @@ private class WgpuBackendSession(
                         val renderTargets = taskList.tasks.filterIsInstance<GPUTask.Render>()
                             .map { it.target }
                             .distinct()
+                        val declaredLayerTargets = taskList.compositeCommands
+                            .filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.PrepareLayerTarget>()
+                        val declaredLayerTargetLabels = declaredLayerTargets.map { it.targetLabel }.toSet()
                         val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
                             .flatMap { it.requests }
                         val preparation = preparations.singleOrNull {
@@ -1394,8 +1397,33 @@ private class WgpuBackendSession(
                                 "A prepared scene frame requires exactly one declared scene target used by rendering.",
                             )
                             renderTargets.any { renderTarget ->
-                                preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
-                                    GPUFrameTextureDescriptor
+                                renderTarget != target &&
+                                    renderTarget.value !in declaredLayerTargetLabels &&
+                                    preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
+                                        GPUFrameTextureDescriptor
+                            } -> executionDiagnostic(
+                                "unsupported.prepared-scene-session.target-count",
+                                "Every prepared render target beyond the scene target must be declared as a layer target or carry one exact texture declaration.",
+                            )
+                            renderTargets.any { renderTarget ->
+                                when {
+                                    renderTarget == target ->
+                                        preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
+                                            GPUFrameTextureDescriptor
+                                    renderTarget.value in declaredLayerTargetLabels ->
+                                        // Declared layer targets are label-only at this stage:
+                                        // PrepareLayerTarget enforces a non-blank descriptorHash and
+                                        // usageLabel at construction, and the exact layer-target
+                                        // descriptor (bounds, sampleCount 1, format,
+                                        // RenderAttachment|TextureBinding) resolves and is validated
+                                        // when T15 materializes the layer target.
+                                        !declaredLayerTargets.any {
+                                            it.targetLabel == renderTarget.value &&
+                                                it.descriptorHash.isNotBlank() &&
+                                                it.usageLabel.isNotBlank()
+                                        }
+                                    else -> false
+                                }
                             } -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.render-target-declaration",
                                 "Every prepared render target requires one exact texture declaration.",
@@ -1442,6 +1470,16 @@ private class WgpuBackendSession(
                         generations[request.resource] =
                             sealedPreparedTextGenerations[request.resource]
                                 ?: (index.toLong() + 2L)
+                    }
+                val declaredLayerTargetLabels = taskList.compositeCommands
+                    .filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.PrepareLayerTarget>()
+                    .map { it.targetLabel }
+                    .toSet()
+                taskList.tasks.filterIsInstance<GPUTask.Render>()
+                    .map { it.target }
+                    .filter { it != target && it.value in declaredLayerTargetLabels }
+                    .forEach { layerTarget ->
+                        generations.putIfAbsent(layerTarget, targetGeneration + 1L)
                     }
 
                 val surfaceTargetResolver = windowOutput?.nativeTargetResolver
