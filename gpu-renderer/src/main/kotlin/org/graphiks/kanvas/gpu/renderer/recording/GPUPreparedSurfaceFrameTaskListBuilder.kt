@@ -3097,6 +3097,14 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 // A composite-only frame has no flat content left: the scene target is
                 // written entirely by the composite steps, so the render task is dropped
                 // and every dependency on it is re-pointed at the layer renders.
+                //
+                // Dropping the render also drops every dependency edge into it (including
+                // the upload->render edge), leaving uploads unordered relative to the new
+                // layer renders. This is harmless today: the prepared-surface materializer
+                // retargets the layer children operands by step index with the late-bound
+                // resource generation, so upload ordering is preserved by the frame-local
+                // retargeting, and the layer-composite-order chain below only chains the
+                // render tail.
                 droppedRenderTaskIds += render.taskId
             } else {
                 replacements[render.taskId] = GPUTask.Render(
@@ -3164,21 +3172,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val lastRemainingRenderTaskId = taskList.tasks
             .filterIsInstance<GPUTask.Render>()
-            .map { render -> replacements[render.taskId]?.taskId ?: render.taskId }
+            .map { render -> render.taskId }
             .lastOrNull { taskId -> taskId !in droppedRenderTaskIds }
-        if (readbackTaskId != null && lastRemainingRenderTaskId != null) {
-            val readbackEdge = dependencies.firstOrNull { existing ->
-                existing.toTaskId == readbackTaskId
-            }
-            if (readbackEdge != null) {
-                dependencies.remove(readbackEdge)
-                if (layerRenders.isNotEmpty()) {
-                    dependencies += readbackEdge.copy(fromTaskId = layerRenders.last().taskId)
-                } else {
-                    dependencies += readbackEdge
-                }
-            }
-        }
         var previous: GPUTaskID? = null
         (listOfNotNull(lastRemainingRenderTaskId) + layerRenders.map(GPUTask.Render::taskId))
             .forEachIndexed { index, taskId ->

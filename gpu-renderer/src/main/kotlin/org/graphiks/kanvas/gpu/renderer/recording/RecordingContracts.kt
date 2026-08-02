@@ -1101,7 +1101,11 @@ class GPUTaskList(
     )
     val compositeCommands: List<GPUPassCommand> = immutableList(compositeCommands)
 
-    // TODO(Task 8/9): compositeCommands is scheduling evidence only until the executor consumes it; nothing renders it yet.
+    // compositeCommands are consumed by the prepared-surface layer-target execution: the
+    // planner lowers them into layer prepare/children/composite steps and the materializer
+    // allocates the frame-local layer texture, renders the children into it, and composites
+    // it onto the scene. The carrier (this task list) remains the transport that rides the
+    // commands forward to the executor.
 
     init {
         require(expectedReplayKeyHash.isNotBlank()) {

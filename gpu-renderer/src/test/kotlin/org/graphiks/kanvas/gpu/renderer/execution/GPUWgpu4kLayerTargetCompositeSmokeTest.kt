@@ -548,6 +548,38 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
             GPUBackendRuntimeNativeFactory.dispose()
         }
     }
+
+    @Test
+    fun `bounded layer composite with multiply blend is refused with the stable blend code`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val generation = backendSession.deviceGeneration
+        val fixture = capturedLayerCompositeInputs(
+            generation = generation,
+            capabilities = compositeCapabilities("layer-composite-blend-admission").withFillRectFacts(),
+            blendMode = GPUBlendMode.MULTIPLY,
+        )
+        try {
+            val result = GPUPreparedSurfaceNativePreflight().validate(
+                fixture.framePlan,
+                fixture.encoderPlan,
+                fixture.resources,
+                fixture.shaderContract,
+                fixture.generationSeal,
+            )
+            // The Task 15 admission alignment admits only SRC_OVER layer composites; every
+            // other blend mode refuses loudly at the preflight until the remaining atlas
+            // source blends are materialized.
+            assertEquals(
+                "unsupported.prepared-surface.layer-composite-blend",
+                assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(result).code,
+                assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(result).message,
+            )
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
     private fun twoLayerCompositeTaskList(
         generation: GPUDeviceGenerationID,
         capabilities: GPUCapabilities,
@@ -850,6 +882,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     private fun capturedLayerCompositeInputs(
         generation: GPUDeviceGenerationID,
         capabilities: GPUCapabilities,
+        blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
     ): CapturedPreparedSurfaceInputs {
         val taskList = layerCompositeTaskList(
             generation = generation,
@@ -857,6 +890,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
             frameId = GPUFrameID(10_763),
             readbackRequestId = GPUReadbackRequestID("readback.prepared.layer-operands"),
             alpha = 1f,
+            blendMode = blendMode,
         )
         val plan = GPUFramePlanner.plan(taskList)
         assertTrue(!plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
@@ -958,6 +992,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
         frameId: GPUFrameID,
         readbackRequestId: GPUReadbackRequestID,
         alpha: Float,
+        blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
     ): GPUTaskList {
         val recording = GPURecorder(
             GPURecordingID("recording.layer-composite"),
@@ -1119,8 +1154,8 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
                 GPUPassCommand.CompositeLayer(
                     sourceLabel = LAYER_TARGET.value,
                     parentTargetLabel = TARGET.value,
-                    blendModeLabel = "srcOver",
-                    blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+                    blendModeLabel = if (blendMode == GPUBlendMode.SRC_OVER) "srcOver" else "multiply",
+                    blendPlan = GPUBlendPlan.NoOp(blendMode, "test"),
                     routeLabel = "native.draw_layer.isolated_target",
                     tokenLabel = "token:layer",
                     alpha = alpha,
