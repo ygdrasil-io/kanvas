@@ -3,8 +3,6 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -151,20 +149,6 @@ class GPUPreparedTextNoFallbackTest {
         paint,
         Matrix33.identity(),
         ClipStack.WideOpen,
-    )
-
-    private fun vertices() = DisplayOp.DrawVertices(
-        vertices = org.graphiks.kanvas.types.Vertices(
-            org.graphiks.kanvas.types.VertexMode.TRIANGLES,
-            listOf(
-                org.graphiks.kanvas.types.Point(0f, 0f),
-                org.graphiks.kanvas.types.Point(1f, 0f),
-                org.graphiks.kanvas.types.Point(0f, 1f),
-            ),
-        ),
-        paint = Paint.fill(Color.RED),
-        transform = Matrix33.identity(),
-        clip = ClipStack.WideOpen,
     )
 
     private fun evidence() = GPUPreparedSurfaceExecutionEvidence(

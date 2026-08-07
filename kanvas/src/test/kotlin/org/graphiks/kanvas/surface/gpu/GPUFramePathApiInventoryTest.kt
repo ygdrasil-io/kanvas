@@ -4,7 +4,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
@@ -2378,51 +2377,5 @@ class GPUFramePathApiInventoryTest {
         lineTo(8f, 1f)
         lineTo(4f, 8f)
         close()
-    }
-
-    private fun imageOperations(): List<DisplayOp> {
-        val image = org.graphiks.kanvas.image.Image.fromPixels(
-            4,
-            4,
-            ByteArray(4 * 4 * 4) { 0xff.toByte() },
-            sourceId = "prepared-image-boundary",
-        )
-        val clip = org.graphiks.kanvas.canvas.ClipStack.WideOpen
-        return listOf(
-            DisplayOp.DrawImage(
-                image,
-                Rect.fromLTRB(0f, 0f, 4f, 4f),
-                Rect.fromLTRB(0f, 0f, 4f, 4f),
-                null,
-                Matrix33.identity(),
-                clip,
-            ),
-            DisplayOp.DrawImageNine(
-                image,
-                Rect.fromLTRB(1f, 1f, 3f, 3f),
-                Rect.fromLTRB(0f, 0f, 8f, 8f),
-                null,
-                Matrix33.identity(),
-                clip,
-            ),
-            DisplayOp.DrawImageLattice(
-                image,
-                Lattice(listOf(2), listOf(2)),
-                Rect.fromLTRB(0f, 0f, 8f, 8f),
-                null,
-                Matrix33.identity(),
-                clip,
-            ),
-            DisplayOp.DrawAtlas(
-                image,
-                listOf(Matrix33.identity()),
-                listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
-                listOf(Color.WHITE),
-                BlendMode.SRC_OVER,
-                Paint.fill(Color.WHITE),
-                Matrix33.identity(),
-                clip,
-            ),
-        )
     }
 }
