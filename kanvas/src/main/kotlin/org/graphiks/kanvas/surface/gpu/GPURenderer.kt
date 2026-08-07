@@ -700,7 +700,6 @@ internal fun renderViaGpu(
     height: Int,
     format: PixelFormat,
     config: RenderConfig,
-    routeTrace: GPUClipRouteTrace? = null,
     preparedRouteTrace: GPUPreparedSurfaceRouteTrace? = null,
 ): RenderResult {
     val operations = buffer.ops()
@@ -711,19 +710,12 @@ internal fun renderViaGpu(
         format = format,
         config = config,
         executionPort = preparedSurfaceProductExecutionPort,
-        legacyPort = preparedSurfaceLegacyPort,
-        legacyRouteTrace = routeTrace,
         trace = preparedRouteTrace,
     )
 }
 
 private val preparedSurfaceProductExecutionPort: GPUPreparedSurfaceExecutionPort =
     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)
-
-private val preparedSurfaceLegacyPort =
-    GPUPreparedSurfaceLegacyPort { operations, width, height, format, config, routeTrace ->
-        renderViaGpuLegacy(operations, width, height, format, config, routeTrace)
-    }
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun renderViaGpuLegacy(

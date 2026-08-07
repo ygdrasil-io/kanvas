@@ -113,6 +113,7 @@ internal object GPUPreparedSurfacePreBackendNoOpGate {
         val elidedTextOperationIndices = linkedSetOf<Int>()
         val culledTextOperationIndices = linkedSetOf<Int>()
         var stateEventCount = 0
+        var hasVisual = false
         request.candidate.operations.forEachIndexed { operationIndex, operation ->
             when (operation) {
                 is DisplayOp.DrawText -> {
@@ -132,11 +133,13 @@ internal object GPUPreparedSurfacePreBackendNoOpGate {
                 is DisplayOp.SetTransform,
                 is DisplayOp.SetClip,
                 is DisplayOp.Annotation,
+                is DisplayOp.FlushAndSnapshot,
                 -> stateEventCount++
-                else -> return null
+                else -> hasVisual = true
             }
         }
-        if (acceptedTextOperationIndices.isEmpty() ||
+        if (hasVisual) return null
+        if (acceptedTextOperationIndices.isNotEmpty() &&
             acceptedTextOperationIndices !=
             elidedTextOperationIndices + culledTextOperationIndices
         ) return null

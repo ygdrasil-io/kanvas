@@ -13,7 +13,6 @@ import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 
 internal sealed interface GPUPreparedSurfaceProductRoute {
-    data class Legacy(val code: String) : GPUPreparedSurfaceProductRoute
     data class Prepared(
         val result: RenderResult,
         val evidence: GPUPreparedSurfaceExecutionEvidence,
@@ -30,22 +29,22 @@ internal object GPUPreparedSurfaceProductRouter {
         config: RenderConfig,
         executionPort: GPUPreparedSurfaceExecutionPort,
     ): GPUPreparedSurfaceProductRoute {
-        if (format == PixelFormat.BGRA8) {
-            return GPUPreparedSurfaceProductRoute.Legacy("legacy.surface.prepared.pixel-format.bgra8")
-        }
         val candidate = when (val eligibility = GPUPreparedSurfaceFrameGate.classify(operations, config)) {
-            is GPUPreparedSurfaceEligibility.Legacy -> return GPUPreparedSurfaceProductRoute.Legacy(eligibility.code)
+            is GPUPreparedSurfaceEligibility.Refused -> return GPUPreparedSurfaceProductRoute.Terminal(
+                GPUDiagnostic(
+                    code = GPUDiagnosticCode(eligibility.code),
+                    domain = GPUDiagnosticDomain.Execution,
+                    severity = GPUDiagnosticSeverity.Error,
+                    message = "The prepared Surface frame is not eligible for prepared execution.",
+                ),
+            )
             is GPUPreparedSurfaceEligibility.Candidate -> eligibility
         }
         return when (val execution = executionPort.execute(
             GPUPreparedSurfaceExecutionRequest(candidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
-                if (candidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
-                    GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
-                } else {
-                    GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
-                }
+                GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.TerminalFailure ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, execution)
@@ -129,19 +128,4 @@ internal object GPUPreparedSurfaceProductRouter {
             facts = mapOf("field" to field, "value" to value),
         ),
     )
-}
-
-private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
-    is DisplayOp.DrawImage,
-    is DisplayOp.DrawImageNine,
-    is DisplayOp.DrawImageLattice,
-    is DisplayOp.DrawAtlas,
-    is DisplayOp.DrawText,
-    is DisplayOp.DrawVertices,
-    is DisplayOp.DrawMesh,
-    is DisplayOp.DrawPicture,
-    is DisplayOp.BeginLayer,
-    DisplayOp.EndLayer,
-    -> true
-    else -> false
 }
