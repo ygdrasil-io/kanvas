@@ -342,7 +342,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     stateEventCount = mapping.stateEvents.count { event ->
                         event.kind == GPUFramePathStateKind.Transform ||
                             event.kind == GPUFramePathStateKind.Clip ||
-                            event.kind == GPUFramePathStateKind.Annotation
+                            event.kind == GPUFramePathStateKind.Annotation ||
+                            event.kind == GPUFramePathStateKind.FlushSnapshot
                     },
                     textMetrics = textPreparation.metrics,
                     acceptedTextOperationIndices =
@@ -460,7 +461,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
                                 event.kind == GPUFramePathStateKind.Clip ||
-                                event.kind == GPUFramePathStateKind.Annotation
+                                event.kind == GPUFramePathStateKind.Annotation ||
+                                event.kind == GPUFramePathStateKind.FlushSnapshot
                         },
                         textMetrics = textPreparation.metrics,
                         textCommandIds = preparedImages.textCommandIds,

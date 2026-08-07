@@ -804,8 +804,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `unregistered mesh program is terminal through the product gate before legacy`() {
-        var legacyCalls = 0
+    fun `unregistered mesh program is terminal through the product gate`() {
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
             positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
@@ -844,10 +843,6 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("refused mesh must not continue through legacy")
-                },
             )
         }
 
@@ -856,7 +851,6 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 .MeshProgramUnregistered,
             failure.diagnostic.code.value,
         )
-        assertEquals(0, legacyCalls)
     }
 
     private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(
