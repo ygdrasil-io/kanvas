@@ -360,7 +360,6 @@ class GPUPreparedSurfaceProductRouterTest {
             config = RenderConfig.DEFAULT,
             capabilities = preparedProductCapabilities(),
         )
-        assertEquals(0, acceptedPlan.legacyDump.invocationCount)
         assertNotNull(acceptedPlan.preparedVerticesInventory)
 
         val refused = DisplayOp.DrawVertices(
@@ -382,7 +381,6 @@ class GPUPreparedSurfaceProductRouterTest {
             config = RenderConfig.DEFAULT,
             capabilities = preparedProductCapabilities(),
         )
-        assertEquals(0, refusedPlan.legacyDump.invocationCount)
         assertEquals(
             GPUPreparedVerticesRefusalCodes.NonFinite,
             assertNotNull(refusedPlan.preparedRefusal).code,

@@ -24,30 +24,6 @@ import org.graphiks.kanvas.types.Rect
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextNoFallbackTest {
     @Test
-    fun `legacy adapter exposes no families and rejects text and vertices`() {
-        val adapter = GPULegacyImmediatePathAdapter()
-
-        assertContentEquals(
-            emptyList(),
-            LegacyDisplayOpFamily.entries,
-        )
-        assertEquals(
-            emptySet(),
-            GPULegacyImmediatePathAdapter.allowedFamilies,
-        )
-        assertFalse(adapter.accepts(text()))
-        assertFalse(adapter.accepts(vertices()))
-        assertFailsWith<IllegalArgumentException> {
-            adapter.recordInvocation(text())
-        }
-        assertFailsWith<IllegalArgumentException> {
-            adapter.recordInvocation(vertices())
-        }
-        assertEquals(0, adapter.dump().invocationCount)
-        assertEquals(emptyMap(), adapter.dump().invocationsByFamily)
-    }
-
-    @Test
     fun `accepted text success crosses prepared execution seam and never calls legacy`() {
         val operations = listOf(
             DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),

@@ -511,8 +511,6 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
 
         assertEquals(setOf(0), prepared.inventory.acceptedTextOperationIndices)
         assertEquals(emptyList(), prepared.mapping.visualCommands)
-        assertEquals(0, prepared.mapping.legacyDump.invocationCount)
-        assertEquals(emptyMap(), prepared.mapping.legacyDump.invocationsByFamily)
     }
 
     @Test

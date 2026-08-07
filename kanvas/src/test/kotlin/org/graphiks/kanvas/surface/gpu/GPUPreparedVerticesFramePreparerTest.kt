@@ -44,7 +44,6 @@ class GPUPreparedVerticesFramePreparerTest {
         assertEquals(mapOf(1 to result.inventory.commands[0].artifactKey,
             2 to result.inventory.commands[1].artifactKey), result.inventory.artifactKeyByCommandId)
         assertEquals(listOf(0, 3), result.mapping.visualCommands.map { it.normalized.commandId.value })
-        assertEquals(0, result.mapping.legacyDump.invocationCount)
         assertTrue(result.mapping.preparedVerticesInventory === result.inventory)
     }
 

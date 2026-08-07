@@ -117,7 +117,6 @@ class GPUFramePathApiInventoryTest {
         assertEquals(listOf(2, 3), vertices.commands.map { it.operationIndex })
         assertEquals(setOf(2, 3), vertices.artifactKeyByCommandId.keys)
         assertEquals(listOf(0, 1, 4), inventory.visualCommands.map { it.normalized.commandId.value })
-        assertEquals(0, inventory.legacyDump.invocationCount)
         assertNotNull(inventory.preparedTextInventory)
     }
 
@@ -1464,7 +1463,6 @@ class GPUFramePathApiInventoryTest {
 
         assertEquals(3, plan.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .sumOf { it.drawPackets.size })
-        assertEquals(0, plan.legacyDump.invocationCount)
     }
 
     @Test
@@ -1534,7 +1532,6 @@ class GPUFramePathApiInventoryTest {
         )
         assertEquals(listOf(0, 1, 2), plan.normalizedCommands.map { it.commandId.value })
         assertNotNull(plan.visualCommands[1].preparedImage)
-        assertEquals(0, plan.legacyDump.invocationCount)
         val preparation = GPUFramePathApiInventory.preparePreparedNativeTaskList(
             inventory = plan,
             capabilities = capabilities,
@@ -2284,31 +2281,6 @@ class GPUFramePathApiInventoryTest {
                 assertFalse(visual.blendPlan is GPUBlendPlan.UnsupportedBlend)
             }
         }
-    }
-
-    @Test
-    fun `prepared image text and vertices families are absent and composites left the legacy allowlist`() {
-        assertEquals(
-            emptySet(),
-            GPULegacyImmediatePathAdapter.allowedFamilies,
-        )
-
-        val adapter = GPULegacyImmediatePathAdapter()
-        assertFalse(adapter.accepts(DisplayOp.DrawRect(
-            Rect.fromLTRB(0f, 0f, 1f, 1f),
-            Paint.fill(Color.RED),
-            Matrix33.identity(),
-            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
-        )))
-        imageOperations().forEach { operation ->
-            assertFalse(adapter.accepts(operation), operation::class.simpleName)
-            assertEquals(null, GPULegacyImmediatePathAdapter.familyOrNull(operation))
-            assertFailsWith<IllegalArgumentException> {
-                adapter.recordInvocation(operation)
-            }
-        }
-        assertEquals(0, adapter.dump().invocationCount)
-        assertEquals(emptyMap(), adapter.dump().invocationsByFamily)
     }
 
     private fun target(width: Int = 32, height: Int = 32) =
