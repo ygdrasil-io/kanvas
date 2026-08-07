@@ -14,7 +14,6 @@ internal sealed interface GPUPreparedSurfaceEligibility {
     data class Legacy(
         val code: String,
         val operationIndex: Int? = null,
-        val family: LegacyDisplayOpFamily? = null,
     ) : GPUPreparedSurfaceEligibility
 }
 

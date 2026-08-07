@@ -89,7 +89,6 @@ data class GPUFramePathInventoryPlan(
     val telemetryInputs: List<GPUFramePathTelemetryInput>,
     val recording: GPURecording,
     val framePlan: GPUFramePlan,
-    val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal?,
     val preparedTextInventory: PreparedTextFrameInventory? = null,
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
@@ -171,7 +170,6 @@ object GPUFramePathApiInventory {
             },
             recording = recording,
             framePlan = framePlan,
-            legacyDump = mapping.legacyDump,
             preparedRefusal = mapping.preparedRefusal,
             preparedTextInventory =
                 publishedTextInventory,
@@ -184,7 +182,6 @@ object GPUFramePathApiInventory {
         GPUOpMapping(
             visualCommands = emptyList(),
             stateEvents = emptyList(),
-            legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
             preparedRefusal = refusal,
         )
 

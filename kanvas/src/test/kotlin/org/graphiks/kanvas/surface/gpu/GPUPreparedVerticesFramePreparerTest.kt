@@ -105,7 +105,6 @@ class GPUPreparedVerticesFramePreparerTest {
             mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
                 GPUOpMapping(
                     visualCommands = emptyList(), stateEvents = emptyList(),
-                    legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
                     preparedRefusal = expected,
                 )
             },
@@ -167,7 +166,6 @@ class GPUPreparedVerticesFramePreparerTest {
                     is PreparedVerticesCommandBindingResult.Ready -> error("invalid binding was accepted")
                     is PreparedVerticesCommandBindingResult.Refused -> GPUOpMapping(
                         visualCommands = emptyList(), stateEvents = emptyList(),
-                        legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
                         preparedRefusal = binding.toOperationRefusal(),
                     )
                 }
