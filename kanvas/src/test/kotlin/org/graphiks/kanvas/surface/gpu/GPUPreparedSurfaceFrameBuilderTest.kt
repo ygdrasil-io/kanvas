@@ -659,6 +659,16 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))) to
                 "unsupported.destination_read.required",
+            // The CLEAR fixture rect overrides the hard rect() paint with Paint.fill(...), whose
+            // antiAlias defaults to true, so this frame mixes a hard uniform32 rect with an
+            // analytic-shape uniform80 AA rect. The refusal is the layout-mixing gate, NOT the
+            // blend admission: the single hard CLEAR rect frame builds Ready (pinned by the
+            // `clear and src hard rects build ready` test below).
+            request(listOf(
+                rect(color = Color.BLUE),
+                rect(color = Color.RED).copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
+            )) to
+                "unsupported.recording.core_primitive_mixed_uniform_layouts",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point(2f, 2f), Point(12f, 2f)),
@@ -679,6 +689,27 @@ class GPUPreparedSurfaceFrameBuilderTest {
             )
             assertEquals(expectedCode, refused.diagnostic.code.value)
         }
+    }
+
+    @Test
+    fun `two analytic rects with mixed blend modes refuse on the shared structural pipeline contract`() {
+        // Both rects use Paint.fill(...) defaults (antiAlias = true), so they share the analytic
+        // shape uniform80 layout; only their blend modes differ. The prepared-surface direct route
+        // materializes one structural pipeline per pass, so a pass mixing blend pipeline keys is
+        // refused at recording and the surface router continues on the legacy route. This is a
+        // recording contract, not a blend-plan refusal: each single-mode frame builds Ready.
+        val mixed = request(listOf(
+            rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC_OVER)),
+            rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
+        ))
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(mixed),
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_mixed_pipeline_keys",
+            refused.diagnostic.code.value,
+        )
     }
 
     @Test
