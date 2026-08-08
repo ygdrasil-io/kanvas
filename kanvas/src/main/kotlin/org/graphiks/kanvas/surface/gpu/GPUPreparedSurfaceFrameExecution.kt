@@ -272,7 +272,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
             val capabilities = backend.capabilities
             if (capabilities == null) {
                 primary = beforeRefusal(
-                    "legacy.surface.prepared.runtime-capabilities-unavailable",
+                    "unavailable.surface.prepared.runtime-capabilities",
                     "The prepared Surface backend did not expose capabilities.",
                 )
             } else {
