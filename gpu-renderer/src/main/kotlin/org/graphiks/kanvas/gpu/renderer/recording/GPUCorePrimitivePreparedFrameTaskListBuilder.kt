@@ -1368,7 +1368,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (request.targetFormat !in corePrimitiveSceneTargetFormats) {
             return refused(
                 "unsupported.recording.core_primitive_target_format",
-                "Prepared core primitive recording requires rgba8unorm or rgba8unorm-srgb.",
+                "Prepared core primitive recording requires rgba8unorm, rgba8unorm-srgb, or bgra8unorm.",
             )
         }
         if (request.configuredAggregateBudgetBytes <= 0L) {
@@ -1403,7 +1403,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
                     else -> return refused(
                         "unsupported.recording.core_primitive_target_format",
-                        "Prepared core primitive recording requires rgba8unorm or rgba8unorm-srgb.",
+                        "Prepared core primitive recording requires rgba8unorm, rgba8unorm-srgb, or bgra8unorm.",
                     )
                 },
                 samplePlan = promotedSamplePlan,

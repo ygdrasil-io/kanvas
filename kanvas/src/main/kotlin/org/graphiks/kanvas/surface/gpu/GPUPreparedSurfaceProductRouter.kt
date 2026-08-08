@@ -46,6 +46,12 @@ internal object GPUPreparedSurfaceProductRouter {
                     interpretation = GPUColorInterpretation.EncodedPremulSrgb,
                 ),
             )
+            // Asymmetric by design: the RGBA8 path keeps the config-derived color (the
+            // default config carries RGBA8_UNORM_SRGB). A Surface(format = RGBA8) with an
+            // explicit config.gpuColorFormat = BGRA8_UNORM opens a bgra8unorm target and
+            // returns BGRA-ordered bytes labelled RGBA8 — a newly-reachable edge, not a
+            // regression (it was a hard refusal before Task 4). FP-09 may derive both
+            // formats symmetrically.
             PixelFormat.RGBA8 -> candidate
         }
         return when (val execution = executionPort.execute(

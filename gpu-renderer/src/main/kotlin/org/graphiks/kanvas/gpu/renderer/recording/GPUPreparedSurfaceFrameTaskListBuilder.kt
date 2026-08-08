@@ -3503,7 +3503,7 @@ private fun preparedSurfaceTargetColorInterpretation(
     GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
     GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     else -> throw IllegalArgumentException(
-        "Prepared ColorGlyph destination snapshots require RGBA8Unorm or RGBA8UnormSrgb.",
+        "Prepared ColorGlyph destination snapshots require RGBA8Unorm, RGBA8UnormSrgb, or BGRA8Unorm.",
     )
 }
 
