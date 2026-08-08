@@ -1,10 +1,12 @@
-# FP-08 — Retire Immediate and CPU Continuation Paths Implementation Plan
+# FP-08 — Retire Immediate and CPU Continuation Paths Implementation Plan (REDUCED SCOPE)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Retire the superseded high-level immediate renderer (`renderViaGpuLegacy`), the empty legacy adapter (`GPULegacyImmediatePathAdapter`), the legacy route authority variants, and the CPU-owned destination snapshot/upload machinery — leaving a single Prepared/Terminal surface route where the destination continuation stays GPU-owned, and proving the retired paths are absent via production searches and regression tests.
+> **SCOPE REVISION (2026-08-08, after Task 4/5 execution):** the original plan's Tasks 4–7 (route-authority collapse to Terminal-only, deletion of `renderViaGpuLegacy` and all legacy-only helper machinery) were **executed and REVERTED** — they caused ~636 GPU test failures (`GPUAllApiBlendSurfaceTest`): the prepared route does NOT yet cover destination-read blends, non-SrcOver core-primitive blends, hairline points, mixed uniform layouts, or analytic-clip non-direct geometry. Those families were genuinely rendered by `renderViaGpuLegacy` (not "legacy-pinning test expectations"). The full legacy retirement is deferred to **FP-09** (new roadmap entry). This plan now covers only the safe retirements: the empty adapter + its plumbing (Tasks 1–3, DONE), native BGRA8 in the prepared route (Task 8), the stable code rename (Task 9), and reduced-scope evidence/closure (Task 10). Tasks 4–7 of the original plan are superseded by FP-09.
 
-**Architecture:** The prepared Surface route becomes the only route. `GPUPreparedSurfaceProductRouter` returns `Prepared | Terminal` only (no `Legacy`); the gate classifies `Candidate | Refused`; `GPUPreparedSurfaceProductEntry` drops the `legacyPort` and the `GPUPreparedSurfaceLegacyPort` fun interface is deleted. Empty/state-only frames and `FlushAndSnapshot` route to Prepared (transparent NoOp / state event). BGRA8 is supported natively in the prepared route by rendering into a `bgra8unorm` target (Graphite/Dawn model: `kBGRA_8888_SkColorType ↔ TF::kBGRA8` with `X::kIdentity`), so the readback yields BGRA-ordered bytes with no CPU swizzle. The GPU-owned destination continuation (`GPUDestinationSnapshotOperation.TextureCopy`/`CopyAsDraw`, `gpu-renderer/.../destination/`, prepared readback) is retained; `GPUTextCPUUploadTelemetryRecord` is descriptive telemetry and is retained.
+**Goal:** Retire the empty legacy adapter (`GPULegacyImmediatePathAdapter`) and its production plumbing, add native BGRA8 support to the prepared route, rename the last `legacy.surface.prepared.*` code, and prove via production searches + regression tests that the retired adapter paths are absent — while KEEPING `renderViaGpuLegacy` as the fallback for families the prepared route cannot yet render (destination-reads, non-SrcOver core blends, hairline). Full legacy retirement is tracked as FP-09.
+
+**Architecture:** The adapter (`GPULegacyImmediatePathAdapter`, `LegacyDisplayOpFamily`, `GPULegacyImmediatePathDump`) is deleted; `legacyDump` leaves `GPUOpMapping`/`GPUFramePathInventoryPlan`; the `family` field leaves `GPUPreparedSurfaceEligibility.Legacy`. The router keeps its `hasTerminalPreparedFamily` split: terminal families (image/text/vertices/composites) refuse with stable codes; non-terminal families that the prepared builder cannot lower fall back to `renderViaGpuLegacy` (destination-reads, non-SrcOver blends, hairline — currently ~636 GPU cases). BGRA8 is supported natively in the prepared route by rendering into a `bgra8unorm` target (Graphite/Dawn model: `kBGRA_8888_SkColorType ↔ TF::kBGRA8` with `X::kIdentity`), so the readback yields BGRA-ordered bytes with no CPU swizzle. The GPU-owned destination continuation (`GPUDestinationSnapshotOperation.TextureCopy`/`CopyAsDraw`, `gpu-renderer/.../destination/`, prepared readback) is retained; `GPUTextCPUUploadTelemetryRecord` is descriptive telemetry and is retained.
 
 **Tech Stack:** Kotlin, WebGPU via wgpu4k, WGSL generation, Gradle (`./gradlew -F off`), JUnit (`kotlin.test`).
 
@@ -63,8 +65,8 @@ Kanvas already prefers `BGRA8Unorm` for native Metal surfaces (`gpu-renderer/...
 - `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt` — remove `GPUPreparedSurfaceLegacyPort`, the `legacyPort`/`legacyRouteTrace` params, the `Legacy` decision branch, and `GPUPreparedSurfaceRouteDecision.Legacy`. (Tasks 4)
 - `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt` — delete `renderViaGpuLegacy` (l.729–~2950) + `preparedSurfaceLegacyPort` + `renderViaGpu`'s `routeTrace`/legacy plumbing + legacy-only helpers. (Tasks 6, 7)
 - `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` — rename `legacy.surface.prepared.runtime-capabilities-unavailable` → `unavailable.surface.prepared.runtime-capabilities` (stable terminal code). (Task 12)
-- `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt` — accept `GPUColorFormat.BGRA8_UNORM → Ready(BGRA8Unorm, EncodedPremulSrgb)`. (Task 8)
-- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt` — `validatePreparedSceneTargetRequest` accepts `GPUColorFormat.BGRA8Unorm`. (Task 8)
+- `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt` — accept `GPUColorFormat.BGRA8_UNORM → Ready(BGRA8Unorm, EncodedPremulSrgb)`. (Task 4)
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt` — `validatePreparedSceneTargetRequest` accepts `GPUColorFormat.BGRA8Unorm`. (Task 4)
 - `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` — (NoOp gate) classify empty/state-only frames as `NoOp` so empty renders stay backend-free. (Task 5)
 
 ### Tests (new / modified / deleted — Task 3, 5, 8, 10, 11)
@@ -196,236 +198,50 @@ git commit -m "test(surface): drop legacy adapter tautologies from adapter consu
 
 ---
 
-## Phase 2 — Route authority collapse (no Legacy route)
+## Phase 2 — SUPERSEDED: route collapse + legacy renderer removal → FP-09
 
-### Task 4: Collapse the route authorities to Prepared/Terminal
+### Tasks 4–7 (original plan): COLLAPSED ROUTE AUTHORITIES / LEGACY RENDERER DELETION — EXECUTED AND REVERTED
 
-**Files:**
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` (NoOp gate extension — empty/state-only → `NoOp`)
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt` (`renderViaGpu` signature: drop `routeTrace`; drop `legacyPort` arg)
+**Status: EXECUTED → REVERTED (2026-08-08).** Commits `9e79eb857` (Task 4, route collapse) and `c5325a3d0` (Task 5, test re-points) were created, then reverted (`3150fc3fe`, `0f1106800`).
 
-**Context:** This is the "duplicate route authorities" consolidation. Three files currently each carry a `Legacy` notion: `GPUPreparedSurfaceEligibility.Legacy` (gate), `GPUPreparedSurfaceProductRoute.Legacy` (router), `GPUPreparedSurfaceRouteDecision.Legacy` (entry). After this task, only `Prepared | Terminal` (product) and `Candidate | Refused` (gate) remain, and `BeforePreparedEntryRefused` always becomes `Terminal` — the `hasTerminalPreparedFamily` distinction existed solely to choose legacy continuation for non-terminal families, which no longer exists.
+**Evidence of the reversal cause (verified on the executed commits):** `GPUAllApiBlendSurfaceTest` failed ~636 GPU cases with 5 refusal codes that the prepared route cannot cover:
+- `unsupported.destination_read.required` — 630 cases (destination-read blends: DARKEN, MULTIPLY, …)
+- `unsupported.native-core-primitive.blend` — 330 cases (non-SrcOver blends on core primitives)
+- `unsupported.core_primitive.point.hairline_exact_lowering` — 168 cases (hairline points)
+- `unsupported.recording.core_primitive_mixed_uniform_layouts` — 92 cases
+- `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry` — 52 cases
 
-Per the approved scope decisions:
-- **FlushAndSnapshot** → a state event in the gate (like `SetTransform`/`SetClip`/`Annotation`): it no longer triggers `Legacy`; a frame with visuals+FlushAndSnapshot is `Candidate`; a pure state-only frame hits the empty-frame path.
-- **Empty/state-only frames** → `Candidate`; the executor's `GPUPreparedSurfacePreBackendNoOpGate` gains an empty/state-only classification returning `NoOp` (transparent readback, no backend open) so `Surface().render()` on an empty surface keeps returning transparent pixels.
+Before the collapse, `GPUPreparedSurfaceProductRouter.route` mapped `BeforePreparedEntryRefused` → `Legacy` for non-terminal families, and `renderViaGpuLegacy` RENDERED those frames (pixel oracle passed). The collapse made them terminal refusals — a functional regression, not legacy-pinning expectations. The plan's assumption ("the prepared route covers everything the legacy rendered") was wrong.
 
-- [ ] **Step 1: Write the failing tests (red) — gate classification**
+**Decision (user, 2026-08-08):** keep `renderViaGpuLegacy` as the fallback for non-covered families; the full legacy retirement is deferred to **FP-09** (new roadmap entry): "retire `renderViaGpuLegacy` and the legacy-only helper machinery once the prepared route covers destination-reads, non-SrcOver core blends, hairline points, mixed uniform layouts, and analytic-clip non-direct geometry."
 
-In `GPUPreparedSurfaceFrameGateTest.kt`, re-point:
-- `empty and state only frames use the stable empty frame diagnostic` (l.88-102) → these frames are now `Candidate` (assert `assertIs<GPUPreparedSurfaceEligibility.Candidate>`).
-- `first refused operation wins with its exact index family and code` (l.104-124) → FlushAndSnapshot no longer wins; assert the frame is `Candidate` and FlushAndSnapshot contributes a state event, not a refusal.
-- `both public color refusals are propagated before candidate construction` (l.127-143) → assert a `Refused` eligibility with the stable `unsupported.surface.gpu-color-format.*` code (RGBA8_UNORM stays refused; BGRA8_UNORM flips to `Ready` in Task 8 — keep this test asserting only RGBA8_UNORM refusal for now and add the BGRA8 flip in Task 8).
-- `all display op variants have one exact whole frame classification` (l.58-85, fixtures l.181-211) → `FlushAndSnapshot` and the state-only fixtures become `Candidate`; no fixture may remain `Expected.Legacy`.
+**What FP-09 will contain (transferred from the original Tasks 4–7):**
+- Collapse `GPUPreparedSurfaceEligibility.Legacy` → `Refused`, `GPUPreparedSurfaceProductRoute.Legacy` → Terminal-only, `GPUPreparedSurfaceRouteDecision.Legacy` removal.
+- `BeforePreparedEntryRefused` → always `Terminal` (once every fallback family is prepared-covered).
+- Delete `renderViaGpuLegacy` + `preparedSurfaceLegacyPort` + `GPUPreparedSurfaceLegacyPort` + `expandPicturesForGpuReplay` + the legacy-only helper machinery (GPUClipExecution.kt, LayerScissorOffscreenTarget, CPU text-atlas builders, legacy mask-lease machinery).
+- The FP-06 `nested_vertices` guard functions stay (test-pinned).
+- Re-point `GPUAllApiBlendSurfaceTest`/`GPUClipCoverageSurfaceTest` expectations with evidence per the FP-08 evidence methodology.
 
-Add a new test:
-
-```kotlin
-@Test
-fun `flush snapshot is a state event and empty frames enter prepared candidate`() {
-    val withVisual = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
-        GPUPreparedSurfaceFrameGate.classify(
-            listOf(DisplayOp.FlushAndSnapshot(RECT), visualRect()),
-            RenderConfig.DEFAULT,
-        ),
-    )
-    assertEquals(2, withVisual.operations.size)
-
-    val empty = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
-        GPUPreparedSurfaceFrameGate.classify(emptyList(), RenderConfig.DEFAULT),
-    )
-    assertEquals(0, empty.operations.size)
-}
-```
-
-(Adapt names to the exact `classify` signature on HEAD.)
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceFrameGateTest" --no-parallel --console=plain`
-Expected: FAIL — the gate still returns `GPUPreparedSurfaceEligibility.Legacy` for FlushAndSnapshot and empty frames.
-
-- [ ] **Step 3: Implement the gate collapse**
-
-In `GPUPreparedSurfaceFrameGate.kt`:
-- Replace `GPUPreparedSurfaceEligibility.Legacy(code, operationIndex, family)` with `GPUPreparedSurfaceEligibility.Refused(code, operationIndex)` (no `family`).
-- Remove `FlushAndSnapshot -> return Legacy("legacy.surface.prepared.flush-snapshot", ...)`; treat it as a state op (`-> Unit`) in the state bucket.
-- Remove the `if (!hasVisual) return Legacy("legacy.surface.prepared.empty-frame")` branch; empty/state-only frames fall through to `Candidate` (keep the `hasVisual` accumulation for the general case — Candidate may carry zero visual ops, which the executor NoOp-gates).
-- Color-mapping refusal (`mapPreparedGpuColorConfig()` `Refused`) → `GPUPreparedSurfaceEligibility.Refused(mapping.code)`.
-
-- [ ] **Step 4: Implement the executor NoOp-gate extension**
-
-In `GPUPreparedSurfaceFrameExecution.kt` `GPUPreparedSurfacePreBackendNoOpGate.classify`: after the existing text loop, if the frame contains **no** `DrawText` and **no** visual ops (only `SetTransform`/`SetClip`/`Annotation`/`FlushAndSnapshot` or nothing), return a `NoOp` with empty text metrics and the correct `stateEventCount` (count the state ops). This keeps `Surface().render()` on an empty surface transparent without opening a WebGPU backend.
-
-- [ ] **Step 5: Collapse the router**
-
-In `GPUPreparedSurfaceProductRouter.kt`:
-- Delete `GPUPreparedSurfaceProductRoute.Legacy`.
-- Delete the `if (format == PixelFormat.BGRA8) return Legacy(...)` short-circuit (BGRA8 handled in Task 8 — for now remove the Legacy return and let the gate/executor decide; Task 8 adds the native color mapping).
-- `is GPUPreparedSurfaceEligibility.Refused -> return GPUPreparedSurfaceProductRoute.Terminal(GPUDiagnostic(...code=eligibility.code...))`.
-- `BeforePreparedEntryRefused` → always `GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)` (remove the `candidate.operations.any(DisplayOp::hasTerminalPreparedFamily)` ternary and the `hasTerminalPreparedFamily` extension).
-
-- [ ] **Step 6: Collapse the entry**
-
-In `GPUPreparedSurfaceProductEntry.kt`:
-- Delete `GPUPreparedSurfaceLegacyPort` and `GPUPreparedSurfaceRouteDecision.Legacy`.
-- Remove `legacyPort: GPUPreparedSurfaceLegacyPort` and `legacyRouteTrace: GPUClipRouteTrace?` params.
-- Remove the `Legacy -> legacyPort.render(...)` branch (it becomes unreachable once `route()` never returns Legacy); keep `Prepared` and `Terminal`.
-
-In `GPURenderer.kt`:
-- Remove `preparedSurfaceLegacyPort` (l.723-726) and the `legacyPort = ...` / `legacyRouteTrace = routeTrace` args in `renderViaGpu`; drop the `routeTrace: GPUClipRouteTrace?` param from `renderViaGpu`.
-
-- [ ] **Step 7: Run the pure-route suites (green)**
-
-```bash
-./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceFrameGateTest" --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*GPUPreparedSurfaceProductEntryTest" --tests "*GPUPreparedSurfaceFrameExecutorTest" --tests "*GPUPreparedTextNoFallbackTest" --no-parallel --console=plain
-```
-
-Expected: BUILD SUCCESSFUL after the corresponding test re-points (Task 5).
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add -A kanvas/src/main kanvas/src/test
-git commit -m "feat(surface): collapse prepared route authorities to prepared and terminal only"
-```
-
-### Task 5: Re-point the route/gate/executor tests
-
-**Files:**
-- Modify: `GPUPreparedSurfaceProductRouterTest.kt` (l.56-81 BGRA8/FlushAndSnapshot; l.422-441 before-entry refusal → Terminal)
-- Modify: `GPUPreparedSurfaceProductEntryTest.kt` (all `legacyPort = GPUPreparedSurfaceLegacyPort {...}` args removed; `owner serializes prepared with gate legacy` test → rename to empty-frame serialization using `GPUPreparedSurfaceEligibility.Refused` or empty ops)
-- Modify: `GPUPreparedTextNoFallbackTest.kt` (the 4 ProductEntry tests — remove `legacyPort` args; the `legacyCalls == 0` counters become `assertEquals(0, preparedCalls)`-style or are deleted)
-- Modify: `GPUPreparedSurfaceProductNativeSmokeTest.kt` (l.816-848 and any `legacyPort`/`legacyRouteTrace` args)
-- Modify: `GPUPreparedSurfaceFrameExecutorTest.kt` (empty/state-only frames now produce a `NoOp` — assert transparent readback and no backend open)
-- Modify: `GPUClipCoverageSurfaceTest.kt` (remove `legacyPort` args in the `GPUPreparedSurfaceProductEntry.render` calls; remove `legacyRouteTrace = trace` args; the `trace.logicalDrawCount == 0` asserts that were counting legacy-only route traces are deleted; keep all refusal-code assertions)
-
-**Context:** These tests exercise the entry/router/gate with a legacy port stub that must now be removed. The core assertions (prepared success, terminal refusals, exact codes) are unchanged; only the `legacyPort`/`legacyRouteTrace` plumbing and legacy-trace counters disappear.
-
-- [ ] **Step 1: Remove `legacyPort`/`legacyRouteTrace` from every test call**
-
-Use `rg -n "legacyPort|legacyRouteTrace|GPUPreparedSurfaceLegacyPort" kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu` to enumerate, then delete each argument. For `GPUClipCoverageSurfaceTest`, also delete `val trace = GPUClipRouteTrace()` lines and the trailing `assertEquals(0, trace.logicalDrawCount)` assertions.
-
-- [ ] **Step 2: Re-point the router's before-entry-refusal test**
-
-`before-entry refusal is legacy while terminal failure remains terminal` (l.422-441) → rename to `before-entry refusal is terminal`; both branches assert `assertIs<GPUPreparedSurfaceProductRoute.Terminal>`.
-
-- [ ] **Step 3: Run the full route suite (green)**
-
-```bash
-./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceFrameGateTest" --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*GPUPreparedSurfaceProductEntryTest" --tests "*GPUPreparedSurfaceFrameExecutorTest" --tests "*GPUPreparedTextNoFallbackTest" --tests "*GPUPreparedSurfaceProductNativeSmokeTest" --no-parallel --console=plain
-```
-
-Expected: BUILD SUCCESSFUL. NOTE: `*GPUPreparedSurfaceProductNativeSmokeTest` requires a WebGPU environment; without one it is skipped via `requireWebGpu()`/`assumeTrue` (a skip is NOT a pass signal). In a non-GPU environment, rely on the pure-route suites for green and run the native smoke suite separately in the WebGPU-enabled environment.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add -A kanvas/src/test
-git commit -m "test(surface): re-point route gate and executor tests to prepared only route"
-```
+**Do NOT execute the original Tasks 4–7 in FP-08.**
 
 ---
+## Phase 3 — Native BGRA8 in the prepared route
 
-## Phase 3 — Legacy renderer removal
-
-### Task 6: Delete `renderViaGpuLegacy`, the legacy port, and the picture-replay expansion
-
-**Files:**
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt` (delete `renderViaGpuLegacy` l.729–~2950, its private helpers, `preparedSurfaceLegacyPort`, and the `GPUClipRouteTrace` import)
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt` (delete `expandPicturesForGpuReplay` l.2300-~2380 and its private `replayPicture`/`expandPicture` lambdas; KEEP `withPictureReplayState` l.2268 and its helpers)
-
-**Context:** After Task 4 nothing in production calls `legacyPort`, so `renderViaGpuLegacy` is unreachable and becomes the deletion target. `expandPicturesForGpuReplay` is called only by `renderViaGpuLegacy` (GPURenderer.kt:739). `withPictureReplayState` is used by the prepared composite capture (`GPUPreparedCompositeCapture.kt:323`) — keep it.
-
-- [ ] **Step 1: Delete `renderViaGpuLegacy` and `preparedSurfaceLegacyPort`**
-
-Delete the whole legacy renderer function body (l.729 through the last line of its local scopes, before `computeAtlasDst` at l.3043) and the `preparedSurfaceLegacyPort` val (l.723-726). Run `rg -n "renderViaGpuLegacy|preparedSurfaceLegacyPort" kanvas/src/main` — must be empty.
-
-- [ ] **Step 2: Delete `expandPicturesForGpuReplay`**
-
-Delete ONLY `expandPicturesForGpuReplay` (l.2300-2376, including its private `replayPicture`/`expandPicture` lambdas). **KEEP** `withPictureReplayState` (l.2268) AND its private helpers `clipForPictureReplay` (l.2378), `ClipStack?.transformForPictureReplay` (l.2397), `ClipStack.Complex.collapsedIntersectingRectOrNull` (l.2408), `ClipStack.DeviceRect.rectForPictureReplay` (l.2427), `ClipStackOp.transformForPictureReplay` (l.2437) — these five are called by `withPictureReplayState` (l.2272, 2291) and MUST survive (the composite capture calls `withPictureReplayState` at `GPUPreparedCompositeCapture.kt:323`). Run `rg -n "expandPicturesForGpuReplay" kanvas/src/main` — must be empty.
-
-- [ ] **Step 3: Compile to confirm the deletion is self-consistent**
-
-```bash
-./gradlew -F off :kanvas:compileKotlin --no-parallel --console=plain
-```
-
-Expected: BUILD SUCCESSFUL. NOTE: `compileKotlin` will NOT flag the legacy-only helpers that remain (unused internal/private declarations are warnings only in this build, and test sources are not compiled here). The actual dead-code detection is the `rg` sweep in Task 7 Step 1 — do not attempt to "unused-symbol" your way through this task; the sweep is the evidence authority.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add -A kanvas/src/main
-git commit -m "feat(surface): delete the legacy immediate renderer and picture replay expansion"
-```
-
-### Task 7: Delete the legacy-only helper machinery (compiler-driven sweep)
-
-**Files (delete/trim, evidence required per symbol):**
-- Delete: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt` (whole file — `renderWithClip`, `GPUClipRouteTrace`, `GPUClipRouteContext`, `GPUClipSourceSurface`, `GPUClipDestinationReadComposer`/`RefusalComposer`, `copyForClipSource`, `copyForDestinationReadSource`; the prepared route uses `gpu-renderer`'s `GPUClipExecutionPlan`, not this file)
-- Trim `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt`: `LayerScissorOffscreenTarget`, `LayerScissorRenderRecorder`, `LayerPlan`/`LayerCompositePlan`/`BackdropPlan`/`SceneTargetFrame`, `LayerBounds`/`intersectLayerScissor`/`intersectScissor`, `renderDestinationReadBlend`, `clipCoverageBlendUniformDraw`/`destinationReadBlendUniformDraw`/`destinationReadScissorBlendUniformDraw`/`coverageCombineUniformDraw`, `cachePixels`, `computeAtlasDst`, `hasColorGlyphs`, `buildTextAtlasMesh`, `drawTextAtlasPass`, `resolveTextColor`, `extractSolidShaderColor`, `ctmEffectiveScale`, `scaledForRasterization`, `normalizeGlyphRects`
-- Trim `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt`: legacy mask-lease machinery (`GPUClipCoverageFrameCache`, `GPUClipCoverageFrameLease`, `GPUClipUsePrepass`, `GPUClipUsePrepassResult`, `GPUClipPreAcquireRefusal`, `preAcquireRefusalOrNull`, `acquireClipMask`, `ClipMaskLease`, `renderClipElement`, `applyConstantCoverage`, `GPUClipCoverageFrameBudgetExceededException`) **only if** `rg` proves no prepared-route caller. **KEEP** the FP-06 guard functions `coreRoutePreflightRefusalReason` (l.340) and `picturePreflightRefusalReason` (l.355) — the FP-06 `nested_vertices` guard is test-pinned (`GPUPreparedSurfaceProductRouterTest.kt:279-280`) and must stay green.
-
-**Context:** Every symbol deleted here must be proven legacy-only first: `rg` its name across `kanvas/src/main` and confirm the only remaining references are within the functions being deleted. The prepared route's shared clip machinery is `GPUClipCoveragePlanner`/`GPUClipCoveragePlan` (gpu-renderer `clips` types) and `GPUClipExecutionPlan` — these are retained. The FP-06 `nested_vertices` guard functions are explicitly retained (scope correction vs "delete all dead code": the mission requires the FP-06 boundary to stay green, and the RouterTest pins those functions directly).
-
-- [ ] **Step 1: Prove deadness per symbol (mandatory evidence)**
-
-```bash
-for s in renderWithClip GPUClipRouteTrace GPUClipDestinationReadComposer GPUClipSourceSurface LayerScissorOffscreenTarget renderDestinationReadBlend cachePixels buildTextAtlasMesh drawTextAtlasPass computeAtlasDst hasColorGlyphs normalizeGlyphRects GPUClipCoverageFrameCache GPUClipUsePrepass acquireClipMask preAcquireRefusalOrNull GPUClipPreAcquireRefusal; do
-  echo "== $s =="; rg -l "\b$s\b" kanvas/src/main --type kotlin | tr '\n' ' '; echo
-done
-```
-
-Record the output to `/tmp/fp08_dead_sweep.txt`. A symbol is safe to delete iff its only `kanvas/src/main` references are inside other symbols being deleted in this plan.
-
-**Documented exceptions (surviving internals — same status as the FP-06 guards):** the following `GPURenderer.kt` internals are legacy-only in production but pinned by tests, so they are retained as dead-but-pinned helpers and documented in the FP-08 evidence report rather than swept (do NOT delete them in this task): `modulateCpalLayerAlpha` (l.87), `colorGlyphSourceColor` (l.91), `productIntermediatePlannerScopeDiagnostics` (l.94), `selectPathVerticesForCommand` (l.102), `hasActiveMaskBlur` (l.109,116), `GPUClipSourcePlane` (l.120), `requiresSeparateGeometryCoverage` (l.125), `forGeometryCoverage` (l.150-160), `layerOpacityUniformDraw` (l.192), `maskBlurDiagnosticFacts` (l.206), `destinationReadBlendModeIndex` (l.222), `clipCoverageBlendModeIndex` (l.242) — each pinned by one of `GPUBlendFormulaSurfaceTest`, `GPUPathStrokeInputTest`, `GPUColorGlyphPaintAlphaTest`, `GPUProductIntermediatePlannerScopeTest`. Their retirement is a follow-up decision outside FP-08 scope.
-
-- [ ] **Step 2: Delete the proven-dead symbols**
-
-Delete each symbol whose reference set is confined to the deletion set. Confirm `./gradlew -F off :kanvas:compileKotlin --no-parallel --console=plain` succeeds.
-
-- [ ] **Step 3: Re-point or delete the direct-machinery tests**
-
-- `GPUClipCoverageDispatchTest.kt`: the case at l.281 (`target.renderWithClip(...)`) tests deleted machinery → delete that test. Any remaining cases that only exercise deleted symbols are deleted too; cases that still exercise retained clip planning (e.g. `GPUClipCoverageFrameCache` register/acquire semantics) — check: the cache itself is legacy-only, so those cases are deleted and their coverage moves to `GPUClipCoveragePlanner` tests if applicable. **KEEP** the case at l.314 (`complex clip is materialized and composited by the real GPU route`) — it is an end-to-end Surface/clip test referencing no deleted symbol; verify it compiles and stays green after the sweep.
-- `GPUTextAtlasGeometryTest.kt`: `buildTextAtlasMesh`/`normalizeGlyphRects`/`hasColorGlyphs` are legacy text-atlas builders → delete the file (the prepared text route has its own atlas tests: `GPUPreparedTextPixelTest`, `GPUPreparedColorGlyphSourceNativeOracleTest`, `GPUTextAtlasGeometryTest` is superseded).
-- `GPUSaveLayerCompositeRegressionTest.kt`: uses `LayerScissorOffscreenTarget` (l.539-629) → delete the file; its saveLayer regression coverage is owned by `GPUPreparedCompositeFrameRouteIntegrationTest`/`GPUPreparedCompositeCaptureSemanticTest` on the prepared route.
-- `GPUClipCoverageSurfaceTest.kt`: after Task 5 it no longer uses `GPUClipRouteTrace`/`renderWithClip`; verify `rg "GPUClipRouteTrace|renderWithClip" kanvas/src/test` only lists `GPUClipCoverageDispatchTest` (to be deleted).
-
-- [ ] **Step 4: Run the surviving clip/blend suites**
-
-```bash
-./gradlew -F off :kanvas:test --tests "*GPUClipCoverageSurfaceTest" --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*GPUPreparedCompositeCaptureSemanticTest" --tests "*GPUPreparedCompositeFrameRouteIntegrationTest" --no-parallel --console=plain
-```
-
-Expected: BUILD SUCCESSFUL (GPU-backed clip tests require WebGPU; run with the environment that has it).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A kanvas/src/main kanvas/src/test
-git commit -m "refactor(surface): remove legacy clip and text atlas helper machinery"
-```
-
----
-
-## Phase 4 — Native BGRA8 in the prepared route
-
-### Task 8: Enable BGRA8 in the prepared route (Graphite/Dawn model)
+### Task 4: Enable BGRA8 in the prepared route (Graphite/Dawn model)
 
 **Files:**
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt` — add `GPUColorFormat.BGRA8_UNORM -> Ready(CanonicalGPUColorFormat.BGRA8Unorm, GPUColorInterpretation.EncodedPremulSrgb)`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt` — `validatePreparedSceneTargetRequest` (l.968-990) accepts `GPUColorFormat.BGRA8Unorm` → `GPUTextureFormat.BGRA8Unorm` with `EncodedPremulSrgb`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt` — remove the BGRA8 Legacy short-circuit (done in Task 4); `success()` returns `format = PixelFormat.BGRA8` when the requested surface format is BGRA8; the executor's target uses `candidate.color.physicalFormat` (already `BGRA8Unorm`)
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt` — `validatePreparedSceneTargetRequest` (l.968-1003) accepts `GPUColorFormat.BGRA8Unorm` → `GPUTextureFormat.BGRA8Unorm` with `EncodedPremulSrgb`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt` — remove the BGRA8 Legacy short-circuit (l.33-35); `success()` returns `format = PixelFormat.BGRA8` when the requested surface format is BGRA8; the executor's target uses `candidate.color.physicalFormat`
+- Test: `GPUPreparedSurfaceFrameGateTest.kt`, `GPUPreparedSurfaceProductRouterTest.kt`, `SurfaceTest.kt`
 
 **Context:** Graphite renders directly into a `kBGRA8`/`BGRA8Unorm` target with identity swizzle; WebGPU stores fragment output `(r,g,b,a)` into a `BGRA8Unorm` attachment as memory `[B,G,R,A]`, so the prepared readback of a `bgra8unorm` target is naturally BGRA-ordered — no CPU channel swap. The prepared materializer already maps `"bgra8unorm" → BGRA8Unorm` (`GPUWgpu4kPreparedSurfaceFramePayloadMaterializer.kt:1479`). The surface `format` (PixelFormat) must be threaded to `success()` so the returned `RenderResult.format` and byte order match the requested surface format.
 
+NOTE on current state (post-revert): at HEAD, `GPUPreparedSurfaceEligibility.Legacy` still exists (the collapse was reverted) and `mapPreparedGpuColorConfig` refuses `BGRA8_UNORM` with `unsupported.surface.gpu-color-format.bgra8-unorm`; the router's `format == PixelFormat.BGRA8` short-circuit routes BGRA8 surfaces to `renderViaGpuLegacy`. This task removes ONLY the BGRA8 short-circuit and enables the prepared BGRA8 path — it does NOT touch the `Legacy` eligibility/route variants (those are FP-09).
+
 - [ ] **Step 1: Write the failing tests (red)**
 
-In `GPUPreparedSurfaceFrameGateTest.kt`, extend `both public color refusals are propagated before candidate construction` (l.127-143): `GPUColorFormat.BGRA8_UNORM` must now produce `Candidate` with `color.physicalFormat == CanonicalGPUColorFormat.BGRA8Unorm` (no longer `Refused("unsupported.surface.gpu-color-format.bgra8-unorm")`).
+In `GPUPreparedSurfaceFrameGateTest.kt`, extend `both public color refusals are propagated before candidate construction` (l.127-143): `GPUColorFormat.BGRA8_UNORM` must now produce `Candidate` with `color.physicalFormat == CanonicalGPUColorFormat.BGRA8Unorm` (no longer `Legacy("unsupported.surface.gpu-color-format.bgra8-unorm")`); `GPUColorFormat.RGBA8_UNORM` stays `Legacy`/refused at HEAD.
 
 In `GPUPreparedSurfaceProductRouterTest.kt`, re-point `non-image gate legacy and BGRA never call the execution port` (l.56-81): the BGRA8 route must be `Prepared` (not Legacy) and reach the execution port; add a `RenderResult.format == PixelFormat.BGRA8` assertion using a fake executor whose readback returns BGRA-ordered bytes.
 
@@ -435,7 +251,7 @@ In `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/SurfaceTest.kt`, the exis
 
 Run: `./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceFrameGateTest" --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*SurfaceTest" --no-parallel --console=plain`
 Expected: FAIL for two distinct reasons:
-- `GPUPreparedSurfaceFrameGateTest`/`GPUPreparedSurfaceProductRouterTest` — BGRA8 still maps to `Refused`/no `Prepared` route with `format == PixelFormat.BGRA8`.
+- `GPUPreparedSurfaceFrameGateTest`/`GPUPreparedSurfaceProductRouterTest` — BGRA8 still maps to `Legacy` (gate refusal / router short-circuit) instead of a `Prepared` route with `format == PixelFormat.BGRA8`.
 - `SurfaceTest` — with no color override, the prepared route opens an RGBA target and returns RGBA-ordered bytes labelled BGRA8, so `assertArrayEquals(byteArrayOf(0, 0, -1, -1, ...))` fails on channel order (NOT a terminal throw). This is the red that proves the target-selection gap.
 
 - [ ] **Step 3: Implement the mapping + target admission**
@@ -465,9 +281,9 @@ git commit -m "feat(surface): native BGRA8 rendering in the prepared route"
 
 ---
 
-## Phase 5 — Stable code naming
+## Phase 4 — Stable code naming
 
-### Task 9: Rename the `runtime-capabilities-unavailable` code
+### Task 5: Rename the `runtime-capabilities-unavailable` code
 
 **Files:**
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` (l.275)
@@ -506,16 +322,16 @@ git commit -m "fix(surface): rename runtime capabilities refusal to a non legacy
 
 ---
 
-## Phase 6 — Regression proof & closure
+## Phase 5 — Regression proof & closure
 
-### Task 10: Full regression, guards, production searches, roadmap update
+### Task 6: Full regression, guards, production searches, roadmap update, FP-09 entry
 
 **Files:**
 - Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceLegacyAbsenceTest.kt`
-- Modify: `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md` (FP-08 → `completed`)
+- Modify: `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md` (FP-08 → `completed`; ADD FP-09 entry)
 - Create: `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-08-retire-immediate-cpu-paths-evidence.md`
 
-**Context:** FP-08 acceptance requires proof that the retired paths are absent (production searches) and that the FP-06/FP-07 guards stay green.
+**Context:** FP-08 (reduced scope) acceptance requires proof that the RETIRED ADAPTER paths are absent (production searches), that the FP-06/FP-07 guards stay green, and that `renderViaGpuLegacy` still serves the non-covered families. The absence test asserts only the symbols actually deleted in this plan — NOT `renderViaGpuLegacy`/`GPUClipRouteTrace`/`renderWithClip`/`cachePixels`/`buildTextAtlasMesh`/`LayerScissorOffscreenTarget`, which remain until FP-09.
 
 - [ ] **Step 1: Add the production-search absence test**
 
@@ -524,20 +340,12 @@ git commit -m "fix(surface): rename runtime capabilities refusal to a non legacy
 ```kotlin
 class GPUPreparedSurfaceLegacyAbsenceTest {
     @Test
-    fun `retired legacy surface symbols are absent from production`() {
+    fun `retired legacy adapter symbols are absent from production`() {
         val retired = listOf(
             "GPULegacyImmediatePathAdapter",
             "LegacyDisplayOpFamily",
             "GPULegacyImmediatePathDump",
-            "GPUPreparedSurfaceLegacyPort",
-            "renderViaGpuLegacy",
-            "expandPicturesForGpuReplay",
-            "legacy.surface.prepared",
-            "GPUClipRouteTrace",
-            "renderWithClip",
-            "cachePixels",
-            "buildTextAtlasMesh",
-            "LayerScissorOffscreenTarget",
+            "legacyDump",
         )
         val root = java.io.File("src/main/kotlin/org/graphiks/kanvas/surface/gpu")
         val offenders = root.walkTopDown()
@@ -557,24 +365,49 @@ class GPUPreparedSurfaceLegacyAbsenceTest {
 ./gradlew -F off :kanvas:test :gpu-renderer:test --no-parallel --console=plain 2>&1 | tee /tmp/fp08_full.log
 ```
 
-Expected: BUILD SUCCESSFUL except the documented pre-existing `GPURendererPackageBoundaryTest` package-boundary case (unchanged). GPU-backed tests (`*NativeSmokeTest`, `*ClipCoverageSurfaceTest`, `*PixelTest`, `*ColorGlyph*`, `*DestinationCopyFrameSmokeTest`) run in the WebGPU-enabled environment; classify any failure with evidence.
+Expected: BUILD SUCCESSFUL except the documented pre-existing `GPURendererPackageBoundaryTest` package-boundary case (unchanged). GPU-backed tests (`*NativeSmokeTest`, `*ClipCoverageSurfaceTest`, `*AllApiBlendSurfaceTest`, `*PixelTest`, `*ColorGlyph*`, `*DestinationCopyFrameSmokeTest`) run in the WebGPU-enabled environment; classify any failure with evidence.
 
-- [ ] **Step 3: Verify the FP-06/FP-07 guards and boundary stay green**
+- [ ] **Step 3: Verify the FP-06/FP-07 guards, the blend fallback, and the boundary**
 
 ```bash
 ./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*GPUPreparedCompositeCaptureSemanticTest" --tests "*GPUPreparedCompositeFrameRouteIntegrationTest" --tests "*GPUAllApiBlendSurfaceTest" --no-parallel --console=plain
 ./gradlew -F off :gpu-renderer:test --tests "*GPURendererPackageBoundaryTest" --no-parallel --console=plain
 ```
 
-Expected: all green except the pre-existing boundary case (documented; must stay failing with the SAME 20-cycle violations — do not fix). `nested_vertices` pins green.
+Expected: all green except the pre-existing boundary case (documented; must stay failing with the SAME 20-cycle violations — do not fix). `nested_vertices` pins green. `GPUAllApiBlendSurfaceTest` green means the legacy fallback still renders destination-read/non-SrcOver families (FP-09 precondition).
 
 - [ ] **Step 4: Write the evidence report**
 
-In `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-08-retire-immediate-cpu-paths-evidence.md`: before/after diff of the Task 1 legacy map, per-task route diagnostics, the compiler-driven dead-sweep evidence (`/tmp/fp08_dead_sweep.txt`), the BGRA8 native byte-order proof, test score deltas, and the Graphite/Dawn C++ references (ResourceTypes.h, Caps.cpp, Image_Graphite.cpp, DawnCommandBuffer.cpp) grounding the GPU-owned destination decision.
+In `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-08-retire-immediate-cpu-paths-evidence.md`: before/after diff of the Task 1 legacy map, the executed-then-reverted Task 4/5 commits with the 636-failure evidence (5 refusal codes table), the BGRA8 native byte-order proof, test score deltas, the FP-09 precondition list, and the Graphite/Dawn C++ references (ResourceTypes.h, Caps.cpp, Image_Graphite.cpp, DawnCommandBuffer.cpp) grounding the GPU-owned destination decision.
 
 - [ ] **Step 5: Update the roadmap**
 
-In `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md`, mark FP-08 `completed` and reference the evidence report.
+In `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md`: mark FP-08 `completed` (reference the evidence report), and ADD a new FP-09 entry:
+
+```markdown
+### FP-09 — Retire the legacy immediate renderer (deferred from FP-08)
+
+Status: `pending`
+
+Goal: retire `renderViaGpuLegacy`, the legacy port, and the legacy-only helper
+machinery once the prepared route covers every currently-fallback family.
+
+Preconditions (all proven by the FP-08 evidence report):
+- destination-read blends (unsupported.destination_read.required — 630 cases);
+- non-SrcOver core-primitive blends (unsupported.native-core-primitive.blend — 330);
+- hairline points (unsupported.core_primitive.point.hairline_exact_lowering — 168);
+- mixed uniform layouts (unsupported.recording.core_primitive_mixed_uniform_layouts — 92);
+- analytic-clip non-direct geometry (…analytic_clip_non_direct_geometry — 52).
+
+Acceptance (transferred from FP-08 original Tasks 4–7):
+- route authorities collapse to Prepared/Terminal (BeforePreparedEntryRefused → always Terminal);
+- `renderViaGpuLegacy`/`GPUPreparedSurfaceLegacyPort`/`preparedSurfaceLegacyPort` deleted;
+- legacy-only helper machinery deleted (GPUClipExecution.kt, LayerScissorOffscreenTarget,
+  CPU text-atlas builders, legacy mask-lease machinery), EXCEPT the FP-06
+  `nested_vertices` guard functions (test-pinned);
+- `GPUAllApiBlendSurfaceTest`/`GPUClipCoverageSurfaceTest` expectations re-pointed
+  with evidence; regression suites green.
+```
 
 - [ ] **Step 6: Final state check**
 
@@ -584,35 +417,33 @@ git log --oneline 6b9e273ea..HEAD | cat
 git status --short
 ```
 
-Expected: the log shows the FP-08 task commits (inventory → adapter → route collapse → renderer deletion → helper sweep → BGRA8 → code rename → regression evidence), no stray files, and `rg "renderViaGpuLegacy|GPULegacyImmediatePathAdapter|legacy.surface.prepared|GPUPreparedSurfaceLegacyPort" kanvas/src/main` returns nothing.
+Expected: the log shows the FP-08 task commits (inventory → adapter → test re-points → [reverted route collapse] → BGRA8 → code rename → regression evidence), no stray files, and `rg "GPULegacyImmediatePathAdapter|LegacyDisplayOpFamily|GPULegacyImmediatePathDump|legacyDump" kanvas/src/main` returns nothing while `rg -c "renderViaGpuLegacy" kanvas/src/main` returns a nonzero count (fallback retained until FP-09).
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add reports/
-git commit -m "docs(surface): fp08 retired immediate and cpu paths evidence and roadmap closure"
+git commit -m "docs(surface): fp08 retired adapter paths evidence, fp09 entry, roadmap closure"
 ```
 
 ---
 
-## Self-review notes (filled at plan time)
+## Self-review notes (filled at plan time; revised 2026-08-08 after the reverted collapse)
 
-- **Spec coverage:** Every FP-08 acceptance maps to a task: adapter + consumers deleted (Tasks 2–3); no migrated family reaches an immediate high-level dispatch (Tasks 4–7); destination continuation stays GPU-owned (Task 7 keeps `GPUDestinationSnapshotOperation`, `gpu-renderer/.../destination/`, prepared readback; Task 8 keeps the GPU-owned BGRA8 readback; `GPUTextCPUUploadTelemetryRecord` is descriptive telemetry, retained); production searches + regression tests prove absence (Task 10).
-- **No placeholders:** every task has concrete files, commands, and expected output. Where a symbol's deadness must be confirmed, the task mandates a `rg`-driven evidence step (Task 7 Step 1) rather than an assumption. `GPUPreparedSurfaceFrameGate.classify`, `GPUPreparedSurfaceProductEntry.render`, and `validatePreparedSceneTargetRequest` signatures must be read at HEAD before editing (they are the exact seams; Task 4/9 call this out).
-- **Type consistency:** `GPUPreparedSurfaceEligibility.Candidate | Refused`, `GPUPreparedSurfaceProductRoute.Prepared | Terminal`, `GPUPreparedSurfaceRouteDecision.Prepared | Terminal` are used consistently; `renderViaGpu` and `GPUPreparedSurfaceProductEntry.render` lose the `legacyPort`/`legacyRouteTrace` params together; the new stable code `unavailable.surface.prepared.runtime-capabilities` is introduced in production (Task 9) before any test re-points to it.
+- **Spec coverage (revised scope):** the reduced FP-08 maps to tasks: adapter + consumers deleted (Tasks 1–3, DONE at `1dd769d01`+`dbf725d61`+`51071ffa6`+`fed1a95d8`); native BGRA8 in the prepared route (Task 4); stable code rename (Task 5); production searches + regression tests + FP-09 roadmap entry (Task 6). Destination continuation stays GPU-owned (unchanged); `GPUTextCPUUploadTelemetryRecord` retained. The original acceptance item "no migrated family reaches an immediate high-level dispatch" is now scoped to the ADAPTER: terminal families (image/text/vertices/composites) already refuse before any dispatch; non-covered families keep the legacy fallback until FP-09.
+- **No placeholders:** every task has concrete files, commands, and expected output. `GPUPreparedSurfaceFrameGate.classify` and `validatePreparedSceneTargetRequest` signatures must be read at HEAD before editing (Task 4).
+- **Type consistency:** the legacy types (`GPUPreparedSurfaceEligibility.Legacy`, `GPUPreparedSurfaceProductRoute.Legacy`, `GPUPreparedSurfaceRouteDecision.Legacy`, `GPUPreparedSurfaceLegacyPort`) remain in use until FP-09; Task 4 does not touch them. The new stable code `unavailable.surface.prepared.runtime-capabilities` is introduced in production (Task 5) before any test re-points to it.
 - **Known plan corrections recorded (scope decisions vs the roadmap):**
-  1. **BGRA8 is native, not refused (decision 1 = b1).** The roadmap's "retire CPU paths" does not include BGRA8; per the Graphite/Dawn model (render into `kBGRA8`/`BGRA8Unorm`, identity swizzle) and the user's note that BGRA8 is the base format of some adapters (Metal prefers `BGRA8Unorm` at `GPUBackendRuntimeNative.kt:7196`), the prepared route gains native BGRA8 support instead of a terminal refusal. This ADDS a small mapping/target-admission change to a retirement plan.
-  2. **The `runtime-capabilities-unavailable` code is renamed, not deleted (decision 2 = b).** It is produced by the prepared executor, not a legacy branch, so it survives as a terminal code with a non-legacy name; the other three `legacy.surface.prepared.*` codes are deleted.
-  3. **`FlushAndSnapshot` becomes a state event (decision 3 = a)** and **empty frames route to Prepared (decision 4 = a)** — both delete legacy branches and preserve today's transparent-output behavior.
-  4. **Legacy helper machinery is deleted with its tests (decision 5 = a)**, EXCEPT the FP-06 `nested_vertices` guard functions (`coreRoutePreflightRefusalReason`/`picturePreflightRefusalReason`) which are retained because the mission explicitly requires the FP-06 guard to stay green and `GPUPreparedSurfaceProductRouterTest:279-280` pins them directly. This is a deliberate, evidence-cited deviation from "delete all dead code".
-  5. **`GPUTextCPUUploadTelemetryRecord` is retained**: it is advisory telemetry describing planned uploads ("does not claim that a GPU upload happened"), not a destination-continuation path; removing it would break the public `font/gpu-api` telemetry contract for no FP-08 benefit.
-  6. **The `GPURendererPackageBoundaryTest` package-boundary case is a documented pre-existing failure** (4 pre-existing failures on master) and must remain in its exact failing state — the mission forbids fixing it in FP-08, and the boundary check is about `gpu-renderer` package cycles, not the removed `kanvas` legacy code.
+  1. **MAJOR — the route collapse (original Tasks 4–5) was executed and REVERTED.** The prepared route does not yet cover destination-read blends (630), non-SrcOver core blends (330), hairline points (168), mixed uniform layouts (92), and analytic-clip non-direct geometry (52) — ~636 GPU cases in `GPUAllApiBlendSurfaceTest` regressed from pixels to terminal refusals. The plan's assumption that the prepared route covered everything the legacy rendered was wrong. Deferred to FP-09 (new roadmap entry). Commits `9e79eb857`/`c5325a3d0` reverted by `3150fc3fe`/`0f1106800`.
+  2. **BGRA8 is native, not refused (decision 1 = b1).** Per the Graphite/Dawn model (render into `kBGRA8`/`BGRA8Unorm`, identity swizzle) and the user's note that BGRA8 is the base format of some adapters (Metal prefers `BGRA8Unorm` at `GPUBackendRuntimeNative.kt:7196`), the prepared route gains native BGRA8 support instead of a terminal refusal.
+  3. **The `runtime-capabilities-unavailable` code is renamed, not deleted (decision 2 = b).** It is produced by the prepared executor, not a legacy branch, so it survives as a terminal code with a non-legacy name.
+  4. **`GPUTextCPUUploadTelemetryRecord` is retained**: advisory telemetry describing planned uploads ("does not claim that a GPU upload happened"), not a destination-continuation path; removing it would break the public `font/gpu-api` telemetry contract.
+  5. **The `GPURendererPackageBoundaryTest` package-boundary case is a documented pre-existing failure** (4 pre-existing failures on master) and must remain in its exact failing state — the mission forbids fixing it in FP-08.
 
 **Independent review corrections applied (2026-08-07, subagent audit):**
-- **M1 (blocking, fixed):** the gate's `family: LegacyDisplayOpFamily?` field is removed in Task 2 together with the adapter file (the type lives only in the deleted file; leaving the field broke `:kanvas:compileKotlin` between Tasks 2–4). Task 2's failure expectation now targets `compileTestKotlin`, not `compileKotlin`.
-- **M2 (blocking, fixed):** Task 8 now forces the `bgra8unorm` target by overriding the candidate color when `format == PixelFormat.BGRA8` (the default `RenderConfig` carries RGBA8_UNORM_SRGB, so the config-derived color never selects BGRA8); the red-test expectation for `SurfaceTest` is the channel-order failure, not a terminal.
-- **M3 (fixed):** Task 6 now enumerates the five picture-replay helpers that MUST survive (`clipForPictureReplay`, the two `transformForPictureReplay`, `collapsedIntersectingRectOrNull`, `rectForPictureReplay`) — shared with the retained `withPictureReplayState`.
-- **M4 (fixed):** Task 6 Step 3 no longer claims a compiler FAIL for unused helpers; the `rg` sweep of Task 7 is the dead-code evidence authority.
-- **M5/M6 (fixed):** Task 1's expected-match list completed; Task 10's absence-test path corrected to the `kanvas/` module working directory.
-- **M7 (fixed):** GPU-backed suites explicitly annotated as environment-dependent (skips are not pass signals).
-- **M8 (fixed):** Task 7 sweep extended with `preAcquireRefusalOrNull`/`GPUClipPreAcquireRefusal`; the retained-but-pinned legacy internals (`destinationReadBlendModeIndex`, `selectPathVerticesForCommand`, `colorGlyphSourceColor`, `modulateCpalLayerAlpha`, `productIntermediatePlannerScopeDiagnostics`, `hasActiveMaskBlur`, `requiresSeparateGeometryCoverage`, `forGeometryCoverage`, `layerOpacityUniformDraw`, `maskBlurDiagnosticFacts`, `clipCoverageBlendModeIndex`, `GPUClipSourcePlane`) are documented as deliberate exceptions; `GPUClipCoverageDispatchTest` case l.314 is confirmed to survive.
+- **M1 (blocking, fixed):** the gate's `family: LegacyDisplayOpFamily?` field is removed in Task 2 together with the adapter file (the type lives only in the deleted file; leaving the field broke `:kanvas:compileKotlin`). Task 2's failure expectation now targets `compileTestKotlin`, not `compileKotlin`.
+- **M2 (blocking, fixed):** Task 4 (BGRA8) forces the `bgra8unorm` target by overriding the candidate color when `format == PixelFormat.BGRA8` (the default `RenderConfig` carries RGBA8_UNORM_SRGB, so the config-derived color never selects BGRA8); the red-test expectation for `SurfaceTest` is the channel-order failure, not a terminal.
+- **M3 (fixed):** Task 6 (original) enumerated the five picture-replay helpers that MUST survive — superseded by the revert, retained in the FP-09 acceptance note.
+- **M5/M6 (fixed):** Task 1's expected-match list completed; the absence-test path corrected to the `kanvas/` module working directory.
+- **M7 (fixed):** GPU-backed suites annotated as environment-dependent.
+- **M8 (fixed):** the sweep extended; the retained-but-pinned legacy internals are documented as deliberate exceptions — all superseded by the revert and transferred to FP-09's acceptance.
