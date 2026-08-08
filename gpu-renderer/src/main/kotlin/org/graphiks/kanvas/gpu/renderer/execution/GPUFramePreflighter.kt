@@ -135,6 +135,7 @@ private const val solidRectRenderStepIdentity = "rect.fill.coverage"
 private fun GPUColorFormat.corePrimitiveInterpretationOrNull(): GPUColorInterpretation? = when (this) {
     GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     else -> null
 }
 

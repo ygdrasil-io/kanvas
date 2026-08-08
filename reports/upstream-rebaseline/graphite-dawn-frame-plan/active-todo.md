@@ -33,7 +33,7 @@ Resolution evidence:
 - `.\gradlew.bat :gpu-renderer:test :gpu-renderer-scenes:test :kanvas:test
   --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
   reaches the Gradle summary with no `min_uniform_buffer_offset_alignment`;
-  remaining red evidence is independently assigned to FP-03 and FP-09.
+  remaining red evidence is independently assigned to FP-03 and FP-10.
 
 Acceptance:
 
@@ -193,7 +193,7 @@ Resolution evidence:
   green, but the GPU worker ended non-green after two half-UNORM assertions
   and an independent native NVIDIA/wgpu access violation; the assertions are
   resolved by `9a2d8edca`, and the request-device lifetime/recreation crash is
-  explicitly assigned to FP-09 below rather than represented as a green full
+  explicitly assigned to FP-10 below rather than represented as a green full
   GPU aggregate;
 - zero FP-03 portability assertion remains failing; no renderer, WGSL, codec,
   font-scaler, CPU-reference, or normal Gradle task-graph production behavior
@@ -405,19 +405,61 @@ texture frame-pool lease, non-core children inside layer scopes.
 
 ### FP-08 — Retire immediate and CPU continuation paths
 
-Status: `pending`
+Status: `completed` (reduced scope; full legacy retirement deferred to FP-09)
 
 Goal: remove the superseded high-level immediate renderer, CPU destination
 snapshot/upload paths, and duplicate route authorities.
 
-Acceptance:
+Resolution evidence (`fp-08-retire-immediate-cpu-paths-evidence.md`):
 
-- `GPULegacyImmediatePathAdapter` and its final consumers are deleted;
-- no migrated family reaches an immediate high-level dispatch;
-- destination continuation remains GPU-owned;
-- production searches and regression tests prove the retired paths are absent.
+- `GPULegacyImmediatePathAdapter` (with `LegacyDisplayOpFamily` and
+  `GPULegacyImmediatePathDump`) and all `legacyDump` plumbing are deleted;
+  production searches return nothing and `GPUPreparedSurfaceLegacyAbsenceTest`
+  pins the retired tokens out of `surface/gpu` production sources;
+- BGRA8 renders natively in the prepared route (readback `[0,0,255,255]` in
+  `BGRA8Unorm` memory layout, route `prepared.surface.direct`, no CPU swizzle)
+  per the Graphite/Dawn model;
+- destination continuation remains GPU-owned (Graphite/Dawn
+  `kTextureCopy`/`kFramebufferFetch`; CPU readback is `readPixels` only);
+- the runtime-capabilities refusal is renamed to a non-legacy terminal code;
+- guard suites green: `GPUPreparedSurfaceProductRouterTest`,
+  `GPUPreparedCompositeCaptureSemanticTest`,
+  `GPUPreparedCompositeFrameRouteIntegrationTest`, `GPUAllApiBlendSurfaceTest`,
+  `GPUPreparedSurfaceLegacyAbsenceTest`; `nested_vertices` pinned; full run
+  `:kanvas:test` 3,230/3,230 green and `:gpu-renderer:test` 3,257 with only
+  the two documented pre-existing failures (package boundary, stencil smoke);
+- the original route-collapse Tasks 4–5 were executed and reverted (~636 GPU
+  cases regressed to terminal refusals with 5 uncovered refusal codes —
+  destination-read 630, core-blend 330, hairline 168, mixed-layouts 92,
+  analytic-clip 52); `renderViaGpuLegacy` stays as the fallback for the
+  not-yet-covered families until FP-09;
+- `GPURendererPackageBoundaryTest` remains in its documented pre-existing
+  failing state (exactly 20 cycle violations, 0 rule violations).
 
-### FP-09 — Reusable prepared Surface session
+### FP-09 — Retire the legacy immediate renderer (deferred from FP-08)
+
+Status: `pending`
+
+Goal: retire `renderViaGpuLegacy`, the legacy port, and the legacy-only helper
+machinery once the prepared route covers every currently-fallback family.
+
+Preconditions (all proven by the FP-08 evidence report):
+- destination-read blends (unsupported.destination_read.required — 630 cases);
+- non-SrcOver core-primitive blends (unsupported.native-core-primitive.blend — 330);
+- hairline points (unsupported.core_primitive.point.hairline_exact_lowering — 168);
+- mixed uniform layouts (unsupported.recording.core_primitive_mixed_uniform_layouts — 92);
+- analytic-clip non-direct geometry (…analytic_clip_non_direct_geometry — 52).
+
+Acceptance (transferred from FP-08 original Tasks 4–7):
+- route authorities collapse to Prepared/Terminal (BeforePreparedEntryRefused → always Terminal);
+- `renderViaGpuLegacy`/`GPUPreparedSurfaceLegacyPort`/`preparedSurfaceLegacyPort` deleted;
+- legacy-only helper machinery deleted (GPUClipExecution.kt, LayerScissorOffscreenTarget,
+  CPU text-atlas builders, legacy mask-lease machinery), EXCEPT the FP-06
+  `nested_vertices` guard functions (test-pinned);
+- `GPUAllApiBlendSurfaceTest`/`GPUClipCoverageSurfaceTest` expectations re-pointed
+  with evidence; regression suites green.
+
+### FP-10 — Reusable prepared Surface session
 
 Status: `pending`
 
@@ -460,7 +502,7 @@ Acceptance:
 - completion-only and readback outputs share the same session boundary;
 - cache creation/reuse counters and lifetime tests pass.
 
-### FP-10 — Close bounded native-rendering gaps
+### FP-11 — Close bounded native-rendering gaps
 
 Status: `pending`
 
@@ -475,7 +517,7 @@ Acceptance:
 - no hidden fallback or unsupported Graphite/Ganesh/SkSL compiler path is
   introduced.
 
-### FP-11 — Current visual and performance evidence
+### FP-12 — Current visual and performance evidence
 
 Status: `pending`
 

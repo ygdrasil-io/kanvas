@@ -40,7 +40,6 @@ class GPUPreparedTextFilterBoundaryTest {
             capabilities = capabilities(),
         )
         assertEquals(GPUTextRefusalCodes.IMAGE_FILTER_REQUIRES_COMPOSITE, inventory.preparedRefusal?.code)
-        assertEquals(0, inventory.legacyDump.invocationCount)
         assertEquals(emptyList(), inventory.visualCommands)
     }
 
@@ -69,7 +68,6 @@ class GPUPreparedTextFilterBoundaryTest {
                 config = RenderConfig.DEFAULT,
                 capabilities = capabilities(),
             )
-            assertEquals(0, inventory.legacyDump.invocationCount)
             assertEquals(emptyList(), inventory.visualCommands)
         }
     }

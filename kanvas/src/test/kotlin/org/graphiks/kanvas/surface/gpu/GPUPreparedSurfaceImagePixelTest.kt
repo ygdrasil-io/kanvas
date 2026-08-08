@@ -155,7 +155,6 @@ class GPUPreparedSurfaceImagePixelTest {
         )
 
         assertEquals(null, inventory.preparedRefusal)
-        assertEquals(0, inventory.legacyDump.invocationCount)
         assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
 
         val buildResult = GPUPreparedSurfaceFrameBuilder.build(

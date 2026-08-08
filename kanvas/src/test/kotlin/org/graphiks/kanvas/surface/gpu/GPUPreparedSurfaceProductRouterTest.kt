@@ -12,6 +12,8 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -53,7 +55,7 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductRouterTest {
     @Test
-    fun `non-image gate legacy and BGRA never call the execution port`() {
+    fun `non-image gate legacy stays legacy while BGRA8 renders prepared with BGRA byte order`() {
         var calls = 0
         val port = GPUPreparedSurfaceExecutionPort {
             calls++
@@ -68,16 +70,30 @@ class GPUPreparedSurfaceProductRouterTest {
             RenderConfig.DEFAULT,
             port,
         )
-        val bgraRoute = GPUPreparedSurfaceProductRouter.route(
-            listOf(rect()), 4, 4, PixelFormat.BGRA8, RenderConfig.DEFAULT, port,
-        )
-
         assertEquals(
             "legacy.surface.prepared.flush-snapshot",
             assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
         )
-        assertEquals("legacy.surface.prepared.pixel-format.bgra8", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(bgraRoute).code)
         assertEquals(0, calls)
+
+        val bgraBytes = byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1)
+        var request: GPUPreparedSurfaceExecutionRequest? = null
+        val bgraPort = GPUPreparedSurfaceExecutionPort {
+            request = it
+            GPUPreparedSurfaceExecutionResult.Succeeded(bgraBytes, 1, 0, evidence())
+        }
+        val bgraRoute = GPUPreparedSurfaceProductRouter.route(
+            listOf(rect()), 2, 1, PixelFormat.BGRA8, RenderConfig.DEFAULT, bgraPort,
+        )
+
+        val prepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(bgraRoute)
+        assertEquals(PixelFormat.BGRA8, prepared.result.format)
+        assertContentEquals(
+            ubyteArrayOf(0u, 0u, 255u, 255u, 0u, 0u, 255u, 255u),
+            prepared.result.pixels,
+        )
+        assertEquals(GPUColorFormat.BGRA8Unorm, request!!.candidate.color.physicalFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request!!.candidate.color.interpretation)
     }
 
     @Test
@@ -360,7 +376,6 @@ class GPUPreparedSurfaceProductRouterTest {
             config = RenderConfig.DEFAULT,
             capabilities = preparedProductCapabilities(),
         )
-        assertEquals(0, acceptedPlan.legacyDump.invocationCount)
         assertNotNull(acceptedPlan.preparedVerticesInventory)
 
         val refused = DisplayOp.DrawVertices(
@@ -382,7 +397,6 @@ class GPUPreparedSurfaceProductRouterTest {
             config = RenderConfig.DEFAULT,
             capabilities = preparedProductCapabilities(),
         )
-        assertEquals(0, refusedPlan.legacyDump.invocationCount)
         assertEquals(
             GPUPreparedVerticesRefusalCodes.NonFinite,
             assertNotNull(refusedPlan.preparedRefusal).code,

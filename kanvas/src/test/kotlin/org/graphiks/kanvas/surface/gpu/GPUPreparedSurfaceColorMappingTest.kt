@@ -33,12 +33,13 @@ class GPUPreparedSurfaceColorMappingTest {
     }
 
     @Test
-    fun `public bgra format is refused with a stable code`() {
-        val refused = assertIs<GPUPreparedSurfaceColorMapping.Refused>(
+    fun `public bgra format maps to the exact canonical prepared color pair`() {
+        val ready = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
             RenderConfig(gpuColorFormat = GPUColorFormat.BGRA8_UNORM).mapPreparedGpuColorConfig(),
         )
 
-        assertEquals("unsupported.surface.gpu-color-format.bgra8-unorm", refused.code)
+        assertEquals(CanonicalGPUColorFormat.BGRA8Unorm, ready.physicalFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, ready.interpretation)
     }
 
     @Test

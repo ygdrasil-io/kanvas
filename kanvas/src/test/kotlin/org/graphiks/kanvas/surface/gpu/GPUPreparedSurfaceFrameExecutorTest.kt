@@ -276,7 +276,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
             ).diagnostic.code.value,
         )
         assertEquals(
-            "legacy.surface.prepared.runtime-capabilities-unavailable",
+            "unavailable.surface.prepared.runtime-capabilities",
             assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
                 noCapabilities.execute(request),
             ).diagnostic.code.value,
@@ -656,7 +656,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
 
         assertEquals("failed.surface.prepared.backend-close", failure.diagnostic.code.value)
         assertEquals(
-            "legacy.surface.prepared.runtime-capabilities-unavailable",
+            "unavailable.surface.prepared.runtime-capabilities",
             failure.diagnostic.facts["primaryCode"],
         )
     }

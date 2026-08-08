@@ -190,7 +190,6 @@ class GPUPreparedImageRefusalMatrixTest {
             assertEquals("artifact", source.facts["boundary"], "${row.name}:source facts")
             assertEquals("inventory", recording.diagnostic.facts["boundary"], "${row.name}:preflight facts")
             assertEquals("surface", surface.diagnostic.facts["boundary"], "${row.name}:surface facts")
-            assertEquals(0, inventory.legacyDump.invocationCount, "${row.name}:fallback")
             assertEquals(0, backend.prepareCalls, "${row.name}:native handles")
         }
 
@@ -355,7 +354,6 @@ class GPUPreparedImageRefusalMatrixTest {
             assertEquals(row.code, preflight.diagnostic.code.value, "${row.name}:preflight")
             assertEquals(row.code, surface.diagnostic.code.value, "${row.name}:surface")
             assertEquals(row.code, execution.diagnostic.code.value, "${row.name}:executor")
-            assertEquals(0, inventory.legacyDump.invocationCount, "${row.name}:fallback")
             assertEquals(0, backend.prepareCalls, "${row.name}:native session")
         }
     }

@@ -979,10 +979,15 @@ internal fun validatePreparedSceneTargetRequest(
             expectedInterpretation = GPUColorInterpretation.LinearPremul
             GPUTextureFormat.RGBA8UnormSrgb
         }
+        GPUColorFormat.BGRA8Unorm -> {
+            expectedInterpretation = GPUColorInterpretation.EncodedPremulSrgb
+            GPUTextureFormat.BGRA8Unorm
+        }
         else -> throw IllegalArgumentException(
             "unsupported.prepared-scene-session.target-format: " +
                 "expected=${GPUColorFormat.RGBA8Unorm.value}|" +
-                "${GPUColorFormat.RGBA8UnormSrgb.value} actual=${request.colorFormat.value}",
+                "${GPUColorFormat.RGBA8UnormSrgb.value}|" +
+                "${GPUColorFormat.BGRA8Unorm.value} actual=${request.colorFormat.value}",
         )
     }
     require(request.colorInterpretation == expectedInterpretation) {
@@ -1217,6 +1222,10 @@ private class WgpuBackendSession(
                     ),
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1),
+                    ),
+                    GPUTextureFormat.BGRA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
                     ),
                     GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1, 4),

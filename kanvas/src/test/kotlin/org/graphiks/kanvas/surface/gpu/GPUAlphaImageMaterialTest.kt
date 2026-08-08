@@ -138,7 +138,6 @@ class GPUAlphaImageMaterialTest {
         val material = visual.normalized.material as GPUMaterialDescriptor.ImageDraw
         val prepared = requireNotNull(visual.preparedImage)
 
-        assertEquals(0, inventory.legacyDump.invocationCount)
         assertEquals(0, material.rgbaPixels.size)
         assertArrayEquals(expandedAlphaPixels, prepared.artifact.tightRgba8BytesForUpload())
     }

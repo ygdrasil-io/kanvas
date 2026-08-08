@@ -94,7 +94,6 @@ import org.graphiks.kanvas.surface.RenderConfig
 internal data class GPUOpMapping(
     val visualCommands: List<GPUFramePathVisualCommand>,
     val stateEvents: List<GPUFramePathStateEvent>,
-    val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
     val culledTextOperationIndices: Set<Int> = emptySet(),
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
@@ -130,7 +129,6 @@ internal object GPUOpMapper {
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
         val culledTextOperationIndices = linkedSetOf<Int>()
         val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
-        val legacy = GPULegacyImmediatePathAdapter()
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
         var provenance = GPUFrameProvenance.None
@@ -154,7 +152,7 @@ internal object GPUOpMapper {
                 inventory.mappedCommands.isNotEmpty()
             ) {
                 return GPUOpMapping(
-                    visualCommands = emptyList(), stateEvents = emptyList(), legacyDump = legacy.dump(),
+                    visualCommands = emptyList(), stateEvents = emptyList(),
                     preparedRefusal = GPUPreparedOperationRefusal(
                         commandId = 0, operationIndex = sourceIndices.firstOrNull() ?: 0,
                         code = "invalid.surface.prepared.vertices-operation-ownership",
@@ -183,14 +181,12 @@ internal object GPUOpMapper {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
                 is DisplayOp.DrawText -> {
                     if (preparedTextInventory == null) {
-                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
                         return@forEachIndexed
                     }
                     if (operationIndex !in preparedTextInventory.acceptedTextOperationIndices) {
                         return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = nextCommandId(),
                                 operationIndex = operationIndex,
@@ -235,7 +231,6 @@ internal object GPUOpMapper {
                                 return GPUOpMapping(
                                     visualCommands = emptyList(),
                                     stateEvents = stateEvents.toList(),
-                                    legacyDump = legacy.dump(),
                                     preparedRefusal = GPUPreparedOperationRefusal(
                                         commandId = commandId,
                                         operationIndex = operationIndex,
@@ -249,7 +244,6 @@ internal object GPUOpMapper {
                                 ?: return GPUOpMapping(
                                     visualCommands = emptyList(),
                                     stateEvents = stateEvents.toList(),
-                                    legacyDump = legacy.dump(),
                                     preparedRefusal = GPUPreparedOperationRefusal(
                                         commandId = commandId,
                                         operationIndex = operationIndex,
@@ -292,7 +286,6 @@ internal object GPUOpMapper {
                             GPUPreparedTextVisualLowering.Invalid -> return GPUOpMapping(
                                 visualCommands = emptyList(),
                                 stateEvents = stateEvents.toList(),
-                                legacyDump = legacy.dump(),
                                 preparedRefusal = GPUPreparedOperationRefusal(
                                     commandId = commandId,
                                     operationIndex = operationIndex,
@@ -335,7 +328,6 @@ internal object GPUOpMapper {
                         is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = commandId,
                                 operationIndex = operationIndex,
@@ -373,7 +365,6 @@ internal object GPUOpMapper {
                         is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = commandId,
                                 operationIndex = operationIndex,
@@ -412,7 +403,6 @@ internal object GPUOpMapper {
                         is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = commandId,
                                 operationIndex = operationIndex,
@@ -451,7 +441,6 @@ internal object GPUOpMapper {
                         is GPUPreparedAtlasLowering.Refused -> return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = commandId,
                                 operationIndex = operationIndex,
@@ -465,7 +454,6 @@ internal object GPUOpMapper {
                 }
                 is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {
                     if (preparedVerticesInventory == null) {
-                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
                         return@forEachIndexed
                     }
                     if (operationIndex in preparedVerticesInventory.elidedVerticesOperationIndices) {
@@ -474,7 +462,6 @@ internal object GPUOpMapper {
                     val command = preparedVerticesInventory.commandsByOperationIndex[operationIndex]
                         ?: return GPUOpMapping(
                             visualCommands = emptyList(), stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = nextCommandId(), operationIndex = operationIndex,
                                 code = "invalid.surface.prepared.vertices-operation-ownership",
@@ -494,7 +481,6 @@ internal object GPUOpMapper {
                         return GPUOpMapping(
                             visualCommands = emptyList(),
                             stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
                                 commandId = nextCommandId(),
                                 operationIndex = operationIndex,
@@ -516,14 +502,13 @@ internal object GPUOpMapper {
                         ),
                     )
                     if (lowered == null) {
-                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
-                    } else {
-                        visual += lowered
-                        recordCommandIds(
-                            operationIndex,
-                            setOf(lowered.normalized.commandId.value),
-                        )
+                        return@forEachIndexed
                     }
+                    visual += lowered
+                    recordCommandIds(
+                        operationIndex,
+                        setOf(lowered.normalized.commandId.value),
+                    )
                 }
             }
         }
@@ -538,7 +523,6 @@ internal object GPUOpMapper {
             is PreparedVerticesCommandBindingResult.Refused -> return GPUOpMapping(
                 visualCommands = emptyList(),
                 stateEvents = stateEvents.toList(),
-                legacyDump = legacy.dump(),
                 preparedRefusal = GPUPreparedOperationRefusal(
                     commandId = preparedVerticesCommandIds[binding.operationIndex]
                         ?.coerceAtLeast(0) ?: nextCommandId(),
@@ -560,7 +544,6 @@ internal object GPUOpMapper {
             is GPUPreparedCommandSlotAuthentication.Refused -> return GPUOpMapping(
                 visualCommands = emptyList(),
                 stateEvents = stateEvents.toList(),
-                legacyDump = legacy.dump(),
                 preparedRefusal = authenticated.refusal,
                 culledTextOperationIndices = culledTextOperationIndices.toSet(),
             )
@@ -568,7 +551,6 @@ internal object GPUOpMapper {
         return GPUOpMapping(
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
-            legacyDump = legacy.dump(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
             preparedVerticesInventory = mappedVerticesInventory,
             allocatedCommandIds = allocatedCommandIds,

@@ -271,7 +271,7 @@ class FirstRoutePlannerTest {
             )
         val incompatibleFixture =
             firstRouteCommand(
-                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "bgra8unorm"),
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "bgra8unorm-srgb"),
             )
 
         val linear =
@@ -1151,7 +1151,7 @@ class FirstRoutePlannerTest {
                 clip = GPUClipFacts.complexStack(bounds = firstRouteBounds),
             ),
             "unsupported.target.format_blend_incompatible" to firstRRectRouteCommand(
-                target = target.copy(colorFormat = "bgra8unorm"),
+                target = target.copy(colorFormat = "bgra8unorm-srgb"),
             ),
             "unsupported.pipeline.capability_missing" to firstRRectRouteCommand(
                 target = target,
@@ -1216,7 +1216,7 @@ class FirstRoutePlannerTest {
                 ),
             ),
             "unsupported.target.format_blend_incompatible" to firstRouteCommand(
-                target = target.copy(colorFormat = "bgra8unorm"),
+                target = target.copy(colorFormat = "bgra8unorm-srgb"),
             ),
             "unsupported.pipeline.capability_missing" to firstRouteCommand(
                 target = target,
@@ -2161,7 +2161,7 @@ class FirstRoutePlannerTest {
                 scopeId = "",
             ),
             "unsupported.target.format_blend_incompatible" to firstDrawLayerCommand(
-                target = target.copy(colorFormat = "bgra8unorm"),
+                target = target.copy(colorFormat = "bgra8unorm-srgb"),
             ),
             "unsupported.pipeline.capability_missing" to firstDrawLayerCommand(
                 target = target,

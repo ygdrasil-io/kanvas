@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
@@ -390,7 +391,6 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             capabilities = GPUProductFlagConfig().buildCapabilities(),
         )
         assertEquals(null, inventory.preparedRefusal)
-        assertEquals(0, inventory.legacyDump.invocationCount)
         assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
         val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
             GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
@@ -802,6 +802,33 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(1L, evidence.readbackCopies)
         assertEquals(0, evidence.activeNativePayloads)
         assertEquals(0, result.stats.opsRefused)
+    }
+
+    @Test
+    fun `bgra8 surface renders prepared with native BGRA byte order and exact format`() {
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(
+                listOf(rect(Rect.fromLTRB(0f, 0f, 2f, 1f), Color.RED)),
+            ),
+            width = 2,
+            height = 1,
+            format = PixelFormat.BGRA8,
+            config = RenderConfig.DEFAULT,
+            preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            decisions.single(),
+            decisions.single().toString(),
+        ).evidence
+        assertEquals(1L, evidence.submits)
+        assertEquals(PixelFormat.BGRA8, result.format)
+        assertContentEquals(
+            byteArrayOf(0, 0, 255.toByte(), 255.toByte(), 0, 0, 255.toByte(), 255.toByte()),
+            result.pixels.toByteArray(),
+        )
     }
 
     @Test

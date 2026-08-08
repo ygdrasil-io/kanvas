@@ -216,9 +216,23 @@ class GPUFrameReadbackCompletionTest {
                 ),
             )
             val incoherent = mapper.map(incoherentOutput, srgbOperand) { error("must not deliver") }
+
+            val bgraOperand = readbackOperand(buffer, GPUTextureFormat.BGRA8Unorm)
+            val bgraDelivery = AtomicReference<GPUFrameNativeReadbackMapDelivery>()
+            val bgraDelivered = CountDownLatch(1)
+            val bgraAccepted = mapper.map(output, bgraOperand) {
+                bgraDelivery.set(it)
+                bgraDelivered.countDown()
+            }
+            assertIs<GPUFrameReadbackMapArmResult.Armed>(bgraAccepted)
+            assertTrue(bgraDelivered.await(2, TimeUnit.SECONDS))
+            val bgraMapped = assertIs<GPUFrameNativeReadbackMapDelivery.Mapped>(bgraDelivery.get())
+            assertContentEquals(mappedBytes, bgraMapped.range.copyBytesFromZero())
+            bgraMapped.range.unmap()
+
             val unsupported = mapper.map(
                 output,
-                readbackOperand(buffer, GPUTextureFormat.BGRA8Unorm),
+                readbackOperand(buffer, GPUTextureFormat.BGRA8UnormSrgb),
             ) { error("must not deliver") }
 
             assertEquals(
@@ -229,9 +243,9 @@ class GPUFrameReadbackCompletionTest {
                 "invalid.frame-readback.native-layout",
                 assertIs<GPUFrameReadbackMapArmResult.Refused>(unsupported).diagnostic.code.value,
             )
-            assertEquals(1, buffer.mapCalls)
-            assertEquals(1, buffer.rangeCalls)
-            assertEquals(1, buffer.unmapCalls)
+            assertEquals(2, buffer.mapCalls)
+            assertEquals(2, buffer.rangeCalls)
+            assertEquals(2, buffer.unmapCalls)
         } finally {
             executor.shutdownNow()
         }

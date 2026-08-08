@@ -712,6 +712,7 @@ internal class GPUWgpu4kNativeReadbackMapper(
                 when (layout.format) {
                     GPUTextureFormat.RGBA8Unorm,
                     GPUTextureFormat.RGBA8UnormSrgb,
+                    GPUTextureFormat.BGRA8Unorm,
                     -> true
                     else -> false
                 }

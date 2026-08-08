@@ -620,6 +620,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                     format = when (identity.targetFormat) {
                         "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
                         "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
+                        "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
                         else -> error("Validated CorePrimitive target format became unsupported")
                     },
                     blend = when {
@@ -639,7 +640,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
 
 internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
-): Boolean = identity.targetFormat in setOf("rgba8unorm", "rgba8unorm-srgb") &&
+): Boolean = identity.targetFormat in setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm") &&
     (identity.sampleCount == 1 ||
         identity.sampleCount == 4 && identity.program.supportsFourSamples()) &&
     identity.topology == "triangle-list" && identity.frontFace == "ccw" &&

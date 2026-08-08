@@ -7,6 +7,8 @@ import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat as CanonicalGPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -124,22 +126,24 @@ class GPUPreparedSurfaceFrameGateTest {
     }
 
     @Test
-    fun `both public color refusals are propagated before candidate construction`() {
-        val cases = listOf(
-            GPUColorFormat.RGBA8_UNORM to "unsupported.surface.gpu-color-format.rgba8-unorm",
-            GPUColorFormat.BGRA8_UNORM to "unsupported.surface.gpu-color-format.bgra8-unorm",
+    fun `bgra8 unorm enters the candidate while rgba8 unorm stays refused`() {
+        val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+            GPUPreparedSurfaceFrameGate.classify(
+                listOf(visualRect()),
+                RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
+            ),
         )
+        assertEquals(CanonicalGPUColorFormat.BGRA8Unorm, candidate.color.physicalFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, candidate.color.interpretation)
 
-        cases.forEach { (format, expectedCode) ->
-            val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
-                GPUPreparedSurfaceFrameGate.classify(
-                    listOf(visualRect()),
-                    RenderConfig.DEFAULT.copy(gpuColorFormat = format),
-                ),
-            )
-            assertEquals(expectedCode, legacy.code)
-            assertEquals(null, legacy.operationIndex)
-        }
+        val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
+            GPUPreparedSurfaceFrameGate.classify(
+                listOf(visualRect()),
+                RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.RGBA8_UNORM),
+            ),
+        )
+        assertEquals("unsupported.surface.gpu-color-format.rgba8-unorm", legacy.code)
+        assertEquals(null, legacy.operationIndex)
     }
 
     @Test

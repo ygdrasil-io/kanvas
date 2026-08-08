@@ -3,8 +3,6 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -23,30 +21,6 @@ import org.graphiks.kanvas.types.Rect
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextNoFallbackTest {
-    @Test
-    fun `legacy adapter exposes no families and rejects text and vertices`() {
-        val adapter = GPULegacyImmediatePathAdapter()
-
-        assertContentEquals(
-            emptyList(),
-            LegacyDisplayOpFamily.entries,
-        )
-        assertEquals(
-            emptySet(),
-            GPULegacyImmediatePathAdapter.allowedFamilies,
-        )
-        assertFalse(adapter.accepts(text()))
-        assertFalse(adapter.accepts(vertices()))
-        assertFailsWith<IllegalArgumentException> {
-            adapter.recordInvocation(text())
-        }
-        assertFailsWith<IllegalArgumentException> {
-            adapter.recordInvocation(vertices())
-        }
-        assertEquals(0, adapter.dump().invocationCount)
-        assertEquals(emptyMap(), adapter.dump().invocationsByFamily)
-    }
-
     @Test
     fun `accepted text success crosses prepared execution seam and never calls legacy`() {
         val operations = listOf(
@@ -175,20 +149,6 @@ class GPUPreparedTextNoFallbackTest {
         paint,
         Matrix33.identity(),
         ClipStack.WideOpen,
-    )
-
-    private fun vertices() = DisplayOp.DrawVertices(
-        vertices = org.graphiks.kanvas.types.Vertices(
-            org.graphiks.kanvas.types.VertexMode.TRIANGLES,
-            listOf(
-                org.graphiks.kanvas.types.Point(0f, 0f),
-                org.graphiks.kanvas.types.Point(1f, 0f),
-                org.graphiks.kanvas.types.Point(0f, 1f),
-            ),
-        ),
-        paint = Paint.fill(Color.RED),
-        transform = Matrix33.identity(),
-        clip = ClipStack.WideOpen,
     )
 
     private fun evidence() = GPUPreparedSurfaceExecutionEvidence(
