@@ -11,7 +11,7 @@ internal sealed interface GPUPreparedSurfaceEligibility {
         val color: GPUPreparedSurfaceColorMapping.Ready,
     ) : GPUPreparedSurfaceEligibility
 
-    data class Refused(
+    data class Legacy(
         val code: String,
         val operationIndex: Int? = null,
     ) : GPUPreparedSurfaceEligibility
@@ -25,7 +25,7 @@ internal object GPUPreparedSurfaceFrameGate {
     ): GPUPreparedSurfaceEligibility {
         val color = when (val mapping = config.mapPreparedGpuColorConfig()) {
             is GPUPreparedSurfaceColorMapping.Ready -> mapping
-            is GPUPreparedSurfaceColorMapping.Refused -> return GPUPreparedSurfaceEligibility.Refused(
+            is GPUPreparedSurfaceColorMapping.Refused -> return GPUPreparedSurfaceEligibility.Legacy(
                 code = mapping.code,
             )
         }
@@ -55,9 +55,18 @@ internal object GPUPreparedSurfaceFrameGate {
                 is DisplayOp.SetTransform,
                 is DisplayOp.SetClip,
                 is DisplayOp.Annotation,
-                is DisplayOp.FlushAndSnapshot,
                 -> Unit
+
+                is DisplayOp.FlushAndSnapshot -> return GPUPreparedSurfaceEligibility.Legacy(
+                    code = "legacy.surface.prepared.flush-snapshot",
+                    operationIndex = operationIndex,
+                )
             }
+        }
+        if (!hasVisual) {
+            return GPUPreparedSurfaceEligibility.Legacy(
+                code = "legacy.surface.prepared.empty-frame",
+            )
         }
         return GPUPreparedSurfaceEligibility.Candidate(
             operations = Collections.unmodifiableList(ArrayList(operations)),
