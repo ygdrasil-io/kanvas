@@ -102,7 +102,7 @@ internal fun validateCorePrimitiveDirectNativeRoute(
     if (targetFormat !in setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm")) {
         return refused(
             "unsupported.native-core-primitive.target-format",
-            "Direct CorePrimitive native geometry requires rgba8unorm or rgba8unorm-srgb.",
+            "Direct CorePrimitive native geometry requires rgba8unorm, rgba8unorm-srgb, or bgra8unorm.",
         )
     }
     val sampleCount = when (samplePlan) {
