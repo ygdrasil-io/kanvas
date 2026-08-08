@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat as CanonicalGPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -30,31 +32,41 @@ internal object GPUPreparedSurfaceProductRouter {
         config: RenderConfig,
         executionPort: GPUPreparedSurfaceExecutionPort,
     ): GPUPreparedSurfaceProductRoute {
-        if (format == PixelFormat.BGRA8) {
-            return GPUPreparedSurfaceProductRoute.Legacy("legacy.surface.prepared.pixel-format.bgra8")
-        }
         val candidate = when (val eligibility = GPUPreparedSurfaceFrameGate.classify(operations, config)) {
             is GPUPreparedSurfaceEligibility.Legacy -> return GPUPreparedSurfaceProductRoute.Legacy(eligibility.code)
             is GPUPreparedSurfaceEligibility.Candidate -> eligibility
         }
+        // The default RenderConfig carries RGBA8_UNORM_SRGB, so the config-derived color would
+        // never select a bgra8unorm target. The requested surface format drives the target
+        // (Graphite model: surface color type -> texture format).
+        val targetCandidate = when (format) {
+            PixelFormat.BGRA8 -> candidate.copy(
+                color = GPUPreparedSurfaceColorMapping.Ready(
+                    physicalFormat = CanonicalGPUColorFormat.BGRA8Unorm,
+                    interpretation = GPUColorInterpretation.EncodedPremulSrgb,
+                ),
+            )
+            PixelFormat.RGBA8 -> candidate
+        }
         return when (val execution = executionPort.execute(
-            GPUPreparedSurfaceExecutionRequest(candidate, width, height),
+            GPUPreparedSurfaceExecutionRequest(targetCandidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
-                if (candidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
+                if (targetCandidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
                     GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
                 } else {
                     GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
                 }
             is GPUPreparedSurfaceExecutionResult.TerminalFailure ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
-            is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, execution)
+            is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, format, execution)
         }
     }
 
     private fun success(
         width: Int,
         height: Int,
+        format: PixelFormat,
         execution: GPUPreparedSurfaceExecutionResult.Succeeded,
     ): GPUPreparedSurfaceProductRoute {
         val drawCallCount = try {
@@ -72,7 +84,7 @@ internal object GPUPreparedSurfaceProductRouter {
                 pixels = execution.rgba.toUByteArray(),
                 width = width,
                 height = height,
-                format = PixelFormat.RGBA8,
+                format = format,
                 diagnostics = Diagnostics().apply {
                     execution.evidence.destinationReadEvidence
                         .sortedBy(GPUPreparedSurfaceDestinationReadEvidence::commandId)

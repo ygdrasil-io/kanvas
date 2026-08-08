@@ -1221,6 +1221,7 @@ private fun String.toPreparedVerticesNativeIndexFormat(): GPUPreparedNativeIndex
 private fun String.toPreparedVerticesTargetFormat(): GPUTextureFormat = when (this) {
     "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
     "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
+    "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
     else -> error("Unsupported prepared-vertices target format: $this")
 }
 

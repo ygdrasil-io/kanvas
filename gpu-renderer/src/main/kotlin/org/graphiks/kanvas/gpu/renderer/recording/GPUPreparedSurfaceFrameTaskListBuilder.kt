@@ -3501,6 +3501,7 @@ private fun preparedSurfaceTargetColorInterpretation(
 ): GPUColorInterpretation = when (format) {
     GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     else -> throw IllegalArgumentException(
         "Prepared ColorGlyph destination snapshots require RGBA8Unorm or RGBA8UnormSrgb.",
     )

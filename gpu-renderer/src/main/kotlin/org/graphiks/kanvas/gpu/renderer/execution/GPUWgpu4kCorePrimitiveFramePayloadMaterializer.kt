@@ -72,11 +72,14 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 private fun GPUColorFormat.isCorePrimitiveSceneTargetFormat(): Boolean =
-    this == GPUColorFormat.RGBA8Unorm || this == GPUColorFormat.RGBA8UnormSrgb
+    this == GPUColorFormat.RGBA8Unorm ||
+        this == GPUColorFormat.RGBA8UnormSrgb ||
+        this == GPUColorFormat.BGRA8Unorm
 
 private fun GPUColorFormat.corePrimitiveInterpretationOrNull(): GPUColorInterpretation? = when (this) {
     GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
     else -> null
 }
 
@@ -86,11 +89,14 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.toGPUColorFo
             GPUColorFormat.RGBA8Unorm
         GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb ->
             GPUColorFormat.RGBA8UnormSrgb
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Bgra8Unorm ->
+            GPUColorFormat.BGRA8Unorm
     }
 
 private fun GPUColorFormat.toCorePrimitiveGPUTextureFormat(): GPUTextureFormat = when (this) {
     GPUColorFormat.RGBA8Unorm -> GPUTextureFormat.RGBA8Unorm
     GPUColorFormat.RGBA8UnormSrgb -> GPUTextureFormat.RGBA8UnormSrgb
+    GPUColorFormat.BGRA8Unorm -> GPUTextureFormat.BGRA8Unorm
     else -> throw IllegalArgumentException("Unsupported CorePrimitive scene target format: $value")
 }
 

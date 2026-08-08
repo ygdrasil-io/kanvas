@@ -37,6 +37,8 @@ internal fun GPUColorFormat.corePrimitiveStructuralColorFormat():
         GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
     GPUColorFormat.RGBA8UnormSrgb ->
         GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb
+    GPUColorFormat.BGRA8Unorm ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Bgra8Unorm
     else -> throw IllegalArgumentException("Unsupported CorePrimitive scene target format: $value")
 }
 
@@ -79,6 +81,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class ColorFormat(val stableIdentity: String) {
         Rgba8Unorm("rgba8unorm"),
         Rgba8UnormSrgb("rgba8unorm-srgb"),
+        Bgra8Unorm("bgra8unorm"),
     }
     enum class DepthStencilFormat { Depth24PlusStencil8 }
     enum class ClipGeometry { Rect, RRect, Path }

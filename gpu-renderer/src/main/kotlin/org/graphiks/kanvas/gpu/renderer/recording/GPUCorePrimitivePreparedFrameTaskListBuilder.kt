@@ -135,6 +135,7 @@ const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
 private val corePrimitiveSceneTargetFormats = setOf(
     GPUColorFormat.RGBA8Unorm,
     GPUColorFormat.RGBA8UnormSrgb,
+    GPUColorFormat.BGRA8Unorm,
 )
 
 internal fun corePrimitiveTargetStateHash(
@@ -1399,6 +1400,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 colorInterpretation = when (request.targetFormat) {
                     GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
                     GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+                    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
                     else -> return refused(
                         "unsupported.recording.core_primitive_target_format",
                         "Prepared core primitive recording requires rgba8unorm or rgba8unorm-srgb.",

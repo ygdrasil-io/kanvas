@@ -1966,7 +1966,7 @@ class GPUFirstRoutePlanner(
 
     private companion object {
         /** Closed target-format set for first native routes. */
-        val firstRouteTargetFormats = setOf("rgba8unorm", "rgba8unorm-srgb")
+        val firstRouteTargetFormats = setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm")
 
         /** Required capability fact for the first native FillRect route. */
         const val firstRouteCapabilityName = "first_slice.fill_rect.native"

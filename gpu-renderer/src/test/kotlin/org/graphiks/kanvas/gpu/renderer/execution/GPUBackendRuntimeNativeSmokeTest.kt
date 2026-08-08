@@ -243,9 +243,14 @@ class GPUBackendRuntimeNativeSmokeTest {
         )
         val cases = listOf(
             Triple(
-                GPUOffscreenTargetRequest(4, 4, GPUColorFormat.BGRA8Unorm),
+                GPUOffscreenTargetRequest(4, 4, GPUColorFormat("bgra8unorm-srgb")),
                 supported,
                 "unsupported.prepared-scene-session.target-format",
+            ),
+            Triple(
+                GPUOffscreenTargetRequest(4, 4, GPUColorFormat.BGRA8Unorm),
+                supported,
+                "unsupported.prepared-scene-session.target-capability",
             ),
             Triple(
                 GPUOffscreenTargetRequest(
@@ -291,7 +296,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `prepared scene target validation accepts only two exact color pairs and maps their native formats`() {
+    fun `prepared scene target validation accepts only the three exact color pairs and maps their native formats`() {
         val supported = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),
             facts = emptyList(),
@@ -299,6 +304,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             supportedTextureFormats = setOf(
                 GPUTextureFormat.RGBA8Unorm,
                 GPUTextureFormat.RGBA8UnormSrgb,
+                GPUTextureFormat.BGRA8Unorm,
             ),
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(
@@ -306,6 +312,9 @@ class GPUBackendRuntimeNativeSmokeTest {
                         renderAttachmentSampleCounts = setOf(1),
                     ),
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1),
+                    ),
+                    GPUTextureFormat.BGRA8Unorm to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1),
                     ),
                 ),
@@ -324,6 +333,12 @@ class GPUBackendRuntimeNativeSmokeTest {
                 GPUColorFormat.RGBA8UnormSrgb,
                 GPUColorInterpretation.LinearPremul,
             ) to GPUTextureFormat.RGBA8UnormSrgb,
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.BGRA8Unorm,
+                GPUColorInterpretation.EncodedPremulSrgb,
+            ) to GPUTextureFormat.BGRA8Unorm,
         )
         accepted.forEach { (request, expectedNativeFormat) ->
             assertEquals(expectedNativeFormat, validatePreparedSceneTargetRequest(request, supported))
@@ -375,7 +390,7 @@ class GPUBackendRuntimeNativeSmokeTest {
         try {
             val formatFailure = assertFailsWith<IllegalArgumentException> {
                 session.prepareSceneFrameSession(
-                    GPUOffscreenTargetRequest(4, 4, GPUColorFormat.BGRA8Unorm),
+                    GPUOffscreenTargetRequest(4, 4, GPUColorFormat("bgra8unorm-srgb")),
                 )
             }
             assertTrue(
@@ -383,6 +398,18 @@ class GPUBackendRuntimeNativeSmokeTest {
                     .startsWith("unsupported.prepared-scene-session.target-format"),
             )
             assertEquals(before, session.runtimeTelemetry.texturesCreated)
+
+            val bgraSession = session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    4,
+                    4,
+                    GPUColorFormat.BGRA8Unorm,
+                    GPUColorInterpretation.EncodedPremulSrgb,
+                ),
+            )
+            bgraSession.close()
+            val afterBgra = session.runtimeTelemetry.texturesCreated
+            assertTrue(afterBgra > before)
 
             val interpretationFailure = assertFailsWith<IllegalArgumentException> {
                 session.prepareSceneFrameSession(
@@ -398,7 +425,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 interpretationFailure.message.orEmpty()
                     .startsWith("unsupported.prepared-scene-session.color-interpretation"),
             )
-            assertEquals(before, session.runtimeTelemetry.texturesCreated)
+            assertEquals(afterBgra, session.runtimeTelemetry.texturesCreated)
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
