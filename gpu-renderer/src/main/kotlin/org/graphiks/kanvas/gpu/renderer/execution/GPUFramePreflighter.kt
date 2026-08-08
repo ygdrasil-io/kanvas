@@ -2093,7 +2093,10 @@ internal class GPUFramePreflighter(
     ): GPUCorePrimitiveDirectNativeRoute = validateCorePrimitiveDirectNativeRoute(
         semantic = semantic,
         exactClipScissor = (clipAuthority as? GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor,
-        canonicalPremultipliedSrcOver = blendPlan.isCanonicalSolidRectSrcOver(),
+        blendPlan = blendPlan ?: return GPUCorePrimitiveDirectNativeRoute.Refused(
+            "unsupported.native-core-primitive.blend",
+            "Direct CorePrimitive native geometry requires one exact classified blend plan.",
+        ),
         samplePlan = samplePlan,
         targetFormat = targetFormat,
     )

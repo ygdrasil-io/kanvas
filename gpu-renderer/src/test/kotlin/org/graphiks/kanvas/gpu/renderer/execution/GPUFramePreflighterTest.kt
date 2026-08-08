@@ -4518,8 +4518,8 @@ class GPUFramePreflighterTest {
     fun `direct native route refusal and non canonical load refuse before preparation`() {
         val directPrepare = coreDirectPrepare()
         val unsupportedBlend = coreRenderStep(
-            coreSemantic(blendMode = GPUBlendMode.SRC),
-            blendPlan = coreBlend(GPUBlendMode.SRC),
+            coreSemantic().withBlendPlanIdentity(shaderNoDstBlend().canonicalIdentity()),
+            blendPlan = shaderNoDstBlend(),
         )
         val canonical = coreRenderStep(coreSemantic())
         val badLoad = GPUFrameStep.RenderPassStep(
@@ -4851,7 +4851,6 @@ class GPUFramePreflighterTest {
             coverBounds = GPUPixelBounds(0, 0, 4, 4),
             geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         )
-        val srcBlend = coreBlend(GPUBlendMode.SRC)
         val cases = listOf(
             framePlan(
                 listOf(
@@ -4892,8 +4891,8 @@ class GPUFramePreflighterTest {
                 listOf(
                     prepareScene(),
                     coreRenderStep(
-                        coreSemantic(blendMode = GPUBlendMode.SRC),
-                        blendPlan = srcBlend,
+                        coreSemantic().withBlendPlanIdentity(shaderNoDstBlend().canonicalIdentity()),
+                        blendPlan = shaderNoDstBlend(),
                     ),
                 ),
             ) to "unsupported.native-core-primitive.blend",
@@ -8674,6 +8673,28 @@ class GPUFramePreflighterTest {
         coverageMode = coverageMode,
     )
 
+    private fun GPUDrawSemanticPayload.CorePrimitive.withBlendPlanIdentity(
+        identity: String,
+    ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
+        payloadRef = payloadRef,
+        sourceFamily = sourceFamily,
+        geometry = geometry,
+        premultipliedRgba = premultipliedRgba,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+        blendPlanIdentity = identity,
+        frameProvenance = frameProvenance,
+        canonicalHash = canonicalHash,
+        coverageMode = coverageMode,
+        analysisRecordId = analysisRecordId,
+        analysisCommandFamily = analysisCommandFamily,
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
+    )
+
     private fun GPUDrawSemanticPayload.CorePrimitive.withTargetBounds(
         targetBounds: GPUPixelBounds,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
@@ -8729,6 +8750,12 @@ class GPUFramePreflighterTest {
             writeMask = "rgba",
         ),
         sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
+    private fun shaderNoDstBlend(): GPUBlendPlan = GPUBlendPlan.ShaderBlendNoDstRead(
+        mode = GPUBlendMode.MODULATE,
+        formulaId = "modulate@v1",
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.ModulateRGBA,
     )
 
     private fun coreColorWriteNoneBlend(): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(

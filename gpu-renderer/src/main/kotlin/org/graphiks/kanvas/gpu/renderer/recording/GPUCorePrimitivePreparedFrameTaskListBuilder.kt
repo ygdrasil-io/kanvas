@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
@@ -200,7 +201,10 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
     return validateCorePrimitiveDirectNativeRoute(
         semantic = semantic,
         exactClipScissor = exactClipScissor,
-        canonicalPremultipliedSrcOver = blendPlan.isCanonicalSolidRectSrcOver(),
+        blendPlan = blendPlan ?: return GPUCorePrimitiveDirectNativeRoute.Refused(
+            "unsupported.native-core-primitive.blend",
+            "Direct CorePrimitive native geometry requires one exact classified blend plan.",
+        ),
         samplePlan = samplePlan,
         targetFormat = targetFormat,
     )
@@ -692,7 +696,8 @@ private fun directCorePrimitiveGeometryBytes(
 ): GPUCorePrimitiveDirectGeometryBytes? {
     if (packet.role != GPUDrawPacketRole.Shading ||
         semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
-        !packet.blendPlan.isCanonicalSolidRectSrcOver()
+        packet.blendPlan?.isCorePrimitiveDirectLaneBlend() != true ||
+        packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
@@ -2016,6 +2021,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.firstOrNull { packet ->
             packet.commandIdValue !in geometryBytesByCommandId &&
                 packet.commandIdValue !in pathStencilPlansByCommandId &&
+                packet.blendPlan !is GPUBlendPlan.NoOp &&
                 corePrimitiveDirectClipAuthority(
                     requireNotNull(packet.clipExecutionPlan),
                     request.targetBounds,
@@ -2104,6 +2110,35 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "unsupported.recording.core_primitive_mixed_uniform_layouts",
                 "One direct CorePrimitive pass cannot mix uniform32, uniform64, uniform80, uniform160, " +
                     "or path layouts.",
+            )
+        }
+        // The prepared-surface direct route materializes one shared structural pipeline per pass.
+        // Mixed blend-mode shading packets are therefore admitted only as far as the classifier,
+        // then refused here so the surface router continues on the legacy route instead of failing
+        // at execution. The preflighter mirrors this shared-key authority; per-key pass
+        // materialization is scheduled with the route-authority work.
+        val directPassStructuralKeys = geometryPackets
+            .filter { packet ->
+                packet.role == GPUDrawPacketRole.Shading &&
+                    packet.commandIdValue !in pathStencilPlansByCommandId &&
+                    packet.clipExecutionPlan !is GPUClipExecutionPlan.StencilCoverage &&
+                    packet.clipExecutionPlan !is GPUClipExecutionPlan.CoverageMask
+            }
+            .map { packet ->
+                corePrimitiveRenderPipelineStructuralKey(
+                    requireNotNull(request.semanticsByCommandId[packet.commandIdValue]),
+                    requireNotNull(packet.clipExecutionPlan),
+                    requireNotNull(packet.blendPlan),
+                    preparedSamplePlan.sampleCount,
+                    request.targetFormat.corePrimitiveStructuralColorFormat(),
+                )
+            }
+            .distinct()
+        if (directPassStructuralKeys.size > 1) {
+            return refused(
+                "unsupported.recording.core_primitive_mixed_pipeline_keys",
+                "One direct CorePrimitive pass requires one exact shared structural pipeline; " +
+                    "mixed blend-mode passes remain on the legacy route.",
             )
         }
         val maxBufferSize = if (geometryPackets.isEmpty()) null else limits.maxBufferSize ?: return refused(

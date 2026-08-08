@@ -26,6 +26,8 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
@@ -657,11 +659,6 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))) to
                 "unsupported.destination_read.required",
-            request(listOf(
-                rect(color = Color.BLUE),
-                rect(color = Color.RED).copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
-            )) to
-                "unsupported.native-core-primitive.blend",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point(2f, 2f), Point(12f, 2f)),
@@ -682,6 +679,37 @@ class GPUPreparedSurfaceFrameBuilderTest {
             )
             assertEquals(expectedCode, refused.diagnostic.code.value)
         }
+    }
+
+    @Test
+    fun `clear and src hard rects build ready with fixed function blend packets`() {
+        val clear = request(listOf(rect().copy(
+            paint = Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.CLEAR),
+        )))
+        val clearResult = GPUPreparedSurfaceFrameBuilder.build(clear)
+        val clearReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            clearResult,
+            (clearResult as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
+        )
+        val clearBlends = clearReady.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .mapNotNull { (it.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode }
+        assertTrue(GPUBlendMode.CLEAR in clearBlends)
+
+        val src = request(listOf(rect().copy(
+            paint = Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.SRC),
+        )))
+        val srcResult = GPUPreparedSurfaceFrameBuilder.build(src)
+        val srcReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            srcResult,
+            (srcResult as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
+        )
+        val srcBlends = srcReady.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .mapNotNull { (it.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode }
+        assertTrue(GPUBlendMode.SRC in srcBlends)
     }
 
     @Test

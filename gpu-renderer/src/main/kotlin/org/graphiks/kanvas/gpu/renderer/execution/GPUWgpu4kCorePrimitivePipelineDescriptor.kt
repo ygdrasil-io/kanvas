@@ -236,14 +236,14 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> when (shader) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
-                    !blend.isCanonicalPremulSrcOver() ||
+                    blend.nativeShadingBlendProgramOrNull() == null ||
                     clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
                     depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None -> null
                 else -> GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
-                    !blend.isCanonicalPremulSrcOver() -> null
+                    blend.nativeShadingBlendProgramOrNull() == null -> null
                 sampleCount == 4 && clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
                 sampleCount == 4 &&
                     depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
@@ -381,9 +381,15 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull
             blend.fixedNativeBlendProgramOrNull() ==
                 GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
         }
-    else -> GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver.takeIf {
-        blend.isCanonicalPremulSrcOver()
-    }
+    else -> blend.nativeShadingBlendProgramOrNull()
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull():
+    GPUWgpu4kCorePrimitiveBlendProgram? = when (this) {
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull()
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
+        GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
+    else -> null
 }
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativePathCoverBlendProgramOrNull():
@@ -667,7 +673,13 @@ private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgr
                 GPUBlendMode.MODULATE,
                 GPUBlendMode.SCREEN,
             )
-        else -> blendProgram == program.defaultBlendProgram()
+        else -> when (program) {
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver,
+            -> blendProgram.mode != null
+            else -> blendProgram == program.defaultBlendProgram()
+        }
     }
 
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.defaultBlendProgram():
