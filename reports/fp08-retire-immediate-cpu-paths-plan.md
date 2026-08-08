@@ -289,7 +289,9 @@ git commit -m "feat(surface): native BGRA8 rendering in the prepared route"
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` (l.275)
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecutorTest.kt` (l.279, 659)
 
-**Context:** Per the approved scope decision, the only `legacy.surface.prepared.*` code that survives becomes a terminal code with a non-legacy name. `legacy.surface.prepared.runtime-capabilities-unavailable` is produced by the prepared executor itself (not a legacy branch) and becomes a terminal refusal after Task 4 → rename to `unavailable.surface.prepared.runtime-capabilities`. The `flush-snapshot` and `empty-frame` codes were deleted in Task 4; `pixel-format.bgra8` was deleted in Task 4 (BGRA8 is now native).
+**Context:** Per the approved scope decision, the only `legacy.surface.prepared.*` code produced by the PREPARED executor is renamed to a non-legacy terminal name. `legacy.surface.prepared.runtime-capabilities-unavailable` is emitted at `GPUPreparedSurfaceFrameExecution.kt:275` when the backend exposes no capabilities → rename to `unavailable.surface.prepared.runtime-capabilities`.
+
+NOTE on current state (post-revert): the codes `legacy.surface.prepared.flush-snapshot` (gate) and `legacy.surface.prepared.empty-frame` (gate) STILL EXIST and route frames to the retained legacy fallback — they are NOT touched by this task (their retirement is FP-09, together with the gate's `Legacy` eligibility). `legacy.surface.prepared.pixel-format.bgra8` was already deleted by Task 4 (BGRA8 is now native).
 
 - [ ] **Step 1: Write the failing test (red)**
 
