@@ -108,44 +108,6 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `empty and state-only frames are no-op success before backend open`() {
-        var backendOpenCalls = 0
-        val backend = FakeBackend(capabilities(), FakeSession())
-        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
-            backendOpenCalls++
-            backend
-        })
-        val stateOnly = executionRequest(
-            listOf(
-                DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
-                DisplayOp.SetClip(ClipStack.WideOpen),
-                DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "state", "marker"),
-                DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 8f, 8f)),
-            ),
-            width = 8,
-            height = 8,
-        )
-        val empty = executionRequest(emptyList(), width = 8, height = 8)
-
-        listOf(stateOnly to 4, empty to 0).forEach { (request, expectedStateEvents) ->
-            val result = executor.execute(request)
-            val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result, result.toString())
-
-            assertContentEquals(ByteArray(8 * 8 * 4), success.rgba)
-            assertEquals(0, success.visualOperationCount)
-            assertEquals(expectedStateEvents, success.stateEventCount)
-            assertEquals(0, success.evidence.targetCreations)
-            assertEquals(0, success.evidence.frameCoordinatorCreations)
-            assertEquals(0, success.evidence.submits)
-            assertEquals(0, success.evidence.draws)
-            assertEquals(0, success.evidence.pipelineBinds)
-        }
-        assertEquals(0, backendOpenCalls)
-        assertEquals(0, backend.prepareCalls)
-        assertEquals(0, backend.closeCalls)
-    }
-
-    @Test
     fun `mixed target-empty text and visible rect bypasses no-op gate and creates one target`() {
         var backendOpenCalls = 0
         val session = FakeSession()

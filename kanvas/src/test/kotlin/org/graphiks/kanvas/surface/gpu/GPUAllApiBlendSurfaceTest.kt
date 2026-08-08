@@ -123,7 +123,18 @@ class GPUAllApiBlendSurfaceTest {
                         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
                         val expectedRoute = expectedPreparedProductRoute(api, mode, context)
 
-                        if (expectedRoute is ProductRouteExpectation.Terminal) {
+                        if (expectedRoute is ProductRouteExpectation.LegacyRefused) {
+                            // A legacy composite (saveLayer) frame stays on the legacy route, but
+                            // vertices/meshes no longer continue through the legacy immediate
+                            // renderer, so the frame refuses at the core-route preflight instead of
+                            // producing pixels.
+                            val gpu = renderGpu(api, mode, context, decisions)
+                            assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
+                            assertTrue(
+                                gpu.result.stats.opsRefused >= 1,
+                                gpu.result.diagnostics.entries.toString(),
+                            )
+                        } else if (expectedRoute is ProductRouteExpectation.Terminal) {
                             val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                                 renderGpu(api, mode, context, decisions)
                             }
@@ -154,6 +165,8 @@ class GPUAllApiBlendSurfaceTest {
                             when (expectedRoute) {
                                 ProductRouteExpectation.Prepared ->
                                     assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+                                ProductRouteExpectation.Legacy ->
+                                    assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
                                 null -> Unit
                                 is ProductRouteExpectation.Terminal ->
                                     error("terminal route returned pixels")
@@ -895,6 +908,8 @@ class GPUAllApiBlendSurfaceTest {
     private sealed interface ProductRouteExpectation {
         data object Prepared : ProductRouteExpectation
         data class Terminal(val code: String) : ProductRouteExpectation
+        data object Legacy : ProductRouteExpectation
+        data object LegacyRefused : ProductRouteExpectation
     }
 
     private class SnapshotDisplayListBuffer(

@@ -40,7 +40,6 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformLayout
-import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
@@ -54,39 +53,30 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductRouterTest {
     @Test
-    fun `empty state-only frames complete as no-op and color refusals are terminal`() {
-        val harness = PreparedProductExecutionHarness(width = 4, height = 4)
-        val stateOnlyRoute = GPUPreparedSurfaceProductRouter.route(
+    fun `non-image gate legacy and BGRA never call the execution port`() {
+        var calls = 0
+        val port = GPUPreparedSurfaceExecutionPort {
+            calls++
+            error("must not execute")
+        }
+
+        val compositeRoute = GPUPreparedSurfaceProductRouter.route(
             listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
             4,
             4,
             PixelFormat.RGBA8,
             RenderConfig.DEFAULT,
-            harness.port,
+            port,
         )
-
-        val prepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(stateOnlyRoute)
-        assertEquals(0, prepared.result.stats.opsDispatched)
-        assertContentEquals(ByteArray(4 * 4 * 4).toUByteArray(), prepared.result.pixels)
-        assertEquals(0, harness.backend.prepareCalls)
-        assertEquals(0, harness.backend.session.submitCalls)
-
-        var calls = 0
         val bgraRoute = GPUPreparedSurfaceProductRouter.route(
-            listOf(rect()),
-            4,
-            4,
-            PixelFormat.BGRA8,
-            RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
-            GPUPreparedSurfaceExecutionPort {
-                calls++
-                error("must not execute")
-            },
+            listOf(rect()), 4, 4, PixelFormat.BGRA8, RenderConfig.DEFAULT, port,
         )
+
         assertEquals(
-            "unsupported.surface.gpu-color-format.bgra8-unorm",
-            assertIs<GPUPreparedSurfaceProductRoute.Terminal>(bgraRoute).diagnostic.code.value,
+            "legacy.surface.prepared.flush-snapshot",
+            assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
         )
+        assertEquals("legacy.surface.prepared.pixel-format.bgra8", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(bgraRoute).code)
         assertEquals(0, calls)
     }
 
@@ -427,11 +417,11 @@ class GPUPreparedSurfaceProductRouterTest {
     }
 
     @Test
-    fun `before-entry refusal is terminal`() {
+    fun `before-entry refusal is legacy while terminal failure remains terminal`() {
         val refusal = diagnostic("unsupported.test.builder", "builder refusal")
         val terminal = diagnostic("failed.test.terminal", "terminal failure")
 
-        val refused = GPUPreparedSurfaceProductRouter.route(
+        val legacy = GPUPreparedSurfaceProductRouter.route(
             listOf(rect()), 4, 4, PixelFormat.RGBA8, RenderConfig.DEFAULT,
             GPUPreparedSurfaceExecutionPort {
                 GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(refusal)
@@ -444,7 +434,7 @@ class GPUPreparedSurfaceProductRouterTest {
             },
         )
 
-        assertEquals(refusal, assertIs<GPUPreparedSurfaceProductRoute.Terminal>(refused).diagnostic)
+        assertEquals(refusal.code.value, assertIs<GPUPreparedSurfaceProductRoute.Legacy>(legacy).code)
         assertEquals(terminal, assertIs<GPUPreparedSurfaceProductRoute.Terminal>(failed).diagnostic)
     }
 

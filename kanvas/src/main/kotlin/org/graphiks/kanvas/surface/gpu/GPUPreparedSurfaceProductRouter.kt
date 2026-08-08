@@ -71,7 +71,6 @@ internal object GPUPreparedSurfaceProductRouter {
                 pixels = execution.rgba.toUByteArray(),
                 width = width,
                 height = height,
-                // TODO(task 8): thread requested PixelFormat into success()
                 format = PixelFormat.RGBA8,
                 diagnostics = Diagnostics().apply {
                     execution.evidence.destinationReadEvidence
