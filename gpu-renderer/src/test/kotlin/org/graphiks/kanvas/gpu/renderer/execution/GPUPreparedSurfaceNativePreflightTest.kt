@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -253,6 +254,42 @@ class GPUPreparedSurfaceNativePreflightTest {
             ),
         )
         assertEquals("unsupported.native-core-primitive.pipeline", unmappable.code)
+        val dstReadKey = srcOverKey.copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.MODULATE,
+                "modulate_dst@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+        val dstRead = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
+            validateMultiKeyDirectPassSealAuthority(
+                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                    listOf(srcOverKey, dstReadKey),
+                    slab(),
+                ),
+                listOf(srcOverKey, dstReadKey),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals("unsupported.native-core-primitive.dst-read-formula", dstRead.code)
+        // The one-component bind-group layout invariant cannot be violated by any constructible
+        // multi-key seal: every admitted Shading key with the shared dynamic-uniform32 layout
+        // lowers onto the single production component, and the destination-reading key that could
+        // project onto the second (dst-read) component is preempted by the formula gate above.
+        // The seal constructor therefore guards the invariant by rejecting any key set whose
+        // uniform layouts would diverge from the shared dynamic-uniform32 slab.
+        assertFailsWith<IllegalArgumentException> {
+            GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                listOf(
+                    srcOverKey,
+                    srcOverKey.copy(
+                        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
+                    ),
+                ),
+                slab(),
+            )
+        }
     }
 
     @Test

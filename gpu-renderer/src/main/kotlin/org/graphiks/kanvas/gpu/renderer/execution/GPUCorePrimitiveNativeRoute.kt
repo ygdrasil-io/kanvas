@@ -334,6 +334,16 @@ internal fun validateMultiKeyDirectPassSealAuthority(
     val mappings = mutableListOf<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     val componentIdentities = mutableListOf<GPUWgpu4kCorePrimitiveComponentIdentity>()
     seal.structuralPipelineKeys.forEach { key ->
+        // Destination-reading keys project onto the dst-read component identity without any
+        // formula program, so they would fail the generic pipeline mapping below; refuse them by
+        // name first so the refusal names the actual blocker (the Task 3c formula program).
+        val componentIdentity = key.corePrimitiveNativeComponentIdentityOrNull()
+        if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY) {
+            return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+                "unsupported.native-core-primitive.dst-read-formula",
+                "Destination-reading direct programs are refused until the prepared destination-read route lands.",
+            )
+        }
         when (val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)) {
             is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> mappings += mapped
             is GPUWgpu4kCorePrimitivePipelineMapping.Refused ->
@@ -343,19 +353,19 @@ internal fun validateMultiKeyDirectPassSealAuthority(
                         mapped.reason,
                 )
         }
-        val componentIdentity = key.corePrimitiveNativeComponentIdentityOrNull()
-            ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+        if (componentIdentity == null) {
+            return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
                 "unsupported.native-core-primitive.pipeline-layout",
                 "A multi-key direct CorePrimitive structural key has no exact bind-group component identity.",
-            )
-        if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY) {
-            return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
-                "unsupported.native-core-primitive.dst-read-formula",
-                "Destination-reading direct programs are refused until the prepared destination-read route lands.",
             )
         }
         componentIdentities += componentIdentity
     }
+    // Every admitted Shading key with the shared dynamic-uniform32 layout lowers onto the single
+    // production component today; the only key that could project onto a second component is the
+    // destination-reading one, which the per-key formula gate above refuses. This refusal is the
+    // defense-in-depth seam Task 3c must resolve when a destination formula program lands and a
+    // pass mixes dst-reading keys with non-dst-reading keys.
     val componentIdentity = componentIdentities.distinct().singleOrNull()
         ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
             "unsupported.native-core-primitive.multi-key-component",

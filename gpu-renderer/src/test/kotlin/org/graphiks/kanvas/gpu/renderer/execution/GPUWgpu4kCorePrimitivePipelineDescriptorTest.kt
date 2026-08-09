@@ -25,6 +25,7 @@ import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -875,14 +876,18 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
             dstReadComponent.bindingLayoutIdentity,
         )
-        assertTrue(isSupportedCorePrimitivePipelineCacheKey(
+        // The session cache refuses dst-read component identities until Task 3c admits the
+        // formula program: hasCompatibleComponentIdentity only accepts the closed production
+        // identities, so this cache-key admission is an explicit future decision rather than a
+        // silent no-op.
+        assertFalse(isSupportedCorePrimitivePipelineCacheKey(
             GPUWgpu4kCorePrimitivePipelineCacheKey(
                 dstReadComponent,
                 assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
                     mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(directKey()),
                 ).identity,
             ),
-        ) || true)
+        ))
 
         val layout = corePrimitiveBindGroupLayoutDescriptor(dstReadComponent)
         val entries = layout.entries
