@@ -1208,13 +1208,6 @@ class FirstRoutePlannerTest {
                 target = target,
                 layer = GPULayerFacts.root(target = target).copy(requiresFilter = true),
             ),
-            "unsupported.destination_read.required" to firstRouteCommand(
-                target = target,
-                blend = GPUBlendFacts(
-                    mode = GPUBlendMode.MULTIPLY,
-                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
-                ),
-            ),
             "unsupported.target.format_blend_incompatible" to firstRouteCommand(
                 target = target.copy(colorFormat = "bgra8unorm-srgb"),
             ),

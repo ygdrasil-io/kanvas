@@ -3445,8 +3445,14 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
     )
     return packets.mapNotNull { packet ->
         val semantic = request.semanticsByCommandId[packet.commandIdValue]
-        if (semantic !is GPUDrawSemanticPayload.ColorGlyph ||
-            packet.blendPlan?.destinationReadRequirement !=
+        // The snapshot machinery plans by command and blend only (family-agnostic): ColorGlyph
+        // and core-primitive packets both consume one TextureCopy per destination-reading packet.
+        if (semantic !is GPUDrawSemanticPayload.ColorGlyph &&
+            semantic !is GPUDrawSemanticPayload.CorePrimitive
+        ) {
+            return@mapNotNull null
+        }
+        if (packet.blendPlan?.destinationReadRequirement !=
             GPUBlendDestinationReadRequirement.DestinationTextureRequired
         ) {
             return@mapNotNull null

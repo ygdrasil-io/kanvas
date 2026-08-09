@@ -524,14 +524,25 @@ internal class GPUPreparedSurfaceFrameExecutor(
         }
         validateImmediateCompletion(submission.immediateState, completion)?.let { return it }
         if (completion.outcome != GPUFrameStructuralOutcome.Succeeded) {
-            return GPUPreparedSurfaceExecutionResult.TerminalFailure(
-                completion.diagnostic
-                    ?: immediateDiagnostic(submission.immediateState)
-                    ?: diagnostic(
-                        "invalid.surface.prepared.terminal-without-diagnostic",
-                        "Prepared Surface execution failed without a terminal diagnostic.",
-                    ),
-            )
+            val diagnostic = completion.diagnostic
+                ?: immediateDiagnostic(submission.immediateState)
+                ?: diagnostic(
+                    "invalid.surface.prepared.terminal-without-diagnostic",
+                    "Prepared Surface execution failed without a terminal diagnostic.",
+                )
+            // Documented prepared-route residual: the core-primitive shader-with-destination
+            // materialization (dst-texture pipeline program, bind layout, and preflight
+            // admission) is not wired yet, so destination-reading core frames cannot execute on
+            // the prepared route. Those frames refuse at native preflight/materialization with
+            // the codes below and must continue on the legacy route (which renders them with the
+            // GPU copy-then-formula composer) instead of becoming terminal. Task 6 classifies the
+            // residual materialization.
+            if (completion.outcome == GPUFrameStructuralOutcome.Refused &&
+                diagnostic.code.value in preparedRouteLegacyFallbackRefusalCodes
+            ) {
+                return GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(diagnostic)
+            }
+            return GPUPreparedSurfaceExecutionResult.TerminalFailure(diagnostic)
         }
         val rgba = when (request.output) {
             GPUPreparedSurfaceRequestedOutput.CompletionOnly -> {
@@ -810,6 +821,18 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
     GPUPreparedSurfaceImmediateState.Submitted -> null
     is GPUPreparedSurfaceImmediateState.FailedAfterSubmit -> state.diagnostic
 }
+
+/**
+ * Prepared-route refusals that document an unwired execution feature and must fall back to the
+ * legacy route instead of failing the frame: destination-reading core-primitive frames whose
+ * shader-with-destination materialization (pipeline program, dst-texture bind layout, preflight
+ * admission) is deferred to Task 6.
+ */
+private val preparedRouteLegacyFallbackRefusalCodes = setOf(
+    "unsupported.native-frame-payload.destination-copy-semantic-shape",
+    "unsupported.prepared-surface.destination-copy",
+    "unsupported.native-core-primitive.pipeline",
+)
 
 private fun unwrapCompletionFailure(failure: Throwable): Throwable = when (failure) {
     is ExecutionException, is CompletionException -> failure.cause ?: failure

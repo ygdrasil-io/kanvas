@@ -7,13 +7,20 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlanner
+import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCopyAsDrawImplementationCapability
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawLayerCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.CopyAsDrawMaterialization
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadMember
@@ -23,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupi
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
@@ -33,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
@@ -48,6 +57,84 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUFramePlannerDestinationContractTest {
+    @Test
+    fun `multiply restore blend DrawLayer composite admits shader destination read packet`() {
+        val command = GPUDrawLayerCommandBuilder.build(
+            commandId = GPUDrawCommandID(60),
+            scopeId = "layer:card",
+            target = GPUTargetFacts(width = 256, height = 256, colorFormat = "rgba8unorm"),
+            bounds = GPUBounds(left = 0f, top = 0f, right = 64f, bottom = 48f),
+            childCommandIds = listOf("draw-rect"),
+            parentScopeId = "root",
+            restoreBlendMode = "multiply",
+            blend = GPUBlendFacts(
+                mode = GPUBlendMode.MULTIPLY,
+                sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = drawLayerFirstRouteCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val packet = plan.pass.drawPackets.single()
+        val blend = assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(packet.blendPlan)
+        assertEquals(GPUBlendMode.MULTIPLY, blend.mode)
+        assertEquals("multiply@v1", blend.formulaId)
+        assertEquals(
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            blend.destinationReadRequirement,
+        )
+
+        // The composite's restore blend is recorded as one TextureCopy snapshot consumed by the
+        // shader-with-destination composite packet; the frame planner must schedule it Ready.
+        val render = GPUTask.Render(
+            taskId = GPUTaskID("task.render.60"),
+            recordingId = RECORDING_ID,
+            phase = GPUTaskPhase.Render,
+            target = SCENE_TARGET,
+            loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            provisionalSegmentKey = plan.pass.provisionalSegmentKey,
+            drawPackets = listOf(packet),
+            batchEligibilityByPacketId = plan.pass.batchEligibilityByPacketId,
+        )
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(group(0, "draw.60", sourceIntermediate = null)),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        consumers = listOf(
+                            GPUDestinationSnapshotConsumerRef(
+                                groupingCommandId = "draw.60",
+                                renderTaskId = render.taskId,
+                                packetId = packet.packetId,
+                                commandId = GPUDrawCommandID(60),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val framePlan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+        assertFalse(framePlan.atomicallyRefused, framePlan.diagnostics.joinToString { it.code.value })
+        assertEquals(
+            listOf("copy", "render:60:load"),
+            framePlan.steps.map { it.destinationScheduleLabel() },
+        )
+        assertEquals(routeDecision.route.consumerKind, "composite-layer.draw_layer")
+    }
+
     @Test
     fun `MSAA render tasks require one exact typed continuation proof before linearization`() {
         val samplePlan = GPUSamplePlan.MultisampleFrame(4)
@@ -1723,6 +1810,26 @@ class GPUFramePlannerDestinationContractTest {
                 implementationVersion = implementationVersion,
                 available = true,
             ),
+        )
+
+    private fun drawLayerFirstRouteCapabilities(): GPUCapabilities =
+        GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "test-gpu",
+                implementationName = "unit",
+                adapterName = "fixture-adapter",
+                deviceName = "fixture-device",
+            ),
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = "first_slice.draw_layer.prepared",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "draw-layer-fixture",
+                ),
+            ),
+            snapshotId = "draw-layer-dst-read-test",
         )
 
     private fun frameCapabilitySeal(

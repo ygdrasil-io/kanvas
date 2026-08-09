@@ -42,7 +42,6 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
@@ -1215,8 +1214,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             else -> null
         }
@@ -1415,7 +1412,13 @@ class GPUFirstRoutePlanner(
             backdropRequired -> "unsupported.layer.backdrop_filter"
             initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
             sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
-            !restoreBlendMode.equals("srcOver", ignoreCase = true) -> "unsupported.layer.restore_blend"
+            // Non-srcOver restore blends whose canonical plan is a shader-with-destination read
+            // are admitted: the prepared composite lane plans the restore composite with a
+            // destination snapshot plus the shader destination formula (Task 3). Everything else
+            // stays refused until a formula/composite materialization exists.
+            !restoreBlendMode.equals("srcOver", ignoreCase = true) &&
+                blend.canonicalPlan(layer.target.colorFormat) !is GPUBlendPlan.ShaderBlendWithDstRead ->
+                "unsupported.layer.restore_blend"
             cpuFallbackRequested -> "unsupported.layer.cpu_fallback_forbidden"
             preserveLCDText -> "unsupported.layer.preserve_lcd_text"
             f16Requested -> "unsupported.layer.f16_unavailable"
@@ -1607,8 +1610,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
@@ -1642,8 +1643,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
@@ -1718,8 +1717,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstPreparedPathFillCapabilityName) &&
                 (maskFilter != null || !capabilities.hasFact(firstStencilCoverCapabilityName)) ->
@@ -1952,8 +1949,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !filterBounds.finite -> "unsupported.filter.bounds_unbounded"
             filterBounds.width <= 0 || filterBounds.height <= 0 -> "unsupported.filter.bounds_invalid"
@@ -2363,8 +2358,6 @@ private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): Strin
     val plan = canonicalPlan(targetFormatClass)
     return when {
         plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
-        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
-            "unsupported.destination_read.required"
         else -> null
     }
 }

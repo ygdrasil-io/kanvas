@@ -8,6 +8,7 @@ import java.nio.ByteOrder
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.validateTextureRequest
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -15,12 +16,19 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadMember
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroup
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
@@ -111,6 +119,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanningResult
@@ -2530,9 +2539,27 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 targetFormat = request.targetFormat,
             )
         }
+        // Prepared destination-read shader blends (scalar SRC, advanced modes) reuse the
+        // GPU-owned snapshot machinery: one TextureCopy snapshot of the scene target per
+        // destination-reading packet, consumed by that packet's shader-with-destination
+        // formula render. The grouping plans by command/blend only — it is family-agnostic.
+        val destinationReadPlans = try {
+            buildCorePrimitiveDestinationSnapshotPlans(
+                request = request,
+                packets = basePackets,
+                limits = limits,
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.recording.core_primitive_destination_snapshot",
+                "Prepared core-primitive destination-snapshot byte accounting overflowed.",
+            )
+        }
+        val destinationReadPlansByCommandId = destinationReadPlans.associateBy { it.packet.commandIdValue }
         val preparations = mutableListOf(
             corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
         )
+        destinationReadPlans.forEach { plan -> preparations += plan.preparation }
         if (geometryVertex != null && geometryIndex != null) {
             preparations += corePrimitiveGeometryBufferPreparation(
                 geometryVertex,
@@ -2735,6 +2762,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         allocations += clipTopologies.flatMap(GPUCoreClipArtifactTopology::allocations)
+        allocations += destinationReadPlans.map(GPUCorePrimitiveDestinationSnapshotPlan::allocation)
         if (readbackPlan != null) {
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.readback",
@@ -2835,8 +2863,21 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             } else {
                 emptyList()
             }
+            val destinationSnapshotUses = if (basePacket.commandIdValue in destinationReadPlansByCommandId) {
+                listOf(
+                    GPUFrameResourceUse(
+                        destinationReadPlansByCommandId.getValue(basePacket.commandIdValue).snapshot,
+                        GPUFrameResourceRole.DestinationSnapshot,
+                        GPUFrameResourceUsage.TextureBinding,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
             return baseRender.resourceUses + geometryUses + uniformUses +
-                pathDepthStencilUses + listOfNotNull(topology?.consumerResourceUse)
+                pathDepthStencilUses + destinationSnapshotUses + listOfNotNull(topology?.consumerResourceUse)
         }
 
         fun consumerDepthStencilLoadStore(
@@ -3289,6 +3330,102 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 else -> dependencies += dependency(prepareId, consumer.taskId, dependencies.size + index)
             }
             previousConsumer = consumer
+        }
+        val destinationReadTask = if (destinationReadPlans.isEmpty()) {
+            null
+        } else {
+            val renderByPacketId = preparedRenders
+                .flatMap { render -> render.drawPackets.map { packet -> packet.packetId to render } }
+                .toMap()
+            GPUTask.DestinationSnapshots(
+                taskId = GPUTaskID(
+                    "task.core-primitive.destination-snapshots.${request.baseTaskList.frameId.value}",
+                ),
+                recordingId = preparedRenders.first().recordingId,
+                phase = GPUTaskPhase.Copy,
+                payload = GPUDestinationSnapshotTaskPayload(
+                    grouping = GPUDestinationSnapshotGroupingResult(
+                        groups = destinationReadPlans.map { plan ->
+                            val render = renderByPacketId.getValue(plan.packet.packetId)
+                            GPUDestinationSnapshotGroup(
+                                key = GPUDestinationSnapshotGroupKey(
+                                    target = GPUTargetIdentity(request.target.value),
+                                    targetGeneration = plan.packet.resourceGeneration,
+                                    deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration,
+                                    format = request.targetFormat,
+                                    colorInterpretation = corePrimitiveDestinationSnapshotColorInterpretation(
+                                        request.targetFormat,
+                                    ),
+                                    sampleContinuation = render.sampleContinuationKey,
+                                    sourceIntermediate = null,
+                                ),
+                                logicalBounds = request.targetBounds,
+                                members = listOf(
+                                    GPUDestinationReadMember(
+                                        commandId = plan.packet.commandIdValue.toString(),
+                                        accessIndex = plan.groupIndex,
+                                        logicalBounds = request.targetBounds,
+                                    ),
+                                ),
+                                copiedBytes = plan.copiedBytes,
+                                decisionDump = listOf(
+                                    "core-primitive:destination-snapshot " +
+                                        "packet=${plan.packet.packetId.value}",
+                                ),
+                            )
+                        },
+                        materializations = destinationReadPlans.map { plan ->
+                            GPUDestinationSnapshotMaterialization.TextureCopy(
+                                groupIndex = plan.groupIndex,
+                                logicalBounds = request.targetBounds,
+                            )
+                        },
+                        totalCopiedBytes = destinationReadPlans.fold(0L) { total, plan ->
+                            Math.addExact(total, plan.copiedBytes)
+                        },
+                        refusals = emptyList(),
+                        decisionDump = listOf(
+                            "core-primitive:destination-copy-then-formula",
+                        ),
+                    ),
+                    operations = destinationReadPlans.map { plan ->
+                        val render = renderByPacketId.getValue(plan.packet.packetId)
+                        GPUDestinationSnapshotOperation.TextureCopy(
+                            groupIndex = plan.groupIndex,
+                            source = request.target,
+                            snapshot = plan.snapshot,
+                            logicalBounds = request.targetBounds,
+                            copyLayout = GPUTextureCopyLayout(
+                                bytesPerRow = plan.paddedBytesPerRow,
+                                rowsPerImage = request.targetBounds.height,
+                            ),
+                            consumers = listOf(
+                                GPUDestinationSnapshotConsumerRef(
+                                    groupingCommandId = plan.packet.commandIdValue.toString(),
+                                    renderTaskId = render.taskId,
+                                    packetId = plan.packet.packetId,
+                                    commandId = GPUDrawCommandID(plan.packet.commandIdValue),
+                                ),
+                            ),
+                        )
+                    },
+                ),
+            )
+        }
+        destinationReadTask?.let { destination ->
+            tasks += destination
+            dependencies += dependency(prepareId, destination.taskId, dependencies.size)
+            destination.payload.operations
+                .flatMap(GPUDestinationSnapshotOperation::consumers)
+                .map(GPUDestinationSnapshotConsumerRef::renderTaskId)
+                .distinct()
+                .forEach { renderTaskId ->
+                    dependencies += dependency(
+                        destination.taskId,
+                        renderTaskId,
+                        dependencies.size,
+                    )
+                }
         }
         if (readbackRequest != null && staging != null) {
             val readbackId = GPUTaskID("task.core-primitive.readback.${request.baseTaskList.frameId.value}")
@@ -4019,5 +4156,103 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             GPUDiagnosticSeverity.Error,
             message,
         ),
+    )
+}
+
+/** One prepared core-primitive destination snapshot: texture, byte accounting, and resource plans. */
+private data class GPUCorePrimitiveDestinationSnapshotPlan(
+    val groupIndex: Int,
+    val packet: GPUDrawPacket,
+    val snapshot: GPUFrameTextureRef,
+    val copiedBytes: Long,
+    val paddedBytesPerRow: Long,
+    val preparation: GPUResourcePreparationRequest,
+    val allocation: GPUFrameMemoryAllocation,
+)
+
+/**
+ * Plans one GPU-owned TextureCopy snapshot per destination-reading core packet.
+ *
+ * The snapshot texture captures the scene target before the shader-with-destination formula
+ * render consumes it; the grouping is planned by command and blend only (family-agnostic), so
+ * the same [GPUDestinationSnapshotOperation.TextureCopy] machinery the ColorGlyph lane uses
+ * serves the core-primitive lane unchanged.
+ */
+private fun buildCorePrimitiveDestinationSnapshotPlans(
+    request: GPUCorePrimitivePreparedFrameRequest,
+    packets: List<GPUDrawPacket>,
+    limits: GPULimits,
+): List<GPUCorePrimitiveDestinationSnapshotPlan> {
+    val logicalBytesPerRow = Math.multiplyExact(request.targetBounds.width.toLong(), 4L)
+    val paddedBytesPerRow = corePrimitiveAlignUpPreparedText(
+        logicalBytesPerRow,
+        limits.copyBytesPerRowAlignment,
+    )
+    val copiedBytes = Math.multiplyExact(
+        paddedBytesPerRow,
+        request.targetBounds.height.toLong(),
+    )
+    val textureBytes = Math.multiplyExact(
+        logicalBytesPerRow,
+        request.targetBounds.height.toLong(),
+    )
+    return packets.mapNotNull { packet ->
+        if (packet.blendPlan?.destinationReadRequirement !=
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        ) {
+            return@mapNotNull null
+        }
+        packet
+    }.mapIndexed { index, packet ->
+        val snapshot = GPUFrameTextureRef(
+            "texture.core-primitive.destination-snapshot." +
+                "${request.baseTaskList.frameId.value}.$index",
+        )
+        GPUCorePrimitiveDestinationSnapshotPlan(
+            groupIndex = index,
+            packet = packet,
+            snapshot = snapshot,
+            copiedBytes = copiedBytes,
+            paddedBytesPerRow = paddedBytesPerRow,
+            preparation = GPUResourcePreparationRequest(
+                resource = snapshot,
+                descriptor = GPUFrameTextureDescriptor(
+                    logicalBounds = request.targetBounds,
+                    format = request.targetFormat,
+                    sampleCount = 1,
+                ),
+                role = GPUFrameResourceRole.DestinationSnapshot,
+                usages = setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = textureBytes,
+                diagnosticLabel = "core-primitive.destination-snapshot.${packet.packetId.value}",
+            ),
+            allocation = GPUFrameMemoryAllocation(
+                "core-primitive.destination-snapshot.${packet.packetId.value}",
+                GPUFrameMemoryCategory.DestinationSnapshot,
+                textureBytes,
+                GPUFrameMemoryResourceKind.Texture2D,
+                request.targetBounds,
+            ),
+        )
+    }
+}
+
+private fun corePrimitiveAlignUpPreparedText(value: Long, alignment: Long): Long {
+    val remainder = value % alignment
+    return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
+}
+
+private fun corePrimitiveDestinationSnapshotColorInterpretation(
+    format: GPUColorFormat,
+): GPUColorInterpretation = when (format) {
+    GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    else -> throw IllegalArgumentException(
+        "Prepared core-primitive destination snapshots require RGBA8Unorm, RGBA8UnormSrgb, or BGRA8Unorm.",
     )
 }

@@ -498,6 +498,42 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
+    fun `destination copy semantic shape refusal on core primitives falls back before prepared entry`() {
+        val refusal = diagnostic("unsupported.native-frame-payload.destination-copy-semantic-shape")
+        val session = FakeSession(submissionFactory = { readbackId ->
+            val attempt = GPUFrameAttemptID("attempt-dst-copy-fallback")
+            GPUPreparedSurfaceSubmission(
+                attempt,
+                GPUPreparedSurfaceImmediateState.Refused(refusal),
+                CompletableFuture.completedFuture(
+                    GPUPreparedSurfaceCompletion(
+                        attempt,
+                        GPUFrameStructuralOutcome.Refused,
+                        refusal,
+                        GPUPreparedSurfaceOutputKind.Absent,
+                        null,
+                        null,
+                    ),
+                ),
+            )
+        })
+        val backend = FakeBackend(capabilities(), session)
+
+        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+            GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceBackendPortFactory { backend },
+            ).execute(request()),
+        )
+
+        assertEquals(
+            "unsupported.native-frame-payload.destination-copy-semantic-shape",
+            refused.diagnostic.code.value,
+        )
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.closeCalls)
+    }
+
+    @Test
     fun `failed completion without diagnostic and successful completion without output are canonical terminals`() {
         val missingDiagnostic = FakeSession(submissionFactory = { readbackId ->
             val attempt = GPUFrameAttemptID("attempt-missing-diagnostic")

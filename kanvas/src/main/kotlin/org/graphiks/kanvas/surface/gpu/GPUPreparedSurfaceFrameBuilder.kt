@@ -497,17 +497,20 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
         .flatMap { task -> task.payload.operations }
         .map { operation ->
             val copy = operation as? GPUDestinationSnapshotOperation.TextureCopy
-                ?: error("Prepared ColorGlyph destination evidence requires a texture copy")
+                ?: error("Prepared destination evidence requires a texture copy")
             val consumer = copy.consumers.single()
             val commandId = consumer.commandId.value
-            require(semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph)
+            require(
+                semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
+                    semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive,
+            )
             val render = rendersByTaskId.getValue(consumer.renderTaskId)
             val packet = render.drawPackets.single { candidate ->
                 candidate.packetId == consumer.packetId &&
                     candidate.commandIdValue == commandId
             }
             val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
-                ?: error("Prepared ColorGlyph destination evidence requires shader blending")
+                ?: error("Prepared destination evidence requires shader blending")
             GPUPreparedSurfaceDestinationReadEvidence(
                 commandId = commandId,
                 sourceLabel = packet.vertexSourceLabel,

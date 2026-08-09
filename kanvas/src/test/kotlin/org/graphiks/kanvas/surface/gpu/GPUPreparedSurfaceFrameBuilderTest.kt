@@ -657,8 +657,6 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val cases = listOf(
             request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))) to
                 "unsupported.core_primitive.material.non_solid",
-            request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))) to
-                "unsupported.destination_read.required",
             // The CLEAR fixture rect overrides the hard rect() paint with Paint.fill(...), whose
             // antiAlias defaults to true, so this frame mixes a hard uniform32 rect with an
             // analytic-shape uniform80 AA rect. The refusal is the layout-mixing gate, NOT the
@@ -741,6 +739,48 @@ class GPUPreparedSurfaceFrameBuilderTest {
             .flatMap(GPUTask.Render::drawPackets)
             .mapNotNull { (it.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode }
         assertTrue(GPUBlendMode.SRC in srcBlends)
+    }
+
+    @Test
+    fun `scalar src rect builds ready with fixed function src packet and no destination snapshot`() {
+        // Paint.fill defaults antiAlias=true, so this is the scalar-coverage SRC rect. The
+        // recorded packet carries the full-coverage analysis plan (fixed-function SRC one-zero):
+        // SRC needs no destination read at all. The destination-read admission on core
+        // primitives is pinned by the MULTIPLY test below.
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))),
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
+        )
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val blend = assertIs<GPUBlendPlan.FixedFunctionBlend>(packets.single().blendPlan)
+        assertEquals(GPUBlendMode.SRC, blend.mode)
+    }
+
+    @Test
+    fun `multiply rect builds ready with destination snapshot and shader with destination blend`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.MULTIPLY)))),
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
+        )
+        val snapshotTasks = ready.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+        assertEquals(1, snapshotTasks.size)
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val blend = packets.mapNotNull { it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead }.single()
+        assertEquals("multiply", blend.mode.gpuLabel)
+        assertEquals("multiply@v1", blend.formulaId)
+        assertEquals(1, ready.destinationReadEvidence.size)
+        assertEquals(listOf("multiply"), ready.destinationReadEvidence.map { it.modeLabel })
     }
 
     @Test
