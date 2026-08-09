@@ -6,6 +6,7 @@ import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
 import io.ygdrasil.webgpu.BufferBinding
+import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUCommandBuffer
@@ -70,11 +71,16 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerGeometrySnapshot
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
@@ -536,7 +542,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val originalRoutes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
             scope.corePrimitiveDirectNativeRouteSeal,
         )
-        val originalPass = requireNotNull(originalRoutes.preparedPassSeal)
+        val originalPass = assertIs<GPUCorePrimitiveDirectPreparedPassSeal>(
+            requireNotNull(originalRoutes.preparedPassSeal),
+        )
         val analyticPass = GPUCorePrimitiveDirectPreparedPassSeal(
             structuralPipelineKey = originalPass.structuralPipelineKey.copy(
                 shader = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -770,6 +778,207 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             readback.destination.ownership,
         )
 
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `single sample direct pass with two structural keys binds each pipeline per packet mid pass`() {
+        val fixture = fixture(useRealPreflight = true)
+        val scope = fixture.encoderPlan.scopes.single()
+        val originalRoutes = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+        check(originalRoutes.orderedUnits.size == 2)
+        val firstUnit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.Direct>(
+            originalRoutes.orderedUnits[0],
+        )
+        val secondUnit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.Direct>(
+            originalRoutes.orderedUnits[1],
+        )
+        val srcOverKey = firstUnit.structuralPipelineKey
+        val clearKey = srcOverKey.copy(blend = fixedClearBlend())
+        val slab = assertIs<GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab>(
+            originalRoutes.uniformAuthority,
+        ).seal
+        setPrivateField(
+            scope,
+            "corePrimitiveNativeScopeRouteSeal",
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                listOf(
+                    firstUnit,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct(
+                        secondUnit.commandIdValue,
+                        secondUnit.packetId,
+                        secondUnit.route,
+                        clearKey,
+                    ),
+                ),
+                slab,
+            ),
+        )
+        val secondPipelineKey = GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.RenderPipeline,
+            GPUPreparedNativeOperandKind.RenderPipeline,
+            gpuPreparedNativeBindingKey("core.${secondUnit.commandIdValue}.RenderPipeline.1"),
+            GPUPreparedNativeOperandOwnership.Borrowed,
+        )
+        setPrivateField(
+            scope,
+            "nativeOperandKeys",
+            scope.nativeOperandKeys.flatMapIndexed { index, key ->
+                if (index == 1) {
+                    listOf(key, secondPipelineKey)
+                } else {
+                    listOf(key)
+                }
+            },
+        )
+
+        val materialized = fixture.materializeCore()
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertEquals(
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetVertexBuffer::class,
+                GPUPreparedNativeRenderCommand.SetIndexBuffer::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.SetScissor::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.SetScissor::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+            ),
+            render.commands.map { it::class },
+        )
+        val pipelines = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+            .map { it.pipeline.pipeline }
+        assertEquals(2, distinctIdentityCount(pipelines))
+        val bindGroups = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .map { it.bindGroup.bindGroup }
+        assertEquals(1, distinctIdentityCount(bindGroups))
+        assertEquals(
+            listOf(0L, 256L),
+            render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map { it.dynamicOffsets.single() },
+        )
+        assertEquals(2, fixture.native.renderPipelineDescriptors.size)
+        val srcOverTarget = assertIs<io.ygdrasil.webgpu.ColorTargetState>(
+            requireNotNull(fixture.native.renderPipelineDescriptors[0].fragment).targets.single(),
+        )
+        val clearTarget = assertIs<io.ygdrasil.webgpu.ColorTargetState>(
+            requireNotNull(fixture.native.renderPipelineDescriptors[1].fragment).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.One, requireNotNull(srcOverTarget.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.dstFactor)
+        assertEquals(2, fixture.cache.counters().invariantCreations)
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `4x direct pass carrying two structural keys materializes both pipelines mid pass`() {
+        val fixture = fixture(sampleCount = 4, useRealPreflight = true)
+        val renderStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val packets = renderStep.drawPackets
+        check(packets.size == 2)
+        val scope = fixture.encoderPlan.scopes.single()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val srcOverAuthority = requireNotNull(packets[0].corePrimitivePreparedAuthority)
+        val slab = requireNotNull(srcOverAuthority.uniformSlabSeal)
+        val srcOverKey = srcOverAuthority.structuralPipelineKey
+        val clearKey = srcOverKey.copy(blend = fixedClearBlend())
+        val clearPipelineKey = clearKey.stableRenderPipelineKey(
+            org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+        )
+        setPrivateField(packets[1], "renderPipelineKey", clearPipelineKey.value)
+        setPrivateField(
+            packets[1],
+            "corePrimitivePreparedAuthority",
+            srcOverAuthority.copy(
+                structuralPipelineKey = clearKey,
+                renderPipelineKey = clearPipelineKey,
+            ),
+        )
+        val multiKeySeal = GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+            listOf(srcOverKey, clearKey),
+            slab,
+        )
+        setPrivateField(
+            scope,
+            "corePrimitiveDirectNativeRouteSeal",
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                routes.routesByPacketId,
+                multiKeySeal,
+            ),
+        )
+        val secondPipelineKey = GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.RenderPipeline,
+            GPUPreparedNativeOperandKind.RenderPipeline,
+            gpuPreparedNativeBindingKey("core.${packets[1].commandIdValue}.RenderPipeline.1"),
+            GPUPreparedNativeOperandOwnership.Borrowed,
+        )
+        setPrivateField(
+            scope,
+            "nativeOperandKeys",
+            scope.nativeOperandKeys.flatMapIndexed { index, key ->
+                if (index == 2) {
+                    listOf(key, secondPipelineKey)
+                } else {
+                    listOf(key)
+                }
+            },
+        )
+
+        val materialized = fixture.materializeCore()
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val pipelineCommands = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+        assertEquals(2, pipelineCommands.size)
+        assertEquals(2, distinctIdentityCount(pipelineCommands.map { it.pipeline.pipeline }))
+        assertEquals(
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetVertexBuffer::class,
+                GPUPreparedNativeRenderCommand.SetIndexBuffer::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.SetScissor::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.SetScissor::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+            ),
+            render.commands.map { it::class },
+        )
+        val bindGroups = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .map { it.bindGroup.bindGroup }
+        assertEquals(1, distinctIdentityCount(bindGroups))
+        assertEquals(
+            listOf(0L, 256L),
+            render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map { it.dynamicOffsets.single() },
+        )
+        assertEquals(2, fixture.native.renderPipelineDescriptors.size)
+        assertEquals(4u, fixture.native.renderPipelineDescriptors.map {
+            requireNotNull(it.multisample).count
+        }.distinct().single())
+        val clearTarget = assertIs<io.ygdrasil.webgpu.ColorTargetState>(
+            requireNotNull(fixture.native.renderPipelineDescriptors[1].fragment).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.dstFactor)
         assertTrue(materialized.draft.disposeBeforeRegistration())
         fixture.close()
     }
@@ -2506,7 +2715,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val originalRoutes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
             originalScope.corePrimitiveDirectNativeRouteSeal,
         )
-        val originalPass = requireNotNull(originalRoutes.preparedPassSeal)
+        val originalPass = assertIs<GPUCorePrimitiveDirectPreparedPassSeal>(
+            requireNotNull(originalRoutes.preparedPassSeal),
+        )
         val corruptedSeals = originalPass.analyticIntersectionUniformSeals.map { seal ->
             if (seal === originalSeal) corruptedSeal else seal
         }
@@ -4747,6 +4958,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
         paintOrder = order,
         source = GPUCommandSource("unit-test", "core-proxy", GPUFrameProvenance.GmContent),
+    )
+
+    private fun fixedClearBlend() = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+        mode = GPUBlendMode.CLEAR,
+        sourceCoverage = GPUSourceCoverageEncoding.None,
+        state = GPUFixedFunctionBlendState(
+            stateId = "test-clear",
+            color = GPUFixedFunctionBlendComponent("zero", "zero", "add"),
+            alpha = GPUFixedFunctionBlendComponent("zero", "zero", "add"),
+            writeMask = "rgba",
+        ),
     )
 
     private fun capabilities(sampleCount: Int = 1) = GPUCapabilities(

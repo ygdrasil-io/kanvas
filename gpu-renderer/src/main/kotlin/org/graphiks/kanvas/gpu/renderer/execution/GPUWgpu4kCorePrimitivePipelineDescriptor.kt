@@ -223,6 +223,42 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
     )
 }
 
+/**
+ * Per-key bind-group component identity (the exact bind-group layout authority) for a structural
+ * key. Destination-reading shading keys project onto the dst-read component whose fragment layout
+ * appends the ordered destination texture and sampler slots; every other admitted key projects onto
+ * the same component the pipeline cache selects for its closed program. Refused keys carry no
+ * component identity.
+ */
+internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComponentIdentityOrNull():
+    GPUWgpu4kCorePrimitiveComponentIdentity? {
+    if (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+        blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+    ) {
+        return PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY
+    }
+    return when (
+        val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(this)
+    ) {
+        is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> when {
+            mapped.identity.program.isAnalyticShape() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+            mapped.identity.program.isClipStencilProducer() ->
+                PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
+            mapped.identity.program.isCoverageMaskProducer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+            mapped.identity.program.isCoverageMaskConsumer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
+            mapped.identity.program.isAnalyticIntersection4() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+            mapped.identity.program.isAnalyticClip() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+            else -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+        }
+        is GPUWgpu4kCorePrimitivePipelineMapping.Refused -> null
+    }
+}
+
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? {
     if (sampleCount !in setOf(1, 4) ||

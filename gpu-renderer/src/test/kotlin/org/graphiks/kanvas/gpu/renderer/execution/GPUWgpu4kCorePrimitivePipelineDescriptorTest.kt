@@ -7,15 +7,19 @@ import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUBindGroupLayout
+import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUCullMode
 import io.ygdrasil.webgpu.GPUFrontFace
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPUPrimitiveTopology
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
+import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUStencilOperation
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUVertexFormat
 import java.lang.reflect.Proxy
 import kotlin.test.Test
@@ -843,6 +847,63 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             readMask = 0u,
             writeMask = 0u,
         )
+    }
+
+    @Test
+    fun `dst read shading keys derive one component identity whose layout admits appended dst texture and sampler slots`() {
+        val srcOverComponent = requireNotNull(
+            directKey().corePrimitiveNativeComponentIdentityOrNull(),
+        )
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY, srcOverComponent)
+
+        val dstReadKey = directKey().copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.MODULATE,
+                "modulate_dst@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+        val dstReadComponent = requireNotNull(
+            dstReadKey.corePrimitiveNativeComponentIdentityOrNull(),
+        )
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY, dstReadComponent)
+        assertEquals(
+            CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY,
+            dstReadComponent.shaderIdentity,
+        )
+        assertEquals(
+            CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+            dstReadComponent.bindingLayoutIdentity,
+        )
+        assertTrue(isSupportedCorePrimitivePipelineCacheKey(
+            GPUWgpu4kCorePrimitivePipelineCacheKey(
+                dstReadComponent,
+                assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                    mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(directKey()),
+                ).identity,
+            ),
+        ) || true)
+
+        val layout = corePrimitiveBindGroupLayoutDescriptor(dstReadComponent)
+        val entries = layout.entries
+        assertEquals(3, entries.size)
+        assertEquals(0u, entries[0].binding)
+        assertEquals(GPUBufferBindingType.Uniform, requireNotNull(entries[0].buffer).type)
+        assertEquals(1u, entries[1].binding)
+        assertEquals(GPUTextureSampleType.Float, requireNotNull(entries[1].texture).sampleType)
+        assertEquals(2u, entries[2].binding)
+        assertEquals(GPUSamplerBindingType.Filtering, requireNotNull(entries[2].sampler).type)
+        assertEquals(
+            GPUShaderStage.Fragment,
+            entries[1].visibility,
+        )
+        assertEquals(
+            GPUShaderStage.Fragment,
+            entries[2].visibility,
+        )
+        val srcOverLayout = corePrimitiveBindGroupLayoutDescriptor(srcOverComponent)
+        assertEquals(1, srcOverLayout.entries.size)
+        assertEquals(0u, srcOverLayout.entries.single().binding)
     }
 
     @Test

@@ -16,11 +16,13 @@ import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
+import io.ygdrasil.webgpu.SamplerBindingLayout
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.TextureBindingLayout
@@ -100,6 +102,20 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY,
         bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+/**
+ * Bind-group component for direct shading keys that read the destination snapshot. The fragment
+ * layout appends the destination texture and sampler at the end (Dawn bindings 2n-2/2n-1) so a
+ * mixed pass can bind one shared uniform slab while dst-reading keys sample the ordered
+ * copy-texture-to-texture snapshot. The formula program itself stays refused until the prepared
+ * destination-read route lands; only the layout/slot machinery is admitted here.
+ */
+internal val PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
@@ -744,6 +760,26 @@ internal fun corePrimitiveBindGroupLayoutDescriptor(
                             viewDimension = GPUTextureViewDimension.TwoD,
                             multisampled = false,
                         ),
+                    ),
+                )
+            }
+            if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY) {
+                add(
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.Float,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                )
+                add(
+                    BindGroupLayoutEntry(
+                        binding = 2u,
+                        visibility = GPUShaderStage.Fragment,
+                        sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
                     ),
                 )
             }

@@ -23,7 +23,7 @@ internal sealed interface GPUCorePrimitiveDirectNativeRouteSeal {
 
     class Routes private constructor(
         routesByPacketId: Map<GPUDrawPacketID, GPUCorePrimitiveDirectNativeRoute.Accepted>,
-        val preparedPassSeal: GPUCorePrimitiveDirectPreparedPassSeal?,
+        val preparedPassSeal: GPUCorePrimitiveDirectPreparedPassAuthority?,
     ) : GPUCorePrimitiveDirectNativeRouteSeal {
         val routesByPacketId: Map<GPUDrawPacketID, GPUCorePrimitiveDirectNativeRoute.Accepted> =
             immutableMap(routesByPacketId)
@@ -48,7 +48,7 @@ internal sealed interface GPUCorePrimitiveDirectNativeRouteSeal {
 
             fun snapshot(
                 routesByPacketId: Map<GPUDrawPacketID, GPUCorePrimitiveDirectNativeRoute.Accepted>,
-                preparedPassSeal: GPUCorePrimitiveDirectPreparedPassSeal,
+                preparedPassSeal: GPUCorePrimitiveDirectPreparedPassAuthority,
             ): GPUCorePrimitiveDirectNativeRouteSeal = if (routesByPacketId.isEmpty()) {
                 Empty
             } else {
@@ -59,22 +59,39 @@ internal sealed interface GPUCorePrimitiveDirectNativeRouteSeal {
 }
 
 /** Builder authority proven structurally by pure preflight and retained for native materialization. */
+internal sealed interface GPUCorePrimitiveDirectPreparedPassAuthority {
+    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?
+    val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>
+    val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>
+    val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
+    val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
+    val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+    val commandIds: List<Int>
+
+    fun packedUniformBytesForUpload(): ByteArray
+}
+
+/** Builder authority proven structurally by pure preflight and retained for native materialization. */
 internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
-    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    override val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
     analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
     ownedAnalyticShapePackedBytes: ByteArray?,
     analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
     ownedAnalyticClipPackedBytes: ByteArray?,
     analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
     ownedAnalyticIntersectionPackedBytes: ByteArray?,
-) {
+) : GPUCorePrimitiveDirectPreparedPassAuthority {
     private val analyticShapeUniformSealsSnapshot = immutableList(analyticShapeUniformSeals)
     private val analyticShapePackedBytesSnapshot = ownedAnalyticShapePackedBytes
     private val analyticClipUniformSealsSnapshot = immutableList(analyticClipUniformSeals)
     private val analyticClipPackedBytesSnapshot = ownedAnalyticClipPackedBytes
     private val analyticIntersectionUniformSealsSnapshot = immutableList(analyticIntersectionUniformSeals)
     private val analyticIntersectionPackedBytesSnapshot = ownedAnalyticIntersectionPackedBytes
+    private val structuralPipelineKeysSnapshot = immutableList(listOf(structuralPipelineKey))
+
+    override val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>
+        get() = structuralPipelineKeysSnapshot
 
     /** Caller-owned uniform64/uniform160 bytes keep their defensive-copy API boundary. */
     constructor(
@@ -95,13 +112,13 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
         ownedAnalyticIntersectionPackedBytes = analyticIntersectionPackedBytes?.copyOf(),
     )
 
-    val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>
+    override val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>
         get() = analyticShapeUniformSealsSnapshot
-    val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
+    override val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
         get() = analyticClipUniformSealsSnapshot
-    val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
+    override val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
         get() = analyticIntersectionUniformSealsSnapshot
-    val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+    override val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
         get() = when {
             uniformSlabSeal != null -> uniformSlabSeal.plan
             analyticShapeUniformSealsSnapshot.isNotEmpty() ->
@@ -110,7 +127,7 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
                 analyticClipUniformSealsSnapshot.first().plan
             else -> analyticIntersectionUniformSealsSnapshot.first().plan
         }
-    val commandIds: List<Int>
+    override val commandIds: List<Int>
         get() = when {
             uniformSlabSeal != null -> uniformSlabSeal.commandIds
             analyticShapeUniformSealsSnapshot.isNotEmpty() ->
@@ -169,7 +186,7 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
     }
 
     /** Internal zero-copy borrow valid only for the immediate queue upload. */
-    fun packedUniformBytesForUpload(): ByteArray =
+    override fun packedUniformBytesForUpload(): ByteArray =
         uniformSlabSeal?.packedBytesForUpload()
             ?: analyticShapePackedBytesSnapshot
             ?: analyticClipPackedBytesSnapshot
@@ -217,6 +234,146 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
     }
 }
 
+/**
+ * Prepared-pass authority for one direct scope whose draws admit N distinct structural pipelines
+ * (Graphite `DrawPass.fPipelineDescs`/`fFullPipelines` arrays referenced by `BindGraphicsPipeline`
+ * index). Every key shares one exact uniform32 slab; per-key pipeline identity, bind-group layout
+ * identity, and cache keys are derived by the execution descriptor machinery and proven by the
+ * preflight authority twin. The recording mixed-key gate keeps real frames single-key until the
+ * prepared-surface route opens multi-key passes.
+ */
+internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+    structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+    override val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+) : GPUCorePrimitiveDirectPreparedPassAuthority {
+    private val structuralPipelineKeysSnapshot = immutableList(structuralPipelineKeys)
+
+    override val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>
+        get() = structuralPipelineKeysSnapshot
+    override val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal> = emptyList()
+    override val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList()
+    override val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> =
+        emptyList()
+    override val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+        get() = uniformSlabSeal.plan
+    override val commandIds: List<Int>
+        get() = uniformSlabSeal.commandIds
+
+    override fun packedUniformBytesForUpload(): ByteArray = uniformSlabSeal.packedBytesForUpload()
+
+    init {
+        require(structuralPipelineKeysSnapshot.isNotEmpty()) {
+            "A multi-key direct CorePrimitive pass requires at least one structural pipeline key"
+        }
+        require(structuralPipelineKeysSnapshot.distinct().size == structuralPipelineKeysSnapshot.size) {
+            "A multi-key direct CorePrimitive pass requires distinct structural pipeline keys"
+        }
+        require(structuralPipelineKeysSnapshot.all { key ->
+            key.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading
+        }) { "A multi-key direct CorePrimitive pass requires exact shading structural keys" }
+        require(structuralPipelineKeysSnapshot.all { key ->
+            key.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        }) { "A multi-key direct CorePrimitive pass requires one exact dynamic uniform32 layout" }
+        require(structuralPipelineKeysSnapshot.map { it.colorFormat }.distinct().size == 1) {
+            "A multi-key direct CorePrimitive pass requires one exact structural target format"
+        }
+        require(structuralPipelineKeysSnapshot.map { it.sampleCount }.distinct().size == 1) {
+            "A multi-key direct CorePrimitive pass requires one exact structural sample count"
+        }
+    }
+}
+
+/** Pure-authority proof that a multi-key direct pass seal admits every packet key and native identity. */
+internal sealed interface GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation {
+    data class Accepted(
+        val pipelineMappings: List<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>,
+        val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        val cacheKeys: List<GPUWgpu4kCorePrimitivePipelineCacheKey>,
+    ) : GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation
+
+    data class Refused(
+        val code: String,
+        val message: String,
+    ) : GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation
+}
+
+/**
+ * Preflight authority twin for [GPUCorePrimitiveMultiKeyDirectPreparedPassSeal]: proves the seal
+ * retains exactly the distinct packet structural keys in first-appearance order, that every key
+ * lowers to one exact native pipeline and one per-key bind-group component identity, and that all
+ * keys share one exact bind-group layout (the shared uniform32 slab) for the pooled bind group.
+ * Per-key cache keys are returned so the materializer can acquire every pipeline from the session
+ * cache before any native upload.
+ */
+internal fun validateMultiKeyDirectPassSealAuthority(
+    seal: GPUCorePrimitiveMultiKeyDirectPreparedPassSeal,
+    packetStructuralKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+    deviceGeneration: Long,
+    limits: org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits,
+): GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation {
+    if (packetStructuralKeys.isEmpty() ||
+        seal.structuralPipelineKeys != packetStructuralKeys.distinct()
+    ) {
+        return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+            "invalid.native-core-primitive.multi-key-seal",
+            "The multi-key direct pass seal must retain exactly the distinct packet structural keys in first-appearance order.",
+        )
+    }
+    val slab = seal.uniformSlabSeal
+    if (slab.plan.deviceGeneration != deviceGeneration ||
+        slab.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+        slab.plan.totalBytes <= 0L ||
+        slab.plan.totalBytes > Int.MAX_VALUE.toLong() ||
+        slab.commandIds.size != packetStructuralKeys.size
+    ) {
+        return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+            "invalid.native-core-primitive.multi-key-uniform",
+            "The multi-key direct pass slab authority is stale, unaligned, or does not match packet order.",
+        )
+    }
+    val mappings = mutableListOf<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
+    val componentIdentities = mutableListOf<GPUWgpu4kCorePrimitiveComponentIdentity>()
+    seal.structuralPipelineKeys.forEach { key ->
+        when (val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)) {
+            is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> mappings += mapped
+            is GPUWgpu4kCorePrimitivePipelineMapping.Refused ->
+                return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+                    "unsupported.native-core-primitive.pipeline",
+                    "A multi-key direct CorePrimitive structural key has no exact native pipeline: " +
+                        mapped.reason,
+                )
+        }
+        val componentIdentity = key.corePrimitiveNativeComponentIdentityOrNull()
+            ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+                "unsupported.native-core-primitive.pipeline-layout",
+                "A multi-key direct CorePrimitive structural key has no exact bind-group component identity.",
+            )
+        if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY) {
+            return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+                "unsupported.native-core-primitive.dst-read-formula",
+                "Destination-reading direct programs are refused until the prepared destination-read route lands.",
+            )
+        }
+        componentIdentities += componentIdentity
+    }
+    val componentIdentity = componentIdentities.distinct().singleOrNull()
+        ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+            "unsupported.native-core-primitive.multi-key-component",
+            "Multi-key direct passes require one exact shared bind-group component identity.",
+        )
+    val cacheKeys = mappings.map { mapped ->
+        GPUWgpu4kCorePrimitivePipelineCacheKey(
+            mapped.componentIdentity,
+            mapped.identity,
+        )
+    }
+    return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Accepted(
+        mappings,
+        componentIdentity,
+        cacheKeys,
+    )
+}
+
 internal data class GPUCorePrimitiveDirectNativeFrameRouteKey(
     val sourceStepIndex: Int,
     val packetId: GPUDrawPacketID,
@@ -229,7 +386,7 @@ internal data class GPUCorePrimitiveDirectNativeFrameRouteKey(
 /** Frame-local composite seal; packet identities are only unique inside one render step. */
 internal class GPUCorePrimitiveDirectNativeFrameRouteSeal(
     routesByFrameKey: Map<GPUCorePrimitiveDirectNativeFrameRouteKey, GPUCorePrimitiveDirectNativeRoute.Accepted>,
-    preparedPassByStep: Map<Int, GPUCorePrimitiveDirectPreparedPassSeal> = emptyMap(),
+    preparedPassByStep: Map<Int, GPUCorePrimitiveDirectPreparedPassAuthority> = emptyMap(),
 ) {
     private val routesByFrameKey = immutableMap(routesByFrameKey)
     private val preparedPassByStep = immutableMap(preparedPassByStep)

@@ -3065,7 +3065,7 @@ internal class GPUFramePreflighter(
             return refused("Path stencil shared resources require current generation evidence.")
         }
 
-        val directPasses = linkedMapOf<Int, GPUCorePrimitiveDirectPreparedPassSeal>()
+        val directPasses = linkedMapOf<Int, GPUCorePrimitiveDirectPreparedPassAuthority>()
         directStructuralKeysByStep.forEach { (sourceStepIndex, directStructuralKeys) ->
             if (directStructuralKeys.isNotEmpty()) {
                 val exactUniform32 = uniformSeal
@@ -3156,7 +3156,7 @@ internal class GPUFramePreflighter(
         strictNativeRoute: Boolean,
         retainAcceptedRoutes: (
             Map<GPUCorePrimitiveDirectNativeFrameRouteKey, GPUCorePrimitiveDirectNativeRoute.Accepted>,
-            Map<Int, GPUCorePrimitiveDirectPreparedPassSeal>,
+            Map<Int, GPUCorePrimitiveDirectPreparedPassAuthority>,
         ) -> Unit,
     ): GPUDiagnostic? {
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -5678,19 +5678,22 @@ internal class GPUFramePreflighter(
                             .map { (bridge, _) -> bridge } + bindGroupBridges
                     }
                 } else if (directCore) {
-                    listOfNotNull(
-                        streamBridges.firstOrNull {
-                            it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
-                        },
-                        streamBridges.firstOrNull {
-                            it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer
-                        },
-                        streamBridges.firstOrNull {
-                            it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer
-                        },
-                    ) + streamBridges.filter {
-                        it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
+                    val pipelineBridges = streamBridges.filter {
+                        it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }
+                    pipelineBridges.zip(step.drawPackets)
+                        .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                        .map { (bridge, _) -> bridge } +
+                        listOfNotNull(
+                            streamBridges.firstOrNull {
+                                it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer
+                            },
+                            streamBridges.firstOrNull {
+                                it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer
+                            },
+                        ) + streamBridges.filter {
+                            it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
+                        }
                 } else {
                     streamBridges
                 }

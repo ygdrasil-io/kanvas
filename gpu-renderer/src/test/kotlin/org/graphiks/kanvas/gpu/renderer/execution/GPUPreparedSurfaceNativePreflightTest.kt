@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -11,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.artifacts.toPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -36,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
@@ -43,6 +46,13 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
@@ -63,6 +73,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameRenderBatch
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
@@ -92,11 +103,383 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUPreparedSurfaceNativePreflightTest {
+    @Test
+    fun `multi key direct pass seal authority proves per key pipelines and one shared bind group layout`() {
+        val generation = GPUDeviceGenerationID(23L)
+        val limits = GPULimits(
+            8192,
+            256,
+            256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        )
+        val srcOverKey = GPUCorePrimitiveRenderPipelineStructuralKey(
+            shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+            topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+            blend = srcOverStructuralBlend(),
+            clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        )
+        val clearKey = srcOverKey.copy(blend = clearStructuralBlend())
+        val plan = GPUUniformSlabPlan(
+            planHash = "multi-key-plan",
+            sourceLabel = "core-primitive-uniform-pass",
+            deviceGeneration = generation.value,
+            alignmentBytes = 256L,
+            totalBytes = 512L,
+            uploadBudgetBytes = 512L,
+            slots = listOf(
+                GPUUniformSlabSlot("draw-1", "payload-1", 32L, 0L, 256L),
+                GPUUniformSlabSlot("draw-2", "payload-2", 32L, 256L, 256L),
+            ),
+        )
+        val slab = GPUCorePrimitiveUniformSlabSeal(plan, listOf(1, 2), ByteArray(512))
+        val seal = GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+            listOf(srcOverKey, clearKey),
+            slab,
+        )
+
+        val accepted = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Accepted>(
+            validateMultiKeyDirectPassSealAuthority(
+                seal,
+                listOf(srcOverKey, clearKey),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals(listOf(srcOverKey, clearKey), seal.structuralPipelineKeys)
+        assertEquals(2, accepted.pipelineMappings.size)
+        assertEquals(2, accepted.cacheKeys.size)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY, accepted.componentIdentity)
+        assertEquals(
+            GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver,
+            accepted.pipelineMappings[0].identity.blendProgram,
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitiveBlendProgram.PremulClear,
+            accepted.pipelineMappings[1].identity.blendProgram,
+        )
+        assertNotEquals(accepted.cacheKeys[0], accepted.cacheKeys[1])
+    }
+
+    @Test
+    fun `multi key direct pass seal authority refuses stale slabs foreign keys and unmappable programs`() {
+        val generation = GPUDeviceGenerationID(23L)
+        val limits = GPULimits(
+            8192,
+            256,
+            256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        )
+        val srcOverKey = GPUCorePrimitiveRenderPipelineStructuralKey(
+            shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+            topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+            blend = srcOverStructuralBlend(),
+            clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        )
+        val clearKey = srcOverKey.copy(blend = clearStructuralBlend())
+        fun slab(deviceGeneration: Long = generation.value) = GPUCorePrimitiveUniformSlabSeal(
+            GPUUniformSlabPlan(
+                planHash = "multi-key-plan",
+                sourceLabel = "core-primitive-uniform-pass",
+                deviceGeneration = deviceGeneration,
+                alignmentBytes = 256L,
+                totalBytes = 512L,
+                uploadBudgetBytes = 512L,
+                slots = listOf(
+                    GPUUniformSlabSlot("draw-1", "payload-1", 32L, 0L, 256L),
+                    GPUUniformSlabSlot("draw-2", "payload-2", 32L, 256L, 256L),
+                ),
+            ),
+            listOf(1, 2),
+            ByteArray(512),
+        )
+        val stale = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
+            validateMultiKeyDirectPassSealAuthority(
+                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                    listOf(srcOverKey, clearKey),
+                    slab(deviceGeneration = generation.value + 1L),
+                ),
+                listOf(srcOverKey, clearKey),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals("invalid.native-core-primitive.multi-key-uniform", stale.code)
+        val foreignKeys = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
+            validateMultiKeyDirectPassSealAuthority(
+                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                    listOf(srcOverKey, clearKey),
+                    slab(),
+                ),
+                listOf(clearKey, srcOverKey),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals("invalid.native-core-primitive.multi-key-seal", foreignKeys.code)
+        val unmappable = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
+            validateMultiKeyDirectPassSealAuthority(
+                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                    listOf(
+                        srcOverKey,
+                        srcOverKey.copy(
+                            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Unsupported(
+                                GPUBlendMode.CLEAR,
+                            ),
+                        ),
+                    ),
+                    slab(),
+                ),
+                listOf(
+                    srcOverKey,
+                    srcOverKey.copy(
+                        blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Unsupported(
+                            GPUBlendMode.CLEAR,
+                        ),
+                    ),
+                ),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals("unsupported.native-core-primitive.pipeline", unmappable.code)
+    }
+
+    @Test
+    fun `direct scope authority matches per packet pipeline bridges for a mixed blend stream`() {
+        val input = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.CoreImageText)
+        val coreRender = input.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single { render ->
+                render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                }
+            }
+        val sourceStepIndex = input.framePlan.steps.indexOf(coreRender)
+        val coreScope = input.encoderPlan.scopes.single { scope ->
+            scope.sourceStepIndex == sourceStepIndex
+        }
+        assertTrue(
+            GPUPreparedSurfaceEncoderScopeAuthority.matches(
+                input.framePlan,
+                coreRender,
+                coreScope,
+                input.generationSeal,
+            ),
+        )
+        val originalPacket = coreRender.drawPackets.single()
+        val srcOverKey = requireNotNull(originalPacket.corePrimitivePreparedAuthority)
+            .structuralPipelineKey
+        val clearKey = srcOverKey.copy(blend = clearStructuralBlend())
+        val clearPipelineKey = clearKey.stableRenderPipelineKey(
+            org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+        )
+        val firstPacket = originalPacket
+        val secondPacket = originalPacket.withPreparedSurfaceTestPipelineKey(
+            packetId = GPUDrawPacketID("packet.prepared-surface.core.2"),
+            commandIdValue = 99,
+            renderPipelineKey = clearPipelineKey,
+        )
+        val packets = listOf(firstPacket, secondPacket)
+        fun operand(
+            kind: org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind,
+            label: String,
+        ) = org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference(
+            label,
+            kind,
+            "descriptor.$label",
+            input.generationSeal.deviceGeneration.value,
+            "core.prepared-surface",
+            listOf("render"),
+            "frame-local",
+        )
+        val bridges = packets.flatMap { packet ->
+            listOf(
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                    packet.packetId,
+                    "setRenderPipeline",
+                    operand(
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline,
+                        "pipeline.${packet.commandIdValue}",
+                    ),
+                ),
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                    packet.packetId,
+                    "setBindGroup",
+                    operand(
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup,
+                        "bind.${packet.commandIdValue}",
+                    ),
+                ),
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                    packet.packetId,
+                    "setVertexBuffer",
+                    operand(
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer,
+                        "vertex.${packet.commandIdValue}",
+                    ),
+                ),
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                    packet.packetId,
+                    "setIndexBuffer",
+                    operand(
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer,
+                        "index.${packet.commandIdValue}",
+                    ),
+                ),
+            )
+        }
+        val batch = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch(
+            batchId = coreRender.batches.single().batchId,
+            packets = packets,
+            kind = coreRender.batches.single().kind,
+            targetStateHash = packets.first().targetStateHash,
+            queueGuard = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard(
+                emptyList(),
+                emptyList(),
+            ),
+        )
+        val passPlan = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan(
+            streamId = "frame.${input.framePlan.frameId.value}.step.$sourceStepIndex",
+            passId = "frame.${input.framePlan.frameId.value}.render.$sourceStepIndex",
+            batches = listOf(batch),
+            cuts = emptyList(),
+            diagnostics = emptyList(),
+            inputPacketCount = packets.size,
+        )
+        val stream = GPUPassCommandStream.fromBatchPlan(
+            streamId = "frame.${input.framePlan.frameId.value}.commands.$sourceStepIndex",
+            batchPlan = passPlan,
+            loadStoreLabel = "${coreRender.loadStore.loadOp}:${coreRender.loadStore.storePlan.name}:" +
+                (coreRender.loadStore.clearColorLabel ?: "none"),
+            operandBridge = bridges,
+        )
+        fun key(
+            role: GPUPreparedNativeOperandRole,
+            kind: GPUPreparedNativeOperandKind,
+            binding: String,
+        ) = GPUPreparedNativeOperandKey(
+            role,
+            kind,
+            gpuPreparedNativeBindingKey(binding),
+            GPUPreparedNativeOperandOwnership.Borrowed,
+        )
+        val expectedKeys = buildList {
+            add(
+                key(
+                    GPUPreparedNativeOperandRole.RenderColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    coreScope.resourceGenerationLabels.first(),
+                ),
+            )
+            packets.forEach { packet ->
+                add(
+                    key(
+                        GPUPreparedNativeOperandRole.RenderPipeline,
+                        GPUPreparedNativeOperandKind.RenderPipeline,
+                        "setRenderPipeline:pipeline.${packet.commandIdValue}",
+                    ),
+                )
+            }
+            add(
+                key(
+                    GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    "setVertexBuffer:vertex.${firstPacket.commandIdValue}",
+                ),
+            )
+            add(
+                key(
+                    GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    "setIndexBuffer:index.${firstPacket.commandIdValue}",
+                ),
+            )
+            packets.forEach { packet ->
+                add(
+                    key(
+                        GPUPreparedNativeOperandRole.RenderBindGroup,
+                        GPUPreparedNativeOperandKind.BindGroup,
+                        "setBindGroup:bind.${packet.commandIdValue}",
+                    ),
+                )
+            }
+        }
+        val mutatedRender = GPUFrameStep.RenderPassStep(
+            target = coreRender.target,
+            loadStore = coreRender.loadStore,
+            samplePlan = coreRender.samplePlan,
+            resourceUses = coreRender.resourceUses,
+            drawPackets = packets,
+            sourceTaskIds = coreRender.sourceTaskIds,
+            batches = listOf(
+                GPUFrameRenderBatch(
+                    batchId = batch.batchId,
+                    kind = batch.kind,
+                    packets = packets,
+                    sourceTaskIds = coreRender.sourceTaskIds,
+                ),
+            ),
+            sampleContinuation = coreRender.sampleContinuation,
+            depthStencilLoadStore = coreRender.depthStencilLoadStore,
+            preparedImageBindingsByPacketId = coreRender.preparedImageBindingsByPacketId,
+        )
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(firstPacket.semanticPayload)
+        fun classifiedRoute(packet: GPUDrawPacket) =
+            assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+                org.graphiks.kanvas.gpu.renderer.recording.classifyCorePrimitiveDirectNativeRoute(
+                    semantic,
+                    requireNotNull(packet.clipExecutionPlan),
+                    packet.blendPlan,
+                    coreRender.samplePlan,
+                    "rgba8unorm",
+                ),
+            )
+        val originalSlab = assertIs<GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab>(
+            (coreScope.corePrimitiveNativeScopeRouteSeal as
+                GPUCorePrimitiveNativeScopeRouteSeal.Routes).uniformAuthority,
+        ).seal
+        val directSeal = GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+            linkedMapOf(
+                firstPacket.packetId to classifiedRoute(firstPacket),
+                secondPacket.packetId to classifiedRoute(secondPacket),
+            ),
+            GPUCorePrimitiveDirectPreparedPassSeal(srcOverKey, originalSlab),
+        )
+        val mutatedScope = GPUCommandEncoderScopePlan(
+            sourceStepIndex = coreScope.sourceStepIndex,
+            operationKind = coreScope.operationKind,
+            scopeLabel = coreScope.scopeLabel,
+            sourceTaskIds = coreScope.sourceTaskIds,
+            sourcePacketIds = packets.map { it.packetId },
+            facadeOperationClasses = stream.commandLabels,
+            targetGeneration = coreScope.targetGeneration,
+            resourceGenerationLabels = coreScope.resourceGenerationLabels,
+            passCommandStream = stream,
+            corePrimitiveDirectNativeRouteSeal = directSeal,
+            corePrimitiveNativeScopeRouteSeal = GPUCorePrimitiveNativeScopeRouteSeal.Empty,
+            targetResource = coreScope.targetResource,
+        ).attachNativeOperandKeys(expectedKeys)
+
+        assertTrue(
+            GPUPreparedSurfaceEncoderScopeAuthority.matches(
+                input.framePlan,
+                mutatedRender,
+                mutatedScope,
+                input.generationSeal,
+            ),
+        )
+    }
+
     @Test
     fun `invalid WGSL crosses real native preflight as the canonical typed refusal`() {
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
@@ -2044,6 +2427,42 @@ private fun GPUDrawPacket.withPreparedSurfaceTestRole(
     clipProducerAuthority = clipProducerAuthority,
 )
 
+private fun GPUDrawPacket.withPreparedSurfaceTestPipelineKey(
+    packetId: GPUDrawPacketID,
+    commandIdValue: Int,
+    renderPipelineKey: org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey,
+) = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = role,
+    blendPlan = blendPlan,
+    renderPipelineKey = renderPipelineKey,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = bindingLayoutHash,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = vertexSourceLabel,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
+
 private fun GPUResourcePreparationRequest.rebuilt(
     descriptor: GPUFrameTextureDescriptor,
 ) = GPUResourcePreparationRequest(
@@ -2318,6 +2737,28 @@ private fun preparedSurfacePathSemantic(
         ),
     )
 }
+
+private fun srcOverStructuralBlend() = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+    mode = GPUBlendMode.SRC_OVER,
+    sourceCoverage = GPUSourceCoverageEncoding.None,
+    state = GPUFixedFunctionBlendState(
+        stateId = "src-over",
+        color = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+        alpha = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+        writeMask = "rgba",
+    ),
+)
+
+private fun clearStructuralBlend() = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+    mode = GPUBlendMode.CLEAR,
+    sourceCoverage = GPUSourceCoverageEncoding.None,
+    state = GPUFixedFunctionBlendState(
+        stateId = "test-clear",
+        color = GPUFixedFunctionBlendComponent("zero", "zero", "add"),
+        alpha = GPUFixedFunctionBlendComponent("zero", "zero", "add"),
+        writeMask = "rgba",
+    ),
+)
 
 private fun preparedSurfaceImageSemantic(
     base: GPUTaskList,
