@@ -349,6 +349,55 @@ git commit -m "feat(surface): prepared destination read blends on core primitive
 
 ---
 
+## Phase 1b — GRAPHITE-FAITHFUL MULTI-PIPELINE DIRECT PASSES (SCOPE AMENDMENT 2026-08-08, user decision)
+
+> **Amendment:** During Tasks 2-3 execution, the prepared direct pass was found to materialize ONE structural pipeline per pass (sealed pass-seal + operand-topology contracts), forcing mixed-blend frames to refuse with `unsupported.recording.core_primitive_mixed_pipeline_keys` and stay on the legacy route. The user directed: verify Graphite/Dawn in `/Users/chaos/workspace/kanvas-forge/skia-main` (done — evidence below), then implement multi-pipeline-per-pass in FP-09.
+
+**C++ evidence (skia-main, verified 2026-08-08):**
+- A `DrawPass` holds an ARRAY of pipelines; draws reference them by index via `BindGraphicsPipeline` commands emitted MID-PASS (`DrawPass.h:103-113`, `DrawCommands.h:108-109`, `DrawList.cpp:203-206`); Dawn executes `SetPipeline` inside one render pass (`DawnCommandBuffer.cpp:675-679, 775-784`). Blend mode is per-pipeline (`GraphicsPipelineDesc = {renderStepID, paintID}`, `GraphicsPipelineDesc.h:27-43`); a frame mixing SrcOver+CLEAR renders in ONE pass with multiple pipeline binds — Graphite never splits a pass on blend mode. `RenderPassDesc.h:87-91` explicitly anticipates mixed pipelines in one pass.
+- Destination reads: per-pass `kTextureCopy` decision at flush (`Device.cpp:2176`); GPU-only `CopyTextureToTextureTask` ordered BEFORE the consuming `RenderPassTask` in the same encoder (`DrawContext.cpp:198-204, 270-315`, `Image_Graphite.cpp:113-137`); dst texture+sampler appended at the END of the fragment bind group (bindings 2n-2/2n-1, `DawnCommandBuffer.cpp:927-938`); `dstReadBounds` intrinsic uniform (`ContextUtils.cpp:86-118`); dst-reading pipelines blend in the shader with fixed-function Src (`ShaderInfo.cpp:1011-1022, 1139-1160, 1218-1219`).
+- Multi-pipeline + dst-copy coexist via `rebindTexturesOnPipelineChange` (`DrawList.cpp:140-174`) and PER-PIPELINE bind groups (dst-copy presence changes the fragment binding count).
+- The Task 2 per-packet revert (256 failures) therefore reflects a missing per-pipeline bind-group discipline, NOT the model — WebGPU legally allows `SetPipeline` mid-pass.
+
+**Design (Graphite-faithful, execution-first to avoid the 256-failure trap):**
+- Task 3b materializes N structural pipelines per direct pass (per-pipeline bind groups + dst bindings at the end of the fragment layout) with materializer-level tests, WITHOUT flipping the recording gate.
+- Task 3c flips the recording/seal/preflight gates: `core_primitive_mixed_pipeline_keys` refusal removed, pass seal + preflight generalized to N keys, dst-read core frames flow end-to-end with pixel evidence, executor fallback residuals removed, router evidence label generalized beyond `DrawText:`.
+- Task 6's evidence run then re-splits `GPUAllApiBlendSurfaceTest` per the actual coverage.
+
+### Task 3b: Materialize multiple structural pipelines per direct pass (execution side)
+
+**Files:** verify-then-modify at HEAD (line numbers drifted during Tasks 2-3):
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt` (the pass-seal → pipeline materialization loop, ~l.811)
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflight.kt` (the shared-key authority ~l.4815, `authenticateColorGlyphDestinationReads` l.1052-1077)
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt` (l.175-186 core+dst-copy refusal)
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUCorePrimitivePreparedAuthority.kt` (structural key → pipeline identity)
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitivePipelineDescriptor.kt` (`nativeShadingBlendProgramOrNull` l.387-393, blend program enum)
+- `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` (executor fallback residual codes l.524-545, 825-836)
+
+**Context:** The recording builder already emits per-packet blend plans and per-key structural authority; the sealed pass-seal/preflight contracts assume one key. This task generalizes the EXECUTION side to N keys per pass: the materializer binds per-key pipelines mid-pass (Graphite `BindGraphicsPipeline(index)`), per-key bind groups (dst-copy presence appends sampler+textureView at the end of the fragment layout — `DawnCommandBuffer.cpp:927-938`), and per-key pipeline caching. The recording gate (`core_primitive_mixed_pipeline_keys`) STAYS until Task 3c so no frame shape changes yet.
+
+- [ ] **Step 1: Write failing materializer tests (red)**
+- [ ] **Step 2: Run to verify they fail**
+- [ ] **Step 3: Generalize the materializer to N pipelines per pass** (multi-key pass seal → per-key pipeline identity + bind group + pipeline cache; dst binding slots at fragment-layout end)
+- [ ] **Step 4: Generalize the preflight shared-key authority to N keys**
+- [ ] **Step 5: Run green + regression** (`GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest`, `GPUPreparedSurfaceNativePreflightTest`, full `:gpu-renderer:test`)
+- [ ] **Step 6: Commit** — `feat(surface): materialize multiple structural pipelines per direct pass`
+
+### Task 3c: Destination-read shader blends on the core lane (Graphite dst-copy recipe) + gate flip
+
+**Files:** as in Task 3 plus `GPUWgpu4kCorePrimitivePipelineDescriptor.kt` (formula program), `BlendWgslBuilder`/`GPUBlendFormulaLibrary` (formula WGSL + dst sampler snippet per `ShaderInfo.cpp:1066-1160`), `GPUPreparedSurfaceFrameBuilder.kt` (evidence gate, already widened in Task 3), `GPUPreparedSurfaceProductRouter.kt:98` (evidence label), `GPUCorePrimitivePreparedFrameTaskListBuilder.kt` (remove the `core_primitive_mixed_pipeline_keys` gate l.2115-2143), `GPUFramePreflighter.kt` (one-key authority), pass seal generalization.
+
+**Context:** Task 3 already wired the ADMISSION (DestinationSnapshots planning for core + DrawLayer) and left 5 execution gaps documented. This task closes them per the Graphite recipe: dst formula program for the core shading lane, dst sampler+textureView bound at fragment-layout end, `dstReadBounds` uniform, preflight admission for CorePrimitive consumers, dispatcher core+dst-copy route; then flips the recording gates so dst-read core frames and mixed-blend frames materialize prepared (multi-pipeline per Task 3b). GPU pixel evidence: DARKEN rect over a destination rect vs the CPU oracle at `GPUAllApiBlendSurfaceTest.kt:152-157`.
+
+- [ ] **Step 1: Write failing tests (red)** — dst-read core frame (DARKEN rect over destination) must build+execute `Ready` with `route:destination-read:DrawRect:*` evidence (`reason == "gpu-copy-then-formula"`); mixed SRC_OVER+CLEAR frame must build `Ready`
+- [ ] **Step 2: Run to verify they fail**
+- [ ] **Step 3: Implement the core dst-read materialization** (descriptor program + formula WGSL + dst bindings + preflight + dispatcher)
+- [ ] **Step 4: Flip the recording gates** (remove `core_primitive_mixed_pipeline_keys`; generalize preflighter one-key authority; remove the executor fallback residuals)
+- [ ] **Step 5: Run green + GPU pixel regression** (`GPUAllApiBlendSurfaceTest` — record the new route split; full `:kanvas:test` + `:gpu-renderer:test`)
+- [ ] **Step 6: Commit** — `feat(surface): destination read formula blends on prepared core lane`
+
+---
+
 ## Phase 2 — Terminal-family policy (families 3–5) and route-authority collapse
 
 ### Task 4: Document and pin the stable terminal refusals for hairline points, mixed uniform layouts, and analytic-clip non-direct geometry
