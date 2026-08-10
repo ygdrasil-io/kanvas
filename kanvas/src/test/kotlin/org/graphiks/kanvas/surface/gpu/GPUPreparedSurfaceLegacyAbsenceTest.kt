@@ -5,16 +5,16 @@ import kotlin.test.assertTrue
 import kotlin.test.Test
 
 /**
- * FP-08 closure guard: the retired immediate/CPU-path adapter symbols must never
- * reappear in the production surface/gpu sources.
+ * FP-08/FP-09 closure guard: the retired immediate/CPU-path adapter symbols must
+ * never reappear in the production surface/gpu sources.
  *
  * The adapter file (GPULegacyImmediatePathAdapter.kt), its display family, its
  * dump type, and the `legacyDump` plumbing were deleted by FP-08 Task 2
  * (commit dbf725d61). `GPUPreparedSurfaceLegacyPort` was retired by FP-09
- * Task 5 (the route collapse); `renderViaGpuLegacy`, `GPUClipRouteTrace`,
- * `renderWithClip`, `cachePixels`, `buildTextAtlasMesh`, and
- * `LayerScissorOffscreenTarget` intentionally remain until FP-09 retires the
- * legacy fallback for the currently-uncovered families.
+ * Task 5 (the route collapse), and FP-09 Tasks 7-8 deleted the remaining legacy
+ * fallback machinery (`renderViaGpuLegacy`, `cachePixels`, `buildTextAtlasMesh`,
+ * `LayerScissorOffscreenTarget`, `renderWithClip`, `GPUClipRouteTrace`).
+ * Task 10 extends this guard to the tokens retired next.
  */
 class GPUPreparedSurfaceLegacyAbsenceTest {
 

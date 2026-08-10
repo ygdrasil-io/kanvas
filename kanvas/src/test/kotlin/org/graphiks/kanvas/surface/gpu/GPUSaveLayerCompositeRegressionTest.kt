@@ -1,14 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
-import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
-import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -25,12 +17,10 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import kotlin.test.assertFailsWith
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
-import java.lang.reflect.Proxy
 import kotlin.math.pow
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -510,143 +500,6 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `bounded saveLayer intersects every child raw draw scissor before encoding`() {
-        val childDraw = GPUBackendRawUniformDraw(
-            uniformBytes = ByteArray(16),
-            scissorX = 1,
-            scissorY = 1,
-            scissorWidth = 6,
-            scissorHeight = 6,
-        )
-
-        val clipped = childDraw.intersectLayerScissor(
-            layerX = 2,
-            layerY = 3,
-            layerWidth = 3,
-            layerHeight = 2,
-        )
-
-        requireNotNull(clipped)
-        assertEquals(2, clipped.scissorX)
-        assertEquals(3, clipped.scissorY)
-        assertEquals(3, clipped.scissorWidth)
-        assertEquals(2, clipped.scissorHeight)
-    }
-
-    @Test
-    fun `bounded child target forwards the intersected scissor to its backend recorder`() {
-        val recordedDraws = mutableListOf<GPUBackendRawUniformDraw>()
-        val childTarget = LayerScissorOffscreenTarget(
-            delegate = SpyOffscreenTarget(recordedDraws),
-            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
-        )
-
-        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
-            drawFullscreenRawUniformPass(
-                wgsl = "test",
-                colorFormat = "rgba8unorm",
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = ByteArray(16),
-                        scissorX = 1,
-                        scissorY = 1,
-                        scissorWidth = 6,
-                        scissorHeight = 6,
-                    ),
-                ),
-            )
-        }
-
-        val forwarded = recordedDraws.single()
-        assertEquals(2, forwarded.scissorX)
-        assertEquals(3, forwarded.scissorY)
-        assertEquals(3, forwarded.scissorWidth)
-        assertEquals(2, forwarded.scissorHeight)
-    }
-
-    @Test
-    fun `bounded child target skips a fully out of bounds stencil test pass`() {
-        val stencilPassCalls = mutableListOf<RecordedStencilPass>()
-        val childTarget = LayerScissorOffscreenTarget(
-            delegate = SpyOffscreenTarget(mutableListOf(), stencilPassCalls),
-            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
-        )
-
-        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
-            drawFullscreenStencilPass(
-                wgsl = "test",
-                colorFormat = "rgba8unorm",
-                stencilMode = GPUBackendStencilMode.Test,
-                triangleData = null,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = ByteArray(16),
-                        scissorX = 0,
-                        scissorY = 0,
-                        scissorWidth = 1,
-                        scissorHeight = 1,
-                    ),
-                ),
-            )
-        }
-
-        assertTrue(stencilPassCalls.isEmpty())
-    }
-
-    @Test
-    fun `bounded child target forwards filtered stencil test draws`() {
-        val stencilPasses = mutableListOf<RecordedStencilPass>()
-        val childTarget = LayerScissorOffscreenTarget(
-            delegate = SpyOffscreenTarget(mutableListOf(), stencilPasses),
-            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
-        )
-
-        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
-            drawFullscreenStencilPass(
-                wgsl = "test",
-                colorFormat = "rgba8unorm",
-                stencilMode = GPUBackendStencilMode.Test,
-                triangleData = null,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(ByteArray(16), 1, 1, 6, 6),
-                    GPUBackendRawUniformDraw(ByteArray(16), 0, 0, 1, 1),
-                ),
-            )
-        }
-
-        val forwarded = stencilPasses.single()
-        assertEquals(GPUBackendStencilMode.Test, forwarded.mode)
-        val draw = forwarded.draws.single()
-        assertEquals(2, draw.scissorX)
-        assertEquals(3, draw.scissorY)
-        assertEquals(3, draw.scissorWidth)
-        assertEquals(2, draw.scissorHeight)
-    }
-
-    @Test
-    fun `bounded child target forwards empty stencil write pass`() {
-        val stencilPasses = mutableListOf<RecordedStencilPass>()
-        val childTarget = LayerScissorOffscreenTarget(
-            delegate = SpyOffscreenTarget(mutableListOf(), stencilPasses),
-            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
-        )
-
-        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
-            drawFullscreenStencilPass(
-                wgsl = "test",
-                colorFormat = "rgba8unorm",
-                stencilMode = GPUBackendStencilMode.Write,
-                triangleData = null,
-                draws = listOf(GPUBackendRawUniformDraw(ByteArray(16), 0, 0, 1, 1)),
-            )
-        }
-
-        val forwarded = stencilPasses.single()
-        assertEquals(GPUBackendStencilMode.Write, forwarded.mode)
-        assertTrue(forwarded.draws.isEmpty())
-    }
-
-    @Test
     fun `empty bounded saveLayer leaves parent untouched`() {
         requireWebGpu()
 
@@ -798,86 +651,6 @@ class GPUSaveLayerCompositeRegressionTest {
         assertEquals(1, result.diagnostics.fatalCount)
         assertEquals(reason, result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason)
     }
-
-    private data class RecordedStencilPass(
-        val mode: GPUBackendStencilMode,
-        val draws: List<GPUBackendRawUniformDraw>,
-    )
-
-    private inner class SpyOffscreenTarget(
-        private val recordedDraws: MutableList<GPUBackendRawUniformDraw>,
-        private val stencilPassCalls: MutableList<RecordedStencilPass>? = null,
-    ) : GPUBackendOffscreenTarget {
-        override val target: GPUSurfaceTarget
-            get() = error("target is not used by this spy")
-
-        override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit): Nothing =
-            error("primary target encoding is not expected")
-
-        override fun readRgba(): Nothing = error("readback is not expected")
-
-        override fun createOffscreenTexture(texture: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture): Nothing =
-            error("texture allocation is not expected")
-
-        override fun snapshotTargetToOffscreenTexture(textureLabel: String): Nothing =
-            error("snapshot is not expected")
-
-        override fun copyTargetToOffscreenTexture(destinationTextureLabel: String): Nothing =
-            error("target copy is not expected")
-
-        override fun encodeOffscreenTexture(
-            textureLabel: String,
-            clearColor: GPUClearColor?,
-            block: GPUBackendRenderRecorder.() -> Unit,
-        ) {
-            block(rawDrawRecorder(recordedDraws, stencilPassCalls))
-        }
-
-        override fun createCoverageMask(request: GPUBackendCoverageMaskRequest): Nothing =
-            error("coverage mask allocation is not expected")
-
-        override fun encodeCoverageMask(
-            mask: GPUBackendCoverageMask,
-            clearColor: GPUClearColor?,
-            block: GPUBackendRenderRecorder.() -> Unit,
-        ): Nothing = error("coverage mask encoding is not expected")
-
-        override fun releaseCoverageMask(mask: GPUBackendCoverageMask): Nothing =
-            error("coverage mask release is not expected")
-
-        override fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String): Nothing =
-            error("offscreen texture copy is not expected")
-
-        override fun close() = Unit
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun rawDrawRecorder(
-        recordedDraws: MutableList<GPUBackendRawUniformDraw>,
-        stencilPassCalls: MutableList<RecordedStencilPass>? = null,
-    ): GPUBackendRenderRecorder =
-        Proxy.newProxyInstance(
-            GPUBackendRenderRecorder::class.java.classLoader,
-            arrayOf(GPUBackendRenderRecorder::class.java),
-        ) { _, method, args ->
-            when (method.name) {
-                "getMaxTextureDimension2D" -> Int.MAX_VALUE
-                "drawFullscreenRawUniformPass" -> {
-                    recordedDraws += args!![2] as List<GPUBackendRawUniformDraw>
-                    null
-                }
-                "drawFullscreenStencilPass" -> {
-                    stencilPassCalls?.add(
-                        RecordedStencilPass(
-                            mode = args!![2] as GPUBackendStencilMode,
-                            draws = args[4] as List<GPUBackendRawUniformDraw>,
-                        ),
-                    )
-                    null
-                }
-                else -> error("unexpected recorder call: ${method.name}")
-            }
-        } as GPUBackendRenderRecorder
 
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()

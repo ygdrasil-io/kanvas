@@ -479,33 +479,6 @@ class GPUPathStrokeInputTest {
     }
 
     @Test
-    fun `stroked paths keep flattened contour vertices instead of fill triangles`() {
-        val flattened = listOf(
-            Point(0f, 0f),
-            Point(10f, 0f),
-            Point(10f, 10f),
-            Point(0f, 10f),
-            Point(0f, 0f),
-        )
-        val fillTriangles = listOf(
-            Point(0f, 0f),
-            Point(10f, 0f),
-            Point(10f, 10f),
-            Point(0f, 0f),
-            Point(10f, 10f),
-            Point(0f, 10f),
-        )
-
-        val selected = selectPathVerticesForCommand(
-            isStroke = true,
-            flattened = flattened,
-            triangulated = fillTriangles,
-        )
-
-        assertEquals(flattened, selected)
-    }
-
-    @Test
     fun `closed stroke geometry emits triangle contours instead of one filled fan`() {
         val square = listOf(
             0f, 0f,
