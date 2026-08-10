@@ -567,7 +567,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
             // FP-09 Task 5 collapse the router terminates every before-entry refusal, and Task 6
             // re-points the surface suites to the exact per-case codes.
             if (completion.outcome == GPUFrameStructuralOutcome.Refused &&
-                diagnostic.code.value in preparedRouteLegacyFallbackRefusalCodes
+                diagnostic.code.value in preparedRouteResidualRefusalCodes
             ) {
                 return GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(diagnostic)
             }
@@ -852,12 +852,13 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
 }
 
 /**
- * Prepared-route refusal codes that document shapes the prepared direct lane genuinely cannot
- * execute: multi-key passes mixing destination-reading keys with non-dst-reading keys (no shared
- * bind-group layout), destination-reading modes without a formula program, and the multi-render
- * dst-copy shape (destination pass, ordered snapshot copy, consuming pass). The classification
- * survives for Task 6/7 evidence labeling (the diagnostic still names the exact residual); the
- * router terminates every before-entry refusal since the FP-09 Task 5 collapse.
+ * Prepared-route residual refusal codes that document shapes the prepared direct lane genuinely
+ * cannot execute: multi-key passes mixing destination-reading keys with non-dst-reading keys (no
+ * shared bind-group layout), destination-reading modes without a formula program, and the
+ * multi-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass). The
+ * classification survives as residual evidence labels (the diagnostic still names the exact
+ * residual); the pre-FP-09 fallback that consumed these codes was deleted with the legacy port,
+ * and the router terminates every before-entry refusal since the FP-09 Task 5 collapse.
  *
  * The pre-3c mixed-lane dst-copy codes are deliberately NOT listed here. Verified empirically
  * (probes through the real builder/executor): `unsupported.prepared-surface.destination-copy`
@@ -871,7 +872,7 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
  * those codes always contains a terminal-family operation (text/image/vertices), so the router
  * terminates it anyway.
  */
-private val preparedRouteLegacyFallbackRefusalCodes = setOf(
+private val preparedRouteResidualRefusalCodes = setOf(
     "unsupported.native-core-primitive.multi-key-component",
     "unsupported.native-core-primitive.dst-read-formula",
     "unsupported.native-core-primitive.multi-render-dst-copy",
