@@ -562,7 +562,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     requirements.analyticClipBindGroupRequired,
                     requirements.msaaColor,
                     requirements.componentIdentity,
-                ))
+                ) ||
+                // The destination snapshot is frame-local: reusing a dst-read slot must rebind
+                // the pooled bind group against the current frame's copy texture, and reusing a
+                // dst-read slot for a non-dst-read frame must drop the stale snapshot entries.
+                slot.handles.dstRead != requirements.dstRead)
         ) {
             grow(
                 slot,

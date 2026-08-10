@@ -213,6 +213,12 @@ internal fun buildCorePrimitiveCoverageMaskConsumerNativeShader(): GPUCorePrimit
  * sampled by device coordinate (the snapshot is an exact full-target copy), and the canonical
  * premultiplied formula blends in the shader while fixed-function state stays Src
  * (Graphite `ShaderInfo.cpp` dst-read recipe).
+ *
+ * Graphite's `dstReadBounds` intrinsic uniform is deliberately absent: the prepared destination
+ * snapshot is an exact full-target copy-texture-to-texture (enforced by
+ * `validateCorePrimitiveDestinationCopy`), so the bounds are the constant (0,0,W,H) and
+ * `textureLoad` at device coordinates (the ColorGlyph precedent) reads the exact texel. A
+ * per-frame bounds uniform would carry no information on this lane.
  */
 internal fun buildCorePrimitiveDstReadNativeShader(
     modeLabel: String,

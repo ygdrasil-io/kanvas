@@ -72,6 +72,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerGeometrySnapshot
@@ -110,6 +111,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -980,6 +982,168 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.srcFactor)
         assertEquals(GPUBlendFactor.Zero, requireNotNull(clearTarget.blend).color.dstFactor)
         assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `destination read packet materializes the ordered snapshot copy before the dst read render`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val payload = materialized.draft.payload
+        val scopes = payload.scopeOperands
+        val copy = scopes.filterIsInstance<GPUPreparedNativeScopeOperand.Copy>().single()
+        val render = scopes.filterIsInstance<GPUPreparedNativeScopeOperand.Render>().single()
+        // The snapshot copy runs before the consuming dst-read pass in the same encoder
+        // (Graphite DrawContext.cpp recipe).
+        assertEquals(GPUEncoderOperationKind.CopyDestination, copy.operationKind)
+        assertTrue(copy.sourceStepIndex < render.sourceStepIndex)
+        val textureLayout = requireNotNull(copy.textureLayout)
+        assertEquals(TARGET.left, textureLayout.sourceOriginX)
+        assertEquals(TARGET.top, textureLayout.sourceOriginY)
+        assertEquals(0, textureLayout.destinationOriginX)
+        assertEquals(0, textureLayout.destinationOriginY)
+        assertEquals(TARGET.width, textureLayout.width)
+        assertEquals(TARGET.height, textureLayout.height)
+        // The snapshot texture is created before the pooled dst-read bind group.
+        val textureEvent = fixture.native.events.indexOf("createTexture:Kanvas.frame.corePrimitive.destinationSnapshot")
+        assertTrue(textureEvent >= 0, fixture.native.events.toString())
+        val bindGroupEvent = fixture.native.events.indexOf(
+            "createBindGroup:Kanvas.session.corePrimitive.framePool.bindGroup0." +
+                CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+        )
+        assertTrue(bindGroupEvent >= 0, fixture.native.events.toString())
+        assertTrue(textureEvent < bindGroupEvent)
+        // The pooled bind group binds uniform@0 plus the ordered snapshot texture@1 and sampler@2.
+        val bindGroup = fixture.native.bindGroupDescriptors.single { descriptor ->
+            descriptor.label == "Kanvas.session.corePrimitive.framePool.bindGroup0." +
+                CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY
+        }
+        assertEquals(3, bindGroup.entries.size)
+        assertEquals(0u, bindGroup.entries[0].binding)
+        assertEquals(1u, bindGroup.entries[1].binding)
+        assertEquals(2u, bindGroup.entries[2].binding)
+        // The dst-read formula pipeline blends in the shader with fixed-function Src.
+        val pipeline = fixture.native.renderPipelineDescriptors.single()
+        val target = assertIs<io.ygdrasil.webgpu.ColorTargetState>(
+            requireNotNull(pipeline.fragment).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.dstFactor)
+        // The render draws exactly the one dst-read packet with the shared dst-read bind group.
+        assertEquals(1, render.commands.count { it is GPUPreparedNativeRenderCommand.DrawIndexed })
+        val setBindGroups = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        assertEquals(1, distinctIdentityCount(setBindGroups.map { it.bindGroup.bindGroup }))
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `destination read frame reuses the pooled slot and rebinds the frame local snapshot per frame`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        fixture.native.events.clear()
+
+        val first = fixture.materializeCore()
+        // Releasing the first draft returns its pooled lease before the second frame checks out.
+        assertTrue(first.draft.disposeBeforeRegistration())
+        val second = fixture.materializeCore()
+        fun pooledBuffers(materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized): List<Any> {
+            val render = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single()
+            return render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+                .map { it.buffer.buffer } +
+                render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+                .map { it.buffer.buffer }
+        }
+        // The frame pool reuses the vertex/index slot across dst-read frames.
+        val firstBuffers = pooledBuffers(first)
+        val secondBuffers = pooledBuffers(second)
+        assertEquals(firstBuffers, secondBuffers)
+        // The snapshot is frame-local, so every frame rebinds the pooled dst-read bind group
+        // against its own copy texture (Graphite DrawList.cpp forced texture rebinding).
+        fun bindGroupOf(materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized): Any {
+            val render = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single()
+            return render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .single().bindGroup.bindGroup
+        }
+        assertNotSame(bindGroupOf(first), bindGroupOf(second))
+        assertEquals(
+            2,
+            fixture.native.bindGroupDescriptors.count { descriptor ->
+                descriptor.label == "Kanvas.session.corePrimitive.framePool.bindGroup0." +
+                    CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY
+            },
+        )
+        assertTrue(second.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `destination copy validation refuses partial snapshot bounds before native action`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        val copyStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+        setPrivateField(copyStep, "logicalBounds", GPUPixelBounds(2, 2, 10, 10))
+        fixture.native.events.clear()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+        assertEquals("invalid.native-core-primitive.destination-copy-source", refused.code)
+        assertEquals(emptyList(), fixture.native.events)
+        fixture.close()
+    }
+
+    @Test
+    fun `destination copy validation refuses multiple snapshot consumers before native action`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        val copyStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+        val consumer = copyStep.consumers.single()
+        val foreignConsumer = GPUDestinationSnapshotConsumerRef(
+            groupingCommandId = consumer.groupingCommandId,
+            renderTaskId = consumer.renderTaskId,
+            packetId = consumer.packetId,
+            commandId = GPUDrawCommandID(99),
+        )
+        setPrivateField(copyStep, "consumers", listOf(consumer, foreignConsumer))
+        fixture.native.events.clear()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+        assertEquals("invalid.native-core-primitive.destination-copy-consumer", refused.code)
+        assertEquals(emptyList(), fixture.native.events)
+        fixture.close()
+    }
+
+    @Test
+    fun `destination copy validation refuses render before copy ordering before native action`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        val plan = fixture.plan
+        val steps = plan.steps.toMutableList()
+        val copy = steps.single { it is GPUFrameStep.CopyDestinationStep }
+        val render = steps.single { it is GPUFrameStep.RenderPassStep }
+        steps.remove(copy)
+        steps.add(steps.indexOf(render) + 1, copy)
+        setPrivateField(plan, "steps", steps)
+        val renderScope = fixture.encoderPlan.scopes.single {
+            it.operationKind == GPUEncoderOperationKind.Render
+        }
+        val copyScope = fixture.encoderPlan.scopes.single {
+            it.operationKind == GPUEncoderOperationKind.CopyDestination
+        }
+        setPrivateField(renderScope, "sourceStepIndex", steps.indexOf(render))
+        setPrivateField(copyScope, "sourceStepIndex", steps.indexOf(copy))
+        fixture.native.events.clear()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+        assertEquals("invalid.native-core-primitive.destination-copy-order", refused.code)
+        assertEquals(emptyList(), fixture.native.events)
         fixture.close()
     }
 
@@ -4214,13 +4378,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         clipStencilPlan: GPUClipExecutionPlan.StencilCoverage? = null,
         sampleCount: Int = 1,
         targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+        dstRead: Boolean = false,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
+        require(!dstRead || routeShape == RouteShape.Direct)
+        require(!dstRead || sampleCount == 1)
+        require(!dstRead || !analyticClip && !analyticIntersection && clipStencilPlan == null)
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities(sampleCount)
         val frameId = GPUFrameID(231L)
         val commandIds = when (routeShape) {
-            RouteShape.Direct -> listOf(1, 2)
+            RouteShape.Direct -> if (dstRead) listOf(1) else listOf(1, 2)
             RouteShape.AnalyticShape -> listOf(1, 2)
             RouteShape.PathOnly -> listOf(2)
             RouteShape.Mixed -> listOf(1, 2, 3)
@@ -4332,6 +4500,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             } else {
                 taskList
             }
+        }
+        if (dstRead) {
+            // The recorder only plans fixed-function SRC_OVER rects; promote every base packet to
+            // the canonical full-coverage destination-read formula plan so the task-list builder
+            // plans the ordered snapshot copy (Graphite dst-copy recipe).
+            base.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+                .forEach { packet ->
+                    setPrivateField(packet, "blendPlan", dstReadBlendPlan())
+                }
         }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
@@ -4971,6 +5149,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
     )
 
+    /** Canonical full-coverage LIGHTEN destination-read plan (formula program + snapshot copy). */
+    private fun dstReadBlendPlan() = GPUBlendPlan.ShaderBlendWithDstRead(
+        mode = GPUBlendMode.LIGHTEN,
+        formulaId = "lighten@v1",
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
     private fun capabilities(sampleCount: Int = 1) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
         facts = listOf(
@@ -5447,6 +5632,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         label == "Kanvas.frame.preparedText.r8-page" ||
                         label == "Kanvas.frame.preparedText.text-atlas" ||
                         label == "Kanvas.frame.colorGlyph.destinationSnapshot" ||
+                        label == "Kanvas.frame.corePrimitive.destinationSnapshot" ||
                         label.startsWith("Kanvas.frame.layerTarget.") ||
                         label.startsWith("Kanvas.frame.preparedText.material-texture.")
                     ) {
@@ -5459,6 +5645,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                                 "Kanvas.frame.preparedText.text-atlas-view"
                             label == "Kanvas.frame.colorGlyph.destinationSnapshot" ->
                                 "Kanvas.frame.colorGlyph.destinationSnapshot-view"
+                            label == "Kanvas.frame.corePrimitive.destinationSnapshot" ->
+                                "Kanvas.frame.corePrimitive.destinationSnapshot-view"
                             label.startsWith("Kanvas.frame.layerTarget.") ->
                                 "$label-view"
                             else -> label.replace("material-texture.", "material-texture-view.")

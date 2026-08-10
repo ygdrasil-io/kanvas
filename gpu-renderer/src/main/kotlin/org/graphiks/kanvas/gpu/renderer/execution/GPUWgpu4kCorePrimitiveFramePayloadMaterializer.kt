@@ -666,6 +666,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive readback must cover the exact canonical target bounds.",
             )
         }
+        // Defensive reachability guard: every direct-only frame retains the unified scope route
+        // seal, so real destination-reading frames materialize through the frame-global run path
+        // (materializeSingleSampleFrameGlobalCore) below; this single-key branch keeps the same
+        // dst-copy authority so the validation and emission stay consistent whichever route runs.
         val copyAuthority = when (
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
@@ -1427,44 +1431,25 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "their AA coverage semantics are verified on the prepared lane.",
             )
         }
-        val multiKeyBindingLayoutHash = if (analyticShapeMultiKey) {
-            CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
-        } else {
-            CORE_PRIMITIVE_BINDING_LAYOUT_HASH
-        }
-        val multiKeyUniformBytes = if (analyticShapeMultiKey) {
-            org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
-        } else {
-            CORE_PRIMITIVE_UNIFORM_BYTES
-        }
+        // The analytic-shape multi-key variant is refused above, so every multi-key pass that
+        // reaches this point is uniform32: the shared dynamic-uniform32 layout and 32-byte block
+        // are the only remaining authorities.
+        val multiKeyBindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+        val multiKeyUniformBytes = CORE_PRIMITIVE_UNIFORM_BYTES
         if (multiKeySeal.uniformSlabSeal?.commandIds != semanticPackets.map { it.second.commandIdValue } ||
             semanticPackets.withIndex().any { (packetIndex, entry) ->
                 val packet = entry.second
                 val authority = packet.corePrimitivePreparedAuthority
-                if (analyticShapeMultiKey) {
-                    authority?.uniformSlabSeal != null ||
-                        authority?.analyticShapeUniformSeal !==
-                        multiKeySeal.analyticShapeUniformSeals[packetIndex] ||
-                        authority?.analyticClipUniformSeal != null ||
-                        authority?.analyticIntersectionUniformSeal != null ||
-                        packet.bindingLayoutHash != multiKeyBindingLayoutHash
-                } else {
-                    authority?.uniformSlabSeal !== multiKeySeal.uniformSlabSeal ||
-                        authority?.analyticShapeUniformSeal != null ||
-                        authority?.analyticClipUniformSeal != null ||
-                        authority?.analyticIntersectionUniformSeal != null ||
-                        packet.bindingLayoutHash != multiKeyBindingLayoutHash
-                }
+                authority?.uniformSlabSeal !== multiKeySeal.uniformSlabSeal ||
+                    authority?.analyticShapeUniformSeal != null ||
+                    authority?.analyticClipUniformSeal != null ||
+                    authority?.analyticIntersectionUniformSeal != null ||
+                    packet.bindingLayoutHash != multiKeyBindingLayoutHash
             }
         ) {
-            val message = if (analyticShapeMultiKey) {
-                "Multi-key CorePrimitive packets must share one exact packet-order analytic-shape uniform80 slab authority."
-            } else {
-                "Multi-key CorePrimitive packets must share one exact packet-order dynamic uniform32 slab authority."
-            }
             return refused(
                 "invalid.native-core-primitive.multi-key-uniform-seal",
-                message,
+                "Multi-key CorePrimitive packets must share one exact packet-order dynamic uniform32 slab authority.",
             )
         }
         val targetBounds = semanticPackets.first().third.targetBounds
@@ -1496,33 +1481,15 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val packetAuthority = packet.corePrimitivePreparedAuthority
             val expectedKey = packetAuthority?.structuralPipelineKey
             val expectedKeyIndex = keyIndexByStructuralKey[expectedKey]
-            val exactUniformAuthority = if (analyticShapeMultiKey) {
-                packetAuthority?.uniformSlabSeal == null &&
-                    packetAuthority?.analyticShapeUniformSeal ===
-                    multiKeySeal.analyticShapeUniformSeals[packetIndex] &&
-                    packetAuthority.analyticClipUniformSeal == null &&
-                    packetAuthority.analyticIntersectionUniformSeal == null
-            } else {
+            val exactUniformAuthority =
                 packetAuthority?.uniformSlabSeal === multiKeySeal.uniformSlabSeal &&
                     packetAuthority.analyticShapeUniformSeal == null &&
                     packetAuthority.analyticClipUniformSeal == null &&
                     packetAuthority.analyticIntersectionUniformSeal == null
-            }
-            val exactUniformPayload = if (analyticShapeMultiKey) {
-                val seal = multiKeySeal.analyticShapeUniformSeals[packetIndex]
-                when (val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
-                    semantic,
-                    GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
-                )) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted ->
-                        seal.hasExactSemantic(semantic) && seal.hasExactPayload(rebuilt.block.packedBytes())
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> false
-                }
-            } else {
+            val exactUniformPayload =
                 semantic.payloadRef.uniformBlock?.byteSize == CORE_PRIMITIVE_UNIFORM_BYTES.toLong() &&
                     semantic.payloadRef.uniformBlock.bytes ==
                     corePrimitiveUniformBytes(semantic.targetBounds, semantic.premultipliedRgba)
-            }
             if (!semantic.hasStructuralIntegrity() || packet.role != GPUDrawPacketRole.Shading ||
                 packet.commandIdValue != semantic.payloadRef.commandIdValue ||
                 packet.uniformSlot != semantic.payloadRef.uniformSlot ||
@@ -1535,10 +1502,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
                 !exactUniformAuthority ||
                 semantic.targetBounds != targetBounds ||
-                (!analyticShapeMultiKey &&
-                    (semantic.payloadRef.uniformBlock?.byteSize != multiKeyUniformBytes.toLong() ||
-                        !exactUniformPayload)) ||
-                (analyticShapeMultiKey && !exactUniformPayload)
+                semantic.payloadRef.uniformBlock?.byteSize != multiKeyUniformBytes.toLong() ||
+                !exactUniformPayload
             ) {
                 return refused(
                     "invalid.native-core-primitive.packet-authority",
@@ -1547,16 +1512,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             sealedRoutes.routesByPacketId.getValue(packet.packetId)
         }
-        val renderScissors = if (analyticShapeMultiKey) {
-            acceptedGeometries.mapIndexed { packetIndex, route ->
-                route.renderScissor ?: return refused(
-                    "invalid.native-core-primitive.packet-authority",
-                    "An analytic-shape multi-key CorePrimitive route is missing its exact non-empty render scissor.",
-                )
-            }
-        } else {
-            semanticPackets.map { it.third.scissorBounds }
-        }
+        val renderScissors = semanticPackets.map { it.third.scissorBounds }
         val arena = try {
             packCorePrimitiveFrameGeometry(acceptedGeometries)
         } catch (failure: Throwable) {
@@ -1617,6 +1573,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive readback must cover the exact canonical target bounds.",
             )
         }
+        // Structurally unreachable for destination reading: an all-dst-read multi-key pass has
+        // identical keys (one mode, one component) and therefore seals as a single key, while
+        // mixed fixed+dst-read or multi-mode dst-read keys are refused by the multi-key-component
+        // authority. The branch stays for defensive consistency with the frame-global and
+        // single-key dst-copy paths.
         val copyAuthority = when (
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
