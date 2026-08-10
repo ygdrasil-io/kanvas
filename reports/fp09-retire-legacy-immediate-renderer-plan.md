@@ -398,6 +398,29 @@ git commit -m "feat(surface): prepared destination read blends on core primitive
 
 ---
 
+---
+
+## Phase 4b — RESTORE TOP-LEVEL MASK BLUR (SCOPE AMENDMENT 2026-08-08, user decision)
+
+> **Amendment:** The Task 10 full regression discovered 18 top-level mask-blur pins (`GPUMaskBlurSurfaceTest` ×11, `GPUPathClipRegressionTest` ×4, `GPUClipAdvancedBlendSurfaceTest` ×3) absent from the plan's §5 inventory: frames that rendered via `renderViaGpuLegacy` (proven green at FP-08 tip `accaea616`) now refuse with `unsupported.core_primitive.rect.analysis_authority_missing` / `unsupported.pipeline.capability_missing` / `invalid.recording.core_primitive_semantic_authority` — the only capability removal outside the anticipated inventory. External review flagged it; the user decided to RESTORE top-level mask blur in the prepared route rather than accept the FP-11 deferral.
+
+**Precedents (verified at HEAD):** the prepared composite route already lowers blur→coverage A8 (`GPUPreparedMaskFilterLowerer.lower(NormalizedMaskFilter)` → `GPUPreparedCoverageFormat.A8`, gpu-renderer filters); the core route has the coverage-mask producer machinery (`GPUCorePrimitiveCoverageMaskPreparedRoute`, `GPUWgpu4kCoverageMaskProducerMaterializer`, R8/A8 mask route); the legacy top-level dispatcher `GPUMaskBlurDispatch.kt` (475 lines: `renderMaskBlurCommand`/`toMaskBlurRequest`/`maskBlurPreflightRefusalReasonOrNull`/`toLocalMaskCommand`) is orphaned but test-pinned by `GPUMaskBlurDispatchTest` — the legacy blur-pass logic and WGSL survive there as reference. `MaskBlurPlan.kt` + `GPUSeparableBlur.kt` (gpu-renderer filters) hold the prepared blur plan/execution.
+
+### Task 11: Top-level mask blur renders prepared on core primitives (rect/path/rrect)
+
+**Goal:** `DrawRect`/`DrawPath`/`DrawRRect` with `paint.maskFilter = MaskFilter.Blur` at the TOP LEVEL (surface ops, no saveLayer) build+execute prepared with pixel evidence, flipping the 18 Task-10 terminal re-points back to `Prepared` assertions.
+
+**Approach (shape-blur, faithful to legacy semantics):** materialize the draw's A8 blur coverage (shape coverage via the core coverage-mask producer machinery, blurred via the prepared blur path), then shade color × blurred coverage — mirroring how the composite route blurs scoped masks and how `renderViaGpuLegacy` blurred top-level shapes (reference: `GPUMaskBlurDispatch.kt` + the deleted `renderDestinationReadBlend`-era blur pass). The exact wiring is the implementer's discovery task: where the top-level blur must hook into `GPUCorePrimitiveSemanticBuilder` (currently refusing) + the recording/execution lanes.
+
+- [ ] **Step 1: Write failing tests (red)** — flip the 18 re-points back: each asserts `Ready` + pixel evidence (CPU blur oracle — the composite route's blur oracle / `GPUMaskBlurDispatchTest` blur math, or the pre-FP-09 legacy render as reference via a documented oracle)
+- [ ] **Step 2: Run to verify they fail** — all 18 must fail with the current terminal codes
+- [ ] **Step 3: Implement top-level blur in the prepared core route** (semantic admission + A8 blur coverage materialization + shading; reuse `GPUPreparedMaskFilterLowerer`/`GPUSeparableBlur`/coverage-mask producer; retire the three refusal paths for blur)
+- [ ] **Step 4: Run green + GPU pixel regression** (the 18 tests + `GPUAllApiBlendSurfaceTest` + `GPUClipCoverageSurfaceTest` + full `:kanvas:test`/`:gpu-renderer:test`)
+- [ ] **Step 5: Update the evidence/roadmap** (the 18 families move from terminal to prepared in evidence §10/§15/§16 + FP-11 transfers; remove the top-level blur gap note)
+- [ ] **Step 6: Commit** — `feat(surface): top level mask blur renders prepared on core primitives`
+
+---
+
 ## Phase 2 — Terminal-family policy (families 3–5) and route-authority collapse
 
 ### Task 4: Document and pin the stable terminal refusals for hairline points, mixed uniform layouts, and analytic-clip non-direct geometry
