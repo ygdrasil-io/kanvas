@@ -7,6 +7,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 
@@ -242,24 +244,30 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
  * preflight authority twin. The recording mixed-key gate keeps real frames single-key until the
  * prepared-surface route opens multi-key passes.
  */
-internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal private constructor(
     structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
-    override val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+    override val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+    ownedAnalyticShapePackedBytes: ByteArray?,
 ) : GPUCorePrimitiveDirectPreparedPassAuthority {
     private val structuralPipelineKeysSnapshot = immutableList(structuralPipelineKeys)
+    private val analyticShapeUniformSealsSnapshot = immutableList(analyticShapeUniformSeals)
+    private val analyticShapePackedBytesSnapshot = ownedAnalyticShapePackedBytes
 
     override val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>
         get() = structuralPipelineKeysSnapshot
-    override val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal> = emptyList()
+    override val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>
+        get() = analyticShapeUniformSealsSnapshot
     override val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList()
     override val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> =
         emptyList()
     override val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
-        get() = uniformSlabSeal.plan
+        get() = requireNotNull(uniformSlabSeal).plan
     override val commandIds: List<Int>
-        get() = uniformSlabSeal.commandIds
+        get() = requireNotNull(uniformSlabSeal).commandIds
 
-    override fun packedUniformBytesForUpload(): ByteArray = uniformSlabSeal.packedBytesForUpload()
+    override fun packedUniformBytesForUpload(): ByteArray =
+        analyticShapePackedBytesSnapshot ?: requireNotNull(uniformSlabSeal).packedBytesForUpload()
 
     init {
         require(structuralPipelineKeysSnapshot.isNotEmpty()) {
@@ -271,14 +279,68 @@ internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
         require(structuralPipelineKeysSnapshot.all { key ->
             key.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading
         }) { "A multi-key direct CorePrimitive pass requires exact shading structural keys" }
-        require(structuralPipelineKeysSnapshot.all { key ->
-            key.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
-        }) { "A multi-key direct CorePrimitive pass requires one exact dynamic uniform32 layout" }
         require(structuralPipelineKeysSnapshot.map { it.colorFormat }.distinct().size == 1) {
             "A multi-key direct CorePrimitive pass requires one exact structural target format"
         }
         require(structuralPipelineKeysSnapshot.map { it.sampleCount }.distinct().size == 1) {
             "A multi-key direct CorePrimitive pass requires one exact structural sample count"
+        }
+        if (analyticShapeUniformSealsSnapshot.isNotEmpty()) {
+            require(structuralPipelineKeysSnapshot.all { key ->
+                key.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+            }) { "An analytic-shape multi-key direct CorePrimitive pass requires the uniform80 layout" }
+        } else {
+            require(structuralPipelineKeysSnapshot.all { key ->
+                key.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+            }) { "A multi-key direct CorePrimitive pass requires one exact dynamic uniform32 layout" }
+        }
+    }
+
+    companion object {
+        /** Uniform32 variant: every key shares one exact packet-order dynamic uniform32 slab. */
+        operator fun invoke(
+            structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+            uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+        ): GPUCorePrimitiveMultiKeyDirectPreparedPassSeal = GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+            structuralPipelineKeys = structuralPipelineKeys,
+            uniformSlabSeal = uniformSlabSeal,
+            analyticShapeUniformSeals = emptyList(),
+            ownedAnalyticShapePackedBytes = null,
+        )
+
+        /**
+         * Analytic-shape variant: one shared uniform80 slab with per-packet analytic shape seals.
+         * The pass owns the only packed uniform80 upload buffer and every seal must share one plan.
+         */
+        fun analyticShape(
+            structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+            analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+        ): GPUCorePrimitiveMultiKeyDirectPreparedPassSeal {
+            require(analyticShapeUniformSeals.isNotEmpty()) {
+                "An analytic-shape multi-key direct CorePrimitive pass requires at least one uniform80 seal"
+            }
+            val plan = analyticShapeUniformSeals.first().plan
+            require(plan.totalBytes <= Int.MAX_VALUE.toLong() &&
+                analyticShapeUniformSeals.size == plan.slots.size &&
+                analyticShapeUniformSeals.map { seal -> seal.slotIndex } == plan.slots.indices.toList() &&
+                analyticShapeUniformSeals.all { seal -> seal.plan === plan }
+            ) { "The analytic-shape uniform80 seals must retain one host-addressable ordered pass plan" }
+            val packed = ByteArray(plan.totalBytes.toInt())
+            analyticShapeUniformSeals.forEach { seal ->
+                seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+            }
+            return GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                structuralPipelineKeys = structuralPipelineKeys,
+                uniformSlabSeal = GPUCorePrimitiveUniformSlabSeal(
+                    plan,
+                    analyticShapeUniformSeals.map { it.commandId },
+                    packed,
+                ),
+                analyticShapeUniformSeals = analyticShapeUniformSeals,
+                ownedAnalyticShapePackedBytes = packed,
+            )
         }
     }
 }
@@ -320,6 +382,10 @@ internal fun validateMultiKeyDirectPassSealAuthority(
         )
     }
     val slab = seal.uniformSlabSeal
+        ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+            "invalid.native-core-primitive.multi-key-uniform",
+            "The multi-key direct pass seal requires one exact uniform slab.",
+        )
     if (slab.plan.deviceGeneration != deviceGeneration ||
         slab.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
         slab.plan.totalBytes <= 0L ||
@@ -334,16 +400,25 @@ internal fun validateMultiKeyDirectPassSealAuthority(
     val mappings = mutableListOf<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     val componentIdentities = mutableListOf<GPUWgpu4kCorePrimitiveComponentIdentity>()
     seal.structuralPipelineKeys.forEach { key ->
-        // Destination-reading keys project onto the dst-read component identity without any
-        // formula program, so they would fail the generic pipeline mapping below; refuse them by
-        // name first so the refusal names the actual blocker (the Task 3c formula program).
-        val componentIdentity = key.corePrimitiveNativeComponentIdentityOrNull()
-        if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY) {
-            return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
-                "unsupported.native-core-primitive.dst-read-formula",
-                "Destination-reading direct programs are refused until the prepared destination-read route lands.",
-            )
+        // Destination-reading keys project onto the per-mode dst-read component identity and the
+        // formula program; modes without a formula (or scalar-coverage dst-read lanes without a
+        // program) refuse by name so the refusal names the actual blocker for Task 6.
+        if (key.blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination) {
+            val shader = key.blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+            if (shader.sourceCoverage != GPUSourceCoverageEncoding.None ||
+                GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+                    shader.mode.gpuLabel,
+                    shader.formulaId,
+                ) == null
+            ) {
+                return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
+                    "unsupported.native-core-primitive.dst-read-formula",
+                    "The destination-read formula program for mode ${shader.mode.gpuLabel} is not " +
+                        "available on the prepared direct lane.",
+                )
+            }
         }
+        val componentIdentity = key.corePrimitiveNativeComponentIdentityOrNull()
         when (val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)) {
             is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> mappings += mapped
             is GPUWgpu4kCorePrimitivePipelineMapping.Refused ->
@@ -361,11 +436,10 @@ internal fun validateMultiKeyDirectPassSealAuthority(
         }
         componentIdentities += componentIdentity
     }
-    // Every admitted Shading key with the shared dynamic-uniform32 layout lowers onto the single
-    // production component today; the only key that could project onto a second component is the
-    // destination-reading one, which the per-key formula gate above refuses. This refusal is the
-    // defense-in-depth seam Task 3c must resolve when a destination formula program lands and a
-    // pass mixes dst-reading keys with non-dst-reading keys.
+    // Every admitted Shading key with the shared dynamic-uniform32 layout lowers onto one exact
+    // component; a pass mixing destination-reading keys with non-dst-reading keys cannot share one
+    // bind-group layout (the dst-read fragment layout appends the snapshot texture and sampler), so
+    // those passes keep the multi-key-component defense until per-key bind groups land.
     val componentIdentity = componentIdentities.distinct().singleOrNull()
         ?: return GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused(
             "unsupported.native-core-primitive.multi-key-component",

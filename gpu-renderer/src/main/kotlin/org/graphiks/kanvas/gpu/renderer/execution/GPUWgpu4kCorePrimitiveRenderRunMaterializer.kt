@@ -62,6 +62,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         targetTexture: GPUTexture,
         targetView: GPUTextureView,
         generationSeal: GPUPreparedGenerationSeal,
+        dstRead: CorePrimitiveDestinationSnapshotHandles? = null,
     ): GPUCorePrimitiveRenderRunMaterialization {
         val routes = plans.mapNotNull { plan ->
             plan.routeSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -225,6 +226,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         pathDepthStencil = pathRequirement,
                         componentIdentity = frameComponentIdentity,
                         sampleCount = 1,
+                        dstRead = dstRead?.binding,
                     ),
                 )
             ) {

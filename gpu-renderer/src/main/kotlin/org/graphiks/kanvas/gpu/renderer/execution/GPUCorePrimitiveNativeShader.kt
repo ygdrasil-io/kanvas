@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 
 internal data class GPUCorePrimitiveNativeShaderPlan(
     val wgslSource: String,
@@ -204,6 +205,67 @@ internal fun buildCorePrimitiveCoverageMaskConsumerNativeShader(): GPUCorePrimit
             validation.message,
         )
     }
+
+/**
+ * Generates and parser-validates the destination-read direct-geometry variant for one formula
+ * mode. Mirrors the ColorGlyph destination-read lane: the snapshot texture and sampler are
+ * appended at the end of the fragment bind group (Dawn bindings 2n-2/2n-1), the destination is
+ * sampled by device coordinate (the snapshot is an exact full-target copy), and the canonical
+ * premultiplied formula blends in the shader while fixed-function state stays Src
+ * (Graphite `ShaderInfo.cpp` dst-read recipe).
+ */
+internal fun buildCorePrimitiveDstReadNativeShader(
+    modeLabel: String,
+): GPUCorePrimitiveNativeShaderResult {
+    val formulaWgsl = GPUBlendFormulaProgramLibrary.selectedBlendFunctionWgsl(modeLabel)
+        ?: return GPUCorePrimitiveNativeShaderResult.Rejected(
+            "unsupported_blend_formula",
+            "The core destination-read lane has no formula program for mode $modeLabel.",
+        )
+    val wgsl = corePrimitiveDstReadNativeWgsl(formulaWgsl)
+    return when (
+        val validation = validateColorWgsl(
+            sourceId = "$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:$modeLabel",
+            wgslSource = wgsl,
+        )
+    ) {
+        is GPUColorWgslValidation.Validated -> GPUCorePrimitiveNativeShaderResult.Ready(
+            GPUCorePrimitiveNativeShaderPlan(wgsl, validation.reflection),
+        )
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+}
+
+internal fun corePrimitiveDstReadNativeWgsl(formulaWgsl: String): String = """
+    struct CorePrimitiveBlock {
+        target_size: vec2<f32>,
+        padding: vec2<f32>,
+        premul_rgba: vec4<f32>,
+    }
+
+    @group(0) @binding(0) var<uniform> core: CorePrimitiveBlock;
+    @group(0) @binding(1) var destinationSnapshot: texture_2d<f32>;
+    @group(0) @binding(2) var destinationSampler: sampler;
+
+    @vertex
+    fn vs_main(@location(0) device_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+        let ndc_x = device_position.x / core.target_size.x * 2.0 - 1.0;
+        let ndc_y = 1.0 - device_position.y / core.target_size.y * 2.0;
+        return vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
+    }
+
+    $formulaWgsl
+
+    @fragment
+    fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+        let dst = textureLoad(destinationSnapshot, vec2i(floor(fragment_position.xy)), 0);
+        let src = core.premul_rgba;
+        return kanvasBlendPremul(src, dst);
+    }
+""".trimIndent()
 
 internal const val CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY = "core-primitive-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY =

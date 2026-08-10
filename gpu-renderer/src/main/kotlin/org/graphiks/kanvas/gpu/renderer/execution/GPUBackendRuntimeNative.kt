@@ -1541,6 +1541,8 @@ private class WgpuBackendSession(
                     surfaceTargetResolver = surfaceTargetResolver,
                     corePrimitiveLimits = backendLimits,
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
+                    onDestinationSnapshotCreated =
+                        preparedSurfaceDestinationSnapshots::recordCreation,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(

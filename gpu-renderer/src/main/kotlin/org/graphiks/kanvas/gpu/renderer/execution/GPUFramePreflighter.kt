@@ -3363,6 +3363,24 @@ internal class GPUFramePreflighter(
                     it !in coreRenders && directUsesByRender.getValue(it).isNotEmpty()
                 })
         ) {
+            // A destination-reading core frame legitimately splits into two renders with the
+            // ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
+            // pass runs after the copy in the same encoder). The prepared direct lane does not
+            // materialize that multi-render dst-copy shape yet, so it refuses by name and the
+            // surface router continues on the legacy route. Task 6 classifies the residual.
+            val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+            if (copySteps.isNotEmpty() && coreRenders.size == 2 &&
+                copySteps.singleOrNull()?.consumers?.singleOrNull()?.let { consumer ->
+                    coreRenders.any { render ->
+                        render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+                    }
+                } == true
+            ) {
+                return diagnostic(
+                    "unsupported.native-core-primitive.multi-render-dst-copy",
+                    "Destination-reading core frames require the prepared multi-render dst-copy shape.",
+                )
+            }
             return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
         }
         val directRender = coreRenders.first()
@@ -3488,19 +3506,23 @@ internal class GPUFramePreflighter(
         val sceneAcceptedIndices = accepted.indices.filter { acceptedIndex ->
             accepted[acceptedIndex].render.target.value !in declaredLayerTargetLabels
         }
-        val structuralPipelineKey = packetAuthorities[sceneAcceptedIndices.first()]
-            .structuralPipelineKey
-        if (sceneAcceptedIndices.any { acceptedIndex ->
-                packetAuthorities[acceptedIndex].structuralPipelineKey != structuralPipelineKey
-            }
-        ) {
-            return refuse("Direct CorePrimitive packets must share one structural pipeline authority.")
+        // The direct pass admits per-key structural pipelines (Graphite DrawPass fFullPipelines):
+        // every packet's render pipeline key must match its own structural key's stable authority,
+        // and the pass shares one exact uniform layout. The stable key is derived once per
+        // distinct structural key, never once per draw.
+        val sceneStructuralKeys = sceneAcceptedIndices.map { acceptedIndex ->
+            packetAuthorities[acceptedIndex].structuralPipelineKey
         }
-        val expectedRenderPipelineKey =
-            structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+        val multiKeyDirectPass = sceneStructuralKeys.distinct().size > 1
+        val structuralPipelineKey = sceneStructuralKeys.first()
+        val stableRenderPipelineKeys = sceneStructuralKeys.distinct().associateWith { key ->
+            key.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+        }
         if (sceneAcceptedIndices.any { acceptedIndex ->
-                packetAuthorities[acceptedIndex].renderPipelineKey != expectedRenderPipelineKey ||
-                    accepted[acceptedIndex].packet.renderPipelineKey != expectedRenderPipelineKey ||
+                packetAuthorities[acceptedIndex].renderPipelineKey !=
+                    stableRenderPipelineKeys.getValue(
+                        packetAuthorities[acceptedIndex].structuralPipelineKey,
+                    ) ||
                     accepted[acceptedIndex].packet.renderPipelineKey !=
                     packetAuthorities[acceptedIndex].renderPipelineKey
             }
@@ -3967,7 +3989,29 @@ internal class GPUFramePreflighter(
         ) {
             return refuse("The direct pass must read exactly all three shared slabs; non-direct draws may read none.")
         }
-        val preparedPassSeal = if (
+        val preparedPassSeal = if (multiKeyDirectPass) {
+            when (uniformLayout) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                    GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                        structuralPipelineKeys = sceneStructuralKeys.distinct(),
+                        uniformSlabSeal = requireNotNull(uniformSeal),
+                    )
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                    try {
+                        GPUCorePrimitiveMultiKeyDirectPreparedPassSeal.analyticShape(
+                            structuralPipelineKeys = sceneStructuralKeys.distinct(),
+                            analyticShapeUniformSeals = analyticShapeSeals,
+                        )
+                    } catch (_: Throwable) {
+                        return refuseShape(
+                            "Analytic shape packet ranges cannot form one exact packed multi-key uniform80 slab.",
+                        )
+                    }
+                else -> return refuse(
+                    "Multi-key direct CorePrimitive passes require one exact uniform32 or analytic-shape uniform80 layout.",
+                )
+            }
+        } else if (
             uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
         ) {
             try {

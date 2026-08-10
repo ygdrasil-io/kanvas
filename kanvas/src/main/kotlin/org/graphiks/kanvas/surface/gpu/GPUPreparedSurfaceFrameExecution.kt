@@ -530,13 +530,13 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     "invalid.surface.prepared.terminal-without-diagnostic",
                     "Prepared Surface execution failed without a terminal diagnostic.",
                 )
-            // Documented prepared-route residual: the core-primitive shader-with-destination
-            // materialization (dst-texture pipeline program, bind layout, and preflight
-            // admission) is not wired yet, so destination-reading core frames cannot execute on
-            // the prepared route. Those frames refuse at native preflight/materialization with
-            // the codes below and must continue on the legacy route (which renders them with the
-            // GPU copy-then-formula composer) instead of becoming terminal. Task 6 classifies the
-            // residual materialization.
+            // Documented prepared-route residuals: shapes the prepared direct lane genuinely cannot
+            // execute yet continue on the legacy route (which renders them with the GPU
+            // copy-then-formula composer) instead of becoming terminal. Multi-key passes that mix
+            // destination-reading keys with non-dst-reading keys cannot share one bind-group layout
+            // (the dst-read fragment layout appends the snapshot texture and sampler), and
+            // dst-read modes without a formula program have no shading pipeline; both are
+            // classified for Task 6.
             if (completion.outcome == GPUFrameStructuralOutcome.Refused &&
                 diagnostic.code.value in preparedRouteLegacyFallbackRefusalCodes
             ) {
@@ -823,15 +823,17 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
 }
 
 /**
- * Prepared-route refusals that document an unwired execution feature and must fall back to the
- * legacy route instead of failing the frame: destination-reading core-primitive frames whose
- * shader-with-destination materialization (pipeline program, dst-texture bind layout, preflight
- * admission) is deferred to Task 6.
+ * Prepared-route refusals that document shapes the prepared direct lane genuinely cannot execute
+ * and must fall back to the legacy route instead of failing the frame: multi-key passes mixing
+ * destination-reading keys with non-dst-reading keys (no shared bind-group layout),
+ * destination-reading modes without a formula program, and the multi-render dst-copy shape
+ * (destination pass, ordered snapshot copy, consuming pass). Task 6 classifies the residuals.
  */
 private val preparedRouteLegacyFallbackRefusalCodes = setOf(
-    "unsupported.native-frame-payload.destination-copy-semantic-shape",
-    "unsupported.prepared-surface.destination-copy",
-    "unsupported.native-core-primitive.pipeline",
+    "unsupported.native-core-primitive.multi-key-component",
+    "unsupported.native-core-primitive.dst-read-formula",
+    "unsupported.native-core-primitive.multi-render-dst-copy",
+    "unsupported.native-core-primitive.analytic-shape-multi-key",
 )
 
 private fun unwrapCompletionFailure(failure: Throwable): Throwable = when (failure) {

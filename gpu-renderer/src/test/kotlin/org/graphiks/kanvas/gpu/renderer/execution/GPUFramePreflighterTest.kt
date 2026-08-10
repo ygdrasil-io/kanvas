@@ -4627,7 +4627,7 @@ class GPUFramePreflighterTest {
             .substringBefore("private fun validateCorePrimitiveRenderAuthority(")
         val perPacketStructuralChecks = directPreflight
             .substringAfter("accepted.indices.forEach { acceptedIndex ->")
-            .substringBefore("val structuralPipelineKey = packetAuthorities[sceneAcceptedIndices.first()]")
+            .substringBefore("val structuralPipelineKey = sceneStructuralKeys.first()")
         assertFalse(
             perPacketStructuralChecks.contains("stableRenderPipelineKey("),
             "pure preflight must not execute SHA-256 key derivation once per draw",
@@ -4637,7 +4637,7 @@ class GPUFramePreflighterTest {
             Regex(
                 """\.stableRenderPipelineKey\(\s*CORE_PRIMITIVE_RENDER_PIPELINE_KEY,?\s*\)""",
             ).findAll(directPreflight).count(),
-            "pure preflight must derive the shared stable render-pipeline key exactly once per pass",
+            "pure preflight must derive the stable render-pipeline keys exactly once per distinct structural key",
         )
         assertFalse(
             directPreflight.contains("val analyticShapePackedBytes ="),

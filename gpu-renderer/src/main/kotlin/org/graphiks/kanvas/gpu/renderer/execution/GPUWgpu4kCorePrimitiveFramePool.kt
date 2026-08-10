@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
@@ -26,6 +27,11 @@ internal enum class GPUWgpu4kCorePrimitiveFramePoolResource {
     MsaaColorView,
 }
 
+internal data class GPUWgpu4kCorePrimitiveDstReadBinding(
+    val view: GPUTextureView,
+    val sampler: GPUSampler,
+)
+
 /** Native allocation seam. The pool owns every handle returned by this factory. */
 internal interface GPUWgpu4kCorePrimitiveFramePoolFactory {
     fun createVertexBuffer(capacityBytes: Long): GPUBuffer
@@ -34,6 +40,7 @@ internal interface GPUWgpu4kCorePrimitiveFramePoolFactory {
     fun createBindGroup(
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
         uniformBuffer: GPUBuffer,
+        dstRead: GPUWgpu4kCorePrimitiveDstReadBinding? = null,
     ): GPUBindGroup
     fun createPathDepthStencilTexture(
         requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement,
@@ -215,6 +222,7 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val analyticClipBindGroupRequired: Boolean = false,
     val sampleCount: Int = 1,
     val msaaColor: GPUWgpu4kCorePrimitiveMsaaColorRequirement? = null,
+    val dstRead: GPUWgpu4kCorePrimitiveDstReadBinding? = null,
 ) {
     val msaaColorByteSize: Long
         get() = msaaColor?.byteSize ?: 0L
@@ -280,6 +288,15 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         require(coverageMask == null || (pathDepthStencil == null && clipDepthStencil == null)) {
             "Coverage-mask frame slots are color-only and refuse depth-stencil attachments"
         }
+        require(dstRead == null || componentIdentity.isCorePrimitiveDstRead()) {
+            "Destination-read bindings require the exact dst-read component identity"
+        }
+        require(dstRead == null || sampleCount == 1) {
+            "Destination-read frame slots remain single-sample"
+        }
+        require(dstRead == null || (coverageMask == null && pathDepthStencil == null && clipDepthStencil == null)) {
+            "Destination-read frame slots are color-only and refuse mask or depth-stencil attachments"
+        }
     }
 }
 
@@ -342,6 +359,7 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
     val sampleCount: Int = 1,
     val msaaColor: GPUWgpu4kCorePrimitiveMsaaColorHandles? = null,
     internal val analyticClipBindGroupOrNull: GPUBindGroup? = null,
+    val dstRead: GPUWgpu4kCorePrimitiveDstReadBinding? = null,
 )
 
 internal data class GPUWgpu4kCorePrimitiveMsaaColorHandles(
@@ -556,6 +574,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 requirements.analyticClipBindGroupRequired,
                 requirements.msaaColor,
                 requirements.componentIdentity,
+                requirements.dstRead,
             )?.let { refusal ->
                 return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(refusal)
             }
@@ -598,6 +617,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     requirements.msaaColor,
                     requirements.componentIdentity,
                     requirements.sampleCount,
+                    requirements.dstRead,
                 )
             ) {
                 is SlotCreation.Created -> {
@@ -783,6 +803,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
         sampleCount: Int,
+        dstRead: GPUWgpu4kCorePrimitiveDstReadBinding? = null,
     ): SlotCreation {
         var vertex: GPUBuffer? = null
         var index: GPUBuffer? = null
@@ -809,7 +830,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 factory.createUniformBuffer(capacities.uniformBytes)
             }
             bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
-                factory.createBindGroup(componentIdentity, requireNotNull(uniform))
+                factory.createBindGroup(componentIdentity, requireNotNull(uniform), dstRead)
             }
             if (analyticClipBindGroupRequired) {
                 analyticClipBindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
@@ -918,6 +939,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                             )
                         },
                         analyticClipBindGroup,
+                        dstRead,
                     ),
                 ),
             )
@@ -955,6 +977,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         analyticClipBindGroupRequired: Boolean,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        dstRead: GPUWgpu4kCorePrimitiveDstReadBinding? = null,
     ): GPUWgpu4kCorePrimitiveFramePoolRefusal? {
         val oldHandles = slot.handles
         var vertex: GPUBuffer? = null
@@ -980,7 +1003,9 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         val replaceMsaaColor = msaaColorRequirement != null &&
             oldHandles.msaaColor?.requirement != msaaColorRequirement
         val replaceBindGroup = capacities.uniformBytes > slot.capacities.uniformBytes ||
-            oldHandles.componentIdentity != componentIdentity
+            oldHandles.componentIdentity != componentIdentity ||
+            (dstRead != null && oldHandles.dstRead != dstRead) ||
+            (dstRead == null && oldHandles.dstRead != null)
         val replaceCoverageMaskConsumerBindGroup =
             coverageMaskConsumerBindGroupRequired &&
                 (
@@ -1012,7 +1037,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
             if (replaceBindGroup) {
                 bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
-                    factory.createBindGroup(componentIdentity, uniform ?: oldHandles.uniformBuffer)
+                    factory.createBindGroup(
+                        componentIdentity,
+                        uniform ?: oldHandles.uniformBuffer,
+                        dstRead,
+                    )
                 }
             }
             if (replaceAnalyticClipBindGroup) {
@@ -1130,6 +1159,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     oldHandles.msaaColor
                 },
                 analyticClipBindGroup ?: oldHandles.analyticClipBindGroupOrNull,
+                dstRead,
             )
             slot.handles = replacement
             slot.capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(

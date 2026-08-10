@@ -851,7 +851,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
-    fun `dst read shading keys derive one component identity whose layout admits appended dst texture and sampler slots`() {
+    fun `dst read shading keys map to a formula program with appended dst texture and sampler slots`() {
         val srcOverComponent = requireNotNull(
             directKey().corePrimitiveNativeComponentIdentityOrNull(),
         )
@@ -859,37 +859,33 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
 
         val dstReadKey = directKey().copy(
             blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
-                GPUBlendMode.MODULATE,
-                "modulate_dst@v1",
+                GPUBlendMode.DARKEN,
+                "darken@v1",
                 GPUSourceCoverageEncoding.None,
             ),
         )
-        val dstReadComponent = requireNotNull(
-            dstReadKey.corePrimitiveNativeComponentIdentityOrNull(),
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(dstReadKey),
         )
-        assertEquals(PRODUCTION_CORE_PRIMITIVE_DST_READ_COMPONENT_IDENTITY, dstReadComponent)
+        // The Graphite dst-read recipe blends in the shader with fixed-function Src, so the
+        // program keeps the direct geometry entry points and the formula lives in the shader.
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver, mapped.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitiveBlendProgram.DstReadDarken, mapped.identity.blendProgram)
+        assertTrue(isSupportedCorePrimitiveRenderPipelineIdentity(mapped.identity))
         assertEquals(
-            CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY,
-            dstReadComponent.shaderIdentity,
+            "$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:darken",
+            mapped.componentIdentity.shaderIdentity,
         )
         assertEquals(
             CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
-            dstReadComponent.bindingLayoutIdentity,
+            mapped.componentIdentity.bindingLayoutIdentity,
         )
-        // The session cache refuses dst-read component identities until Task 3c admits the
-        // formula program: hasCompatibleComponentIdentity only accepts the closed production
-        // identities, so this cache-key admission is an explicit future decision rather than a
-        // silent no-op.
-        assertFalse(isSupportedCorePrimitivePipelineCacheKey(
-            GPUWgpu4kCorePrimitivePipelineCacheKey(
-                dstReadComponent,
-                assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
-                    mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(directKey()),
-                ).identity,
-            ),
+        // The session cache admits the dst-read formula component identity (Task 3c decision point).
+        assertTrue(isSupportedCorePrimitivePipelineCacheKey(
+            GPUWgpu4kCorePrimitivePipelineCacheKey(mapped.componentIdentity, mapped.identity),
         ))
 
-        val layout = corePrimitiveBindGroupLayoutDescriptor(dstReadComponent)
+        val layout = corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
         val entries = layout.entries
         assertEquals(3, entries.size)
         assertEquals(0u, entries[0].binding)
@@ -909,6 +905,18 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         val srcOverLayout = corePrimitiveBindGroupLayoutDescriptor(srcOverComponent)
         assertEquals(1, srcOverLayout.entries.size)
         assertEquals(0u, srcOverLayout.entries.single().binding)
+
+        // Fixed-function state is exact Src; the formula applies in the fragment shader.
+        val target = assertIs<ColorTargetState>(
+            requireNotNull(
+                corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment,
+            ).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.dstFactor)
+        assertEquals(GPUBlendOperation.Add, requireNotNull(target.blend).color.operation)
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).alpha.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).alpha.dstFactor)
     }
 
     @Test

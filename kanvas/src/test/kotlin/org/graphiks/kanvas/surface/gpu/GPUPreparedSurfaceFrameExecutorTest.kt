@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
@@ -498,38 +499,43 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `destination copy semantic shape refusal on core primitives falls back before prepared entry`() {
-        val refusal = diagnostic("unsupported.native-frame-payload.destination-copy-semantic-shape")
+    fun `destination read core frame executes ready with copy then formula evidence`() {
+        // Hard DESTINATION rect (fixed SRC_OVER) followed by a hard DARKEN source rect over it.
+        // The prepared core lane must build Ready (mixed structural keys are admitted by the
+        // direct-pass authority) and execute Succeeded with the destination-read formula evidence.
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
         val session = FakeSession(submissionFactory = { readbackId ->
-            val attempt = GPUFrameAttemptID("attempt-dst-copy-fallback")
-            GPUPreparedSurfaceSubmission(
-                attempt,
-                GPUPreparedSurfaceImmediateState.Refused(refusal),
-                CompletableFuture.completedFuture(
-                    GPUPreparedSurfaceCompletion(
-                        attempt,
-                        GPUFrameStructuralOutcome.Refused,
-                        refusal,
-                        GPUPreparedSurfaceOutputKind.Absent,
-                        null,
-                        null,
-                    ),
-                ),
-            )
+            successSubmission(readbackId, ByteArray(32 * 24 * 4))
         })
         val backend = FakeBackend(capabilities(), session)
 
-        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
-            GPUPreparedSurfaceFrameExecutor(
-                GPUPreparedSurfaceBackendPortFactory { backend },
-            ).execute(request()),
-        )
+        val result = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        ).execute(executionRequest(operations, width = 32, height = 24))
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result)
 
-        assertEquals(
-            "unsupported.native-frame-payload.destination-copy-semantic-shape",
-            refused.diagnostic.code.value,
-        )
+        assertEquals(1, success.evidence.destinationSnapshotCreations)
+        assertEquals(1, success.evidence.destinationCopies)
+        assertEquals(0, success.evidence.destinationReadbackSnapshots)
+        val evidence = success.evidence.destinationReadEvidence.single()
+        assertEquals("darken", evidence.modeLabel)
+        assertEquals("copy-then-formula", evidence.action)
+        assertEquals(setOf(evidence.commandId), success.evidence.destinationReadTextCommandIds)
         assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
         assertEquals(1, session.closeCalls)
     }
 
@@ -1018,7 +1024,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
             renderPasses = 1,
             draws = 1,
             pipelineBinds = 1,
+            destinationSnapshotCreations = destinationReadCommandIds().size.toLong(),
+            destinationCopies = destinationReadCommandIds().size.toLong(),
         )
+
+        private fun destinationReadCommandIds(): Set<Int> =
+            submittedTaskLists.lastOrNull()?.tasks
+                ?.filterIsInstance<GPUTask.DestinationSnapshots>()
+                ?.flatMap { task -> task.payload.operations }
+                ?.flatMap(GPUDestinationSnapshotOperation::consumers)
+                ?.map { consumer -> consumer.commandId.value }
+                ?.toSet()
+                .orEmpty()
 
         private fun postCloseCounters() = postCompletionCounters().copy(targetCloses = 1)
     }

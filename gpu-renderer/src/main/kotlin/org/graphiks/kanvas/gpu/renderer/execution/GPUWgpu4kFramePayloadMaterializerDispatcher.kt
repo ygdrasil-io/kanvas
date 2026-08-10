@@ -172,6 +172,11 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
     return when {
         hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect
+        hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.CorePrimitive::class) ->
+            // Destination-reading core-primitive frames route through the multi-key core
+            // materializer: the direct pass emits the ordered snapshot copy and the dst-read
+            // formula pipelines sample it (Graphite DrawContext dst-copy recipe).
+            GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
             GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
             distinct.all { semanticClass ->
@@ -182,7 +187,7 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         hasDestinationCopy -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.destination-copy-semantic-shape",
-            "A prepared destination-copy frame requires the supported solid-rectangle semantic shape.",
+            "A prepared destination-copy frame requires the supported solid-rectangle or core-primitive semantic shape.",
         )
         distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
@@ -234,6 +239,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
     private val corePrimitiveLimits: GPULimits? = null,
     private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
+    private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
         preparedSurfaceMixedMaterializer?.capabilities?.contains(
@@ -341,6 +347,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                         "unsupported.native-core-primitive.limits-unavailable",
                         "The direct CorePrimitive route requires observed backend limits.",
                     ),
+                    onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 reusableFramePlan,
                 reusableEncoderPlan,

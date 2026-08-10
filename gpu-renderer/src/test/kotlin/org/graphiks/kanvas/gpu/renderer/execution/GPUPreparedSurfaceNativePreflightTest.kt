@@ -257,11 +257,48 @@ class GPUPreparedSurfaceNativePreflightTest {
         val dstReadKey = srcOverKey.copy(
             blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
                 GPUBlendMode.MODULATE,
-                "modulate_dst@v1",
+                "modulate@v1",
                 GPUSourceCoverageEncoding.None,
             ),
         )
-        val dstRead = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
+        // An all-dst-read multi-key seal admits the formula program: every key maps to one
+        // dst-read pipeline and component, and the per-key cache keys differ per mode.
+        val dstReadAccepted = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Accepted>(
+            validateMultiKeyDirectPassSealAuthority(
+                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                    listOf(dstReadKey),
+                    slab(deviceGeneration = generation.value).let { twoSlot ->
+                        GPUCorePrimitiveUniformSlabSeal(
+                            GPUUniformSlabPlan(
+                                planHash = "multi-key-plan-single",
+                                sourceLabel = "core-primitive-uniform-pass",
+                                deviceGeneration = twoSlot.plan.deviceGeneration,
+                                alignmentBytes = 256L,
+                                totalBytes = 256L,
+                                uploadBudgetBytes = 256L,
+                                slots = listOf(
+                                    GPUUniformSlabSlot("draw-1", "payload-1", 32L, 0L, 256L),
+                                ),
+                            ),
+                            listOf(1),
+                            ByteArray(256),
+                        )
+                    },
+                ),
+                listOf(dstReadKey),
+                generation.value,
+                limits,
+            ),
+        )
+        assertEquals(
+            CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+            dstReadAccepted.componentIdentity.bindingLayoutIdentity,
+        )
+        assertEquals(1, dstReadAccepted.cacheKeys.size)
+        // A pass mixing a fixed src-over key with a destination-reading key cannot share one
+        // bind-group component identity: the dst-read layout appends the snapshot texture and
+        // sampler, so the mixed pass keeps the multi-key-component defense.
+        val mixed = assertIs<GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused>(
             validateMultiKeyDirectPassSealAuthority(
                 GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
                     listOf(srcOverKey, dstReadKey),
@@ -272,7 +309,7 @@ class GPUPreparedSurfaceNativePreflightTest {
                 limits,
             ),
         )
-        assertEquals("unsupported.native-core-primitive.dst-read-formula", dstRead.code)
+        assertEquals("unsupported.native-core-primitive.multi-key-component", mixed.code)
         // The one-component bind-group layout invariant cannot be violated by any constructible
         // multi-key seal: every admitted Shading key with the shared dynamic-uniform32 layout
         // lowers onto the single production component, and the destination-reading key that could

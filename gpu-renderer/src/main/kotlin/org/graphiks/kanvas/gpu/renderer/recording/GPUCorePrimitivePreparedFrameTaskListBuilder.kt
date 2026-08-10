@@ -2121,11 +2121,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     "or path layouts.",
             )
         }
-        // The prepared-surface direct route materializes one shared structural pipeline per pass.
-        // Mixed blend-mode shading packets are therefore admitted only as far as the classifier,
-        // then refused here so the surface router continues on the legacy route instead of failing
-        // at execution. The preflighter mirrors this shared-key authority; per-key pass
-        // materialization is scheduled with the route-authority work.
+        // The prepared-surface direct route materializes one shared uniform slab per pass with
+        // per-key structural pipelines (Graphite `DrawPass.fFullPipelines` + `BindGraphicsPipeline`
+        // index): mixed blend-mode shading packets admit distinct keys, and the preflighter's
+        // multi-key authority validates the per-key seals at planning time.
         val directPassStructuralKeys = geometryPackets
             .filter { packet ->
                 packet.role == GPUDrawPacketRole.Shading &&
@@ -2143,13 +2142,6 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 )
             }
             .distinct()
-        if (directPassStructuralKeys.size > 1) {
-            return refused(
-                "unsupported.recording.core_primitive_mixed_pipeline_keys",
-                "One direct CorePrimitive pass requires one exact shared structural pipeline; " +
-                    "mixed blend-mode passes remain on the legacy route.",
-            )
-        }
         val maxBufferSize = if (geometryPackets.isEmpty()) null else limits.maxBufferSize ?: return refused(
             "unsupported.recording.core_primitive_max_buffer_size_unavailable",
             "Direct CorePrimitive uniform slab planning requires observed maxBufferSize.",

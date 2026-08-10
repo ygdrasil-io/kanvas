@@ -690,24 +690,28 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `two analytic rects with mixed blend modes refuse on the shared structural pipeline contract`() {
+    fun `two analytic rects with mixed blend modes build ready on the multi key direct pass`() {
         // Both rects use Paint.fill(...) defaults (antiAlias = true), so they share the analytic
-        // shape uniform80 layout; only their blend modes differ. The prepared-surface direct route
-        // materializes one structural pipeline per pass, so a pass mixing blend pipeline keys is
-        // refused at recording and the surface router continues on the legacy route. This is a
-        // recording contract, not a blend-plan refusal: each single-mode frame builds Ready.
+        // shape uniform80 layout; only their blend modes differ. The direct pass assembler emits
+        // multi-key seals (distinct shading keys, shared slab) instead of refusing, so the mixed
+        // frame builds Ready at the recording boundary.
         val mixed = request(listOf(
             rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC_OVER)),
             rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
         ))
 
-        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(mixed),
+            (GPUPreparedSurfaceFrameBuilder.build(mixed) as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
         )
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_pipeline_keys",
-            refused.diagnostic.code.value,
-        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(2, packets.size)
+        val blendModes = packets.mapNotNull { packet ->
+            (packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode
+        }
+        assertEquals(setOf(GPUBlendMode.SRC_OVER, GPUBlendMode.CLEAR), blendModes.toSet())
     }
 
     @Test

@@ -95,7 +95,7 @@ internal object GPUPreparedSurfaceProductRouter {
                     execution.evidence.destinationReadEvidence
                         .sortedBy(GPUPreparedSurfaceDestinationReadEvidence::commandId)
                         .forEach { routeEvidence ->
-                            val operation = "DrawText:${routeEvidence.commandId}"
+                            val operation = "${routeEvidence.operationFamily}:${routeEvidence.commandId}"
                             degrade(
                                 code = "route:destination-read:$operation",
                                 operation = operation,
