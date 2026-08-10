@@ -1,8 +1,8 @@
 # FP-09 Retire Legacy Immediate Renderer — Terminal/Prepared Evidence
 
-Status: **skeleton** — Task 6 capture. Full narrative finalized in Task 10.
+Status: **final** — Task 10 closure (full regression, stale-pin re-points, roadmap FP-09 completed).
 
-Branch: `codex/graphite-dawn-frame-fp09`, HEAD `b1163ae9b` (Task 5 route collapse).
+Branch: `codex/graphite-dawn-frame-fp09`, HEAD `571ba6e23` (Task 5 route collapse); closure commit adds the Task 10 evidence and roadmap update.
 
 ## 1. Evidence runs
 
@@ -143,3 +143,195 @@ Verification:
 - `grep frame-build-contract` in tests now matches only the genuine-bug
   catch-all pin (`GPUPreparedSurfaceFrameBuilderTest`); the code is no longer
   produced for dst-read core frames.
+
+## 8. Before/after legacy map (Task 1 inventory → final state)
+
+The Task 1 before-snapshot (`reports/fp09-legacy-map.txt`, committed at `42ef8a093`)
+lists every production `Legacy` site at the FP-08 tip `accaea616`:
+
+| site | retired by |
+| --- | --- |
+| `GPUPreparedSurfaceFrameGate.kt:28,60-61,67-68` (`Eligibility.Legacy`, `legacy.surface.prepared.flush-snapshot`/`empty-frame`) | Task 5 (`b1163ae9b`) — eligibility variant deleted; `FlushAndSnapshot`/empty frames become state-event `Candidate` → executor `NoOp` |
+| `GPUPreparedSurfaceProductRouter.kt:36,61,64,152` (`Route.Legacy`, `hasTerminalPreparedFamily`) | Task 5 — `BeforePreparedEntryRefused` → always `Terminal`; `hasTerminalPreparedFamily` deleted |
+| `GPUPreparedSurfaceProductEntry.kt:21,56,70-72` (`GPUPreparedSurfaceLegacyPort`, `RouteDecision.Legacy`, `legacyPort`) | Task 5 — port interface and legacy branch deleted |
+| `GPURenderer.kt:714,724-725,729` (`preparedSurfaceLegacyPort`, `renderViaGpuLegacy`) | Task 7 (`292861921`) — legacy renderer body (~2,300 lines) deleted |
+| `GPURenderer.kt:87-696, 3043-3262` (legacy-only helpers + CPU text-atlas builders) | Task 7 |
+
+Final state (Task 10 Step 6): `rg` over `kanvas/src/main` for
+`GPUPreparedSurfaceProductRoute.Legacy|GPUPreparedSurfaceEligibility.Legacy|GPUPreparedSurfaceRouteDecision.Legacy|GPUPreparedSurfaceLegacyPort|renderViaGpuLegacy|legacy.surface.prepared|hasTerminalPreparedFamily|legacyPort`
+returns **nothing**; the second sweep
+(`GPUClipExecution|renderWithClip|GPUClipRouteTrace|LayerScissorOffscreenTarget|buildTextAtlasMesh|GPUClipUsePrepass|GPUClipCoverageFrameCache|expandPicturesForGpuReplay`)
+returns only substring matches of the live prepared clip-execution contracts
+(`GPUClipExecutionPlan`/`GPUClipExecutionGeometry`/`GPUClipExecutionIdentityBuilder`,
+all in `gpu-renderer/.../clips/GPUClipExecutionPlan.kt`) — zero matches for the
+deleted `GPUClipExecution.kt` symbols (`renderWithClip`, `GPUClipRouteTrace`,
+`GPUClipSourceSurface`, `GPUClipRouteContext`, `copyForClipSource`,
+`GPUClipDestinationReadComposer`, …). `GPUPreparedSurfaceLegacyAbsenceTest` pins
+all 16 retired tokens (the 4 FP-08 tokens + the 12 FP-09 tokens) out of
+`surface/gpu` production sources.
+
+## 9. Per-family decision table (the FP-09 policy, as executed)
+
+| family | plan §2 code | cases (Task 6 evidence) | decision | FP-11 note |
+| --- | --- | --- | --- | --- |
+| 1. destination-read blends | `unsupported.destination_read.required` (630) | covered | **Prepared coverage** (Tasks 3/3b/3c): `ShaderBlendWithDstRead` + GPU-owned `TextureCopy` + `GPUBlendFormulaLibrary` on core primitives; `GPUAllApiBlendSurfaceTest` routes render prepared with `route:destination-read:<op>` evidence (`reason == "gpu-copy-then-formula"`) and match the CPU pixel oracle | — |
+| 2. non-SrcOver core blends | `unsupported.native-core-primitive.blend` (330) | covered | **Prepared coverage** (Task 2): `FixedFunctionBlend`/`ShaderBlendNoDstRead` admission via the direct-native-route classifier + multi-pipeline per pass (Task 3b) | — |
+| 3. hairline points | `unsupported.core_primitive.point.hairline_exact_lowering` (168) | terminal | **Stable terminal refusal** (Task 4 policy; pinned by `GPUFramePathApiInventoryTest.kt:735,751` and the router matrix) | hairline points |
+| 4. mixed uniform layouts | `unsupported.recording.core_primitive_mixed_uniform_layouts` (202) | terminal | **Stable terminal refusal** — multi-layout pass splitting is a recording feature (emission `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602,2104`) | mixed uniform layouts |
+| 5. analytic clip non-direct geometry | `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry` (2) | terminal | **Stable terminal refusal** (emission `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994`) | analytic-clip non-direct geometry |
+| 6. multi-render dst-copy | `unsupported.native-core-primitive.multi-render-dst-copy` (60) | terminal | **Stable terminal refusal** — the prepared lane executes only single-render dst-read frames (snapshot scheduled before its one pass); destination-then-consumer frames refuse (executor residual, documented at `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt` `validateCorePrimitiveDestinationCopy`) | multi-render dst-copy |
+| 7. analytic-shape multi-key | `unsupported.native-core-primitive.analytic-shape-multi-key` (2) | terminal | **Stable terminal refusal** — AA multi-key dst-read shapes | analytic-shape multi-key |
+| 8. dst-read formula mapped routes | `unsupported.native-core-primitive.dst-read-formula` (2) | terminal | **Stable terminal refusal** — single-op dst-read formula frames on mapped routes | dst-read formula |
+| 9. path/drrect dst-read | `unsupported.native-core-primitive.path-destination-read` (60) | terminal | **Designed refusal** (§4 below): path-stencil dst-read cannot resolve the snapshot consumer ref; the recording authority refuses by name before the assembler | path destination-read |
+| 10. mask-blur rect frames | `unsupported.core_primitive.rect.analysis_authority_missing` | terminal | **Stable terminal refusal** (evidence §4): top-level mask-blur frames carry no rect route authority after the legacy mask machinery deletion (Task 8) | mask-blur/filter gap (FP-11 "filter") |
+| 11. mask-blur path/rrect | `unsupported.pipeline.capability_missing` (path), `invalid.recording.core_primitive_semantic_authority` (rrect) | terminal | **Stable refusals** — the path frame refuses at the FillPath capability gate; the rrect frame refuses at the recording authority | mask-blur/filter gap (FP-11 "filter") |
+
+Coverage for families 1-2 required the Graphite-faithful multi-pipeline work
+(Tasks 3b/3c — see §14): a single prepared pass now materializes N structural
+pipelines with per-pipeline bind groups, exactly like Graphite's `DrawPass`
+pipeline array. The mixed-key gate (`core_primitive_mixed_pipeline_keys`) was
+removed in Task 3c; frames that STILL mix incompatible uniform layouts refuse
+with the family-4 code rather than rendering on a single-key pass.
+
+## 10. Task 6 evidence run recap (red capture + re-points)
+
+§1-§7 above record the Task 6 capture: red run 513 failures grouped into the
+per-code table (§2), the blend/clip suite re-points (§3, §5), the straggler
+classification (§4), the green verification (§6), and the path-dst-read
+residual resolution (§7). Nothing in those sections changed during Task 10;
+the full-run discovery in §15 (18 stale legacy pins in three files the Task 6
+inventory did not cover) is the only re-point extension the full-run proof
+added.
+
+## 11. No-legacy-fated-frame regression proof (Task 3c fix 3 verification)
+
+The route collapse (`b1163ae9b`) guarantees **no frame is fated to the legacy
+route**: `BeforePreparedEntryRefused` routes to `Terminal` unconditionally, and
+the `hasTerminalPreparedFamily` split is deleted. Pinned by
+`GPUPreparedSurfaceProductRouterTest.before-entry refusals for the terminal
+families are never legacy` — a matrix of the three Task-4 codes plus a generic
+core refusal, each returning `GPUPreparedSurfaceProductRoute.Terminal` with the
+exact code.
+
+The Task 3c executor residuals are **designed refusal codes, not hidden
+fallbacks**: the dst-read core lane executes only frames whose snapshot copy is
+scheduled before the frame's single render pass; destination-then-consumer
+frames refuse with `unsupported.native-core-primitive.multi-render-dst-copy`
+(the limitation is documented at
+`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.validateCorePrimitiveDestinationCopy`,
+and the SolidRect destination-copy lane carries the background-then-consumer
+pixel oracle in `GPUWgpu4kDestinationCopyFrameSmokeTest`). A `rg` sweep for
+legacy identifiers in `gpu-renderer/src` executor sources returns nothing.
+
+## 12. NoOp / flush-snapshot parity proof
+
+`FlushAndSnapshot` and empty/state-only frames classify as `Candidate`
+(`GPUPreparedSurfaceFrameGateTest.empty and state only frames classify as
+candidate and complete as noop`, `flush snapshot frames classify as candidate
+state event frames`) and the executor's `GPUPreparedSurfacePreBackendNoOpGate`
+returns `NoOp` with zero native work; `completeNoOp` returns transparent
+zero-filled pixels for `ReadbackRgba` — exact parity with the legacy renderer's
+cleared-target result (pinned in `GPUPreparedSurfaceFrameExecutorTest`). The
+`legacy.surface.prepared.flush-snapshot`/`legacy.surface.prepared.empty-frame`
+codes no longer exist (absence guard pins `legacy.surface.prepared`).
+
+## 13. Guard-retention proof (surviving symbols + pinned tests)
+
+| surviving symbol | pinned by |
+| --- | --- |
+| `DisplayOp.coreRoutePreflightRefusalReason` (`nested_vertices` guard) | `GPUPreparedSurfaceProductRouterTest.kt:295-301` (exact `unsupported.picture.nested_vertices` code for vertices/meshes + null preflight for other families) — zero production callers at HEAD, unit pin only; the composite capture refuses vertices/meshes children with its own `unsupported.composite.operation` (KDoc corrected in Task 10) |
+| `DisplayOp.coveragePlaneTask4RefusalOrNull` | plan-mandated named boundary for future visual operations |
+| `DisplayOp.DrawPicture.picturePreflightRefusalReason` + `Picture.containsLayer` + `SaveLayerRec.gpuCompositePreflightRefusalOrNull` | `GPUPreparedCompositeCaptureSemanticTest` (composite capture preflight semantics), `GPUPreparedCompositeFrameRouteIntegrationTest` |
+| `GPUOpMapper.withPictureReplayState`/`clipForPictureReplay`/`transformForPictureReplay` | prepared composite capture (`GPUPreparedCompositeCapture.kt:323`) — `expandPicturesForGpuReplay` deleted (Task 8) |
+| `unavailable.surface.prepared.runtime-capabilities` (FP-08 rename) | untouched |
+
+Guard verification (Task 10 Step 3): `GPUPreparedSurfaceProductRouterTest`
+(15) + `GPUPreparedCompositeCaptureSemanticTest` (19) +
+`GPUPreparedCompositeFrameRouteIntegrationTest` (8) + `GPUAllApiBlendSurfaceTest`
+(1,864) + `GPUClipCoverageSurfaceTest` (41) = **1,947 tests, 0 failures**.
+
+## 14. Graphite C++ evidence (multi-pipeline per-pass — the FP-09 amendment rationale)
+
+Verified at `/Users/chaos/workspace/kanvas-forge/skia-main` (2026-08-08, recorded
+in the plan amendment `f45d4fc6f`): a Graphite `DrawPass` holds an ARRAY of
+pipelines with draws referencing them by index via `BindGraphicsPipeline`
+commands emitted MID-PASS (`DrawPass.h:103-113`, `DrawCommands.h:108-109`,
+`DrawList.cpp:203-206`); Dawn executes `SetPipeline` inside one render pass
+(`DawnCommandBuffer.cpp:675-679, 775-784`); blend mode is per-pipeline
+(`GraphicsPipelineDesc.h:27-43`), and `RenderPassDesc.h:87-91` anticipates
+mixed pipelines in one pass — Graphite never splits a pass on blend mode.
+Destination reads use a per-pass `kTextureCopy` decision at flush
+(`Device.cpp:2176`), the GPU-only copy is ordered BEFORE the consuming
+`RenderPassTask` in the same encoder (`DrawContext.cpp:198-204, 270-315`,
+`Image_Graphite.cpp:113-137`), and the dst texture+sampler append at the END of
+the fragment bind group (`DawnCommandBuffer.cpp:927-938`) with
+`rebindTexturesOnPipelineChange` per-pipeline bind groups
+(`DrawList.cpp:140-174`). FP-09's Tasks 3b/3c implement exactly this model for
+the prepared core lane: N structural pipelines per direct pass, per-pipeline
+bind groups, dst bindings at the fragment-layout end, dst copy before the
+consuming pass.
+
+## 15. Full-run regression proof (Task 10 Step 2) and test-score deltas
+
+Before (FP-08 close, `accaea616`, FP-08 evidence):
+`:kanvas:test` 3,230/3,230 green; `:gpu-renderer:test` 3,257 tests, 2 failed
+(both documented pre-existing).
+
+After (FP-09 close, Task 10):
+`:kanvas:test` **3,210 tests, 0 failures, 0 errors, 0 skipped** (count drops
+because Task 9 deleted the four legacy-pinning test files); `:gpu-renderer:test`
+**3,273 tests, 2 failed** — both documented pre-existing and unchanged:
+`GPURendererPackageBoundaryTest` package-boundary case (exactly 20 cycle
+violations, 0 rule violations) and `GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest`
+(AA-4x partial-premultiplied red edge, `assertPartialPremultipliedRedEdge`,
+reproduces at base SHA).
+
+Full-run discovery — 18 stale legacy pins in three files missed by the Task 6
+inventory were re-pointed in Task 10 to the designed terminal codes (identical
+failures reproduced at pristine HEAD `571ba6e23`; all 21 tests in the three
+classes pass at the FP-08 tip `accaea616`, proving the frames were
+legacy-rendered pre-FP-09):
+
+| file | tests re-pointed | codes |
+| --- | --- | --- |
+| `GPUClipAdvancedBlendSurfaceTest` | 3 | `unsupported.recording.core_primitive_mixed_uniform_layouts` (AA-clip dst-read; scissor dst-read), `unsupported.core_primitive.rect.analysis_authority_missing` (mask-blur dst-read) |
+| `GPUMaskBlurSurfaceTest` | 11 | `unsupported.core_primitive.rect.analysis_authority_missing` (top-level mask-blur rect frames), `unsupported.pipeline.capability_missing` (triangle), `invalid.recording.core_primitive_semantic_authority` (rrect) |
+| `GPUPathClipRegressionTest` | 4 | `unsupported.recording.core_primitive_mixed_uniform_layouts` ×3, `unsupported.native-core-primitive.multi-render-dst-copy` ×1 |
+
+Every re-point asserts the exact terminal code with the fixture retained; the
+AA-clip dst-read re-point additionally asserts no destination snapshot is
+allocated before refusal (`destinationReadbackSnapshots`/`destinationCopies`
+unchanged). Top-level mask blur remains a tracked FP-11 gap (§16); mask blur
+inside a saveLayer scope still renders through the composite capture's
+`GPUPreparedMaskFilterLowerer` (FP-07 composite route, unchanged).
+
+## 16. FP-11 tracking notes (terminal families, per the roadmap)
+
+Per `active-todo.md` FP-11 "FP-09 transfers", each with its emission site and
+case count:
+
+- exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering` (`GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465`; 168 cases);
+- multi-uniform-layout direct passes — `unsupported.recording.core_primitive_mixed_uniform_layouts` (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602, 2104`; 202 cases);
+- analytic clips over non-direct shading geometry — `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry` (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994`; 2 cases);
+- multi-render dst-copy (destination-then-consumer dst-read frames) — `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
+- analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key` (2 cases);
+- path destination-read — `unsupported.native-core-primitive.path-destination-read` (60 cases; §4);
+- top-level mask-blur rect/path/rrect frames — `unsupported.core_primitive.rect.analysis_authority_missing` / `unsupported.pipeline.capability_missing` / `invalid.recording.core_primitive_semantic_authority` (prepared top-level blur route unwired; legacy machinery deleted in Task 8; orphaned `GPUMaskBlurDispatch` noted for cleanup).
+
+## 17. Known environmental flake documentation
+
+`failed.surface.prepared.session-close` continues to land on a different random
+non-dst-read frame whenever a GPU-heavy suite re-runs under churn. Observed
+again during Task 10 (the guard suite run, then 4 further frames on an isolated
+`GPUAllApiBlendSurfaceTest` re-run under elevated machine GPU pressure); a
+second isolated re-run passed 1,864/1,864, and the full `:kanvas:test`
+aggregate passed 3,210/3,210 with zero failures. No assertion was weakened for
+it; the class passes in isolation on re-run.
+
+## 18. Commit trail (FP-09)
+
+`42ef8a093` (inventory) · `9dcc4d36c`+`e5263bed4` (Task 2) · `9799fdeb2` (Task 3)
+· `f45d4fc6f` (plan amendment) · `efbd9332a`+`e0d164824` (Task 3b) ·
+`b17251b2c`+`746d97f93`+`1dbf2e5f7` (Task 3c) · `b1163ae9b` (Task 5) ·
+`56cf93f30`+`ac3b989a4`+`469a850bb` (Task 6) · `292861921` (Task 7) ·
+`6c44db0e9` (Task 8) · `4dc764bc8`+`571ba6e23` (Task 9) · Task 10 closure commit.
