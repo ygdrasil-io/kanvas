@@ -32,10 +32,10 @@ Red capture (Task 6 Step 1):
 | `unsupported.native-core-primitive.multi-render-dst-copy` | 60 | 0 | 60 | dst-read multi-render (rect/color) |
 | `unsupported.native-core-primitive.analytic-shape-multi-key` | 0 | 2 | 2 | AA multi-key dst-read shapes |
 | `unsupported.native-core-primitive.dst-read-formula` | 0 | 2 | 2 | single-op dst-read formula (mapped routes) |
-| `invalid.surface.prepared.frame-build-contract` | 60 | 0 | 60 | path/drrect dst-read — see §4 |
+| `unsupported.native-core-primitive.path-destination-read` | 60 | 0 | 60 | path/drrect dst-read (designed refusal, §4) |
 | `unsupported.core_primitive.rect.analysis_authority_missing` | 0 | 2 | 2 | mask-blur rect authority |
 | `failed.surface.prepared.session-close` | 1 | 0 | 1 | environmental flake (Run 1 only) |
-| **total** | **498** | **15** | **512** | |
+| **total** | **498** | **15** | **513** | |
 
 Cross-reference to FP-08 evidence §3 (the executed-then-reverted collapse):
 the reverted run reported 5 code families (`destination_read.required` 630,
@@ -62,7 +62,7 @@ full-suite aggregate.
 | DrawRect, DrawColor | UNCLIPPED/SCISSOR, artistic + PLUS | `unsupported.native-core-primitive.multi-render-dst-copy` |
 | DrawRect, DrawColor | UNCLIPPED/SCISSOR, fixed/SCREEN/MODULATE | Prepared (pixel oracle) |
 | DrawPath, DrawDRRect | ALPHA_MASK | `unsupported.recording.core_primitive_mixed_uniform_layouts` |
-| DrawPath, DrawDRRect | UNCLIPPED/SCISSOR, artistic + PLUS | `invalid.surface.prepared.frame-build-contract` (§4) |
+| DrawPath, DrawDRRect | UNCLIPPED/SCISSOR, artistic + PLUS | `unsupported.native-core-primitive.path-destination-read` (§4) |
 | DrawPath, DrawDRRect | UNCLIPPED/SCISSOR, fixed/SCREEN/MODULATE | Prepared (pixel oracle) |
 | Clear | all | Prepared (mode is ignored by design) |
 
@@ -72,16 +72,25 @@ that NO destination readback was allocated before refusal.
 
 ## 4. Stragglers (unexpected codes, classified explicitly)
 
-- `invalid.surface.prepared.frame-build-contract` (60): DrawPath/DrawDRRect
-  with a dst-read blend outside an analytic clip. The builder's dst-read
-  evidence authentication (`copy.consumers.single()`,
-  GPUPreparedSurfaceFrameBuilder.kt:510) finds no consumer for a
-  non-direct-geometry source and throws `NoSuchElementException`, which the
-  builder's catch-all converts to `invalid.surface.prepared.frame-build-contract`.
-  Stable and reproducible across runs, but it is a generic internal-contract
-  wrapper, not one of the four designed dst-read residuals. Task 7 (legacy
-  retirement) / Task 10 should replace it with a designed refusal code for the
-  path/drrect dst-read family (candidate: `unsupported.native-core-primitive.*`).
+- `unsupported.native-core-primitive.path-destination-read` (60, designed
+  refusal added by the Task 6 fix commit): DrawPath/DrawDRRect with a
+  dst-read blend outside an analytic clip. Root cause of the original
+  `invalid.surface.prepared.frame-build-contract` wrapper: the snapshot
+  planner (`buildCorePrimitiveDestinationSnapshotPlans`) is family-agnostic
+  and records a `TextureCopy` consumer ref at the BASE packet id, but the
+  assembler lowers path-stencil (`StencilEdgeFan`) sources into
+  producer/cover packets with fresh ids
+  (`<base>.path-stencil-cover`), so the dst-read cover can never be resolved
+  (`renderByPacketId.getValue(plan.packet.packetId)` throws
+  `NoSuchElementException`, GPUCorePrimitivePreparedFrameTaskListBuilder.kt
+  :3341) and the frame-builder catch-all wrapped it as
+  `invalid.surface.prepared.frame-build-contract`. Even with the consumer
+  resolved, the dst-read formula forces the cover into its own render pass,
+  which the path-stencil authority rejects, so the shape cannot execute
+  prepared. The recording authority now refuses it by name before the
+  assembler. `invalid.surface.prepared.frame-build-contract` remains only as
+  the catch-all guard for genuine builder bugs (pinned by
+  `GPUPreparedSurfaceFrameBuilderTest.unexpected construction exception…`).
 - `unsupported.recording.core_primitive_analytic_shape_clip` (7, clip suite):
   designed refusal at the task-list builder ("Prepared analytic shapes require
   NoClip or ScissorOnly") reached when a rrect/analytic-shape frame sits under
@@ -115,3 +124,22 @@ Conclusion: the `failed.surface.prepared.session-close` flake lands on a
 different random non-dst-read frame whenever the full suite re-runs under GPU
 churn and passes in isolation — the documented environmental behavior. No
 assertion was weakened for it.
+
+## 7. Task 6 follow-up (path dst-read residual resolution)
+
+The 60 `invalid.surface.prepared.frame-build-contract` cases were resolved in
+commit (Task 6 fix): the recording authority now refuses path-stencil
+dst-read frames with the designed `unsupported.native-core-primitive.path-
+destination-read` code, and the blend suite re-points those cases to it.
+Verification:
+
+```bash
+./gradlew -F off :kanvas:test --tests "*GPUAllApiBlendSurfaceTest" \
+  --tests "*GPUClipCoverageSurfaceTest" --tests "*GPUPreparedSurfaceFrameBuilderTest" \
+  --no-parallel --console=plain
+```
+
+- 1864 + 41 + 30 tests, 0 failures, BUILD SUCCESSFUL.
+- `grep frame-build-contract` in tests now matches only the genuine-bug
+  catch-all pin (`GPUPreparedSurfaceFrameBuilderTest`); the code is no longer
+  produced for dst-read core frames.

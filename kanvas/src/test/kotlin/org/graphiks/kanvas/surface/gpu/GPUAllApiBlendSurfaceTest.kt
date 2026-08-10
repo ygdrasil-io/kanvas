@@ -593,7 +593,7 @@ class GPUAllApiBlendSurfaceTest {
                     context == BlendContext.ALPHA_MASK ->
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        ProductRouteExpectation.Terminal(PREPARED_FRAME_BUILD_CONTRACT_REFUSAL)
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
                     else -> null
                 }
                 else -> error("Unclassified core primitive API ${api.name}")
@@ -985,8 +985,8 @@ class GPUAllApiBlendSurfaceTest {
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_MULTI_RENDER_DST_COPY_REFUSAL =
             "unsupported.native-core-primitive.multi-render-dst-copy"
-        const val PREPARED_FRAME_BUILD_CONTRACT_REFUSAL =
-            "invalid.surface.prepared.frame-build-contract"
+        const val PREPARED_PATH_DST_READ_REFUSAL =
+            "unsupported.native-core-primitive.path-destination-read"
         // The 15 dst-read modes that the direct lane refuses for a two-draw frame:
         // every artistic mode except SCREEN (whose formula program is implemented)
         // plus PLUS. Matches the evidence run's multi-render-dst-copy case list.

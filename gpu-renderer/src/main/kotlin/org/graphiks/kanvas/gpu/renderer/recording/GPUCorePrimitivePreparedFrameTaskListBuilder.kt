@@ -2547,6 +2547,23 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Prepared core-primitive destination-snapshot byte accounting overflowed.",
             )
         }
+        // The snapshot consumer ref records the base packet id, but the assembler lowers a
+        // path-stencil (StencilEdgeFan) source into producer/cover packets with fresh ids, so
+        // the dst-read cover can never be resolved from the base packet. The dst-read formula
+        // also forces the cover into its own render pass, which the path-stencil authority
+        // rejects. Refuse the path dst-read shape by name at the recording authority instead
+        // of surfacing an internal frame-build contract wrapper from the assembler.
+        destinationReadPlans.firstOrNull { plan ->
+            val geometry = (request.semanticsByCommandId[plan.packet.commandIdValue]
+                as? GPUDrawSemanticPayload.CorePrimitive)?.geometry
+            geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
+                geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
+        }?.let {
+            return refused(
+                "unsupported.native-core-primitive.path-destination-read",
+                "Prepared path-stencil packets cannot consume destination-read snapshots yet.",
+            )
+        }
         val destinationReadPlansByCommandId = destinationReadPlans.associateBy { it.packet.commandIdValue }
         val preparations = mutableListOf(
             corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
