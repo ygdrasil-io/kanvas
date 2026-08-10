@@ -500,16 +500,11 @@ class GPUPreparedSurfaceFrameExecutorTest {
 
     @Test
     fun `destination read core frame executes ready with copy then formula evidence`() {
-        // Hard DESTINATION rect (fixed SRC_OVER) followed by a hard DARKEN source rect over it.
-        // The prepared core lane must build Ready (mixed structural keys are admitted by the
-        // direct-pass authority) and execute Succeeded with the destination-read formula evidence.
+        // One hard DARKEN rect over the frame's initial (cleared) target: this is the
+        // single-key dst-read shape the prepared lane actually executes (the snapshot copy runs
+        // before the single render pass, and the dst-read formula program blends in the shader).
+        // The mixed destination-then-source shape is pinned by the fallback test below.
         val operations = listOf(
-            DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 32f, 24f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
-                Matrix33.identity(),
-                ClipStack.WideOpen,
-            ),
             DisplayOp.DrawRect(
                 Rect.fromLTRB(4f, 4f, 28f, 20f),
                 Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
@@ -537,6 +532,47 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(1, backend.prepareCalls)
         assertEquals(1, session.submitCalls)
         assertEquals(1, session.closeCalls)
+    }
+
+    @Test
+    fun `mixed fixed and destination read core frame refuses before prepared entry`() {
+        // A destination rect (fixed SRC_OVER) followed by a DARKEN source rect over it: under the
+        // production capability snapshot this splits into two renders with the ordered snapshot
+        // copy between them, and the recording preflight refuses the multi-render dst-copy shape
+        // so the frame continues on the legacy route. The fake capabilities here collapse the
+        // frame into the single-render shape (the copy lands before the whole pass), so the
+        // real-cap build outcome is reproduced through the executor's frameBuilder seam; the
+        // end-to-end real-cap behavior (Legacy + destination-read evidence) is pinned by
+        // GPUAllApiBlendSurfaceTest.
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val backend = FakeBackend(capabilities(), FakeSession())
+        val refusal = diagnostic("unsupported.native-core-primitive.multi-render-dst-copy")
+
+        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+            GPUPreparedSurfaceFrameExecutor(
+                backendFactory = GPUPreparedSurfaceBackendPortFactory { backend },
+                frameBuilder = { _ ->
+                    GPUPreparedSurfaceFrameBuildResult.Refused(refusal)
+                },
+            ).execute(executionRequest(operations, width = 32, height = 24)),
+        )
+
+        assertEquals("unsupported.native-core-primitive.multi-render-dst-copy", refused.diagnostic.code.value)
+        assertEquals(0, backend.prepareCalls)
+        assertEquals(1, backend.closeCalls)
     }
 
     @Test

@@ -828,6 +828,18 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
  * destination-reading keys with non-dst-reading keys (no shared bind-group layout),
  * destination-reading modes without a formula program, and the multi-render dst-copy shape
  * (destination pass, ordered snapshot copy, consuming pass). Task 6 classifies the residuals.
+ *
+ * The pre-3c mixed-lane dst-copy codes are deliberately NOT listed here. Verified empirically
+ * (probes through the real builder/executor): `unsupported.prepared-surface.destination-copy`
+ * requires a ColorGlyph destination-reading consumer, but every non-fixed-function text blend
+ * (including all destination-read text) is refused earlier by the surface text preparer
+ * (`invalid.preflight.text.blend`), so no buildable frame reaches the mixed-lane site; and
+ * `destination-copy-semantic-shape` requires a destination-copy frame with non-admitted
+ * semantics, but every mixed attempt (rect+vertices, rect+image, text+rect) is refused earlier
+ * by the recording preflight (`invalid.preflight.core_primitive_direct_geometry_resources`,
+ * `unsupported.preflight.sampled_image_unmaterialized`). Even a hypothetical frame reaching
+ * those codes always contains a terminal-family operation (text/image/vertices), so the router
+ * converts the fallback into Terminal anyway; no legacy-fated frame regressed.
  */
 private val preparedRouteLegacyFallbackRefusalCodes = setOf(
     "unsupported.native-core-primitive.multi-key-component",

@@ -5194,6 +5194,15 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
      * (Graphite DrawContext.cpp: the GPU-only copy runs before the consuming pass in the same
      * encoder). The snapshot texture must be one exact frame-local full-target copy whose single
      * consumer is a destination-reading packet of this scope.
+     *
+     * Evidence limitation (recorded for Task 6): every frame this lane executes today has the
+     * snapshot copy scheduled before its single render pass, so the captured destination is the
+     * frame's cleared target. Frames with meaningful pre-copy destination content split into two
+     * renders (destination pass, ordered copy, consuming pass) and are refused by the
+     * multi-render-dst-copy preflight residual, continuing on the legacy route. Prepared dst-read
+     * pixels are therefore verified only for empty-destination content until the two-render
+     * materialization lands; the SolidRect destination-copy lane already carries the
+     * background-then-consumer pixel oracle in `GPUWgpu4kDestinationCopyFrameSmokeTest`.
      */
     private fun validateCorePrimitiveDestinationCopy(
         framePlan: GPUFramePlan,
