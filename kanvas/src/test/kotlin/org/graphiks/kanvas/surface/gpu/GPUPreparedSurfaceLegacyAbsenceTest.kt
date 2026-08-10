@@ -10,8 +10,8 @@ import kotlin.test.Test
  *
  * The adapter file (GPULegacyImmediatePathAdapter.kt), its display family, its
  * dump type, and the `legacyDump` plumbing were deleted by FP-08 Task 2
- * (commit dbf725d61). These four tokens are the ONLY symbols retired by FP-08;
- * `renderViaGpuLegacy`, `GPUPreparedSurfaceLegacyPort`, `GPUClipRouteTrace`,
+ * (commit dbf725d61). `GPUPreparedSurfaceLegacyPort` was retired by FP-09
+ * Task 5 (the route collapse); `renderViaGpuLegacy`, `GPUClipRouteTrace`,
  * `renderWithClip`, `cachePixels`, `buildTextAtlasMesh`, and
  * `LayerScissorOffscreenTarget` intentionally remain until FP-09 retires the
  * legacy fallback for the currently-uncovered families.

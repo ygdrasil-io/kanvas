@@ -103,17 +103,24 @@ internal fun interface GPUPreparedSurfaceExecutionPort {
     fun execute(request: GPUPreparedSurfaceExecutionRequest): GPUPreparedSurfaceExecutionResult
 }
 
-/** Pure proof for text-only no-op frames that need no backend or capability facts. */
+/** Pure proof for no-op frames that need no backend or capability facts. */
 internal object GPUPreparedSurfacePreBackendNoOpGate {
     fun classify(
         request: GPUPreparedSurfaceExecutionRequest,
     ): GPUPreparedSurfaceFrameBuildResult.NoOp? {
         if (request.width <= 0 || request.height <= 0) return null
+        val operations = request.candidate.operations
+        if (operations.isEmpty()) {
+            return noOp(stateEventCount = 0)
+        }
+        if (operations.all(::isPreBackendStateEvent)) {
+            return noOp(stateEventCount = operations.size)
+        }
         val acceptedTextOperationIndices = linkedSetOf<Int>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
         val culledTextOperationIndices = linkedSetOf<Int>()
         var stateEventCount = 0
-        request.candidate.operations.forEachIndexed { operationIndex, operation ->
+        operations.forEachIndexed { operationIndex, operation ->
             when (operation) {
                 is DisplayOp.DrawText -> {
                     acceptedTextOperationIndices += operationIndex
@@ -132,6 +139,7 @@ internal object GPUPreparedSurfacePreBackendNoOpGate {
                 is DisplayOp.SetTransform,
                 is DisplayOp.SetClip,
                 is DisplayOp.Annotation,
+                is DisplayOp.FlushAndSnapshot,
                 -> stateEventCount++
                 else -> return null
             }
@@ -140,25 +148,46 @@ internal object GPUPreparedSurfacePreBackendNoOpGate {
             acceptedTextOperationIndices !=
             elidedTextOperationIndices + culledTextOperationIndices
         ) return null
-        return GPUPreparedSurfaceFrameBuildResult.NoOp(
+        return noOp(
             stateEventCount = stateEventCount,
-            textMetrics = GPUPreparedTextFrameMetrics(
-                glyphCount = 0,
-                uniqueMaskCount = 0,
-                instanceCount = 0,
-                a8InstanceCount = 0,
-                colorGlyphInstanceCount = 0,
-                pathStrokeDrawCount = 0,
-                subRunCount = 0,
-                pageCount = 0,
-                pageBytes = 0,
-                instanceBytes = 0,
-            ),
             acceptedTextOperationIndices = acceptedTextOperationIndices.toSet(),
             elidedTextOperationIndices = elidedTextOperationIndices.toSet(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
         )
     }
+
+    private fun isPreBackendStateEvent(operation: DisplayOp): Boolean = when (operation) {
+        is DisplayOp.SetTransform,
+        is DisplayOp.SetClip,
+        is DisplayOp.Annotation,
+        is DisplayOp.FlushAndSnapshot,
+        -> true
+        else -> false
+    }
+
+    private fun noOp(
+        stateEventCount: Int,
+        acceptedTextOperationIndices: Set<Int> = emptySet(),
+        elidedTextOperationIndices: Set<Int> = emptySet(),
+        culledTextOperationIndices: Set<Int> = emptySet(),
+    ) = GPUPreparedSurfaceFrameBuildResult.NoOp(
+        stateEventCount = stateEventCount,
+        textMetrics = GPUPreparedTextFrameMetrics(
+            glyphCount = 0,
+            uniqueMaskCount = 0,
+            instanceCount = 0,
+            a8InstanceCount = 0,
+            colorGlyphInstanceCount = 0,
+            pathStrokeDrawCount = 0,
+            subRunCount = 0,
+            pageCount = 0,
+            pageBytes = 0,
+            instanceBytes = 0,
+        ),
+        acceptedTextOperationIndices = acceptedTextOperationIndices,
+        elidedTextOperationIndices = elidedTextOperationIndices,
+        culledTextOperationIndices = culledTextOperationIndices,
+    )
 }
 
 internal fun DisplayOp.DrawText.hasConservativeTargetEmptyTextProof(
@@ -531,12 +560,12 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     "Prepared Surface execution failed without a terminal diagnostic.",
                 )
             // Documented prepared-route residuals: shapes the prepared direct lane genuinely cannot
-            // execute yet continue on the legacy route (which renders them with the GPU
-            // copy-then-formula composer) instead of becoming terminal. Multi-key passes that mix
-            // destination-reading keys with non-dst-reading keys cannot share one bind-group layout
-            // (the dst-read fragment layout appends the snapshot texture and sampler), and
-            // dst-read modes without a formula program have no shading pipeline; both are
-            // classified for Task 6.
+            // execute. Multi-key passes that mix destination-reading keys with non-dst-reading
+            // keys cannot share one bind-group layout (the dst-read fragment layout appends the
+            // snapshot texture and sampler), and dst-read modes without a formula program have no
+            // shading pipeline. The classification still labels the diagnostic here; after the
+            // FP-09 Task 5 collapse the router terminates every before-entry refusal, and Task 6
+            // re-points the surface suites to the exact per-case codes.
             if (completion.outcome == GPUFrameStructuralOutcome.Refused &&
                 diagnostic.code.value in preparedRouteLegacyFallbackRefusalCodes
             ) {
@@ -823,11 +852,12 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
 }
 
 /**
- * Prepared-route refusals that document shapes the prepared direct lane genuinely cannot execute
- * and must fall back to the legacy route instead of failing the frame: multi-key passes mixing
- * destination-reading keys with non-dst-reading keys (no shared bind-group layout),
- * destination-reading modes without a formula program, and the multi-render dst-copy shape
- * (destination pass, ordered snapshot copy, consuming pass). Task 6 classifies the residuals.
+ * Prepared-route refusal codes that document shapes the prepared direct lane genuinely cannot
+ * execute: multi-key passes mixing destination-reading keys with non-dst-reading keys (no shared
+ * bind-group layout), destination-reading modes without a formula program, and the multi-render
+ * dst-copy shape (destination pass, ordered snapshot copy, consuming pass). The classification
+ * survives for Task 6/7 evidence labeling (the diagnostic still names the exact residual); the
+ * router terminates every before-entry refusal since the FP-09 Task 5 collapse.
  *
  * The pre-3c mixed-lane dst-copy codes are deliberately NOT listed here. Verified empirically
  * (probes through the real builder/executor): `unsupported.prepared-surface.destination-copy`
@@ -839,7 +869,7 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
  * by the recording preflight (`invalid.preflight.core_primitive_direct_geometry_resources`,
  * `unsupported.preflight.sampled_image_unmaterialized`). Even a hypothetical frame reaching
  * those codes always contains a terminal-family operation (text/image/vertices), so the router
- * converts the fallback into Terminal anyway; no legacy-fated frame regressed.
+ * terminates it anyway.
  */
 private val preparedRouteLegacyFallbackRefusalCodes = setOf(
     "unsupported.native-core-primitive.multi-key-component",

@@ -29,7 +29,6 @@ class GPUPreparedTextNoFallbackTest {
             text(),
         )
         var preparedCalls = 0
-        var legacyCalls = 0
         var admittedOperations: List<DisplayOp>? = null
 
         val result = GPUPreparedSurfaceProductEntry.render(
@@ -48,23 +47,17 @@ class GPUPreparedTextNoFallbackTest {
                     evidence = evidence(),
                 )
             },
-            legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                legacyCalls++
-                error("accepted text must not continue through legacy")
-            },
         )
 
         assertEquals(1, preparedCalls)
         assertEquals(operations, admittedOperations)
         assertContentEquals(ubyteArrayOf(1u, 2u, 3u, 4u), result.pixels)
         assertEquals(1, result.stats.opsDispatched)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `text refusal before prepared entry is terminal and never calls legacy`() {
+    fun `text refusal before prepared entry is terminal`() {
         val refusal = diagnostic("unsupported.text.lowering.test")
-        var legacyCalls = 0
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
@@ -76,22 +69,16 @@ class GPUPreparedTextNoFallbackTest {
                 executionPort = GPUPreparedSurfaceExecutionPort {
                     GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(refusal)
                 },
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("refused text must not continue through legacy")
-                },
             )
         }.exceptionOrNull()
 
         val terminal = assertIs<GPUPreparedSurfaceTerminalException>(failure)
         assertEquals(refusal, terminal.diagnostic)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `post-admission text failure is terminal and never calls legacy`() {
+    fun `post-admission text failure is terminal`() {
         val refusal = diagnostic("failed.text.execution.test")
-        var legacyCalls = 0
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
@@ -103,22 +90,16 @@ class GPUPreparedTextNoFallbackTest {
                 executionPort = GPUPreparedSurfaceExecutionPort {
                     GPUPreparedSurfaceExecutionResult.TerminalFailure(refusal)
                 },
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("failed text must not continue through legacy")
-                },
             )
         }.exceptionOrNull()
 
         val terminal = assertIs<GPUPreparedSurfaceTerminalException>(failure)
         assertEquals(refusal, terminal.diagnostic)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `text image filter refusal remains terminal for FP-07 and never calls legacy`() {
+    fun `text image filter refusal remains terminal for FP-07`() {
         val refusal = diagnostic("unsupported.image-filter.text.fp07")
-        var legacyCalls = 0
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
@@ -130,16 +111,11 @@ class GPUPreparedTextNoFallbackTest {
                 executionPort = GPUPreparedSurfaceExecutionPort {
                     GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(refusal)
                 },
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("image-filtered text must not continue through legacy")
-                },
             )
         }.exceptionOrNull()
 
         val terminal = assertIs<GPUPreparedSurfaceTerminalException>(failure)
         assertEquals(refusal, terminal.diagnostic)
-        assertEquals(0, legacyCalls)
     }
 
     private fun text(paint: Paint = Paint.fill(Color.RED)) = DisplayOp.DrawText(

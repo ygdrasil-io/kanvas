@@ -262,6 +262,50 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
+    fun `empty and state event only frames classify as no-ops and complete transparent before backend open`() {
+        val stateOnly = executionRequest(
+            listOf(
+                DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
+                DisplayOp.SetClip(ClipStack.WideOpen),
+                DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "key", "value"),
+                DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+            ),
+            width = 4,
+            height = 4,
+        )
+        val empty = executionRequest(emptyList(), width = 4, height = 4)
+
+        val stateNoOp = assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(stateOnly),
+        )
+        assertEquals(4, stateNoOp.stateEventCount)
+        assertTrue(stateNoOp.acceptedTextOperationIndices.isEmpty())
+        assertTrue(stateNoOp.elidedTextOperationIndices.isEmpty())
+        assertTrue(stateNoOp.culledTextOperationIndices.isEmpty())
+
+        val emptyNoOp = assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(empty),
+        )
+        assertEquals(0, emptyNoOp.stateEventCount)
+        assertTrue(emptyNoOp.acceptedTextOperationIndices.isEmpty())
+
+        var backendOpenCalls = 0
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+            backendOpenCalls++
+            FakeBackend(capabilities(), FakeSession())
+        })
+        listOf(stateOnly, empty).forEach { request ->
+            val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request))
+            assertContentEquals(ByteArray(4 * 4 * 4), success.rgba)
+            assertEquals(0, success.visualOperationCount)
+            assertEquals(0, success.evidence.targetCreations)
+            assertEquals(0, success.evidence.frameCoordinatorCreations)
+            assertEquals(0, success.evidence.submits)
+        }
+        assertEquals(0, backendOpenCalls)
+    }
+
+    @Test
     fun `backend and capabilities unavailable refuse before prepared entry`() {
         val request = request()
         val unavailable = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { null })

@@ -557,7 +557,6 @@ class GPUClipCoverageSurfaceTest {
                 clip = clip,
             ),
         )
-        var legacyCalls = 0
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = ops,
@@ -567,21 +566,15 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("textured vertices must not continue through legacy")
-                },
             )
         }
 
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
     fun `scissor destination read DrawText keeps exterior intact`() {
         requireWebGpu()
-        var legacyCalls = 0
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
@@ -608,15 +601,10 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("destination-read TextA8 must not continue through legacy")
-                },
             )
         }
 
         assertEquals("invalid.preflight.text.blend", failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -624,7 +612,6 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val vertices = texturedScissorTriangle()
-        var legacyCalls = 0
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -642,15 +629,10 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("textured vertices must not continue through legacy")
-                },
             )
         }
 
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -658,7 +640,6 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
-        var legacyCalls = 0
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -677,21 +658,15 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("textured mesh must not continue through legacy")
-                },
             )
         }
 
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
     fun `empty scissor destination read DrawText remains terminal before legacy`() {
         requireWebGpu()
-        var legacyCalls = 0
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
@@ -718,22 +693,16 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("destination-read TextA8 must not continue through legacy")
-                },
             )
         }
 
         assertEquals("invalid.preflight.text.blend", failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
     fun `empty scissor textured vertices are terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
-        var legacyCalls = 0
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -751,15 +720,10 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("textured vertices must not continue through legacy")
-                },
             )
         }
 
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -767,7 +731,6 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
-        var legacyCalls = 0
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -786,15 +749,10 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("textured mesh must not continue through legacy")
-                },
             )
         }
 
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -927,9 +885,6 @@ class GPUClipCoverageSurfaceTest {
             program = MeshProgram(effect),
             bounds = Rect(2f, 2f, 8f, 8f),
         )
-        val trace = GPUClipRouteTrace()
-        var legacyCalls = 0
-
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -941,11 +896,6 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("refused mesh must not continue through legacy")
-                },
-                legacyRouteTrace = trace,
             )
         }
 
@@ -953,8 +903,6 @@ class GPUClipCoverageSurfaceTest {
             GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
             failure.diagnostic.code.value,
         )
-        assertEquals(0, legacyCalls)
-        assertEquals(0, trace.logicalDrawCount)
     }
 
     @Test
@@ -983,11 +931,10 @@ class GPUClipCoverageSurfaceTest {
             Rect(0f, 0f, 8f, 8f),
             listOf(DisplayOp.DrawPicture(child, null, Matrix33.identity(), outerClip)),
         )
-        val trace = GPUClipRouteTrace()
         val clippedFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderViaGpu(
                 StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(clipped, null, Matrix33.identity(), outerClip))),
-                32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT, trace,
+                32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT,
             )
         }
         assertEquals("unsupported.composite.clip", clippedFailure.diagnostic.code.value)
@@ -1182,12 +1129,9 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `outline text without a typeface is terminal before legacy`() {
         requireWebGpu()
-        var legacyCalls = 0
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
-        val trace = GPUClipRouteTrace()
-
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
@@ -1213,17 +1157,10 @@ class GPUClipCoverageSurfaceTest {
                 config = RenderConfig.DEFAULT,
                 executionPort =
                     GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    error("missing typeface must not continue through legacy")
-                },
-                legacyRouteTrace = trace,
             )
         }
 
         assertEquals("unsupported.text.typeface_missing", failure.diagnostic.code.value)
-        assertEquals(0, legacyCalls)
-        assertEquals(0, trace.logicalDrawCount)
     }
 
     @Test
@@ -1234,7 +1171,6 @@ class GPUClipCoverageSurfaceTest {
                 ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true),
             ),
         )
-        val trace = GPUClipRouteTrace()
 
         val result = renderViaGpu(
             buffer = StaticDisplayListBuffer(
@@ -1253,12 +1189,9 @@ class GPUClipCoverageSurfaceTest {
             height = 16,
             format = PixelFormat.RGBA8,
             config = RenderConfig.DEFAULT,
-            routeTrace = trace,
         )
 
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(0, trace.logicalDrawCount)
-        assertEquals(0, trace.sourceThenCompositeCount)
     }
 
     @Test
@@ -1278,8 +1211,6 @@ class GPUClipCoverageSurfaceTest {
                 ),
             ),
         )
-        val trace = GPUClipRouteTrace()
-
         // The alpha-mask clipped picture is a documented prepared-route refusal: the
         // composite capture refuses clip snapshots inside layer scopes.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
@@ -1291,7 +1222,6 @@ class GPUClipCoverageSurfaceTest {
                 height = 16,
                 format = PixelFormat.RGBA8,
                 config = RenderConfig.DEFAULT,
-                routeTrace = trace,
             )
         }
         assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
@@ -1345,8 +1275,6 @@ class GPUClipCoverageSurfaceTest {
             ),
             DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip),
         )
-        val trace = GPUClipRouteTrace()
-
         // The DrawPicture inside the complex-clip frame is a documented prepared-route
         // refusal (unsupported.composite.operation): the composite capture admits only core
         // geometry operations inside layer scopes.
@@ -1357,7 +1285,6 @@ class GPUClipCoverageSurfaceTest {
                 height = 32,
                 format = PixelFormat.RGBA8,
                 config = RenderConfig.DEFAULT,
-                routeTrace = trace,
             )
         }
         assertEquals("unsupported.composite.operation", failure.diagnostic.code.value)
