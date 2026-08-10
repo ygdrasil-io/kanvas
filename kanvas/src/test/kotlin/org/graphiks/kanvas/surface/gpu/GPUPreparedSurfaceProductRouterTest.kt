@@ -467,6 +467,7 @@ class GPUPreparedSurfaceProductRouterTest {
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
             "unsupported.native-core-primitive.multi-render-dst-copy",
             "unsupported.native-core-primitive.analytic-shape-multi-key",
+            "unsupported.native-core-primitive.path-destination-read",
             "unsupported.test.builder",
         )
 

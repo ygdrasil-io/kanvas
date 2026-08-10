@@ -73,7 +73,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex difference clip with image is terminal before the frame enters legacy`() {
+    fun `complex difference clip with image is terminal`() {
         requireWebGpu()
         val surface = Surface(32, 32)
         surface.canvas {
@@ -165,21 +165,35 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip blur uses the blurred mask as geometry coverage`() {
+    fun `complex clip blur is terminal at the core semantic build`() {
         // The mask-blur rect frame is terminal at the core-semantic build: the
         // recording analysis does not authorize a blurred rect as a direct core
-        // primitive, so the route collapse terminates it instead of falling back
-        // to the legacy blur lane.
+        // primitive, so the route collapse terminates it before any coverage
+        // computation instead of falling back to the legacy blur lane.
         assertTerminal(PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL) {
             renderBlurredDifferenceClipScene()
         }
     }
 
     @Test
-    fun `one hundred twenty complex mask blur frames compose stably without readback`() {
-        assertTerminal(PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL) {
-            renderAlternatingClipAndSigmaFrames(frameCount = 120)
+    fun `complex mask blur frames are terminal at the core semantic build`() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!
+        val readbacksBefore = session.runtimeTelemetry.destinationReadbackSnapshots
+
+        // The refusal is sigma-independent: every mask blur frame terminates at
+        // the semantic build (the blurred rect carries no rect analysis
+        // authority), and the refusal must not allocate a destination readback.
+        val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderBlurredDifferenceClipScene(sigma = 1.5f)
         }
+        assertEquals(PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL, terminal.diagnostic.code.value)
+        assertEquals(
+            readbacksBefore,
+            session.runtimeTelemetry.destinationReadbackSnapshots,
+            "a terminal mask blur frame allocated a destination readback before refusal",
+        )
     }
 
     @Test
@@ -725,7 +739,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip source retains every point subpass`() {
+    fun `complex clip source with hairline points refuses at exact lowering`() {
         requireWebGpu()
 
         // Hairline points refuse at exact lowering regardless of clip.
@@ -1281,13 +1295,6 @@ class GPUClipCoverageSurfaceTest {
         return List(4) { channel -> pixels[offset + channel].toInt() and 0xff }
     }
 
-    private fun renderPartialAlphaDestination() = Surface(16, 16).run {
-        canvas {
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.fromArgb(128, 32, 64, 192)))
-        }
-        render()
-    }
-
     private fun renderBlurredDifferenceClipScene(
         sigma: Float = 2f,
         clipOffset: Float = 0f,
@@ -1321,56 +1328,6 @@ class GPUClipCoverageSurfaceTest {
         }
         render()
     }
-
-    private fun renderAlternatingClipAndSigmaFrames(frameCount: Int): AlternatingBlurFramesResult {
-        require(frameCount > 0)
-        GPUBackendRuntimeFactory.dispose()
-        val session = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(session != null, "GPU backend unavailable in current environment")
-        session!!
-
-        val warmup = renderBlurredDifferenceClipScene(sigma = 1.5f, clipOffset = 0f)
-        assertEquals(0, warmup.diagnostics.fatalCount, warmup.diagnostics.entries.toString())
-        val refusalReasons = coveragePlaneRefusals(warmup).toMutableSet()
-        val pipelineCountAfterWarmup = session.executionCacheTelemetry
-            .filter { it.cacheName == "pipeline" }
-            .sumOf { it.creations }
-        val telemetryBeforeFrames = session.runtimeTelemetry
-
-        repeat(frameCount) { frame ->
-            val frameResult = renderBlurredDifferenceClipScene(
-                sigma = 0.5f + (frame % 7),
-                clipOffset = (frame % 3).toFloat() * 0.25f,
-            )
-            assertEquals(0, frameResult.diagnostics.fatalCount, frameResult.diagnostics.entries.toString())
-            refusalReasons += coveragePlaneRefusals(frameResult)
-        }
-
-        val pipelineCountAtEnd = session.executionCacheTelemetry
-            .filter { it.cacheName == "pipeline" }
-            .sumOf { it.creations }
-        val telemetryAfterFrames = session.runtimeTelemetry
-        return AlternatingBlurFramesResult(
-            refusalReasons = refusalReasons,
-            pipelineCountAfterWarmup = pipelineCountAfterWarmup,
-            pipelineCountAtEnd = pipelineCountAtEnd,
-            destinationReadbackSnapshots =
-                telemetryAfterFrames.destinationReadbackSnapshots - telemetryBeforeFrames.destinationReadbackSnapshots,
-        )
-    }
-
-    private fun coveragePlaneRefusals(result: org.graphiks.kanvas.surface.RenderResult): Set<String> =
-        result.diagnostics.entries
-            .map { it.reason }
-            .filter { it.startsWith("unsupported.coverage_plane.") }
-            .toSet()
-
-    private data class AlternatingBlurFramesResult(
-        val refusalReasons: Set<String>,
-        val pipelineCountAfterWarmup: Long,
-        val pipelineCountAtEnd: Long,
-        val destinationReadbackSnapshots: Long,
-    )
 
     private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {
         canvas {
