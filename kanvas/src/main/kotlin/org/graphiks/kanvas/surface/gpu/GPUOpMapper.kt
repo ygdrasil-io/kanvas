@@ -2211,7 +2211,7 @@ internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
 
 // ────────────────────────────────────────────────────────────────────────────
 // DisplayOp.withCombinedTransform — concatenate an outer transform into every
-// drawing op that carries a transform field. Used for DrawPicture expansion.
+// drawing op that carries a transform field. Used for picture replay.
 // ────────────────────────────────────────────────────────────────────────────
 
 internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {

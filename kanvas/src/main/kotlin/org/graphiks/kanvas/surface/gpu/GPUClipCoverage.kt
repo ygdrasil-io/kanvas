@@ -9,13 +9,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 
 /**
- * Shared renderer/prepass refusal contract: refused draws must never reserve a mask use.
+ * Shared composite terminal-refusal contract: refused draws must never reserve a mask use.
  *
- * Prepared vertices and meshes never continue through the legacy immediate route. This code is
- * reached both by vertices/meshes nested inside a legacy composite (pictures/layers) and by
- * top-level vertices/meshes in legacy-gated frames (e.g. BGRA8 or composite frames); the
- * "nested" label reflects the composite case. Vertices/meshes inside composites remain
- * unsupported until FP-07.
+ * This guard has no production callers at HEAD; it survives because
+ * GPUPreparedSurfaceProductRouterTest pins the exact `unsupported.picture.nested_vertices`
+ * code for vertices/meshes and the null preflight for other families, and the composite
+ * capture semantics depend on the same refusal before any native work.
  */
 internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) {
     is DisplayOp.DrawVertices,
@@ -26,9 +25,10 @@ internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) 
 }
 
 /**
- * Task 4 supplies an S/G adapter for every visual operation accepted by this
- * renderer. Kept as a named boundary for prepass callers: a future visual
- * operation must either install its adapter or return a stable refusal here.
+ * Plan-mandated placeholder for future visual operations (named boundary), not
+ * currently pinned: Task 4 supplies an S/G adapter for every visual operation
+ * accepted by this renderer. A future visual operation must either install its
+ * adapter or return a stable refusal here.
  */
 internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = null
 
