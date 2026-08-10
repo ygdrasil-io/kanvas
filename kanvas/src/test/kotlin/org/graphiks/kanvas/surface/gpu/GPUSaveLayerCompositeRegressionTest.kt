@@ -9,7 +9,6 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -647,11 +646,6 @@ class GPUSaveLayerCompositeRegressionTest {
         assertEquals(code, failure.diagnostic.code.value, failure.diagnostic.toString())
     }
 
-    private fun assertFatalReason(result: org.graphiks.kanvas.surface.RenderResult, reason: String) {
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(reason, result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason)
-    }
-
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -668,61 +662,6 @@ class GPUSaveLayerCompositeRegressionTest {
         val offset = (y * 8 + x) * 4
         val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
         actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
-            assertTrue(
-                kotlin.math.abs(actualByte - expectedByte) <= tolerance,
-                "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
-            )
-        }
-    }
-
-    private fun assertPixelNearAt(
-        pixels: UByteArray,
-        width: Int,
-        x: Int,
-        y: Int,
-        expected: Rgba,
-        tolerance: Int,
-    ) {
-        val offset = (y * width + x) * 4
-        val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
-        actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
-            assertTrue(
-                kotlin.math.abs(actualByte - expectedByte) <= tolerance,
-                "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
-            )
-        }
-    }
-
-    private fun publicLayerExpected(mode: BlendMode, coverage: Float): Rgba = when (mode) {
-        BlendMode.SRC -> when (coverage) {
-            1f -> Rgba(red = 188, green = 0, blue = 0, alpha = 128)
-            .5f -> Rgba(red = 225, green = 188, blue = 188, alpha = 191)
-            else -> error("unsupported coverage $coverage")
-        }
-        BlendMode.DST_IN -> when (coverage) {
-            1f -> Rgba(red = 188, green = 188, blue = 188, alpha = 128)
-            .5f -> Rgba(red = 225, green = 225, blue = 225, alpha = 191)
-            else -> error("unsupported coverage $coverage")
-        }
-        BlendMode.MULTIPLY -> when (coverage) {
-            1f -> Rgba(red = 255, green = 188, blue = 188, alpha = 255)
-            .5f -> Rgba(red = 255, green = 225, blue = 225, alpha = 255)
-            else -> error("unsupported coverage $coverage")
-        }
-        else -> error("fixture only defines SRC, DST_IN, and MULTIPLY")
-    }
-
-    private fun assertPixelNearPixels(
-        actual: UByteArray,
-        expected: UByteArray,
-        x: Int,
-        y: Int,
-        tolerance: Int,
-    ) {
-        val offset = (y * 8 + x) * 4
-        (0 until 4).forEach { channel ->
-            val actualByte = actual[offset + channel].toInt() and 0xff
-            val expectedByte = expected[offset + channel].toInt() and 0xff
             assertTrue(
                 kotlin.math.abs(actualByte - expectedByte) <= tolerance,
                 "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",

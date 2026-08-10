@@ -9,6 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
@@ -33,12 +34,25 @@ class GPUBlendFormulaSurfaceTest {
         val dispatcher = GPUBlendFormulaLibrary.allModeBlendDispatcherWgsl()
         val cases = destinationReadDispatcherCases()
 
-        assertEquals(15, cases.size)
-        assertEquals(
-            cases.size,
-            cases.map { (mode, _) -> mode }.toSet().size,
-            "destination-read modes must be unique",
+        // Cross-check the hardcoded case list against the mode registry: every mode whose
+        // canonical plan requires a destination texture must have a dispatcher case, so a
+        // future dst-read mode with no case fails loudly instead of passing silently.
+        // The dispatcher also carries stable advanced-formula cases for modes that plan as
+        // fixed-function at full coverage on a clamped target (SCREEN), so the case list is
+        // a superset of the canonical dst-read set; the 15-case size pin below keeps the
+        // stable 14..28 case ABI itself honest against additions.
+        val canonicalDstReadModes = BlendMode.entries
+            .filter { mode ->
+                mode.toGpuBlendFacts().canonicalBlendPlan().destinationReadRequirement ==
+                    GPUBlendDestinationReadRequirement.DestinationTextureRequired
+            }
+            .toSet()
+        assertTrue(
+            canonicalDstReadModes.all { mode -> cases.any { (caseMode, _) -> caseMode == mode } },
+            "missing dispatcher case for canonical destination-read modes: " +
+                (canonicalDstReadModes - cases.map { (mode, _) -> mode }.toSet()),
         )
+        assertEquals(15, cases.size)
         assertEquals(
             cases.size,
             cases.map { (_, caseLine) -> caseLine }.toSet().size,
@@ -80,6 +94,11 @@ class GPUBlendFormulaSurfaceTest {
             },
             result.diagnostics.entries.toString(),
         )
+        // Pixel-oracle disclosure: the destination is transparent, so every blend mode
+        // yields source-over-transparent and the oracle cannot discriminate formula math.
+        // This test pins the end-to-end dst-read pipeline (copy-then-formula evidence),
+        // not the formula itself — DARKEN against a real backdrop is covered by
+        // GPUClipAdvancedBlendSurfaceTest.
         assertPixelNear(
             pixels = result.pixels,
             x = 16,

@@ -13,8 +13,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
  *
  * This guard has no production callers at HEAD; it survives because
  * GPUPreparedSurfaceProductRouterTest pins the exact `unsupported.picture.nested_vertices`
- * code for vertices/meshes and the null preflight for other families, and the composite
- * capture semantics depend on the same refusal before any native work.
+ * code for vertices/meshes and the null preflight for other families — a unit pin only.
+ * The composite capture does not rely on this refusal: it refuses vertices/meshes children
+ * with its own `unsupported.composite.operation` code (GPUPreparedSurfaceFrameBuilder.kt).
  */
 internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) {
     is DisplayOp.DrawVertices,

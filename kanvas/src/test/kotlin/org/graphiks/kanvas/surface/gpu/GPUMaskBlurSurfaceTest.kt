@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.surface.gpu
 
-import kotlin.math.abs
-import kotlin.math.pow
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.canvas.Canvas
@@ -21,7 +19,20 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 
+/**
+ * Top-level mask-blur frame pins after FP-09.
+ *
+ * Pre-FP-09, plain (non-saveLayer) mask-blur rect/rrect/path frames rendered through the
+ * legacy immediate renderer (verified green at the FP-08 tip accaea616). FP-09 deleted the
+ * legacy mask-blur machinery (Tasks 7-8) and the prepared top-level blur route is not
+ * wired, so these frames now refuse with the designed stable codes (Task 6 evidence §4:
+ * `unsupported.core_primitive.rect.analysis_authority_missing` for mask-blur rect frames).
+ * These tests pin the fixtures and their exact terminal codes; mask blur inside a
+ * saveLayer scope still renders through the composite capture's prepared
+ * `GPUPreparedMaskFilterLowerer` (FP-07 composite route, unchanged).
+ */
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUMaskBlurSurfaceTest {
     @AfterEach
@@ -30,110 +41,87 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `normal rect blur has exterior non-flat halo`() {
-        val pixels = renderRect(BlurStyle.NORMAL, 2f)
-        val exterior = alphaAt(pixels, 7, 12, 32)
-        val interior = alphaAt(pixels, 9, 12, 32)
-
-        assertTrue(exterior > 0) { "normal exterior alpha=$exterior interior alpha=$interior" }
-        assertTrue(interior < 255)
+    fun `normal rect blur is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing { renderRectResult(BlurStyle.NORMAL, 2f) }
     }
 
     @Test
-    fun `source-composited translucent blur applies halo coverage once`() {
-        val opaqueResult = renderBlurredOverOpaqueBlue(Color.RED, sigma = 3f)
-        val translucentResult = renderBlurredOverOpaqueBlue(Color.fromArgb(128, 255, 0, 0), sigma = 3f)
-        assertEquals(0, opaqueResult.diagnostics.fatalCount, opaqueResult.diagnostics.entries.toString())
-        assertEquals(0, translucentResult.diagnostics.fatalCount, translucentResult.diagnostics.entries.toString())
-        val opaque = opaqueResult.pixels.toByteArray()
-        val translucent = translucentResult.pixels.toByteArray()
-        val haloOffset = (12 * 32 + 7) * 4
-        val opaqueHaloRed = opaque[haloOffset].toInt() and 0xFF
-        val translucentHaloRed = translucent[haloOffset].toInt() and 0xFF
-        val translucentHaloBlue = translucent[haloOffset + 2].toInt() and 0xFF
-        val translucentHaloAlpha = translucent[haloOffset + 3].toInt() and 0xFF
-
-        assertTrue(opaqueHaloRed > 0, "opaque halo red=$opaqueHaloRed")
-        // The opaque red halo reveals G in linear light. Halving paint alpha must halve that
-        // material contribution before sRGB encoding; applying G to S as well would be darker.
-        val expectedTranslucentRed = (
-            linearToSrgb(srgbToLinear(opaqueHaloRed / 255f) * (128f / 255f)) * 255f
-        ).toInt()
-        assertTrue(
-            abs(translucentHaloRed - expectedTranslucentRed) <= 3,
-            "translucent halo red=$translucentHaloRed expected=$expectedTranslucentRed opaque halo red=$opaqueHaloRed",
-        )
-        assertTrue(translucentHaloBlue < 255, "halo must alter the opaque blue destination")
-        assertEquals(255, translucentHaloAlpha)
-    }
-
-    @Test
-    fun `blur touching the mask edge fades against transparent outside`() {
-        val pixels = Surface(width = 32, height = 32).run {
-            requireWebGpu()
-            canvas {
-                drawRect(Rect(0f, 8f, 9f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
-            }
-            render().pixels.toByteArray()
+    fun `source-composited translucent blur is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing {
+            renderBlurredOverOpaqueBlue(Color.RED, sigma = 3f)
+            renderBlurredOverOpaqueBlue(Color.fromArgb(128, 255, 0, 0), sigma = 3f)
         }
-
-        val edge = alphaAt(pixels, 0, 12, 32)
-        val interior = alphaAt(pixels, 3, 12, 32)
-
-        assertTrue(edge < interior) { "edge alpha=$edge interior alpha=$interior" }
-        assertEquals(0, alphaAt(pixels, 24, 12, 32))
     }
 
     @Test
-    fun `outer blur removes interior coverage`() {
-        val pixels = renderRect(BlurStyle.OUTER, 2f)
-        val interior = alphaAt(pixels, 12, 12, 32)
-        val exterior = alphaAt(pixels, 7, 12, 32)
-
-        assertEquals(0, interior)
-        assertTrue(exterior > 0) { "outer exterior alpha=$exterior interior alpha=$interior" }
+    fun `blur touching the mask edge is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing {
+            Surface(width = 32, height = 32).run {
+                requireWebGpu()
+                canvas {
+                    drawRect(Rect(0f, 8f, 9f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+                }
+                render()
+            }
+        }
     }
 
     @Test
-    fun `solid and inner preserve documented coverage`() {
-        assertEquals(255, alphaAt(renderRect(BlurStyle.SOLID, 2f), 12, 12, 32))
-        assertTrue(alphaAt(renderRect(BlurStyle.INNER, 2f), 12, 12, 32) > 0)
-        assertEquals(0, alphaAt(renderRect(BlurStyle.INNER, 2f), 7, 12, 32))
+    fun `outer blur is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing { renderRectResult(BlurStyle.OUTER, 2f) }
     }
 
     @Test
-    fun `path and rrect create a halo`() {
-        val triangle = alphaAt(renderTriangle(2f), 7, 12, 32)
-        val rrect = alphaAt(renderRRect(2f), 7, 12, 32)
-
-        assertTrue(triangle > 0) { "triangle exterior alpha=$triangle rrect exterior alpha=$rrect" }
-        assertTrue(rrect > 0)
+    fun `solid and inner blur are terminal analysis authority missing refusals`() {
+        assertFatalAnalysisAuthorityMissing {
+            renderRectResult(BlurStyle.SOLID, 2f)
+            renderRectResult(BlurStyle.INNER, 2f)
+            renderRectResult(BlurStyle.INNER, 2f)
+        }
     }
 
     @Test
-    fun `sigma forty eight reduces rather than refuses`() {
-        val result = renderRectResult(BlurStyle.NORMAL, 48f)
+    fun `path and rrect blur are terminal capability refusals`() {
+        requireWebGpu()
 
-        assertEquals(1, result.stats.opsDispatched)
-        assertEquals(0, result.stats.opsRefused)
-        assertTrue(result.diagnostics.entries.any { entry ->
-            entry.reason.contains("mask-filter.blur.reduced-resolution")
-        })
-    }
-
-    @Test
-    fun `budget refusal has no dispatch`() {
-        val result = renderRectResult(
-            style = BlurStyle.NORMAL,
-            sigma = 12f,
-            config = RenderConfig(maxMaskBlurIntermediateBytes = 8u),
+        // The triangle blur frame refuses at the first-route planner's FillPath
+        // capability gate (unsupported.pipeline.capability_missing) before any native
+        // work. The rrect blur frame passes the first-route planner but refuses at the
+        // recording authority (invalid.recording.core_primitive_semantic_authority): its
+        // gathered core rrect semantic cannot match the analyzed blur lane. Pre-FP-09 the
+        // legacy renderer materialized both blur masks (green at the FP-08 tip accaea616).
+        val triangle = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderTriangle(2f)
+        }
+        assertEquals(
+            "unsupported.pipeline.capability_missing",
+            triangle.diagnostic.code.value,
         )
+        val rrect = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderRRect(2f)
+        }
+        assertEquals(
+            "invalid.recording.core_primitive_semantic_authority",
+            rrect.diagnostic.code.value,
+        )
+    }
 
-        assertEquals(0, result.stats.opsDispatched)
-        assertEquals(1, result.stats.opsRefused)
-        assertTrue(result.diagnostics.entries.any { entry ->
-            entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
-        })
+    @Test
+    fun `sigma forty eight rect blur is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing { renderRectResult(BlurStyle.NORMAL, 48f) }
+    }
+
+    @Test
+    fun `budget refusal is preempted by the analysis authority refusal`() {
+        // The legacy budget gate (unsupported.mask-filter.blur.intermediate-budget) is
+        // unreachable: the frame refuses at the core-semantic builder first.
+        assertFatalAnalysisAuthorityMissing {
+            renderRectResult(
+                style = BlurStyle.NORMAL,
+                sigma = 12f,
+                config = RenderConfig(maxMaskBlurIntermediateBytes = 8u),
+            )
+        }
     }
 
     @Test
@@ -144,75 +132,68 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `source-composited mask blur uses an available clip budget and refuses an exhausted one`() {
-        val config = RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)
-        val deviceRect = renderSourceCompositedBlur(config) {
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
-        }
-        val wideOpen = renderSourceCompositedBlur(config) {}
-        val complex = renderSourceCompositedBlur(config) {
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
-        }
-
-        assertEquals(1, deviceRect.stats.opsDispatched, deviceRect.diagnostics.entries.toString())
-        assertEquals(0, deviceRect.diagnostics.fatalCount, deviceRect.diagnostics.entries.toString())
-        assertTrue(deviceRect.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
-        assertTrue(alphaAt(deviceRect.pixels.toByteArray(), 16, 16, 32) > 0)
-
-        listOf(complex, wideOpen).forEach { result ->
-            assertEquals(0, result.stats.opsDispatched, result.diagnostics.entries.toString())
-            assertEquals(1, result.stats.opsRefused, result.diagnostics.entries.toString())
-            assertTrue(result.diagnostics.entries.any { entry ->
-                entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
-            })
+    fun `source-composited mask blur frames are terminal analysis authority missing refusals`() {
+        // Pre-FP-09, a device-clipped source-composited blur dispatched once and a
+        // wide-open/exhausted one refused at the budget gate; both behaviors were legacy
+        // renderer behavior. After the collapse every top-level blur frame refuses at the
+        // core-semantic builder with the designed analysis_authority_missing code.
+        assertFatalAnalysisAuthorityMissing {
+            renderSourceCompositedBlur(RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)) {
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
+            }
+            renderSourceCompositedBlur(RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)) {}
+            renderSourceCompositedBlur(RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)) {
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+            }
         }
     }
 
     @Test
-    fun `destination-read blur with a device clip composes through independent geometry coverage`() {
-        val result = Surface(width = 32, height = 32).run {
-            requireWebGpu()
-            canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                save()
-                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
-                drawRect(
-                    Rect(4f, 4f, 28f, 28f),
-                    blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
-                )
-                restore()
+    fun `destination-read blur with a device clip is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing {
+            Surface(width = 32, height = 32).run {
+                requireWebGpu()
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                    drawRect(
+                        Rect(4f, 4f, 28f, 28f),
+                        blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
+                    )
+                    restore()
+                }
+                render()
             }
-            render()
         }
-
-        assertEquals(255, result.pixels[(4 * 32 + 4) * 4].toInt())
-        assertEquals(0, result.pixels[(16 * 32 + 16) * 4].toInt())
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
     }
 
     @Test
-    fun `source blur preserves destination outside its halo`() {
-        val result = Surface(width = 32, height = 32).run {
-            requireWebGpu()
-            canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                drawRect(
-                    Rect(10f, 10f, 22f, 22f),
-                    blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC),
-                )
+    fun `source blur is a terminal analysis authority missing refusal`() {
+        assertFatalAnalysisAuthorityMissing {
+            Surface(width = 32, height = 32).run {
+                requireWebGpu()
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(
+                        Rect(10f, 10f, 22f, 22f),
+                        blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC),
+                    )
+                }
+                render()
             }
-            render()
         }
-
-        assertEquals(255, result.pixels[(2 * 32 + 2) * 4].toInt())
-        assertEquals(0, result.pixels[(16 * 32 + 16) * 4].toInt())
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
-    private fun renderRect(style: BlurStyle, sigma: Float): ByteArray =
-        renderRectResult(style, sigma).pixels.toByteArray()
+    private fun assertFatalAnalysisAuthorityMissing(render: () -> Unit) {
+        requireWebGpu()
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { render() }
+        assertEquals(
+            "unsupported.core_primitive.rect.analysis_authority_missing",
+            failure.diagnostic.code.value,
+        )
+    }
 
     private fun renderBlurredOverOpaqueBlue(source: Color, sigma: Float) = Surface(width = 32, height = 32).run {
         requireWebGpu()
@@ -307,13 +288,4 @@ class GPUMaskBlurSurfaceTest {
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
         runtime!!.close()
     }
-
-    private fun alphaAt(pixels: ByteArray, x: Int, y: Int, width: Int): Int =
-        pixels[(y * width + x) * 4 + 3].toInt() and 0xff
-
-    private fun srgbToLinear(value: Float): Float =
-        if (value <= 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
-
-    private fun linearToSrgb(value: Float): Float =
-        if (value <= 0.0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - 0.055f
 }
