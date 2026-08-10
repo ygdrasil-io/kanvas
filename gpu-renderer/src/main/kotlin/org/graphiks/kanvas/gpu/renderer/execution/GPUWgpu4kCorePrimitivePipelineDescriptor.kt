@@ -312,8 +312,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                     blend.nativeShadingBlendProgramOrNull() == null ||
                     // The destination-read formula program exists only on the direct geometry
-                    // lane; analytic-shape dst-read keys refuse by name so the surface router
-                    // continues on the legacy route (Task 6 classifies the residual).
+                    // lane; analytic-shape dst-read keys refuse by name, surfacing as the
+                    // terminal refusal the recording classifies (Task 6 evidence family).
                     blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ||
                     clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
                     depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None -> null

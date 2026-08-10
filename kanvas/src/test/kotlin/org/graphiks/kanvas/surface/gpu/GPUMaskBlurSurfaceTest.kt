@@ -73,11 +73,10 @@ class GPUMaskBlurSurfaceTest {
 
     @Test
     fun `solid and inner blur are terminal analysis authority missing refusals`() {
-        assertFatalAnalysisAuthorityMissing {
-            renderRectResult(BlurStyle.SOLID, 2f)
-            renderRectResult(BlurStyle.INNER, 2f)
-            renderRectResult(BlurStyle.INNER, 2f)
-        }
+        // Each style needs its own assert block: the terminal exception is thrown inside
+        // the wrapped lambda, so a single block would only ever exercise the first style.
+        assertFatalAnalysisAuthorityMissing { renderRectResult(BlurStyle.SOLID, 2f) }
+        assertFatalAnalysisAuthorityMissing { renderRectResult(BlurStyle.INNER, 2f) }
     }
 
     @Test

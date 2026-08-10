@@ -5199,7 +5199,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
      * snapshot copy scheduled before its single render pass, so the captured destination is the
      * frame's cleared target. Frames with meaningful pre-copy destination content split into two
      * renders (destination pass, ordered copy, consuming pass) and are refused by the
-     * multi-render-dst-copy preflight residual, continuing on the legacy route. Prepared dst-read
+     * multi-render-dst-copy preflight residual, which surfaces as a terminal refusal (the legacy
+     * route was deleted in FP-09 Task 5). Prepared dst-read
      * pixels are therefore verified only for empty-destination content until the two-render
      * materialization lands; the SolidRect destination-copy lane already carries the
      * background-then-consumer pixel oracle in `GPUWgpu4kDestinationCopyFrameSmokeTest`.

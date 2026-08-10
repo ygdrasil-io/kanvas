@@ -49,6 +49,15 @@ these suites), and two stragglers (§4). Case counts differ from the reverted
 run because the current matrix fixture set is smaller than the reverted
 full-suite aggregate.
 
+Count reconciliation: the FP-08 counts above (hairline 168, mixed-uniform 92,
+analytic-clip 52) are the historical full-suite aggregate of a different matrix
+era, while this report's per-code table is the measured per-test distribution
+across the blend/clip suites (hairline 175, mixed-uniform 202, analytic-clip 2
+in this table). Per-family counts therefore differ in both directions; the
+measured Task 6 numbers are authoritative for the current matrix (used in §9,
+§15-§16 and the FP-11 transfer lists), and the FP-08 figures remain labeled as
+historical where quoted.
+
 ## 3. Blend suite re-pointing (GPUAllApiBlendSurfaceTest)
 
 `expectedPreparedProductRoute` now maps (per the evidence run):
@@ -176,7 +185,7 @@ all 16 retired tokens (the 4 FP-08 tokens + the 12 FP-09 tokens) out of
 | --- | --- | --- | --- | --- |
 | 1. destination-read blends | `unsupported.destination_read.required` (630) | covered | **Prepared coverage** (Tasks 3/3b/3c): `ShaderBlendWithDstRead` + GPU-owned `TextureCopy` + `GPUBlendFormulaLibrary` on core primitives; `GPUAllApiBlendSurfaceTest` routes render prepared with `route:destination-read:<op>` evidence (`reason == "gpu-copy-then-formula"`) and match the CPU pixel oracle | — |
 | 2. non-SrcOver core blends | `unsupported.native-core-primitive.blend` (330) | covered | **Prepared coverage** (Task 2): `FixedFunctionBlend`/`ShaderBlendNoDstRead` admission via the direct-native-route classifier + multi-pipeline per pass (Task 3b) | — |
-| 3. hairline points | `unsupported.core_primitive.point.hairline_exact_lowering` (168) | terminal | **Stable terminal refusal** (Task 4 policy; pinned by `GPUFramePathApiInventoryTest.kt:735,751` and the router matrix) | hairline points |
+| 3. hairline points | `unsupported.core_primitive.point.hairline_exact_lowering` (175) | terminal | **Stable terminal refusal** (Task 4 policy; pinned by `GPUFramePathApiInventoryTest.kt:735,751` and the router matrix) | hairline points |
 | 4. mixed uniform layouts | `unsupported.recording.core_primitive_mixed_uniform_layouts` (202) | terminal | **Stable terminal refusal** — multi-layout pass splitting is a recording feature (emission `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602,2104`) | mixed uniform layouts |
 | 5. analytic clip non-direct geometry | `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry` (2) | terminal | **Stable terminal refusal** (emission `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994`) | analytic-clip non-direct geometry |
 | 6. multi-render dst-copy | `unsupported.native-core-primitive.multi-render-dst-copy` (60) | terminal | **Stable terminal refusal** — the prepared lane executes only single-render dst-read frames (snapshot scheduled before its one pass); destination-then-consumer frames refuse (executor residual, documented at `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt` `validateCorePrimitiveDestinationCopy`) | multi-render dst-copy |
@@ -305,14 +314,26 @@ unchanged). Top-level mask blur remains a tracked FP-11 gap (§16); mask blur
 inside a saveLayer scope still renders through the composite capture's
 `GPUPreparedMaskFilterLowerer` (FP-07 composite route, unchanged).
 
+Documented deviation — `GPUSaveLayerCompositeRegressionTest` was RE-POINTED,
+not deleted: the plan File Map listed the file for deletion (it pinned
+`LayerScissorOffscreenTarget`/`LayerBounds`), but Task 9's evidence showed its
+remaining cases were live prepared-route coverage (bounded saveLayer pixel
+oracles and prepared-route terminal-refusal pins), so the five
+legacy-pinning tests were deleted (227 lines; the scissor/recorder-forwarding
+cases that exercised the deleted layer-target machinery) and the 22 live tests
+were kept. The file pins the composite route's bounded-layer rendering and its
+documented refusal codes; its Task 10 review additionally removed four dead
+private helpers.
+
 ## 16. FP-11 tracking notes (terminal families, per the roadmap)
 
 Per `active-todo.md` FP-11 "FP-09 transfers", each with its emission site and
 case count:
 
-- exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering` (`GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465`; 168 cases);
+- exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering` (`GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465`; 175 cases);
 - multi-uniform-layout direct passes — `unsupported.recording.core_primitive_mixed_uniform_layouts` (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602, 2104`; 202 cases);
 - analytic clips over non-direct shading geometry — `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry` (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994`; 2 cases);
+- dst-read formula on mapped routes — `unsupported.native-core-primitive.dst-read-formula` (2 cases);
 - multi-render dst-copy (destination-then-consumer dst-read frames) — `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
 - analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key` (2 cases);
 - path destination-read — `unsupported.native-core-primitive.path-destination-read` (60 cases; §4);

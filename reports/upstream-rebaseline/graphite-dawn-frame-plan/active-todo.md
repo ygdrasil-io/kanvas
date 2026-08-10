@@ -452,7 +452,7 @@ Resolution evidence (`fp-09-retire-legacy-immediate-renderer-evidence.md`):
   the coverage required the Graphite-faithful multi-pipeline per-pass materialization
   (Tasks 3b/3c: DrawPass pipeline array, `BindGraphicsPipeline` mid-pass, dst copy before
   the consuming pass — C++ evidence in skia-main, plan amendment `f45d4fc6f`);
-- stable terminal refusals replace the legacy render for hairline points (168),
+- stable terminal refusals replace the legacy render for hairline points (175),
   mixed uniform layouts (202), analytic-clip non-direct geometry (2), and the blend
   residuals (multi-render-dst-copy 60, analytic-shape-multi-key 2, dst-read-formula 2,
   path-destination-read 60) — documented behavior change (pixels → loud refusal),
@@ -523,11 +523,13 @@ cases.
 
 FP-09 transfers (stable terminal refusals, per `fp-09-retire-legacy-immediate-renderer-evidence.md`):
 - exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering`
-  (GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465; 168 cases);
+  (GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465; 175 cases);
 - multi-uniform-layout direct passes — `unsupported.recording.core_primitive_mixed_uniform_layouts`
   (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602, 2104; 202 cases);
 - analytic clips over non-direct shading geometry — `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry`
   (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994; 2 cases);
+- dst-read formula on mapped routes — `unsupported.native-core-primitive.dst-read-formula`
+  (2 cases);
 - multi-render dst-copy (destination-then-consumer dst-read frames) —
   `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
 - analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key`

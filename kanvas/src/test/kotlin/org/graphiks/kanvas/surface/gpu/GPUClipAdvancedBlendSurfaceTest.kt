@@ -100,7 +100,7 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun destinationReadMaskBlurRefusesWithAnalysisAuthorityMissing() {
+    fun `destination read mask blur refuses with analysis authority missing`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
