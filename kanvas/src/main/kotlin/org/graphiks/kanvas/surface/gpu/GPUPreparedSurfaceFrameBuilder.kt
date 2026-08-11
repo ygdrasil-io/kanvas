@@ -517,6 +517,22 @@ internal object GPUPreparedSurfaceFrameBuilder {
  * previous frame's pixels. Synthesize the frame's implicit clear as an explicit leading
  * [DisplayOp.Clear] so the copy always captures the cleared target, on fresh and retained sessions
  * alike.
+ *
+ * Evidence contract of the synthesized clear: the [DisplayOp.Clear] is a REAL op in the visual
+ * stream. It maps to one full-target solid command, so the built frame reports
+ * `visualOperationCount` N+1 (N recorded visuals), the native evidence reports one extra render
+ * pass, draw, and pipeline bind, and the executor's `opsDispatched` is N+1 by design — the clear
+ * IS a dispatched op. The synthesis never flips a builder-NoOp frame to Ready: it fires only for
+ * frames whose first visual op is a non-empty destination-reading text op (empty-glyph text ops
+ * are skipped when locating the first visual, and empty-glyph-only frames stay NoOp).
+ *
+ * Known non-synthesized shapes (documented, not handled): elidable non-empty text first ops whose
+ * blend is outside [PREPARED_DST_READ_TEXT_BLEND_MODES] (e.g. an opaque DST_IN text elides to a
+ * no-op while a later dst-read text fuses the clear). Such frames keep the retained-target
+ * behavior above; no current test shape exercises them. LCD (subpixel) text cannot reach this
+ * lane: its blend plan is always `ShaderBlendWithDstRead` (GPUSubpixelLcd.lcdBlendPlan), which the
+ * prepared-surface lane refuses for TextA8 at `invalid.preflight.text.blend`
+ * (GPUPreparedSurfaceFrameTaskListBuilder), so no LCD frame ever renders through the copy lane.
  */
 private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
     interpretation: GPUColorInterpretation,
@@ -533,10 +549,15 @@ private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
     ) {
         return this
     }
-    val firstVisual = firstOrNull(DisplayOp::isVisualDraw) ?: return this
+    // Locate the first visual op that will actually paint: empty-glyph text ops are elided by
+    // the prepared-text inventory, so they do not own the fused scene clear and must not block
+    // the synthesis for a later destination-reading text op.
+    val firstVisual = firstOrNull { visual ->
+        visual.isVisualDraw() &&
+            (visual !is DisplayOp.DrawText || visual.blob.glyphRuns.any { run -> run.glyphs.isNotEmpty() })
+    } ?: return this
     val text = firstVisual as? DisplayOp.DrawText ?: return this
     if (text.paint.blendMode !in PREPARED_DST_READ_TEXT_BLEND_MODES) return this
-    if (text.blob.glyphRuns.sumOf { run -> run.glyphs.size } == 0) return this
     return listOf(
         DisplayOp.Clear(Color.TRANSPARENT),
     ) + this
@@ -566,8 +587,17 @@ private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
  * Text blend modes whose canonical scalar-coverage blend plan samples the destination texture
  * (`ShaderBlendWithDstRead`), mirroring GPUBlendPlanning's scalar-coverage fallback branch for
  * text semantics. A leading destination-reading draw therefore sees the frame's cleared state.
+ *
+ * The set is pinned by `GPUPreparedSurfaceFrameBuilderTextTest` against the planner itself
+ * (`GPUBlendPlanner.plan` with scalar coverage and a non-proven-opaque source), so drift fails
+ * loudly. Over-approximation is intentional: for a PROVEN-OPAQUE source alpha the planner
+ * downgrades SRC/SRC_IN/SRC_OUT/DST_ATOP to fixed-function blends (no destination read), so the
+ * mirror may synthesize a clear for an opaque non-reading text op — harmless, because the clear
+ * rect writes transparent and the fused-clear render would have cleared the target anyway.
+ * LCD (subpixel) coverage reads the destination regardless of mode, but LCD text never reaches
+ * this lane (see [withSynthesizedDstReadSceneClear]); the mirror therefore does not model it.
  */
-private val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
+internal val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
     BlendMode.SRC,
     BlendMode.SRC_IN,
     BlendMode.SRC_OUT,

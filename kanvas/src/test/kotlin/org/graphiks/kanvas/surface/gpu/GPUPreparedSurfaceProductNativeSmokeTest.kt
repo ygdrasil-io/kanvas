@@ -69,6 +69,21 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
     @Test
     fun `mixed direct path direct frame uses the prepared product route with exact native evidence`() {
+        // Prime the shared executor's cached session deterministically, independent of test
+        // order: render one frame through the shared port, then dispose the runtime. The dispose
+        // forces the next frame to open a fresh runtime with a new device generation, which the
+        // executor observes as a generation boundary: it closes the primed session and prepares
+        // a new one. The asserted frame below therefore always sees (targetCreations 1,
+        // targetCloses 1), whether or not a previous test in the class already rendered.
+        renderViaGpu(
+            buffer = StaticDisplayListBuffer(listOf(rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED))),
+            width = 4,
+            height = 4,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+        )
+        GPUBackendRuntimeFactory.dispose()
+
         val operations = listOf(
             rect(Rect.fromLTRB(1f, 1f, 7f, 7f), Color.RED),
             DisplayOp.DrawPath(
@@ -101,9 +116,8 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertPixel(result.pixels.toByteArray(), 32, 31, 31, listOf(0, 0, 0, 0))
 
         assertEquals(1L, evidence.targetCreations)
-        // This frame renders through the shared preparedSurfaceProductExecutionPort after the
-        // class's @AfterTest dispose: the fresh runtime carries a new device generation, so the
-        // frame closes the previous generation's cached session (boundary, not checkin).
+        // The primed session from above is closed at the device-generation boundary created by
+        // the dispose, so this frame's evidence is the boundary (close+recreate), not a checkin.
         assertEquals(1L, evidence.targetCloses)
         assertEquals(1L, evidence.frameCoordinatorCreations)
         assertEquals(1L, evidence.encoders)

@@ -664,10 +664,15 @@ internal class PreparedProductSession(
 
     override fun counters(): GPUPreparedSceneNativeCounters {
         counterReads++
+        // Session-state fake: counters are cumulative across the session's frames, so a second
+        // frame through the harness reports the same per-frame deltas instead of a silent zero
+        // delta (which would trip the executor's per-frame evidence checks). The first read
+        // reports the created state; later reads report the completed frames so far.
+        val completedFrames = if (counterReads == 1) 0L else (counterReads + 1L) / 3L
         return when {
-            closed -> completedCounters().copy(targetCloses = 1)
+            closed -> completedCounters(completedFrames).copy(targetCloses = 1)
             counterReads == 1 -> GPUPreparedSceneNativeCounters(targetCreations = 1)
-            else -> completedCounters()
+            else -> completedCounters(completedFrames)
         }
     }
 
@@ -675,19 +680,19 @@ internal class PreparedProductSession(
         closed = true
     }
 
-    private fun completedCounters() = GPUPreparedSceneNativeCounters(
+    private fun completedCounters(completedFrames: Long) = GPUPreparedSceneNativeCounters(
         targetCreations = 1,
-        frameCoordinatorCreations = 1,
-        encoders = 1,
-        commandBuffers = 1,
-        submits = 1,
-        readbackCopies = 1,
-        renderPasses = 1,
-        draws = 1,
-        pipelineBinds = 1,
-        retentionRegistrations = 1,
-        retentionCompletions = 1,
-        distinctRetentionTickets = 1,
+        frameCoordinatorCreations = completedFrames,
+        encoders = completedFrames,
+        commandBuffers = completedFrames,
+        submits = completedFrames,
+        readbackCopies = completedFrames,
+        renderPasses = completedFrames,
+        draws = completedFrames,
+        pipelineBinds = completedFrames,
+        retentionRegistrations = completedFrames,
+        retentionCompletions = completedFrames,
+        distinctRetentionTickets = completedFrames.toInt(),
     )
 }
 

@@ -287,6 +287,10 @@ internal class GPUPreparedSurfaceFrameExecutor(
         GPUPreparedSurfaceFrameBuildSession()::build,
     private val ordinal: AtomicLong = sharedOrdinal,
 ) : GPUPreparedSurfaceExecutionPort {
+    // Serialization invariant: every production render runs under
+    // GPUPreparedSurfaceRuntimeOwner.lock (GPUPreparedSurfaceProductEntry.kt), so the cached
+    // session fields below are touched by one frame at a time and need no synchronization of
+    // their own. Direct executor use in tests is single-threaded by construction.
     private var cachedKey: GPUPreparedSurfaceSessionKey? = null
     private var cachedSession: GPUPreparedSurfaceSessionPort? = null
     private var cachedTarget: GPUFrameTargetRef? = null
@@ -307,7 +311,9 @@ internal class GPUPreparedSurfaceFrameExecutor(
         var session: GPUPreparedSurfaceSessionPort? = null
         var primary: GPUPreparedSurfaceExecutionResult? = null
         var pendingSuccess: PendingPreparedSuccess? = null
-        var postCloseCounters: GPUPreparedSceneNativeCounters? = null
+        // The post-frame counters read at checkin (or after a poisoned close); named for what
+        // it is — a checkin read, not a post-close read.
+        var postFrameCounters: GPUPreparedSceneNativeCounters? = null
         var postCloseTelemetry: GPUBackendRuntimeTelemetry? = null
         var sessionCreatedByFrame = false
         var sessionClosedByFrame = false
@@ -460,10 +466,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 if (primary != null) {
                     // Poisoned session: the frame failed, so the session is terminal. Close it
                     // and evict it from the cache; the next frame prepares a fresh session.
-                    try {
-                        activeSession.close()
-                        postCloseCounters = activeSession.counters()
-                    } catch (failure: Throwable) {
+                    activeSession.poisonSession()?.let { failure ->
                         val existingCode = primaryCode(primary)
                         primary = terminal(
                             "failed.surface.prepared.session-close",
@@ -479,16 +482,26 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     }
                 } else {
                     // Checkin: keep the cached session open for compatible frames; the counters
-                    // read after the frame feeds the per-frame delta computation.
-                    try {
-                        postCloseCounters = activeSession.counters()
+                    // read after the frame feeds the per-frame delta computation. A counters
+                    // failure means the session cannot be accounted anymore, so it is poisoned
+                    // like any other failed session: closed and evicted, or every later frame
+                    // would fail this same checkin read forever.
+                    postFrameCounters = try {
+                        activeSession.counters()
                     } catch (failure: Throwable) {
-                        val existingCode = primaryCode(primary)
+                        val poisonFailure = activeSession.poisonSession() ?: failure
+                        sessionClosedByFrame = true
+                        if (activeSession === cachedSession) {
+                            cachedSession = null
+                            cachedKey = null
+                            cachedTarget = null
+                        }
                         primary = terminal(
-                            "failed.surface.prepared.session-close",
-                            "The prepared Surface session could not close cleanly.",
-                            closeFacts(failure, existingCode),
+                            "failed.surface.prepared.session-counters",
+                            "The prepared Surface session counters could not be read on checkin.",
+                            closeFacts(poisonFailure, null),
                         )
+                        null
                     }
                 }
             }
@@ -518,7 +531,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
         val current = primary
         val pending = pendingSuccess
         if (current == null && pending != null) {
-            val closed = postCloseCounters ?: return terminal(
+            val postFrame = postFrameCounters ?: return terminal(
                 "failed.surface.prepared.completion",
                 "The prepared Surface frame completion failed.",
                 mapOf("failureClass" to IllegalStateException::class.java.name),
@@ -528,7 +541,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 "The prepared Surface frame completion failed.",
                 mapOf("failureClass" to IllegalStateException::class.java.name),
             )
-            return finalizeSuccess(pending, closed, telemetry)
+            return finalizeSuccess(pending, postFrame, telemetry)
         }
         return current ?: terminal(
             "invalid.surface.prepared.terminal-without-diagnostic",
@@ -614,6 +627,9 @@ internal class GPUPreparedSurfaceFrameExecutor(
         sessionClosedByFrame: Boolean,
         onSuccess: (PendingPreparedSuccess) -> Unit,
     ): GPUPreparedSurfaceExecutionResult? {
+        // Telemetry baseline read after session prepare/checkin: any telemetry produced by the
+        // prepare step of a reused session is deliberately excluded from the frame's
+        // destinationReadbackSnapshots delta, which must count only this frame's readbacks.
         val telemetryBefore = backend.runtimeTelemetry
         val beforeSubmit = session.counters()
         val submission = try {
@@ -747,23 +763,23 @@ internal class GPUPreparedSurfaceFrameExecutor(
 
     private fun finalizeSuccess(
         pending: PendingPreparedSuccess,
-        afterClose: GPUPreparedSceneNativeCounters,
+        postFrameCounters: GPUPreparedSceneNativeCounters,
         telemetryAfter: GPUBackendRuntimeTelemetry,
     ): GPUPreparedSurfaceExecutionResult {
         return try {
             check(pending.beforeSubmit.targetCreations == 1L && pending.beforeSubmit.targetCloses == 0L)
             check(pending.afterCompletion.targetCreations == 1L && pending.afterCompletion.targetCloses == 0L)
-            check(afterClose.targetCreations == 1L && afterClose.targetCloses == 0L)
-            check(afterClose.activeNativePayloads == 0)
-            check(afterClose.outputOwnedNativePayloads == 0)
-            check(afterClose.quarantinedNativePayloads == 0)
+            check(postFrameCounters.targetCreations == 1L && postFrameCounters.targetCloses == 0L)
+            check(postFrameCounters.activeNativePayloads == 0)
+            check(postFrameCounters.outputOwnedNativePayloads == 0)
+            check(postFrameCounters.quarantinedNativePayloads == 0)
             check(
-                delta(pending.beforeSubmit.retentionRegistrations, afterClose.retentionRegistrations) ==
-                    delta(pending.beforeSubmit.retentionCompletions, afterClose.retentionCompletions),
+                delta(pending.beforeSubmit.retentionRegistrations, postFrameCounters.retentionRegistrations) ==
+                    delta(pending.beforeSubmit.retentionCompletions, postFrameCounters.retentionCompletions),
             )
-            check(delta(pending.beforeSubmit.retentionQuarantines, afterClose.retentionQuarantines) == 0L)
+            check(delta(pending.beforeSubmit.retentionQuarantines, postFrameCounters.retentionQuarantines) == 0L)
             check(
-                deltaInt(pending.beforeSubmit.distinctRetentionTickets, afterClose.distinctRetentionTickets) ==
+                deltaInt(pending.beforeSubmit.distinctRetentionTickets, postFrameCounters.distinctRetentionTickets) ==
                     1,
             )
 
@@ -790,24 +806,24 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 draws = delta(pending.beforeSubmit.draws, pending.afterCompletion.draws),
                 drawIndexed = delta(pending.beforeSubmit.drawIndexed, pending.afterCompletion.drawIndexed),
                 pipelineBinds = delta(pending.beforeSubmit.pipelineBinds, pending.afterCompletion.pipelineBinds),
-                activeNativePayloads = afterClose.activeNativePayloads,
-                outputOwnedNativePayloads = afterClose.outputOwnedNativePayloads,
-                quarantinedNativePayloads = afterClose.quarantinedNativePayloads,
+                activeNativePayloads = postFrameCounters.activeNativePayloads,
+                outputOwnedNativePayloads = postFrameCounters.outputOwnedNativePayloads,
+                quarantinedNativePayloads = postFrameCounters.quarantinedNativePayloads,
                 retentionRegistrations = delta(
                     pending.beforeSubmit.retentionRegistrations,
-                    afterClose.retentionRegistrations,
+                    postFrameCounters.retentionRegistrations,
                 ),
                 retentionCompletions = delta(
                     pending.beforeSubmit.retentionCompletions,
-                    afterClose.retentionCompletions,
+                    postFrameCounters.retentionCompletions,
                 ),
                 retentionQuarantines = delta(
                     pending.beforeSubmit.retentionQuarantines,
-                    afterClose.retentionQuarantines,
+                    postFrameCounters.retentionQuarantines,
                 ),
                 distinctRetentionTickets = deltaInt(
                     pending.beforeSubmit.distinctRetentionTickets,
-                    afterClose.distinctRetentionTickets,
+                    postFrameCounters.distinctRetentionTickets,
                 ),
                 textCounters = GPUPreparedTextFrameCounters(
                     a8Instances = pending.textMetrics.a8InstanceCount,
@@ -1013,6 +1029,22 @@ private fun primaryCode(result: GPUPreparedSurfaceExecutionResult?): String? = w
     is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused -> result.diagnostic.code.value
     is GPUPreparedSurfaceExecutionResult.TerminalFailure -> result.diagnostic.code.value
     is GPUPreparedSurfaceExecutionResult.Succeeded -> null
+}
+
+/**
+ * Closes a terminal session and returns the close failure, if any. The counters read after the
+ * close is best-effort: a poisoned session's counts are never consumed for evidence.
+ */
+private fun GPUPreparedSurfaceSessionPort.poisonSession(): Throwable? = try {
+    close()
+    try {
+        counters()
+    } catch (_: Throwable) {
+        // A poisoned session's counters are not consumed; ignore read failures.
+    }
+    null
+} catch (failure: Throwable) {
+    failure
 }
 
 private fun closeFacts(failure: Throwable, primaryCode: String?): Map<String, String> = buildMap {
