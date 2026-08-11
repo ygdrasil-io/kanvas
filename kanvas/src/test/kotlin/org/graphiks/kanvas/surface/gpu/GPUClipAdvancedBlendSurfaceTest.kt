@@ -100,35 +100,38 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun `destination read mask blur refuses with analysis authority missing`() {
+    fun `destination read mask blur renders prepared via the copy-then-formula lane`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        // FP-09 terminal refusal: a top-level mask-blur rect frame carries no rect route
-        // authority in its analysis record — the designed analysis_authority_missing code
-        // (Task 6 evidence §4, mask-blur rect frames). Pre-FP-09 the legacy renderer
-        // materialized the blur mask; the legacy mask machinery is deleted (Task 8) and
-        // the prepared top-level blur route is not wired, so the frame refuses loudly.
-        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                    drawRect(
-                        Rect(10f, 10f, 22f, 22f),
-                        Paint.fill(Color.BLACK).copy(
-                            antiAlias = false,
-                            blendMode = BlendMode.DARKEN,
-                            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
-                        ),
-                    )
-                }
-                render()
+        // FP-09 Task 11: top-level mask blur is prepared-covered. The DARKEN
+        // blur rect over the white destination rides the copy-then-formula
+        // destination-read lane with the blurred coverage as its source shade,
+        // matching the CPU oracle (TopLevelMaskBlurPixelOracle + the composite
+        // route's blend oracle). Pre-FP-09 the legacy renderer materialized the
+        // blur mask the same way (green at the FP-08 tip accaea616).
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(
+                    Rect(10f, 10f, 22f, 22f),
+                    Paint.fill(Color.BLACK).copy(
+                        antiAlias = false,
+                        blendMode = BlendMode.DARKEN,
+                        maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
+                    ),
+                )
             }
+            render().pixels.toUByteArray()
         }
-        assertEquals(
-            "unsupported.core_primitive.rect.analysis_authority_missing",
-            failure.diagnostic.code.value,
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE)
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32,
+            TopLevelMaskBlurPixelOracle.Shape.Rect(10f, 10f, 22f, 22f),
+            TopLevelMaskBlurPixelOracle.fullTargetBounds(),
+            BlurStyle.NORMAL, 2f, Color.BLACK, BlendMode.DARKEN, destination,
         )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
 
     @Test
