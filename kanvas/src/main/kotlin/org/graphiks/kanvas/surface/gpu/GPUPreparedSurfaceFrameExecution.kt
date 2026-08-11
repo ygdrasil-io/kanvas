@@ -53,6 +53,29 @@ internal enum class GPUPreparedSurfaceExecutionRouteMarker(
     PreparedSurfaceDirect("prepared.surface.direct"),
 }
 
+/**
+ * Per-frame deltas of the session-scoped invariant cache counters (created/reused invariants,
+ * destination snapshots, color-glyph atlas reuse). Every field is a delta between the session's
+ * before-submit and after-completion counter reads, so a creating frame reports positive
+ * creations and zero reuses, and every compatible later frame reports zero creations and
+ * positive reuses. The pool slot counters (coverageMaskSlotReuses, msaaColorSlotReuses,
+ * pathDepthStencilSlotReuses, clipDepthStencilSlotReuses) are not surfaced here: they live on
+ * GPUPreparedSceneRenderCounters, which the executor's session port does not expose.
+ */
+internal data class GPUPreparedSceneInvariantCounterDeltas(
+    val solidRectCreations: Long = 0L,
+    val solidRectReuses: Long = 0L,
+    val corePrimitiveCreations: Long = 0L,
+    val corePrimitiveReuses: Long = 0L,
+    val registeredUniformCreations: Long = 0L,
+    val registeredUniformReuses: Long = 0L,
+    val separableBlurCreations: Long = 0L,
+    val separableBlurReuses: Long = 0L,
+    val destinationSnapshotCreations: Long = 0L,
+    val destinationSnapshotReuses: Long = 0L,
+    val colorGlyphAtlasReuses: Long = 0L,
+)
+
 internal data class GPUPreparedSurfaceExecutionEvidence(
     val targetCreations: Long,
     val targetCloses: Long,
@@ -80,6 +103,8 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val destinationReadTextCommandIds: Set<Int> = emptySet(),
     val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence> =
         emptyList(),
+    val invariantCounters: GPUPreparedSceneInvariantCounterDeltas =
+        GPUPreparedSceneInvariantCounterDeltas(),
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -860,6 +885,52 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 ),
                 destinationReadTextCommandIds = pending.destinationReadTextCommandIds,
                 destinationReadEvidence = pending.destinationReadEvidence,
+                invariantCounters = GPUPreparedSceneInvariantCounterDeltas(
+                    solidRectCreations = delta(
+                        pending.beforeSubmit.solidRectInvariantCreations,
+                        pending.afterCompletion.solidRectInvariantCreations,
+                    ),
+                    solidRectReuses = delta(
+                        pending.beforeSubmit.solidRectInvariantReuses,
+                        pending.afterCompletion.solidRectInvariantReuses,
+                    ),
+                    corePrimitiveCreations = delta(
+                        pending.beforeSubmit.corePrimitiveInvariantCreations,
+                        pending.afterCompletion.corePrimitiveInvariantCreations,
+                    ),
+                    corePrimitiveReuses = delta(
+                        pending.beforeSubmit.corePrimitiveInvariantReuses,
+                        pending.afterCompletion.corePrimitiveInvariantReuses,
+                    ),
+                    registeredUniformCreations = delta(
+                        pending.beforeSubmit.registeredUniformInvariantCreations,
+                        pending.afterCompletion.registeredUniformInvariantCreations,
+                    ),
+                    registeredUniformReuses = delta(
+                        pending.beforeSubmit.registeredUniformInvariantReuses,
+                        pending.afterCompletion.registeredUniformInvariantReuses,
+                    ),
+                    separableBlurCreations = delta(
+                        pending.beforeSubmit.separableBlurInvariantCreations,
+                        pending.afterCompletion.separableBlurInvariantCreations,
+                    ),
+                    separableBlurReuses = delta(
+                        pending.beforeSubmit.separableBlurInvariantReuses,
+                        pending.afterCompletion.separableBlurInvariantReuses,
+                    ),
+                    destinationSnapshotCreations = delta(
+                        pending.beforeSubmit.destinationSnapshotCreations,
+                        pending.afterCompletion.destinationSnapshotCreations,
+                    ),
+                    destinationSnapshotReuses = delta(
+                        pending.beforeSubmit.destinationSnapshotReuses,
+                        pending.afterCompletion.destinationSnapshotReuses,
+                    ),
+                    colorGlyphAtlasReuses = delta(
+                        pending.beforeSubmit.colorGlyphAtlasReuses,
+                        pending.afterCompletion.colorGlyphAtlasReuses,
+                    ),
+                ),
             )
             check(evidence.frameCoordinatorCreations == 1L)
             check(evidence.encoders == 1L)

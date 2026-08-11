@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -115,6 +116,84 @@ class GPUPreparedSurfaceLifetimeStressTest {
             } finally {
                 GPUBackendRuntimeFactory.dispose()
             }
+        }
+    }
+
+    @Test
+    fun `size transition is deterministic and reuses after the transition`() {
+        assumeGpu()
+        try {
+            val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)
+            val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest(width = 64, height = 64)),
+            )
+            assertEquals(1L, first.evidence.targetCreations)
+            val transition = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest(width = 32, height = 32)),
+            )
+            assertEquals(1L, transition.evidence.targetCreations, "size change creates a new session target")
+            assertEquals(1L, transition.evidence.targetCloses, "size change closes the old session exactly once")
+            val after = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest(width = 32, height = 32)),
+            )
+            assertEquals(0L, after.evidence.targetCreations, "the new size is reused after the transition")
+            assertEquals(0L, after.evidence.targetCloses)
+        } finally {
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `dispose between frames advances the generation and reuses the new session`() {
+        assumeGpu()
+        try {
+            val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)
+            val before = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest()),
+            )
+            assertEquals(1L, before.evidence.targetCreations)
+            GPUBackendRuntimeFactory.dispose()
+            val after = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest()),
+            )
+            assertEquals(1L, after.evidence.targetCreations, "a disposed backend reopens one fresh session")
+            assertEquals(1L, after.evidence.targetCloses, "the stale session is closed exactly once")
+            val reused = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest()),
+            )
+            assertEquals(0L, reused.evidence.targetCreations, "the reopened session is reused")
+            assertEquals(0L, reused.evidence.targetCloses)
+        } finally {
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `cache creation and reuse counters grow monotonically within one session`() {
+        assumeGpu()
+        try {
+            val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)
+            val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest()),
+            )
+            executor.execute(lifetimeRequest())
+            val third = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+                executor.execute(lifetimeRequest()),
+            )
+            assertTrue(
+                first.evidence.invariantCounters.corePrimitiveCreations > 0L,
+                "the first frame creates the core-primitive invariants",
+            )
+            assertEquals(
+                0L, third.evidence.invariantCounters.corePrimitiveCreations,
+                "the third frame reuses the invariants instead of creating new ones",
+            )
+            assertTrue(
+                third.evidence.invariantCounters.corePrimitiveReuses > 0L,
+                "the third frame reuses the session's core-primitive invariants",
+            )
+        } finally {
+            GPUBackendRuntimeFactory.dispose()
         }
     }
 }

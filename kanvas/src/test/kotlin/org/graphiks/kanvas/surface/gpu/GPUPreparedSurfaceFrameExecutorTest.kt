@@ -17,6 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat as CanonicalGPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -39,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
@@ -424,6 +427,184 @@ class GPUPreparedSurfaceFrameExecutorTest {
         // per-frame recording/frame/readback identities above remain distinct.
         assertEquals(sceneTarget(firstTasks), sceneTarget(secondTasks))
         assertNotEquals(session.submittedReadbackIds[0], session.submittedReadbackIds[1])
+    }
+
+    @Test
+    fun `size transition closes the old session and creates exactly one new session`() {
+        val backend = TransitionBackend(capabilities())
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
+
+        val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(64, 64)),
+        )
+        val transition = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(32, 32)),
+        )
+        val after = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(32, 32)),
+        )
+
+        assertEquals(1L, first.evidence.targetCreations, "the first frame creates its session target")
+        assertEquals(0L, first.evidence.targetCloses, "the first frame checks the session in")
+        assertEquals(1L, first.evidence.frameCoordinatorCreations)
+        assertEquals(
+            1L, transition.evidence.targetCreations,
+            "the size change creates exactly one new session target",
+        )
+        assertEquals(
+            1L, transition.evidence.targetCloses,
+            "the size change closes exactly one old session",
+        )
+        assertEquals(1L, transition.evidence.frameCoordinatorCreations)
+        assertEquals(0L, after.evidence.targetCreations, "the new size is reused after the transition")
+        assertEquals(0L, after.evidence.targetCloses)
+        assertEquals(2, backend.prepareCalls, "two sessions are prepared across the transition")
+        assertEquals(1, backend.createdSessions[0].closeCalls, "the old session is closed exactly once")
+        assertEquals(0, backend.createdSessions[1].closeCalls, "the new session is checked in")
+        assertEquals(64, backend.preparedRequests[0].width)
+        assertEquals(32, backend.preparedRequests[1].width)
+        // The invariant delta machinery reports zeros on a creating frame's reuse fields and
+        // positive reuse only on the subsequent frame of the same session.
+        assertEquals(0L, transition.evidence.invariantCounters.corePrimitiveReuses)
+        assertEquals(1L, transition.evidence.invariantCounters.corePrimitiveCreations)
+        assertEquals(0L, after.evidence.invariantCounters.corePrimitiveCreations)
+        assertTrue(after.evidence.invariantCounters.corePrimitiveReuses > 0L)
+    }
+
+    @Test
+    fun `format transition closes the old session and creates exactly one new session`() {
+        val backend = TransitionBackend(capabilities())
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
+        val rgbaRequest = transitionRequest(16, 16, RenderConfig.DEFAULT)
+        val bgraRequest = transitionRequest(
+            16, 16,
+            RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
+        )
+
+        val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(rgbaRequest))
+        val transition = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(bgraRequest))
+
+        assertEquals(1L, first.evidence.targetCreations)
+        assertEquals(0L, first.evidence.targetCloses)
+        assertEquals(
+            1L, transition.evidence.targetCreations,
+            "the format change creates exactly one new session",
+        )
+        assertEquals(
+            1L, transition.evidence.targetCloses,
+            "the format change closes exactly one old session",
+        )
+        assertEquals(2, backend.prepareCalls)
+        assertEquals(1, backend.createdSessions[0].closeCalls, "the RGBA8 session is closed exactly once")
+        assertEquals(0, backend.createdSessions[1].closeCalls)
+        assertEquals(
+            CanonicalGPUColorFormat.RGBA8UnormSrgb,
+            backend.preparedRequests[0].colorFormat,
+        )
+        assertEquals(
+            CanonicalGPUColorFormat.BGRA8Unorm,
+            backend.preparedRequests[1].colorFormat,
+            "the new session is prepared on the BGRA8 physical format",
+        )
+        assertEquals(
+            GPUColorInterpretation.EncodedPremulSrgb,
+            backend.preparedRequests[1].colorInterpretation,
+            "the new session is prepared on the BGRA8 interpretation",
+        )
+    }
+
+    @Test
+    fun `device generation transition closes the stale session before creating the new one`() {
+        val backend = TransitionBackend(capabilities())
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
+
+        val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(16, 16)),
+        )
+        backend.deviceGeneration = GPUDeviceGenerationID(backend.deviceGeneration.value + 1)
+        val transition = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(16, 16)),
+        )
+
+        assertEquals(1L, first.evidence.targetCreations)
+        assertEquals(0L, first.evidence.targetCloses)
+        assertEquals(
+            1L, transition.evidence.targetCreations,
+            "the generation change creates exactly one new session",
+        )
+        assertEquals(
+            1L, transition.evidence.targetCloses,
+            "the stale session is closed exactly once",
+        )
+        assertEquals(1, backend.createdSessions[0].closeCalls, "the stale-generation session is closed exactly once")
+        assertEquals(0, backend.createdSessions[1].closeCalls)
+        assertEquals(
+            listOf(91L, 92L), backend.prepareGenerations,
+            "the new session is prepared on the new generation",
+        )
+    }
+
+    @Test
+    fun `owner transition creates a fresh session on a new executor instance`() {
+        val firstBackend = TransitionBackend(capabilities())
+        val secondBackend = TransitionBackend(capabilities())
+        val executorA = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { firstBackend })
+        val executorB = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { secondBackend })
+
+        assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executorA.execute(transitionRequest(16, 16)))
+        val owner = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executorB.execute(transitionRequest(16, 16)),
+        )
+
+        assertEquals(
+            1L, owner.evidence.targetCreations,
+            "the second owner's first frame creates its own session",
+        )
+        assertEquals(0L, owner.evidence.targetCloses)
+        assertEquals(1, firstBackend.prepareCalls)
+        assertEquals(
+            0, firstBackend.createdSessions.single().closeCalls,
+            "the first owner's session is untouched by the second owner",
+        )
+        assertEquals(
+            1, firstBackend.createdSessions.single().submitCalls,
+            "the first owner's session is untouched by the second owner",
+        )
+        assertEquals(1, secondBackend.prepareCalls)
+        assertEquals(0, secondBackend.createdSessions.single().closeCalls)
+    }
+
+    @Test
+    fun `close transition after dispose completes a subsequent frame on a new generation`() {
+        val backend = TransitionBackend(capabilities())
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
+
+        val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(16, 16)),
+        )
+        backend.disposeSession()
+        backend.deviceGeneration = GPUDeviceGenerationID(backend.deviceGeneration.value + 1)
+        val reopened = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            executor.execute(transitionRequest(16, 16)),
+        )
+
+        assertEquals(1L, first.evidence.targetCreations)
+        assertEquals(
+            1L, reopened.evidence.targetCreations,
+            "the disposed backend reopens one fresh session",
+        )
+        assertEquals(
+            1L, reopened.evidence.targetCloses,
+            "the stale session is closed exactly once by the executor",
+        )
+        // The fake dispose closed the session, and the executor's stale-session close is
+        // idempotent over it, exactly like the native session state machine tolerates a
+        // factory-disposed session.
+        assertEquals(
+            2, backend.createdSessions[0].closeCalls,
+            "the disposed session is closed again idempotently by the executor",
+        )
+        assertEquals(0, backend.createdSessions[1].closeCalls, "the reopened session is checked in")
     }
 
     @Test
@@ -822,6 +1003,26 @@ class GPUPreparedSurfaceFrameExecutorTest {
         height,
     )
 
+    private fun transitionRequest(
+        width: Int,
+        height: Int,
+        config: RenderConfig = RenderConfig.DEFAULT,
+    ): GPUPreparedSurfaceExecutionRequest {
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 1f, 4f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        return GPUPreparedSurfaceExecutionRequest(
+            assertIs(GPUPreparedSurfaceFrameGate.classify(operations, config)),
+            width,
+            height,
+        )
+    }
+
     private fun emptyGlyphText(): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(
@@ -1136,6 +1337,105 @@ class GPUPreparedSurfaceFrameExecutorTest {
             targetCreations = 1,
             targetCloses = 1,
         )
+    }
+
+    /**
+     * Transition-matrix backend fake: every [prepare] creates a fresh [RecordingSession] and
+     * records the request plus the device generation it was prepared on; [deviceGeneration] is
+     * mutable so the matrix can advance it between executes; [disposeSession] simulates the
+     * backend factory disposing the currently cached session out from under the executor.
+     */
+    private class TransitionBackend(
+        override val capabilities: GPUCapabilities,
+    ) : GPUPreparedSurfaceBackendPort {
+        override var deviceGeneration = GPUDeviceGenerationID(91)
+        var prepareCalls = 0
+            private set
+        val preparedRequests = mutableListOf<GPUOffscreenTargetRequest>()
+        val prepareGenerations = mutableListOf<Long>()
+        val createdSessions = mutableListOf<RecordingSession>()
+        var closeCalls = 0
+            private set
+
+        override val runtimeTelemetry: GPUBackendRuntimeTelemetry
+            get() = GPUBackendRuntimeTelemetry(destinationReadbackSnapshots = 7L)
+
+        override fun prepare(request: GPUOffscreenTargetRequest): GPUPreparedSurfaceSessionPort {
+            prepareCalls++
+            preparedRequests += request
+            prepareGenerations += deviceGeneration.value
+            return RecordingSession(byteCount = request.width * request.height * 4)
+                .also(createdSessions::add)
+        }
+
+        fun disposeSession() {
+            createdSessions.lastOrNull()?.close()
+        }
+
+        override fun close() {
+            closeCalls++
+        }
+    }
+
+    /** Session fake with cumulative counters advanced by [submit], mirroring the native
+     *  session-cache semantics: the first frame of a session creates the core-primitive
+     *  invariants and every later frame reuses them. */
+    private class RecordingSession(
+        private val byteCount: Int,
+    ) : GPUPreparedSurfaceSessionPort {
+        var submitCalls = 0
+            private set
+        var closeCalls = 0
+            private set
+        private var completedFrames = 0
+
+        override fun submit(
+            taskList: GPUTaskList,
+            readbackId: GPUReadbackRequestID,
+        ): GPUPreparedSurfaceSubmission {
+            submitCalls++
+            val attempt = GPUFrameAttemptID("attempt-matrix")
+            completedFrames++
+            return GPUPreparedSurfaceSubmission(
+                attempt,
+                GPUPreparedSurfaceImmediateState.Submitted,
+                CompletableFuture.completedFuture(
+                    GPUPreparedSurfaceCompletion(
+                        attempt,
+                        GPUFrameStructuralOutcome.Succeeded,
+                        null,
+                        GPUPreparedSurfaceOutputKind.ReadbackRgba,
+                        readbackId,
+                        ByteArray(byteCount) { (it + 1).toByte() },
+                    ),
+                ),
+            )
+        }
+
+        override fun counters(): GPUPreparedSceneNativeCounters {
+            val frames = completedFrames
+            return GPUPreparedSceneNativeCounters(
+                encoders = frames.toLong(),
+                commandBuffers = frames.toLong(),
+                targetCreations = 1,
+                targetCloses = 0,
+                submits = frames.toLong(),
+                readbackCopies = frames.toLong(),
+                retentionRegistrations = frames.toLong(),
+                retentionCompletions = frames.toLong(),
+                frameCoordinatorCreations = frames.toLong(),
+                distinctRetentionTickets = frames,
+                renderPasses = frames.toLong(),
+                draws = frames.toLong(),
+                pipelineBinds = frames.toLong(),
+                corePrimitiveInvariantCreations = if (frames >= 1) 1L else 0L,
+                corePrimitiveInvariantReuses = if (frames >= 1) (frames - 1).toLong() else 0L,
+            )
+        }
+
+        override fun close() {
+            closeCalls++
+        }
     }
 
     private fun frameCounters() = GPUPreparedSceneNativeCounters(
