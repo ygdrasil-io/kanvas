@@ -422,4 +422,7 @@ between the two GPUs contributes is untracked and worth a wgpu4k ticket.
 `6c44db0e9` (Task 8) · `4dc764bc8`+`571ba6e23` (Task 9) · Task 10 closure commit
 (`56cf93f30`..`00c6327b4`) · `e0e58137e` (Task 11 red tests + pixel oracle) ·
 `3e2a71b5e` (Task 11 implementation) · `docs(surface): fp09 top level mask blur
-closure evidence` (Task 11 evidence/roadmap closure).
+closure evidence` (Task 11 evidence/roadmap closure) ·
+`af0193617` (fix: target-sized dst snapshot + W3C DARKEN oracle) ·
+`e8031c6c2` (headless materializer/cache coverage + cleanups) ·
+`318204d9e` (fix: naga quote parse) · `a81725d9d` (fix-saga evidence docs).
