@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import java.io.File
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.BlendMode
@@ -268,6 +269,69 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `darken blur over a non uniform destination samples the full scene snapshot`() {
+        requireWebGpu()
+        // CRITICAL-1 regression: the destination snapshot must be TARGET-sized so the
+        // composite samples the true scene pixel under the blur. A two-tone destination
+        // (gray left half, white right half, boundary at x=16) sits under the blur
+        // region [12,24)²; any local-mask-sized snapshot would clamp the right half to
+        // the gray edge pixel.
+        val pixels = Surface(width = 32, height = 32).run {
+            requireWebGpu()
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(Rect(0f, 0f, 16f, 32f), Paint.fill(Color.fromArgb(255, 128, 128, 128)))
+                drawRect(
+                    Rect(12f, 8f, 24f, 24f),
+                    blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
+                )
+            }
+            render().pixels.toUByteArray()
+        }
+        val destination = TopLevelMaskBlurPixelOracle.overlayRect(
+            TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE),
+            32, 32, 0f, 0f, 16f, 32f, Color.fromArgb(255, 128, 128, 128),
+        )
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(12f, 8f, 24f, 24f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.DARKEN, destination,
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `translucent colored darken blur matches the w3c formula over a mid-tone destination`() {
+        requireWebGpu()
+        // IMPORTANT-2 regression: the DARKEN composite formula blends the UNPREMULTIPLIED
+        // per-channel minimum (W3C compositing, mirroring kanvasBlendAdvancedPremul);
+        // a premultiplied-min oracle diverges by tens of levels for colored translucent
+        // sources. Source = translucent (128,128,255,0) over mid-gray (0.5).
+        val source = Color.fromArgb(128, 128, 255, 0)
+        val destinationColor = Color.fromArgb(255, 128, 128, 128)
+        val pixels = Surface(width = 32, height = 32).run {
+            requireWebGpu()
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(destinationColor))
+                drawRect(
+                    Rect(10f, 10f, 22f, 22f),
+                    Paint.fill(source).copy(
+                        antiAlias = false,
+                        blendMode = BlendMode.DARKEN,
+                        maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
+                    ),
+                )
+            }
+            render().pixels.toUByteArray()
+        }
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, destinationColor)
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(10f, 10f, 22f, 22f), fullTarget(), BlurStyle.NORMAL, 2f,
+            source, BlendMode.DARKEN, destination,
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
     fun `source blur renders prepared with replace semantics`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {
@@ -398,4 +462,6 @@ class GPUMaskBlurSurfaceTest {
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
         runtime!!.close()
     }
+
 }
+

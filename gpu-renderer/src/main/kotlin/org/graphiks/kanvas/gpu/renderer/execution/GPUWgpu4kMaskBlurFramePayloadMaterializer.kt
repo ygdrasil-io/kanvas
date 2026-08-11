@@ -126,32 +126,35 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             message,
         )
 
+
         val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         if (renderSteps.isEmpty()) {
             return invalid("render-scope", "Top-level mask blur requires at least one render scope.")
         }
+
         val coreRuns = mutableListOf<StageEntry>()
         val solidRuns = mutableListOf<StageEntry>()
         val stageEntries = mutableListOf<StageEntry>()
         for (step in renderSteps) {
-            if (step.drawPackets.size != 1) {
-                return invalid(
-                    "packet-count",
-                    "Every top-level mask blur render scope requires exactly one packet.",
-                )
-            }
-            val packet = step.drawPackets.single()
-            when (val semantic = packet.semanticPayload) {
+            val packets = step.drawPackets
+            when (val semantic = packets.firstOrNull()?.semanticPayload) {
                 is GPUDrawSemanticPayload.MaskBlur -> {
+                    if (packets.size != 1) {
+                        return invalid(
+                            "packet-count",
+                            "Every mask blur stage scope requires exactly one packet.",
+                        )
+                    }
                     val maskBlurSemantic = semantic
-                    val stage = maskBlurStageFromRenderStepId(step.drawPackets.single().renderStepId.value)
+                    val packet = packets.single()
+                    val stage = maskBlurStageFromRenderStepId(packet.renderStepId.value)
                         ?: return invalid(
                             "stage",
                             "Mask blur packet ${packet.packetId.value} rides an unknown stage " +
                                 step.drawPackets.single().renderStepId.value,
                         )
                     if (!semantic.hasCanonicalHashIntegrity() ||
-                        packet.commandIdValue != semantic.payloadRef.commandIdValue ||
+                        packet!!.commandIdValue != semantic.payloadRef.commandIdValue ||
                         packet.uniformSlot != semantic.payloadRef.uniformSlot ||
                         packet.vertexSourceLabel != TOP_LEVEL_MASK_BLUR_VERTEX_SOURCE_LABEL
                     ) {
@@ -170,6 +173,12 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                     stageEntries += StageEntry(stage, step, scope, maskBlurSemantic, packet)
                 }
                 is GPUDrawSemanticPayload.CorePrimitive -> {
+                    if (packets.size != 1) {
+                        return invalid(
+                            "packet-count",
+                            "Every core render scope inside a mask blur frame requires exactly one packet.",
+                        )
+                    }
                     val scope = encoderPlan.scopes.singleOrNull {
                         it.sourceStepIndex == framePlan.steps.indexOf(step) &&
                             it.operationKind == GPUEncoderOperationKind.Render
@@ -177,7 +186,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         "render-plan",
                         "A core render scope is not executable.",
                     )
-                    coreRuns += StageEntry(GPUMaskBlurStage.Composite, step, scope, semantic, packet)
+                    coreRuns += StageEntry(GPUMaskBlurStage.Composite, step, scope, semantic, packets.single())
                 }
                 is GPUDrawSemanticPayload.SolidRect -> {
                     val scope = encoderPlan.scopes.singleOrNull {
@@ -187,15 +196,28 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         "render-plan",
                         "A solid render scope is not executable.",
                     )
-                    if (!packet.blendPlan.isCanonicalSolidRectSrcOver() ||
-                        packet.semanticPayload?.payloadRef?.uniformBlock == null
+                    if (packets.any { solidPacket ->
+                            !solidPacket.blendPlan.isCanonicalSolidRectSrcOver() ||
+                                solidPacket.semanticPayload?.payloadRef?.uniformBlock == null
+                        }
                     ) {
                         return invalid(
                             "solid-authority",
                             "SolidRect scene renders inside mask blur frames require the canonical src-over authority.",
                         )
                     }
-                    solidRuns += StageEntry(GPUMaskBlurStage.Composite, step, scope, semantic, packet)
+                    // Batched solid renders (the planner coalesces adjacent same-segment
+                    // renders) carry one packet per draw in a single scope.
+                    packets.forEach { solidPacket ->
+                        solidRuns += StageEntry(
+                            GPUMaskBlurStage.Composite,
+                            step,
+                            scope,
+                            solidPacket.semanticPayload as? GPUDrawSemanticPayload.SolidRect
+                                ?: return invalid("solid-semantic", "A solid packet lost its typed semantic."),
+                            solidPacket,
+                        )
+                    }
                 }
                 else -> return invalid(
                     "semantic-payload",
@@ -513,45 +535,78 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         if (solidRuns.isNotEmpty()) {
             val sceneBounds = sceneTargetBounds(framePlan)
                 ?: return invalid("scene-bounds", "The prepared scene bounds are not resolvable.")
-            solidRuns.forEach { run ->
-                val block = run.packet.semanticPayload?.payloadRef?.uniformBlock
-                    ?: return invalid("solid-uniform", "SolidRect scene renders lost their uniform block.")
-                val uniform = createUniform(
-                    "Kanvas.frame.maskBlur.solidUniform16",
-                    block.bytes.map { byte -> byte.toByte() }.toByteArray()
-                )
-                val bindGroup = device.createBindGroup(
-                    BindGroupDescriptor(
-                        label = "Kanvas.frame.maskBlur.solidBindGroup",
-                        layout = invariants.maskBindGroupLayout,
-                        entries = listOf(
-                            BindGroupEntry(0u, BufferBinding(uniform, 0uL, block.bytes.size.toULong())),
+            solidRuns.groupBy(StageEntry::scope).forEach { (_, runs) ->
+                val firstRun = runs.first()
+                val draws = runs.map { run ->
+                    val block = run.packet.semanticPayload?.payloadRef?.uniformBlock
+                        ?: return invalid("solid-uniform", "SolidRect scene renders lost their uniform block.")
+                    val uniform = createUniform(
+                        "Kanvas.frame.maskBlur.solidUniform16",
+                        block.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                    )
+                    val bindGroup = device.createBindGroup(
+                        BindGroupDescriptor(
+                            label = "Kanvas.frame.maskBlur.solidBindGroup",
+                            layout = invariants.maskBindGroupLayout,
+                            entries = listOf(
+                                BindGroupEntry(0u, BufferBinding(uniform, 0uL, block.bytes.size.toULong())),
+                            ),
                         ),
-                    ),
-                ).tracked()
-                val scissor = when (val parsed = run.packet.solidRectNativeScissor(sceneBounds)) {
-                    is SolidRectNativeScissorResult.Valid -> parsed.scissor
-                    is SolidRectNativeScissorResult.Invalid -> return invalid(
-                        "solid-scissor",
-                        parsed.message,
+                    ).tracked()
+                    val scissor = when (val parsed = run.packet.solidRectNativeScissor(sceneBounds)) {
+                        is SolidRectNativeScissorResult.Valid -> {
+                            if (run.packet.scissorBoundsHash == null) {
+                                // Batched scene renders inside mask blur frames may lose the
+                                // preflighted scissor authority; the uniform block's device
+                                // rect is the same authority and restores the per-draw scissor.
+                                val bytes = run.semantic.payloadRef?.uniformBlock?.bytes
+                                    ?: return invalid("solid-scissor", "A batched solid draw lost its uniform block.")
+                                val floats = java.nio.ByteBuffer.wrap(bytes.map { it.toByte() }.toByteArray())
+                                    .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                                val l = floats.float
+                                val t = floats.float
+                                val r = floats.float
+                                val b = floats.float
+                                if (l < 0f || t < 0f || r <= l || b <= t ||
+                                    r > sceneBounds.right.toFloat() || b > sceneBounds.bottom.toFloat()
+                                ) {
+                                    return invalid(
+                                        "solid-scissor",
+                                        "A batched solid draw's device rect is not a valid scissor.",
+                                    )
+                                }
+                                SolidRectNativeScissor(l.toInt(), t.toInt(), (r - l).toInt(), (b - t).toInt())
+                            } else {
+                                parsed.scissor
+                            }
+                        }
+                        is SolidRectNativeScissorResult.Invalid -> return invalid(
+                            "solid-scissor",
+                            parsed.message,
+                        )
+                    }
+                    solidUniforms += uniform
+                    solidBindGroups += bindGroup
+                    SolidDraw(
+                        bindGroup,
+                        GPUPixelBounds(
+                            scissor.x,
+                            scissor.y,
+                            scissor.x + scissor.width,
+                            scissor.y + scissor.height,
+                        ),
+                        run.semantic,
                     )
                 }
-                solidUniforms += uniform
-                solidBindGroups += bindGroup
                 solidOperands += renderOperand(
-                    entry = run,
+                    entry = firstRun,
                     targetView = targetView,
                     pipeline = compositePipelines.solidPipeline,
-                    bindGroup = bindGroup,
                     clear = false,
-                    scissor = GPUPixelBounds(
-                        scissor.x,
-                        scissor.y,
-                        scissor.x + scissor.width,
-                        scissor.y + scissor.height,
-                    ),
+                    draws = draws,
                     generationSeal = generationSeal,
                 )
+                println("MBLUR-SOLID draws=" + draws.joinToString { "scissor=${it.scissor}" })
             }
         }
 
@@ -690,20 +745,28 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         var dstSnapshotTexture: io.ygdrasil.webgpu.GPUTexture? = null
         var dstSnapshotView: io.ygdrasil.webgpu.GPUTextureView? = null
         val compositeOperands = mutableListOf<GPUPreparedNativeScopeOperand.Render>()
-        val dstCopyOperand: GPUPreparedNativeScopeOperand.Copy? = if (
+        val dstCopyOperand: GPUPreparedNativeScopeOperand? = if (
             compositeEntries.isNotEmpty() && compositeEntries.first().dstRead
         ) {
             if (copyStep == null || copyScope == null) {
                 return invalid("dst-read-copy", "Destination-reading composites lost their copy scope.")
             }
+            val snapshotBounds = sceneTargetBounds(framePlan)
+                ?: return invalid("scene-bounds", "The prepared scene bounds are not resolvable.")
+
+            // The snapshot mirrors the scene format and copies the FULL target bounds
+            // (the recording's CopyDestinationStep layout is the authority), so the
+            // composite samples the true scene texel under the blur. The copy is a
+            // native GPU texture copy — destination reads never touch the CPU.
             val snapshot = device.createTexture(
                 TextureDescriptor(
-                    size = Extent3D(localBounds.width.toUInt(), localBounds.height.toUInt(), 1u),
+                    size = Extent3D(snapshotBounds.width.toUInt(), snapshotBounds.height.toUInt(), 1u),
                     format = targetFormat,
                     usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
                     label = "Kanvas.frame.maskBlur.destinationSnapshot",
                 ),
             ).tracked()
+
             dstSnapshotTexture = snapshot
             val snapshotView = snapshot.createView().tracked()
             dstSnapshotView = snapshotView
@@ -751,8 +814,8 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                     sourceOriginY = 0,
                     destinationOriginX = 0,
                     destinationOriginY = 0,
-                    width = localBounds.width,
-                    height = localBounds.height,
+                    width = snapshotBounds.width,
+                    height = snapshotBounds.height,
                 ),
             )
         } else {
@@ -900,6 +963,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         ),
                     )
                 }
+
                 dstSnapshotTexture?.let { snapshot ->
                     add(
                         GPUPreparedNativeAuxiliaryHandle(
@@ -941,6 +1005,11 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         val dstRead: Boolean,
     )
 
+    private data class SolidDraw(
+        val bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
+        val scissor: GPUPixelBounds,
+        val semantic: GPUDrawSemanticPayload,
+    )
     private fun renderOperand(
         entry: StageEntry,
         targetView: io.ygdrasil.webgpu.GPUTextureView,
@@ -948,6 +1017,22 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
         clear: Boolean,
         scissor: GPUPixelBounds,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeScopeOperand.Render = renderOperand(
+        entry = entry,
+        targetView = targetView,
+        pipeline = pipeline,
+        clear = clear,
+        draws = listOf(SolidDraw(bindGroup, scissor, entry.semantic)),
+        generationSeal = generationSeal,
+    )
+
+    private fun renderOperand(
+        entry: StageEntry,
+        targetView: io.ygdrasil.webgpu.GPUTextureView,
+        pipeline: io.ygdrasil.webgpu.GPURenderPipeline,
+        clear: Boolean,
+        draws: List<SolidDraw>,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeScopeOperand.Render {
         val borrowed = GPUPreparedNativeOperandOwnership.Borrowed
@@ -973,36 +1058,40 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                 },
             ),
             commands = buildList {
-                add(
-                    GPUPreparedNativeRenderCommand.SetPipeline(
-                        GPUPreparedNativeRenderPipelineOperand(
-                            pipeline,
-                            generationSeal.deviceGeneration,
-                            borrowed,
+                draws.forEach { draw ->
+                    // One pipeline + bind-group per draw: the preflighted scope keys
+                    // describe a SetPipeline/SetBindGroup sequence per batched draw.
+                    add(
+                        GPUPreparedNativeRenderCommand.SetPipeline(
+                            GPUPreparedNativeRenderPipelineOperand(
+                                pipeline,
+                                generationSeal.deviceGeneration,
+                                borrowed,
+                            ),
                         ),
-                    ),
-                )
-                add(
-                    GPUPreparedNativeRenderCommand.SetBindGroup(
-                        0,
-                        GPUPreparedNativeBindGroupOperand(
-                            bindGroup,
-                            generationSeal.deviceGeneration,
-                            borrowed,
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            0,
+                            GPUPreparedNativeBindGroupOperand(
+                                draw.bindGroup,
+                                generationSeal.deviceGeneration,
+                                borrowed,
+                            ),
                         ),
-                    ),
-                )
-                add(
-                    GPUPreparedNativeRenderCommand.SetScissor(
-                        scissor.left,
-                        scissor.top,
-                        scissor.width,
-                        scissor.height,
-                    ),
-                )
-                add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetScissor(
+                            draw.scissor.left,
+                            draw.scissor.top,
+                            draw.scissor.width,
+                            draw.scissor.height,
+                        ),
+                    )
+                    add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+                }
             },
-            semanticPayloads = listOf(entry.semantic),
+            semanticPayloads = draws.map { draw -> draw.semantic },
         )
     }
 

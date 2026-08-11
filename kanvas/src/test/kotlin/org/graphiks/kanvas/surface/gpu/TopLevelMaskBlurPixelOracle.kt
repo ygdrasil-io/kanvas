@@ -228,6 +228,32 @@ object TopLevelMaskBlurPixelOracle {
         return if (inside) 1f else 0f
     }
 
+    fun kernelForDebug(plan: MaskBlurPlan.Ready): BlurKernelUniform = kernelFor(plan)
+
+    fun localCoverageDebug(plan: MaskBlurPlan.Ready, shape: Shape): FloatArray = localCoverage(plan, shape)
+
+    fun styledDebug(plan: MaskBlurPlan.Ready, localMask: FloatArray): FloatArray {
+        val kernel = kernelFor(plan)
+        val blurredH = blurPass(localMask, plan.localWidth, plan.localHeight, kernel, horizontal = true)
+        return blurPass(blurredH, plan.localWidth, plan.localHeight, kernel, horizontal = false)
+    }
+
+    fun stageRowsDebug(
+        plan: MaskBlurPlan.Ready,
+        localMask: FloatArray,
+        row: Int,
+    ): Triple<FloatArray, FloatArray, FloatArray> {
+        val kernel = kernelFor(plan)
+        val blurredH = blurPass(localMask, plan.localWidth, plan.localHeight, kernel, horizontal = true)
+        val blurred = blurPass(blurredH, plan.localWidth, plan.localHeight, kernel, horizontal = false)
+        val w = plan.localWidth
+        return Triple(
+            localMask.slice(row * w until (row + 1) * w).toFloatArray(),
+            blurredH.slice(row * w until (row + 1) * w).toFloatArray(),
+            blurred.slice(row * w until (row + 1) * w).toFloatArray(),
+        )
+    }
+
     private fun kernelFor(plan: MaskBlurPlan.Ready): BlurKernelUniform {
         val activeSigma = max(0.5f, plan.effectiveSigma)
         val taps = (ceil(activeSigma).toInt() * 2 + 1).coerceIn(3, MAX_MASK_BLUR_TAPS)
@@ -406,12 +432,22 @@ object TopLevelMaskBlurPixelOracle {
         )
         BlendMode.SRC -> src
         BlendMode.DARKEN -> {
-            val mixed = Premul4(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b), 0f)
+            // W3C compositing formula, mirroring kanvasBlendAdvancedPremul exactly:
+            // the blend term B(Cb, Cs) = min(Cb, Cs) applies to the UNPREMULTIPLIED
+            // colors, while the Porter-Duff terms use the premultiplied rgb.
+            if (src.a == 0f) return dst
+            val srcColor = floatArrayOf(src.r / src.a, src.g / src.a, src.b / src.a)
+            val dstColor = floatArrayOf(dst.r / dst.a, dst.g / dst.a, dst.b / dst.a)
+            val blended = floatArrayOf(
+                min(srcColor[0], dstColor[0]),
+                min(srcColor[1], dstColor[1]),
+                min(srcColor[2], dstColor[2]),
+            )
             val alpha = src.a + dst.a * (1f - src.a)
             Premul4(
-                src.r * (1f - dst.a) + dst.r * (1f - src.a) + mixed.r * src.a * dst.a,
-                src.g * (1f - dst.a) + dst.g * (1f - src.a) + mixed.g * src.a * dst.a,
-                src.b * (1f - dst.a) + dst.b * (1f - src.a) + mixed.b * src.a * dst.a,
+                src.r * (1f - dst.a) + dst.r * (1f - src.a) + src.a * dst.a * blended[0],
+                src.g * (1f - dst.a) + dst.g * (1f - src.a) + src.a * dst.a * blended[1],
+                src.b * (1f - dst.a) + dst.b * (1f - src.a) + src.a * dst.a * blended[2],
                 alpha,
             )
         }
@@ -442,6 +478,35 @@ object TopLevelMaskBlurPixelOracle {
 
     private fun encodeAlpha(value: Float): Float = value.coerceIn(0f, 1f)
 
+    /** Overlays one non-AA solid rect onto an existing encoded destination (used for under-draws). */
+    fun overlayRect(
+        destination: UByteArray,
+        targetWidth: Int,
+        targetHeight: Int,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Color,
+    ): UByteArray {
+        val premul = color.toLinearPremul()
+        val out = destination.copyOf()
+        for (y in 0 until targetHeight) {
+            for (x in 0 until targetWidth) {
+                val px = x + 0.5f
+                val py = y + 0.5f
+                if (px >= left && px < right && py >= top && py < bottom) {
+                    val index = (y * targetWidth + x) * 4
+                    out[index] = encodeByte(encodeLinear(premul[0]))
+                    out[index + 1] = encodeByte(encodeLinear(premul[1]))
+                    out[index + 2] = encodeByte(encodeLinear(premul[2]))
+                    out[index + 3] = encodeByte(encodeAlpha(premul[3]))
+                }
+            }
+        }
+        return out
+    }
+
     /** Non-AA solid rect fill in the same encode convention (used for under-draws). */
     fun fillRect(
         targetWidth: Int,
@@ -460,10 +525,10 @@ object TopLevelMaskBlurPixelOracle {
                 val py = y + 0.5f
                 if (px >= left && px < right && py >= top && py < bottom) {
                     val index = (y * targetWidth + x) * 4
-                    out[index] = encode(premul[0])
-                    out[index + 1] = encode(premul[1])
-                    out[index + 2] = encode(premul[2])
-                    out[index + 3] = encode(premul[3])
+                    out[index] = encodeByte(encodeLinear(premul[0]))
+                    out[index + 1] = encodeByte(encodeLinear(premul[1]))
+                    out[index + 2] = encodeByte(encodeLinear(premul[2]))
+                    out[index + 3] = encodeByte(encodeAlpha(premul[3]))
                 }
             }
         }
@@ -473,13 +538,28 @@ object TopLevelMaskBlurPixelOracle {
     fun assertPixelsNear(expected: UByteArray, actual: UByteArray, tolerance: Int = 24) {
         require(expected.size == actual.size)
         var worst = 0
+        var worstIdx = 0
         for (i in expected.indices) {
             val diff = abs(expected[i].toInt() - actual[i].toInt())
-            if (diff > worst) worst = diff
+            if (diff > worst) { worst = diff; worstIdx = i }
+        }
+        val w = 32
+        val sb = StringBuilder()
+        for (y in listOf(8, 10, 12, 14, 16, 18, 20, 24)) {
+            sb.append("row ").append(y).append(": ")
+            for (x in listOf(0, 4, 6, 8, 10, 12, 14, 15, 16, 17, 18, 20, 22, 24, 28)) {
+                val idx = (y * w + x) * 4
+                sb.append("(").append(x).append(",").append(y).append(")rgba=")
+                    .append(actual[idx].toInt()).append(",").append(actual[idx+1].toInt()).append(",").append(actual[idx+2].toInt()).append(",").append(actual[idx+3].toInt())
+                    .append(" / ")
+                    .append(expected[idx].toInt()).append(",").append(expected[idx+1].toInt()).append(",").append(expected[idx+2].toInt()).append(",").append(expected[idx+3].toInt())
+                    .append("  ")
+            }
+            sb.append("\n")
         }
         check(worst <= tolerance) {
-            "top-level mask blur pixel mismatch: worst channel diff $worst > $tolerance " +
-                "(expected=${expected.toList()} actual=${actual.toList()})"
+            "top-level mask blur pixel mismatch: worst channel diff $worst at index $worstIdx > $tolerance\n" +
+                sb.toString()
         }
     }
 }

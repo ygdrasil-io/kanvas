@@ -247,6 +247,8 @@ internal class GPUWgpu4kMaskBlurSessionCache(
                     code = MASK_BLUR_COMPOSITE_DST_WGSL,
                 ),
             ).track()
+
+
             fun layout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout = device.createPipelineLayout(
                 PipelineLayoutDescriptor(
                     label = "Kanvas.session.maskBlur.compositePipelineLayout",

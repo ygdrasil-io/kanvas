@@ -291,6 +291,7 @@ internal fun buildTopLevelMaskBlurFrame(
     val dstReadPackets = chains.mapNotNull { chain ->
         val composite = chain.renderTasks.flatMap(GPUTask.Render::drawPackets)
             .firstOrNull { it.renderStepId.value == MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY }
+
         composite?.takeIf { it.blendPlan?.destinationReadRequirement ==
             GPUBlendDestinationReadRequirement.DestinationTextureRequired
         }?.let { packet -> chain.commandId to packet }
@@ -972,6 +973,20 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4f
 
 ${org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary.advancedBlendDispatcherWgsl()}
 
+fn kanvasSrgbToLinear(c: f32) -> f32 {
+    if (c <= 0.04045) {
+        return c / 12.92;
+    }
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+
+fn kanvasLinearToSrgb(c: f32) -> f32 {
+    if (c <= 0.0031308) {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 0.4166667) - 0.055;
+}
+
 @fragment
 fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let localSize = max(uniforms.deviceBounds.zw - uniforms.deviceBounds.xy, vec2f(1.0));
@@ -980,8 +995,10 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let src = uniforms.color * coverage;
     let dstDims = textureDimensions(dstTexture);
     let dstUv = position.xy / vec2f(f32(dstDims.x), f32(dstDims.y));
-    let dst = textureSample(dstTexture, dstSampler, dstUv);
-    return blendPremul(src, dst, uniforms.blendMode);
+    let dstEncoded = textureSample(dstTexture, dstSampler, dstUv);
+    let dst = vec4f(kanvasSrgbToLinear(dstEncoded.r), kanvasSrgbToLinear(dstEncoded.g), kanvasSrgbToLinear(dstEncoded.b), dstEncoded.a);
+    let blended = blendPremul(src, dst, uniforms.blendMode);
+    return blended;
 }
 """.trimIndent()
 

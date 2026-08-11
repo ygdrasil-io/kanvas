@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.Extent3D
+import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
@@ -410,6 +413,12 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {
             val pass = render.pass
+            if (render.operationKind == GPUEncoderOperationKind.CopyDestination) {
+                synchronized(this@GPUWgpu4kFrameEncodingBackend) {
+                    destinationCopyCount += 1
+                    onDestinationCopyEncoded()
+                }
+            }
             encodeWgpu4kRenderPass(
                 native,
                 render,
