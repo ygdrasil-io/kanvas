@@ -378,6 +378,41 @@ halo, scale, budget gate, local command lowering). The legacy `MASK_BLUR_*`
 WGSL survives as the port source for the lane's blur/style/composite modules.
 The deletion itself remains tracked with the broader legacy retirement.
 
+### Task 11 review-fix saga (2026-08-11) — root causes, for the record
+
+The DARKEN fix round (commits `af0193617` + `e8031c6c2` + `318204d9e`)
+surfaced two distinct root causes, both worth recording:
+
+1. **Leftover debug probes from an interrupted agent session.** The fix-round
+   debugger left a CONSTANT return inside the blit shader
+   (`return vec4f(0.5, 0.25, 0.0, 1.0);` = the observed `(128,64,0)` snapshot
+   corruption) and a mask-probe return in the composite WGSL (the observed
+   `cov×255` gray output). The blit approach itself was then removed in favor
+   of the original native `copyTextureToTexture` with a TARGET-sized layout
+   (the reviewer's Critical-1 fix: the recording's target-bounds copy
+   authority), which is the committed state. Lesson: interrupted GPU-debugging
+   sessions can leave probe code that looks like a deliberate change.
+2. **Double quotes inside a WGSL `//` comment break the naga parser.**
+   The sRGB-decode rationale comment added to `MASK_BLUR_COMPOSITE_DST_WGSL`
+   contained the phrase `"complete"` (with quotes); wgpu-naga's lexer treats
+   the quote as a string start inside the comment, consuming the rest of the
+   module and failing with `parsing error: expected statement, found ""` at
+   the module tail — surfaced as a hard SIGABRT in
+   `_wgpuDeviceCreateShaderModule` (uncaptured-error panic), which killed the
+   test worker (exit 134) before any test ran. Fix `318204d9e` removed the
+   quotes. Lesson: NEVER use double quotes inside WGSL string-literal comments.
+
+### Two-GPU environment note (flake context)
+
+This Mac carries two Metal GPUs: Intel UHD Graphics 630 (integrated) and AMD
+Radeon Pro 5500M (discrete). The `failed.surface.prepared.session-close`
+flake + the worker SIGABRTs observed during the Task 11 fix round occurred
+under heavy multi-worker GPU churn; a machine reboot alone did NOT clear the
+crash (it was the naga parse panic above, not the flake). The flake class
+itself (`session-close` on random non-dst-read frames, green in isolation)
+remains documented as environmental; whether wgpu-native's adapter selection
+between the two GPUs contributes is untracked and worth a wgpu4k ticket.
+
 ## 18. Commit trail (FP-09)
 
 `42ef8a093` (inventory) · `9dcc4d36c`+`e5263bed4` (Task 2) · `9799fdeb2` (Task 3)
