@@ -1208,13 +1208,6 @@ class FirstRoutePlannerTest {
                 target = target,
                 layer = GPULayerFacts.root(target = target).copy(requiresFilter = true),
             ),
-            "unsupported.destination_read.required" to firstRouteCommand(
-                target = target,
-                blend = GPUBlendFacts(
-                    mode = GPUBlendMode.MULTIPLY,
-                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
-                ),
-            ),
             "unsupported.target.format_blend_incompatible" to firstRouteCommand(
                 target = target.copy(colorFormat = "bgra8unorm-srgb"),
             ),
@@ -2286,6 +2279,13 @@ class FirstRoutePlannerTest {
                     affectsValidity = true,
                     evidenceLabel = "first-route-fixture",
                 ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "first-route-fixture",
+                ),
             ),
             snapshotId = "first-route-test",
         )
@@ -2308,6 +2308,13 @@ class FirstRoutePlannerTest {
             facts = listOf(
                 GPUCapabilityFact(
                     name = "first_slice.fill_rrect.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "rrect-route-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
                     source = "unit-test",
                     value = "supported",
                     affectsValidity = true,
@@ -2368,6 +2375,13 @@ class FirstRoutePlannerTest {
             facts = listOf(
                 GPUCapabilityFact(
                     name = "first_slice.path_fill.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "path-fill-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
                     source = "unit-test",
                     value = "supported",
                     affectsValidity = true,

@@ -438,26 +438,37 @@ Resolution evidence (`fp-08-retire-immediate-cpu-paths-evidence.md`):
 
 ### FP-09 — Retire the legacy immediate renderer (deferred from FP-08)
 
-Status: `pending`
+Status: `completed`
 
-Goal: retire `renderViaGpuLegacy`, the legacy port, and the legacy-only helper
-machinery once the prepared route covers every currently-fallback family.
-
-Preconditions (all proven by the FP-08 evidence report):
-- destination-read blends (unsupported.destination_read.required — 630 cases);
-- non-SrcOver core-primitive blends (unsupported.native-core-primitive.blend — 330);
-- hairline points (unsupported.core_primitive.point.hairline_exact_lowering — 168);
-- mixed uniform layouts (unsupported.recording.core_primitive_mixed_uniform_layouts — 92);
-- analytic-clip non-direct geometry (…analytic_clip_non_direct_geometry — 52).
-
-Acceptance (transferred from FP-08 original Tasks 4–7):
-- route authorities collapse to Prepared/Terminal (BeforePreparedEntryRefused → always Terminal);
-- `renderViaGpuLegacy`/`GPUPreparedSurfaceLegacyPort`/`preparedSurfaceLegacyPort` deleted;
-- legacy-only helper machinery deleted (GPUClipExecution.kt, LayerScissorOffscreenTarget,
-  CPU text-atlas builders, legacy mask-lease machinery), EXCEPT the FP-06
-  `nested_vertices` guard functions (test-pinned);
-- `GPUAllApiBlendSurfaceTest`/`GPUClipCoverageSurfaceTest` expectations re-pointed
-  with evidence; regression suites green.
+Resolution evidence (`fp-09-retire-legacy-immediate-renderer-evidence.md`):
+- route authorities collapse to Prepared/Terminal/Refused/NoOp — `BeforePreparedEntryRefused`
+  → always `Terminal`; the `Legacy` eligibility/route/decision variants and the legacy
+  `GPUPreparedSurfaceLegacyPort` are deleted;
+- prepared coverage added: non-SrcOver core-primitive blends (CLEAR/SRC/… fixed-function +
+  shader-no-dst) and destination-read blends (`ShaderBlendWithDstRead` + GPU-owned
+  `TextureCopy` snapshots + `GPUBlendFormulaLibrary` formulas) on core primitives and layer
+  composites — the FP-08 evidence §3 codes `unsupported.native-core-primitive.blend` (330)
+  and `unsupported.destination_read.required` (630) no longer fire for covered shapes;
+  the coverage required the Graphite-faithful multi-pipeline per-pass materialization
+  (Tasks 3b/3c: DrawPass pipeline array, `BindGraphicsPipeline` mid-pass, dst copy before
+  the consuming pass — C++ evidence in skia-main, plan amendment `f45d4fc6f`);
+- stable terminal refusals replace the legacy render for hairline points (175),
+  mixed uniform layouts (202), analytic-clip non-direct geometry (2), and the blend
+  residuals (multi-render-dst-copy 60, analytic-shape-multi-key 2, dst-read-formula 2,
+  path-destination-read 60) — documented behavior change (pixels → loud refusal),
+  tracked as bounded FP-11 gaps;
+- `renderViaGpuLegacy` and the legacy-only machinery are deleted (GPUClipExecution.kt,
+  LayerScissorOffscreenTarget, CPU text-atlas builders, legacy mask-lease machinery);
+  the FP-06 `nested_vertices` guards stay test-pinned;
+- `GPUAllApiBlendSurfaceTest`/`GPUClipCoverageSurfaceTest` re-pointed with evidence;
+  the Task 10 full run exposed and re-pointed 18 further stale legacy pins in
+  `GPUClipAdvancedBlendSurfaceTest`/`GPUMaskBlurSurfaceTest`/`GPUPathClipRegressionTest`
+  (identical failures at pristine HEAD; all 21 tests green at the FP-08 tip, proving
+  pre-FP-09 legacy rendering);
+- full run: `:kanvas:test` 3,210/3,210 green and `:gpu-renderer:test` 3,273 with only
+  the two documented pre-existing failures (package boundary — exactly 20 cycle
+  violations, 0 rule violations, unchanged; stencil smoke — reproduces at base SHA);
+  `GPUPreparedSurfaceLegacyAbsenceTest` pins all 16 retired tokens.
 
 ### FP-10 — Reusable prepared Surface session
 
@@ -509,6 +520,31 @@ Status: `pending`
 Goal: address the native gaps explicitly retained by the completed migrations,
 including required stroke, coverage, sampling, filter, and runtime-effect
 cases.
+
+FP-09 transfers (stable terminal refusals, per `fp-09-retire-legacy-immediate-renderer-evidence.md`):
+- exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering`
+  (GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465; 175 cases);
+- multi-uniform-layout direct passes — `unsupported.recording.core_primitive_mixed_uniform_layouts`
+  (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602, 2104; 202 cases);
+- analytic clips over non-direct shading geometry — `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry`
+  (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994; 2 cases);
+- dst-read formula on mapped routes — `unsupported.native-core-primitive.dst-read-formula`
+  (2 cases);
+- multi-render dst-copy (destination-then-consumer dst-read frames) —
+  `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
+- analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key`
+  (2 cases);
+- path destination-read — `unsupported.native-core-primitive.path-destination-read`
+  (60 cases);
+- ~~top-level mask-blur rect/path/rrect frames~~ — **RESOLVED by FP-09 Task 11**
+  (commit `3e2a71b5e`): top-level mask blur renders prepared on core primitives
+  (mask -> blur-h -> blur-v -> style -> composite) with the CPU pixel oracle;
+  the budget gate (`unsupported.mask-filter.blur.intermediate-budget`) is
+  reachable again; the lane's composite applies NoClip or integer ScissorOnly
+  clips only (complex-clip blur stays terminal at
+  `invalid.preflight.core_primitive_clip_producer_authority`; coverage-mask and
+  analytic clips over the blur composite stay terminal at
+  `unsupported.native-mask-blur.clip`).
 
 Acceptance:
 

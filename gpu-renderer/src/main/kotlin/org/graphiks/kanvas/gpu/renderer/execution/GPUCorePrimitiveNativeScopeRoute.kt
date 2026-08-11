@@ -101,7 +101,7 @@ internal sealed interface GPUCorePrimitiveNativeScopeUniformAuthority {
     }
 
     class DirectPreparedPass(
-        val seal: GPUCorePrimitiveDirectPreparedPassSeal,
+        val seal: GPUCorePrimitiveDirectPreparedPassAuthority,
     ) : GPUCorePrimitiveNativeScopeUniformAuthority {
         override val plan: GPUUniformSlabPlan
             get() = seal.uniformPlan
@@ -192,7 +192,7 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
 
         internal constructor(
             orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
-            directPreparedPassSeal: GPUCorePrimitiveDirectPreparedPassSeal,
+            directPreparedPassSeal: GPUCorePrimitiveDirectPreparedPassAuthority,
             uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
                 GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
         ) : this(

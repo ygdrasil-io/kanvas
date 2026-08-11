@@ -511,6 +511,7 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             corePrimitiveCache = corePrimitiveCache,
             registeredUniformRectCache = registeredUniformRectCache,
             separableBlurRectCache = separableBlurRectCache,
+            maskBlurCache = GPUWgpu4kMaskBlurSessionCache(native.device),
             destinationCopyCache = destinationCopyCache,
             surfaceBlitCache = surfaceBlitCache,
             preparedSurfaceMixedMaterializer = mixed,

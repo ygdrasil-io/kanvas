@@ -11,7 +11,7 @@ internal sealed interface GPUPreparedSurfaceEligibility {
         val color: GPUPreparedSurfaceColorMapping.Ready,
     ) : GPUPreparedSurfaceEligibility
 
-    data class Legacy(
+    data class Refused(
         val code: String,
         val operationIndex: Int? = null,
     ) : GPUPreparedSurfaceEligibility
@@ -25,47 +25,8 @@ internal object GPUPreparedSurfaceFrameGate {
     ): GPUPreparedSurfaceEligibility {
         val color = when (val mapping = config.mapPreparedGpuColorConfig()) {
             is GPUPreparedSurfaceColorMapping.Ready -> mapping
-            is GPUPreparedSurfaceColorMapping.Refused -> return GPUPreparedSurfaceEligibility.Legacy(
+            is GPUPreparedSurfaceColorMapping.Refused -> return GPUPreparedSurfaceEligibility.Refused(
                 code = mapping.code,
-            )
-        }
-        var hasVisual = false
-        operations.forEachIndexed { operationIndex, operation ->
-            when (operation) {
-                is DisplayOp.DrawColor,
-                is DisplayOp.Clear,
-                is DisplayOp.DrawPoint,
-                is DisplayOp.DrawPoints,
-                is DisplayOp.DrawRect,
-                is DisplayOp.DrawRRect,
-                is DisplayOp.DrawDRRect,
-                is DisplayOp.DrawPath,
-                is DisplayOp.DrawImage,
-                is DisplayOp.DrawImageNine,
-                is DisplayOp.DrawImageLattice,
-                is DisplayOp.DrawAtlas,
-                is DisplayOp.DrawText,
-                is DisplayOp.DrawVertices,
-                is DisplayOp.DrawMesh,
-                is DisplayOp.DrawPicture,
-                is DisplayOp.BeginLayer,
-                DisplayOp.EndLayer,
-                -> hasVisual = true
-
-                is DisplayOp.SetTransform,
-                is DisplayOp.SetClip,
-                is DisplayOp.Annotation,
-                -> Unit
-
-                is DisplayOp.FlushAndSnapshot -> return GPUPreparedSurfaceEligibility.Legacy(
-                    code = "legacy.surface.prepared.flush-snapshot",
-                    operationIndex = operationIndex,
-                )
-            }
-        }
-        if (!hasVisual) {
-            return GPUPreparedSurfaceEligibility.Legacy(
-                code = "legacy.surface.prepared.empty-frame",
             )
         }
         return GPUPreparedSurfaceEligibility.Candidate(

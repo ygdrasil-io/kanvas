@@ -15,7 +15,6 @@ import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 
 internal sealed interface GPUPreparedSurfaceProductRoute {
-    data class Legacy(val code: String) : GPUPreparedSurfaceProductRoute
     data class Prepared(
         val result: RenderResult,
         val evidence: GPUPreparedSurfaceExecutionEvidence,
@@ -33,7 +32,8 @@ internal object GPUPreparedSurfaceProductRouter {
         executionPort: GPUPreparedSurfaceExecutionPort,
     ): GPUPreparedSurfaceProductRoute {
         val candidate = when (val eligibility = GPUPreparedSurfaceFrameGate.classify(operations, config)) {
-            is GPUPreparedSurfaceEligibility.Legacy -> return GPUPreparedSurfaceProductRoute.Legacy(eligibility.code)
+            is GPUPreparedSurfaceEligibility.Refused ->
+                return GPUPreparedSurfaceProductRoute.Terminal(terminalDiagnostic(eligibility.code))
             is GPUPreparedSurfaceEligibility.Candidate -> eligibility
         }
         // The default RenderConfig carries RGBA8_UNORM_SRGB, so the config-derived color would
@@ -58,11 +58,7 @@ internal object GPUPreparedSurfaceProductRouter {
             GPUPreparedSurfaceExecutionRequest(targetCandidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
-                if (targetCandidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
-                    GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
-                } else {
-                    GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
-                }
+                GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.TerminalFailure ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, format, execution)
@@ -95,7 +91,7 @@ internal object GPUPreparedSurfaceProductRouter {
                     execution.evidence.destinationReadEvidence
                         .sortedBy(GPUPreparedSurfaceDestinationReadEvidence::commandId)
                         .forEach { routeEvidence ->
-                            val operation = "DrawText:${routeEvidence.commandId}"
+                            val operation = "${routeEvidence.operationFamily}:${routeEvidence.commandId}"
                             degrade(
                                 code = "route:destination-read:$operation",
                                 operation = operation,
@@ -147,19 +143,11 @@ internal object GPUPreparedSurfaceProductRouter {
             facts = mapOf("field" to field, "value" to value),
         ),
     )
-}
 
-private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
-    is DisplayOp.DrawImage,
-    is DisplayOp.DrawImageNine,
-    is DisplayOp.DrawImageLattice,
-    is DisplayOp.DrawAtlas,
-    is DisplayOp.DrawText,
-    is DisplayOp.DrawVertices,
-    is DisplayOp.DrawMesh,
-    is DisplayOp.DrawPicture,
-    is DisplayOp.BeginLayer,
-    DisplayOp.EndLayer,
-    -> true
-    else -> false
+    private fun terminalDiagnostic(code: String) = GPUDiagnostic(
+        code = GPUDiagnosticCode(code),
+        domain = GPUDiagnosticDomain.Execution,
+        severity = GPUDiagnosticSeverity.Error,
+        message = "The prepared Surface route cannot render this frame.",
+    )
 }

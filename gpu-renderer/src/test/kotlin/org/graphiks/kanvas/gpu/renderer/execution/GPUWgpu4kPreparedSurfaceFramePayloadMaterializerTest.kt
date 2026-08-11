@@ -1373,6 +1373,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             corePrimitiveCache = coreCache,
             registeredUniformRectCache = registeredUniformRectCache,
             separableBlurRectCache = blurCache,
+            maskBlurCache = GPUWgpu4kMaskBlurSessionCache(native.device),
             destinationCopyCache = destinationCopyCache,
             surfaceBlitCache = surfaceCache,
             corePrimitiveLimits = LIMITS,

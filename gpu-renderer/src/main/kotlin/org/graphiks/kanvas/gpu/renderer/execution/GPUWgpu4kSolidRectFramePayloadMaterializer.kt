@@ -981,19 +981,19 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
     }
 }
 
-private data class SolidRectNativeScissor(
+internal data class SolidRectNativeScissor(
     val x: Int,
     val y: Int,
     val width: Int,
     val height: Int,
 )
 
-private sealed interface SolidRectNativeScissorResult {
+internal sealed interface SolidRectNativeScissorResult {
     data class Valid(val scissor: SolidRectNativeScissor) : SolidRectNativeScissorResult
     data class Invalid(val message: String) : SolidRectNativeScissorResult
 }
 
-private fun GPUDrawPacket.solidRectNativeScissor(
+internal fun GPUDrawPacket.solidRectNativeScissor(
     targetBounds: GPUPixelBounds,
 ): SolidRectNativeScissorResult {
     val hash = scissorBoundsHash

@@ -2,7 +2,6 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException
-import kotlin.math.pow
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
@@ -13,16 +12,10 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.redByte
 import org.graphiks.kanvas.types.withAlphaByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -33,7 +26,7 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun `all destination-read blends retain clipped source and use no readback`() {
+    fun `clipped destination-read blends refuse with the mixed uniform layouts code before native work`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         val before = session!!.runtimeTelemetry
@@ -49,57 +42,75 @@ class GPUClipAdvancedBlendSurfaceTest {
             BlendMode.EXCLUSION,
         )
 
+        // FP-09 terminal refusal: an analytic (AA) clip over an analytic-shape dst-read
+        // draw mixes the analytic-shape uniform80 lane with the analytic-clip uniform64/
+        // uniform160 lane — the designed mixed-uniform-layouts family. Pre-FP-09 these
+        // frames rendered via the legacy renderer (green at the FP-08 tip accaea616); the
+        // route collapse converted them to this stable code (Task 6 evidence family 4).
         expectedByMode.forEach { mode ->
-            val result = renderClippedBlend(destination, source, mode)
-
-            assertPixelNear(result.pixels, 4, 4, destination, tolerance = 0)
-            assertPixelNear(result.pixels, 20, 20, expectedBlend(source, destination, mode), tolerance = 2)
-            assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                renderClippedBlend(destination, source, mode)
+            }
+            assertEquals(
+                "unsupported.recording.core_primitive_mixed_uniform_layouts",
+                failure.diagnostic.code.value,
+            )
         }
-        val partialAlpha = renderClippedBlend(
-            destination,
-            Color.RED.withAlphaByte(128),
-            BlendMode.DARKEN,
-        )
+        assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderClippedBlend(
+                destination,
+                Color.RED.withAlphaByte(128),
+                BlendMode.DARKEN,
+            )
+        }
         val after = GPUBackendRuntimeFactory.createOrNull()!!.runtimeTelemetry
 
-        assertPixelNear(partialAlpha.pixels, 4, 4, destination, tolerance = 0)
-        assertTrue(alphaAt(partialAlpha.pixels, 20, 20) > 0)
-        assertEquals(0, partialAlpha.diagnostics.fatalCount, partialAlpha.diagnostics.entries.toString())
+        // The terminal refusal allocates no destination snapshot before failing.
         assertEquals(before.destinationReadbackSnapshots, after.destinationReadbackSnapshots)
-        assertTrue(after.destinationCopies - before.destinationCopies >= 7L)
+        assertEquals(before.destinationCopies, after.destinationCopies)
     }
 
     @Test
-    fun `scissor destination read blend preserves destination outside the clip`() {
+    fun `scissor destination read blend refuses with the mixed uniform layouts code before encoding`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        val result = Surface(width = 32, height = 32).run {
-            canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                save()
-                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
-                drawRect(
-                    Rect(4f, 4f, 28f, 28f),
-                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
-                )
-                restore()
+        // FP-09 terminal refusal: the frame mixes an unclipped uniform32 rect with a
+        // scissored dst-read rect (uniform64 lane); pre-FP-09 the legacy renderer
+        // rendered it. See the sibling analytic-clip case for the family reference.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                    drawRect(
+                        Rect(4f, 4f, 28f, 28f),
+                        Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                    )
+                    restore()
+                }
+                render()
             }
-            render()
         }
-
-        assertPixelNear(result.pixels, 4, 4, Color.WHITE, tolerance = 0)
-        assertPixelNear(result.pixels, 16, 16, Color.BLACK, tolerance = 0)
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(
+            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            failure.diagnostic.code.value,
+        )
     }
 
     @Test
-    fun destinationReadMaskBlurUsesIndependentGeometryCoverage() {
+    fun `destination read mask blur renders prepared via the copy-then-formula lane`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        val result = Surface(width = 32, height = 32).run {
+        // FP-09 Task 11: top-level mask blur is prepared-covered. The DARKEN
+        // blur rect over the white destination rides the copy-then-formula
+        // destination-read lane with the blurred coverage as its source shade,
+        // matching the CPU oracle (TopLevelMaskBlurPixelOracle + the composite
+        // route's blend oracle). Pre-FP-09 the legacy renderer materialized the
+        // blur mask the same way (green at the FP-08 tip accaea616).
+        val pixels = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                 drawRect(
@@ -111,15 +122,16 @@ class GPUClipAdvancedBlendSurfaceTest {
                     ),
                 )
             }
-            render()
+            render().pixels.toUByteArray()
         }
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(
-            result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" },
-            result.diagnostics.entries.toString(),
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE)
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32,
+            TopLevelMaskBlurPixelOracle.Shape.Rect(10f, 10f, 22f, 22f),
+            TopLevelMaskBlurPixelOracle.fullTargetBounds(),
+            BlurStyle.NORMAL, 2f, Color.BLACK, BlendMode.DARKEN, destination,
         )
-        assertPixelNear(result.pixels, 16, 16, Color.BLACK, tolerance = 3)
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
 
     @Test
@@ -217,54 +229,4 @@ class GPUClipAdvancedBlendSurfaceTest {
             }
             render()
         }
-
-    private fun expectedBlend(source: Color, destination: Color, mode: BlendMode): Color {
-        val src = floatArrayOf(source.redByte.toFloat(), source.greenByte.toFloat(), source.blueByte.toFloat())
-            .map { srgbToLinear(it / 255f) }
-        val dst = floatArrayOf(destination.redByte.toFloat(), destination.greenByte.toFloat(), destination.blueByte.toFloat())
-            .map { srgbToLinear(it / 255f) }
-        val blended = List(3) { channel ->
-            val s = src[channel]
-            val d = dst[channel]
-            when (mode) {
-                BlendMode.MULTIPLY -> s * d
-                BlendMode.SCREEN -> s + d - s * d
-                BlendMode.OVERLAY -> if (d <= 0.5f) 2f * s * d else 1f - 2f * (1f - s) * (1f - d)
-                BlendMode.DARKEN -> minOf(s, d)
-                BlendMode.LIGHTEN -> maxOf(s, d)
-                BlendMode.DIFFERENCE -> kotlin.math.abs(d - s)
-                BlendMode.EXCLUSION -> s + d - 2f * s * d
-                else -> error("Not a destination-read mode: $mode")
-            }
-        }
-        return Color.fromRGBA(
-            linearToSrgb(blended[0]),
-            linearToSrgb(blended[1]),
-            linearToSrgb(blended[2]),
-        )
-    }
-
-    private fun srgbToLinear(value: Float): Float =
-        if (value <= 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
-
-    private fun linearToSrgb(value: Float): Float =
-        if (value <= 0.0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - 0.055f
-
-    private fun assertPixelNear(pixels: UByteArray, x: Int, y: Int, color: Color, tolerance: Int) {
-        val offset = (y * 32 + x) * 4
-        val actual = listOf(
-            pixels[offset].toInt(),
-            pixels[offset + 1].toInt(),
-            pixels[offset + 2].toInt(),
-            pixels[offset + 3].toInt(),
-        )
-        val expected = listOf(color.redByte, color.greenByte, color.blueByte, color.alphaByte)
-        assertTrue(kotlin.math.abs(expected[0] - actual[0]) <= tolerance, "red at ($x,$y) actual=$actual expected=$expected")
-        assertTrue(kotlin.math.abs(expected[1] - actual[1]) <= tolerance, "green at ($x,$y) actual=$actual expected=$expected")
-        assertTrue(kotlin.math.abs(expected[2] - actual[2]) <= tolerance, "blue at ($x,$y) actual=$actual expected=$expected")
-        assertTrue(kotlin.math.abs(expected[3] - actual[3]) <= tolerance, "alpha at ($x,$y) actual=$actual expected=$expected")
-    }
-
-    private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
-        pixels[(y * 32 + x) * 4 + 3].toInt()
 }

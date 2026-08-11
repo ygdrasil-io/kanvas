@@ -5,16 +5,20 @@ import kotlin.test.assertTrue
 import kotlin.test.Test
 
 /**
- * FP-08 closure guard: the retired immediate/CPU-path adapter symbols must never
- * reappear in the production surface/gpu sources.
+ * FP-08/FP-09 closure guard: the retired immediate/CPU-path adapter symbols must
+ * never reappear in the production surface/gpu sources.
  *
  * The adapter file (GPULegacyImmediatePathAdapter.kt), its display family, its
  * dump type, and the `legacyDump` plumbing were deleted by FP-08 Task 2
- * (commit dbf725d61). These four tokens are the ONLY symbols retired by FP-08;
- * `renderViaGpuLegacy`, `GPUPreparedSurfaceLegacyPort`, `GPUClipRouteTrace`,
- * `renderWithClip`, `cachePixels`, `buildTextAtlasMesh`, and
- * `LayerScissorOffscreenTarget` intentionally remain until FP-09 retires the
- * legacy fallback for the currently-uncovered families.
+ * (commit dbf725d61). FP-09 then deleted the legacy immediate renderer
+ * (`renderViaGpuLegacy`, Task 7), the legacy port
+ * (`GPUPreparedSurfaceLegacyPort`, Task 5 route collapse), and the legacy-only
+ * helper machinery (Task 8: `GPUClipExecution.kt` — `renderWithClip`,
+ * `GPUClipRouteTrace`, `cachePixels`; the CPU text-atlas builders —
+ * `buildTextAtlasMesh`; `LayerScissorOffscreenTarget`, `GPUClipUsePrepass`,
+ * `GPUClipCoverageFrameCache`, `acquireClipMask`, `expandPicturesForGpuReplay`),
+ * plus the two `legacy.surface.prepared.*` gate codes (Task 5). Task 10 pins
+ * every retired token in the guard below.
  */
 class GPUPreparedSurfaceLegacyAbsenceTest {
 
@@ -25,6 +29,18 @@ class GPUPreparedSurfaceLegacyAbsenceTest {
             "LegacyDisplayOpFamily",
             "GPULegacyImmediatePathDump",
             "legacyDump",
+            "renderViaGpuLegacy",
+            "GPUPreparedSurfaceLegacyPort",
+            "GPUClipRouteTrace",
+            "renderWithClip",
+            "cachePixels",
+            "buildTextAtlasMesh",
+            "LayerScissorOffscreenTarget",
+            "GPUClipUsePrepass",
+            "GPUClipCoverageFrameCache",
+            "acquireClipMask",
+            "expandPicturesForGpuReplay",
+            "legacy.surface.prepared",
         )
         val root = productionSurfaceGpuSourceRoot()
         assertTrue(

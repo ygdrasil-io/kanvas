@@ -42,7 +42,6 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
@@ -420,6 +419,9 @@ class GPUFirstRoutePlanner(
 
     /** Builds an executable blur-mask FillRect route contract. */
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
+        if (!capabilities.hasFact(firstMaskBlurCapabilityName)) {
+            return refusedPlan(command = command, code = "unsupported.pipeline.capability_missing")
+        }
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val routeLabel = "executable.fill_rect.mask_blur"
         val pipelineKey = "mask-blur.rect-fill.${command.layer.target.colorFormat}.src_over"
@@ -630,6 +632,13 @@ class GPUFirstRoutePlanner(
         acceptedRRect: GPURRectNormalizationResult.Accepted,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority,
     ): GPUFirstRoutePlan {
+        if (!capabilities.hasFact(firstMaskBlurCapabilityName)) {
+            return refusedPlan(
+                command = command,
+                code = "unsupported.pipeline.capability_missing",
+                rrectGeometryAuthority = rrectGeometryAuthority,
+            )
+        }
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
         val routeLabel = "executable.fill_rrect.mask_blur"
         val pipelineKey = "mask-blur.rrect-fill.${command.layer.target.colorFormat}.src_over"
@@ -854,6 +863,9 @@ class GPUFirstRoutePlanner(
 
     /** Builds an executable blur-mask FillPath route contract. */
     private fun blurMaskFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        if (!capabilities.hasFact(firstMaskBlurCapabilityName)) {
+            return refusedPlan(command = command, code = "unsupported.pipeline.capability_missing")
+        }
         val recordId = "analysis.fill_path.${command.commandId.value}"
         val routeLabel = "executable.path_fill.mask_blur"
         val pipelineKey = "mask-blur.path-fill.${command.layer.target.colorFormat}.src_over"
@@ -1215,8 +1227,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             else -> null
         }
@@ -1415,7 +1425,13 @@ class GPUFirstRoutePlanner(
             backdropRequired -> "unsupported.layer.backdrop_filter"
             initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
             sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
-            !restoreBlendMode.equals("srcOver", ignoreCase = true) -> "unsupported.layer.restore_blend"
+            // Non-srcOver restore blends whose canonical plan is a shader-with-destination read
+            // are admitted: the prepared composite lane plans the restore composite with a
+            // destination snapshot plus the shader destination formula (Task 3). Everything else
+            // stays refused until a formula/composite materialization exists.
+            !restoreBlendMode.equals("srcOver", ignoreCase = true) &&
+                blend.canonicalPlan(layer.target.colorFormat) !is GPUBlendPlan.ShaderBlendWithDstRead ->
+                "unsupported.layer.restore_blend"
             cpuFallbackRequested -> "unsupported.layer.cpu_fallback_forbidden"
             preserveLCDText -> "unsupported.layer.preserve_lcd_text"
             f16Requested -> "unsupported.layer.f16_unavailable"
@@ -1607,8 +1623,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
@@ -1642,8 +1656,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
@@ -1718,11 +1730,16 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
+            // A mask-filtered path rides the prepared top-level mask blur lane and requires
+            // that capability fact; plain paths keep the stencil-cover/prepared-path-fill pair.
+            maskFilter != null -> if (!capabilities.hasFact(firstMaskBlurCapabilityName)) {
+                "unsupported.pipeline.capability_missing"
+            } else {
+                null
+            }
             !capabilities.hasFact(firstPreparedPathFillCapabilityName) &&
-                (maskFilter != null || !capabilities.hasFact(firstStencilCoverCapabilityName)) ->
+                !capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 "unsupported.pipeline.capability_missing"
             else -> null
         }
@@ -1952,8 +1969,6 @@ class GPUFirstRoutePlanner(
                 blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ->
-                "unsupported.destination_read.required"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !filterBounds.finite -> "unsupported.filter.bounds_unbounded"
             filterBounds.width <= 0 || filterBounds.height <= 0 -> "unsupported.filter.bounds_invalid"
@@ -2065,6 +2080,9 @@ class GPUFirstRoutePlanner(
 
         /** Required capability fact for the blur filter native route. */
         const val firstBlurFilterCapabilityName = "first_slice.blur_filter.native"
+
+        /** Required capability fact for the prepared top-level mask blur lane (Task 11). */
+        const val firstMaskBlurCapabilityName = "first_slice.mask_blur.native"
 
         /** Required capability fact for the color matrix filter native route. */
         const val firstColorMatrixFilterCapabilityName = "first_slice.color_matrix_filter.native"
@@ -2363,8 +2381,6 @@ private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): Strin
     val plan = canonicalPlan(targetFormatClass)
     return when {
         plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
-        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
-            "unsupported.destination_read.required"
         else -> null
     }
 }

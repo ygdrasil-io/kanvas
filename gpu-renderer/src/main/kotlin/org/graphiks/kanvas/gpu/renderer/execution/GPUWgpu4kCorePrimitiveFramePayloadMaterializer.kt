@@ -2,12 +2,19 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BufferDescriptor
+import io.ygdrasil.webgpu.Extent3D
+import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUQueue
+import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
+import io.ygdrasil.webgpu.SamplerDescriptor
+import io.ygdrasil.webgpu.TextureDescriptor
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -109,6 +116,30 @@ private fun GPUFramePlan.corePrimitiveSceneTargetDescriptor(
         it.role == GPUFrameResourceRole.SceneTarget && it.resource == target
     }?.descriptor as? GPUFrameTextureDescriptor
 
+/** Ordered destination snapshot authority for one direct CorePrimitive scope. */
+internal data class CorePrimitiveDestinationCopyAuthority(
+    val step: GPUFrameStep.CopyDestinationStep,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val snapshotDescriptor: GPUFrameTextureDescriptor,
+    val copyScope: GPUCommandEncoderScopePlan,
+)
+
+/** Native destination snapshot resources for the ordered copy and the dst-read bind group. */
+internal data class CorePrimitiveDestinationSnapshotHandles(
+    val texture: GPUTexture,
+    val binding: GPUWgpu4kCorePrimitiveDstReadBinding,
+)
+
+internal sealed interface CorePrimitiveDestinationCopyValidation {
+    data class Accepted(val authority: CorePrimitiveDestinationCopyAuthority?) :
+        CorePrimitiveDestinationCopyValidation
+
+    data class Refused(
+        val code: String,
+        val message: String,
+    ) : CorePrimitiveDestinationCopyValidation
+}
+
 /** Public-wgpu4k materializer for direct and unified indexed path CorePrimitive routes. */
 internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     private val device: GPUDevice,
@@ -118,6 +149,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     private val limits: GPULimits,
     private val coverageMaskProducerMaterializer: GPUWgpu4kCoverageMaskProducerMaterializerPort =
         GPUWgpu4kCoverageMaskProducerMaterializer(queue, sessionCache, limits),
+    private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var consumed = false
@@ -241,7 +273,22 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             Triple(renderStep, packet, semantic)
         }
-        val uniformLayout = preparedPassSeal.structuralPipelineKey.uniformLayout
+        val singleKeySeal = when (preparedPassSeal) {
+            is GPUCorePrimitiveMultiKeyDirectPreparedPassSeal ->
+                return materializeDirectMultiKeyCore(
+                    framePlan = framePlan,
+                    encoderPlan = encoderPlan,
+                    resources = resources,
+                    generationSeal = generationSeal,
+                    renderStep = renderStep,
+                    renderScope = renderScope,
+                    sealedRoutes = sealedRoutes,
+                    semanticPackets = semanticPackets,
+                    multiKeySeal = preparedPassSeal,
+                )
+            is GPUCorePrimitiveDirectPreparedPassSeal -> preparedPassSeal
+        }
+        val uniformLayout = singleKeySeal.structuralPipelineKey.uniformLayout
         fun refuseAnalyticShape(message: String) = refused(
             "invalid.native-core-primitive.analytic-shape-uniform-seal",
             message,
@@ -255,24 +302,24 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "Clip-stencil and coverage-mask programs require their dedicated native routes.",
             )
         }
-        val analyticShapeUniformSeals = preparedPassSeal.analyticShapeUniformSeals
-        val analyticClipUniformSeals = preparedPassSeal.analyticClipUniformSeals
-        val analyticIntersectionUniformSeals = preparedPassSeal.analyticIntersectionUniformSeals
+        val analyticShapeUniformSeals = singleKeySeal.analyticShapeUniformSeals
+        val analyticClipUniformSeals = singleKeySeal.analyticClipUniformSeals
+        val analyticIntersectionUniformSeals = singleKeySeal.analyticIntersectionUniformSeals
         val exactUniformAuthority = when (uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                preparedPassSeal.uniformSlabSeal != null && analyticShapeUniformSeals.isEmpty() &&
+                singleKeySeal.uniformSlabSeal != null && analyticShapeUniformSeals.isEmpty() &&
                     analyticClipUniformSeals.isEmpty() &&
                     analyticIntersectionUniformSeals.isEmpty()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
-                preparedPassSeal.uniformSlabSeal == null && analyticShapeUniformSeals.isEmpty() &&
+                singleKeySeal.uniformSlabSeal == null && analyticShapeUniformSeals.isEmpty() &&
                     analyticClipUniformSeals.size == semanticPackets.size &&
                     analyticIntersectionUniformSeals.isEmpty()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
-                preparedPassSeal.uniformSlabSeal == null && analyticShapeUniformSeals.isEmpty() &&
+                singleKeySeal.uniformSlabSeal == null && analyticShapeUniformSeals.isEmpty() &&
                     analyticClipUniformSeals.isEmpty() &&
                     analyticIntersectionUniformSeals.size == semanticPackets.size
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                preparedPassSeal.uniformSlabSeal == null &&
+                singleKeySeal.uniformSlabSeal == null &&
                     analyticShapeUniformSeals.size == semanticPackets.size &&
                     analyticClipUniformSeals.isEmpty() && analyticIntersectionUniformSeals.isEmpty()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
@@ -294,7 +341,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val sealedUniformPlan = when (uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                requireNotNull(preparedPassSeal.uniformSlabSeal).plan
+                requireNotNull(singleKeySeal.uniformSlabSeal).plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
                 analyticClipUniformSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
@@ -322,7 +369,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before direct binding selection")
         }
-        val uniformUploadBytes = preparedPassSeal.packedUniformBytesForUpload()
+        val uniformUploadBytes = singleKeySeal.packedUniformBytesForUpload()
         fun packedRangeEquals(offset: Long, expected: ByteArray): Boolean {
             if (offset < 0L || offset > uniformUploadBytes.size.toLong() - expected.size.toLong()) {
                 return false
@@ -347,7 +394,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive requires one exact supported scene target.",
             )
         val declaredStructuralColorFormat = declaredTargetFormat.corePrimitiveStructuralColorFormat()
-        if (preparedPassSeal.structuralPipelineKey.colorFormat != declaredStructuralColorFormat) {
+        if (singleKeySeal.structuralPipelineKey.colorFormat != declaredStructuralColorFormat) {
             return refused(
                 "invalid.native-core-primitive.target-contract",
                 "CorePrimitive target format contradicts its structural pipeline authority.",
@@ -365,9 +412,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
                 packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount, declaredTargetFormat) ||
                 packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
-                packetAuthority?.structuralPipelineKey != preparedPassSeal.structuralPipelineKey ||
+                packetAuthority?.structuralPipelineKey != singleKeySeal.structuralPipelineKey ||
                 packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
-                packetAuthority.uniformSlabSeal !== preparedPassSeal.uniformSlabSeal ||
+                packetAuthority.uniformSlabSeal !== singleKeySeal.uniformSlabSeal ||
                 packetAuthority.analyticShapeUniformSeal !== expectedAnalyticShapeSeal ||
                 packetAuthority.analyticClipUniformSeal !== expectedAnalyticSeal ||
                 packetAuthority.analyticIntersectionUniformSeal !== expectedAnalyticIntersectionSeal ||
@@ -435,7 +482,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     packetAuthority.analyticShapeUniformSeal !== seal ||
                     seal.slotIndex != packetIndex || seal.commandId != packet.commandIdValue ||
                     seal.packetId != packet.packetId ||
-                    seal.structuralPipelineKey != preparedPassSeal.structuralPipelineKey ||
+                    seal.structuralPipelineKey != singleKeySeal.structuralPipelineKey ||
                     seal.structuralPipelineKey != packetAuthority.structuralPipelineKey ||
                     seal.structuralPipelineKey.shader !=
                     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape ||
@@ -619,7 +666,27 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive readback must cover the exact canonical target bounds.",
             )
         }
-        val expectedEncoderSteps = 1 + if (readbackStep == null) 0 else 1
+        // Defensive reachability guard: every direct-only frame retains the unified scope route
+        // seal, so real destination-reading frames materialize through the frame-global run path
+        // (materializeSingleSampleFrameGlobalCore) below; this single-key branch keeps the same
+        // dst-copy authority so the validation and emission stay consistent whichever route runs.
+        val copyAuthority = when (
+            val validation = validateCorePrimitiveDestinationCopy(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                renderStep = renderStep,
+                consumerPacketIds = semanticPackets.map { it.second.packetId }.toSet(),
+                targetBounds = targetBounds,
+                targetFormat = declaredTargetFormat,
+            )
+        ) {
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Refused ->
+                return refused(validation.code, validation.message)
+        }
+        val expectedEncoderSteps = 1 +
+            (if (copyAuthority == null) 0 else 1) +
+            (if (readbackStep == null) 0 else 1)
         if (framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } != expectedEncoderSteps) {
             return refused(
                 "unsupported.native-core-primitive.encoder-shape",
@@ -635,10 +702,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The direct CorePrimitive readback scope is absent from the encoder plan.",
             )
         }
-        if (encoderPlan.scopes != listOfNotNull(renderScope, readbackScope)) {
+        if (encoderPlan.scopes != listOfNotNull(copyAuthority?.copyScope, renderScope, readbackScope)) {
             return refused(
                 "unsupported.native-core-primitive.scope-order",
-                "CorePrimitive encoder scopes must preserve render order then optional readback.",
+                "CorePrimitive encoder scopes must preserve copy, render, then optional readback order.",
             )
         }
         val exactSampleAuthority = when (renderStep.samplePlan) {
@@ -693,7 +760,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val uniformPreparation = preparation(GPUFrameResourceRole.UniformData)
             ?: return refused("unsupported.native-core-primitive.uniform", "CorePrimitive uniform slab declaration is missing.")
         val stagingPreparation = preparation(GPUFrameResourceRole.ReadbackStaging)
-        if (preparations.size != 4 + (if (readbackStep == null) 0 else 1) ||
+        val expectedPreparationCount = 4 +
+            (if (copyAuthority == null) 0 else 1) +
+            (if (readbackStep == null) 0 else 1)
+        if (preparations.size != expectedPreparationCount ||
             (readbackStep == null) != (stagingPreparation == null)
         ) {
             return refused(
@@ -809,10 +879,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val pipelineMappingCandidate = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
-            preparedPassSeal.structuralPipelineKey,
+            singleKeySeal.structuralPipelineKey,
         )
         val pipelineMapping = pipelineMappingCandidate as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
         if (pipelineMapping == null) {
+            // Destination-reading keys without a formula program (scalar-coverage dst-read on the
+            // analytic-shape lane) refuse by name so the surface router continues on the legacy
+            // route. Task 6 classifies the residual.
+            if (singleKeySeal.structuralPipelineKey.blend is
+                GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.dst-read-formula",
+                    "The destination-read formula program is not available for this direct structural shape.",
+                )
+            }
             if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1) {
                 return refuseAnalyticShape(
                     "Analytic shape structural authority has no exact native pipeline.",
@@ -823,20 +904,27 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The direct CorePrimitive structural key has no exact native pipeline.",
             )
         }
-        val expectedComponentIdentity = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
-                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
-                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before direct component selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before direct component selection")
+        val expectedComponentIdentity = when {
+            singleKeySeal.structuralPipelineKey.blend is
+                GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
+                requireNotNull(
+                    singleKeySeal.structuralPipelineKey.corePrimitiveNativeComponentIdentityOrNull(),
+                )
+            else -> when (uniformLayout) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                    PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                    error("NoBindingsV1 was refused before direct component selection")
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+                -> error("Coverage-mask layouts were refused before direct component selection")
+            }
         }
         val exactProgram = when (uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
@@ -907,7 +995,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val preparedByLogical = resources.ordinaryResources.associateBy { it.logicalResource }
-        if (resources.ordinaryResources.size != 4 ||
+        val expectedOrdinaryResources = 4 + (if (copyAuthority == null) 0 else 1)
+        if (resources.ordinaryResources.size != expectedOrdinaryResources ||
             listOf(targetPreparation, vertexPreparation, indexPreparation, uniformPreparation).any { preparation ->
                 val evidence = preparedByLogical[preparation.resource]
                 val expectedKind = if (preparation.role == GPUFrameResourceRole.SceneTarget) {
@@ -1009,6 +1098,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } else {
                 null
             }
+            val dstReadSnapshot = copyAuthority?.let { authority ->
+                createCorePrimitiveDestinationSnapshot(
+                    authority,
+                    declaredTargetFormat,
+                    targetBounds,
+                )
+            }
             val invariants = when (
                 val acquired = sessionCache.acquire(
                     pipelineCacheKey,
@@ -1030,6 +1126,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         componentIdentity = pipelineMapping.componentIdentity,
                         sampleCount = sampleCount,
                         msaaColor = msaaColorRequirement,
+                        dstRead = dstReadSnapshot?.binding,
                     ),
                 )
             ) {
@@ -1201,7 +1298,31 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } else {
                 null
             }
-            val operandsByStep = (listOf(renderOperand) + listOfNotNull(readbackOperand))
+            val copyOperand = copyAuthority?.let { authority ->
+                GPUPreparedNativeScopeOperand.Copy(
+                    sourceStepIndex = authority.copyScope.sourceStepIndex,
+                    operationKind = GPUEncoderOperationKind.CopyDestination,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeTextureOperand(
+                        requireNotNull(dstReadSnapshot).texture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(
+                        sourceOriginX = targetBounds.left,
+                        sourceOriginY = targetBounds.top,
+                        destinationOriginX = 0,
+                        destinationOriginY = 0,
+                        width = targetBounds.width,
+                        height = targetBounds.height,
+                    ),
+                )
+            }
+            val operandsByStep = (listOfNotNull(copyOperand, renderOperand) + listOfNotNull(readbackOperand))
                 .associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             val payload = GPUPreparedNativeFramePayload(
                 identity = GPUPreparedNativeFrameIdentity(
@@ -1259,6 +1380,836 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             "unsupported.native-core-primitive.surface",
             "The direct CorePrimitive route is offscreen-only before surface decoration.",
         )
+    }
+
+    /**
+     * Materializes one direct CorePrimitive scope whose pass seal admits N distinct structural
+     * pipelines (Graphite `DrawPass.fFullPipelines` + `BindGraphicsPipeline(index)`): every key
+     * acquires its own session-cache pipeline, the shared uniform32 slab keeps one pooled bind
+     * group, and the render commands bind each key's pipeline only when the active key changes.
+     * Single-sample frames that also carry the unified route seal delegate to the frame-global
+     * run materializer, which owns the shared-slab partition across mixed prepared-surface runs.
+     */
+    private fun materializeDirectMultiKeyCore(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+        renderStep: GPUFrameStep.RenderPassStep,
+        renderScope: GPUCommandEncoderScopePlan,
+        sealedRoutes: GPUCorePrimitiveDirectNativeRouteSeal.Routes,
+        semanticPackets: List<Triple<GPUFrameStep.RenderPassStep, GPUDrawPacket, GPUDrawSemanticPayload.CorePrimitive>>,
+        multiKeySeal: GPUCorePrimitiveMultiKeyDirectPreparedPassSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val sampleCount = renderStep.samplePlan.sampleCount
+        val isMsaa4x = renderStep.samplePlan == GPUSamplePlan.MultisampleFrame(4)
+        val packetStructuralKeys = semanticPackets.map { (_, packet, _) ->
+            requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
+        }
+        val multiKeyAuthority = when (
+            val authority = validateMultiKeyDirectPassSealAuthority(
+                multiKeySeal,
+                packetStructuralKeys,
+                generationSeal.deviceGeneration.value,
+                limits,
+            )
+        ) {
+            is GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Accepted -> authority
+            is GPUCorePrimitiveMultiKeyDirectPassAuthorityValidation.Refused ->
+                return refused(authority.code, authority.message)
+        }
+        val analyticShapeMultiKey = multiKeySeal.analyticShapeUniformSeals.isNotEmpty()
+        if (analyticShapeMultiKey) {
+            // Mixed fixed-function blends on the analytic-shape lane are admitted by the
+            // multi-key pass seal, but their AA coverage semantics are not yet verified against
+            // the CPU oracle on the prepared lane (the analytic shape shader modulates the source
+            // by coverage, which cannot express every blend, e.g. CLEAR). Those frames continue
+            // on the legacy route; Task 6 classifies the residual.
+            return refused(
+                "unsupported.native-core-primitive.analytic-shape-multi-key",
+                "Multi-key analytic-shape CorePrimitive passes remain on the legacy route until " +
+                    "their AA coverage semantics are verified on the prepared lane.",
+            )
+        }
+        // The analytic-shape multi-key variant is refused above, so every multi-key pass that
+        // reaches this point is uniform32: the shared dynamic-uniform32 layout and 32-byte block
+        // are the only remaining authorities.
+        val multiKeyBindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+        val multiKeyUniformBytes = CORE_PRIMITIVE_UNIFORM_BYTES
+        if (multiKeySeal.uniformSlabSeal?.commandIds != semanticPackets.map { it.second.commandIdValue } ||
+            semanticPackets.withIndex().any { (packetIndex, entry) ->
+                val packet = entry.second
+                val authority = packet.corePrimitivePreparedAuthority
+                authority?.uniformSlabSeal !== multiKeySeal.uniformSlabSeal ||
+                    authority?.analyticShapeUniformSeal != null ||
+                    authority?.analyticClipUniformSeal != null ||
+                    authority?.analyticIntersectionUniformSeal != null ||
+                    packet.bindingLayoutHash != multiKeyBindingLayoutHash
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.multi-key-uniform-seal",
+                "Multi-key CorePrimitive packets must share one exact packet-order dynamic uniform32 slab authority.",
+            )
+        }
+        val targetBounds = semanticPackets.first().third.targetBounds
+        val declaredTargetDescriptor =
+            framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target) ?: return refused(
+            "unsupported.native-core-primitive.target-contract",
+            "CorePrimitive requires one exact supported scene target.",
+        )
+        val declaredTargetFormat = declaredTargetDescriptor.format
+        val declaredTargetInterpretation =
+            declaredTargetFormat.corePrimitiveInterpretationOrNull() ?: return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact supported scene target.",
+            )
+        val declaredStructuralColorFormat = declaredTargetFormat.corePrimitiveStructuralColorFormat()
+        if (multiKeySeal.structuralPipelineKeys.any { key ->
+                key.colorFormat != declaredStructuralColorFormat
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.target-contract",
+                "CorePrimitive target format contradicts its multi-key structural pipeline authority.",
+            )
+        }
+        val keyIndexByStructuralKey = multiKeySeal.structuralPipelineKeys
+            .withIndex()
+            .associate { (index, key) -> key to index }
+        val acceptedGeometries = semanticPackets.mapIndexed { packetIndex, (_, packet, semantic) ->
+            val packetAuthority = packet.corePrimitivePreparedAuthority
+            val expectedKey = packetAuthority?.structuralPipelineKey
+            val expectedKeyIndex = keyIndexByStructuralKey[expectedKey]
+            val exactUniformAuthority =
+                packetAuthority?.uniformSlabSeal === multiKeySeal.uniformSlabSeal &&
+                    packetAuthority.analyticShapeUniformSeal == null &&
+                    packetAuthority.analyticClipUniformSeal == null &&
+                    packetAuthority.analyticIntersectionUniformSeal == null
+            val exactUniformPayload =
+                semantic.payloadRef.uniformBlock?.byteSize == CORE_PRIMITIVE_UNIFORM_BYTES.toLong() &&
+                    semantic.payloadRef.uniformBlock.bytes ==
+                    corePrimitiveUniformBytes(semantic.targetBounds, semantic.premultipliedRgba)
+            if (!semantic.hasStructuralIntegrity() || packet.role != GPUDrawPacketRole.Shading ||
+                packet.commandIdValue != semantic.payloadRef.commandIdValue ||
+                packet.uniformSlot != semantic.payloadRef.uniformSlot ||
+                packet.bindingLayoutHash != multiKeyBindingLayoutHash ||
+                packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
+                packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount, declaredTargetFormat) ||
+                packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
+                packetAuthority == null ||
+                expectedKeyIndex == null ||
+                packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
+                !exactUniformAuthority ||
+                semantic.targetBounds != targetBounds ||
+                semantic.payloadRef.uniformBlock?.byteSize != multiKeyUniformBytes.toLong() ||
+                !exactUniformPayload
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.packet-authority",
+                    "A multi-key CorePrimitive packet contradicts its immutable semantic, pipeline, uniform, or target authority.",
+                )
+            }
+            sealedRoutes.routesByPacketId.getValue(packet.packetId)
+        }
+        val renderScissors = semanticPackets.map { it.third.scissorBounds }
+        val arena = try {
+            packCorePrimitiveFrameGeometry(acceptedGeometries)
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.geometry-arena",
+                "Direct CorePrimitive geometry cannot be packed safely: ${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+        val vertexBytes: Long
+        val indexBytes: Long
+        val geometrySlicesValid: Boolean
+        try {
+            vertexBytes = Math.multiplyExact(arena.vertices.size.toLong(), Float.SIZE_BYTES.toLong())
+            indexBytes = Math.multiplyExact(arena.indices.size.toLong(), Int.SIZE_BYTES.toLong())
+            val totalVertexCount = arena.vertices.size / 2
+            var expectedFirstIndex = 0
+            var expectedBaseVertex = 0
+            geometrySlicesValid = arena.vertices.size % 2 == 0 && arena.slices.all { slice ->
+                val nextFirstIndex = Math.addExact(slice.firstIndex, slice.indexCount)
+                val nextBaseVertex = Math.addExact(slice.baseVertex, slice.vertexCount)
+                val maximumAddressedVertex = Math.addExact(slice.baseVertex, slice.maxLocalIndex)
+                val valid = slice.firstIndex == expectedFirstIndex &&
+                    slice.baseVertex == expectedBaseVertex &&
+                    slice.indexCount > 0 && slice.vertexCount > 0 &&
+                    slice.maxLocalIndex in 0 until slice.vertexCount &&
+                    nextFirstIndex <= arena.indices.size && nextBaseVertex <= totalVertexCount &&
+                    maximumAddressedVertex < totalVertexCount
+                expectedFirstIndex = nextFirstIndex
+                expectedBaseVertex = nextBaseVertex
+                valid
+            } && expectedFirstIndex == arena.indices.size && expectedBaseVertex == totalVertexCount
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.native-core-primitive.geometry-slices",
+                "Direct CorePrimitive geometry slices overflow their exact shared-slab convention.",
+            )
+        }
+        if (vertexBytes <= 0L || indexBytes <= 0L || vertexBytes % 8L != 0L || indexBytes % 4L != 0L ||
+            !geometrySlicesValid
+        ) {
+            return refused(
+                "invalid.native-core-primitive.geometry-slices",
+                "Direct CorePrimitive geometry slices violate the exact shared-slab offset convention.",
+            )
+        }
+
+        val readbackSteps = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val readbackStep = readbackSteps.singleOrNull()
+        if (readbackSteps.size > 1 || framePlan.steps.any { it is GPUFrameStep.CopyResourceStep }) {
+            return refused(
+                "unsupported.native-core-primitive.scope-shape",
+                "Direct CorePrimitive accepts only render scopes and one optional readback scope.",
+            )
+        }
+        if (readbackStep != null && readbackStep.request.sourceBounds != targetBounds) {
+            return refused(
+                "unsupported.native-core-primitive.readback-layout",
+                "CorePrimitive readback must cover the exact canonical target bounds.",
+            )
+        }
+        // Structurally unreachable for destination reading: an all-dst-read multi-key pass has
+        // identical keys (one mode, one component) and therefore seals as a single key, while
+        // mixed fixed+dst-read or multi-mode dst-read keys are refused by the multi-key-component
+        // authority. The branch stays for defensive consistency with the frame-global and
+        // single-key dst-copy paths.
+        val copyAuthority = when (
+            val validation = validateCorePrimitiveDestinationCopy(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                renderStep = renderStep,
+                consumerPacketIds = semanticPackets.map { it.second.packetId }.toSet(),
+                targetBounds = targetBounds,
+                targetFormat = declaredTargetFormat,
+            )
+        ) {
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Refused ->
+                return refused(validation.code, validation.message)
+        }
+        val expectedEncoderSteps = 1 +
+            (if (copyAuthority == null) 0 else 1) +
+            (if (readbackStep == null) 0 else 1)
+        if (framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } != expectedEncoderSteps) {
+            return refused(
+                "unsupported.native-core-primitive.encoder-shape",
+                "Direct CorePrimitive contains an unsupported encoder operation.",
+            )
+        }
+        val readbackScope = readbackStep?.let { step ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Readback
+            } ?: return refused(
+                "unsupported.native-core-primitive.readback-plan",
+                "The direct CorePrimitive readback scope is absent from the encoder plan.",
+            )
+        }
+        if (encoderPlan.scopes != listOfNotNull(copyAuthority?.copyScope, renderScope, readbackScope)) {
+            return refused(
+                "unsupported.native-core-primitive.scope-order",
+                "CorePrimitive encoder scopes must preserve copy, render, then optional readback order.",
+            )
+        }
+        val exactSampleAuthority = when (renderStep.samplePlan) {
+            GPUSamplePlan.SingleSampleFrame -> renderStep.sampleContinuation == null
+            is GPUSamplePlan.MultisampleFrame -> renderStep.samplePlan.sampleCount == 4 &&
+                renderStep.sampleContinuation?.let { continuation ->
+                    continuation.key.target.value == renderStep.target.value &&
+                        continuation.key.targetGeneration == generationSeal.targetGeneration &&
+                        continuation.key.deviceGeneration == generationSeal.deviceGeneration &&
+                        continuation.key.colorFormat == declaredTargetFormat &&
+                        continuation.key.colorInterpretation == declaredTargetInterpretation &&
+                        continuation.key.samplePlan == renderStep.samplePlan &&
+                        continuation.key.attachmentAuthority ==
+                        org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUSampleAttachmentAuthority.PreparedFramePayload &&
+                        continuation.key.colorAttachment.value ==
+                        "msaa-color:${renderStep.target.value}:${generationSeal.targetGeneration}" &&
+                        continuation.key.depthStencilAttachment == null &&
+                        continuation.loadTransition == GPUSampleLoadTransition.FreshClear &&
+                        continuation.storeAction == GPUSampleStoreAction.Store &&
+                        continuation.resolveAction == GPUSampleResolveAction.ResolveCanonical
+                } == true
+            is GPUSamplePlan.LocalResolveApproximation -> false
+        }
+        if (!exactSampleAuthority ||
+            renderStep.loadStore.loadOp != "clear" || renderStep.loadStore.storePlan != GPUStorePlan.Store ||
+            renderStep.loadStore.clearColorLabel != null || renderStep.depthStencilLoadStore != null ||
+            renderStep.resourceUses.any {
+                it.role == GPUFrameResourceRole.PathDepthStencil ||
+                    it.role == GPUFrameResourceRole.ClipDepthStencil
+            } || semanticPackets.any { (_, _, semantic) ->
+                semantic.scissorBounds.isEmpty ||
+                semantic.scissorBounds.left < targetBounds.left || semantic.scissorBounds.top < targetBounds.top ||
+                semantic.scissorBounds.right > targetBounds.right || semantic.scissorBounds.bottom > targetBounds.bottom
+            }
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.render-state",
+                "CorePrimitive requires one exact clear/store 1x or color-only 4x resolve pass and contained scissors.",
+            )
+        }
+
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        fun preparation(role: GPUFrameResourceRole) = preparations.filter { it.role == role }.singleOrNull()
+        val targetPreparation = preparation(GPUFrameResourceRole.SceneTarget)
+            ?: return refused("unsupported.native-core-primitive.target", "CorePrimitive target declaration is missing.")
+        val vertexPreparation = preparation(GPUFrameResourceRole.VertexData)
+            ?: return refused("unsupported.native-core-primitive.vertex", "CorePrimitive vertex slab declaration is missing.")
+        val indexPreparation = preparation(GPUFrameResourceRole.IndexData)
+            ?: return refused("unsupported.native-core-primitive.index", "CorePrimitive index slab declaration is missing.")
+        val uniformPreparation = preparation(GPUFrameResourceRole.UniformData)
+            ?: return refused("unsupported.native-core-primitive.uniform", "CorePrimitive uniform slab declaration is missing.")
+        val stagingPreparation = preparation(GPUFrameResourceRole.ReadbackStaging)
+        val expectedPreparationCount = 4 +
+            (if (copyAuthority == null) 0 else 1) +
+            (if (readbackStep == null) 0 else 1)
+        if (preparations.size != expectedPreparationCount ||
+            (readbackStep == null) != (stagingPreparation == null)
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.resource-shape",
+                "CorePrimitive requires exactly target, shared vertex/index/uniform slabs, and optional readback staging.",
+            )
+        }
+        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
+        if (targetPreparation.resource != renderStep.target ||
+            targetDescriptor == null ||
+            targetDescriptor != declaredTargetDescriptor ||
+            targetDescriptor.logicalBounds != targetBounds ||
+            !targetDescriptor.format.isCorePrimitiveSceneTargetFormat() ||
+            targetDescriptor.sampleCount != 1 ||
+            targetPreparation.usages != setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.CopySource,
+            ) || targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact frame-local supported scene target.",
+            )
+        }
+        if (isMsaa4x) {
+            val expectedMsaaBytes = try {
+                Math.multiplyExact(
+                    Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()),
+                    Math.multiplyExact(RGBA_BYTES_PER_PIXEL, sampleCount.toLong()),
+                )
+            } catch (_: ArithmeticException) {
+                return refused(
+                    "unsupported.native-core-primitive.msaa-budget",
+                    "The 4x CorePrimitive color attachment byte size overflowed.",
+                )
+            }
+            if (framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.FrameLocalMsaaColor] !=
+                expectedMsaaBytes
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.msaa-budget",
+                    "The 4x CorePrimitive color attachment must have exact aggregate memory authority.",
+                )
+            }
+        }
+        fun exactGeometryBuffer(
+            preparation: GPUResourcePreparationRequest,
+            role: GPUFrameResourceRole,
+            usage: GPUFrameResourceUsage,
+            bytes: Long,
+        ): Boolean {
+            val descriptor = preparation.descriptor as? GPUFrameBufferDescriptor ?: return false
+            return preparation.role == role && descriptor.byteSize == bytes && descriptor.alignmentBytes == 4L &&
+                preparation.byteSize == bytes &&
+                preparation.usages == setOf(GPUFrameResourceUsage.CopyDestination, usage) &&
+                preparation.lifetime == GPUFrameResourceLifetime.FrameLocal
+        }
+        if (!exactGeometryBuffer(vertexPreparation, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, vertexBytes) ||
+            !exactGeometryBuffer(indexPreparation, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, indexBytes) ||
+            setOf(vertexPreparation.resource, indexPreparation.resource, uniformPreparation.resource).size != 3
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.buffer-contract",
+                "CorePrimitive shared Float32x2 vertex and Uint32 index slabs are not exact.",
+            )
+        }
+        val uniformDescriptor = uniformPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refused(
+                "unsupported.native-core-primitive.uniform-contract",
+                "CorePrimitive uniform slab requires one exact buffer descriptor.",
+            )
+        val uniformSlabPlan = multiKeySeal.uniformPlan
+        if (uniformSlabPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
+            uniformSlabPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment
+        ) {
+            return refused(
+                "invalid.native-core-primitive.uniform-seal-generation",
+                "CorePrimitive builder uniform authority is stale for the materialized device generation.",
+            )
+        }
+        if (uniformDescriptor.byteSize != uniformSlabPlan.totalBytes ||
+            uniformDescriptor.alignmentBytes != uniformSlabPlan.alignmentBytes ||
+            uniformPreparation.byteSize != uniformSlabPlan.totalBytes ||
+            uniformPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Uniform,
+            ) || uniformPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.uniform-contract",
+                "CorePrimitive uniform preparation differs from the sealed aligned slab plan.",
+            )
+        }
+        if (uniformSlabPlan.totalBytes > Int.MAX_VALUE.toLong()) {
+            return refused(
+                "unsupported.native-core-primitive.uniform-slab-host-size",
+                "CorePrimitive uniform slab exceeds the host-addressable ByteArray size.",
+            )
+        }
+        val exactUses = setOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                vertexPreparation.resource,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceUsage.Vertex,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                indexPreparation.resource,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceUsage.Index,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                uniformPreparation.resource,
+                GPUFrameResourceRole.UniformData,
+                GPUFrameResourceUsage.Uniform,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+        )
+        if (renderStep.resourceUses.filter {
+                it.role == GPUFrameResourceRole.VertexData || it.role == GPUFrameResourceRole.IndexData ||
+                    it.role == GPUFrameResourceRole.UniformData
+            }.toSet() != exactUses
+        ) {
+            return refused(
+                "invalid.native-core-primitive.render-resource-uses",
+                "Every direct CorePrimitive draw must read the exact shared vertex and index slabs.",
+            )
+        }
+
+        val preparedByLogical = resources.ordinaryResources.associateBy { it.logicalResource }
+        val expectedOrdinaryResources = 4 + (if (copyAuthority == null) 0 else 1)
+        if (resources.ordinaryResources.size != expectedOrdinaryResources ||
+            listOf(targetPreparation, vertexPreparation, indexPreparation, uniformPreparation).any { preparation ->
+                val evidence = preparedByLogical[preparation.resource]
+                val expectedKind = if (preparation.role == GPUFrameResourceRole.SceneTarget) {
+                    GPUPreparedConcreteResourceRef.Texture::class.java
+                } else {
+                    GPUPreparedConcreteResourceRef.Buffer::class.java
+                }
+                evidence == null || evidence.role != preparation.role ||
+                    evidence.deviceGeneration != generationSeal.deviceGeneration ||
+                    evidence.resourceGeneration != generationSeal.resourceGenerations[preparation.resource] ||
+                    !expectedKind.isInstance(evidence.concreteResource)
+            } || listOf(targetPreparation, vertexPreparation, indexPreparation, uniformPreparation).any {
+                generationSeal.resourceGenerations[it.resource] == null
+            }
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.prepared-resources",
+                "CorePrimitive prepared target and geometry evidence is missing or substituted.",
+            )
+        }
+        if (preparedSceneTarget.width != targetBounds.width || preparedSceneTarget.height != targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.prepared-target",
+                "The prepared scene target differs from the sealed CorePrimitive target.",
+            )
+        }
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+        if ((readbackStep == null) != (output == null) || resources.outputOwnedReadbacks.size > 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-output",
+                "The optional CorePrimitive readback must match one output-owned staging lease.",
+            )
+        }
+        if (readbackStep != null && stagingPreparation != null && output != null) {
+            val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            if (readbackStep.source != targetPreparation.resource || readbackStep.staging != stagingPreparation.resource ||
+                output.request != readbackStep.request || output.stagingResource != stagingPreparation.resource ||
+                output.request.sourceBounds != targetBounds ||
+                stagingDescriptor?.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.MapRead,
+                ) || stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                output.resourceGeneration != generationSeal.resourceGenerations[stagingPreparation.resource] ||
+                output.layout.width != targetBounds.width || output.layout.height != targetBounds.height ||
+                output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+                output.layout.paddedBytesPerRow % WEBGPU_COPY_ROW_ALIGNMENT != 0L ||
+                output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.readback-layout",
+                    "The output-owned CorePrimitive RGBA8 readback layout is not exact.",
+                )
+            }
+        }
+
+        // Single-sample frames that also retain the unified route seal delegate to the
+        // frame-global run materializer, which owns the shared-slab partition across runs.
+        val unifiedRoute = renderScope.corePrimitiveNativeScopeRouteSeal as?
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes
+        if (!isMsaa4x && unifiedRoute != null) {
+            return materializeSingleSampleFrameGlobalCore(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                resources = resources,
+                generationSeal = generationSeal,
+                renderStep = renderStep,
+                renderScope = renderScope,
+                route = unifiedRoute,
+                readbackScope = readbackScope,
+                output = output,
+                targetFormat = declaredTargetFormat,
+            )
+        }
+
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-core-primitive.materializer-state",
+                    "The CorePrimitive materializer closed during multi-key validation.",
+                )
+            }
+            materializing = true
+        }
+        var frameLease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var frameLeaseTransferred = false
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val msaaColorRequirement = if (isMsaa4x) {
+                GPUWgpu4kCorePrimitiveMsaaColorRequirement(
+                    target = renderStep.target,
+                    colorAttachment = requireNotNull(renderStep.sampleContinuation).key.colorAttachment,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    width = targetBounds.width,
+                    height = targetBounds.height,
+                    format = declaredTargetFormat.toCorePrimitiveGPUTextureFormat(),
+                )
+            } else {
+                null
+            }
+            val acquiredByCacheKey = linkedMapOf<
+                GPUWgpu4kCorePrimitivePipelineCacheKey,
+                GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+                >()
+            multiKeyAuthority.cacheKeys.forEach { cacheKey ->
+                when (val acquired = sessionCache.acquire(cacheKey)) {
+                    is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired ->
+                        acquiredByCacheKey[cacheKey] = acquired
+                    is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> {
+                        synchronized(this) { materializing = false }
+                        return refusedSessionCacheAcquire(acquired.reason)
+                    }
+                }
+            }
+            val dstReadSnapshot = copyAuthority?.let { authority ->
+                createCorePrimitiveDestinationSnapshot(
+                    authority,
+                    declaredTargetFormat,
+                    targetBounds,
+                )
+            }
+            frameLease = when (
+                val checkout = sessionCache.acquireFrame(
+                    GPUWgpu4kCorePrimitiveFramePoolRequirements(
+                        generationSeal.deviceGeneration,
+                        vertexBytes,
+                        indexBytes,
+                        uniformSlabPlan.totalBytes,
+                        componentIdentity = multiKeyAuthority.componentIdentity,
+                        sampleCount = sampleCount,
+                        msaaColor = msaaColorRequirement,
+                        dstRead = dstReadSnapshot?.binding,
+                    ),
+                )
+            ) {
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused -> {
+                    synchronized(this) { materializing = false }
+                    return refusedPoolCheckout(checkout.reason)
+                }
+            }
+            val pooled = requireNotNull(frameLease)
+            val vertexBuffer = pooled.handles.vertexBuffer
+            val indexBuffer = pooled.handles.indexBuffer
+            val uniformBuffer = pooled.handles.uniformBuffer
+            val bindGroup = pooled.handles.bindGroup
+            check(pooled.handles.sampleCount == sampleCount &&
+                pooled.handles.msaaColor?.requirement == msaaColorRequirement &&
+                (isMsaa4x == (pooled.handles.msaaColor != null))
+            ) { "Pooled CorePrimitive color attachment differs from its exact sample authority" }
+            uploadExact(
+                vertexBuffer,
+                ArrayBuffer.of(arena.vertices),
+                usedBytes = vertexBytes,
+                capacityBytes = pooled.capacities.vertexBytes,
+            )
+            uploadExact(
+                indexBuffer,
+                ArrayBuffer.of(arena.indices),
+                usedBytes = indexBytes,
+                capacityBytes = pooled.capacities.indexBytes,
+            )
+            uploadExact(
+                uniformBuffer,
+                ArrayBuffer.of(multiKeySeal.packedUniformBytesForUpload()),
+                usedBytes = uniformSlabPlan.totalBytes,
+                capacityBytes = pooled.capacities.uniformBytes,
+            )
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.multiKey.readback",
+                    ),
+                ).tracked()
+            }
+            val canonicalTargetViewOperand = GPUPreparedNativeTextureViewOperand(
+                targetView,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val colorTargetViewOperand = pooled.handles.msaaColor?.let { msaa ->
+                GPUPreparedNativeTextureViewOperand(
+                    msaa.view,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            } ?: canonicalTargetViewOperand
+            val pipelineOperandByCacheKey = acquiredByCacheKey.mapValues { (_, acquired) ->
+                GPUPreparedNativeRenderPipelineOperand(
+                    acquired.pipeline,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            }
+            val vertexOperand = GPUPreparedNativeBufferOperand(
+                vertexBuffer,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                byteCapacity = pooled.capacities.vertexBytes,
+            )
+            val indexOperand = GPUPreparedNativeBufferOperand(
+                indexBuffer,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                byteCapacity = pooled.capacities.indexBytes,
+            )
+            val sharedBindGroupOperand = GPUPreparedNativeBindGroupOperand(
+                bindGroup,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val renderCommands = buildList {
+                var lastKeyIndex = keyIndexByStructuralKey.getValue(
+                    requireNotNull(semanticPackets.first().second.corePrimitivePreparedAuthority)
+                        .structuralPipelineKey,
+                )
+                var lastPipeline = pipelineOperandByCacheKey.getValue(
+                    multiKeyAuthority.cacheKeys[lastKeyIndex],
+                )
+                add(GPUPreparedNativeRenderCommand.SetPipeline(lastPipeline))
+                add(
+                    GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                        0,
+                        vertexOperand,
+                        offset = 0L,
+                        size = vertexBytes,
+                        vertexStrideBytes = 8L,
+                    ),
+                )
+                add(
+                    GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                        indexOperand,
+                        GPUPreparedNativeIndexFormat.Uint32,
+                        offset = 0L,
+                        size = indexBytes,
+                    ),
+                )
+                semanticPackets.indices.forEach { index ->
+                    val (_, packet, _) = semanticPackets[index]
+                    val slice = arena.slices[index]
+                    val uniformSlot = uniformSlabPlan.slots[index]
+                    val renderScissor = renderScissors[index]
+                    val keyIndex = keyIndexByStructuralKey.getValue(
+                        requireNotNull(packet.corePrimitivePreparedAuthority)
+                            .structuralPipelineKey,
+                    )
+                    if (keyIndex != lastKeyIndex) {
+                        val pipeline = pipelineOperandByCacheKey.getValue(
+                            multiKeyAuthority.cacheKeys[keyIndex],
+                        )
+                        add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                        lastKeyIndex = keyIndex
+                        lastPipeline = pipeline
+                    }
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            0,
+                            sharedBindGroupOperand,
+                            dynamicOffsets = listOf(uniformSlot.alignedOffset),
+                        ),
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetScissor(
+                            renderScissor.left,
+                            renderScissor.top,
+                            renderScissor.width,
+                            renderScissor.height,
+                        ),
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.DrawIndexed(
+                            GPUPreparedNativeDrawCall.DrawIndexed(
+                                indexCount = slice.indexCount,
+                                firstIndex = slice.firstIndex,
+                                baseVertex = slice.baseVertex,
+                                vertexCount = slice.vertexCount,
+                                maxLocalIndex = slice.maxLocalIndex,
+                            ),
+                        ),
+                    )
+                }
+                check(lastKeyIndex >= 0 && lastPipeline !== null)
+            }
+            val renderOperand = GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = renderScope.sourceStepIndex,
+                pass = GPUPreparedNativeRenderPassConfig(
+                    colorTarget = colorTargetViewOperand,
+                    resolveTarget = canonicalTargetViewOperand.takeIf { isMsaa4x },
+                    loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                    storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0),
+                ),
+                commands = renderCommands,
+                semanticPayloads = semanticPackets.map { it.third },
+                operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
+            )
+            val readbackOperand = if (readbackScope != null && output != null && stagingBuffer != null) {
+                GPUPreparedNativeScopeOperand.Readback(
+                    sourceStepIndex = readbackScope.sourceStepIndex,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeBufferOperand(
+                        stagingBuffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                    ),
+                    layout = GPUPreparedNativeReadbackLayout(
+                        originX = output.request.sourceBounds.left,
+                        originY = output.request.sourceBounds.top,
+                        width = output.layout.width,
+                        height = output.layout.height,
+                        bytesPerRow = output.layout.paddedBytesPerRow,
+                        rowsPerImage = output.layout.rowsPerImage,
+                        bufferOffset = output.layout.bufferOffset,
+                        mappedSize = output.layout.totalBufferBytes,
+                        format = declaredTargetFormat.toCorePrimitiveGPUTextureFormat(),
+                    ),
+                )
+            } else {
+                null
+            }
+            val copyOperand = copyAuthority?.let { authority ->
+                GPUPreparedNativeScopeOperand.Copy(
+                    sourceStepIndex = authority.copyScope.sourceStepIndex,
+                    operationKind = GPUEncoderOperationKind.CopyDestination,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeTextureOperand(
+                        requireNotNull(dstReadSnapshot).texture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(
+                        sourceOriginX = targetBounds.left,
+                        sourceOriginY = targetBounds.top,
+                        destinationOriginX = 0,
+                        destinationOriginY = 0,
+                        width = targetBounds.width,
+                        height = targetBounds.height,
+                    ),
+                )
+            }
+            val operandsByStep = (listOfNotNull(copyOperand, renderOperand) + listOfNotNull(readbackOperand))
+                .associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = framePlan.frameId,
+                    contextIdentity = encoderPlan.contextIdentity,
+                    encoderPlanId = encoderPlan.planId,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    scopes = encoderPlan.scopes.map { scope ->
+                        GPUPreparedNativeScopeKey(
+                            scope.sourceStepIndex,
+                            scope.operationKind,
+                            scope.resourceGenerationLabels,
+                            scope.nativeOperandKeys,
+                        )
+                    },
+                ),
+                scopeOperands = encoderPlan.scopes.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
+                leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) { "Native CorePrimitive materializer closed during multi-key materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                frameLeaseTransferred = true
+            }
+            result
+        } catch (failure: Throwable) {
+            if (!frameLeaseTransferred) terminalizePooledLeaseBeforeRegistration(frameLease)
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-core-primitive.multi-key-materialization",
+                "Public wgpu4k multi-key CorePrimitive materialization failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        }
     }
 
     private fun materializePreparedCoverageMaskCore(
@@ -3038,9 +3989,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         is GPUCorePrimitiveNativeScopeUniformAuthority.PathPreparedPass,
                         -> false
                     } &&
-                    preparedDirectPass.structuralPipelineKey == directUnits.firstOrNull()?.structuralPipelineKey &&
-                    directUnits.all {
-                        it.structuralPipelineKey == preparedDirectPass.structuralPipelineKey
+                    when (preparedDirectPass) {
+                        is GPUCorePrimitiveMultiKeyDirectPreparedPassSeal ->
+                            preparedDirectPass.structuralPipelineKeys ==
+                                directUnits.map { it.structuralPipelineKey }.distinct() &&
+                                directUnits.all {
+                                    it.structuralPipelineKey in preparedDirectPass.structuralPipelineKeys
+                                }
+                        is GPUCorePrimitiveDirectPreparedPassSeal ->
+                            preparedDirectPass.structuralPipelineKey ==
+                                directUnits.firstOrNull()?.structuralPipelineKey &&
+                                directUnits.all {
+                                    it.structuralPipelineKey == preparedDirectPass.structuralPipelineKey
+                                }
                     }
                 if (directSeal.routesByPacketId.keys.toList() != directUnits.map { it.packetId } ||
                     directUnits.any { directSeal.routesByPacketId[it.packetId] !== it.route } ||
@@ -3996,6 +4957,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         output: GPUPreparedReadbackOutput?,
         targetFormat: GPUColorFormat,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        val targetBounds = (renderStep.drawPackets.first().semanticPayload
+            as GPUDrawSemanticPayload.CorePrimitive).targetBounds
         val preparationByResource = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -4030,6 +4993,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "${failure::class.simpleName.orEmpty()}.",
             )
         }
+        val copyAuthority = when (
+            val validation = validateCorePrimitiveDestinationCopy(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                renderStep = renderStep,
+                consumerPacketIds = renderStep.drawPackets.map { packet -> packet.packetId }.toSet(),
+                targetBounds = targetBounds,
+                targetFormat = targetFormat,
+            )
+        ) {
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Refused ->
+                return refused(validation.code, validation.message)
+        }
 
         synchronized(this) {
             if (closed) {
@@ -4050,12 +5027,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         )
         return try {
             val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val dstRead = copyAuthority?.let { authority ->
+                createCorePrimitiveDestinationSnapshot(
+                    authority,
+                    targetFormat,
+                    targetBounds,
+                )
+            }
             val ready = when (
                 val result = runMaterializer.materializeAcceptedRuns(
                     plans = listOf(acceptedPlan),
                     targetTexture = targetTexture,
                     targetView = targetView,
                     generationSeal = generationSeal,
+                    dstRead = dstRead,
                 )
             ) {
                 is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
@@ -4107,8 +5092,34 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     null
                 }
+            val copyOperand = copyAuthority?.let { authority ->
+                GPUPreparedNativeScopeOperand.Copy(
+                    sourceStepIndex = authority.copyScope.sourceStepIndex,
+                    operationKind = GPUEncoderOperationKind.CopyDestination,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeTextureOperand(
+                        requireNotNull(dstRead?.texture),
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(
+                        sourceOriginX = targetBounds.left,
+                        sourceOriginY = targetBounds.top,
+                        destinationOriginX = 0,
+                        destinationOriginY = 0,
+                        width = targetBounds.width,
+                        height = targetBounds.height,
+                    ),
+                )
+            }
             val operandsByStep = (
-                ready.renderOperands + listOfNotNull(readbackOperand)
+                listOfNotNull(copyOperand) +
+                    ready.renderOperands +
+                    listOfNotNull(readbackOperand)
                 ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             val exactScopeKeys = encoderPlan.scopes.map { scope ->
                 GPUPreparedNativeScopeKey(
@@ -4178,6 +5189,137 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     private fun refused(code: String, message: String) =
         refusedWgpu4kPreRegistrationMaterialization(code, message, preRegistrationHandles)
 
+    /**
+     * Validates the optional ordered destination snapshot for a direct CorePrimitive scope
+     * (Graphite DrawContext.cpp: the GPU-only copy runs before the consuming pass in the same
+     * encoder). The snapshot texture must be one exact frame-local full-target copy whose single
+     * consumer is a destination-reading packet of this scope.
+     *
+     * Evidence limitation (recorded for Task 6): every frame this lane executes today has the
+     * snapshot copy scheduled before its single render pass, so the captured destination is the
+     * frame's cleared target. Frames with meaningful pre-copy destination content split into two
+     * renders (destination pass, ordered copy, consuming pass) and are refused by the
+     * multi-render-dst-copy preflight residual, which surfaces as a terminal refusal (the legacy
+     * route was deleted in FP-09 Task 5). Prepared dst-read
+     * pixels are therefore verified only for empty-destination content until the two-render
+     * materialization lands; the SolidRect destination-copy lane already carries the
+     * background-then-consumer pixel oracle in `GPUWgpu4kDestinationCopyFrameSmokeTest`.
+     */
+    private fun validateCorePrimitiveDestinationCopy(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        renderStep: GPUFrameStep.RenderPassStep,
+        consumerPacketIds: Set<GPUDrawPacketID>,
+        targetBounds: GPUPixelBounds,
+        targetFormat: GPUColorFormat,
+    ): CorePrimitiveDestinationCopyValidation {
+        val copies = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        if (copies.size > 1) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "unsupported.native-core-primitive.destination-copy-shape",
+                "Direct CorePrimitive accepts at most one ordered destination snapshot copy.",
+            )
+        }
+        val copy = copies.singleOrNull()
+        if (copy == null) return CorePrimitiveDestinationCopyValidation.Accepted(null)
+        if (copy.source != renderStep.target || copy.logicalBounds != targetBounds) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-source",
+                "The destination snapshot must copy the exact scene target bounds.",
+            )
+        }
+        val consumer = copy.consumers.singleOrNull()
+            ?: return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-consumer",
+                "The ordered destination snapshot requires one exact consumer.",
+            )
+        if (consumer.packetId !in consumerPacketIds) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-consumer",
+                "The destination snapshot consumer must be one exact destination-reading packet of this scope.",
+            )
+        }
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val snapshotPreparation = preparations.singleOrNull { request ->
+            request.resource == copy.snapshot
+        } ?: return CorePrimitiveDestinationCopyValidation.Refused(
+            "invalid.native-core-primitive.destination-copy-resource",
+            "The destination snapshot has no exact frame preparation.",
+        )
+        val snapshotDescriptor = snapshotPreparation.descriptor as? GPUFrameTextureDescriptor
+        val expectedSnapshotBytes = try {
+            Math.multiplyExact(
+                Math.multiplyExact(targetBounds.width.toLong(), 4L),
+                targetBounds.height.toLong(),
+            )
+        } catch (_: ArithmeticException) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-resource",
+                "The destination snapshot byte accounting overflowed.",
+            )
+        }
+        if (snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+            snapshotDescriptor == null ||
+            snapshotDescriptor.logicalBounds != targetBounds ||
+            snapshotDescriptor.format != targetFormat ||
+            snapshotDescriptor.sampleCount != 1 ||
+            snapshotPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.TextureBinding,
+            ) || snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            snapshotPreparation.byteSize != expectedSnapshotBytes
+        ) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-resource",
+                "The destination snapshot preparation is not one exact frame-local full-target texture.",
+            )
+        }
+        val minimumBytesPerRow = try {
+            Math.multiplyExact(targetBounds.width.toLong(), 4L)
+        } catch (_: ArithmeticException) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-source",
+                "The destination snapshot row accounting overflowed.",
+            )
+        }
+        if (copy.sourceKey.target.value != renderStep.target.value ||
+            copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
+            copy.sourceKey.format != targetFormat ||
+            copy.sourceKey.sampleContinuation != null ||
+            copy.sourceKey.sourceIntermediate != null ||
+            copy.copyLayout.rowsPerImage != targetBounds.height ||
+            copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
+            copy.copyLayout.bytesPerRow % limits.minUniformBufferOffsetAlignment != 0L
+        ) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-source",
+                "The destination snapshot copy layout or source authority is not exact.",
+            )
+        }
+        val copyScope = encoderPlan.scopes.singleOrNull { scope ->
+            scope.sourceStepIndex == framePlan.steps.indexOf(copy) &&
+                scope.operationKind == GPUEncoderOperationKind.CopyDestination
+        } ?: return CorePrimitiveDestinationCopyValidation.Refused(
+            "invalid.native-core-primitive.destination-copy-plan",
+            "The destination snapshot copy scope is absent from the encoder plan.",
+        )
+        if (framePlan.steps.indexOf(copy) >= framePlan.steps.indexOf(renderStep)) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-order",
+                "The destination snapshot copy must run before its consuming render scope.",
+            )
+        }
+        return CorePrimitiveDestinationCopyValidation.Accepted(
+            CorePrimitiveDestinationCopyAuthority(
+                copy,
+                snapshotPreparation,
+                snapshotDescriptor,
+                copyScope,
+            ),
+        )
+    }
+
     private fun refusedPoolCheckout(
         reason: GPUWgpu4kCorePrimitiveFramePoolRefusal,
     ): GPUPreparedNativeFramePayloadMaterialization.Refused = when (reason) {
@@ -4246,6 +5388,51 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 
     private fun <T : AutoCloseable> T.tracked(): T = preRegistrationHandles.track(this)
+
+    /**
+     * Creates the ordered destination snapshot native resources (Graphite DrawContext.cpp:
+     * copy-texture-to-texture, GPU-only, ordered before the consuming pass). The texture format
+     * matches the scene target so sampling linearizes the same texel domain the shader writes.
+     */
+    private fun createCorePrimitiveDestinationSnapshot(
+        authority: CorePrimitiveDestinationCopyAuthority,
+        targetFormat: GPUColorFormat,
+        targetBounds: GPUPixelBounds,
+    ): CorePrimitiveDestinationSnapshotHandles {
+        val texture = device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(
+                    targetBounds.width.toUInt(),
+                    targetBounds.height.toUInt(),
+                    1u,
+                ),
+                format = targetFormat.toCorePrimitiveGPUTextureFormat(),
+                usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
+                label = "Kanvas.frame.corePrimitive.destinationSnapshot",
+            ),
+        ).tracked()
+        onDestinationSnapshotCreated()
+        val view = texture.createView().tracked()
+        val sampler = device.createSampler(
+            SamplerDescriptor(
+                addressModeU = GPUAddressMode.ClampToEdge,
+                addressModeV = GPUAddressMode.ClampToEdge,
+                addressModeW = GPUAddressMode.ClampToEdge,
+                magFilter = GPUFilterMode.Nearest,
+                minFilter = GPUFilterMode.Nearest,
+                mipmapFilter = GPUMipmapFilterMode.Nearest,
+                lodMinClamp = 0f,
+                lodMaxClamp = 0f,
+                compare = null,
+                maxAnisotropy = 1u.toUShort(),
+                label = "Kanvas.frame.corePrimitive.destinationSampler",
+            ),
+        ).tracked()
+        return CorePrimitiveDestinationSnapshotHandles(
+            texture,
+            GPUWgpu4kCorePrimitiveDstReadBinding(view, sampler),
+        )
+    }
 
     private fun uploadExact(
         buffer: GPUBuffer,

@@ -62,6 +62,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         targetTexture: GPUTexture,
         targetView: GPUTextureView,
         generationSeal: GPUPreparedGenerationSeal,
+        dstRead: CorePrimitiveDestinationSnapshotHandles? = null,
     ): GPUCorePrimitiveRenderRunMaterialization {
         val routes = plans.mapNotNull { plan ->
             plan.routeSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -225,6 +226,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         pathDepthStencil = pathRequirement,
                         componentIdentity = frameComponentIdentity,
                         sampleCount = 1,
+                        dstRead = dstRead?.binding,
                     ),
                 )
             ) {
@@ -370,10 +372,14 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     semanticPayloads = runPackets.map { packet ->
                         packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
                     },
-                    operandLayout = if (runHasPath) {
-                        GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive
-                    } else {
-                        GPUPreparedNativeRenderOperandLayout.CommandOrder
+                    operandLayout = when {
+                        runHasPath ->
+                            GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive
+                        route.orderedUnits
+                            .map { (it as GPUCorePrimitiveNativeScopeRouteUnit.Direct).structuralPipelineKey }
+                            .distinct().size > 1 ->
+                            GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive
+                        else -> GPUPreparedNativeRenderOperandLayout.CommandOrder
                     },
                 )
             }
@@ -491,13 +497,15 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 )
             }
             if (!hasPath &&
-                route.orderedUnits.map {
-                    (it as GPUCorePrimitiveNativeScopeRouteUnit.Direct).structuralPipelineKey
-                }.distinct().size != 1
+                route.orderedUnits.any { unit ->
+                    unit !is GPUCorePrimitiveNativeScopeRouteUnit.Direct ||
+                        unit.structuralPipelineKey.role !=
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading
+                }
             ) {
                 return refused(
                     "invalid.native-core-primitive.frame-global-direct-pipeline",
-                    "Each direct CorePrimitive run requires one exact shared structural pipeline.",
+                    "Every direct CorePrimitive run requires exact shading structural pipelines.",
                 )
             }
         }
@@ -523,11 +531,13 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         val units = route.orderedUnits.map {
             it as GPUCorePrimitiveNativeScopeRouteUnit.Direct
         }
-        val pipeline = requireNotNull(
-            pipelineOperands[units.first().structuralPipelineKey],
-        )
         return buildList {
-            add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+            var lastPipeline = requireNotNull(
+                pipelineOperands[units.first().structuralPipelineKey],
+            ) {
+                "A direct CorePrimitive run requires an exact pipeline for its first structural key"
+            }
+            add(GPUPreparedNativeRenderCommand.SetPipeline(lastPipeline))
             add(
                 GPUPreparedNativeRenderCommand.SetVertexBuffer(
                     0,
@@ -550,6 +560,15 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     packets[index].semanticPayload as GPUDrawSemanticPayload.CorePrimitive
                 val scissor = units[index].route.renderScissor ?: semantic.scissorBounds
                 val slice = slices[index]
+                val pipeline = requireNotNull(
+                    pipelineOperands[units[index].structuralPipelineKey],
+                ) {
+                    "A direct CorePrimitive run requires an exact pipeline for every structural key"
+                }
+                if (pipeline !== lastPipeline) {
+                    add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                    lastPipeline = pipeline
+                }
                 if (pipeline.bindingPolicy ==
                     GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
                 ) {

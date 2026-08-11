@@ -123,18 +123,7 @@ class GPUAllApiBlendSurfaceTest {
                         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
                         val expectedRoute = expectedPreparedProductRoute(api, mode, context)
 
-                        if (expectedRoute is ProductRouteExpectation.LegacyRefused) {
-                            // A legacy composite (saveLayer) frame stays on the legacy route, but
-                            // vertices/meshes no longer continue through the legacy immediate
-                            // renderer, so the frame refuses at the core-route preflight instead of
-                            // producing pixels.
-                            val gpu = renderGpu(api, mode, context, decisions)
-                            assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
-                            assertTrue(
-                                gpu.result.stats.opsRefused >= 1,
-                                gpu.result.diagnostics.entries.toString(),
-                            )
-                        } else if (expectedRoute is ProductRouteExpectation.Terminal) {
+                        if (expectedRoute is ProductRouteExpectation.Terminal) {
                             val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                                 renderGpu(api, mode, context, decisions)
                             }
@@ -165,8 +154,6 @@ class GPUAllApiBlendSurfaceTest {
                             when (expectedRoute) {
                                 ProductRouteExpectation.Prepared ->
                                     assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
-                                ProductRouteExpectation.Legacy ->
-                                    assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
                                 null -> Unit
                                 is ProductRouteExpectation.Terminal ->
                                     error("terminal route returned pixels")
@@ -579,7 +566,39 @@ class GPUAllApiBlendSurfaceTest {
                 else -> ProductRouteExpectation.Prepared
             }
         }
-        if (api.name !in IMAGE_API_NAMES) return null
+        if (api.name !in IMAGE_API_NAMES) {
+            // Core primitives after the FP-09 Task 5 route collapse. Every
+            // before-entry refusal is now Terminal, so each shape family refuses
+            // with the exact recording/builder code the evidence run produced:
+            // hairline points always; rrects always (the analytic-shape uniform80
+            // mixes with the rect background layout); rect/color/draw-path/drrect
+            // per clip context and blend family. Cases that still render prepared
+            // stay null so the pixel oracle keeps proving them.
+            return when (api.name) {
+                "Clear" -> null
+                "DrawPoint", "DrawPoints" ->
+                    ProductRouteExpectation.Terminal(PREPARED_POINT_HAIRLINE_REFUSAL)
+                "DrawRRect" ->
+                    ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                "DrawRect", "DrawColor" -> when {
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
+                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                    context == BlendContext.ALPHA_MASK ->
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES ->
+                        ProductRouteExpectation.Terminal(PREPARED_MULTI_RENDER_DST_COPY_REFUSAL)
+                    else -> null
+                }
+                "DrawPath", "DrawDRRect" -> when {
+                    context == BlendContext.ALPHA_MASK ->
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES ->
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
+                    else -> null
+                }
+                else -> error("Unclassified core primitive API ${api.name}")
+            }
+        }
         val refusal = when (api.name) {
             "DrawImage",
             "DrawImageNine",
@@ -908,8 +927,6 @@ class GPUAllApiBlendSurfaceTest {
     private sealed interface ProductRouteExpectation {
         data object Prepared : ProductRouteExpectation
         data class Terminal(val code: String) : ProductRouteExpectation
-        data object Legacy : ProductRouteExpectation
-        data object LegacyRefused : ProductRouteExpectation
     }
 
     private class SnapshotDisplayListBuffer(
@@ -960,6 +977,20 @@ class GPUAllApiBlendSurfaceTest {
         )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
+        const val PREPARED_POINT_HAIRLINE_REFUSAL =
+            "unsupported.core_primitive.point.hairline_exact_lowering"
+        const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
+            "unsupported.recording.core_primitive_mixed_uniform_layouts"
+        const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
+            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
+        const val PREPARED_MULTI_RENDER_DST_COPY_REFUSAL =
+            "unsupported.native-core-primitive.multi-render-dst-copy"
+        const val PREPARED_PATH_DST_READ_REFUSAL =
+            "unsupported.native-core-primitive.path-destination-read"
+        // The 15 dst-read modes that the direct lane refuses for a two-draw frame:
+        // every artistic mode except SCREEN (whose formula program is implemented)
+        // plus PLUS. Matches the evidence run's multi-render-dst-copy case list.
+        val MULTI_RENDER_DST_COPY_MODES = (ARTISTIC_MODES - BlendMode.SCREEN) + BlendMode.PLUS
 
         @AfterAll
         @JvmStatic

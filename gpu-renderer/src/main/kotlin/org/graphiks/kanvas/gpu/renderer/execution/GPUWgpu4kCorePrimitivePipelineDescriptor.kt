@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.clipStencilStructuralProgramOrNul
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.coverageMaskStructuralProgramOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.pathStencilStructuralProgramOrNull
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 
 /** Closed, handle-free fixed-function state consumed by native CorePrimitive pipelines. */
 internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
@@ -124,7 +125,29 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
         "one-minus-src-alpha",
         "add",
     ),
+    // Destination-read formula programs (Graphite dst-read recipe): the formula blends in the
+    // shader while fixed-function state stays exact Src, so every dst-read mode lowers onto the
+    // same Src state but keeps one distinct blend-program identity for the mode.
+    DstReadPlus(GPUBlendMode.PLUS, "one", "zero", "add", "one", "zero", "add"),
+    DstReadModulate(GPUBlendMode.MODULATE, "one", "zero", "add", "one", "zero", "add"),
+    DstReadMultiply(GPUBlendMode.MULTIPLY, "one", "zero", "add", "one", "zero", "add"),
+    DstReadOverlay(GPUBlendMode.OVERLAY, "one", "zero", "add", "one", "zero", "add"),
+    DstReadDarken(GPUBlendMode.DARKEN, "one", "zero", "add", "one", "zero", "add"),
+    DstReadLighten(GPUBlendMode.LIGHTEN, "one", "zero", "add", "one", "zero", "add"),
+    DstReadColorDodge(GPUBlendMode.COLOR_DODGE, "one", "zero", "add", "one", "zero", "add"),
+    DstReadColorBurn(GPUBlendMode.COLOR_BURN, "one", "zero", "add", "one", "zero", "add"),
+    DstReadHardLight(GPUBlendMode.HARD_LIGHT, "one", "zero", "add", "one", "zero", "add"),
+    DstReadSoftLight(GPUBlendMode.SOFT_LIGHT, "one", "zero", "add", "one", "zero", "add"),
+    DstReadDifference(GPUBlendMode.DIFFERENCE, "one", "zero", "add", "one", "zero", "add"),
+    DstReadExclusion(GPUBlendMode.EXCLUSION, "one", "zero", "add", "one", "zero", "add"),
+    DstReadHue(GPUBlendMode.HUE, "one", "zero", "add", "one", "zero", "add"),
+    DstReadSaturation(GPUBlendMode.SATURATION, "one", "zero", "add", "one", "zero", "add"),
+    DstReadColor(GPUBlendMode.COLOR, "one", "zero", "add", "one", "zero", "add"),
+    DstReadLuminosity(GPUBlendMode.LUMINOSITY, "one", "zero", "add", "one", "zero", "add"),
 }
+
+internal fun GPUWgpu4kCorePrimitiveBlendProgram.isDstRead(): Boolean =
+    name.startsWith("DstRead")
 
 /** Closed native programs materialized by the bounded CorePrimitive WebGPU lane. */
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
@@ -207,6 +230,12 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             blendProgram = blendProgram,
         ),
         componentIdentity = when {
+            structuralKey.blend is
+                GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
+                corePrimitiveDstReadComponentIdentity(
+                    (structuralKey.blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
+                        .mode.gpuLabel,
+                )
             program.isAnalyticShape() ->
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
             program.isClipStencilProducer() ->
@@ -223,6 +252,51 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
     )
 }
 
+/**
+ * Per-key bind-group component identity (the exact bind-group layout authority) for a structural
+ * key. Destination-reading shading keys project onto the per-mode dst-read component whose
+ * fragment layout appends the ordered destination texture and sampler slots; every other admitted
+ * key projects onto the same component the pipeline cache selects for its closed program. Refused
+ * keys carry no component identity.
+ */
+internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComponentIdentityOrNull():
+    GPUWgpu4kCorePrimitiveComponentIdentity? {
+    if (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+        blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+    ) {
+        val shader = blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+        if (shader.sourceCoverage != GPUSourceCoverageEncoding.None ||
+            GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+                shader.mode.gpuLabel,
+                shader.formulaId,
+            ) == null
+        ) {
+            return null
+        }
+        return corePrimitiveDstReadComponentIdentity(shader.mode.gpuLabel)
+    }
+    return when (
+        val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(this)
+    ) {
+        is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> when {
+            mapped.identity.program.isAnalyticShape() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+            mapped.identity.program.isClipStencilProducer() ->
+                PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
+            mapped.identity.program.isCoverageMaskProducer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+            mapped.identity.program.isCoverageMaskConsumer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
+            mapped.identity.program.isAnalyticIntersection4() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+            mapped.identity.program.isAnalyticClip() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+            else -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+        }
+        is GPUWgpu4kCorePrimitivePipelineMapping.Refused -> null
+    }
+}
+
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? {
     if (sampleCount !in setOf(1, 4) ||
@@ -236,14 +310,18 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> when (shader) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
-                    !blend.isCanonicalPremulSrcOver() ||
+                    blend.nativeShadingBlendProgramOrNull() == null ||
+                    // The destination-read formula program exists only on the direct geometry
+                    // lane; analytic-shape dst-read keys refuse by name, surfacing as the
+                    // terminal refusal the recording classifies (Task 6 evidence family).
+                    blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ||
                     clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
                     depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None -> null
                 else -> GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
-                    !blend.isCanonicalPremulSrcOver() -> null
+                    blend.nativeShadingBlendProgramOrNull() == null -> null
                 sampleCount == 4 && clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
                 sampleCount == 4 &&
                     depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
@@ -381,9 +459,27 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull
             blend.fixedNativeBlendProgramOrNull() ==
                 GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
         }
-    else -> GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver.takeIf {
-        blend.isCanonicalPremulSrcOver()
-    }
+    else -> blend.nativeShadingBlendProgramOrNull()
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull():
+    GPUWgpu4kCorePrimitiveBlendProgram? = when (this) {
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull()
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
+        GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
+        if (sourceCoverage != GPUSourceCoverageEncoding.None) {
+            null
+        } else if (
+            GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(mode.gpuLabel, formulaId) == null
+        ) {
+            null
+        } else {
+            GPUWgpu4kCorePrimitiveBlendProgram.entries.singleOrNull { candidate ->
+                candidate.isDstRead() && candidate.mode == mode
+            }
+        }
+    else -> null
 }
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativePathCoverBlendProgramOrNull():
@@ -667,7 +763,13 @@ private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgr
                 GPUBlendMode.MODULATE,
                 GPUBlendMode.SCREEN,
             )
-        else -> blendProgram == program.defaultBlendProgram()
+        else -> when (program) {
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver,
+            -> blendProgram.mode != null
+            else -> blendProgram == program.defaultBlendProgram()
+        }
     }
 
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.defaultBlendProgram():

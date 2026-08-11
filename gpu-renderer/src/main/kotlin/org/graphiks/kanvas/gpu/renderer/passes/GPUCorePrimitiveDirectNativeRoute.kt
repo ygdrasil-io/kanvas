@@ -88,13 +88,13 @@ internal sealed interface GPUCorePrimitiveDirectNativeRoute {
  * Classifies one direct route from semantic data plus already-resolved neutral authorities.
  *
  * Callers own clip-plan and blend-plan interpretation. This pure classifier deliberately accepts
- * only the resulting exact scissor and canonical premultiplied-SrcOver fact, so `passes` does not
- * depend on recording or execution packages.
+ * only the resulting exact scissor and the exact blend plan, so `passes` does not depend on
+ * recording or execution packages.
  */
 internal fun validateCorePrimitiveDirectNativeRoute(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     exactClipScissor: GPUPixelBounds?,
-    canonicalPremultipliedSrcOver: Boolean,
+    blendPlan: GPUBlendPlan,
     samplePlan: GPUSamplePlan,
     targetFormat: String,
 ): GPUCorePrimitiveDirectNativeRoute {
@@ -116,10 +116,11 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "Direct CorePrimitive native geometry requires one or four exact samples.",
         )
     }
-    if (!canonicalPremultipliedSrcOver) {
+    if (!blendPlan.isCorePrimitiveDirectLaneBlend()) {
         return refused(
             "unsupported.native-core-primitive.blend",
-            "Direct CorePrimitive native geometry requires canonical premultiplied SrcOver.",
+            "Direct CorePrimitive native geometry requires a canonical fixed-function, " +
+                "shader-no-destination, or shader-with-destination blend plan.",
         )
     }
     val analyticShape = when (semantic.geometry) {
@@ -225,6 +226,24 @@ internal fun validateCorePrimitiveDirectNativeRoute(
 }
 
 private val QUAD_INDICES = intArrayOf(0, 2, 1, 0, 3, 2)
+
+/**
+ * Admits blend plans the prepared CorePrimitive direct/analytic shading lane can exactly
+ * materialize today: the closed fixed-function program set (including DST no-op) and the
+ * shader-with-destination family (refused earlier by the recorder's destination-read gate;
+ * wired in Task 3). ShaderBlendNoDstRead stays refused for this lane until a core-primitive
+ * formula-shader materialization path exists — the [BlendWgslBuilder] formula library serves
+ * only the material-program lane, and the scalar-coverage no-dst remainder is re-verified in
+ * Task 6's evidence run.
+ */
+internal fun GPUBlendPlan.isCorePrimitiveDirectLaneBlend(): Boolean = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend -> true
+    is GPUBlendPlan.ShaderBlendNoDstRead -> false
+    is GPUBlendPlan.ShaderBlendWithDstRead -> true
+    is GPUBlendPlan.LayerCompositeBlend -> child.isCorePrimitiveDirectLaneBlend()
+    is GPUBlendPlan.NoOp -> true
+    is GPUBlendPlan.UnsupportedBlend -> false
+}
 
 private fun quadVertices(left: Float, top: Float, right: Float, bottom: Float): FloatArray =
     floatArrayOf(left, top, right, top, right, bottom, left, bottom)

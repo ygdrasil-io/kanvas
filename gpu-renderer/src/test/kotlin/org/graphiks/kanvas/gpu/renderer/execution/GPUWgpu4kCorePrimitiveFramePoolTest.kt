@@ -2161,6 +2161,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         override fun createBindGroup(
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
             uniformBuffer: GPUBuffer,
+            dstRead: GPUWgpu4kCorePrimitiveDstReadBinding?,
         ): GPUBindGroup = create(
             GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
             "bindGroup",

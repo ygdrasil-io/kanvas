@@ -2211,7 +2211,7 @@ internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
 
 // ────────────────────────────────────────────────────────────────────────────
 // DisplayOp.withCombinedTransform — concatenate an outer transform into every
-// drawing op that carries a transform field. Used for DrawPicture expansion.
+// drawing op that carries a transform field. Used for picture replay.
 // ────────────────────────────────────────────────────────────────────────────
 
 internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {
@@ -2276,85 +2276,6 @@ internal fun DisplayOp.withPictureReplayState(
         }
         else -> transformed
     }
-}
-
-/** Expands supported Pictures before clip-use accounting so every child gets its own S/G route. */
-internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
-    val expanded = mutableListOf<DisplayOp>()
-    lateinit var expandPicture: (org.graphiks.kanvas.picture.Picture, Matrix33, ClipStack) -> Unit
-
-    fun replayPicture(
-        picture: org.graphiks.kanvas.picture.Picture,
-        outerTransform: Matrix33,
-        enclosingClip: ClipStack,
-        paint: org.graphiks.kanvas.paint.Paint?,
-    ) {
-        // A supported picture paint is group compositing. Reuse the existing saveLayer
-        // compositor so its opacity and standard BlendMode are applied once to the recorded
-        // child result, rather than incorrectly to each child operation.
-        if (paint != null) {
-            expanded += DisplayOp.BeginLayer(
-                SaveLayerRec(paint = paint, compositeClip = enclosingClip),
-                Matrix33.identity(),
-            )
-        }
-        // The outer DrawPicture clip belongs to the atomic group restore. Passing it to children
-        // as well would multiply an AA coverage F twice (once into the temporary layer and again
-        // at restore). Captured child clips continue to be replayed normally.
-        expandPicture(
-            picture,
-            outerTransform,
-            if (paint == null) enclosingClip else ClipStack.WideOpen,
-        )
-        if (paint != null) expanded += DisplayOp.EndLayer
-    }
-
-    expandPicture = { picture, outerTransform, enclosingClip ->
-        var deferredLayerDepth = 0
-        for (nested in picture.ops) {
-            // A public saveLayer captured in the Picture owns the enclosing clip at its final
-            // restore. Its children must not receive that same clip or fractional coverage would
-            // be applied twice and transparent layer pixels could corrupt the parent.
-            val childEnclosingClip = if (deferredLayerDepth == 0) enclosingClip else ClipStack.WideOpen
-            when (nested) {
-                is DisplayOp.BeginLayer -> {
-                    expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-                    deferredLayerDepth++
-                }
-                DisplayOp.EndLayer -> {
-                    expanded += nested
-                    if (deferredLayerDepth > 0) deferredLayerDepth--
-                }
-                is DisplayOp.DrawPicture -> {
-                    // Retain an explicitly unsupported Picture as one operation so its existing
-                    // preflight refusal remains atomic: no preceding picture child is encoded.
-                    if (nested.coreRoutePreflightRefusalReason() != null) {
-                        expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-                    } else {
-                        val nestedClip = childEnclosingClip.intersectWith(
-                            nested.clip.transformForPictureReplay(outerTransform),
-                        )
-                        replayPicture(
-                            nested.picture,
-                            outerTransform * nested.transform,
-                            nestedClip,
-                            nested.paint,
-                        )
-                    }
-                }
-                else -> expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-            }
-        }
-    }
-
-    for (operation in this) {
-        if (operation is DisplayOp.DrawPicture && operation.coreRoutePreflightRefusalReason() == null) {
-            replayPicture(operation.picture, operation.transform, operation.clip, operation.paint)
-        } else {
-            expanded += operation
-        }
-    }
-    return expanded
 }
 
 private fun clipForPictureReplay(operation: DisplayOp): ClipStack? = when (operation) {

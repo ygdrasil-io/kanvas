@@ -293,7 +293,7 @@ class GPUFramePathApiInventoryTest {
             .single()
             .drawPackets
             .single()
-        val semantic = gatheredSemantic(inventory)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
         val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
         val analysisRecord = inventory.recording.analysis.records.single()
 
@@ -360,7 +360,7 @@ class GPUFramePathApiInventoryTest {
             normalizedCommands = listOf(localBoundsCommand),
         )
 
-        val semantic = gatheredSemantic(localBoundsInventory)
+        val semantic = gatheredSemantic(localBoundsInventory) as GPUDrawSemanticPayload.CorePrimitive
         val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
 
         assertEquals(GPUPixelBounds(2, 3, 15, 13), geometry.coverBounds)
@@ -393,7 +393,7 @@ class GPUFramePathApiInventoryTest {
                 config = RenderConfig.DEFAULT,
                 capabilities = capabilities,
             )
-            val semantic = gatheredSemantic(inventory)
+            val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
             assertEquals(expectedAuthority, semantic.rectRouteAuthority)
             when (expectedAuthority) {
                 GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
@@ -432,7 +432,7 @@ class GPUFramePathApiInventoryTest {
             normalizedCommands = listOf(forgedCommand),
         )
 
-        val semantic = gatheredSemantic(forged)
+        val semantic = gatheredSemantic(forged) as GPUDrawSemanticPayload.CorePrimitive
 
         assertEquals(GPUCorePrimitiveSourceFamily.Rect, semantic.sourceFamily)
         assertEquals("FillRect", semantic.analysisCommandFamily)
@@ -542,7 +542,7 @@ class GPUFramePathApiInventoryTest {
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
         val analysisRecord = inventory.recording.analysis.records.single()
-        val semantic = gatheredSemantic(inventory)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
         val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
 
         assertNotNull(analysisRecord.corePrimitiveRRectGeometryAuthority)
@@ -687,7 +687,7 @@ class GPUFramePathApiInventoryTest {
         )
         val inventory = inventoryFor(operation)
         val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
-        val semantic = gatheredSemantic(inventory)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
         val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
 
         assertEquals(8f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.min())
@@ -709,7 +709,7 @@ class GPUFramePathApiInventoryTest {
         )
         val inventory = inventoryFor(operation)
         val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
-        val semantic = gatheredSemantic(inventory)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
         val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
 
         assertEquals(2f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.min())
@@ -980,7 +980,9 @@ class GPUFramePathApiInventoryTest {
         assertEquals(2f, command.rrect.bottomRight.x)
         assertEquals(2f, command.rrect.bottomLeft.x)
 
-        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(
+            (gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive).geometry,
+        )
         assertEquals(listOf(0f, 0f, 2f, 2f, 2f, 2f, 2f, 2f), geometry.radii)
     }
 
@@ -1024,7 +1026,9 @@ class GPUFramePathApiInventoryTest {
         assertTrue(command.rrect.topLeft.x.isFinite())
         assertEquals(Float.MAX_VALUE, command.rrect.topLeft.x)
 
-        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(
+            (gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive).geometry,
+        )
         assertEquals(List(8) { 5f }, geometry.radii)
     }
 
@@ -1043,7 +1047,9 @@ class GPUFramePathApiInventoryTest {
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
 
-        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(
+            (gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive).geometry,
+        )
 
         assertEquals(listOf(6f, 1.5f, 6f, 4.5f, 3f, 4.5f, 1.5f, 1.5f), geometry.radii)
     }
@@ -2287,12 +2293,12 @@ class GPUFramePathApiInventoryTest {
 
     private fun semanticFor(operation: DisplayOp): GPUDrawSemanticPayload.CorePrimitive {
         val inventory = inventoryFor(operation)
-        return gatheredSemantic(inventory)
+        return gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
     }
 
     private fun gatheredSemantic(
         inventory: GPUFramePathInventoryPlan,
-    ): GPUDrawSemanticPayload.CorePrimitive {
+    ): GPUDrawSemanticPayload {
         val target = target()
         val result = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
             inventory,

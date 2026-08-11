@@ -9,24 +9,12 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 
 internal sealed interface GPUPreparedSurfaceRouteDecision {
-    data class Legacy(val code: String) : GPUPreparedSurfaceRouteDecision
     data class Prepared(val evidence: GPUPreparedSurfaceExecutionEvidence) : GPUPreparedSurfaceRouteDecision
     data class Terminal(val code: String) : GPUPreparedSurfaceRouteDecision
 }
 
 internal fun interface GPUPreparedSurfaceRouteTrace {
     fun record(decision: GPUPreparedSurfaceRouteDecision)
-}
-
-internal fun interface GPUPreparedSurfaceLegacyPort {
-    fun render(
-        operations: List<DisplayOp>,
-        width: Int,
-        height: Int,
-        format: PixelFormat,
-        config: RenderConfig,
-        routeTrace: GPUClipRouteTrace?,
-    ): RenderResult
 }
 
 internal class GPUPreparedSurfaceTerminalException(
@@ -36,10 +24,8 @@ internal class GPUPreparedSurfaceTerminalException(
 /**
  * Process-wide owner of the shared mono-backend runtime.
  *
- * Both prepared and legacy Surface work is kept under this owner so a
- * an eligible before-entry refusal can continue through legacy rendering
- * without allowing another frame to overlap the shared runtime. Prepared
- * image and text refusals are terminal before this boundary.
+ * All prepared Surface work is kept under this owner so no frame can overlap the
+ * shared runtime. Refusals are terminal before this boundary.
  */
 private object GPUPreparedSurfaceRuntimeOwner {
     val lock = ReentrantLock(true)
@@ -53,8 +39,6 @@ internal object GPUPreparedSurfaceProductEntry {
         format: PixelFormat,
         config: RenderConfig,
         executionPort: GPUPreparedSurfaceExecutionPort,
-        legacyPort: GPUPreparedSurfaceLegacyPort,
-        legacyRouteTrace: GPUClipRouteTrace? = null,
         trace: GPUPreparedSurfaceRouteTrace? = null,
     ): RenderResult = GPUPreparedSurfaceRuntimeOwner.lock.withLock {
         when (
@@ -67,11 +51,6 @@ internal object GPUPreparedSurfaceProductEntry {
                 executionPort,
             )
         ) {
-            is GPUPreparedSurfaceProductRoute.Legacy -> {
-                trace.recordWithoutAffectingRoute(GPUPreparedSurfaceRouteDecision.Legacy(route.code))
-                legacyPort.render(operations, width, height, format, config, legacyRouteTrace)
-            }
-
             is GPUPreparedSurfaceProductRoute.Prepared -> {
                 trace.recordWithoutAffectingRoute(GPUPreparedSurfaceRouteDecision.Prepared(route.evidence))
                 route.result

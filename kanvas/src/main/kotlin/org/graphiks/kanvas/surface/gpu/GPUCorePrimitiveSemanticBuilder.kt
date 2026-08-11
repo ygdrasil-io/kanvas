@@ -17,6 +17,12 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point as GPUPathPoint
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
+import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.filters.blurKernelUniform
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurLocalGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -35,9 +41,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.surface.RenderConfig
 
 internal sealed interface GPUCorePrimitiveSemanticGatherResult {
-    data class Gathered(val semantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>) :
+    data class Gathered(val semantics: Map<Int, GPUDrawSemanticPayload>) :
         GPUCorePrimitiveSemanticGatherResult
 
     data class Refused(
@@ -85,7 +92,7 @@ internal object GPUCorePrimitiveSemanticBuilder {
             GPUCorePrimitiveColorTransform.Identity,
     ): GPUCorePrimitiveSemanticGatherResult {
         val gatherer = GPUCorePrimitivePayloadGatherer()
-        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload.CorePrimitive>()
+        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>()
         val analysisRecordsByCommandId = recording.analysis.records
             .groupBy(GPUDrawAnalysisRecord::commandIdValue)
         val recordingPacketsByCommandId = recording.taskList.tasks
@@ -149,25 +156,38 @@ internal object GPUCorePrimitiveSemanticBuilder {
                     ),
                 ).toGatherRefusal(visual)
             }
-            val semantic = try {
-                gatherer.gatherSemantic(
-                    visual.toCorePrimitiveInput(
-                        targetBounds = targetBounds,
+            val semantic = if (visual.normalized.maskFilterOrNull() != null) {
+                try {
+                    visual.gatherMaskBlurSemantic(
                         analysisRecord = analysisRecord,
                         recordingBlendPlanIdentity = recordingBlendPlanIdentity,
+                        targetBounds = targetBounds,
                         colorTransform = colorTransform,
-                    ),
-                )
-            } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
-                return failure.refusal.toGatherRefusal(visual)
-            } catch (failure: IllegalArgumentException) {
-                val stableCode = failure.message
-                    ?.takeIf { message -> message.startsWith("unsupported.core_primitive.") }
-                    ?: "unsupported.core_primitive.geometry.invalid"
-                return GPUCorePrimitiveGeometryRefusal(
-                    code = stableCode,
-                    refusalFacts = mapOf("reason" to (failure.message ?: "invalid_geometry")),
-                ).toGatherRefusal(visual)
+                    )
+                } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
+                    return failure.refusal.toGatherRefusal(visual)
+                }
+            } else {
+                try {
+                    gatherer.gatherSemantic(
+                        visual.toCorePrimitiveInput(
+                            targetBounds = targetBounds,
+                            analysisRecord = analysisRecord,
+                            recordingBlendPlanIdentity = recordingBlendPlanIdentity,
+                            colorTransform = colorTransform,
+                        ),
+                    )
+                } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
+                    return failure.refusal.toGatherRefusal(visual)
+                } catch (failure: IllegalArgumentException) {
+                    val stableCode = failure.message
+                        ?.takeIf { message -> message.startsWith("unsupported.core_primitive.") }
+                        ?: "unsupported.core_primitive.geometry.invalid"
+                    return GPUCorePrimitiveGeometryRefusal(
+                        code = stableCode,
+                        refusalFacts = mapOf("reason" to (failure.message ?: "invalid_geometry")),
+                    ).toGatherRefusal(visual)
+                }
             }
             semantics[visual.normalized.commandId.value] = semantic
         }
@@ -185,6 +205,134 @@ private fun GPUCorePrimitiveGeometryRefusal.toGatherRefusal(
         "source" to visual.normalized.source.operation,
     ),
 )
+
+/** Returns the normalized mask filter of one core draw command, or null for others. */
+private fun NormalizedDrawCommand.maskFilterOrNull(): NormalizedMaskFilter? = when (this) {
+    is NormalizedDrawCommand.FillRect -> maskFilter
+    is NormalizedDrawCommand.FillRRect -> maskFilter
+    is NormalizedDrawCommand.FillPath -> maskFilter
+    else -> null
+}
+
+/** Gathers the closed prepared top-level mask blur semantic for one blur draw. */
+private fun GPUFramePathVisualCommand.gatherMaskBlurSemantic(
+    targetBounds: GPUPixelBounds,
+    analysisRecord: GPUDrawAnalysisRecord,
+    recordingBlendPlanIdentity: String,
+    colorTransform: GPUCorePrimitiveColorTransform,
+): GPUDrawSemanticPayload {
+    val normalized = normalized
+    val normalizedMaterial = normalized.material as? GPUMaterialDescriptor.SolidColor
+        ?: refuseGeometry(
+            "unsupported.core_primitive.mask_blur.material_non_solid",
+            mapOf(
+                "materialKind" to normalized.material?.let { it::class.simpleName }.orEmpty(),
+            ),
+        )
+    val blur = normalized.maskFilterOrNull() as? NormalizedMaskFilter.Blur
+        ?: refuseGeometry(
+            "unsupported.core_primitive.mask_blur.kind",
+            mapOf("maskFilterKind" to normalized.maskFilterOrNull()?.let { it::class.simpleName }.orEmpty()),
+        )
+    normalized.maskBlurPreflightRefusalReasonOrNull()?.let { reason ->
+        refuseGeometry(
+            "unsupported.core_primitive.mask_blur.$reason",
+            mapOf("reason" to reason),
+        )
+    }
+    val alpha = normalizedMaterial.a
+    val request = normalized.toMaskBlurRequest(
+        targetWidth = targetBounds.width,
+        targetHeight = targetBounds.height,
+        maxTextureDimension2D = MAX_MASK_BLUR_TEXTURE_DIMENSION,
+        config = RenderConfig.DEFAULT,
+    )
+    val plan = when (val planned = MaskBlurPlanner.plan(request)) {
+        is MaskBlurPlan.Ready -> planned
+        MaskBlurPlan.Identity -> refuseGeometry(
+            "unsupported.core_primitive.mask_blur.zero_sigma",
+            mapOf("sigma" to blur.sigma.toString()),
+        )
+        is MaskBlurPlan.Refused -> refuseGeometry(
+            planned.code,
+            mapOf("sigma" to blur.sigma.toString()),
+        )
+    }
+    val localCommand = normalized.toLocalMaskCommand(plan)
+    val localGeometry = when (localCommand) {
+        is NormalizedDrawCommand.FillRect -> GPUMaskBlurLocalGeometry.Rect(
+            localCommand.rect.left,
+            localCommand.rect.top,
+            localCommand.rect.right,
+            localCommand.rect.bottom,
+        )
+        is NormalizedDrawCommand.FillRRect -> {
+            val rrect = localCommand.rrect
+            GPUMaskBlurLocalGeometry.RRect(
+                left = rrect.rect.left,
+                top = rrect.rect.top,
+                right = rrect.rect.right,
+                bottom = rrect.rect.bottom,
+                radii = listOf(
+                    rrect.topLeft.x, rrect.topLeft.y,
+                    rrect.topRight.x, rrect.topRight.y,
+                    rrect.bottomRight.x, rrect.bottomRight.y,
+                    rrect.bottomLeft.x, rrect.bottomLeft.y,
+                ),
+            )
+        }
+        is NormalizedDrawCommand.FillPath -> GPUMaskBlurLocalGeometry.Path(
+                vertices = localCommand.tessellatedVertices,
+                contourStarts = localCommand.contourStarts,
+                fillRule = localCommand.pathDescriptor.fillRule,
+                inverseFill = localCommand.pathDescriptor.inverseFill,
+            )
+        else -> refuseGeometry(
+            "unsupported.core_primitive.mask_blur.command",
+            mapOf("commandKind" to localCommand::class.simpleName.orEmpty()),
+        )
+    }
+    val sourceFamily = when (normalized) {
+        is NormalizedDrawCommand.FillRect -> "FillRect"
+        is NormalizedDrawCommand.FillRRect -> "FillRRect"
+        is NormalizedDrawCommand.FillPath -> "FillPath"
+        else -> refuseGeometry(
+            "unsupported.core_primitive.mask_blur.command",
+            mapOf("commandKind" to normalized::class.simpleName.orEmpty()),
+        )
+    }
+    val kernel = blurKernelUniform(plan)
+    val scissor = clipCoverage.toPreparedScissorBounds(
+        targetBounds = targetBounds,
+        nonScissorClipRetainedSeparately = true,
+    ) ?: refuseGeometry("unsupported.core_primitive.clip.scissor_empty", emptyMap())
+    return GPUMaskBlurPayloadGatherer().gatherSemantic(
+        commandIdValue = normalized.commandId.value,
+        sourceFamily = sourceFamily,
+        deviceBounds = plan.deviceBounds,
+        localWidth = plan.localWidth,
+        localHeight = plan.localHeight,
+        scale = plan.scale,
+        style = plan.style,
+        effectiveSigma = plan.effectiveSigma,
+        tapCount = kernel.tapCount,
+        weights = kernel.weights,
+        localGeometry = localGeometry,
+        premultipliedRgba = floatArrayOf(
+            colorTransform.apply(normalizedMaterial.r) * alpha,
+            colorTransform.apply(normalizedMaterial.g) * alpha,
+            colorTransform.apply(normalizedMaterial.b) * alpha,
+            alpha,
+        ),
+        targetBounds = targetBounds,
+        scissorBounds = scissor,
+        clipCoveragePlan = clipCoverage,
+        clipExecutionPlanIdentity = null,
+        blendPlanIdentity = recordingBlendPlanIdentity,
+    )
+}
+
+private const val MAX_MASK_BLUR_TEXTURE_DIMENSION = 4096
 
 private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     targetBounds: GPUPixelBounds,

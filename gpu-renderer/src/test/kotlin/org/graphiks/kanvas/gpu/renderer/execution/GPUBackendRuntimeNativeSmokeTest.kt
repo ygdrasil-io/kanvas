@@ -1100,6 +1100,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                     GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
                     GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
                     "first_slice.fill_rect.affine.native",
+                    "first_slice.mask_blur.native",
                 ),
                 nativeRouteFacts.keys,
             )

@@ -4860,27 +4860,30 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
             ) + bindGroups
         }
         val bridges = if (direct) {
-            listOfNotNull(
-                stream.operandBridge.firstOrNull {
-                    it.operand.kind ==
-                        org.graphiks.kanvas.gpu.renderer.resources
-                            .GPUMaterializedCommandOperandKind.RenderPipeline
-                },
-                stream.operandBridge.firstOrNull {
-                    it.operand.kind ==
-                        org.graphiks.kanvas.gpu.renderer.resources
-                            .GPUMaterializedCommandOperandKind.VertexBuffer
-                },
-                stream.operandBridge.firstOrNull {
-                    it.operand.kind ==
-                        org.graphiks.kanvas.gpu.renderer.resources
-                            .GPUMaterializedCommandOperandKind.IndexBuffer
-                },
-            ) + stream.operandBridge.filter {
+            val pipelineBridges = stream.operandBridge.filter {
                 it.operand.kind ==
                     org.graphiks.kanvas.gpu.renderer.resources
-                        .GPUMaterializedCommandOperandKind.BindGroup
+                        .GPUMaterializedCommandOperandKind.RenderPipeline
             }
+            pipelineBridges.zip(render.drawPackets)
+                .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                .map { (bridge, _) -> bridge } +
+                listOfNotNull(
+                    stream.operandBridge.firstOrNull {
+                        it.operand.kind ==
+                            org.graphiks.kanvas.gpu.renderer.resources
+                                .GPUMaterializedCommandOperandKind.VertexBuffer
+                    },
+                    stream.operandBridge.firstOrNull {
+                        it.operand.kind ==
+                            org.graphiks.kanvas.gpu.renderer.resources
+                                .GPUMaterializedCommandOperandKind.IndexBuffer
+                    },
+                ) + stream.operandBridge.filter {
+                    it.operand.kind ==
+                        org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUMaterializedCommandOperandKind.BindGroup
+                }
         } else {
             stream.operandBridge
         }

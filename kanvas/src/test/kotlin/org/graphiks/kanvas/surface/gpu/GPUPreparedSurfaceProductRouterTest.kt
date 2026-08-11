@@ -55,14 +55,17 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductRouterTest {
     @Test
-    fun `non-image gate legacy stays legacy while BGRA8 renders prepared with BGRA byte order`() {
+    fun `flush snapshot frames reach the execution port while BGRA8 renders prepared with BGRA byte order`() {
+        val snapshotBytes = byteArrayOf(1, 2, 3, 4)
         var calls = 0
-        val port = GPUPreparedSurfaceExecutionPort {
+        var flushRequest: GPUPreparedSurfaceExecutionRequest? = null
+        val port = GPUPreparedSurfaceExecutionPort { incoming ->
             calls++
-            error("must not execute")
+            flushRequest = incoming
+            GPUPreparedSurfaceExecutionResult.Succeeded(snapshotBytes, 0, 1, evidence())
         }
 
-        val compositeRoute = GPUPreparedSurfaceProductRouter.route(
+        val flushRoute = GPUPreparedSurfaceProductRouter.route(
             listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
             4,
             4,
@@ -70,11 +73,13 @@ class GPUPreparedSurfaceProductRouterTest {
             RenderConfig.DEFAULT,
             port,
         )
+        val flushPrepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(flushRoute)
+        assertContentEquals(ubyteArrayOf(1u, 2u, 3u, 4u), flushPrepared.result.pixels)
+        assertEquals(1, calls)
         assertEquals(
-            "legacy.surface.prepared.flush-snapshot",
-            assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
+            listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
+            flushRequest!!.candidate.operations,
         )
-        assertEquals(0, calls)
 
         val bgraBytes = byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1)
         var request: GPUPreparedSurfaceExecutionRequest? = null
@@ -273,7 +278,7 @@ class GPUPreparedSurfaceProductRouterTest {
     }
 
     @Test
-    fun `vertices and mesh reaching the legacy route carry the exact composite refusal`() {
+    fun `vertices and mesh refuse with the exact composite code before native work`() {
         val triangle = verticesTriangle()
         val paint = Paint.fill(Color.RED).copy(antiAlias = false)
         val verticesOp = DisplayOp.DrawVertices(
@@ -290,8 +295,8 @@ class GPUPreparedSurfaceProductRouterTest {
             clip = ClipStack.WideOpen,
         )
 
-        // The legacy route is only entered through a legacy-gated frame (composites or a
-        // format/color refusal); any vertices/mesh it sees is refused with this exact code.
+        // The composite preflight refuses nested vertices/meshes with this exact code
+        // before any native work; the route is Terminal after the FP-09 Task 5 collapse.
         assertEquals("unsupported.picture.nested_vertices", verticesOp.coreRoutePreflightRefusalReason())
         assertEquals("unsupported.picture.nested_vertices", meshOp.coreRoutePreflightRefusalReason())
         assertEquals(
@@ -433,11 +438,11 @@ class GPUPreparedSurfaceProductRouterTest {
     }
 
     @Test
-    fun `before-entry refusal is legacy while terminal failure remains terminal`() {
+    fun `before-entry refusal is terminal while terminal failure remains terminal`() {
         val refusal = diagnostic("unsupported.test.builder", "builder refusal")
         val terminal = diagnostic("failed.test.terminal", "terminal failure")
 
-        val legacy = GPUPreparedSurfaceProductRouter.route(
+        val refused = GPUPreparedSurfaceProductRouter.route(
             listOf(rect()), 4, 4, PixelFormat.RGBA8, RenderConfig.DEFAULT,
             GPUPreparedSurfaceExecutionPort {
                 GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(refusal)
@@ -450,8 +455,54 @@ class GPUPreparedSurfaceProductRouterTest {
             },
         )
 
-        assertEquals(refusal.code.value, assertIs<GPUPreparedSurfaceProductRoute.Legacy>(legacy).code)
+        assertEquals(refusal, assertIs<GPUPreparedSurfaceProductRoute.Terminal>(refused).diagnostic)
         assertEquals(terminal, assertIs<GPUPreparedSurfaceProductRoute.Terminal>(failed).diagnostic)
+    }
+
+    @Test
+    fun `before-entry refusals for the terminal families are never legacy`() {
+        val codes = listOf(
+            "unsupported.core_primitive.point.hairline_exact_lowering",
+            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
+            "unsupported.native-core-primitive.multi-render-dst-copy",
+            "unsupported.native-core-primitive.analytic-shape-multi-key",
+            "unsupported.native-core-primitive.path-destination-read",
+            "unsupported.test.builder",
+        )
+
+        codes.forEach { code ->
+            val route = GPUPreparedSurfaceProductRouter.route(
+                listOf(rect()), 4, 4, PixelFormat.RGBA8, RenderConfig.DEFAULT,
+                GPUPreparedSurfaceExecutionPort {
+                    GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(
+                        diagnostic(code, "builder refusal"),
+                    )
+                },
+            )
+
+            val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(route, code)
+            assertEquals(code, terminal.diagnostic.code.value)
+        }
+    }
+
+    @Test
+    fun `gate color refusals terminate with the exact stable code before the execution port`() {
+        var calls = 0
+        val route = GPUPreparedSurfaceProductRouter.route(
+            listOf(rect()), 4, 4, PixelFormat.RGBA8,
+            RenderConfig.DEFAULT.copy(gpuColorFormat = org.graphiks.kanvas.surface.GPUColorFormat.RGBA8_UNORM),
+            GPUPreparedSurfaceExecutionPort {
+                calls++
+                error("gate-refused frames must never execute")
+            },
+        )
+
+        val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(route)
+        assertEquals("unsupported.surface.gpu-color-format.rgba8-unorm", terminal.diagnostic.code.value)
+        assertEquals(GPUDiagnosticSeverity.Error, terminal.diagnostic.severity)
+        assertEquals(GPUDiagnosticDomain.Execution, terminal.diagnostic.domain)
+        assertEquals(0, calls)
     }
 
     @Test

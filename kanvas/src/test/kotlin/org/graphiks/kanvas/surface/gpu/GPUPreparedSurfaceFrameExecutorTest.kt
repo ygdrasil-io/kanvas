@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
@@ -258,6 +259,50 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val returned = success.rgba
         returned[1] = 9
         assertContentEquals(byteArrayOf(5, 6, 7, 8), success.rgba)
+    }
+
+    @Test
+    fun `empty and state event only frames classify as no-ops and complete transparent before backend open`() {
+        val stateOnly = executionRequest(
+            listOf(
+                DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
+                DisplayOp.SetClip(ClipStack.WideOpen),
+                DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "key", "value"),
+                DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+            ),
+            width = 4,
+            height = 4,
+        )
+        val empty = executionRequest(emptyList(), width = 4, height = 4)
+
+        val stateNoOp = assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(stateOnly),
+        )
+        assertEquals(4, stateNoOp.stateEventCount)
+        assertTrue(stateNoOp.acceptedTextOperationIndices.isEmpty())
+        assertTrue(stateNoOp.elidedTextOperationIndices.isEmpty())
+        assertTrue(stateNoOp.culledTextOperationIndices.isEmpty())
+
+        val emptyNoOp = assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(empty),
+        )
+        assertEquals(0, emptyNoOp.stateEventCount)
+        assertTrue(emptyNoOp.acceptedTextOperationIndices.isEmpty())
+
+        var backendOpenCalls = 0
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+            backendOpenCalls++
+            FakeBackend(capabilities(), FakeSession())
+        })
+        listOf(stateOnly, empty).forEach { request ->
+            val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request))
+            assertContentEquals(ByteArray(4 * 4 * 4), success.rgba)
+            assertEquals(0, success.visualOperationCount)
+            assertEquals(0, success.evidence.targetCreations)
+            assertEquals(0, success.evidence.frameCoordinatorCreations)
+            assertEquals(0, success.evidence.submits)
+        }
+        assertEquals(0, backendOpenCalls)
     }
 
     @Test
@@ -495,6 +540,83 @@ class GPUPreparedSurfaceFrameExecutorTest {
             assertEquals(expected, failure.diagnostic)
             assertEquals(1, session.closeCalls)
         }
+    }
+
+    @Test
+    fun `destination read core frame executes ready with copy then formula evidence`() {
+        // One hard DARKEN rect over the frame's initial (cleared) target: this is the
+        // single-key dst-read shape the prepared lane actually executes (the snapshot copy runs
+        // before the single render pass, and the dst-read formula program blends in the shader).
+        // The mixed destination-then-source shape is pinned by the fallback test below.
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val session = FakeSession(submissionFactory = { readbackId ->
+            successSubmission(readbackId, ByteArray(32 * 24 * 4))
+        })
+        val backend = FakeBackend(capabilities(), session)
+
+        val result = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        ).execute(executionRequest(operations, width = 32, height = 24))
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result)
+
+        assertEquals(1, success.evidence.destinationSnapshotCreations)
+        assertEquals(1, success.evidence.destinationCopies)
+        assertEquals(0, success.evidence.destinationReadbackSnapshots)
+        val evidence = success.evidence.destinationReadEvidence.single()
+        assertEquals("darken", evidence.modeLabel)
+        assertEquals("copy-then-formula", evidence.action)
+        assertEquals(setOf(evidence.commandId), success.evidence.destinationReadTextCommandIds)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
+        assertEquals(1, session.closeCalls)
+    }
+
+    @Test
+    fun `mixed fixed and destination read core frame refuses before prepared entry`() {
+        // A destination rect (fixed SRC_OVER) followed by a DARKEN source rect over it: under the
+        // production capability snapshot this splits into two renders with the ordered snapshot
+        // copy between them, and the recording preflight refuses the multi-render dst-copy shape
+        // so the frame continues on the legacy route. The fake capabilities here collapse the
+        // frame into the single-render shape (the copy lands before the whole pass), so the
+        // real-cap build outcome is reproduced through the executor's frameBuilder seam; the
+        // end-to-end real-cap behavior (Legacy + destination-read evidence) is pinned by
+        // GPUAllApiBlendSurfaceTest.
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val backend = FakeBackend(capabilities(), FakeSession())
+        val refusal = diagnostic("unsupported.native-core-primitive.multi-render-dst-copy")
+
+        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+            GPUPreparedSurfaceFrameExecutor(
+                backendFactory = GPUPreparedSurfaceBackendPortFactory { backend },
+                frameBuilder = { _ ->
+                    GPUPreparedSurfaceFrameBuildResult.Refused(refusal)
+                },
+            ).execute(executionRequest(operations, width = 32, height = 24)),
+        )
+
+        assertEquals("unsupported.native-core-primitive.multi-render-dst-copy", refused.diagnostic.code.value)
+        assertEquals(0, backend.prepareCalls)
+        assertEquals(1, backend.closeCalls)
     }
 
     @Test
@@ -982,7 +1104,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
             renderPasses = 1,
             draws = 1,
             pipelineBinds = 1,
+            destinationSnapshotCreations = destinationReadCommandIds().size.toLong(),
+            destinationCopies = destinationReadCommandIds().size.toLong(),
         )
+
+        private fun destinationReadCommandIds(): Set<Int> =
+            submittedTaskLists.lastOrNull()?.tasks
+                ?.filterIsInstance<GPUTask.DestinationSnapshots>()
+                ?.flatMap { task -> task.payload.operations }
+                ?.flatMap(GPUDestinationSnapshotOperation::consumers)
+                ?.map { consumer -> consumer.commandId.value }
+                ?.toSet()
+                .orEmpty()
 
         private fun postCloseCounters() = postCompletionCounters().copy(targetCloses = 1)
     }

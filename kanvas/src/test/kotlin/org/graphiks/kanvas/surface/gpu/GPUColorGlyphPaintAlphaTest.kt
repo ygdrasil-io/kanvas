@@ -34,33 +34,6 @@ class GPUColorGlyphPaintAlphaTest {
     }
 
     @Test
-    fun `CPAL layer alpha is multiplied by partial paint alpha`() {
-        val cpalLayer = Color.fromArgb(192, 32, 96, 224)
-        val paint = Color.fromArgb(128, 255, 255, 255)
-
-        val modulated = modulateCpalLayerAlpha(cpalLayer, paint)
-
-        assertEquals(32, modulated.redByte)
-        assertEquals(96, modulated.greenByte)
-        assertEquals(224, modulated.blueByte)
-        assertEquals(96, modulated.alphaByte)
-    }
-
-    @Test
-    fun `color glyph geometry coverage is white and opaque`() {
-        val cpalLayer = Color.fromArgb(96, 32, 96, 224)
-
-        assertEquals(
-            Color.WHITE,
-            colorGlyphSourceColor(cpalLayer, geometryCoverage = true),
-        )
-        assertEquals(
-            cpalLayer,
-            colorGlyphSourceColor(cpalLayer, geometryCoverage = false),
-        )
-    }
-
-    @Test
     fun `WebGPU COLRv0 CPAL glyph keeps paint alpha in S and geometry in G`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
@@ -297,6 +270,14 @@ class GPUColorGlyphPaintAlphaTest {
         assertTrue(facts["destination-read.source"].orEmpty().isNotBlank())
         assertTrue(facts["destination-read.snapshot"].orEmpty().isNotBlank())
     }
+
+    /** Oracle mirror of the retired CPAL modulation: paint alpha scales the layer alpha only. */
+    private fun modulateCpalLayerAlpha(layer: Color, paint: Color): Color = Color.fromArgb(
+        layer.alphaByte * paint.alphaByte / 255,
+        layer.redByte,
+        layer.greenByte,
+        layer.blueByte,
+    )
 
     /** RGBA8 sRGB readback stores premultiplied linear color, then transfers it to sRGB. */
     private fun premultipliedSrgb(color: Color): Color {

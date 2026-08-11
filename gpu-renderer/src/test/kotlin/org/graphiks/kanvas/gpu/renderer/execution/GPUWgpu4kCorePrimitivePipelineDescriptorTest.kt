@@ -7,20 +7,25 @@ import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUBindGroupLayout
+import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUCullMode
 import io.ygdrasil.webgpu.GPUFrontFace
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPUPrimitiveTopology
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
+import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUStencilOperation
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUVertexFormat
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -846,6 +851,155 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `dst read shading keys map to a formula program with appended dst texture and sampler slots`() {
+        val srcOverComponent = requireNotNull(
+            directKey().corePrimitiveNativeComponentIdentityOrNull(),
+        )
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY, srcOverComponent)
+
+        val dstReadKey = directKey().copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.DARKEN,
+                "darken@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(dstReadKey),
+        )
+        // The Graphite dst-read recipe blends in the shader with fixed-function Src, so the
+        // program keeps the direct geometry entry points and the formula lives in the shader.
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver, mapped.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitiveBlendProgram.DstReadDarken, mapped.identity.blendProgram)
+        assertTrue(isSupportedCorePrimitiveRenderPipelineIdentity(mapped.identity))
+        assertEquals(
+            "$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:darken",
+            mapped.componentIdentity.shaderIdentity,
+        )
+        assertEquals(
+            CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+            mapped.componentIdentity.bindingLayoutIdentity,
+        )
+        // The session cache admits the dst-read formula component identity (Task 3c decision point).
+        assertTrue(isSupportedCorePrimitivePipelineCacheKey(
+            GPUWgpu4kCorePrimitivePipelineCacheKey(mapped.componentIdentity, mapped.identity),
+        ))
+
+        val layout = corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
+        val entries = layout.entries
+        assertEquals(3, entries.size)
+        assertEquals(0u, entries[0].binding)
+        assertEquals(GPUBufferBindingType.Uniform, requireNotNull(entries[0].buffer).type)
+        assertEquals(1u, entries[1].binding)
+        assertEquals(GPUTextureSampleType.Float, requireNotNull(entries[1].texture).sampleType)
+        assertEquals(2u, entries[2].binding)
+        assertEquals(GPUSamplerBindingType.Filtering, requireNotNull(entries[2].sampler).type)
+        assertEquals(
+            GPUShaderStage.Fragment,
+            entries[1].visibility,
+        )
+        assertEquals(
+            GPUShaderStage.Fragment,
+            entries[2].visibility,
+        )
+        val srcOverLayout = corePrimitiveBindGroupLayoutDescriptor(srcOverComponent)
+        assertEquals(1, srcOverLayout.entries.size)
+        assertEquals(0u, srcOverLayout.entries.single().binding)
+
+        // Fixed-function state is exact Src; the formula applies in the fragment shader.
+        val target = assertIs<ColorTargetState>(
+            requireNotNull(
+                corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment,
+            ).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.dstFactor)
+        assertEquals(GPUBlendOperation.Add, requireNotNull(target.blend).color.operation)
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).alpha.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).alpha.dstFactor)
+    }
+
+    @Test
+    fun `direct shading maps non src over fixed blends to exact fixed function descriptors`() {
+        val cases = listOf(
+            fixedBlend(
+                GPUBlendMode.CLEAR, "zero", "zero", "zero", "zero",
+            ) to GPUWgpu4kCorePrimitiveBlendProgram.PremulClear,
+            fixedBlend(
+                GPUBlendMode.SRC, "one", "zero", "one", "zero",
+            ) to GPUWgpu4kCorePrimitiveBlendProgram.PremulSrc,
+            fixedBlend(
+                GPUBlendMode.DST_OVER, "one-minus-dst-alpha", "one", "one-minus-dst-alpha", "one",
+            ) to GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOver,
+        )
+
+        cases.forEach { (blend, expectedBlendProgram) ->
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
+                    directKey().copy(blend = blend),
+                ),
+            )
+            assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver, mapped.identity.program)
+            assertEquals(expectedBlendProgram, mapped.identity.blendProgram)
+            assertTrue(isSupportedCorePrimitiveRenderPipelineIdentity(mapped.identity))
+            val target = assertIs<ColorTargetState>(
+                requireNotNull(
+                    corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment,
+                ).targets.single(),
+            )
+            assertEquals(
+                requireNotNull(expectedBlendProgram.colorSourceFactor).toWgpuFactor(),
+                requireNotNull(target.blend).color.srcFactor,
+            )
+            assertEquals(
+                requireNotNull(expectedBlendProgram.colorDestinationFactor).toWgpuFactor(),
+                requireNotNull(target.blend).color.dstFactor,
+            )
+        }
+    }
+
+    @Test
+    fun `analytic shape shading maps non src over fixed blends with the direct shader blend state`() {
+        val clearKey = analyticShapeKey().copy(
+            blend = fixedBlend(
+                GPUBlendMode.CLEAR, "zero", "zero", "zero", "zero",
+            ),
+        )
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(clearKey),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver, mapped.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitiveBlendProgram.PremulClear, mapped.identity.blendProgram)
+        assertTrue(isSupportedCorePrimitiveRenderPipelineIdentity(mapped.identity))
+        val target = assertIs<ColorTargetState>(
+            requireNotNull(
+                corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment,
+            ).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.dstFactor)
+    }
+
+    @Test
+    fun `direct shading keeps unsupported and coverage encoded blends refused`() {
+        val mutations = listOf(
+            directKey().copy(blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Unsupported(GPUBlendMode.CLEAR)),
+            directKey().copy(blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderNoDestination(
+                GPUBlendMode.MODULATE, "modulate@v1", GPUSourceCoverageEncoding.ModulateRGBA,
+            )),
+            directKey().copy(blend = srcOverBlend().copy(
+                sourceCoverage = GPUSourceCoverageEncoding.ModulateRGBA,
+            )),
+        )
+
+        mutations.forEach { mutation ->
+            assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(mutation),
+            )
+        }
+    }
+
+    @Test
     fun `analytic rect and rrect hard and aa keys map to four exact uniform64 programs`() {
         val cases = listOf(
             analyticKey(GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect, false) to
@@ -1315,6 +1469,13 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             writeMask = "rgba",
         ),
     )
+
+    private fun String.toWgpuFactor(): GPUBlendFactor = when (this) {
+        "zero" -> GPUBlendFactor.Zero
+        "one" -> GPUBlendFactor.One
+        "one-minus-dst-alpha" -> GPUBlendFactor.OneMinusDstAlpha
+        else -> error("Unexpected test blend factor: $this")
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun <T> proxy(type: Class<T>): T = Proxy.newProxyInstance(

@@ -1374,6 +1374,109 @@ sealed interface GPUDrawSemanticPayload {
                     ),
                 )
     }
+    /** Immutable plan, kernel, local-geometry, and scene-shade facts of one top-level mask blur draw. */
+    class MaskBlur internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val sourceFamily: String,
+        val deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+        val localWidth: Int,
+        val localHeight: Int,
+        val scale: Float,
+        val style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+        val effectiveSigma: Float,
+        val tapCount: Int,
+        weights: List<Float>,
+        val localGeometry: GPUMaskBlurLocalGeometry,
+        premultipliedRgba: List<Float>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val clipCoveragePlan: GPUClipCoveragePlan,
+        val clipExecutionPlanIdentity: String?,
+        val blendPlanIdentity: String,
+        canonicalHash: String? = null,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "MaskBlur"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val weights: List<Float> = immutableList(weights)
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        private val suppliedCanonicalHash: String? = canonicalHash
+        val canonicalHash: String by lazy {
+            suppliedCanonicalHash ?: maskBlurCanonicalPreimage(
+                payloadRef = this.payloadRef,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = this.weights,
+                localGeometry = localGeometry,
+                premultipliedRgba = this.premultipliedRgba,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload()
+        }
+
+        internal fun hasStructuralIntegrity(): Boolean =
+            payloadRef.renderStepIdentity == MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.byteSize == MASK_BLUR_PAYLOAD_BYTES.toLong() &&
+                payloadRef.uniformBlock.bytes.size == MASK_BLUR_PAYLOAD_BYTES &&
+                payloadRef.uniformBlock.bytes == maskBlurPayloadBytes(
+                    deviceBounds,
+                    premultipliedRgba,
+                    style,
+                    scale,
+                    effectiveSigma,
+                    tapCount,
+                    localWidth,
+                    localHeight,
+                    localGeometry,
+                ) &&
+                sourceFamily in setOf("FillRect", "FillRRect", "FillPath") &&
+                deviceBounds.left.isFinite() && deviceBounds.top.isFinite() &&
+                deviceBounds.right.isFinite() && deviceBounds.bottom.isFinite() &&
+                deviceBounds.right > deviceBounds.left && deviceBounds.bottom > deviceBounds.top &&
+                localWidth > 0 && localHeight > 0 && scale > 0f && scale.isFinite() &&
+                effectiveSigma.isFinite() && effectiveSigma >= 0.5f &&
+                tapCount in 3..25 && tapCount % 2 == 1 &&
+                weights.size == 25 &&
+                weights.all { it.isFinite() && it >= 0f } &&
+                kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f &&
+                weights.drop(tapCount).all { it == 0f } &&
+                premultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(scissorBounds) &&
+                clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
+                (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
+                blendPlanIdentity.isNotBlank()
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            hasStructuralIntegrity() && canonicalHash == maskBlurCanonicalPreimage(
+                payloadRef = payloadRef,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = weights,
+                localGeometry = localGeometry,
+                premultipliedRgba = premultipliedRgba,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload()
+    }
+
 }
 
 /** Gathers one immutable prepared A8 text semantic without allocating native resources. */
@@ -2153,6 +2256,330 @@ private fun List<Float>.isPremultipliedRgba(): Boolean =
         this[0] <= this[3] && this[1] <= this[3] && this[2] <= this[3]
 
 private const val SEPARABLE_BLUR_RECT_PAYLOAD_BYTES = 144
+
+/** Primary render step identity of the prepared top-level mask blur lane (the scene composite). */
+const val MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY = "mask-blur.composite"
+
+/** Largest localized path accepted by the prepared top-level mask blur semantic. */
+const val MAX_MASK_BLUR_PATH_VERTICES = 64
+
+/** Closed stage set for the prepared top-level mask blur lane. */
+enum class GPUMaskBlurStage(val wireId: String) {
+    Mask("mask"),
+    BlurH("blur-h"),
+    BlurV("blur-v"),
+    Style("style"),
+    Composite("composite"),
+}
+
+/** Returns the closed render-step identity of one top-level mask blur stage. */
+internal fun maskBlurRenderStepId(stage: GPUMaskBlurStage): String = "mask-blur.${stage.wireId}"
+
+/** Returns the closed stage for a mask blur render step, or null for foreign steps. */
+internal fun maskBlurStageFromRenderStepId(stepId: String): GPUMaskBlurStage? =
+    GPUMaskBlurStage.entries.firstOrNull { maskBlurRenderStepId(it) == stepId }
+
+/** Exact immutable local-space geometry of one blurred shape (plan-scaled, origin-shifted). */
+sealed interface GPUMaskBlurLocalGeometry {
+    data class Rect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+    ) : GPUMaskBlurLocalGeometry
+
+    data class RRect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val radii: List<Float>,
+    ) : GPUMaskBlurLocalGeometry {
+        init {
+            require(radii.size == 8 && radii.all(Float::isFinite)) {
+                "Mask blur local RRect requires exactly eight finite radii"
+            }
+        }
+    }
+
+    data class Path(
+        val vertices: List<Float>,
+        val contourStarts: List<Int>,
+        val fillRule: String,
+        val inverseFill: Boolean,
+    ) : GPUMaskBlurLocalGeometry {
+        init {
+            require(vertices.isNotEmpty() && vertices.size % 2 == 0) {
+                "Mask blur local path requires non-empty even vertex pairs"
+            }
+            require(vertices.size / 2 <= MAX_MASK_BLUR_PATH_VERTICES) {
+                "Mask blur local path exceeds $MAX_MASK_BLUR_PATH_VERTICES vertices"
+            }
+            require(contourStarts.isNotEmpty() && contourStarts.first() == 0) {
+                "Mask blur local path requires a zero-start contour list"
+            }
+            require(
+                fillRule == "winding" || fillRule == "Winding" || fillRule == "NonZero" ||
+                    fillRule == "even-odd" || fillRule == "EvenOdd" || fillRule == "evenOdd",
+            ) {
+                "Mask blur local path requires a closed fill rule"
+            }
+        }
+    }
+}
+
+/**
+ * Immutable input, plan, kernel, local-geometry, and scene-shade facts of one prepared
+ * top-level mask blur draw. One semantic rides all five lane stages; the stage is derived
+ * from the packet render step ([maskBlurStageFromRenderStepId]).
+ */
+
+
+private const val MASK_BLUR_PAYLOAD_BYTES = 416
+
+/** Closed payload-block gatherer for one prepared top-level mask blur draw. */
+class GPUMaskBlurPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        sourceFamily: String,
+        deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+        localWidth: Int,
+        localHeight: Int,
+        scale: Float,
+        style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+        effectiveSigma: Float,
+        tapCount: Int,
+        weights: FloatArray,
+        localGeometry: GPUMaskBlurLocalGeometry,
+        premultipliedRgba: FloatArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+        clipCoveragePlan: GPUClipCoveragePlan,
+        clipExecutionPlanIdentity: String?,
+        blendPlanIdentity: String,
+    ): GPUDrawSemanticPayload.MaskBlur {
+        require(commandIdValue >= 0) { "Mask blur command id must be non-negative" }
+        require(sourceFamily in setOf("FillRect", "FillRRect", "FillPath")) {
+            "Mask blur source family must be a closed core family"
+        }
+        require(deviceBounds.right > deviceBounds.left && deviceBounds.bottom > deviceBounds.top) {
+            "Mask blur device bounds must be non-empty"
+        }
+        require(localWidth > 0 && localHeight > 0) { "Mask blur local mask must be non-empty" }
+        require(scale > 0f && scale.isFinite()) { "Mask blur scale must be finite and positive" }
+        require(effectiveSigma.isFinite() && effectiveSigma >= 0.5f) {
+            "Mask blur effective sigma must be finite and at least 0.5"
+        }
+        require(tapCount in 3..25 && tapCount % 2 == 1) {
+            "Mask blur tap count must be an odd value in 3..25"
+        }
+        require(weights.size == 25 && weights.all { it.isFinite() && it >= 0f }) {
+            "Mask blur weights must contain 25 finite non-negative values"
+        }
+        require(kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f) {
+            "Mask blur active weights must be normalized"
+        }
+        require(weights.drop(tapCount).all { it == 0f }) {
+            "Mask blur padded weights must be zero"
+        }
+        require(premultipliedRgba.toList().isPremultipliedRgba()) {
+            "Mask blur source color must be finite premultiplied RGBA"
+        }
+        require(targetBounds.containsRegisteredUniformRect(scissorBounds)) {
+            "Mask blur scissor bounds must be contained by the target"
+        }
+        require(clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
+            "Mask blur clip coverage plan must not be refused"
+        }
+        require(blendPlanIdentity.isNotBlank()) { "Mask blur blend identity must not be blank" }
+        val weightsList = weights.toList()
+        val color = premultipliedRgba.toList()
+        val bytes = maskBlurPayloadBytes(
+            deviceBounds, color, style, scale, effectiveSigma, tapCount, localWidth, localHeight, localGeometry,
+        )
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=mask-blur",
+                    "command=$commandIdValue",
+                    "family=$sourceFamily",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = "mask-blur.input-v1",
+            byteSize = MASK_BLUR_PAYLOAD_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = "pass.mask-blur.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField("device-bounds", 0L, 16L, "float32x4"),
+                GPUUniformPayloadField("color.premul-rgba", 16L, 16L, "float32x4"),
+                GPUUniformPayloadField("style", 32L, 4L, "uint32"),
+                GPUUniformPayloadField("scale", 36L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.sigma", 40L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.tap-count", 44L, 4L, "uint32"),
+                GPUUniformPayloadField("mask.size", 48L, 8L, "uint32x2"),
+                GPUUniformPayloadField("geometry", 56L, 360L, "mask-blur.geometry-v1"),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("mask-blur:$commandIdValue"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.MaskBlur(
+            payloadRef = ref,
+            sourceFamily = sourceFamily,
+            deviceBounds = deviceBounds,
+            localWidth = localWidth,
+            localHeight = localHeight,
+            scale = scale,
+            style = style,
+            effectiveSigma = effectiveSigma,
+            tapCount = tapCount,
+            weights = weightsList,
+            localGeometry = localGeometry,
+            premultipliedRgba = color,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
+            canonicalHash = maskBlurCanonicalPreimage(
+                payloadRef = ref,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = weightsList,
+                localGeometry = localGeometry,
+                premultipliedRgba = color,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload(),
+        )
+    }
+}
+
+private fun maskBlurPayloadBytes(
+    deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+    premultipliedRgba: List<Float>,
+    style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+    scale: Float,
+    effectiveSigma: Float,
+    tapCount: Int,
+    localWidth: Int,
+    localHeight: Int,
+    localGeometry: GPUMaskBlurLocalGeometry,
+): List<Int> = ByteBuffer.allocate(MASK_BLUR_PAYLOAD_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    putFloat(deviceBounds.left)
+    putFloat(deviceBounds.top)
+    putFloat(deviceBounds.right)
+    putFloat(deviceBounds.bottom)
+    premultipliedRgba.forEach(::putFloat)
+    putInt(style.ordinal)
+    putFloat(scale)
+    putFloat(effectiveSigma)
+    putInt(tapCount)
+    putInt(localWidth)
+    putInt(localHeight)
+    when (localGeometry) {
+        is GPUMaskBlurLocalGeometry.Rect -> {
+            putInt(0)
+            putFloat(localGeometry.left)
+            putFloat(localGeometry.top)
+            putFloat(localGeometry.right)
+            putFloat(localGeometry.bottom)
+            repeat(12) { put(0) }
+        }
+        is GPUMaskBlurLocalGeometry.RRect -> {
+            putInt(1)
+            putFloat(localGeometry.left)
+            putFloat(localGeometry.top)
+            putFloat(localGeometry.right)
+            putFloat(localGeometry.bottom)
+            localGeometry.radii.forEach(::putFloat)
+            repeat(4) { put(0) }
+        }
+        is GPUMaskBlurLocalGeometry.Path -> {
+            putInt(2)
+            localGeometry.vertices.forEach(::putFloat)
+            repeat(MAX_MASK_BLUR_PATH_VERTICES * 2 - localGeometry.vertices.size) { put(0) }
+            localGeometry.contourStarts.forEach { putInt(it) }
+            repeat(8 - localGeometry.contourStarts.size) { putInt(0) }
+            putInt(if (localGeometry.fillRule == "even-odd" || localGeometry.fillRule == "EvenOdd") 1 else 0)
+            putInt(if (localGeometry.inverseFill) 1 else 0)
+        }
+    }
+}.array().map { it.toInt() and 0xff }
+
+private fun maskBlurCanonicalPreimage(
+    payloadRef: GPUDrawPayloadRef,
+    sourceFamily: String,
+    deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+    localWidth: Int,
+    localHeight: Int,
+    scale: Float,
+    style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+    localGeometry: GPUMaskBlurLocalGeometry,
+    premultipliedRgba: List<Float>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    clipCoveragePlan: GPUClipCoveragePlan,
+    clipExecutionPlanIdentity: String?,
+    blendPlanIdentity: String,
+): String = listOf(
+    "type=MaskBlur",
+    "command=${payloadRef.commandIdValue}",
+    "step=${payloadRef.renderStepIdentity}",
+    "fingerprint=${payloadRef.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "family=$sourceFamily",
+    "bounds=${deviceBounds.left},${deviceBounds.top},${deviceBounds.right},${deviceBounds.bottom}",
+    "local=${localWidth}x$localHeight",
+    "scale=$scale",
+    "style=${style.name}",
+    "sigma=$effectiveSigma",
+    "tapCount=$tapCount",
+    "weights=${weights.joinToString(",")}",
+    "geometry=${maskBlurLocalGeometryPreimage(localGeometry)}",
+    "color=${premultipliedRgba.joinToString(",")}",
+    "target=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "scissor=${scissorBounds.left},${scissorBounds.top},${scissorBounds.right},${scissorBounds.bottom}",
+    "clip=${clipCoveragePlan.canonicalPreimage()}",
+    "clipExecution=${clipExecutionPlanIdentity.orEmpty()}",
+    "blend=$blendPlanIdentity",
+).joinToString("\n")
+
+private fun maskBlurLocalGeometryPreimage(geometry: GPUMaskBlurLocalGeometry): String = when (geometry) {
+    is GPUMaskBlurLocalGeometry.Rect ->
+        "rect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}"
+    is GPUMaskBlurLocalGeometry.RRect ->
+        "rrect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}:" +
+            geometry.radii.joinToString(",")
+    is GPUMaskBlurLocalGeometry.Path ->
+        "path:${geometry.fillRule}:${geometry.inverseFill}:" +
+            geometry.vertices.joinToString(",") + ":" + geometry.contourStarts.joinToString(",")
+}
+
+private fun String.sha256HexPayload(): String = sha256Hex(this)
 
 private fun registeredUniformRectCanonicalPreimage(
     ref: GPUDrawPayloadRef,

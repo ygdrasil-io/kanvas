@@ -1563,6 +1563,26 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.MaskBlur -> {
+            string("canonicalHash", value.canonicalHash)
+            string("sourceFamily", value.sourceFamily)
+            string("deviceBounds", value.deviceBounds.toString())
+            int("localWidth", value.localWidth)
+            int("localHeight", value.localHeight)
+            string("scale", value.scale.toString())
+            string("style", value.style.name)
+            string("effectiveSigma", value.effectiveSigma.toString())
+            int("tapCount", value.tapCount)
+            list("weights", value.weights) { weight -> string("weight", weight.toString()) }
+            string("geometry", maskBlurLocalGeometryDump(value.localGeometry))
+            list("premultipliedRgba", value.premultipliedRgba) { channel ->
+                string("channel", channel.toString())
+            }
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+            nullableString("clipExecutionPlanIdentity", value.clipExecutionPlanIdentity)
+            string("blendPlanIdentity", value.blendPlanIdentity)
+        }
         is GPUDrawSemanticPayload.Vertices -> {
             string("canonicalHash", value.canonicalHash)
             string("artifactKey", value.artifact.key)
@@ -2316,6 +2336,13 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.MaskBlur ->
+            "$common,family=$sourceFamily,bounds=$deviceBounds,local=${localWidth}x$localHeight," +
+                "scale=$scale,style=${style.name},sigma=$effectiveSigma,taps=$tapCount," +
+                "geometry=${maskBlurLocalGeometryDump(localGeometry)}," +
+                "color=${premultipliedRgba.joinToString(",")},target=$targetBounds," +
+                "scissor=$scissorBounds,clipExecution=${clipExecutionPlanIdentity ?: "none"}," +
+                "blend=$blendPlanIdentity)"
         is GPUDrawSemanticPayload.Vertices ->
             "$common,preparedVerticesHash=$canonicalHash,artifact=${artifact.key}," +
                 "topology=${topologyIdentity.sourceLabel},transform=${transformBytes.joinToString(",")}," +
@@ -2438,3 +2465,15 @@ private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String {
 private fun GPUDestinationSnapshotConsumerRef.dumpDestinationConsumer(): String =
     "consumerGrouping=$groupingCommandId,consumerTask=${renderTaskId.value}," +
         "consumerPacket=${packetId.value},consumerCommand=${commandId.value}"
+
+private fun maskBlurLocalGeometryDump(geometry: org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurLocalGeometry): String =
+    when (geometry) {
+        is org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurLocalGeometry.Rect ->
+            "rect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}"
+        is org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurLocalGeometry.RRect ->
+            "rrect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}:" +
+                geometry.radii.joinToString(",")
+        is org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurLocalGeometry.Path ->
+            "path:${geometry.fillRule}:${geometry.inverseFill}:" +
+                geometry.vertices.joinToString(",") + ":" + geometry.contourStarts.joinToString(",")
+    }

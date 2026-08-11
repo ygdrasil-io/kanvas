@@ -16,11 +16,14 @@ import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUSampler
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
+import io.ygdrasil.webgpu.SamplerBindingLayout
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.TextureBindingLayout
@@ -103,6 +106,29 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY =
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+/**
+ * Bind-group component for direct shading keys that read the destination snapshot, parameterized
+ * by the formula mode: the shader identity carries the mode so the session cache keys one formula
+ * module per mode. The fragment layout appends the destination texture and sampler at the end
+ * (Dawn bindings 2n-2/2n-1) so a pass binds one shared uniform slab while dst-reading keys sample
+ * the ordered copy-texture-to-texture snapshot.
+ */
+internal fun corePrimitiveDstReadComponentIdentity(modeLabel: String):
+    GPUWgpu4kCorePrimitiveComponentIdentity = GPUWgpu4kCorePrimitiveComponentIdentity(
+    shaderIdentity = "$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:$modeLabel",
+    bindingLayoutIdentity = CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+    vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+)
+
+internal fun GPUWgpu4kCorePrimitiveComponentIdentity.isCorePrimitiveDstRead(): Boolean =
+    bindingLayoutIdentity == CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY &&
+        vertexLayoutIdentity == CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY &&
+        shaderIdentity.startsWith("$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:")
+
+internal fun GPUWgpu4kCorePrimitiveComponentIdentity.dstReadModeLabelOrNull(): String? =
+    shaderIdentity.removePrefix("$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:")
+        .takeIf { suffix -> suffix != shaderIdentity }
+
 internal val PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY,
@@ -155,6 +181,8 @@ internal fun isSupportedCorePrimitivePipelineCacheKey(
     key.hasCompatibleComponentIdentity()
 
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentity(): Boolean = when {
+    isCorePrimitiveDstReadPipelineKey() ->
+        pipelineIdentity.blendProgram.isDstRead() && componentIdentity.dstReadModeLabelOrNull() != null
     pipelineIdentity.program.isAnalyticShape() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
     pipelineIdentity.program.isClipStencilProducer() ->
@@ -169,6 +197,10 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
     else -> componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
 }
+
+private fun GPUWgpu4kCorePrimitivePipelineCacheKey.isCorePrimitiveDstReadPipelineKey(): Boolean =
+    componentIdentity.isCorePrimitiveDstRead() &&
+        pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
 
 internal enum class GPUWgpu4kCorePrimitiveSessionCacheNativeResource {
     BindGroupLayout,
@@ -366,6 +398,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             override fun createBindGroup(
                 componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
                 uniformBuffer: GPUBuffer,
+                dstRead: GPUWgpu4kCorePrimitiveDstReadBinding?,
             ): GPUBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
                     label = if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY) {
@@ -379,16 +412,22 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                     ) {
                         "CorePrimitive components must exist before the frame pool allocates a bind group"
                     },
-                    entries = listOf(
-                        BindGroupEntry(
-                            binding = 0u,
-                            resource = BufferBinding(
-                                buffer = uniformBuffer,
-                                offset = 0uL,
-                                size = componentIdentity.uniformBindingSizeBytes(),
+                    entries = buildList {
+                        add(
+                            BindGroupEntry(
+                                binding = 0u,
+                                resource = BufferBinding(
+                                    buffer = uniformBuffer,
+                                    offset = 0uL,
+                                    size = componentIdentity.uniformBindingSizeBytes(),
+                                ),
                             ),
-                        ),
-                    ),
+                        )
+                        if (dstRead != null) {
+                            add(BindGroupEntry(binding = 1u, resource = dstRead.view))
+                            add(BindGroupEntry(binding = 2u, resource = dstRead.sampler))
+                        }
+                    },
                 ),
             )
 
@@ -493,19 +532,20 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             State.Open -> Unit
         }
         if (!key.hasCompatibleComponentIdentity()) {
-            if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
+            if (!key.componentIdentity.isCorePrimitiveDstRead() &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
             ) {
-            return refused(
-                GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity(
-                    PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
-                    key.componentIdentity,
-                ),
-            )
+                return refused(
+                    GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity(
+                        PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                        key.componentIdentity,
+                    ),
+                )
             }
             return refused(
                 GPUWgpu4kCorePrimitiveSessionCacheRefusal.UnsupportedPipelineIdentity(key.pipelineIdentity),
@@ -620,7 +660,9 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                         buildCorePrimitiveCoverageMaskProducerNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY ->
                         buildCorePrimitiveCoverageMaskConsumerNativeShader()
-                    else -> buildCorePrimitiveNativeShader()
+                    else -> key.componentIdentity.dstReadModeLabelOrNull()?.let { modeLabel ->
+                        buildCorePrimitiveDstReadNativeShader(modeLabel)
+                    } ?: buildCorePrimitiveNativeShader()
                 }
             ) {
                 is GPUCorePrimitiveNativeShaderResult.Ready -> shader.plan
@@ -744,6 +786,26 @@ internal fun corePrimitiveBindGroupLayoutDescriptor(
                             viewDimension = GPUTextureViewDimension.TwoD,
                             multisampled = false,
                         ),
+                    ),
+                )
+            }
+            if (componentIdentity.isCorePrimitiveDstRead()) {
+                add(
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.Float,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                )
+                add(
+                    BindGroupLayoutEntry(
+                        binding = 2u,
+                        visibility = GPUShaderStage.Fragment,
+                        sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
                     ),
                 )
             }

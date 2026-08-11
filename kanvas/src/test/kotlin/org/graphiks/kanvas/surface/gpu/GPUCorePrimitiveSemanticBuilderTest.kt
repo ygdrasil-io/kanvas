@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
@@ -39,22 +40,27 @@ class GPUCorePrimitiveSemanticBuilderTest {
         assertEquals(productionGathered.semantics.keys, harnessGathered.semantics.keys)
         productionGathered.semantics.forEach { (commandId, productionSemantic) ->
             val harnessSemantic = harnessGathered.semantics.getValue(commandId)
-            assertEquals(productionSemantic.canonicalHash, harnessSemantic.canonicalHash)
+            assertEquals(productionSemantic.canonicalType, harnessSemantic.canonicalType)
             assertEquals(productionSemantic.payloadRef, harnessSemantic.payloadRef)
-            assertEquals(productionSemantic.sourceFamily, harnessSemantic.sourceFamily)
-            assertEquals(productionSemantic.geometry::class, harnessSemantic.geometry::class)
-            assertEquals(productionSemantic.premultipliedRgba, harnessSemantic.premultipliedRgba)
-            assertEquals(productionSemantic.targetBounds, harnessSemantic.targetBounds)
-            assertEquals(productionSemantic.scissorBounds, harnessSemantic.scissorBounds)
-            assertEquals(productionSemantic.clipCoveragePlan, harnessSemantic.clipCoveragePlan)
-            assertEquals(productionSemantic.blendPlanIdentity, harnessSemantic.blendPlanIdentity)
-            assertEquals(productionSemantic.frameProvenance, harnessSemantic.frameProvenance)
-            assertEquals(productionSemantic.coverageMode, harnessSemantic.coverageMode)
-            assertEquals(productionSemantic.analysisRecordId, harnessSemantic.analysisRecordId)
-            assertEquals(productionSemantic.analysisCommandFamily, harnessSemantic.analysisCommandFamily)
-            assertEquals(productionSemantic.rectRouteAuthority, harnessSemantic.rectRouteAuthority)
-            assertEquals(productionSemantic.rectGeometryAuthority, harnessSemantic.rectGeometryAuthority)
-            assertEquals(productionSemantic.rrectGeometryAuthority, harnessSemantic.rrectGeometryAuthority)
+            if (productionSemantic is GPUDrawSemanticPayload.CorePrimitive &&
+                harnessSemantic is GPUDrawSemanticPayload.CorePrimitive
+            ) {
+                assertEquals(productionSemantic.canonicalHash, harnessSemantic.canonicalHash)
+                assertEquals(productionSemantic.sourceFamily, harnessSemantic.sourceFamily)
+                assertEquals(productionSemantic.geometry::class, harnessSemantic.geometry::class)
+                assertEquals(productionSemantic.premultipliedRgba, harnessSemantic.premultipliedRgba)
+                assertEquals(productionSemantic.targetBounds, harnessSemantic.targetBounds)
+                assertEquals(productionSemantic.scissorBounds, harnessSemantic.scissorBounds)
+                assertEquals(productionSemantic.clipCoveragePlan, harnessSemantic.clipCoveragePlan)
+                assertEquals(productionSemantic.blendPlanIdentity, harnessSemantic.blendPlanIdentity)
+                assertEquals(productionSemantic.frameProvenance, harnessSemantic.frameProvenance)
+                assertEquals(productionSemantic.coverageMode, harnessSemantic.coverageMode)
+                assertEquals(productionSemantic.analysisRecordId, harnessSemantic.analysisRecordId)
+                assertEquals(productionSemantic.analysisCommandFamily, harnessSemantic.analysisCommandFamily)
+                assertEquals(productionSemantic.rectRouteAuthority, harnessSemantic.rectRouteAuthority)
+                assertEquals(productionSemantic.rectGeometryAuthority, harnessSemantic.rectGeometryAuthority)
+                assertEquals(productionSemantic.rrectGeometryAuthority, harnessSemantic.rrectGeometryAuthority)
+            }
         }
     }
 

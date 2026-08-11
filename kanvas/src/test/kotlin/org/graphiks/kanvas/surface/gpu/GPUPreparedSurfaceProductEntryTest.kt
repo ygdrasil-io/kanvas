@@ -21,24 +21,17 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
-import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceProductEntryTest {
     @Test
-    fun `admitted image executes prepared and trace failure never invokes legacy`() {
+    fun `admitted image executes prepared and trace failure never changes the route`() {
         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
-        var legacyCalls = 0
-        val legacy = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-            legacyCalls++
-            LEGACY_RESULT
-        }
         val harness = PreparedProductExecutionHarness(width = 8, height = 8)
 
         val result = GPUPreparedSurfaceProductEntry.render(
@@ -48,12 +41,10 @@ class GPUPreparedSurfaceProductEntryTest {
             format = PixelFormat.RGBA8,
             config = RenderConfig.DEFAULT,
             executionPort = harness.port,
-            legacyPort = legacy,
             trace = GPUPreparedSurfaceRouteTrace { decisions += it },
         )
 
         assertEquals(harness.expectedRgba.toUByteArray().toList(), result.pixels.toList())
-        assertEquals(0, legacyCalls)
         assertEquals(1, decisions.size)
         assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
 
@@ -65,22 +56,19 @@ class GPUPreparedSurfaceProductEntryTest {
             format = PixelFormat.RGBA8,
             config = RenderConfig.DEFAULT,
             executionPort = failingTraceHarness.port,
-            legacyPort = legacy,
             trace = GPUPreparedSurfaceRouteTrace { throw IllegalStateException("observer failure") },
         )
 
         assertEquals(failingTraceHarness.expectedRgba.toUByteArray().toList(), resultWithFailingTrace.pixels.toList())
-        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `invalid admitted image raises its exact prepared terminal and never invokes legacy`() {
+    fun `invalid admitted image raises its exact prepared terminal`() {
         val invalidImage = preparedProductImage(
             sourceId = "entry-invalid-image",
             pixels = null,
         )
         val harness = PreparedProductExecutionHarness(width = 8, height = 8)
-        var legacyCalls = 0
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
@@ -90,23 +78,17 @@ class GPUPreparedSurfaceProductEntryTest {
                 format = PixelFormat.RGBA8,
                 config = RenderConfig.DEFAULT,
                 executionPort = harness.port,
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    LEGACY_RESULT
-                },
             )
         }.exceptionOrNull()
 
         val typed = assertIs<GPUPreparedSurfaceTerminalException>(failure)
         assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, typed.diagnostic.code.value)
         assertEquals(0, harness.backend.prepareCalls)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `terminal raises a typed exception with canonical stable message and no legacy`() {
+    fun `terminal raises a typed exception with canonical stable message`() {
         val diagnostic = diagnostic("failed.test.prepared", "Prepared frame failed canonically.")
-        var legacyCalls = 0
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
@@ -118,17 +100,12 @@ class GPUPreparedSurfaceProductEntryTest {
                 executionPort = GPUPreparedSurfaceExecutionPort {
                     GPUPreparedSurfaceExecutionResult.TerminalFailure(diagnostic)
                 },
-                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
-                    legacyCalls++
-                    LEGACY_RESULT
-                },
             )
         }.exceptionOrNull()
 
         val typed = assertIs<GPUPreparedSurfaceTerminalException>(failure)
         assertSame(diagnostic, typed.diagnostic)
         assertEquals("failed.test.prepared: Prepared frame failed canonically.", typed.message)
-        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -154,13 +131,12 @@ class GPUPreparedSurfaceProductEntryTest {
     }
 
     @Test
-    fun `owner serializes prepared with gate legacy`() {
+    fun `owner serializes prepared with state event frames`() {
         val probe = ConcurrencyProbe()
         val execution = GPUPreparedSurfaceExecutionPort { probe.use { preparedResult() } }
-        val legacy = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ -> probe.use { LEGACY_RESULT } }
 
         runConcurrently(
-            { renderPrepared(execution, legacy) },
+            { renderPrepared(execution) },
             {
                 GPUPreparedSurfaceProductEntry.render(
                     operations = listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f))),
@@ -169,7 +145,6 @@ class GPUPreparedSurfaceProductEntryTest {
                     format = PixelFormat.RGBA8,
                     config = RenderConfig.DEFAULT,
                     executionPort = execution,
-                    legacyPort = legacy,
                 )
             },
         )
@@ -178,11 +153,12 @@ class GPUPreparedSurfaceProductEntryTest {
     }
 
     @Test
-    fun `owner keeps builder refusal to legacy atomic against prepared work`() {
+    fun `owner keeps builder refusal terminal atomic against prepared work`() {
         val probe = ConcurrencyProbe()
         val call = AtomicInteger()
         val ids = Collections.synchronizedList(mutableListOf<Long>())
         val ordinal = AtomicLong()
+        val outcomes = Collections.synchronizedList(mutableListOf<Any>())
         val execution = GPUPreparedSurfaceExecutionPort {
             probe.use {
                 ids += ordinal.incrementAndGet()
@@ -195,21 +171,23 @@ class GPUPreparedSurfaceProductEntryTest {
                 }
             }
         }
-        val legacy = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ -> probe.use { LEGACY_RESULT } }
 
         runConcurrently(
-            { renderPrepared(execution, legacy) },
-            { renderPrepared(execution, legacy) },
+            { outcomes += renderOutcome(execution) },
+            { outcomes += renderOutcome(execution) },
         )
 
         assertEquals(1, probe.maximum.get())
         assertEquals(2, ids.size)
         assertNotEquals(ids[0], ids[1])
+        val terminals = outcomes.filterIsInstance<GPUPreparedSurfaceTerminalException>()
+        assertEquals(1, terminals.size)
+        assertEquals("unsupported.test.builder", terminals.single().diagnostic.code.value)
+        assertEquals(1, outcomes.filterIsInstance<RenderResult>().size)
     }
 
     private fun renderPrepared(
         execution: GPUPreparedSurfaceExecutionPort,
-        legacy: GPUPreparedSurfaceLegacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ -> LEGACY_RESULT },
     ) = GPUPreparedSurfaceProductEntry.render(
         operations = listOf(rect()),
         width = 1,
@@ -217,8 +195,12 @@ class GPUPreparedSurfaceProductEntryTest {
         format = PixelFormat.RGBA8,
         config = RenderConfig.DEFAULT,
         executionPort = execution,
-        legacyPort = legacy,
     )
+
+    private fun renderOutcome(execution: GPUPreparedSurfaceExecutionPort): Any =
+        runCatching { renderPrepared(execution) }.let { result ->
+            result.getOrNull() ?: result.exceptionOrNull()!!
+        }
 
     private fun runConcurrently(first: () -> Unit, second: () -> Unit) {
         val executor = Executors.newFixedThreadPool(2)
@@ -271,14 +253,6 @@ class GPUPreparedSurfaceProductEntryTest {
 
     private companion object {
         val RECT = Rect.fromLTRB(0f, 0f, 1f, 1f)
-        val LEGACY_RESULT = RenderResult(
-            pixels = ubyteArrayOf(0u, 0u, 0u, 0u),
-            width = 1,
-            height = 1,
-            format = PixelFormat.RGBA8,
-            diagnostics = Diagnostics(),
-            stats = RenderStats(0, 0, 0, 0, 0f),
-        )
         val EVIDENCE = GPUPreparedSurfaceExecutionEvidence(
             targetCreations = 1,
             targetCloses = 1,

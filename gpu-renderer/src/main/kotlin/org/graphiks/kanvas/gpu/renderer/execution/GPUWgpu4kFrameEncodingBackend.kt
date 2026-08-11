@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.Extent3D
+import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice

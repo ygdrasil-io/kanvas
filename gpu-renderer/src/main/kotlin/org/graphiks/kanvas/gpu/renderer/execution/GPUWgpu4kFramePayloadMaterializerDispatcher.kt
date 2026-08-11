@@ -15,6 +15,7 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object CorePrimitive : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
+    data object MaskBlur : GPUWgpu4kPreparedFramePayloadRoute
     data object PreparedSurfaceMixed : GPUWgpu4kPreparedFramePayloadRoute
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
 }
@@ -172,6 +173,11 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
     return when {
         hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect
+        hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.CorePrimitive::class) ->
+            // Destination-reading core-primitive frames route through the multi-key core
+            // materializer: the direct pass emits the ordered snapshot copy and the dst-read
+            // formula pipelines sample it (Graphite DrawContext dst-copy recipe).
+            GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
             GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
             distinct.all { semanticClass ->
@@ -180,14 +186,37 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
                     semanticClass == GPUDrawSemanticPayload.TextA8::class ||
                     semanticClass == GPUDrawSemanticPayload.ColorGlyph::class
             } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
+        hasDestinationCopy && distinct.toSet() == setOf(GPUDrawSemanticPayload.MaskBlur::class) ||
+        hasDestinationCopy && distinct.toSet() == setOf(
+            GPUDrawSemanticPayload.MaskBlur::class,
+            GPUDrawSemanticPayload.SolidRect::class,
+        ) ||
+        hasDestinationCopy && distinct.toSet() == setOf(
+            GPUDrawSemanticPayload.MaskBlur::class,
+            GPUDrawSemanticPayload.CorePrimitive::class,
+        ) -> GPUWgpu4kPreparedFramePayloadRoute.MaskBlur
         hasDestinationCopy -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.destination-copy-semantic-shape",
-            "A prepared destination-copy frame requires the supported solid-rectangle semantic shape.",
+            "A prepared destination-copy frame requires the supported solid-rectangle or core-primitive semantic shape.",
         )
         distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
         distinct == listOf(GPUDrawSemanticPayload.CorePrimitive::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
+        // Task 11: top-level mask blur frames (MaskBlur-only, or core + MaskBlur
+        // mixed) execute through the dedicated mask blur materializer, which
+        // materializes the closed blur chain (mask -> blur-h -> blur-v -> style ->
+        // composite) and delegates at most one non-blur core render to the pooled
+        // core run materializer.
+        distinct.toSet() == setOf(GPUDrawSemanticPayload.MaskBlur::class) ||
+            distinct.toSet() == setOf(
+                GPUDrawSemanticPayload.MaskBlur::class,
+                GPUDrawSemanticPayload.CorePrimitive::class,
+            ) ||
+            distinct.toSet() == setOf(
+                GPUDrawSemanticPayload.MaskBlur::class,
+                GPUDrawSemanticPayload.SolidRect::class,
+            ) -> GPUWgpu4kPreparedFramePayloadRoute.MaskBlur
         distinct == listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
@@ -228,12 +257,14 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
+    private val maskBlurCache: GPUWgpu4kMaskBlurSessionCache,
     private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
     private val surfaceTargetResolver: GPUAcquiredSurfaceNativeTargetResolver =
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
     private val corePrimitiveLimits: GPULimits? = null,
     private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
+    private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
         preparedSurfaceMixedMaterializer?.capabilities?.contains(
@@ -265,6 +296,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         }
         val fullSemantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
+
         val fullHasDestinationCopy = framePlan.steps.any {
             it is GPUFrameStep.CopyDestinationStep
         }
@@ -341,6 +373,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                         "unsupported.native-core-primitive.limits-unavailable",
                         "The direct CorePrimitive route requires observed backend limits.",
                     ),
+                    onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 reusableFramePlan,
                 reusableEncoderPlan,
@@ -369,6 +402,26 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     queue,
                     preparedSceneTarget,
                     separableBlurRectCache,
+                ),
+                reusableFramePlan,
+                reusableEncoderPlan,
+                encoderPlan,
+                surfaceRoute,
+                resources,
+                generationSeal,
+            )
+            GPUWgpu4kPreparedFramePayloadRoute.MaskBlur -> dispatch(
+                GPUWgpu4kMaskBlurFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    maskBlurCache,
+                    corePrimitiveCache,
+                    corePrimitiveLimits ?: return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                        "unsupported.native-mask-blur.limits-unavailable",
+                        "The mask blur route requires observed backend limits.",
+                    ),
+                    onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 reusableFramePlan,
                 reusableEncoderPlan,

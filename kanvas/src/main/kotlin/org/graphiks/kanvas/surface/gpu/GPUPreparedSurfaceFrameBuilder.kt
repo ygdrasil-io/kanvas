@@ -60,6 +60,7 @@ internal data class GPUPreparedSurfaceFrameBuildRequest(
 /** Authenticated historical route facts carried from the exact prepared Task 5/8 graph. */
 internal data class GPUPreparedSurfaceDestinationReadEvidence(
     val commandId: Int,
+    val operationFamily: String,
     val sourceLabel: String,
     val snapshotLabel: String,
     val modeLabel: String,
@@ -68,6 +69,7 @@ internal data class GPUPreparedSurfaceDestinationReadEvidence(
 ) {
     init {
         require(commandId >= 0)
+        require(operationFamily.isNotBlank())
         require(sourceLabel.isNotBlank())
         require(snapshotLabel.isNotBlank())
         require(modeLabel.isNotBlank())
@@ -405,6 +407,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     semanticsByCommandId = semantics,
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
+                    maskBlurIntermediateBudgetBytes = request.candidate.config.maxMaskBlurIntermediateBytes.toLong(),
                 ),
                 allowEmptyBaseTaskList = compositeScheduling != null,
             )) {
@@ -450,7 +453,13 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         mergedTaskList
                     }
                     val destinationReadEvidence = splitTaskList
-                        .authenticatedDestinationReadEvidence(semantics)
+                        .authenticatedDestinationReadEvidence(
+                            semantics,
+                            destinationReadOperationFamily(
+                                request.candidate.operations,
+                                mapping.commandIdsByOperationIndex,
+                            ),
+                        )
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = splitTaskList,
                         readbackRequestId = request.readbackRequestId,
@@ -490,6 +499,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
 
 private fun GPUTaskList.authenticatedDestinationReadEvidence(
     semantics: Map<Int, GPUDrawSemanticPayload>,
+    operationFamilyByCommandId: Map<Int, String>,
 ): List<GPUPreparedSurfaceDestinationReadEvidence> {
     val rendersByTaskId = tasks.filterIsInstance<GPUTask.Render>()
         .associateBy(GPUTask.Render::taskId)
@@ -497,19 +507,25 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
         .flatMap { task -> task.payload.operations }
         .map { operation ->
             val copy = operation as? GPUDestinationSnapshotOperation.TextureCopy
-                ?: error("Prepared ColorGlyph destination evidence requires a texture copy")
+                ?: error("Prepared destination evidence requires a texture copy")
             val consumer = copy.consumers.single()
             val commandId = consumer.commandId.value
-            require(semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph)
+            require(
+                semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
+                    semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive ||
+                    semantics[commandId] is GPUDrawSemanticPayload.MaskBlur,
+            )
             val render = rendersByTaskId.getValue(consumer.renderTaskId)
             val packet = render.drawPackets.single { candidate ->
                 candidate.packetId == consumer.packetId &&
                     candidate.commandIdValue == commandId
             }
             val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
-                ?: error("Prepared ColorGlyph destination evidence requires shader blending")
+                ?: error("Prepared destination evidence requires shader blending")
             GPUPreparedSurfaceDestinationReadEvidence(
                 commandId = commandId,
+                operationFamily = operationFamilyByCommandId[commandId]
+                    ?: error("Prepared destination evidence requires one exact source operation"),
                 sourceLabel = packet.vertexSourceLabel,
                 snapshotLabel = copy.snapshot.value,
                 modeLabel = blend.mode.gpuLabel,
@@ -520,6 +536,22 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
                 action = "copy-then-formula",
             )
         }
+}
+
+/**
+ * Maps every recorded command id back to the public DisplayOp family that produced it, so the
+ * destination-read route evidence names the operation the way the legacy renderer does
+ * (`DrawRect:<commandId>`).
+ */
+private fun destinationReadOperationFamily(
+    operations: List<DisplayOp>,
+    commandIdsByOperationIndex: Map<Int, Set<Int>>,
+): Map<Int, String> = buildMap {
+    commandIdsByOperationIndex.forEach { (operationIndex, commandIds) ->
+        val family = operations.getOrNull(operationIndex)?.javaClass?.simpleName
+            ?: return@forEach
+        commandIds.forEach { commandId -> put(commandId, family) }
+    }
 }
 
 /**

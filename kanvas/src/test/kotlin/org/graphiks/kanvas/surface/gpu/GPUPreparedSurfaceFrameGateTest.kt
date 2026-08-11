@@ -75,19 +75,12 @@ class GPUPreparedSurfaceFrameGateTest {
                         candidate.color,
                     )
                 }
-                is Expected.Legacy -> {
-                    val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
-                        GPUPreparedSurfaceFrameGate.classify(listOf(fixture.operation), RenderConfig.DEFAULT),
-                    )
-                    assertEquals(fixture.expected.code, legacy.code)
-                    assertEquals(fixture.expected.operationIndex, legacy.operationIndex)
-                }
             }
         }
     }
 
     @Test
-    fun `empty and state only frames use the stable empty frame diagnostic`() {
+    fun `empty and state only frames classify as candidate and complete as noop`() {
         val stateOnly = listOf(
             DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
             DisplayOp.SetClip(ClipStack.WideOpen),
@@ -95,33 +88,29 @@ class GPUPreparedSurfaceFrameGateTest {
         )
 
         listOf(emptyList(), stateOnly).forEach { operations ->
-            val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
+            val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
                 GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
             )
-            assertEquals("legacy.surface.prepared.empty-frame", legacy.code)
-            assertEquals(null, legacy.operationIndex)
+            assertEquals(operations, candidate.operations)
         }
     }
 
     @Test
-    fun `first refused operation wins with its exact index family and code`() {
+    fun `flush snapshot frames classify as candidate state event frames`() {
         val visual = visualRect()
         val image = displayOpFixtures().single { it.operation is DisplayOp.DrawImage }.operation
         val text = displayOpFixtures().single { it.operation is DisplayOp.DrawText }.operation
         val flush = DisplayOp.FlushAndSnapshot(RECT)
         val cases = listOf(
-            listOf(DisplayOp.SetTransform(Matrix33.identity()), visual, image, flush, text) to
-                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 3),
-            listOf(visual, flush, image) to
-                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 1),
+            listOf(DisplayOp.SetTransform(Matrix33.identity()), visual, image, flush, text),
+            listOf(visual, flush, image),
         )
 
-        cases.forEach { (operations, expected) ->
-            val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
+        cases.forEach { operations ->
+            val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
                 GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
             )
-            assertEquals(expected.code, legacy.code)
-            assertEquals(expected.operationIndex, legacy.operationIndex)
+            assertEquals(operations, candidate.operations)
         }
     }
 
@@ -136,14 +125,14 @@ class GPUPreparedSurfaceFrameGateTest {
         assertEquals(CanonicalGPUColorFormat.BGRA8Unorm, candidate.color.physicalFormat)
         assertEquals(GPUColorInterpretation.EncodedPremulSrgb, candidate.color.interpretation)
 
-        val legacy = assertIs<GPUPreparedSurfaceEligibility.Legacy>(
+        val refused = assertIs<GPUPreparedSurfaceEligibility.Refused>(
             GPUPreparedSurfaceFrameGate.classify(
                 listOf(visualRect()),
                 RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.RGBA8_UNORM),
             ),
         )
-        assertEquals("unsupported.surface.gpu-color-format.rgba8-unorm", legacy.code)
-        assertEquals(null, legacy.operationIndex)
+        assertEquals("unsupported.surface.gpu-color-format.rgba8-unorm", refused.code)
+        assertEquals(null, refused.operationIndex)
     }
 
     @Test
@@ -166,10 +155,6 @@ class GPUPreparedSurfaceFrameGateTest {
 
     private sealed interface Expected {
         data object Candidate : Expected
-        data class Legacy(
-            val code: String,
-            val operationIndex: Int?,
-        ) : Expected
     }
 
     private fun displayOpFixtures(): List<Fixture> {
@@ -180,7 +165,6 @@ class GPUPreparedSurfaceFrameGateTest {
         )
         val path = Path().addRect(RECT)
         val visual = Expected.Candidate
-        fun legacy(code: String) = Expected.Legacy(code, 0)
 
         return listOf(
             Fixture(visualRect(), visual),
@@ -188,12 +172,8 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawPath(path, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.SetTransform(MATRIX), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null,
-            )),
-            Fixture(DisplayOp.SetClip(CLIP), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null,
-            )),
+            Fixture(DisplayOp.SetTransform(MATRIX), Expected.Candidate),
+            Fixture(DisplayOp.SetClip(CLIP), Expected.Candidate),
             Fixture(DisplayOp.BeginLayer(null, null), visual),
             Fixture(DisplayOp.EndLayer, visual),
             Fixture(DisplayOp.DrawColor(Color.RED, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
@@ -207,10 +187,8 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.Annotation(RECT, "key", "value"), Expected.Legacy(
-                "legacy.surface.prepared.empty-frame", null,
-            )),
-            Fixture(DisplayOp.FlushAndSnapshot(RECT), legacy("legacy.surface.prepared.flush-snapshot")),
+            Fixture(DisplayOp.Annotation(RECT, "key", "value"), Expected.Candidate),
+            Fixture(DisplayOp.FlushAndSnapshot(RECT), Expected.Candidate),
         )
     }
 

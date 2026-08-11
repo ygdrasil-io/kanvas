@@ -143,8 +143,8 @@ object GPUClipCoveragePlanner {
 
 /**
  * Legacy immutable-plan deduplication kept for callers that only inspect plans.
- * Materialized WebGPU masks must use [GPUClipCoverageFrameCache], whose scope
- * is one frame and whose releases are driven by the use prepass.
+ * Materialized WebGPU masks run through the prepared coverage-mask route
+ * (GPUWgpu4kCoverageMaskProducerMaterializer), whose scope is one prepared frame.
  */
 class GPUClipCoverageCache {
     private val masks = ConcurrentHashMap<String, GPUClipCoveragePlan.Mask>()

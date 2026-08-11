@@ -18,15 +18,16 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveDirectClipAuthority
-import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -229,6 +230,22 @@ class GPUCorePrimitiveNativeRouteTest {
     }
 
     @Test
+    fun `hard rect with canonical clear fixed function blend classifies accepted`() {
+        val accepted = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f), blend = clear()),
+                GPUClipExecutionPlan.NoClip,
+                clear(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry, accepted.lane)
+        assertEquals(TARGET, accepted.renderScissor)
+    }
+
+    @Test
     fun `clip plan and semantic scissor must be identical`() {
         val partial = GPUPixelBounds(2, 3, 12, 14)
         val noClipMismatch = validateCorePrimitiveDirectNativeRoute(
@@ -260,9 +277,16 @@ class GPUCorePrimitiveNativeRouteTest {
     fun `unsupported geometry coverage clip blend sample and format refuse before native work`() {
         val cases = listOf(
             validateCorePrimitiveDirectNativeRoute(
-                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f), blend = src()),
+                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f), blend = unsupported()),
                 GPUClipExecutionPlan.NoClip,
-                src(),
+                unsupported(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ) to "unsupported.native-core-primitive.blend",
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f), blend = shaderNoDst()),
+                GPUClipExecutionPlan.NoClip,
+                shaderNoDst(),
                 GPUSamplePlan.SingleSampleFrame,
                 "rgba8unorm",
             ) to "unsupported.native-core-primitive.blend",
@@ -407,7 +431,7 @@ class GPUCorePrimitiveNativeRouteTest {
     private fun validateCorePrimitiveDirectNativeRoute(
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         clipExecutionPlan: GPUClipExecutionPlan,
-        blendPlan: GPUBlendPlan?,
+        blendPlan: GPUBlendPlan,
         samplePlan: GPUSamplePlan,
         targetFormat: String,
     ): GPUCorePrimitiveDirectNativeRoute {
@@ -418,7 +442,7 @@ class GPUCorePrimitiveNativeRouteTest {
         return org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute(
             semantic = semantic,
             exactClipScissor = (clipAuthority as? GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor,
-            canonicalPremultipliedSrcOver = blendPlan.isCanonicalSolidRectSrcOver(),
+            blendPlan = blendPlan,
             samplePlan = samplePlan,
             targetFormat = targetFormat,
         )
@@ -426,7 +450,23 @@ class GPUCorePrimitiveNativeRouteTest {
 
     private fun srcOver(): GPUBlendPlan.FixedFunctionBlend = fixed(GPUBlendMode.SRC_OVER)
 
-    private fun src(): GPUBlendPlan.FixedFunctionBlend = fixed(GPUBlendMode.SRC)
+    private fun clear(): GPUBlendPlan.FixedFunctionBlend = fixed(GPUBlendMode.CLEAR)
+
+    private fun unsupported(): GPUBlendPlan = GPUBlendPlan.UnsupportedBlend(
+        mode = GPUBlendMode.CLEAR,
+        diagnostic = GPUBlendDiagnostic(
+            code = "test.unsupported.blend",
+            mode = GPUBlendMode.CLEAR,
+            message = "test unsupported blend",
+        ),
+        refusalScope = GPURefusalScope.RefusedLeafDrawStep,
+    )
+
+    private fun shaderNoDst(): GPUBlendPlan = GPUBlendPlan.ShaderBlendNoDstRead(
+        mode = GPUBlendMode.MODULATE,
+        formulaId = "modulate@v1",
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.ModulateRGBA,
+    )
 
     private fun fixed(mode: GPUBlendMode) = GPUBlendPlan.FixedFunctionBlend(
         mode = mode,

@@ -8,6 +8,7 @@ import java.nio.ByteOrder
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.validateTextureRequest
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -15,12 +16,19 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadMember
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroup
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
@@ -32,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
@@ -110,6 +119,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanningResult
@@ -200,7 +210,10 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
     return validateCorePrimitiveDirectNativeRoute(
         semantic = semantic,
         exactClipScissor = exactClipScissor,
-        canonicalPremultipliedSrcOver = blendPlan.isCanonicalSolidRectSrcOver(),
+        blendPlan = blendPlan ?: return GPUCorePrimitiveDirectNativeRoute.Refused(
+            "unsupported.native-core-primitive.blend",
+            "Direct CorePrimitive native geometry requires one exact classified blend plan.",
+        ),
         samplePlan = samplePlan,
         targetFormat = targetFormat,
     )
@@ -692,7 +705,8 @@ private fun directCorePrimitiveGeometryBytes(
 ): GPUCorePrimitiveDirectGeometryBytes? {
     if (packet.role != GPUDrawPacketRole.Shading ||
         semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
-        !packet.blendPlan.isCanonicalSolidRectSrcOver()
+        packet.blendPlan?.isCorePrimitiveDirectLaneBlend() != true ||
+        packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
@@ -1306,7 +1320,7 @@ data class GPUCorePrimitivePreparedFrameRequest(
     val capabilities: GPUCapabilities,
     val target: GPUFrameTargetRef,
     val targetBounds: GPUPixelBounds,
-    val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
+    val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
     val readbackRequestId: GPUReadbackRequestID? = null,
     val configuredAggregateBudgetBytes: Long = 1L shl 30,
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
@@ -1385,7 +1399,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         val requiresStencilAa = request.semanticsByCommandId.values.any { semantic ->
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.StencilAA
+            (semantic as? GPUDrawSemanticPayload.CorePrimitive)?.coverageMode ==
+                GPUCorePrimitiveCoverageMode.StencilAA
         }
         val promotesSingleSampleBase = requiresStencilAa &&
             recordedBaseRenders.all { render -> render.samplePlan == GPUSamplePlan.SingleSampleFrame }
@@ -1450,7 +1465,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         basePackets.firstOrNull { packet ->
             !packet.hasCorePrimitiveSemanticAuthority(
-                requireNotNull(request.semanticsByCommandId[packet.commandIdValue]),
+                requireNotNull(request.coreSemantics()[packet.commandIdValue]),
                 request.capabilities,
             )
         }?.let {
@@ -1461,7 +1476,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         for (render in baseRenders) {
             for (packet in render.drawPackets) {
-                val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 when (
                     val authority = validateCorePrimitiveCoverageSampleAuthority(
                         geometry = semantic.geometry,
@@ -1545,7 +1560,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame &&
             boundedClipStencilMsaaPlan == null && basePackets.any { packet ->
                 val plan = packet.clipExecutionPlan
-                val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 val analyticPathStencilAa = plan is GPUClipExecutionPlan.AnalyticCoverage &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.StencilAA &&
                     (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
@@ -1590,7 +1605,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val analyticShapeCommandIds = basePackets.mapNotNullTo(linkedSetOf()) { packet ->
             packet.commandIdValue.takeIf {
-                request.semanticsByCommandId.getValue(it).usesAnalyticShapeUniform80()
+                request.coreSemantics().getValue(it).usesAnalyticShapeUniform80()
             }
         }
         if (analyticShapeCommandIds.any {
@@ -1618,7 +1633,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         "Prepared analytic shapes currently require NoClip or ScissorOnly execution.",
                     )
                 }
-                val preparedSemantic = request.semanticsByCommandId.getValue(commandId)
+                val preparedSemantic = request.coreSemantics().getValue(commandId)
                     .withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
                 val semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic)
                 val uniformBytes = when (val uniform = buildCorePrimitiveAnalyticShapeUniform(
@@ -1679,7 +1694,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val pathStencilPlansByCommandId = linkedMapOf<Int, GPUCorePrimitivePathStencilPacketPlan>()
         basePackets.forEach { packet ->
-            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+            val semantic = request.coreSemantics().getValue(packet.commandIdValue)
             val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
                 ?: return@forEach
             when (geometry.geometryMode) {
@@ -1778,7 +1793,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }.orEmpty()
         val preparedCoverageMaskSemanticsByCommandId = staticCoverageMaskPlan?.let { maskPlan ->
             staticCoverageMaskConsumers.associate { packet ->
-                packet.commandIdValue to request.semanticsByCommandId
+                packet.commandIdValue to request.coreSemantics()
                     .getValue(packet.commandIdValue)
                     .withClipExecutionPlanIdentity(maskPlan.canonicalIdentity())
             }
@@ -1910,7 +1925,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 staticNativeClipStencilConsumers.mapNotNull { packet ->
                     directCorePrimitiveGeometryBytes(
                         packet,
-                        request.semanticsByCommandId.getValue(packet.commandIdValue),
+                        request.coreSemantics().getValue(packet.commandIdValue),
                         acceptedClipStencilPlan = candidate,
                     )?.let { packet.commandIdValue to it }
                 }.toMap().takeIf { it.size == staticNativeClipStencilConsumers.size }
@@ -1963,7 +1978,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 val bytes = if (analyticShape == null) {
                     directCorePrimitiveGeometryBytes(
                         packet,
-                        requireNotNull(request.semanticsByCommandId[packet.commandIdValue]),
+                        requireNotNull(request.coreSemantics()[packet.commandIdValue]),
                         acceptedCoverageMaskPlan = nativeCoverageMaskPlan,
                     )
                 } else {
@@ -2016,6 +2031,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.firstOrNull { packet ->
             packet.commandIdValue !in geometryBytesByCommandId &&
                 packet.commandIdValue !in pathStencilPlansByCommandId &&
+                packet.blendPlan !is GPUBlendPlan.NoOp &&
                 corePrimitiveDirectClipAuthority(
                     requireNotNull(packet.clipExecutionPlan),
                     request.targetBounds,
@@ -2023,7 +2039,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
             ?.let { packet ->
                 val decision = classifyCorePrimitiveDirectNativeRoute(
-                    semantic = request.semanticsByCommandId.getValue(packet.commandIdValue),
+                    semantic = request.coreSemantics().getValue(packet.commandIdValue),
                     clipExecutionPlan = requireNotNull(packet.clipExecutionPlan),
                     blendPlan = packet.blendPlan,
                     samplePlan = baseRenders.single { render -> packet in render.drawPackets }.samplePlan,
@@ -2106,6 +2122,27 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     "or path layouts.",
             )
         }
+        // The prepared-surface direct route materializes one shared uniform slab per pass with
+        // per-key structural pipelines (Graphite `DrawPass.fFullPipelines` + `BindGraphicsPipeline`
+        // index): mixed blend-mode shading packets admit distinct keys, and the preflighter's
+        // multi-key authority validates the per-key seals at planning time.
+        val directPassStructuralKeys = geometryPackets
+            .filter { packet ->
+                packet.role == GPUDrawPacketRole.Shading &&
+                    packet.commandIdValue !in pathStencilPlansByCommandId &&
+                    packet.clipExecutionPlan !is GPUClipExecutionPlan.StencilCoverage &&
+                    packet.clipExecutionPlan !is GPUClipExecutionPlan.CoverageMask
+            }
+            .map { packet ->
+                corePrimitiveRenderPipelineStructuralKey(
+                    requireNotNull(request.coreSemantics()[packet.commandIdValue]),
+                    requireNotNull(packet.clipExecutionPlan),
+                    requireNotNull(packet.blendPlan),
+                    preparedSamplePlan.sampleCount,
+                    request.targetFormat.corePrimitiveStructuralColorFormat(),
+                )
+            }
+            .distinct()
         val maxBufferSize = if (geometryPackets.isEmpty()) null else limits.maxBufferSize ?: return refused(
             "unsupported.recording.core_primitive_max_buffer_size_unavailable",
             "Direct CorePrimitive uniform slab planning requires observed maxBufferSize.",
@@ -2130,7 +2167,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 maxDynamicUniformBuffersPerPipelineLayout = requireNotNull(maxDynamicUniformBuffers),
                 payloads = legacyUniformPackets.map { packet ->
                     val bytes = requireNotNull(
-                        request.semanticsByCommandId.getValue(packet.commandIdValue).payloadRef.uniformBlock,
+                        request.coreSemantics().getValue(packet.commandIdValue).payloadRef.uniformBlock,
                     ).bytes
                     GPUUniformSlabPayload(
                         slotLabel = "draw-${packet.commandIdValue}",
@@ -2155,7 +2192,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             val packedBytes = ByteArray(plan.totalBytes.toInt())
             legacyUniformPackets.zip(plan.slots).forEach { (packet, slot) ->
                 val bytes = requireNotNull(
-                    request.semanticsByCommandId.getValue(packet.commandIdValue).payloadRef.uniformBlock,
+                    request.coreSemantics().getValue(packet.commandIdValue).payloadRef.uniformBlock,
                 ).bytes
                 bytes.indices.forEach { byteIndex ->
                     packedBytes[slot.alignedOffset.toInt() + byteIndex] = bytes[byteIndex].toByte()
@@ -2216,7 +2253,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     slotLabel = "coverage-mask-consumer-${consumer.packetId.value}",
                     bytes = corePrimitiveCoverageMaskConsumerUniformBytes(
                         maskPlan,
-                        request.semanticsByCommandId.getValue(consumer.commandId),
+                        request.coreSemantics().getValue(consumer.commandId),
                     ),
                 )
             }
@@ -2341,7 +2378,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val analyticUniformBytesByCommandId = analyticUniformPackets.associate { packet ->
             val commandId = packet.commandIdValue
             commandId to corePrimitiveAnalyticClipUniformBytes(
-                request.semanticsByCommandId.getValue(commandId),
+                request.coreSemantics().getValue(commandId),
                 analyticClipAuthoritiesByCommandId.getValue(commandId),
             )
         }
@@ -2373,7 +2410,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             analyticIntersectionUniformPackets.associate { packet ->
                 val commandId = packet.commandIdValue
                 commandId to corePrimitiveAnalyticIntersectionUniformBytes(
-                    request.semanticsByCommandId.getValue(commandId),
+                    request.coreSemantics().getValue(commandId),
                     analyticIntersectionAuthoritiesByCommandId.getValue(commandId),
                 )
             }
@@ -2495,9 +2532,44 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 targetFormat = request.targetFormat,
             )
         }
+        // Prepared destination-read shader blends (scalar SRC, advanced modes) reuse the
+        // GPU-owned snapshot machinery: one TextureCopy snapshot of the scene target per
+        // destination-reading packet, consumed by that packet's shader-with-destination
+        // formula render. The grouping plans by command/blend only — it is family-agnostic.
+        val destinationReadPlans = try {
+            buildCorePrimitiveDestinationSnapshotPlans(
+                request = request,
+                packets = basePackets,
+                limits = limits,
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.recording.core_primitive_destination_snapshot",
+                "Prepared core-primitive destination-snapshot byte accounting overflowed.",
+            )
+        }
+        // The snapshot consumer ref records the base packet id, but the assembler lowers a
+        // path-stencil (StencilEdgeFan) source into producer/cover packets with fresh ids, so
+        // the dst-read cover can never be resolved from the base packet. The dst-read formula
+        // also forces the cover into its own render pass, which the path-stencil authority
+        // rejects. Refuse the path dst-read shape by name at the recording authority instead
+        // of surfacing an internal frame-build contract wrapper from the assembler.
+        destinationReadPlans.firstOrNull { plan ->
+            val geometry = (request.semanticsByCommandId[plan.packet.commandIdValue]
+                as? GPUDrawSemanticPayload.CorePrimitive)?.geometry
+            geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
+                geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
+        }?.let {
+            return refused(
+                "unsupported.native-core-primitive.path-destination-read",
+                "Prepared path-stencil packets cannot consume destination-read snapshots yet.",
+            )
+        }
+        val destinationReadPlansByCommandId = destinationReadPlans.associateBy { it.packet.commandIdValue }
         val preparations = mutableListOf(
             corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
         )
+        destinationReadPlans.forEach { plan -> preparations += plan.preparation }
         if (geometryVertex != null && geometryIndex != null) {
             preparations += corePrimitiveGeometryBufferPreparation(
                 geometryVertex,
@@ -2700,6 +2772,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         allocations += clipTopologies.flatMap(GPUCoreClipArtifactTopology::allocations)
+        allocations += destinationReadPlans.map(GPUCorePrimitiveDestinationSnapshotPlan::allocation)
         if (readbackPlan != null) {
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.readback",
@@ -2800,8 +2873,21 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             } else {
                 emptyList()
             }
+            val destinationSnapshotUses = if (basePacket.commandIdValue in destinationReadPlansByCommandId) {
+                listOf(
+                    GPUFrameResourceUse(
+                        destinationReadPlansByCommandId.getValue(basePacket.commandIdValue).snapshot,
+                        GPUFrameResourceRole.DestinationSnapshot,
+                        GPUFrameResourceUsage.TextureBinding,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
             return baseRender.resourceUses + geometryUses + uniformUses +
-                pathDepthStencilUses + listOfNotNull(topology?.consumerResourceUse)
+                pathDepthStencilUses + destinationSnapshotUses + listOfNotNull(topology?.consumerResourceUse)
         }
 
         fun consumerDepthStencilLoadStore(
@@ -2851,7 +2937,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     listOf(
                         packet(
                             basePacket,
-                            requireNotNull(request.semanticsByCommandId[basePacket.commandIdValue]),
+                            requireNotNull(request.coreSemantics()[basePacket.commandIdValue]),
                             preparedSemanticOverride = preparedCoverageMaskSemanticsByCommandId[
                                 basePacket.commandIdValue
                             ] ?: preparedAnalyticShapesByCommandId[basePacket.commandIdValue]?.semantic,
@@ -3254,6 +3340,102 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 else -> dependencies += dependency(prepareId, consumer.taskId, dependencies.size + index)
             }
             previousConsumer = consumer
+        }
+        val destinationReadTask = if (destinationReadPlans.isEmpty()) {
+            null
+        } else {
+            val renderByPacketId = preparedRenders
+                .flatMap { render -> render.drawPackets.map { packet -> packet.packetId to render } }
+                .toMap()
+            GPUTask.DestinationSnapshots(
+                taskId = GPUTaskID(
+                    "task.core-primitive.destination-snapshots.${request.baseTaskList.frameId.value}",
+                ),
+                recordingId = preparedRenders.first().recordingId,
+                phase = GPUTaskPhase.Copy,
+                payload = GPUDestinationSnapshotTaskPayload(
+                    grouping = GPUDestinationSnapshotGroupingResult(
+                        groups = destinationReadPlans.map { plan ->
+                            val render = renderByPacketId.getValue(plan.packet.packetId)
+                            GPUDestinationSnapshotGroup(
+                                key = GPUDestinationSnapshotGroupKey(
+                                    target = GPUTargetIdentity(request.target.value),
+                                    targetGeneration = plan.packet.resourceGeneration,
+                                    deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration,
+                                    format = request.targetFormat,
+                                    colorInterpretation = corePrimitiveDestinationSnapshotColorInterpretation(
+                                        request.targetFormat,
+                                    ),
+                                    sampleContinuation = render.sampleContinuationKey,
+                                    sourceIntermediate = null,
+                                ),
+                                logicalBounds = request.targetBounds,
+                                members = listOf(
+                                    GPUDestinationReadMember(
+                                        commandId = plan.packet.commandIdValue.toString(),
+                                        accessIndex = plan.groupIndex,
+                                        logicalBounds = request.targetBounds,
+                                    ),
+                                ),
+                                copiedBytes = plan.copiedBytes,
+                                decisionDump = listOf(
+                                    "core-primitive:destination-snapshot " +
+                                        "packet=${plan.packet.packetId.value}",
+                                ),
+                            )
+                        },
+                        materializations = destinationReadPlans.map { plan ->
+                            GPUDestinationSnapshotMaterialization.TextureCopy(
+                                groupIndex = plan.groupIndex,
+                                logicalBounds = request.targetBounds,
+                            )
+                        },
+                        totalCopiedBytes = destinationReadPlans.fold(0L) { total, plan ->
+                            Math.addExact(total, plan.copiedBytes)
+                        },
+                        refusals = emptyList(),
+                        decisionDump = listOf(
+                            "core-primitive:destination-copy-then-formula",
+                        ),
+                    ),
+                    operations = destinationReadPlans.map { plan ->
+                        val render = renderByPacketId.getValue(plan.packet.packetId)
+                        GPUDestinationSnapshotOperation.TextureCopy(
+                            groupIndex = plan.groupIndex,
+                            source = request.target,
+                            snapshot = plan.snapshot,
+                            logicalBounds = request.targetBounds,
+                            copyLayout = GPUTextureCopyLayout(
+                                bytesPerRow = plan.paddedBytesPerRow,
+                                rowsPerImage = request.targetBounds.height,
+                            ),
+                            consumers = listOf(
+                                GPUDestinationSnapshotConsumerRef(
+                                    groupingCommandId = plan.packet.commandIdValue.toString(),
+                                    renderTaskId = render.taskId,
+                                    packetId = plan.packet.packetId,
+                                    commandId = GPUDrawCommandID(plan.packet.commandIdValue),
+                                ),
+                            ),
+                        )
+                    },
+                ),
+            )
+        }
+        destinationReadTask?.let { destination ->
+            tasks += destination
+            dependencies += dependency(prepareId, destination.taskId, dependencies.size)
+            destination.payload.operations
+                .flatMap(GPUDestinationSnapshotOperation::consumers)
+                .map(GPUDestinationSnapshotConsumerRef::renderTaskId)
+                .distinct()
+                .forEach { renderTaskId ->
+                    dependencies += dependency(
+                        destination.taskId,
+                        renderTaskId,
+                        dependencies.size,
+                    )
+                }
         }
         if (readbackRequest != null && staging != null) {
             val readbackId = GPUTaskID("task.core-primitive.readback.${request.baseTaskList.frameId.value}")
@@ -3985,4 +4167,108 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             message,
         ),
     )
+}
+
+/** One prepared core-primitive destination snapshot: texture, byte accounting, and resource plans. */
+private data class GPUCorePrimitiveDestinationSnapshotPlan(
+    val groupIndex: Int,
+    val packet: GPUDrawPacket,
+    val snapshot: GPUFrameTextureRef,
+    val copiedBytes: Long,
+    val paddedBytesPerRow: Long,
+    val preparation: GPUResourcePreparationRequest,
+    val allocation: GPUFrameMemoryAllocation,
+)
+
+/**
+ * Plans one GPU-owned TextureCopy snapshot per destination-reading core packet.
+ *
+ * The snapshot texture captures the scene target before the shader-with-destination formula
+ * render consumes it; the grouping is planned by command and blend only (family-agnostic), so
+ * the same [GPUDestinationSnapshotOperation.TextureCopy] machinery the ColorGlyph lane uses
+ * serves the core-primitive lane unchanged.
+ */
+private fun buildCorePrimitiveDestinationSnapshotPlans(
+    request: GPUCorePrimitivePreparedFrameRequest,
+    packets: List<GPUDrawPacket>,
+    limits: GPULimits,
+): List<GPUCorePrimitiveDestinationSnapshotPlan> {
+    val logicalBytesPerRow = Math.multiplyExact(request.targetBounds.width.toLong(), 4L)
+    val paddedBytesPerRow = corePrimitiveAlignUpPreparedText(
+        logicalBytesPerRow,
+        limits.copyBytesPerRowAlignment,
+    )
+    val copiedBytes = Math.multiplyExact(
+        paddedBytesPerRow,
+        request.targetBounds.height.toLong(),
+    )
+    val textureBytes = Math.multiplyExact(
+        logicalBytesPerRow,
+        request.targetBounds.height.toLong(),
+    )
+    return packets.mapNotNull { packet ->
+        if (packet.blendPlan?.destinationReadRequirement !=
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        ) {
+            return@mapNotNull null
+        }
+        packet
+    }.mapIndexed { index, packet ->
+        val snapshot = GPUFrameTextureRef(
+            "texture.core-primitive.destination-snapshot." +
+                "${request.baseTaskList.frameId.value}.$index",
+        )
+        GPUCorePrimitiveDestinationSnapshotPlan(
+            groupIndex = index,
+            packet = packet,
+            snapshot = snapshot,
+            copiedBytes = copiedBytes,
+            paddedBytesPerRow = paddedBytesPerRow,
+            preparation = GPUResourcePreparationRequest(
+                resource = snapshot,
+                descriptor = GPUFrameTextureDescriptor(
+                    logicalBounds = request.targetBounds,
+                    format = request.targetFormat,
+                    sampleCount = 1,
+                ),
+                role = GPUFrameResourceRole.DestinationSnapshot,
+                usages = setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = textureBytes,
+                diagnosticLabel = "core-primitive.destination-snapshot.${packet.packetId.value}",
+            ),
+            allocation = GPUFrameMemoryAllocation(
+                "core-primitive.destination-snapshot.${packet.packetId.value}",
+                GPUFrameMemoryCategory.DestinationSnapshot,
+                textureBytes,
+                GPUFrameMemoryResourceKind.Texture2D,
+                request.targetBounds,
+            ),
+        )
+    }
+}
+
+private fun corePrimitiveAlignUpPreparedText(value: Long, alignment: Long): Long {
+    val remainder = value % alignment
+    return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
+}
+
+private fun corePrimitiveDestinationSnapshotColorInterpretation(
+    format: GPUColorFormat,
+): GPUColorInterpretation = when (format) {
+    GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    GPUColorFormat.BGRA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    else -> throw IllegalArgumentException(
+        "Prepared core-primitive destination snapshots require RGBA8Unorm, RGBA8UnormSrgb, or BGRA8Unorm.",
+    )
+}
+
+/** Typed core-only view used by the direct CorePrimitive assembler (blur packets route elsewhere). */
+private fun GPUCorePrimitivePreparedFrameRequest.coreSemantics():
+    Map<Int, GPUDrawSemanticPayload.CorePrimitive> = semanticsByCommandId.mapValues { (_, semantic) ->
+    semantic as GPUDrawSemanticPayload.CorePrimitive
 }
