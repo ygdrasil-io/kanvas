@@ -412,12 +412,12 @@ git commit -m "feat(surface): prepared destination read blends on core primitive
 
 **Approach (shape-blur, faithful to legacy semantics):** materialize the draw's A8 blur coverage (shape coverage via the core coverage-mask producer machinery, blurred via the prepared blur path), then shade color × blurred coverage — mirroring how the composite route blurs scoped masks and how `renderViaGpuLegacy` blurred top-level shapes (reference: `GPUMaskBlurDispatch.kt` + the deleted `renderDestinationReadBlend`-era blur pass). The exact wiring is the implementer's discovery task: where the top-level blur must hook into `GPUCorePrimitiveSemanticBuilder` (currently refusing) + the recording/execution lanes.
 
-- [ ] **Step 1: Write failing tests (red)** — flip the 18 re-points back: each asserts `Ready` + pixel evidence (CPU blur oracle — the composite route's blur oracle / `GPUMaskBlurDispatchTest` blur math, or the pre-FP-09 legacy render as reference via a documented oracle)
-- [ ] **Step 2: Run to verify they fail** — all 18 must fail with the current terminal codes
-- [ ] **Step 3: Implement top-level blur in the prepared core route** (semantic admission + A8 blur coverage materialization + shading; reuse `GPUPreparedMaskFilterLowerer`/`GPUSeparableBlur`/coverage-mask producer; retire the three refusal paths for blur)
-- [ ] **Step 4: Run green + GPU pixel regression** (the 18 tests + `GPUAllApiBlendSurfaceTest` + `GPUClipCoverageSurfaceTest` + full `:kanvas:test`/`:gpu-renderer:test`)
-- [ ] **Step 5: Update the evidence/roadmap** (the 18 families move from terminal to prepared in evidence §10/§15/§16 + FP-11 transfers; remove the top-level blur gap note)
-- [ ] **Step 6: Commit** — `feat(surface): top level mask blur renders prepared on core primitives`
+- [x] **Step 1: Write failing tests (red)** — flip the 18 re-points back: each asserts `Ready` + pixel evidence (CPU blur oracle — the composite route's blur oracle / `GPUMaskBlurDispatchTest` blur math, or the pre-FP-09 legacy render as reference via a documented oracle)
+- [x] **Step 2: Run to verify they fail** — all 18 must fail with the current terminal codes
+- [x] **Step 3: Implement top-level blur in the prepared core route** (semantic admission + A8 blur coverage materialization + shading; reuse `GPUPreparedMaskFilterLowerer`/`GPUSeparableBlur`/coverage-mask producer; retire the three refusal paths for blur)
+- [x] **Step 4: Run green + GPU pixel regression** (the 18 tests + `GPUAllApiBlendSurfaceTest` + `GPUClipCoverageSurfaceTest` + full `:kanvas:test`/`:gpu-renderer:test`)
+- [x] **Step 5: Update the evidence/roadmap** (the 18 families move from terminal to prepared in evidence §10/§15/§16 + FP-11 transfers; remove the top-level blur gap note)
+- [x] **Step 6: Commit** — `feat(surface): top level mask blur renders prepared on core primitives`
 
 ---
 

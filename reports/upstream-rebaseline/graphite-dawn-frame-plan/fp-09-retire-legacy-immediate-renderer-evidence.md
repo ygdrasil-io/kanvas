@@ -210,7 +210,9 @@ classification (§4), the green verification (§6), and the path-dst-read
 residual resolution (§7). Nothing in those sections changed during Task 10;
 the full-run discovery in §15 (18 stale legacy pins in three files the Task 6
 inventory did not cover) is the only re-point extension the full-run proof
-added.
+added. Task 11 (Phase 4b amendment) then RESTORED top-level mask blur: 11 of
+the 18 pins assert prepared with the CPU pixel oracle, 1 re-points to the now
+reachable budget gate, and 6 stay terminal (classified per-case in §15).
 
 ## 11. No-legacy-fated-frame regression proof (Task 3c fix 3 verification)
 
@@ -310,9 +312,26 @@ legacy-rendered pre-FP-09):
 Every re-point asserts the exact terminal code with the fixture retained; the
 AA-clip dst-read re-point additionally asserts no destination snapshot is
 allocated before refusal (`destinationReadbackSnapshots`/`destinationCopies`
-unchanged). Top-level mask blur remains a tracked FP-11 gap (§16); mask blur
-inside a saveLayer scope still renders through the composite capture's
-`GPUPreparedMaskFilterLowerer` (FP-07 composite route, unchanged).
+unchanged). Mask blur inside a saveLayer scope still renders through the
+composite capture's `GPUPreparedMaskFilterLowerer` (FP-07 composite route,
+unchanged).
+
+Task 11 (Phase 4b amendment, user decision) restored top-level mask blur in
+the prepared route: the top-level blur lane (semantic admission + closed
+five-stage chain recording + native materialization, commit `3e2a71b5e`)
+flips the Task 10 re-points back to prepared:
+
+| file | Task 10 re-points | Task 11 final |
+| --- | --- | --- |
+| `GPUMaskBlurSurfaceTest` | 11 terminal | 10 prepared (CPU pixel oracle vs `TopLevelMaskBlurPixelOracle`, tolerance 24/255: NORMAL/SOLID/INNER/OUTER rects incl. σ48 reduced-resolution, triangle path, rrect, SRC_OVER/SRC composites, DARKEN via the copy-then-formula lane, device-rect scissored composite, wide-open and decal-edge frames) + 1 budget re-point (`unsupported.mask-filter.blur.intermediate-budget`, the legacy budget gate is reachable again) |
+| `GPUClipAdvancedBlendSurfaceTest` | 3 terminal | 1 prepared (DARKEN mask blur over destination via copy-then-formula) + 2 stay terminal (AA-clip dst-read and scissor dst-read: no mask filter — genuine mixed-uniform-layouts family) |
+| `GPUPathClipRegressionTest` | 4 terminal | 4 stay terminal (rect+clipped path, dst-in path, darken rect, DIFFERENCE path: no mask filter — genuine mixed-uniform-layouts / multi-render-dst-copy families) |
+| `GPUClipCoverageSurfaceTest` (blur pins) | 2 terminal (`analysis_authority_missing`) | 2 stay terminal, re-classified to `invalid.preflight.core_primitive_clip_producer_authority` (complex clip + DARKEN + blur: the coverage-mask clip producer route rejects the blur composite consumer — lane scope) |
+
+The 10 prepared rect/rrect/path cases and the two DARKEN cases compare GPU
+pixels against the documented CPU oracle (legacy dispatcher math: MaskBlurPlanner
+plans, blurKernelUniform kernel with decal sampling, style formulas, encoded-space
+fixed-function SRC_OVER/SRC and linear formula DARKEN composites).
 
 Documented deviation — `GPUSaveLayerCompositeRegressionTest` was RE-POINTED,
 not deleted: the plan File Map listed the file for deletion (it pinned
@@ -337,7 +356,7 @@ case count:
 - multi-render dst-copy (destination-then-consumer dst-read frames) — `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
 - analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key` (2 cases);
 - path destination-read — `unsupported.native-core-primitive.path-destination-read` (60 cases; §4);
-- top-level mask-blur rect/path/rrect frames — `unsupported.core_primitive.rect.analysis_authority_missing` / `unsupported.pipeline.capability_missing` / `invalid.recording.core_primitive_semantic_authority` (prepared top-level blur route unwired; legacy machinery deleted in Task 8; orphaned `GPUMaskBlurDispatch` noted for cleanup).
+- complex-clip mask blur — `invalid.preflight.core_primitive_clip_producer_authority` (2 cases; Task 11 lane scope: the blur composite applies NoClip or integer ScissorOnly clips; coverage-mask and analytic clips over the blur composite stay terminal).
 
 ## 17. Known environmental flake documentation
 
@@ -349,10 +368,23 @@ second isolated re-run passed 1,864/1,864, and the full `:kanvas:test`
 aggregate passed 3,210/3,210 with zero failures. No assertion was weakened for
 it; the class passes in isolation on re-run.
 
+### GPUMaskBlurDispatch fate (Task 11)
+
+`GPUMaskBlurDispatch.kt` remains orphaned (zero production consumers) but is
+superseded-not-deleted: its `MaskBlurPlanner` / `blurKernelUniform` /
+localization math is the planning and kernel authority REUSED by the prepared
+top-level blur lane, and `GPUMaskBlurDispatchTest` pins that math (plan bounds,
+halo, scale, budget gate, local command lowering). The legacy `MASK_BLUR_*`
+WGSL survives as the port source for the lane's blur/style/composite modules.
+The deletion itself remains tracked with the broader legacy retirement.
+
 ## 18. Commit trail (FP-09)
 
 `42ef8a093` (inventory) · `9dcc4d36c`+`e5263bed4` (Task 2) · `9799fdeb2` (Task 3)
 · `f45d4fc6f` (plan amendment) · `efbd9332a`+`e0d164824` (Task 3b) ·
 `b17251b2c`+`746d97f93`+`1dbf2e5f7` (Task 3c) · `b1163ae9b` (Task 5) ·
 `56cf93f30`+`ac3b989a4`+`469a850bb` (Task 6) · `292861921` (Task 7) ·
-`6c44db0e9` (Task 8) · `4dc764bc8`+`571ba6e23` (Task 9) · Task 10 closure commit.
+`6c44db0e9` (Task 8) · `4dc764bc8`+`571ba6e23` (Task 9) · Task 10 closure commit
+(`56cf93f30`..`00c6327b4`) · `e0e58137e` (Task 11 red tests + pixel oracle) ·
+`3e2a71b5e` (Task 11 implementation) · `docs(surface): fp09 top level mask blur
+closure evidence` (Task 11 evidence/roadmap closure).

@@ -536,11 +536,15 @@ FP-09 transfers (stable terminal refusals, per `fp-09-retire-legacy-immediate-re
   (2 cases);
 - path destination-read — `unsupported.native-core-primitive.path-destination-read`
   (60 cases);
-- top-level mask-blur rect/path/rrect frames —
-  `unsupported.core_primitive.rect.analysis_authority_missing` /
-  `unsupported.pipeline.capability_missing` / `invalid.recording.core_primitive_semantic_authority`
-  (prepared top-level blur route unwired; legacy mask machinery deleted by FP-09 Task 8;
-  saveLayer-scoped mask blur still renders via the composite capture).
+- ~~top-level mask-blur rect/path/rrect frames~~ — **RESOLVED by FP-09 Task 11**
+  (commit `3e2a71b5e`): top-level mask blur renders prepared on core primitives
+  (mask -> blur-h -> blur-v -> style -> composite) with the CPU pixel oracle;
+  the budget gate (`unsupported.mask-filter.blur.intermediate-budget`) is
+  reachable again; the lane's composite applies NoClip or integer ScissorOnly
+  clips only (complex-clip blur stays terminal at
+  `invalid.preflight.core_primitive_clip_producer_authority`; coverage-mask and
+  analytic clips over the blur composite stay terminal at
+  `unsupported.native-mask-blur.clip`).
 
 Acceptance:
 
