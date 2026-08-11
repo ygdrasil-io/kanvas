@@ -917,41 +917,68 @@ internal class GPUPreparedSceneChildRegistry(
 object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
+    private val generationCounter = AtomicLong(0L)
+
+    /** Original backend creation implementation used when no test seam is installed. */
+    internal val defaultBackendCreator: () -> GPUBackendSession? = ::createGlfwBackendSession
+
+    /** Test seam: session creation is injectable so factory lifetime interleavings run without GLFW. */
+    internal var backendCreator: () -> GPUBackendSession? = defaultBackendCreator
+
+    /** Stamps the next factory-owned device generation; every session creation consumes exactly one. */
+    internal fun nextDeviceGeneration(): GPUDeviceGenerationID =
+        GPUDeviceGenerationID(generationCounter.incrementAndGet())
+
+    private fun createGlfwBackendSession(): GPUBackendSession? = try {
+        val glfw = runBlocking {
+            glfwContextRenderer(
+                width = 1,
+                height = 1,
+                title = "kanvas-gpu-renderer-runtime",
+                deferredRendering = true,
+            )
+        }
+        WgpuBackendSession(glfw, nextDeviceGeneration())
+    } catch (_: Throwable) {
+        null
+    }
 
     /** Creates a GPU runtime session when the host can initialize the backend.
      *  The session is reused across renders so callers do not create one native device per render.
      *  The returned wrapper ignores close() so that callers using .use {} do not destroy
      *  the shared device. Call [dispose] to release native resources on shutdown. */
-    fun createOrNull(): GPUBackendSession? {
+    fun createOrNull(): GPUBackendSession? = synchronized(this) {
         if (sharedInner == null) {
-            sharedInner = try {
-                val glfw = runBlocking {
-                    glfwContextRenderer(
-                        width = 1,
-                        height = 1,
-                        title = "kanvas-gpu-renderer-runtime",
-                        deferredRendering = true,
-                    )
-                }
-                WgpuBackendSession(glfw)
+            val created = try {
+                backendCreator()
             } catch (_: Throwable) {
                 null
             }
-            if (sharedInner != null) {
-                val hook = Thread { sharedInner!!.close() }
+            sharedInner = created
+            if (created != null) {
+                val hook = Thread { created.close() }
                 shutdownHook = hook
                 Runtime.getRuntime().addShutdownHook(hook)
             }
         }
-        return sharedInner?.let { NonClosingSession(it) }
+        sharedInner?.let { NonClosingSession(it) }
     }
 
-    /** Releases the shared session and its native resources. */
+    /** Releases the shared session and its native resources.
+     *  dispose serializes with createOrNull: the shared session and every registered
+     *  prepared-scene child are closed eagerly, and device teardown completes when the
+     *  last child lease is released (deferred by design via [GPUPreparedSceneChildRegistry]
+     *  claimTeardownIfReady). A subsequent createOrNull never reuses the closed session. */
     fun dispose() {
-        shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
-        shutdownHook = null
-        sharedInner?.close()
-        sharedInner = null
+        synchronized(this) {
+            shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
+            shutdownHook = null
+            try {
+                sharedInner?.close()
+            } finally {
+                sharedInner = null
+            }
+        }
     }
 
     private class NonClosingSession(
@@ -1038,9 +1065,9 @@ internal fun preparedSceneExecutorTarget(
 
 private class WgpuBackendSession(
     private val glfw: GLFWContext,
+    override val deviceGeneration: GPUDeviceGenerationID,
 ) : GPUBackendSession {
     private val sessionOrdinal = nextSessionOrdinal()
-    override val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
     private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
