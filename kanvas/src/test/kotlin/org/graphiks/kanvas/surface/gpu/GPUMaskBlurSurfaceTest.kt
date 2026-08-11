@@ -205,7 +205,7 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `source-composited mask blur frames render prepared under wide-open and scissored clips`() {
+    fun `source-composited mask blur frame renders prepared under a wide-open clip`() {
         requireWebGpu()
 
         // Wide-open clip: full-screen blur.
@@ -215,30 +215,30 @@ class GPUMaskBlurSurfaceTest {
             Color.BLACK, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedWideOpen, wideOpen)
+    }
 
-        // Integer non-AA device-rect clip: scissored composite.
-        val scissored = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
-        }
-        val expectedScissored = TopLevelMaskBlurPixelOracle.render(
-            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
-            clip = TopLevelMaskBlurPixelOracle.RectClip(14f, 14f, 18f, 18f, antiAlias = false),
-        )
-        TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedScissored, scissored)
-        assertEquals(0, scissored[(2 * 32 + 2) * 4 + 3].toInt())
+    @Test
+    fun `mask blur composites under coverage and analytic clips are terminal`() {
+        requireWebGpu()
 
-        // AA device-rect clip: coverage-masked composite with the clip's edge falloff.
-        val aaClipped = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
+        // Task 11 lane scope: the blur composite applies NoClip or integer ScissorOnly
+        // clips. A stacked non-AA device-rect clip plans a coverage-mask clip and an
+        // AA device-rect clip plans an analytic clip; both refuse with the documented
+        // lane-scope code instead of rendering unclipped.
+        val stacked = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+            }
         }
-        val expectedAaClipped = TopLevelMaskBlurPixelOracle.render(
-            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
-            clip = TopLevelMaskBlurPixelOracle.RectClip(14f, 14f, 18f, 18f, antiAlias = true),
-        )
-        TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedAaClipped, aaClipped)
+        assertEquals("unsupported.native-mask-blur.clip", stacked.diagnostic.code.value)
+
+        val aaClipped = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
+            }
+        }
+        assertEquals("unsupported.native-mask-blur.clip", aaClipped.diagnostic.code.value)
     }
 
     @Test

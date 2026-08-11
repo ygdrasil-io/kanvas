@@ -59,6 +59,8 @@ private const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
     "unsupported.recording.core_primitive_mixed_uniform_layouts"
 private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
+private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
+    "invalid.preflight.core_primitive_clip_producer_authority"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 private const val PREPARED_DST_READ_FORMULA_REFUSAL =
@@ -165,30 +167,32 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip blur is terminal at the core semantic build`() {
-        // The mask-blur rect frame is terminal at the core-semantic build: the
-        // recording analysis does not authorize a blurred rect as a direct core
-        // primitive, so the route collapse terminates it before any coverage
-        // computation instead of falling back to the legacy blur lane.
-        assertTerminal(PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL) {
+    fun `complex clip blur is terminal at the clip producer preflight`() {
+        // FP-09 Task 11 admitted top-level blur (the frame records the mask blur
+        // chain), but the complex clip (AA rect intersect + path difference) plans a
+        // coverage-mask clip whose producer route rejects the blur composite consumer
+        // (invalid.preflight.core_primitive_clip_producer_authority). The combination
+        // stays terminal with evidence; the lane's composite applies NoClip or
+        // integer ScissorOnly clips only.
+        assertTerminal(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL) {
             renderBlurredDifferenceClipScene()
         }
     }
 
     @Test
-    fun `complex mask blur frames are terminal at the core semantic build`() {
+    fun `complex mask blur frames are terminal at the clip producer preflight`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         session!!
         val readbacksBefore = session.runtimeTelemetry.destinationReadbackSnapshots
 
-        // The refusal is sigma-independent: every mask blur frame terminates at
-        // the semantic build (the blurred rect carries no rect analysis
-        // authority), and the refusal must not allocate a destination readback.
+        // The refusal is sigma-independent: every complex-clip mask blur frame
+        // terminates at the coverage-mask clip producer preflight, and the refusal
+        // must not allocate a destination readback.
         val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderBlurredDifferenceClipScene(sigma = 1.5f)
         }
-        assertEquals(PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL, terminal.diagnostic.code.value)
+        assertEquals(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL, terminal.diagnostic.code.value)
         assertEquals(
             readbacksBefore,
             session.runtimeTelemetry.destinationReadbackSnapshots,

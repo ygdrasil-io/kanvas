@@ -2279,6 +2279,13 @@ class FirstRoutePlannerTest {
                     affectsValidity = true,
                     evidenceLabel = "first-route-fixture",
                 ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "first-route-fixture",
+                ),
             ),
             snapshotId = "first-route-test",
         )
@@ -2301,6 +2308,13 @@ class FirstRoutePlannerTest {
             facts = listOf(
                 GPUCapabilityFact(
                     name = "first_slice.fill_rrect.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "rrect-route-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
                     source = "unit-test",
                     value = "supported",
                     affectsValidity = true,
@@ -2361,6 +2375,13 @@ class FirstRoutePlannerTest {
             facts = listOf(
                 GPUCapabilityFact(
                     name = "first_slice.path_fill.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "path-fill-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
                     source = "unit-test",
                     value = "supported",
                     affectsValidity = true,

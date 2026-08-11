@@ -1062,6 +1062,8 @@ private class WgpuBackendSession(
     private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
     private val quarantinedSeparableBlurCaches =
         linkedSetOf<GPUWgpu4kSeparableBlurRectSessionCache>()
+    private val quarantinedMaskBlurCaches =
+        linkedSetOf<GPUWgpu4kMaskBlurSessionCache>()
     private val quarantinedDestinationCopyCaches =
         linkedSetOf<GPUWgpu4kDestinationCopySessionCache>()
     private val quarantinedSurfaceBlitCaches =
@@ -1090,6 +1092,7 @@ private class WgpuBackendSession(
                                 addAll(quarantinedRegisteredUniformCaches)
                                 addAll(quarantinedColorGlyphCaches)
                                 addAll(quarantinedSeparableBlurCaches)
+                                addAll(quarantinedMaskBlurCaches)
                                 addAll(quarantinedDestinationCopyCaches)
                                 addAll(quarantinedSurfaceBlitCaches)
                             }
@@ -1106,6 +1109,8 @@ private class WgpuBackendSession(
                                 is GPUWgpu4kColorGlyphSessionCache -> quarantinedColorGlyphCaches.remove(owner)
                                 is GPUWgpu4kSeparableBlurRectSessionCache ->
                                     quarantinedSeparableBlurCaches.remove(owner)
+                                is GPUWgpu4kMaskBlurSessionCache ->
+                                    quarantinedMaskBlurCaches.remove(owner)
                                 is GPUWgpu4kDestinationCopySessionCache ->
                                     quarantinedDestinationCopyCaches.remove(owner)
                                 is GPUWgpu4kSurfaceBlitSessionCache -> quarantinedSurfaceBlitCaches.remove(owner)
@@ -1190,6 +1195,13 @@ private class WgpuBackendSession(
                     name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
                     source = "runtime",
                     evidenceLabel = "core-primitive-path-stencil-native",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.mask_blur.native",
+                    source = "runtime",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "prepared-top-level-mask-blur",
                 ),
                 GPUCapabilityFact(
                     name = "first_slice.fill_rect.affine.native",
@@ -1318,6 +1330,9 @@ private class WgpuBackendSession(
         val destinationCopyCache = setupTransaction.own(
             GPUWgpu4kDestinationCopySessionCache(glfw.wgpuContext.device),
         )
+        val maskBlurCache = setupTransaction.own(
+            GPUWgpu4kMaskBlurSessionCache(glfw.wgpuContext.device),
+        )
         val surfaceBlitCache = setupTransaction.own(
             GPUWgpu4kSurfaceBlitSessionCache(glfw.wgpuContext.device, preparedTarget),
         )
@@ -1371,6 +1386,7 @@ private class WgpuBackendSession(
                     colorGlyphCache,
                     registeredUniformRectCache,
                     separableBlurRectCache,
+                    maskBlurCache,
                     destinationCopyCache,
                 ),
                 target = preparedTarget,
@@ -1536,6 +1552,7 @@ private class WgpuBackendSession(
                     corePrimitiveCache = corePrimitiveCache,
                     registeredUniformRectCache = registeredUniformRectCache,
                     separableBlurRectCache = separableBlurRectCache,
+                    maskBlurCache = maskBlurCache,
                     destinationCopyCache = destinationCopyCache,
                     surfaceBlitCache = surfaceBlitCache,
                     surfaceTargetResolver = surfaceTargetResolver,

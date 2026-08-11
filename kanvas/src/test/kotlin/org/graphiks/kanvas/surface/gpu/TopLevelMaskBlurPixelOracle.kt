@@ -21,7 +21,9 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.r
+import org.graphiks.kanvas.types.redByte
 
 /**
  * CPU pixel oracle for top-level mask blur (Task 11), faithful to the legacy
@@ -138,17 +140,22 @@ object TopLevelMaskBlurPixelOracle {
         maxIntermediateBytes: Long = Long.MAX_VALUE,
         clip: RectClip? = null,
     ): UByteArray {
+        val planClipBounds = clip?.let { rect ->
+            GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+        } ?: clipBounds
         val plan = planShape(
-            targetWidth, targetHeight, shape, clipBounds, style, sigma, maxIntermediateBytes,
+            targetWidth, targetHeight, shape, planClipBounds, style, sigma, maxIntermediateBytes,
         ) as MaskBlurPlan.Ready
         val kernel = kernelFor(plan)
         val localMask = localCoverage(plan, shape)
         val blurredH = blurPass(localMask, plan.localWidth, plan.localHeight, kernel, horizontal = true)
         val blurred = blurPass(blurredH, plan.localWidth, plan.localHeight, kernel, horizontal = false)
         val styled = stylePass(plan, localMask, blurred)
+
         val composite = compositePass(
             plan, styled, source, blendMode, destinationEncoded, targetWidth, targetHeight, clip,
         )
+
         return composite
     }
 
@@ -319,18 +326,59 @@ object TopLevelMaskBlurPixelOracle {
                 val dstEncoded = FloatArray(4) { channel ->
                     destinationEncoded[dstIndex + channel].toInt() / 255f
                 }
-                val dst = dstEncoded.toLinearPremul()
                 val src = Premul4(
                     srcLinear[0] * coverage,
                     srcLinear[1] * coverage,
                     srcLinear[2] * coverage,
                     srcLinear[3] * coverage,
                 )
-                val blended = blendPremul(src, dst, blendMode)
-                out[dstIndex] = encode(blended.r)
-                out[dstIndex + 1] = encode(blended.g)
-                out[dstIndex + 2] = encode(blended.b)
-                out[dstIndex + 3] = encode(blended.a)
+                val blended = when (blendMode) {
+                    BlendMode.SRC_OVER -> {
+                        // Fixed-function composite: the source is blended against the
+                        // decoded attachment in linear space, then the result is
+                        // sRGB-encoded on write (observed GPU behavior).
+                        val dst = Premul4(
+                            srgbToLinear(dstEncoded[0]),
+                            srgbToLinear(dstEncoded[1]),
+                            srgbToLinear(dstEncoded[2]),
+                            dstEncoded[3],
+                        )
+                        Premul4(
+                            encodeLinear(src.r + dst.r * (1f - src.a)),
+                            encodeLinear(src.g + dst.g * (1f - src.a)),
+                            encodeLinear(src.b + dst.b * (1f - src.a)),
+                            encodeAlpha(src.a + dst.a * (1f - src.a)),
+                        )
+                    }
+                    BlendMode.SRC -> {
+                        Premul4(
+                            encodeLinear(src.r),
+                            encodeLinear(src.g),
+                            encodeLinear(src.b),
+                            encodeAlpha(src.a),
+                        )
+                    }
+                    else -> {
+                        // Destination-read formula composite: linear blend, final encode.
+                        val dst = Premul4(
+                            srgbToLinear(dstEncoded[0]),
+                            srgbToLinear(dstEncoded[1]),
+                            srgbToLinear(dstEncoded[2]),
+                            dstEncoded[3],
+                        )
+                        val formula = blendPremul(src, dst, blendMode)
+                        Premul4(
+                            encodeLinear(formula.r),
+                            encodeLinear(formula.g),
+                            encodeLinear(formula.b),
+                            encodeAlpha(formula.a),
+                        )
+                    }
+                }
+                out[dstIndex] = encodeByte(blended.r)
+                out[dstIndex + 1] = encodeByte(blended.g)
+                out[dstIndex + 2] = encodeByte(blended.b)
+                out[dstIndex + 3] = encodeByte(blended.a)
             }
         }
         return out
@@ -341,9 +389,11 @@ object TopLevelMaskBlurPixelOracle {
     private data class Premul4(val r: Float, val g: Float, val b: Float, val a: Float)
 
     private fun Color.toLinearPremul(): FloatArray {
-        val alpha = a / 255f
-        return floatArrayOf(srgbToLinear(r / 255f) * alpha, srgbToLinear(g / 255f) * alpha, srgbToLinear(b / 255f) * alpha, alpha)
+        val alpha = a
+        return floatArrayOf(srgbToLinear(r) * alpha, srgbToLinear(g) * alpha, srgbToLinear(b) * alpha, alpha)
     }
+
+
 
     private fun FloatArray.toLinearPremul(): Premul4 = Premul4(this[0], this[1], this[2], this[3])
 
@@ -376,12 +426,21 @@ object TopLevelMaskBlurPixelOracle {
         return if (clamped <= 0.0031308f) clamped * 12.92f else 1.055f * clamped.pow(1f / 2.4f) - 0.055f
     }
 
-    private fun encode(value: Float): UByte {
-        val linear = value.coerceIn(0f, 1f)
-        val encoded = linearToSrgb(linear) * 255f
-        return (if (encoded - floor(encoded) >= 0.5f) ceil(encoded) else floor(encoded)).toInt()
+    private fun encode(value: Float): UByte = encodeByte(value)
+
+    private fun encodeByte(value: Float): UByte {
+        val clamped = value.coerceIn(0f, 1f)
+        val scaled = clamped * 255f
+        return (if (scaled - floor(scaled) >= 0.5f) ceil(scaled) else floor(scaled)).toInt()
             .coerceIn(0, 255).toUByte()
     }
+
+    private fun encodeLinear(value: Float): Float {
+        val clamped = value.coerceIn(0f, 1f)
+        return linearToSrgb(clamped)
+    }
+
+    private fun encodeAlpha(value: Float): Float = value.coerceIn(0f, 1f)
 
     /** Non-AA solid rect fill in the same encode convention (used for under-draws). */
     fun fillRect(

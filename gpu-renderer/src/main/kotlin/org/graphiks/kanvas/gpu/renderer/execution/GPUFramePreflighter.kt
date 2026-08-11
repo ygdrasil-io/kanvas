@@ -1987,7 +1987,8 @@ internal class GPUFramePreflighter(
                                     packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.Vertices ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
-                                    packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
+                                    packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.MaskBlur
                             val acceptedGeneration = when {
                                 (preparedLateBound || packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
                                     packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
@@ -4401,6 +4402,8 @@ internal class GPUFramePreflighter(
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.SeparableBlurRect ->
                 validateSeparableBlurRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.MaskBlur ->
+                validateMaskBlurSemanticPayload(framePlan, sourceStepIndex, render, packet, semantic)
             is GPUDrawSemanticPayload.SampledImage ->
                 if (!hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
                     diagnostic(
@@ -6193,3 +6196,11 @@ private fun GPUPreparedNativeFrameBoundary.terminalizeCallerRetainedDraft(
         releaseOrQuarantineBeforeRegistration(draft)
     }
 }
+
+private fun validateMaskBlurSemanticPayload(
+    framePlan: GPUFramePlan,
+    sourceStepIndex: Int,
+    render: GPUFrameStep.RenderPassStep,
+    packet: GPUDrawPacket,
+    semantic: GPUDrawSemanticPayload.MaskBlur,
+): GPUDiagnostic? = null

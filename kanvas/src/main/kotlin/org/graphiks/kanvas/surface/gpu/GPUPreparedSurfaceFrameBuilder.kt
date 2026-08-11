@@ -407,6 +407,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     semanticsByCommandId = semantics,
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
+                    maskBlurIntermediateBudgetBytes = request.candidate.config.maxMaskBlurIntermediateBytes.toLong(),
                 ),
                 allowEmptyBaseTaskList = compositeScheduling != null,
             )) {
@@ -511,7 +512,8 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             val commandId = consumer.commandId.value
             require(
                 semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
-                    semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive,
+                    semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive ||
+                    semantics[commandId] is GPUDrawSemanticPayload.MaskBlur,
             )
             val render = rendersByTaskId.getValue(consumer.renderTaskId)
             val packet = render.drawPackets.single { candidate ->

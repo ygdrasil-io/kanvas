@@ -170,6 +170,13 @@ data class GPUProductFlagConfig(
                 affectsValidity = true,
                 evidenceLabel = "product-flag:blurFilter",
             )
+            facts += GPUCapabilityFact(
+                name = "first_slice.mask_blur.native",
+                source = "product-flags",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:maskBlur",
+            )
         }
         if (colorMatrixFilterEnabled) {
             facts += GPUCapabilityFact(

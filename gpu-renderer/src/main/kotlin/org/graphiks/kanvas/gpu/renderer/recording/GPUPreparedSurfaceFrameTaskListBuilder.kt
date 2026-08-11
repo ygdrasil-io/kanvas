@@ -118,6 +118,8 @@ data class GPUPreparedSurfaceFrameRequest(
     val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
     val readbackRequestId: GPUReadbackRequestID?,
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    /** Legacy mask-blur intermediate budget (RenderConfig.maxMaskBlurIntermediateBytes). */
+    val maskBlurIntermediateBudgetBytes: Long = 67_108_864L,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -984,13 +986,14 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 it !is GPUDrawSemanticPayload.SampledImage &&
                 it !is GPUDrawSemanticPayload.TextA8 &&
                 it !is GPUDrawSemanticPayload.ColorGlyph &&
-                it !is GPUDrawSemanticPayload.Vertices
+                it !is GPUDrawSemanticPayload.Vertices &&
+                it !is GPUDrawSemanticPayload.MaskBlur
         }
         if (unsupported != null) {
             return refused(
                 "unsupported.recording.prepared_surface_semantic_type",
                 "Prepared surfaces accept only CorePrimitive, SampledImage, TextA8, ColorGlyph, " +
-                    "and Vertices semantics.",
+                    "Vertices, and MaskBlur semantics.",
             )
         }
         val hasPreparedText = request.semanticsByCommandId.values.any {
@@ -1094,6 +1097,19 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         // assemblers, which require at least one base render.
         if (allowEmptyBaseTaskList && packets.isEmpty()) {
             return GPUPreparedSurfaceFrameResult.Recorded(request.baseTaskList)
+        }
+        val maskBlurPackets = packets.filter { packet ->
+            request.semanticsByCommandId[packet.commandIdValue] is GPUDrawSemanticPayload.MaskBlur
+        }
+        if (maskBlurPackets.isNotEmpty()) {
+            // Task 11: top-level mask blur. The whole frame is recorded by the closed
+            // mask blur lane (non-blur packets keep their scene renders; each blur draw
+            // expands into mask -> blur-h -> blur-v -> style -> composite).
+            return buildTopLevelMaskBlurFrame(
+                request = request,
+                configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+                maskBlurIntermediateBudgetBytes = request.maskBlurIntermediateBudgetBytes,
+            )
         }
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
