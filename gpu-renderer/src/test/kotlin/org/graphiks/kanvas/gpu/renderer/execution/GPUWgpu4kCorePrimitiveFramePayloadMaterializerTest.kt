@@ -5664,6 +5664,36 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         }.also { created ->
                             createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
                         }
+                    } else if (label == "Kanvas.frame.maskBlur.destinationSnapshot" ||
+                        label.startsWith("Kanvas.session.maskBlur.")
+                    ) {
+                        // The mask blur lane (Task 11) tracks every intermediate and the
+                        // destination snapshot in its pre-registration ledger, so each
+                        // texture must be a distinct handle with its own view.
+                        val imageViewLabel = when (label) {
+                            "Kanvas.frame.maskBlur.destinationSnapshot" ->
+                                "Kanvas.frame.maskBlur.destinationSnapshot-view"
+                            "Kanvas.session.maskBlur.maskTexture" ->
+                                "Kanvas.session.maskBlur.maskTexture.view"
+                            "Kanvas.session.maskBlur.horizontalTexture" ->
+                                "Kanvas.session.maskBlur.horizontalTexture.view"
+                            "Kanvas.session.maskBlur.verticalTexture" ->
+                                "Kanvas.session.maskBlur.verticalTexture.view"
+                            else -> "Kanvas.session.maskBlur.styledTexture.view"
+                        }
+                        handle(GPUTexture::class.java, label) { textureMethod ->
+                            if (textureMethod.name == "createView") {
+                                events += "createView:$imageViewLabel"
+                                recordedHandle(
+                                    GPUTextureView::class.java,
+                                    imageViewLabel,
+                                ) as GPUTextureView
+                            } else {
+                                null
+                            }
+                        }.also { created ->
+                            createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
+                        }
                     } else {
                         texture
                     }

@@ -980,13 +980,6 @@ fn kanvasSrgbToLinear(c: f32) -> f32 {
     return pow((c + 0.055) / 1.055, 2.4);
 }
 
-fn kanvasLinearToSrgb(c: f32) -> f32 {
-    if (c <= 0.0031308) {
-        return c * 12.92;
-    }
-    return 1.055 * pow(c, 0.4166667) - 0.055;
-}
-
 @fragment
 fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let localSize = max(uniforms.deviceBounds.zw - uniforms.deviceBounds.xy, vec2f(1.0));
@@ -996,6 +989,11 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let dstDims = textureDimensions(dstTexture);
     let dstUv = position.xy / vec2f(f32(dstDims.x), f32(dstDims.y));
     let dstEncoded = textureSample(dstTexture, dstSampler, dstUv);
+    // wgpu4k does NOT auto-decode sRGB samples on this backend (verified empirically),
+    // so the dst snapshot must be decoded manually per the Graphite kTextureCopy model.
+    // A spec-compliant backend WOULD decode sRGB samples automatically and would
+    // double-decode here — flagged for a wgpu4k ticket per the project's
+    // wgpu4k-evolution policy before any "complete" claim.
     let dst = vec4f(kanvasSrgbToLinear(dstEncoded.r), kanvasSrgbToLinear(dstEncoded.g), kanvasSrgbToLinear(dstEncoded.b), dstEncoded.a);
     let blended = blendPremul(src, dst, uniforms.blendMode);
     return blended;

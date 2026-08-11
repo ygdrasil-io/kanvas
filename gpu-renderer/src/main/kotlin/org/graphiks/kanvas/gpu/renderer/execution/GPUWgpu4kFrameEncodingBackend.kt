@@ -413,12 +413,6 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {
             val pass = render.pass
-            if (render.operationKind == GPUEncoderOperationKind.CopyDestination) {
-                synchronized(this@GPUWgpu4kFrameEncodingBackend) {
-                    destinationCopyCount += 1
-                    onDestinationCopyEncoded()
-                }
-            }
             encodeWgpu4kRenderPass(
                 native,
                 render,

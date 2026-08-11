@@ -606,7 +606,6 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                     draws = draws,
                     generationSeal = generationSeal,
                 )
-                println("MBLUR-SOLID draws=" + draws.joinToString { "scissor=${it.scissor}" })
             }
         }
 

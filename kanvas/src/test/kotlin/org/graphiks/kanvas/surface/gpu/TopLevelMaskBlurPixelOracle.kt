@@ -7,6 +7,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sqrt
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.filters.BlurKernelUniform
 import org.graphiks.kanvas.gpu.renderer.filters.MAX_MASK_BLUR_TAPS
@@ -226,32 +227,6 @@ object TopLevelMaskBlurPixelOracle {
         }
         if (shape.inverseFill) inside = !inside
         return if (inside) 1f else 0f
-    }
-
-    fun kernelForDebug(plan: MaskBlurPlan.Ready): BlurKernelUniform = kernelFor(plan)
-
-    fun localCoverageDebug(plan: MaskBlurPlan.Ready, shape: Shape): FloatArray = localCoverage(plan, shape)
-
-    fun styledDebug(plan: MaskBlurPlan.Ready, localMask: FloatArray): FloatArray {
-        val kernel = kernelFor(plan)
-        val blurredH = blurPass(localMask, plan.localWidth, plan.localHeight, kernel, horizontal = true)
-        return blurPass(blurredH, plan.localWidth, plan.localHeight, kernel, horizontal = false)
-    }
-
-    fun stageRowsDebug(
-        plan: MaskBlurPlan.Ready,
-        localMask: FloatArray,
-        row: Int,
-    ): Triple<FloatArray, FloatArray, FloatArray> {
-        val kernel = kernelFor(plan)
-        val blurredH = blurPass(localMask, plan.localWidth, plan.localHeight, kernel, horizontal = true)
-        val blurred = blurPass(blurredH, plan.localWidth, plan.localHeight, kernel, horizontal = false)
-        val w = plan.localWidth
-        return Triple(
-            localMask.slice(row * w until (row + 1) * w).toFloatArray(),
-            blurredH.slice(row * w until (row + 1) * w).toFloatArray(),
-            blurred.slice(row * w until (row + 1) * w).toFloatArray(),
-        )
     }
 
     private fun kernelFor(plan: MaskBlurPlan.Ready): BlurKernelUniform {
@@ -535,19 +510,46 @@ object TopLevelMaskBlurPixelOracle {
         return out
     }
 
+    /**
+     * Asserts the GPU pixels within a channel tolerance of the oracle.
+     *
+     * Tolerance rationale (24/255): the lane is four consecutive 8-bit stages
+     * (mask -> blur-h -> blur-v -> style -> composite), each quantizing ~1-2/255
+     * on top of the scene target's own 8-bit encode, and the styled mask is
+     * sampled with nearest filtering into the scaled local grid, so a
+     * boundary texel can shift by a full local texel when scale < 1. The
+     * secondary exactness asserts in the flip-set tests pin the extremes
+     * (exact 255/255 center coverage and exact 0/255 decal corners), so a
+     * mismatched shape cannot hide inside the tolerance.
+     */
     fun assertPixelsNear(expected: UByteArray, actual: UByteArray, tolerance: Int = 24) {
         require(expected.size == actual.size)
+        require(actual.size % 4 == 0) {
+            "Mask blur pixel buffers must be RGBA byte arrays"
+        }
         var worst = 0
         var worstIdx = 0
         for (i in expected.indices) {
             val diff = abs(expected[i].toInt() - actual[i].toInt())
             if (diff > worst) { worst = diff; worstIdx = i }
         }
-        val w = 32
+        // Derive the target width from the buffer length (closest factor pair of
+        // the channel count) so non-32 targets dump correctly.
+        val channels = actual.size / 4
+        var w = sqrt(channels.toDouble()).toInt()
+        while (w > 1 && channels % w != 0) w -= 1
+        check(w >= 1) { "Mask blur pixel buffers must have a factorable channel count" }
+        val h = channels / w
+        val rows = listOf(0.25, 0.375, 0.5, 0.625, 0.75, 0.875)
+            .map { fraction -> ((h - 1) * fraction).toInt() }
+            .distinct()
+        val cols = listOf(0.0, 0.125, 0.1875, 0.25, 0.46875, 0.53125, 0.5625, 0.625, 0.6875, 0.875)
+            .map { fraction -> ((w - 1) * fraction).toInt() }
+            .distinct()
         val sb = StringBuilder()
-        for (y in listOf(8, 10, 12, 14, 16, 18, 20, 24)) {
+        for (y in rows) {
             sb.append("row ").append(y).append(": ")
-            for (x in listOf(0, 4, 6, 8, 10, 12, 14, 15, 16, 17, 18, 20, 22, 24, 28)) {
+            for (x in cols) {
                 val idx = (y * w + x) * 4
                 sb.append("(").append(x).append(",").append(y).append(")rgba=")
                     .append(actual[idx].toInt()).append(",").append(actual[idx+1].toInt()).append(",").append(actual[idx+2].toInt()).append(",").append(actual[idx+3].toInt())
