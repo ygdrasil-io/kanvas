@@ -496,6 +496,14 @@ Resolution evidence (`fp-10-reusable-prepared-surface-session-evidence.md`):
   pre-existing failures (package boundary, stencil smoke); the `failed.surface.prepared.session-close`
   flake remains documented environmental (FP-09 evidence §17).
 
+FP-10 transfer (retained-session-exposed pre-existing gap, per evidence §11):
+- mask-blur leading-composite retained-target ordering —
+  `GPUTopLevelMaskBlurFrameRecording` `firstCompositeClears = sceneRenders.isEmpty()`
+  does not account for a mixed frame whose first paint op is a mask blur (composite
+  `loadOp="load"` samples the retained previous-frame pixels; pre-FP-10 loaded
+  undefined fresh-target content); correct condition is "no scene clear render
+  ordered BEFORE the composite"; no test covers the leading-blur-mixed shape.
+
 ### FP-11 — Close bounded native-rendering gaps
 
 Status: `pending`

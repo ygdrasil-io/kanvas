@@ -255,3 +255,16 @@ regression proof + stress green + evidence report + roadmap FP-10 completed).
 Task 6 runs at HEAD `fcb1798c9`, 2026-08-12, on the Intel UHD Graphics 630 + AMD Radeon Pro 5500M
 Mac (Metal backend): full regression (§7), stress 6/6 + factory lifetime 3/3 + boundary unchanged
 (§6), AFTER-fix ordered repro 1,874/1,874 with no flake and no native crash (§1).
+
+## 11. Known residual (final review, 2026-08-12)
+
+**Mask-blur leading-composite retained-target gap** (`GPUTopLevelMaskBlurFrameRecording.kt`,
+`firstCompositeClears = sceneRenders.isEmpty()`): a MIXED frame whose first paint op is a mask
+blur (chain sorts before the frame's first clear scene render in `orderedRenders` paint order)
+runs its composite with `loadOp = "load"` over the RETAINED session target — sampling the
+previous frame's pixels. Pre-FP-10 this loaded undefined fresh-target content (equally wrong,
+silent), so it is a pre-existing semantic gap EXPOSED by session reuse, not a regression of a
+correct path; it is now deterministic-stale instead of garbage. The correct condition is "no
+scene clear render ordered BEFORE the composite", not "no scene renders at all". No test covers
+the leading-blur-mixed shape. Tracked as an FP-11 transfer (see active-todo); the gap was
+documented rather than fixed in FP-10 to keep the reuse change reviewable.
