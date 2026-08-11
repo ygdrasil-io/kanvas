@@ -992,8 +992,8 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     // wgpu4k does NOT auto-decode sRGB samples on this backend (verified empirically),
     // so the dst snapshot must be decoded manually per the Graphite kTextureCopy model.
     // A spec-compliant backend WOULD decode sRGB samples automatically and would
-    // double-decode here — flagged for a wgpu4k ticket per the project's
-    // wgpu4k-evolution policy before any "complete" claim.
+    // double-decode here - flagged for a wgpu4k ticket per the project's
+    // wgpu4k-evolution policy before any completeness claim.
     let dst = vec4f(kanvasSrgbToLinear(dstEncoded.r), kanvasSrgbToLinear(dstEncoded.g), kanvasSrgbToLinear(dstEncoded.b), dstEncoded.a);
     let blended = blendPremul(src, dst, uniforms.blendMode);
     return blended;
