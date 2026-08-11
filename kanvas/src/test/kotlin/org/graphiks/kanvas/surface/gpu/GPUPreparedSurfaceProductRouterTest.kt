@@ -556,7 +556,7 @@ class GPUPreparedSurfaceProductRouterTest {
         pipelineBinds: Long = 1,
     ) = GPUPreparedSurfaceExecutionEvidence(
         targetCreations = 1,
-        targetCloses = 1,
+        targetCloses = 0,
         frameCoordinatorCreations = 1,
         encoders = 1,
         commandBuffers = 1,

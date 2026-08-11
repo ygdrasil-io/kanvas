@@ -101,6 +101,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertPixel(result.pixels.toByteArray(), 32, 31, 31, listOf(0, 0, 0, 0))
 
         assertEquals(1L, evidence.targetCreations)
+        // This frame renders through the shared preparedSurfaceProductExecutionPort after the
+        // class's @AfterTest dispose: the fresh runtime carries a new device generation, so the
+        // frame closes the previous generation's cached session (boundary, not checkin).
         assertEquals(1L, evidence.targetCloses)
         assertEquals(1L, evidence.frameCoordinatorCreations)
         assertEquals(1L, evidence.encoders)
@@ -249,7 +252,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
         val evidence = result.evidence
         assertEquals(1L, evidence.targetCreations)
-        assertEquals(1L, evidence.targetCloses)
+        assertEquals(0L, evidence.targetCloses)
         assertEquals(1L, evidence.frameCoordinatorCreations)
         assertEquals(1L, evidence.encoders)
         assertEquals(1L, evidence.commandBuffers)
@@ -347,7 +350,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertPixel(result.rgba, 40, 37, 11, listOf(0, 0, 0, 0))
         assertEquals(11, result.visualOperationCount)
         assertEquals(1L, result.evidence.targetCreations)
-        assertEquals(1L, result.evidence.targetCloses)
+        assertEquals(0L, result.evidence.targetCloses)
         assertEquals(1L, result.evidence.submits)
         assertEquals(1L, result.evidence.readbackCopies)
         assertEquals(0, result.evidence.activeNativePayloads)

@@ -998,14 +998,10 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var analyticClipBindGroup: GPUBindGroup? = null
         var msaaColorTexture: GPUTexture? = null
         var msaaColorView: GPUTextureView? = null
-        val replacePathDepthStencil = pathDepthStencilRequirement != null &&
-            oldHandles.pathDepthStencil?.requirement != pathDepthStencilRequirement
-        val replaceClipDepthStencil = clipDepthStencilRequirement != null &&
-            oldHandles.clipDepthStencil?.requirement != clipDepthStencilRequirement
-        val replaceCoverageMask = coverageMaskRequirement != null &&
-            oldHandles.coverageMask?.requirement != coverageMaskRequirement
-        val replaceMsaaColor = msaaColorRequirement != null &&
-            oldHandles.msaaColor?.requirement != msaaColorRequirement
+        val replacePathDepthStencil = oldHandles.pathDepthStencil?.requirement != pathDepthStencilRequirement
+        val replaceClipDepthStencil = oldHandles.clipDepthStencil?.requirement != clipDepthStencilRequirement
+        val replaceCoverageMask = oldHandles.coverageMask?.requirement != coverageMaskRequirement
+        val replaceMsaaColor = oldHandles.msaaColor?.requirement != msaaColorRequirement
         val replaceBindGroup = capacities.uniformBytes > slot.capacities.uniformBytes ||
             oldHandles.componentIdentity != componentIdentity ||
             (dstRead != null && oldHandles.dstRead != dstRead) ||
@@ -1056,7 +1052,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     )
                 }
             }
-            if (replacePathDepthStencil) {
+            if (replacePathDepthStencil && pathDepthStencilRequirement != null) {
                 pathDepthStencilTexture = allocate(
                     GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
                 ) {
@@ -1068,7 +1064,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     factory.createPathDepthStencilView(requireNotNull(pathDepthStencilTexture))
                 }
             }
-            if (replaceClipDepthStencil) {
+            if (replaceClipDepthStencil && clipDepthStencilRequirement != null) {
                 clipDepthStencilTexture = allocate(
                     GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilTexture,
                 ) {
@@ -1080,7 +1076,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     factory.createClipDepthStencilView(requireNotNull(clipDepthStencilTexture))
                 }
             }
-            if (replaceCoverageMask) {
+            if (replaceCoverageMask && coverageMaskRequirement != null) {
                 coverageMaskTexture = allocate(
                     GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
                 ) {
@@ -1102,7 +1098,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     )
                 }
             }
-            if (replaceMsaaColor) {
+            if (replaceMsaaColor && msaaColorRequirement != null) {
                 msaaColorTexture = allocate(
                     GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorTexture,
                 ) {
@@ -1120,31 +1116,37 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 uniform ?: oldHandles.uniformBuffer,
                 bindGroup ?: oldHandles.bindGroup,
                 if (replacePathDepthStencil) {
-                    GPUWgpu4kCorePrimitivePathDepthStencilHandles(
-                        requireNotNull(pathDepthStencilRequirement),
-                        requireNotNull(pathDepthStencilTexture),
-                        requireNotNull(pathDepthStencilView),
-                    )
+                    pathDepthStencilRequirement?.let { requirement ->
+                        GPUWgpu4kCorePrimitivePathDepthStencilHandles(
+                            requirement,
+                            requireNotNull(pathDepthStencilTexture),
+                            requireNotNull(pathDepthStencilView),
+                        )
+                    }
                 } else {
                     oldHandles.pathDepthStencil
                 },
                 componentIdentity,
                 if (replaceClipDepthStencil) {
-                    GPUWgpu4kCorePrimitiveClipDepthStencilHandles(
-                        requireNotNull(clipDepthStencilRequirement),
-                        requireNotNull(clipDepthStencilTexture),
-                        requireNotNull(clipDepthStencilView),
-                    )
+                    clipDepthStencilRequirement?.let { requirement ->
+                        GPUWgpu4kCorePrimitiveClipDepthStencilHandles(
+                            requirement,
+                            requireNotNull(clipDepthStencilTexture),
+                            requireNotNull(clipDepthStencilView),
+                        )
+                    }
                 } else {
                     oldHandles.clipDepthStencil
                 },
                 if (replaceCoverageMask) {
-                    GPUWgpu4kCorePrimitiveCoverageMaskHandles(
-                        requireNotNull(coverageMaskRequirement),
-                        requireNotNull(coverageMaskTexture),
-                        requireNotNull(coverageMaskView),
-                        coverageMaskConsumerBindGroup,
-                    )
+                    coverageMaskRequirement?.let { requirement ->
+                        GPUWgpu4kCorePrimitiveCoverageMaskHandles(
+                            requirement,
+                            requireNotNull(coverageMaskTexture),
+                            requireNotNull(coverageMaskView),
+                            coverageMaskConsumerBindGroup,
+                        )
+                    }
                 } else if (replaceCoverageMaskConsumerBindGroup) {
                     requireNotNull(oldHandles.coverageMask).copy(
                         consumerBindGroupOrNull = requireNotNull(coverageMaskConsumerBindGroup),
@@ -1154,11 +1156,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 },
                 oldHandles.sampleCount,
                 if (replaceMsaaColor) {
-                    GPUWgpu4kCorePrimitiveMsaaColorHandles(
-                        requireNotNull(msaaColorRequirement),
-                        requireNotNull(msaaColorTexture),
-                        requireNotNull(msaaColorView),
-                    )
+                    msaaColorRequirement?.let { requirement ->
+                        GPUWgpu4kCorePrimitiveMsaaColorHandles(
+                            requirement,
+                            requireNotNull(msaaColorTexture),
+                            requireNotNull(msaaColorView),
+                        )
+                    }
                 } else {
                     oldHandles.msaaColor
                 },
@@ -1414,13 +1418,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Boolean = this.componentIdentity == componentIdentity &&
-        (pathRequirement == null || pathDepthStencil?.requirement == pathRequirement) &&
-        (clipRequirement == null || clipDepthStencil?.requirement == clipRequirement) &&
-        (coverageMaskRequirement == null || coverageMask?.requirement == coverageMaskRequirement) &&
+        pathDepthStencil?.requirement == pathRequirement &&
+        clipDepthStencil?.requirement == clipRequirement &&
+        coverageMask?.requirement == coverageMaskRequirement &&
         (!coverageMaskConsumerBindGroupRequired ||
             coverageMask?.consumerBindGroupOrNull != null) &&
         (!analyticClipBindGroupRequired || analyticClipBindGroupOrNull != null) &&
-        (msaaColorRequirement == null || msaaColor?.requirement == msaaColorRequirement)
+        msaaColor?.requirement == msaaColorRequirement
 
     private fun selectAvailableSlot(
         available: List<Slot>,

@@ -388,10 +388,14 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                     )
                 }
             }
-            if (composite.step.loadStore != GPULoadStorePlan("load", GPUStorePlan.Store)) {
+            if (composite.step.loadStore !in setOf(
+                    GPULoadStorePlan("load", GPUStorePlan.Store),
+                    GPULoadStorePlan("clear", GPUStorePlan.Store),
+                )
+            ) {
                 return invalid(
                     "composite-load",
-                    "The mask blur composite requires one load-and-store scene pass.",
+                    "The mask blur composite requires one load-and-store or clear-and-store scene pass.",
                 )
             }
             if (mask.step.drawPackets.single().scissorBoundsHash != localScissor ||
@@ -790,7 +794,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                     targetView = targetView,
                     pipeline = compositePipelines.dstPipeline,
                     bindGroup = dstBindGroup,
-                    clear = false,
+                    clear = pending.entry.step.loadStore.loadOp == "clear",
                     scissor = pending.scissor,
                     generationSeal = generationSeal,
                 )
@@ -841,7 +845,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         compositePipelines.srcPipeline
                     },
                     bindGroup = compositeBindGroup,
-                    clear = false,
+                    clear = pending.entry.step.loadStore.loadOp == "clear",
                     scissor = pending.scissor,
                     generationSeal = generationSeal,
                 )

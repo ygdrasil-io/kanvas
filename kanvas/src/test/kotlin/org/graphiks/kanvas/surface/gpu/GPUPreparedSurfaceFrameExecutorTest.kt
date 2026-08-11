@@ -355,7 +355,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `success preserves build facts and returns exact frame-local evidence after close`() {
+    fun `success preserves build facts and returns exact frame-local evidence after checkin`() {
         val session = FakeSession()
         val backend = FakeBackend(capabilities(), session)
         val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
@@ -369,7 +369,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(1, backend.prepareCalls)
         assertEquals(1, backend.closeCalls)
         assertEquals(1, session.submitCalls)
-        assertEquals(1, session.closeCalls)
+        assertEquals(0, session.closeCalls)
         assertEquals(1, backend.preparedRequests.single().width)
         assertEquals(4, backend.preparedRequests.single().height)
         assertEquals(request().candidate.color.physicalFormat, backend.preparedRequests.single().colorFormat)
@@ -403,21 +403,27 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `two executions allocate distinct target recording frame and readback identities`() {
-        val sessions = mutableListOf<FakeSession>()
-        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
-            FakeBackend(capabilities(), FakeSession().also(sessions::add))
-        })
+    fun `two executions reuse one session with distinct target recording frame and readback identities`() {
+        val session = FakeSession()
+        val backend = FakeBackend(capabilities(), session)
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
 
-        assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request()))
-        assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request()))
+        val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request()))
+        val second = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request()))
 
-        val firstTasks = sessions[0].submittedTaskLists.single()
-        val secondTasks = sessions[1].submittedTaskLists.single()
+        assertEquals(0L, first.evidence.targetCloses)
+        assertEquals(0L, second.evidence.targetCreations)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(2, session.submitCalls)
+        assertEquals(0, session.closeCalls)
+        val firstTasks = session.submittedTaskLists[0]
+        val secondTasks = session.submittedTaskLists[1]
         assertNotEquals(firstTasks.frameId, secondTasks.frameId)
         assertNotEquals(firstTasks.recordingSeals.single().recordingId, secondTasks.recordingSeals.single().recordingId)
-        assertNotEquals(sceneTarget(firstTasks), sceneTarget(secondTasks))
-        assertNotEquals(sessions[0].submittedReadbackIds.single(), sessions[1].submittedReadbackIds.single())
+        // One session binds one canonical logical target for its whole lifetime; the
+        // per-frame recording/frame/readback identities above remain distinct.
+        assertEquals(sceneTarget(firstTasks), sceneTarget(secondTasks))
+        assertNotEquals(session.submittedReadbackIds[0], session.submittedReadbackIds[1])
     }
 
     @Test
@@ -575,7 +581,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(setOf(evidence.commandId), success.evidence.destinationReadTextCommandIds)
         assertEquals(1, backend.prepareCalls)
         assertEquals(1, session.submitCalls)
-        assertEquals(1, session.closeCalls)
+        assertEquals(0, session.closeCalls)
     }
 
     @Test
@@ -687,14 +693,14 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `readback size overflow and invalid post-close counters are terminal`() {
+    fun `readback size overflow and invalid after-close counters are terminal`() {
         val backend = FakeBackend(capabilities(), FakeSession())
         val overflow = GPUPreparedSurfaceFrameExecutor(
             backendFactory = GPUPreparedSurfaceBackendPortFactory { backend },
             frameBuilder = { readyBuild() },
         ).execute(request().copy(width = Int.MAX_VALUE, height = Int.MAX_VALUE))
         val invalidCounters = FakeSession(
-            postCloseCountersOverride = postCloseCounters().copy(activeNativePayloads = 1),
+            afterCloseCountersOverride = frameCounters().copy(activeNativePayloads = 1),
         )
 
         val overflowFailure = assertIs<GPUPreparedSurfaceExecutionResult.TerminalFailure>(overflow)
@@ -749,7 +755,10 @@ class GPUPreparedSurfaceFrameExecutorTest {
 
     @Test
     fun `session and backend close failures are terminal with primary code provenance`() {
-        val session = FakeSession(closeFailure = IllegalStateException("session detail"))
+        val session = FakeSession(
+            submitFailure = IllegalStateException("submit detail"),
+            closeFailure = IllegalStateException("session close detail"),
+        )
         val backend = FakeBackend(
             capabilities(), session, closeFailure = UnsupportedOperationException("backend detail"),
         )
@@ -975,7 +984,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     private fun evidence() = GPUPreparedSurfaceExecutionEvidence(
-        1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1,
+        1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1,
         0, 0, 0, 1, 1, 0, 1,
         GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
     )
@@ -1037,7 +1046,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         private val submissionFactory: ((GPUReadbackRequestID) -> GPUPreparedSurfaceSubmission)? = null,
         private val closeFailure: Throwable? = null,
         private val submitFailure: Throwable? = null,
-        private val postCloseCountersOverride: GPUPreparedSceneNativeCounters? = null,
+        private val afterCloseCountersOverride: GPUPreparedSceneNativeCounters? = null,
     ) : GPUPreparedSurfaceSessionPort {
         val submittedTaskLists = mutableListOf<GPUTaskList>()
         val submittedReadbackIds = mutableListOf<GPUReadbackRequestID>()
@@ -1076,12 +1085,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
             }
         }
 
+        // Session-state fake: counters are cumulative across the session's frames. The first
+        // read of a session reports the created state; later reads report the state after the
+        // completed frames so far; the executor's per-frame afterClose read (every third read)
+        // can be overridden to probe invalid checkin counters.
         override fun counters(): GPUPreparedSceneNativeCounters {
             counterReads++
+            val completedFrames = if (counterReads == 1) 0 else (counterReads + 1) / 3
             return when {
-                closed -> postCloseCountersOverride ?: postCloseCounters()
+                closed -> afterCloseCountersOverride ?: closedCounters()
                 counterReads == 1 -> GPUPreparedSceneNativeCounters(targetCreations = 1)
-                else -> postCompletionCounters()
+                counterReads % 3 == 0 -> afterCloseCountersOverride ?: postCompletionCounters(completedFrames)
+                else -> postCompletionCounters(completedFrames)
             }
         }
 
@@ -1091,21 +1106,21 @@ class GPUPreparedSurfaceFrameExecutorTest {
             closeFailure?.let { throw it }
         }
 
-        private fun postCompletionCounters() = GPUPreparedSceneNativeCounters(
-            encoders = 1,
-            commandBuffers = 1,
+        private fun postCompletionCounters(completedFrames: Int) = GPUPreparedSceneNativeCounters(
+            encoders = completedFrames.toLong(),
+            commandBuffers = completedFrames.toLong(),
             targetCreations = 1,
-            submits = 1,
-            readbackCopies = 1,
-            retentionRegistrations = 1,
-            retentionCompletions = 1,
-            frameCoordinatorCreations = 1,
-            distinctRetentionTickets = 1,
-            renderPasses = 1,
-            draws = 1,
-            pipelineBinds = 1,
-            destinationSnapshotCreations = destinationReadCommandIds().size.toLong(),
-            destinationCopies = destinationReadCommandIds().size.toLong(),
+            submits = completedFrames.toLong(),
+            readbackCopies = completedFrames.toLong(),
+            retentionRegistrations = completedFrames.toLong(),
+            retentionCompletions = completedFrames.toLong(),
+            frameCoordinatorCreations = completedFrames.toLong(),
+            distinctRetentionTickets = completedFrames,
+            renderPasses = completedFrames.toLong(),
+            draws = completedFrames.toLong(),
+            pipelineBinds = completedFrames.toLong(),
+            destinationSnapshotCreations = destinationReadCommandIds().size.toLong() * completedFrames,
+            destinationCopies = destinationReadCommandIds().size.toLong() * completedFrames,
         )
 
         private fun destinationReadCommandIds(): Set<Int> =
@@ -1117,14 +1132,17 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 ?.toSet()
                 .orEmpty()
 
-        private fun postCloseCounters() = postCompletionCounters().copy(targetCloses = 1)
+        private fun closedCounters() = GPUPreparedSceneNativeCounters(
+            targetCreations = 1,
+            targetCloses = 1,
+        )
     }
 
-    private fun postCloseCounters() = GPUPreparedSceneNativeCounters(
+    private fun frameCounters() = GPUPreparedSceneNativeCounters(
         encoders = 1,
         commandBuffers = 1,
         targetCreations = 1,
-        targetCloses = 1,
+        targetCloses = 0,
         submits = 1,
         readbackCopies = 1,
         retentionRegistrations = 1,

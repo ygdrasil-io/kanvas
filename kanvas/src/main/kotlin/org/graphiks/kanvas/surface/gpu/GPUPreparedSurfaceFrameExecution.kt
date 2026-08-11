@@ -273,12 +273,24 @@ internal class GPUPreparedSurfaceCompletion(
     val rgba: ByteArray? get() = ownedRgba?.copyOf()
 }
 
+private data class GPUPreparedSurfaceSessionKey(
+    val deviceGeneration: Long,
+    val width: Int,
+    val height: Int,
+    val colorFormat: String,
+    val colorInterpretation: String,
+)
+
 internal class GPUPreparedSurfaceFrameExecutor(
     private val backendFactory: GPUPreparedSurfaceBackendPortFactory,
     private val frameBuilder: (GPUPreparedSurfaceFrameBuildRequest) -> GPUPreparedSurfaceFrameBuildResult =
         GPUPreparedSurfaceFrameBuildSession()::build,
     private val ordinal: AtomicLong = sharedOrdinal,
 ) : GPUPreparedSurfaceExecutionPort {
+    private var cachedKey: GPUPreparedSurfaceSessionKey? = null
+    private var cachedSession: GPUPreparedSurfaceSessionPort? = null
+    private var cachedTarget: GPUFrameTargetRef? = null
+
     override fun execute(request: GPUPreparedSurfaceExecutionRequest): GPUPreparedSurfaceExecutionResult {
         GPUPreparedSurfacePreBackendNoOpGate.classify(request)?.let { noOp ->
             return completeNoOp(request, noOp)
@@ -297,6 +309,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
         var pendingSuccess: PendingPreparedSuccess? = null
         var postCloseCounters: GPUPreparedSceneNativeCounters? = null
         var postCloseTelemetry: GPUBackendRuntimeTelemetry? = null
+        var sessionCreatedByFrame = false
+        var sessionClosedByFrame = false
         try {
             val capabilities = backend.capabilities
             if (capabilities == null) {
@@ -306,7 +320,22 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 )
             } else {
                 val frameOrdinal = ordinal.incrementAndGet()
-                val target = GPUFrameTargetRef("surface-prepared-target-$frameOrdinal")
+                val key = GPUPreparedSurfaceSessionKey(
+                    deviceGeneration = backend.deviceGeneration.value,
+                    width = request.width,
+                    height = request.height,
+                    colorFormat = request.candidate.color.physicalFormat.value,
+                    colorInterpretation = request.candidate.color.interpretation.value,
+                )
+                // The prepared scene session binds one canonical logical target for its whole
+                // lifetime (stale.prepared-scene-session.target-identity), so the scene target
+                // ref is cached with the session; recording/frame/readback identities stay
+                // frame-local.
+                val target: GPUFrameTargetRef = if (key == cachedKey) {
+                    cachedTarget ?: GPUFrameTargetRef("surface-prepared-target-$frameOrdinal")
+                } else {
+                    GPUFrameTargetRef("surface-prepared-target-$frameOrdinal")
+                }
                 val recordingId = GPURecordingID("surface-prepared-recording-$frameOrdinal")
                 val frameId = GPUFrameID(frameOrdinal)
                 val readbackId = GPUReadbackRequestID("surface-prepared-readback-$frameOrdinal")
@@ -329,20 +358,93 @@ internal class GPUPreparedSurfaceFrameExecutor(
                             request.output == GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
                     ),
                 )
-                primary = when (build) {
+                when (build) {
                     is GPUPreparedSurfaceFrameBuildResult.Refused ->
-                        GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(build.diagnostic)
+                        primary =
+                            GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(build.diagnostic)
                     is GPUPreparedSurfaceFrameBuildResult.NoOp ->
-                        completeNoOp(request, build)
+                        primary = completeNoOp(request, build)
                     is GPUPreparedSurfaceFrameBuildResult.Ready -> {
-                        val prepared = executePrepared(
-                            request = request,
-                            backend = backend,
-                            build = build,
-                            openSession = { opened -> session = opened },
-                            onSuccess = { pendingSuccess = it },
-                        )
-                        prepared
+                        val expectedByteCount = try {
+                            Math.multiplyExact(
+                                Math.multiplyExact(request.width.toLong(), request.height.toLong()),
+                                4L,
+                            )
+                        } catch (failure: ArithmeticException) {
+                            primary = terminal(
+                                "invalid.surface.prepared.readback-size",
+                                "Prepared Surface dimensions do not fit the RGBA readback contract.",
+                                mapOf(
+                                    "width" to request.width.toString(),
+                                    "height" to request.height.toString(),
+                                    "failureClass" to failure.javaClass.name,
+                                ),
+                            )
+                            null
+                        }
+                        if (primary == null) {
+                            if (key != cachedKey) {
+                                val oldSession = cachedSession
+                                if (oldSession != null) {
+                                    try {
+                                        oldSession.close()
+                                    } catch (failure: Throwable) {
+                                        val existingCode = primaryCode(primary)
+                                        primary = terminal(
+                                            "failed.surface.prepared.session-close",
+                                            "The prepared Surface session could not close cleanly.",
+                                            closeFacts(failure, existingCode),
+                                        )
+                                    }
+                                    sessionClosedByFrame = true
+                                    cachedSession = null
+                                    cachedKey = null
+                                    cachedTarget = null
+                                }
+                                if (primary == null) {
+                                    var prepared: GPUPreparedSurfaceSessionPort? = null
+                                    prepared = try {
+                                        backend.prepare(
+                                            GPUOffscreenTargetRequest(
+                                                width = request.width,
+                                                height = request.height,
+                                                colorFormat = request.candidate.color.physicalFormat,
+                                                colorInterpretation = request.candidate.color.interpretation,
+                                            ),
+                                        )
+                                    } catch (failure: Throwable) {
+                                        primary = terminal(
+                                            "failed.surface.prepared.session-prepare",
+                                            "The prepared Surface session could not be created.",
+                                            mapOf("failureClass" to failure.javaClass.name),
+                                        )
+                                        null
+                                    }
+                                    if (prepared != null) {
+                                        cachedSession = prepared
+                                        cachedKey = key
+                                        cachedTarget = target
+                                        sessionCreatedByFrame = true
+                                        session = prepared
+                                    }
+                                }
+                            } else {
+                                session = cachedSession
+                            }
+                        }
+                        if (session != null && primary == null) {
+                            val prepared = executePrepared(
+                                request = request,
+                                backend = backend,
+                                build = build,
+                                session = session,
+                                expectedByteCount = expectedByteCount!!,
+                                sessionCreatedByFrame = sessionCreatedByFrame,
+                                sessionClosedByFrame = sessionClosedByFrame,
+                                onSuccess = { pendingSuccess = it },
+                            )
+                            if (prepared != null) primary = prepared
+                        }
                     }
                 }
             }
@@ -355,16 +457,39 @@ internal class GPUPreparedSurfaceFrameExecutor(
         } finally {
             val activeSession = session
             if (activeSession != null) {
-                try {
-                    activeSession.close()
-                    postCloseCounters = activeSession.counters()
-                } catch (failure: Throwable) {
-                    val existingCode = primaryCode(primary)
-                    primary = terminal(
-                        "failed.surface.prepared.session-close",
-                        "The prepared Surface session could not close cleanly.",
-                        closeFacts(failure, existingCode),
-                    )
+                if (primary != null) {
+                    // Poisoned session: the frame failed, so the session is terminal. Close it
+                    // and evict it from the cache; the next frame prepares a fresh session.
+                    try {
+                        activeSession.close()
+                        postCloseCounters = activeSession.counters()
+                    } catch (failure: Throwable) {
+                        val existingCode = primaryCode(primary)
+                        primary = terminal(
+                            "failed.surface.prepared.session-close",
+                            "The prepared Surface session could not close cleanly.",
+                            closeFacts(failure, existingCode),
+                        )
+                    }
+                    sessionClosedByFrame = true
+                    if (activeSession === cachedSession) {
+                        cachedSession = null
+                        cachedKey = null
+                        cachedTarget = null
+                    }
+                } else {
+                    // Checkin: keep the cached session open for compatible frames; the counters
+                    // read after the frame feeds the per-frame delta computation.
+                    try {
+                        postCloseCounters = activeSession.counters()
+                    } catch (failure: Throwable) {
+                        val existingCode = primaryCode(primary)
+                        primary = terminal(
+                            "failed.surface.prepared.session-close",
+                            "The prepared Surface session could not close cleanly.",
+                            closeFacts(failure, existingCode),
+                        )
+                    }
                 }
             }
             if (primary == null && pendingSuccess != null) {
@@ -483,40 +608,13 @@ internal class GPUPreparedSurfaceFrameExecutor(
         request: GPUPreparedSurfaceExecutionRequest,
         backend: GPUPreparedSurfaceBackendPort,
         build: GPUPreparedSurfaceFrameBuildResult.Ready,
-        openSession: (GPUPreparedSurfaceSessionPort) -> Unit,
+        session: GPUPreparedSurfaceSessionPort,
+        expectedByteCount: Long,
+        sessionCreatedByFrame: Boolean,
+        sessionClosedByFrame: Boolean,
         onSuccess: (PendingPreparedSuccess) -> Unit,
     ): GPUPreparedSurfaceExecutionResult? {
-        val expectedByteCount = try {
-            Math.multiplyExact(Math.multiplyExact(request.width.toLong(), request.height.toLong()), 4L)
-        } catch (failure: ArithmeticException) {
-            return terminal(
-                "invalid.surface.prepared.readback-size",
-                "Prepared Surface dimensions do not fit the RGBA readback contract.",
-                mapOf(
-                    "width" to request.width.toString(),
-                    "height" to request.height.toString(),
-                    "failureClass" to failure.javaClass.name,
-                ),
-            )
-        }
         val telemetryBefore = backend.runtimeTelemetry
-        val session = try {
-            backend.prepare(
-                GPUOffscreenTargetRequest(
-                    width = request.width,
-                    height = request.height,
-                    colorFormat = request.candidate.color.physicalFormat,
-                    colorInterpretation = request.candidate.color.interpretation,
-                ),
-            )
-        } catch (failure: Throwable) {
-            return terminal(
-                "failed.surface.prepared.session-prepare",
-                "The prepared Surface session could not be created.",
-                mapOf("failureClass" to failure.javaClass.name),
-            )
-        }
-        openSession(session)
         val beforeSubmit = session.counters()
         val submission = try {
             when (request.output) {
@@ -640,6 +738,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
+                sessionCreatedByFrame,
+                sessionClosedByFrame,
             ),
         )
         return null
@@ -653,17 +753,23 @@ internal class GPUPreparedSurfaceFrameExecutor(
         return try {
             check(pending.beforeSubmit.targetCreations == 1L && pending.beforeSubmit.targetCloses == 0L)
             check(pending.afterCompletion.targetCreations == 1L && pending.afterCompletion.targetCloses == 0L)
-            check(afterClose.targetCreations == 1L && afterClose.targetCloses == 1L)
+            check(afterClose.targetCreations == 1L && afterClose.targetCloses == 0L)
             check(afterClose.activeNativePayloads == 0)
             check(afterClose.outputOwnedNativePayloads == 0)
             check(afterClose.quarantinedNativePayloads == 0)
-            check(afterClose.retentionRegistrations == afterClose.retentionCompletions)
-            check(afterClose.retentionQuarantines == 0L)
-            check(afterClose.distinctRetentionTickets == 1)
+            check(
+                delta(pending.beforeSubmit.retentionRegistrations, afterClose.retentionRegistrations) ==
+                    delta(pending.beforeSubmit.retentionCompletions, afterClose.retentionCompletions),
+            )
+            check(delta(pending.beforeSubmit.retentionQuarantines, afterClose.retentionQuarantines) == 0L)
+            check(
+                deltaInt(pending.beforeSubmit.distinctRetentionTickets, afterClose.distinctRetentionTickets) ==
+                    1,
+            )
 
             val evidence = GPUPreparedSurfaceExecutionEvidence(
-                targetCreations = afterClose.targetCreations,
-                targetCloses = afterClose.targetCloses,
+                targetCreations = if (pending.sessionCreatedByFrame) 1L else 0L,
+                targetCloses = if (pending.sessionClosedByFrame) 1L else 0L,
                 frameCoordinatorCreations = delta(
                     pending.beforeSubmit.frameCoordinatorCreations,
                     pending.afterCompletion.frameCoordinatorCreations,
@@ -687,10 +793,22 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 activeNativePayloads = afterClose.activeNativePayloads,
                 outputOwnedNativePayloads = afterClose.outputOwnedNativePayloads,
                 quarantinedNativePayloads = afterClose.quarantinedNativePayloads,
-                retentionRegistrations = afterClose.retentionRegistrations,
-                retentionCompletions = afterClose.retentionCompletions,
-                retentionQuarantines = afterClose.retentionQuarantines,
-                distinctRetentionTickets = afterClose.distinctRetentionTickets,
+                retentionRegistrations = delta(
+                    pending.beforeSubmit.retentionRegistrations,
+                    afterClose.retentionRegistrations,
+                ),
+                retentionCompletions = delta(
+                    pending.beforeSubmit.retentionCompletions,
+                    afterClose.retentionCompletions,
+                ),
+                retentionQuarantines = delta(
+                    pending.beforeSubmit.retentionQuarantines,
+                    afterClose.retentionQuarantines,
+                ),
+                distinctRetentionTickets = deltaInt(
+                    pending.beforeSubmit.distinctRetentionTickets,
+                    afterClose.distinctRetentionTickets,
+                ),
                 textCounters = GPUPreparedTextFrameCounters(
                     a8Instances = pending.textMetrics.a8InstanceCount,
                     colorGlyphInstances = pending.textMetrics.colorGlyphInstanceCount,
@@ -806,6 +924,10 @@ internal class GPUPreparedSurfaceFrameExecutor(
         check(it >= 0L)
     }
 
+    private fun deltaInt(before: Int, after: Int): Int = Math.subtractExact(after, before).also {
+        check(it >= 0)
+    }
+
     private fun commandDelta(
         pending: PendingPreparedSuccess,
         commandId: Int,
@@ -834,6 +956,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,
+        val sessionCreatedByFrame: Boolean,
+        val sessionClosedByFrame: Boolean,
     ) {
         private val ownedRgba = rgba.copyOf()
         val rgba: ByteArray get() = ownedRgba.copyOf()
