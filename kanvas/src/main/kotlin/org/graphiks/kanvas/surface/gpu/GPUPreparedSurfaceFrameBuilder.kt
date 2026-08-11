@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
@@ -43,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
+import org.graphiks.kanvas.paint.BlendMode
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -115,7 +117,17 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         return try {
-            val hasCompositeOps = request.candidate.operations.any { operation ->
+            // Destination-reading frames whose first visual op is the reader fuse the
+            // scene-target clear into that reader's render pass, while the destination
+            // snapshot copy is ordered before the pass. On a fresh target the copy
+            // accidentally captures the cleared state; on a retained prepared session
+            // target (FP-10 reuse) it captures the previous frame's pixels. Synthesize
+            // the frame's implicit clear as an explicit leading op so the copy always
+            // captures the cleared target.
+            val operations = request.candidate.operations.withSynthesizedDstReadSceneClear(
+                interpretation = request.candidate.color.interpretation,
+            )
+            val hasCompositeOps = operations.any { operation ->
                 operation is DisplayOp.BeginLayer ||
                     operation is DisplayOp.EndLayer ||
                     operation is DisplayOp.DrawPicture
@@ -132,7 +144,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // with unsupported.surface.prepared.mixed-composite-topology.
             val compositeHandling = if (hasCompositeOps) {
                 prepareCompositeFrameHandling(
-                    operations = request.candidate.operations,
+                    operations = operations,
                     capabilities = request.capabilities,
                     taskListBuilder = taskListBuilder,
                     context = contextFor(request),
@@ -158,7 +170,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val compositeScheduling = (compositeHandling as? CompositeFrameHandling.Ready)
                 ?.takeIf { ready -> ready.handling.commands.isNotEmpty() }
             val elidedCompositeChildOperationIndices = compositeScheduling?.let {
-                compositeCoveredOperationIndices(request.candidate.operations)
+                compositeCoveredOperationIndices(operations)
             } ?: emptySet()
             // A covered DrawPicture never reaches this elision: the capturer refuses unpainted
             // pictures inside saveLayer scopes (unsupported.composite.operation) and painted
@@ -172,25 +184,25 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // isolated target cannot ride the scene.
             val flatElidedOperationIndices = (
                 elidedCompositeChildOperationIndices.filter { index ->
-                    request.candidate.operations[index] is DisplayOp.DrawPicture
+                    operations[index] is DisplayOp.DrawPicture
                 }
                 ).toSet() + compositeScheduling?.let { ready ->
                     emptyLayerCoveredOperationIndices(
                         ready = ready,
-                        operations = request.candidate.operations,
+                        operations = operations,
                         coveredOperationIndices = elidedCompositeChildOperationIndices,
                         targetBounds = request.targetBounds,
                     )
                 }.orEmpty()
             if (compositeHandling is CompositeFrameHandling.Ready) {
                 compositeTopologyRefusal(
-                    operations = request.candidate.operations,
+                    operations = operations,
                     coveredOperationIndices = elidedCompositeChildOperationIndices,
                 )?.let { refusal ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(refusal)
                 }
             }
-            val hasPreparedText = request.candidate.operations.any { operation ->
+            val hasPreparedText = operations.any { operation ->
                 operation is org.graphiks.kanvas.canvas.DisplayOp.DrawText
             }
             val frameGeneration = if (hasPreparedText) {
@@ -207,7 +219,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 0
             }
             val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
-                operations = request.candidate.operations,
+                operations = operations,
                 target = request.targetFacts,
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
@@ -228,7 +240,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
-                operations = request.candidate.operations,
+                operations = operations,
                 target = request.targetFacts,
                 config = request.candidate.config,
                 capabilities = request.capabilities,
@@ -267,7 +279,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val verticesInventory = verticesPreparation.inventory
             val preparedImages = collectPreparedImageVisuals(
                 mapping = mapping,
-                operations = request.candidate.operations,
+                operations = operations,
                 inventory = textPreparation.inventory,
                 elidedOperationIndices = flatElidedOperationIndices,
             )
@@ -311,14 +323,14 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 verticesInventory.mappedCommands.isEmpty() &&
                 compositeScheduling == null
             ) {
-                val textOperationIndices = request.candidate.operations.withIndex()
+                val textOperationIndices = operations.withIndex()
                     .filter { indexed -> indexed.value is DisplayOp.DrawText }
                     .mapTo(linkedSetOf()) { indexed -> indexed.index }
                 val accountedTextOperationIndices = (
                     textPreparation.inventory.elidedTextOperationIndices +
                         mapping.culledTextOperationIndices
                     ).toSet()
-                val hasOnlyTextAndStateOperations = request.candidate.operations.all { operation ->
+                val hasOnlyTextAndStateOperations = operations.all { operation ->
                     operation is DisplayOp.DrawText ||
                         operation is DisplayOp.Annotation ||
                         operation is DisplayOp.SetTransform ||
@@ -456,7 +468,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         .authenticatedDestinationReadEvidence(
                             semantics,
                             destinationReadOperationFamily(
-                                request.candidate.operations,
+                                operations,
                                 mapping.commandIdsByOperationIndex,
                             ),
                         )
@@ -496,6 +508,86 @@ internal object GPUPreparedSurfaceFrameBuilder {
         }
     }
 }
+
+/**
+ * Destination-reading prepared frames whose first visual op IS the reader fuse the scene-target
+ * clear into that reader's render pass (`loadOp = "clear"` on the first scene render), while the
+ * destination snapshot copy is ordered before that pass. On a fresh target the copy accidentally
+ * captures the cleared state; on a retained prepared-session target (FP-10 reuse) it captures the
+ * previous frame's pixels. Synthesize the frame's implicit clear as an explicit leading
+ * [DisplayOp.Clear] so the copy always captures the cleared target, on fresh and retained sessions
+ * alike.
+ */
+private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
+    interpretation: GPUColorInterpretation,
+): List<DisplayOp> {
+    // EncodedPremulSrgb targets refuse translucent solids (unsupported.surface.prepared.
+    // encoded-premul-srgb.translucent-solid); those frames keep today's fused-clear behavior.
+    if (interpretation == GPUColorInterpretation.EncodedPremulSrgb) return this
+    // Composite frames own their background through the saveLayer pipeline.
+    if (any { operation ->
+            operation is DisplayOp.BeginLayer ||
+                operation is DisplayOp.EndLayer ||
+                operation is DisplayOp.DrawPicture
+        }
+    ) {
+        return this
+    }
+    val firstVisual = firstOrNull(DisplayOp::isVisualDraw) ?: return this
+    val text = firstVisual as? DisplayOp.DrawText ?: return this
+    if (text.paint.blendMode !in PREPARED_DST_READ_TEXT_BLEND_MODES) return this
+    if (text.blob.glyphRuns.sumOf { run -> run.glyphs.size } == 0) return this
+    return listOf(
+        DisplayOp.Clear(Color.TRANSPARENT),
+    ) + this
+}
+
+private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
+    is DisplayOp.DrawRect,
+    is DisplayOp.DrawRRect,
+    is DisplayOp.DrawPath,
+    is DisplayOp.DrawImage,
+    is DisplayOp.DrawText,
+    is DisplayOp.DrawVertices,
+    is DisplayOp.DrawColor,
+    is DisplayOp.Clear,
+    is DisplayOp.DrawPoint,
+    is DisplayOp.DrawPoints,
+    is DisplayOp.DrawDRRect,
+    is DisplayOp.DrawImageNine,
+    is DisplayOp.DrawImageLattice,
+    is DisplayOp.DrawMesh,
+    is DisplayOp.DrawAtlas,
+    -> true
+    else -> false
+}
+
+/**
+ * Text blend modes whose canonical scalar-coverage blend plan samples the destination texture
+ * (`ShaderBlendWithDstRead`), mirroring GPUBlendPlanning's scalar-coverage fallback branch for
+ * text semantics. A leading destination-reading draw therefore sees the frame's cleared state.
+ */
+private val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
+    BlendMode.SRC,
+    BlendMode.SRC_IN,
+    BlendMode.SRC_OUT,
+    BlendMode.DST_ATOP,
+    BlendMode.PLUS,
+    BlendMode.MULTIPLY,
+    BlendMode.OVERLAY,
+    BlendMode.DARKEN,
+    BlendMode.LIGHTEN,
+    BlendMode.COLOR_DODGE,
+    BlendMode.COLOR_BURN,
+    BlendMode.HARD_LIGHT,
+    BlendMode.SOFT_LIGHT,
+    BlendMode.DIFFERENCE,
+    BlendMode.EXCLUSION,
+    BlendMode.HUE,
+    BlendMode.SATURATION,
+    BlendMode.COLOR,
+    BlendMode.LUMINOSITY,
+)
 
 private fun GPUTaskList.authenticatedDestinationReadEvidence(
     semantics: Map<Int, GPUDrawSemanticPayload>,

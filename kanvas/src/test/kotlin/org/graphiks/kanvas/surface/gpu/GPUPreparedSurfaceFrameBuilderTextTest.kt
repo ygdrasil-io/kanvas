@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
@@ -106,6 +107,60 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         assertEquals(1, packets.size)
         assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets.single().semanticPayload)
         assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+    }
+
+    @Test
+    fun `destination read color glyph as first visual op synthesizes leading clear before the copy`() {
+        val destinationReadText = colorTextOperation(fontSize = 28f).copy(
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(destinationReadText),
+                    identity = "dst-read-clear-synthesis",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val clearRender = renders.first()
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(clearRender.drawPackets.single().semanticPayload)
+        assertEquals("clear", clearRender.loadStore.loadOp)
+        val consumer = ready.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+            .flatMap { task -> task.payload.operations }
+            .flatMap(GPUDestinationSnapshotOperation::consumers)
+            .single()
+        val consumerRender = renders.single { render ->
+            render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+        }
+        assertTrue(
+            renders.indexOf(consumerRender) > renders.indexOf(clearRender),
+            "destination snapshot consumer must render after the synthesized scene clear",
+        )
+        assertEquals("load", consumerRender.loadStore.loadOp)
+        assertIs<GPUDrawSemanticPayload.ColorGlyph>(consumerRender.drawPackets.single().semanticPayload)
+    }
+
+    @Test
+    fun `non destination read color glyph first visual op synthesizes no leading clear`() {
+        val sourceOverText = colorTextOperation(fontSize = 28f)
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(sourceOverText),
+                    identity = "src-over-no-clear-synthesis",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(1, renders.size)
+        assertIs<GPUDrawSemanticPayload.ColorGlyph>(renders.single().drawPackets.single().semanticPayload)
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+        assertTrue(renders.single().drawPackets.none { packet ->
+            packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+        })
     }
 
     @Test
