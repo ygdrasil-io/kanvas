@@ -255,7 +255,7 @@ class GPUPreparedSurfaceProductEntryTest {
         val RECT = Rect.fromLTRB(0f, 0f, 1f, 1f)
         val EVIDENCE = GPUPreparedSurfaceExecutionEvidence(
             targetCreations = 1,
-            targetCloses = 1,
+            targetCloses = 0,
             frameCoordinatorCreations = 1,
             encoders = 1,
             commandBuffers = 1,

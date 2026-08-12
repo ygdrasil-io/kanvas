@@ -16,8 +16,17 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
@@ -795,6 +804,47 @@ class GPUPreparedSurfaceNativePreflightTest {
                 }
                 .corePrimitiveNativeScopeRouteSeal,
             coreRun.routeSeal,
+        )
+    }
+
+    @Test
+    fun `mixed masked text frame passes the direct core geometry gate without mask artifacts refusal`() {
+        // A direct core render plus a coverage-mask text consumer is exactly the mixed shape the
+        // `!exactPreparedSurfaceMixedBoundary` carve-out in GPUFramePreflighter's direct-geometry
+        // validation protects: the mask artifacts belong to the text member, so the frame must
+        // NOT be refused with invalid.preflight.core_primitive_direct_geometry_resources. The
+        // captured boundary refusal proves the frame cleared every frame-preflight gate,
+        // including that one.
+        val input = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.MixedMaskedText)
+        val preparations = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        assertTrue(
+            preparations.any { request -> request.role == GPUFrameResourceRole.ClipMask },
+            "mixed masked text fixture must own text-side mask artifacts",
+        )
+        val directCore = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filter { render ->
+                render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                }
+            }
+        assertTrue(
+            directCore.any { render ->
+                render.drawPackets.all { packet ->
+                    packet.clipExecutionPlan is GPUClipExecutionPlan.NoClip
+                }
+            },
+            "mixed masked text fixture must own an unclipped direct core render",
+        )
+        assertTrue(
+            input.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().any { render ->
+                render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                }
+            },
+            "mixed masked text fixture must own the text consumer",
         )
     }
 
@@ -1713,6 +1763,7 @@ internal enum class PreparedSurfaceFixtureShape {
     CoreImageCore,
     ImageCoreImage,
     CoreImageText,
+    MixedMaskedText,
     PathImage,
     ImagePath,
     PathImagePath,
@@ -1734,6 +1785,10 @@ internal fun preparedSurfacePreflightFixture(
     val capabilities = preparedSurfaceCapabilities()
     val commands = when (shape) {
         PreparedSurfaceFixtureShape.Mixed -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceImageCommand(1, 1),
+        )
+        PreparedSurfaceFixtureShape.MixedMaskedText -> listOf(
             preparedSurfaceCoreCommand(0, 0),
             preparedSurfaceImageCommand(1, 1),
         )
@@ -1786,13 +1841,26 @@ internal fun preparedSurfacePreflightFixture(
         commands.forEach(::record)
     }.close()
     val clippedBase = recording.taskList.withPreparedSurfaceClipAuthority()
-    val base = if (shape != PreparedSurfaceFixtureShape.CoreImageText) {
+    val base = if (shape != PreparedSurfaceFixtureShape.CoreImageText &&
+        shape != PreparedSurfaceFixtureShape.MixedMaskedText
+    ) {
         clippedBase
     } else {
         val precedingRender = clippedBase.tasks.filterIsInstance<GPUTask.Render>().last()
+        val maskedText = shape == PreparedSurfaceFixtureShape.MixedMaskedText
         val textPacket = preparedTextPreflightPacket(
             commandId = 2,
             resourceGeneration = precedingRender.drawPackets.single().resourceGeneration,
+            clipCoveragePlan = if (maskedText) {
+                preparedSurfaceMaskedTextCoveragePlan()
+            } else {
+                GPUClipCoveragePlan.NoClip
+            },
+            clipExecutionPlan = if (maskedText) {
+                preparedSurfaceMaskedTextClipPlan()
+            } else {
+                GPUClipExecutionPlan.NoClip
+            },
         )
         GPUTaskList(
             frameId = clippedBase.frameId,
@@ -2879,6 +2947,59 @@ private fun preparedSurfaceCoreCommand(commandId: Int, paintOrder: Int) =
         paintOrder = paintOrder,
         source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
     )
+
+/** Two non-AA rect producers (intersect, then difference) matching [preparedSurfaceMaskedTextClipPlan]. */
+private fun preparedSurfaceMaskedTextCoveragePlan(): GPUClipCoveragePlan = GPUClipCoveragePlan.Mask(
+    contentKey = "clip.prepared-surface.text.mask",
+    width = PREPARED_SURFACE_BOUNDS.width,
+    height = PREPARED_SURFACE_BOUNDS.height,
+    sampleCount = 1,
+    resolvedBytes = PREPARED_SURFACE_BOUNDS.width.toLong() * PREPARED_SURFACE_BOUNDS.height,
+    requiredBytes = PREPARED_SURFACE_BOUNDS.width.toLong() * PREPARED_SURFACE_BOUNDS.height,
+    elements = listOf(
+        GPUClipCoverageElement(
+            operation = GPUClipCoverageOperation.Intersect,
+            kind = GPUClipCoverageElementKind.Rect,
+            values = listOf(0f, 0f, 16f, 16f),
+            vertexCount = 0,
+            antiAlias = false,
+            fillRule = GPUClipFillRule.Winding,
+            inverseFill = false,
+        ),
+        GPUClipCoverageElement(
+            operation = GPUClipCoverageOperation.Difference,
+            kind = GPUClipCoverageElementKind.Rect,
+            values = listOf(4f, 4f, 12f, 12f),
+            vertexCount = 0,
+            antiAlias = false,
+            fillRule = GPUClipFillRule.Winding,
+            inverseFill = false,
+        ),
+    ),
+)
+
+private fun preparedSurfaceMaskedTextClipPlan(): GPUClipExecutionPlan = GPUClipExecutionPlan.CoverageMask(
+    contentKey = "clip.prepared-surface.text.mask",
+    bounds = PREPARED_SURFACE_BOUNDS,
+    sampleCount = 1,
+    depthStencilRequired = false,
+    orderingToken = GPUClipOrderingToken("token.prepared-surface.text.mask"),
+    producers = listOf(
+        GPUClipMaskProducerPlan(
+            sourceOrder = 0,
+            geometry = GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
+            combine = GPUClipMaskCombine.Intersect,
+            antiAlias = false,
+        ),
+        GPUClipMaskProducerPlan(
+            sourceOrder = 1,
+            geometry = GPUClipExecutionGeometry.Rect(GPUBounds(4f, 4f, 12f, 12f)),
+            combine = GPUClipMaskCombine.Difference,
+            antiAlias = false,
+        ),
+    ),
+    consumer = GPUClipMaskConsumerPlan(),
+)
 
 private fun preparedSurfaceImageCommand(commandId: Int, paintOrder: Int) =
     GPUDrawImageRectCommandBuilder.build(

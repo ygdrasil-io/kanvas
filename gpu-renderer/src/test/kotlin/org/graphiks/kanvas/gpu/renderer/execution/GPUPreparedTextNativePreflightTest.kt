@@ -3162,6 +3162,8 @@ internal fun preparedTextPreflightPacket(
     blendPlan: GPUBlendPlan? = null,
     renderStepIdentity: String = "text.a8_mask.sample",
     passId: String = "pass.prepared-text.$commandId",
+    clipCoveragePlan: GPUClipCoveragePlan = GPUClipCoveragePlan.NoClip,
+    clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
 ): GPUDrawPacket =
     GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.prepared-text.$commandId"),
@@ -3181,8 +3183,8 @@ internal fun preparedTextPreflightPacket(
             state = blendState,
             sourceCoverageEncoding = GPUSourceCoverageEncoding.ModulateRGBA,
         ),
-        clipCoveragePlan = GPUClipCoveragePlan.NoClip,
-        clipExecutionPlan = GPUClipExecutionPlan.NoClip,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlan = clipExecutionPlan,
         renderPipelineKey = GPURenderPipelineKey("pending.pipeline.prepared-text"),
         bindingLayoutHash = "pending.layout.prepared-text",
         vertexSourceLabel = "prepared-text-instance-quad",

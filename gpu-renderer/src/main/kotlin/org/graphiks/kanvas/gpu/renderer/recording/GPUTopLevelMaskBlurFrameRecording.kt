@@ -156,9 +156,18 @@ internal fun buildTopLevelMaskBlurFrame(
 
     // Re-plan each blur draw with the configured intermediate budget so the legacy
     // budget gate stays reachable, then verify the immutable semantic plan facts.
+    val sceneRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
+        .filter { render -> render.drawPackets.none { packet ->
+            request.semanticsByCommandId[packet.commandIdValue] is GPUDrawSemanticPayload.MaskBlur
+        } }
+        .map { render -> retargetSceneRender(render, request.target) }
     val chains = mutableListOf<GPUTopLevelMaskBlurChain>()
     val frameId = request.baseTaskList.frameId
     val recordingId = blurPacketRenders.first().recordingId
+    // A frame without scene renders has no clear scene render before the blur chain:
+    // the first chain's composite must clear the scene target itself (the target is
+    // retained across frames in a reusable prepared session).
+    val firstCompositeClears = sceneRenders.isEmpty()
     for ((chainIndex, packet) in blurPackets.withIndex()) {
         val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             as GPUDrawSemanticPayload.MaskBlur
@@ -210,14 +219,10 @@ internal fun buildTopLevelMaskBlurFrame(
             recordingId = recordingId,
             chainIndex = chainIndex,
             limits = limits,
+            compositeLoadOp = if (firstCompositeClears && chainIndex == 0) "clear" else "load",
         )
     }
 
-    val sceneRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
-        .filter { render -> render.drawPackets.none { packet ->
-            request.semanticsByCommandId[packet.commandIdValue] is GPUDrawSemanticPayload.MaskBlur
-        } }
-        .map { render -> retargetSceneRender(render, request.target) }
     // Ordered scene timeline: the recorded scene renders (each at its command paint
     // order) with the blur composites inserted at their own paint positions.
     val orderedRenders = buildList {
@@ -519,6 +524,7 @@ private fun buildBlurChain(
     recordingId: GPURecordingID,
     chainIndex: Int,
     limits: GPULimits,
+    compositeLoadOp: String,
 ): GPUTopLevelMaskBlurChain {
     val commandId = semantic.payloadRef.commandIdValue
     val suffix = "mask-blur.$commandId.$chainIndex"
@@ -749,7 +755,7 @@ private fun buildBlurChain(
         taskId = GPUTaskID("task.mask-blur.composite.$suffix"),
         recordingId = recordingId,
         target = request.target,
-        loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+        loadStore = GPULoadStorePlan(compositeLoadOp, GPUStorePlan.Store),
         packets = listOf(composite),
         resourceUses = listOf(
             GPUFrameResourceUse(

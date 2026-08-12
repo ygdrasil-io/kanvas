@@ -525,7 +525,7 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
                         step,
                         GPUFrameStep.RenderPassStep(
                             target = step.target,
-                            loadStore = CLEAR_LOAD_STORE,
+                            loadStore = GPULoadStorePlan("retained", GPUStorePlan.Store),
                             samplePlan = step.samplePlan,
                             resourceUses = step.resourceUses,
                             drawPackets = step.drawPackets,

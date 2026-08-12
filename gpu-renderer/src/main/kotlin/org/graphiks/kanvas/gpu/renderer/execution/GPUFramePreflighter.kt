@@ -3323,7 +3323,10 @@ internal class GPUFramePreflighter(
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
         }
-        if (accepted.isNotEmpty()) {
+        // A frame that exactly matches the prepared-surface mixed boundary owns mask/depth
+        // artifacts for its non-core members (text, image, vertices); only an all-direct-core
+        // frame is forbidden from carrying them.
+        if (!exactPreparedSurfaceMixedBoundary && accepted.isNotEmpty()) {
             val forbiddenDirectRoles = setOf(
                 GPUFrameResourceRole.PathDepthStencil,
                 GPUFrameResourceRole.ClipDepthStencil,

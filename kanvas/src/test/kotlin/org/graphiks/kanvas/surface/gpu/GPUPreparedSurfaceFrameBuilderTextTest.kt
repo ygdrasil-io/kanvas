@@ -19,9 +19,18 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
@@ -106,6 +115,142 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         assertEquals(1, packets.size)
         assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets.single().semanticPayload)
         assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+    }
+
+    @Test
+    fun `destination read color glyph as first visual op synthesizes leading clear before the copy`() {
+        val destinationReadText = colorTextOperation(fontSize = 28f).copy(
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(destinationReadText),
+                    identity = "dst-read-clear-synthesis",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val clearRender = renders.first()
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(clearRender.drawPackets.single().semanticPayload)
+        assertEquals("clear", clearRender.loadStore.loadOp)
+        val consumer = ready.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+            .flatMap { task -> task.payload.operations }
+            .flatMap(GPUDestinationSnapshotOperation::consumers)
+            .single()
+        val consumerRender = renders.single { render ->
+            render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+        }
+        assertTrue(
+            renders.indexOf(consumerRender) > renders.indexOf(clearRender),
+            "destination snapshot consumer must render after the synthesized scene clear",
+        )
+        assertEquals("load", consumerRender.loadStore.loadOp)
+        assertIs<GPUDrawSemanticPayload.ColorGlyph>(consumerRender.drawPackets.single().semanticPayload)
+        // The synthesized clear is a REAL visual op in the stream: one extra visual command
+        // (and one extra dispatched draw/render pass/pipeline bind at native execution).
+        assertEquals(2, ready.visualOperationCount)
+    }
+
+    @Test
+    fun `empty blob destination read text stays builder no op without synthesized clear`() {
+        val emptyText = textOperation().copy(
+            blob = TextBlob(emptyList()),
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+        )
+
+        // A frame whose only visual op is an elided empty text is a builder NoOp. If the
+        // synthesis fired for the empty blob, the injected clear rect would make the frame
+        // Ready with one core packet, so the NoOp classification pins the empty-glyph guard.
+        val noOp = GPUPreparedSurfaceFrameBuilder.build(
+            preparedFrameRequest(
+                operations = listOf(emptyText),
+                identity = "empty-dst-read-no-synthesis",
+            ),
+        )
+        assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(noOp)
+    }
+
+    @Test
+    fun `empty text before destination read text still synthesizes leading clear`() {
+        // The empty text elides to nothing, so the destination-reading text is the first
+        // painted op: the synthesis must skip the empty blob when locating the first visual.
+        val emptyText = textOperation().copy(blob = TextBlob(emptyList()))
+        val destinationReadText = colorTextOperation(fontSize = 28f).copy(
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(emptyText, destinationReadText),
+                    identity = "empty-then-dst-read-synthesis",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val clearRender = renders.first()
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(clearRender.drawPackets.single().semanticPayload)
+        assertEquals("clear", clearRender.loadStore.loadOp)
+        val consumer = ready.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+            .flatMap { task -> task.payload.operations }
+            .flatMap(GPUDestinationSnapshotOperation::consumers)
+            .single()
+        val consumerRender = renders.single { render ->
+            render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+        }
+        assertTrue(
+            renders.indexOf(consumerRender) > renders.indexOf(clearRender),
+            "destination snapshot consumer must render after the synthesized scene clear",
+        )
+        assertEquals(2, ready.visualOperationCount)
+    }
+
+    @Test
+    fun `destination read text blend mirror equals the planner scalar coverage set`() {
+        // The synthesis condition mirrors GPUBlendPlanner's scalar-coverage dst-read fallback
+        // for text semantics; pin the mirror to the planner itself so drift fails loudly.
+        val plannerRequired = GPUBlendMode.entries.filter { mode ->
+            GPUBlendPlanner().plan(
+                GPUBlendSpecializationRequest(
+                    mode = mode,
+                    coverage = GPUCoverageConsumption.ScalarCoverage,
+                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
+                    target = GPUTargetBlendFacts(
+                        formatClass = "rgba8unorm",
+                        clampsNormalizedColorWrites = true,
+                        premultipliedAlpha = true,
+                    ),
+                    samplePlan = GPUSamplePlan.SingleSampleFrame,
+                ),
+            ).destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        }.map { it.name }.toSet()
+        assertEquals(
+            plannerRequired,
+            PREPARED_DST_READ_TEXT_BLEND_MODES.map { mode -> mode.name }.toSet(),
+        )
+    }
+
+    @Test
+    fun `non destination read color glyph first visual op synthesizes no leading clear`() {
+        val sourceOverText = colorTextOperation(fontSize = 28f)
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(sourceOverText),
+                    identity = "src-over-no-clear-synthesis",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(1, renders.size)
+        assertIs<GPUDrawSemanticPayload.ColorGlyph>(renders.single().drawPackets.single().semanticPayload)
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+        assertTrue(renders.single().drawPackets.none { packet ->
+            packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+        })
     }
 
     @Test

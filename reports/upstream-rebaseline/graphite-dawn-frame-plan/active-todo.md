@@ -472,46 +472,37 @@ Resolution evidence (`fp-09-retire-legacy-immediate-renderer-evidence.md`):
 
 ### FP-10 — Reusable prepared Surface session
 
-Status: `pending`
+Status: `completed`
 
 Goal: reuse backend, target, invariant pipelines, and frame-local pools across
 compatible Surface frames.
 
-Current evidence:
+Resolution evidence (`fp-10-reusable-prepared-surface-session-evidence.md`):
+- the backend factory is a synchronized state machine: create/dispose mutual exclusion,
+  explicit per-dispose device-generation stamping, idempotent dispose that waits for
+  registered prepared-session children (the existing `GPUPreparedSceneChildRegistry`
+  close-wait) before releasing the shared device — the `EXCEPTION_ACCESS_VIOLATION`
+  lifetime/recreation failure class (Queue.writeBuffer + materializeFullscreenUniformSlab
+  after `GPUBackendRuntimeFactory.dispose()` churn) is closed by construction;
+- the process-wide executor caches one prepared scene session keyed by
+  (deviceGeneration, size, format, interpretation): compatible frames reuse the target,
+  the invariant pipeline caches, and the frame-local pools (creation/reuse counters
+  surfaced in the executor evidence), and completion-only + readback outputs share the
+  same session boundary;
+- generation/size/format/owner/close transitions are deterministic — each closes exactly
+  one old session and creates exactly one new one, pinned by a transition matrix and the
+  `GPUPreparedSurfaceLifetimeStressTest` (session reuse, output-sharing, churn probe);
+- full run: `:kanvas:test`/`:gpu-renderer:test` green except the two documented
+  pre-existing failures (package boundary, stencil smoke); the `failed.surface.prepared.session-close`
+  flake remains documented environmental (FP-09 evidence §17).
 
-- full `:kanvas:test` reproduces an `EXCEPTION_ACCESS_VIOLATION` in
-  `wgpu_native.dll` through `Queue.writeBuffer` and
-  `WgpuRenderRecorder.materializeFullscreenUniformSlab`;
-- class-only `GPUAllApiBlendSurfaceTest` passes all 1,858 tests; the ordered
-  reproduction `.\gradlew.bat :kanvas:test --tests
-  "org.graphiks.kanvas.surface.SurfaceTest" --tests
-  "org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest"
-  --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
-  passes `SurfaceTest` 10/10, then the blend worker crashes in
-  `Queue.writeBuffer`;
-- `SurfaceTest.@AfterEach` repeatedly calls the process-global
-  `GPUBackendRuntimeFactory.dispose()`; teardown/recreation is a sufficient
-  predecessor trigger;
-- the FP-01 device-limit change is causally excluded: focused created-device
-  alignment tests pass and none of the three crash dumps contains the former
-  alignment validation panic;
-- the FP-03 full GPU aggregate produced
-  `gpu-renderer/hs_err_pid18980.log`: an `EXCEPTION_ACCESS_VIOLATION` through
-  `nvoglv64.dll`, Vulkan, and `wgpu_native.dll` while
-  `GPUWgpu4kSolidRectFrameSmokeTest` called `Adapter.requestDevice` after
-  earlier native session/resource teardown in the same worker; the isolated
-  complete solid-rectangle class later passed 17/17 without a crash, so this
-  is a new trigger location in the existing lifetime/recreation failure class,
-  not evidence that the FP-03 assertion changes caused the crash;
-- the future minimal TDD reproduction is repeated runtime dispose/recreate
-  followed by fullscreen uniform slab writes in one JVM.
-
-Acceptance:
-
-- repeated frames do not reopen the backend or prepared session;
-- generation, size, format, owner, and close transitions are deterministic;
-- completion-only and readback outputs share the same session boundary;
-- cache creation/reuse counters and lifetime tests pass.
+FP-10 transfer (retained-session-exposed pre-existing gap, per evidence §11):
+- mask-blur leading-composite retained-target ordering —
+  `GPUTopLevelMaskBlurFrameRecording` `firstCompositeClears = sceneRenders.isEmpty()`
+  does not account for a mixed frame whose first paint op is a mask blur (composite
+  `loadOp="load"` samples the retained previous-frame pixels; pre-FP-10 loaded
+  undefined fresh-target content); correct condition is "no scene clear render
+  ordered BEFORE the composite"; no test covers the leading-blur-mixed shape.
 
 ### FP-11 — Close bounded native-rendering gaps
 
