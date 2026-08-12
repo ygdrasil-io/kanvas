@@ -332,6 +332,32 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `leading blur composite on a mixed retained frame clears instead of sampling the previous frame`() {
+        requireWebGpu()
+        // Frame 1 fills the retained session target with blue.
+        Surface(width = 32, height = 32).run {
+            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            render()
+        }
+        // Frame 2 is the leading-blur-mixed shape: the FIRST paint op is a mask blur, a later
+        // scene render draws only a small red rect. The blur composite sorts before the red
+        // rect and must clear the scene target itself (no clear scene render is ordered before
+        // it). Outside the blur region and the red rect the target must be transparent, never
+        // the retained blue. Probe pixel (0,0): the sigma-2 kernel (5 taps, half 2) reaches the
+        // shape [4,12) only at x>=2 or x<=13, so (0,0) lies outside the blur halo (coverage 0).
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(4f, 4f, 12f, 12f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(Rect(20f, 20f, 30f, 30f), Paint.fill(Color.RED))
+            }
+            render().pixels.toUByteArray()
+        }
+        assertEquals(0, pixels[(0 * 32 + 0) * 4 + 3].toInt(), "cleared region outside the blur must be transparent")
+        assertEquals(0, pixels[(0 * 32 + 0) * 4 + 2].toInt(), "cleared region must carry no retained blue")
+        assertEquals(255, pixels[(25 * 32 + 25) * 4 + 0].toInt(), "the later scene render must draw its red rect")
+    }
+
+    @Test
     fun `source blur renders prepared with replace semantics`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {

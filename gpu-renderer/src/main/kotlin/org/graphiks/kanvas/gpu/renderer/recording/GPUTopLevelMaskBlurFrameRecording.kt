@@ -164,11 +164,15 @@ internal fun buildTopLevelMaskBlurFrame(
     val chains = mutableListOf<GPUTopLevelMaskBlurChain>()
     val frameId = request.baseTaskList.frameId
     val recordingId = blurPacketRenders.first().recordingId
-    // A frame without scene renders has no clear scene render before the blur chain:
-    // the first chain's composite must clear the scene target itself (the target is
-    // retained across frames in a reusable prepared session).
-    val firstCompositeClears = sceneRenders.isEmpty()
+    // A frame whose first paint op is a mask blur has no clear scene render ordered BEFORE
+    // the leading composite: on a retained session (FP-10) the composite must clear the scene
+    // target itself. The condition is per chain — "no scene clear render before THIS
+    // composite" — not "no scene renders at all".
+    val sceneRenderPaintOrders = sceneRenders.map { render ->
+        render.drawPackets.minOf { it.originalPaintOrder }
+    }
     for ((chainIndex, packet) in blurPackets.withIndex()) {
+        val compositeClears = sceneRenderPaintOrders.none { it < packet.originalPaintOrder }
         val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             as GPUDrawSemanticPayload.MaskBlur
         val replanned = when (
@@ -219,7 +223,7 @@ internal fun buildTopLevelMaskBlurFrame(
             recordingId = recordingId,
             chainIndex = chainIndex,
             limits = limits,
-            compositeLoadOp = if (firstCompositeClears && chainIndex == 0) "clear" else "load",
+            compositeLoadOp = if (compositeClears) "clear" else "load",
         )
     }
 
