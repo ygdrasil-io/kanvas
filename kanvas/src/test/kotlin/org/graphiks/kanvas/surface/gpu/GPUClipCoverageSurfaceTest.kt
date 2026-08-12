@@ -65,7 +65,6 @@ private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 private const val PREPARED_DST_READ_FORMULA_REFUSAL =
     "unsupported.native-core-primitive.dst-read-formula"
-private const val PREPARED_HAIRLINE_REFUSAL = "unsupported.core_primitive.point.hairline_exact_lowering"
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -743,29 +742,31 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip source with hairline points refuses at exact lowering`() {
+    fun `complex clip source with hairline points lowers through the complex clip`() {
         requireWebGpu()
 
-        // Hairline points refuse at exact lowering regardless of clip.
-        assertTerminal(PREPARED_HAIRLINE_REFUSAL) {
-            renderViaGpu(
-                StaticDisplayListBuffer(
-                    listOf(
-                        DisplayOp.DrawPoints(
-                            PointMode.POINTS,
-                            listOf(Point(4f, 4f), Point(20f, 4f)),
-                            Paint.fill(Color.RED),
-                            Matrix33.identity(),
-                            complexFullClip(),
-                        ),
+        // Hairline points lower to one-device-pixel squares and render prepared through the
+        // complex AA clip; both points sit inside the clip region.
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawPoints(
+                        PointMode.POINTS,
+                        listOf(Point(4f, 4f), Point(20f, 4f)),
+                        Paint.fill(Color.RED),
+                        Matrix33.identity(),
+                        complexFullClip(),
                     ),
                 ),
-                32,
-                32,
-                PixelFormat.RGBA8,
-                RenderConfig.DEFAULT,
-            )
-        }
+            ),
+            32,
+            32,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.summary())
+        assertRgbaNear(result.pixels, 32, 4, 4, Color.RED)
+        assertRgbaNear(result.pixels, 32, 20, 4, Color.RED)
     }
 
     @Test

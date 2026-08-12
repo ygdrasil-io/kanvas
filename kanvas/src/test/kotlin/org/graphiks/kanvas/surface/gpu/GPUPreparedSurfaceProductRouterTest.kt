@@ -461,8 +461,9 @@ class GPUPreparedSurfaceProductRouterTest {
 
     @Test
     fun `before-entry refusals for the terminal families are never legacy`() {
+        // Hairline points (unsupported.core_primitive.point.hairline_exact_lowering) left this
+        // matrix in FP-11 Task 3: they lower to one-device-pixel squares and route Prepared.
         val codes = listOf(
-            "unsupported.core_primitive.point.hairline_exact_lowering",
             "unsupported.recording.core_primitive_mixed_uniform_layouts",
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
             "unsupported.native-core-primitive.multi-render-dst-copy",

@@ -467,7 +467,14 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         clipCoveragePlan = clipCoverage,
         blendPlanIdentity = recordingBlendPlanIdentity,
         frameProvenance = provenance,
-        coverageMode = coverageMode(),
+        // The canonical hairline point square is hard DirectTriangles geometry, so its
+        // coverage is full-or-scissor even though the FillPath command derives stencil
+        // coverage for general path fills.
+        coverageMode = if (normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand()) {
+            GPUCorePrimitiveCoverageMode.FullOrScissor
+        } else {
+            coverageMode()
+        },
         analysisRecordId = analysisRecord.recordId.takeIf {
             sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
                 sourceFamily == GPUCorePrimitiveSourceFamily.RRect
@@ -554,7 +561,6 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
     if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
         val refusalCode = when {
             dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.point.path_effect_exact_lowering"
-            strokeWidth == 0f -> "unsupported.core_primitive.point.hairline_exact_lowering"
             !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.core_primitive.point.invalid_width"
             strokeCap == "round" -> "unsupported.core_primitive.point.round_cap_exact_lowering"
             else -> null
@@ -569,6 +575,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
                 ),
             )
         }
+        if (strokeWidth == 0f) return hairlinePointDeviceGeometry(targetBounds)
     }
     if (stroke) return strokeDeviceGeometry(targetBounds)
     if (tessellatedVertices.isEmpty()) {
@@ -600,6 +607,67 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         fillRule = pathDescriptor.fillRule.toCoreFillRule(),
         inverseFill = pathDescriptor.inverseFill,
+    )
+}
+
+private fun NormalizedDrawCommand.FillPath.isHairlinePointCommand(): Boolean =
+    (source.operation == "drawPoint" || source.operation == "drawPoints.points") && strokeWidth == 0f
+
+/**
+ * Canonical hairline point lowering: every hairline `drawPoint`/`drawPoints.points` point
+ * becomes the one device pixel that contains it — the pixel-aligned unit square
+ * `[floor(dx), floor(dx)+1] x [floor(dy), floor(dy)+1]` for the device-space point. This is
+ * exactly the non-AA Skia rasterization of a 1-px point after rounding, it keeps the CPU
+ * oracle's assumption (a hairline point fully covers its pixel) exact, and the square is hard
+ * DirectTriangles geometry with full-or-scissor coverage: no stencil, no stroke expansion.
+ */
+private fun NormalizedDrawCommand.FillPath.hairlinePointDeviceGeometry(
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveGeometryInput.TriangulatedPath {
+    // A hairline point path flattens each degenerate point rect to exactly one vertex at the
+    // point (every line-to coincides with the rect start), so the flattened path is one vertex
+    // per point in command order.
+    val deviceSquares = tessellatedVertices.chunked(2).mapNotNull { vertex ->
+        val point = transform.map(vertex[0], vertex[1])
+        val left = floor(point.first).toInt()
+        val top = floor(point.second).toInt()
+        val clampedLeft = left.coerceIn(targetBounds.left, targetBounds.right)
+        val clampedTop = top.coerceIn(targetBounds.top, targetBounds.bottom)
+        val clampedRight = (left + 1).coerceIn(targetBounds.left, targetBounds.right)
+        val clampedBottom = (top + 1).coerceIn(targetBounds.top, targetBounds.bottom)
+        if (clampedRight <= clampedLeft || clampedBottom <= clampedTop) null
+        else GPUPixelBounds(clampedLeft, clampedTop, clampedRight, clampedBottom)
+    }
+    if (deviceSquares.isEmpty()) {
+        refuseGeometry(
+            code = "unsupported.core_primitive.empty_path",
+            facts = mapOf("source" to source.operation),
+        )
+    }
+    val vertices = deviceSquares.flatMap { square ->
+        listOf(
+            square.left.toFloat(), square.top.toFloat(),
+            square.right.toFloat(), square.top.toFloat(),
+            square.right.toFloat(), square.bottom.toFloat(),
+            square.left.toFloat(), square.bottom.toFloat(),
+        )
+    }
+    val indices = deviceSquares.indices.flatMap { squareIndex ->
+        val base = squareIndex * 4
+        listOf(base, base + 1, base + 2, base, base + 2, base + 3)
+    }
+    return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = vertices,
+        indices = indices,
+        sourceContourStarts = deviceSquares.indices.map { it * 4 },
+        sourceVertexCount = deviceSquares.size * 4,
+        coverBounds = GPUPixelBounds(
+            deviceSquares.minOf { it.left },
+            deviceSquares.minOf { it.top },
+            deviceSquares.maxOf { it.right },
+            deviceSquares.maxOf { it.bottom },
+        ),
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
     )
 }
 

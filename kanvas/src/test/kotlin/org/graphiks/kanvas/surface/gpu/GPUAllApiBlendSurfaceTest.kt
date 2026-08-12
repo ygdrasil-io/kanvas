@@ -570,14 +570,29 @@ class GPUAllApiBlendSurfaceTest {
             // Core primitives after the FP-09 Task 5 route collapse. Every
             // before-entry refusal is now Terminal, so each shape family refuses
             // with the exact recording/builder code the evidence run produced:
-            // hairline points always; rrects always (the analytic-shape uniform80
-            // mixes with the rect background layout); rect/color/draw-path/drrect
-            // per clip context and blend family. Cases that still render prepared
-            // stay null so the pixel oracle keeps proving them.
+            // rrects always (the analytic-shape uniform80 mixes with the rect
+            // background layout); rect/color/draw-path/drrect per clip context
+            // and blend family; hairline points render prepared as one-device-px
+            // squares except where the clip (mixed layouts) or the dst-read
+            // two-render frame keeps them terminal. Cases that still render
+            // prepared stay null so the pixel oracle keeps proving them.
             return when (api.name) {
                 "Clear" -> null
-                "DrawPoint", "DrawPoints" ->
-                    ProductRouteExpectation.Terminal(PREPARED_POINT_HAIRLINE_REFUSAL)
+                "DrawPoint", "DrawPoints" -> when {
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
+                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                    context == BlendContext.ALPHA_MASK ->
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES -> if (api.name == "DrawPoint") {
+                        // The DrawPoint fixture draws three separate point commands, so its
+                        // dst-read frame is a four-render shape whose direct-resource seal
+                        // fails before the two-render dst-copy admission.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    } else {
+                        ProductRouteExpectation.Terminal(PREPARED_MULTI_RENDER_DST_COPY_REFUSAL)
+                    }
+                    else -> null
+                }
                 "DrawRRect" ->
                     ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                 "DrawRect", "DrawColor" -> when {
@@ -977,14 +992,14 @@ class GPUAllApiBlendSurfaceTest {
         )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
-        const val PREPARED_POINT_HAIRLINE_REFUSAL =
-            "unsupported.core_primitive.point.hairline_exact_lowering"
         const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
             "unsupported.recording.core_primitive_mixed_uniform_layouts"
         const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_MULTI_RENDER_DST_COPY_REFUSAL =
             "unsupported.native-core-primitive.multi-render-dst-copy"
+        const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
+            "invalid.preflight.core_primitive_direct_geometry_resources"
         const val PREPARED_PATH_DST_READ_REFUSAL =
             "unsupported.native-core-primitive.path-destination-read"
         // The 15 dst-read modes that the direct lane refuses for a two-draw frame:

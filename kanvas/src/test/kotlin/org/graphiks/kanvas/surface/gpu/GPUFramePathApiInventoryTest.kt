@@ -721,19 +721,18 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `drawPoint hairline refuses with a stable geometry diagnostic`() {
-        val inventory = inventoryFor(DisplayOp.DrawPoint(
+    fun `drawPoint hairline lowers to a one device pixel square geometry`() {
+        val semantic = semanticFor(DisplayOp.DrawPoint(
             10f,
             12f,
             Paint.fill(Color.RED).copy(strokeWidth = 0f, strokeCap = StrokeCap.SQUARE),
             Matrix33.identity(),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
-
-        val refused = gatherRefusal(inventory)
-
-        assertEquals("unsupported.core_primitive.point.hairline_exact_lowering", refused.code)
-        assertEquals("drawPoint", refused.facts["source"])
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        // The hairline point is one device pixel: cover bounds span 1 px in each axis.
+        assertEquals(1, geometry.coverBounds.right - geometry.coverBounds.left, "hairline point spans one device pixel in x")
+        assertEquals(1, geometry.coverBounds.bottom - geometry.coverBounds.top, "hairline point spans one device pixel in y")
     }
 
     @Test
