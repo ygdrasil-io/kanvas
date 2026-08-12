@@ -172,7 +172,12 @@ internal fun buildTopLevelMaskBlurFrame(
         render.drawPackets.minOf { it.originalPaintOrder }
     }
     for ((chainIndex, packet) in blurPackets.withIndex()) {
-        val compositeClears = sceneRenderPaintOrders.none { it < packet.originalPaintOrder }
+        // A composite clears only when it is the frame's FIRST scene-target writer: the
+        // first chain (chainIndex 0) AND no scene render is ordered before it. Later chains
+        // always load the already-composited scene — a "clear" would wipe the whole
+        // attachment, erasing earlier chain output outside this chain's scissor.
+        val compositeClears =
+            chainIndex == 0 && sceneRenderPaintOrders.none { it < packet.originalPaintOrder }
         val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             as GPUDrawSemanticPayload.MaskBlur
         val replanned = when (

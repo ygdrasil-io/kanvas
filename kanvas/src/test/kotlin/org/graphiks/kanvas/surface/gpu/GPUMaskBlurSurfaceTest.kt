@@ -358,6 +358,38 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `second blur composite on a two blur frame loads the composited scene instead of clearing it`() {
+        requireWebGpu()
+        // Frame 1 fills the retained session target with blue.
+        Surface(width = 32, height = 32).run {
+            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            render()
+        }
+        // Frame 2 draws TWO blur rects and nothing else. Chain 0's composite is the frame's
+        // first scene-target writer and clears; chain 1's composite must LOAD the already
+        // composited scene — a "clear" loadOp wipes the entire attachment and only redraws
+        // within chain 1's scissor, erasing chain 0's output outside it. Both sigma-2 halos
+        // (radius 6) extend the local masks to the same 20x20 size (bounds [6,14) and [14,22)
+        // halo-extend to [0,20) and [8,28)), so the lane's one-local-mask-size-per-frame
+        // serialization admits the frame. Pixel (10,10) sits in chain 0's shape interior
+        // (4px from every [6,14) edge, full kernel coverage) while chain 1's blurred coverage
+        // there is zero (its shape edge is 14, out of the 5-tap reach), so the second
+        // composite must leave it as chain 0's output.
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(6f, 6f, 14f, 14f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(Rect(14f, 14f, 22f, 22f), blurPaint(BlurStyle.NORMAL, 2f))
+            }
+            render().pixels.toUByteArray()
+        }
+        val firstBlurAlpha = pixels[(10 * 32 + 10) * 4 + 3].toInt()
+        assertTrue(
+            firstBlurAlpha >= 200,
+            "the second composite must not clear away the first blur: alpha=$firstBlurAlpha",
+        )
+    }
+
+    @Test
     fun `source blur renders prepared with replace semantics`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {
