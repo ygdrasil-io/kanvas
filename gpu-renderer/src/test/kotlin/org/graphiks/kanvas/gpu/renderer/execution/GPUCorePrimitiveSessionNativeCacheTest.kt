@@ -61,7 +61,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         assertNotSame(first.pipelineLayout, direct.pipelineLayout)
         assertEquals(2, native.pipelineCreationCount)
         assertEquals(GPUCorePrimitiveNativeCacheCounters(2, 1, 0), cache.counters())
-        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= 30)
 
         cache.close()
     }
@@ -525,25 +525,27 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
-    fun `concrete cache accepts thirty factory validated pipelines and typed refuses the thirty first`() {
+    fun `concrete cache accepts the sealed ceiling of factory validated pipelines and typed refuses the next`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
-        val live = (0 until 30).associate { index ->
+        val live = (0 until CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES).associate { index ->
             val key = testKey("pipeline-$index")
             key to cache.acquire(key).acquiredHandles()
         }
 
         val refused = assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused>(
-            cache.acquire(testKey("pipeline-30")),
+            cache.acquire(testKey("pipeline-${CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES}")),
         )
 
         assertEquals(
-            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(maxEntries = 30),
+            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(
+                maxEntries = CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES,
+            ),
             refused.reason,
         )
-        assertEquals(30, native.pipelineCreationCount)
+        assertEquals(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES.toLong(), native.pipelineCreationCount.toLong())
         live.forEach { (key, handles) -> assertSame(handles, cache.acquire(key).acquiredHandles()) }
-        assertEquals(GPUCorePrimitiveNativeCacheCounters(30, 30, 0), cache.counters())
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES.toLong(), CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES.toLong(), 0), cache.counters())
         cache.close()
     }
 

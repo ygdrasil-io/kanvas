@@ -10,6 +10,7 @@ import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
 
@@ -89,28 +90,38 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `darken rect over destination refuses with the multi render dst copy code`() {
+    fun `darken rect over destination renders prepared via the multi render dst copy lane`() {
         requireWebGpu()
 
-        // FP-09 terminal refusal: a destination-read rect over an existing destination
-        // render is the designed multi-render-dst-copy family (Task 6 evidence §2). The
-        // prepared route refuses before allocating any native work. Pre-FP-09 the legacy
-        // renderer rendered it (green at the FP-08 tip accaea616).
-        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                    drawRect(
-                        Rect(8f, 8f, 24f, 24f),
-                        Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
-                    )
-                }
-                render()
+        // FP-11 Task 4: a destination-read rect over an existing destination render is the
+        // designed multi-render dst-copy shape (producer render, ordered snapshot copy,
+        // consuming render). The prepared direct lane admits it and executes the Graphite
+        // copy-then-formula recipe. The paints are hard (antiAlias = false) so the frame stays
+        // on the full-coverage direct lane: default-AA rects lower to the analytic-shape
+        // dst-read family whose formula program is a designed closed refusal. Pre-FP-09 the
+        // legacy renderer rendered it (green at the FP-08 tip accaea616); the FP-09 route
+        // collapse refused it by name.
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawRect(
+                    Rect(8f, 8f, 24f, 24f),
+                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                )
             }
+            render()
         }
-        assertEquals(
-            "unsupported.native-core-primitive.multi-render-dst-copy",
-            failure.diagnostic.code.value,
+        val pixels = result.pixels
+        // CPU reference: DARKEN over an opaque white destination = per-channel min; the black
+        // source yields opaque black inside the rect and retained white outside.
+        assertEquals(255, pixels[(12 * 32 + 12) * 4 + 3].toInt(), "in-rect pixel is opaque")
+        assertEquals(0, pixels[(12 * 32 + 12) * 4 + 0].toInt(), "in-rect pixel is DARKEN(black, white) = black")
+        assertEquals(255, pixels[(2 * 32 + 2) * 4 + 0].toInt(), "outside the rect the white destination is retained")
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.code.startsWith("route:destination-read:DrawRect:") && entry.reason == "gpu-copy-then-formula"
+            },
+            "the dst-read multi-render frame must emit the copy-then-formula route evidence",
         )
     }
 

@@ -2801,6 +2801,51 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `two render destination reading core frame classifies accepted with the ordered copy`() {
+        // FP-11 Task 4: a destination-then-consumer dst-read frame (producer render, ordered
+        // snapshot copy, consuming render) is the valid direct dst-read shape. Today it refuses
+        // with unsupported.native-core-primitive.multi-render-dst-copy.
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = fixture.context,
+            capabilities = fixture.capabilities,
+        ).preflight(fixture.framePlan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message} ${it.facts}"
+            },
+        ).frame
+
+        val renderSteps = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(2, renderSteps.size)
+        val copyStep = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+        val readbackStep = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
+        val scopes = prepared.encoderPlan.scopes
+        assertEquals(
+            listOfNotNull(
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.CopyDestination,
+                GPUEncoderOperationKind.Render,
+                readbackStep?.let { GPUEncoderOperationKind.Readback },
+            ),
+            scopes.map { it.operationKind },
+        )
+        assertEquals(fixture.framePlan.steps.indexOf(copyStep), scopes[1].sourceStepIndex)
+        scopes.filter { it.operationKind == GPUEncoderOperationKind.Render }.forEach { scope ->
+            assertTrue(
+                scope.corePrimitiveDirectNativeRouteSeal is GPUCorePrimitiveDirectNativeRouteSeal.Routes,
+                "every dst-read render scope requires its retained direct route seal",
+            )
+        }
+    }
+
+    @Test
     fun `core mask seal corruption matrix refuses before side effects`() {
         val scenarios = listOf(
             coreMaskFramePlan(maskByteDelta = 4),

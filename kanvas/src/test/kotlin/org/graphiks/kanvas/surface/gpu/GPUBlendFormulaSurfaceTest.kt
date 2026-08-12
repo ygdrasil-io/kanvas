@@ -73,8 +73,9 @@ class GPUBlendFormulaSurfaceTest {
         val source = Color.fromArgb(255, 192, 64, 32)
 
         // A single destination-read draw renders prepared with the GPU copy-then-formula
-        // route. (A second background draw would make the frame a documented Terminal
-        // refusal instead: mixed uniform layouts / multi-render-dst-copy.)
+        // route. (A second background draw splits the frame into the two-render dst-copy
+        // shape, which FP-11 Task 4 admits on the prepared direct lane; the pixel oracle for
+        // that shape lives in GPUPathClipRegressionTest and GPUAllApiBlendSurfaceTest.)
         val result = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(

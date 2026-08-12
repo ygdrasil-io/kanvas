@@ -20,7 +20,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPrepa
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
@@ -124,6 +126,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandK
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
@@ -3360,6 +3364,20 @@ internal class GPUFramePreflighter(
             return diagnostic(route.code, route.message)
         }
         if (!declaresDirectBoundary) return null
+        val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        val dstCopyConsumerPacketId = copySteps.singleOrNull()?.consumers?.singleOrNull()?.packetId
+        // FP-11 Task 4: a destination-reading core frame legitimately splits into two renders with
+        // the ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
+        // pass runs after the copy in the same encoder). The shape is admitted when the ordered
+        // CopyDestinationStep consumer resolves to one packet of the second core render and both
+        // core renders share the exact same scene target.
+        val twoRenderDstReadShape = copySteps.isNotEmpty() &&
+            coreRenders.size == 2 &&
+            coreRenders.map { it.target }.distinct().size == 1 &&
+            dstCopyConsumerPacketId != null &&
+            coreRenders.any { render ->
+                render.drawPackets.any { packet -> packet.packetId == dstCopyConsumerPacketId }
+            }
         if ((!exactPreparedSurfaceMixedBoundary && coreRenders.size != 1) ||
             coreRenders.sumOf { render -> render.drawPackets.size } != accepted.size ||
             (!exactPreparedSurfaceMixedBoundary &&
@@ -3367,25 +3385,16 @@ internal class GPUFramePreflighter(
                     it !in coreRenders && directUsesByRender.getValue(it).isNotEmpty()
                 })
         ) {
-            // A destination-reading core frame legitimately splits into two renders with the
-            // ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
-            // pass runs after the copy in the same encoder). The prepared direct lane does not
-            // materialize that multi-render dst-copy shape yet, so it refuses by name and the
-            // surface router continues on the legacy route. Task 6 classifies the residual.
-            val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
-            if (copySteps.isNotEmpty() && coreRenders.size == 2 &&
-                copySteps.singleOrNull()?.consumers?.singleOrNull()?.let { consumer ->
-                    coreRenders.any { render ->
-                        render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
-                    }
-                } == true
-            ) {
-                return diagnostic(
-                    "unsupported.native-core-primitive.multi-render-dst-copy",
-                    "Destination-reading core frames require the prepared multi-render dst-copy shape.",
-                )
+            if (!twoRenderDstReadShape) {
+                return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
             }
-            return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
+        }
+        val dstConsumerRender = if (twoRenderDstReadShape) {
+            coreRenders.first { render ->
+                render.drawPackets.any { packet -> packet.packetId == dstCopyConsumerPacketId }
+            }
+        } else {
+            null
         }
         val directRender = coreRenders.first()
         val directTargetDescriptor =
@@ -3402,15 +3411,38 @@ internal class GPUFramePreflighter(
                 "Direct CorePrimitive native geometry requires an exact prepared target format.",
             )
         }
-        if (!exactPreparedSurfaceMixedBoundary &&
-            (directRender.loadStore.loadOp != "clear" ||
+        if (!exactPreparedSurfaceMixedBoundary) {
+            if (dstConsumerRender != null) {
+                // The admitted two-render dst-copy shape owns the exact clear/store producer
+                // pass followed by the load/store consuming pass (the recording orders the
+                // ordered snapshot copy between them).
+                val producerRender = coreRenders.first { it !== dstConsumerRender }
+                val producerIndex = framePlan.steps.indexOf(producerRender)
+                val consumerIndex = framePlan.steps.indexOf(dstConsumerRender)
+                val copyIndex = copySteps.single().let(framePlan.steps::indexOf)
+                val exactLoadStore = producerRender.loadStore.loadOp == "clear" &&
+                    producerRender.loadStore.storePlan == GPUStorePlan.Store &&
+                    producerRender.loadStore.clearColorLabel == null &&
+                    dstConsumerRender.loadStore.loadOp == "load" &&
+                    dstConsumerRender.loadStore.storePlan == GPUStorePlan.Store &&
+                    dstConsumerRender.loadStore.clearColorLabel == null &&
+                    producerIndex < copyIndex && copyIndex < consumerIndex
+                if (!exactLoadStore) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_direct_load_store",
+                        "The two-render dst-copy shape requires the clear/store producer, the ordered " +
+                            "snapshot copy, then the load/store consuming pass.",
+                    )
+                }
+            } else if (directRender.loadStore.loadOp != "clear" ||
                 directRender.loadStore.storePlan != GPUStorePlan.Store ||
-                directRender.loadStore.clearColorLabel != null)
-        ) {
-            return diagnostic(
-                "invalid.preflight.core_primitive_direct_load_store",
-                "Direct CorePrimitive requires exactly one clear/store pass.",
-            )
+                directRender.loadStore.clearColorLabel != null
+            ) {
+                return diagnostic(
+                    "invalid.preflight.core_primitive_direct_load_store",
+                    "Direct CorePrimitive requires exactly one clear/store pass.",
+                )
+            }
         }
         val vertex = directPreparations.filter { it.role == GPUFrameResourceRole.VertexData }.singleOrNull()
             ?: return refuse("Direct CorePrimitive requires exactly one shared vertex slab.")
@@ -3517,7 +3549,6 @@ internal class GPUFramePreflighter(
         val sceneStructuralKeys = sceneAcceptedIndices.map { acceptedIndex ->
             packetAuthorities[acceptedIndex].structuralPipelineKey
         }
-        val multiKeyDirectPass = sceneStructuralKeys.distinct().size > 1
         val structuralPipelineKey = sceneStructuralKeys.first()
         val stableRenderPipelineKeys = sceneStructuralKeys.distinct().associateWith { key ->
             key.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
@@ -3993,57 +4024,116 @@ internal class GPUFramePreflighter(
         ) {
             return refuse("The direct pass must read exactly all three shared slabs; non-direct draws may read none.")
         }
-        val preparedPassSeal = if (multiKeyDirectPass) {
-            when (uniformLayout) {
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                    GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
-                        structuralPipelineKeys = sceneStructuralKeys.distinct(),
-                        uniformSlabSeal = requireNotNull(uniformSeal),
-                    )
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                    try {
-                        GPUCorePrimitiveMultiKeyDirectPreparedPassSeal.analyticShape(
-                            structuralPipelineKeys = sceneStructuralKeys.distinct(),
-                            analyticShapeUniformSeals = analyticShapeSeals,
-                        )
-                    } catch (_: Throwable) {
-                        return refuseShape(
-                            "Analytic shape packet ranges cannot form one exact packed multi-key uniform80 slab.",
+        // The direct lane admits per-key structural pipelines per render scope (Graphite
+        // DrawPass fFullPipelines): every packet's render pipeline key must match its own
+        // structural key's stable authority, and every scope shares one exact uniform layout.
+        // The stable key is derived once per distinct structural key, never once per draw.
+        // A two-render dst-copy frame retains one prepared pass seal per render scope (the
+        // producer and consuming passes each seal over their own packets' structural keys).
+        val acceptedStepIndexes = accepted.map(Direct::sourceStepIndex).distinct()
+        val singleStepFrame = acceptedStepIndexes.size == 1
+        val stepCommandIdsByIndex = acceptedStepIndexes.associateWith { stepIndex ->
+            accepted.filter { it.sourceStepIndex == stepIndex }.map { it.packet.commandIdValue }
+        }
+        val uniformSlabSealByStep: Map<Int, GPUCorePrimitiveUniformSlabSeal?> =
+            if (singleStepFrame || exactPreparedSurfaceMixedBoundary) {
+                // Single-render and exact-mixed-boundary frames keep the frame-global slab
+                // authority: the mixed preflight requires every core run to partition one shared
+                // uniform slab, and single-render passes already seal over their whole slab.
+                acceptedStepIndexes.associateWith { uniformSeal }
+            } else {
+                acceptedStepIndexes.associateWith { stepIndex ->
+                    uniformSeal?.let { frameSeal ->
+                        sliceUniformSlabSealToCommands(
+                            frameSeal,
+                            stepCommandIdsByIndex.getValue(stepIndex),
                         )
                     }
-                else -> return refuse(
-                    "Multi-key direct CorePrimitive passes require one exact uniform32 or analytic-shape uniform80 layout.",
-                )
+                }
             }
-        } else if (
-            uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
-        ) {
-            try {
-                GPUCorePrimitiveDirectPreparedPassSeal.analyticShape(
-                    structuralPipelineKey,
-                    analyticShapeSeals,
-                )
-            } catch (_: Throwable) {
-                return refuseShape("Analytic shape packet ranges cannot form one exact packed uniform80 slab.")
+        val preparedPassSealsByStep = buildMap<Int, GPUCorePrimitiveDirectPreparedPassAuthority> {
+            val analyticShapeFrame = uniformLayout ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+            acceptedStepIndexes.forEach { stepIndex ->
+                val stepAcceptedIndices = accepted.indices.filter {
+                    accepted[it].sourceStepIndex == stepIndex
+                }
+                val stepStructuralKeys = stepAcceptedIndices.map { packetAuthorities[it].structuralPipelineKey }
+                val stepMultiKey = stepStructuralKeys.distinct().size > 1
+                val stepUniformSlabSeal = uniformSlabSealByStep.getValue(stepIndex)
+                val stepAnalyticShapeSeals = if (!analyticShapeFrame) {
+                    emptyList()
+                } else if (singleStepFrame) {
+                    stepAcceptedIndices.map { analyticShapeSeals[it] }
+                } else {
+                    sliceAnalyticShapeUniformSealsToCommands(
+                        analyticShapeSeals,
+                        stepCommandIdsByIndex.getValue(stepIndex),
+                        accepted.filter { it.sourceStepIndex == stepIndex }
+                            .associate { it.packet.commandIdValue to it.semantic },
+                    )
+                }
+                val stepSeal = if (stepMultiKey) {
+                    when (uniformLayout) {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                            GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
+                                structuralPipelineKeys = stepStructuralKeys.distinct(),
+                                uniformSlabSeal = requireNotNull(stepUniformSlabSeal),
+                            )
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                            try {
+                                GPUCorePrimitiveMultiKeyDirectPreparedPassSeal.analyticShape(
+                                    structuralPipelineKeys = stepStructuralKeys.distinct(),
+                                    analyticShapeUniformSeals = stepAnalyticShapeSeals,
+                                )
+                            } catch (_: Throwable) {
+                                return refuseShape(
+                                    "Analytic shape packet ranges cannot form one exact packed multi-key uniform80 slab.",
+                                )
+                            }
+                        else -> return refuse(
+                            "Multi-key direct CorePrimitive passes require one exact uniform32 or analytic-shape uniform80 layout.",
+                        )
+                    }
+                } else if (
+                    uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                ) {
+                    try {
+                        GPUCorePrimitiveDirectPreparedPassSeal.analyticShape(
+                            structuralPipelineKey = stepStructuralKeys.first(),
+                            analyticShapeUniformSeals = stepAnalyticShapeSeals,
+                        )
+                    } catch (_: Throwable) {
+                        return refuseShape("Analytic shape packet ranges cannot form one exact packed uniform80 slab.")
+                    }
+                } else {
+                    GPUCorePrimitiveDirectPreparedPassSeal(
+                        structuralPipelineKey = stepStructuralKeys.first(),
+                        uniformSlabSeal = stepUniformSlabSeal,
+                        analyticClipUniformSeals = if (analyticSeals.isEmpty()) {
+                            emptyList()
+                        } else {
+                            stepAcceptedIndices.map { analyticSeals[it] }
+                        },
+                        analyticClipPackedBytes = analyticPackedBytes,
+                        analyticIntersectionUniformSeals = if (analyticIntersectionSeals.isEmpty()) {
+                            emptyList()
+                        } else {
+                            stepAcceptedIndices.map { analyticIntersectionSeals[it] }
+                        },
+                        analyticIntersectionPackedBytes = analyticIntersectionPackedBytes,
+                    )
+                }
+                put(stepIndex, stepSeal)
             }
-        } else {
-            GPUCorePrimitiveDirectPreparedPassSeal(
-                structuralPipelineKey = structuralPipelineKey,
-                uniformSlabSeal = uniformSeal,
-                analyticClipUniformSeals = analyticSeals,
-                analyticClipPackedBytes = analyticPackedBytes,
-                analyticIntersectionUniformSeals = analyticIntersectionSeals,
-                analyticIntersectionPackedBytes = analyticIntersectionPackedBytes,
-            )
         }
         retainAcceptedRoutes(
             accepted.associate { entry ->
                 GPUCorePrimitiveDirectNativeFrameRouteKey(entry.sourceStepIndex, entry.packet.packetId) to
                     entry.route
             },
-            accepted.map(Direct::sourceStepIndex)
-                .distinct()
-                .associateWith { preparedPassSeal },
+            preparedPassSealsByStep,
         )
         return null
     }
@@ -6088,8 +6178,123 @@ internal fun gpuSurfaceAcquisitionDiagnostic(status: GPUSurfaceAcquisitionStatus
     )
 }
 
+/**
+ * Rebases one direct CorePrimitive analytic-shape uniform80 slab to exactly one render scope's
+ * commands: the frame's shared slab covers every analytic direct packet, but a two-render
+ * dst-copy frame materializes each pass through its own pooled run, so each run must own a slab
+ * plan whose slots start at zero and per-packet seals whose offsets address only that pass's
+ * payloads.
+ */
+private fun sliceAnalyticShapeUniformSealsToCommands(
+    seals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+    stepCommandIds: List<Int>,
+    semanticsByCommandId: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
+): List<GPUCorePrimitiveAnalyticShapeUniformSeal> {
+    val framePlan = seals.first().plan
+    val sealByCommand = seals.associateBy { it.commandId }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        val frameSlot = framePlan.slots[seal.slotIndex]
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = frameSlot.slotLabel,
+            payloadHash = frameSlot.payloadHash,
+            payloadBytes = frameSlot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = frameSlot.allocatedBytes,
+        )
+        nextOffset += frameSlot.allocatedBytes
+        rebased
+    }
+    val totalBytes = (
+        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
+        ) * framePlan.alignmentBytes
+    val slicedPlan = GPUUniformSlabPlan(
+        planHash = framePlan.planHash,
+        sourceLabel = framePlan.sourceLabel,
+        deviceGeneration = framePlan.deviceGeneration,
+        alignmentBytes = framePlan.alignmentBytes,
+        totalBytes = totalBytes,
+        uploadBudgetBytes = framePlan.uploadBudgetBytes,
+        slots = slots,
+    )
+    return stepCommandIds.mapIndexed { index, commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        GPUCorePrimitiveAnalyticShapeUniformSeal(
+            plan = slicedPlan,
+            slotIndex = index,
+            commandId = seal.commandId,
+            packetId = seal.packetId,
+            semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(
+                semanticsByCommandId.getValue(commandId),
+            ),
+            renderScissor = seal.renderScissor,
+            structuralPipelineKey = seal.structuralPipelineKey,
+            renderPipelineKey = seal.renderPipelineKey,
+            bindingLayoutHash = seal.bindingLayoutHash,
+            resourceGeneration = seal.resourceGeneration,
+            payloadBytes = seal.payloadBytesSnapshot(),
+        )
+    }
+}
+
 private fun diagnostic(code: String, message: String, facts: Map<String, String> = emptyMap()): GPUDiagnostic =
     preflightDiagnostic(code, message, facts)
+
+/**
+ * Rebases one direct CorePrimitive uniform32 slab seal to exactly one render scope's commands:
+ * the frame's shared slab covers every direct packet, but a two-render dst-copy frame
+ * materializes each pass through its own pooled run, so each run must own a slab plan whose
+ * slots start at zero and whose packed bytes carry only that pass's payloads.
+ */
+private fun sliceUniformSlabSealToCommands(
+    seal: GPUCorePrimitiveUniformSlabSeal,
+    stepCommandIds: List<Int>,
+): GPUCorePrimitiveUniformSlabSeal {
+    val plan = seal.plan
+    val packed = seal.packedBytesForUpload()
+    val slotByCommand = plan.slots.indices.associate { index ->
+        seal.commandIds[index] to plan.slots[index]
+    }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val slot = slotByCommand.getValue(commandId)
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = slot.slotLabel,
+            payloadHash = slot.payloadHash,
+            payloadBytes = slot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = slot.allocatedBytes,
+        )
+        nextOffset += slot.allocatedBytes
+        rebased
+    }
+    val coveredBytes = nextOffset
+    val totalBytes = (
+        (coveredBytes + plan.alignmentBytes - 1L) / plan.alignmentBytes
+        ) * plan.alignmentBytes
+    val slicedPacked = ByteArray(totalBytes.toInt())
+    stepCommandIds.forEachIndexed { index, commandId ->
+        val slot = slotByCommand.getValue(commandId)
+        val payload = ByteArray(slot.payloadBytes.toInt()) { byteIndex ->
+            packed[slot.alignedOffset.toInt() + byteIndex]
+        }
+        payload.copyInto(slicedPacked, slots[index].alignedOffset.toInt())
+    }
+    return GPUCorePrimitiveUniformSlabSeal(
+        plan = GPUUniformSlabPlan(
+            planHash = plan.planHash,
+            sourceLabel = plan.sourceLabel,
+            deviceGeneration = plan.deviceGeneration,
+            alignmentBytes = plan.alignmentBytes,
+            totalBytes = totalBytes,
+            uploadBudgetBytes = plan.uploadBudgetBytes,
+            slots = slots,
+        ),
+        commandIds = stepCommandIds,
+        packedBytes = slicedPacked,
+    )
+}
 
 /** Maps the passive prepared-image clip handoff to the stable execution refusal contract. */
 internal fun preparedImageClipPreflightDiagnostic(

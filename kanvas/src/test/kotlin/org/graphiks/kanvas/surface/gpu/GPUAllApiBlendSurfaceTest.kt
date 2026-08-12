@@ -589,7 +589,10 @@ class GPUAllApiBlendSurfaceTest {
                         // fails before the two-render dst-copy admission.
                         ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
                     } else {
-                        ProductRouteExpectation.Terminal(PREPARED_MULTI_RENDER_DST_COPY_REFUSAL)
+                        // FP-11 Task 4: the single DrawPoints command splits into the admitted
+                        // two-render dst-copy shape (destination pass, ordered snapshot copy,
+                        // consuming pass) on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
                     }
                     else -> null
                 }
@@ -601,7 +604,9 @@ class GPUAllApiBlendSurfaceTest {
                     context == BlendContext.ALPHA_MASK ->
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        ProductRouteExpectation.Terminal(PREPARED_MULTI_RENDER_DST_COPY_REFUSAL)
+                        // FP-11 Task 4: the two-render dst-copy shape (destination pass, ordered
+                        // snapshot copy, consuming pass) is admitted on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
                     else -> null
                 }
                 "DrawPath", "DrawDRRect" -> when {
@@ -996,15 +1001,14 @@ class GPUAllApiBlendSurfaceTest {
             "unsupported.recording.core_primitive_mixed_uniform_layouts"
         const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
-        const val PREPARED_MULTI_RENDER_DST_COPY_REFUSAL =
-            "unsupported.native-core-primitive.multi-render-dst-copy"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
             "invalid.preflight.core_primitive_direct_geometry_resources"
         const val PREPARED_PATH_DST_READ_REFUSAL =
             "unsupported.native-core-primitive.path-destination-read"
-        // The 15 dst-read modes that the direct lane refuses for a two-draw frame:
-        // every artistic mode except SCREEN (whose formula program is implemented)
-        // plus PLUS. Matches the evidence run's multi-render-dst-copy case list.
+        // The 15 dst-read modes whose two-draw frames route through the FP-11 Task 4
+        // multi-render dst-copy admission: every artistic mode except SCREEN (whose formula
+        // program is implemented) plus PLUS. Matches the FP-09 evidence run's
+        // multi-render-dst-copy case list.
         val MULTI_RENDER_DST_COPY_MODES = (ARTISTIC_MODES - BlendMode.SCREEN) + BlendMode.PLUS
 
         @AfterAll

@@ -1065,8 +1065,9 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
 /**
  * Prepared-route residual refusal codes that document shapes the prepared direct lane genuinely
  * cannot execute: multi-key passes mixing destination-reading keys with non-dst-reading keys (no
- * shared bind-group layout), destination-reading modes without a formula program, and the
- * multi-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass). The
+ * shared bind-group layout) and destination-reading modes without a formula program. The
+ * two-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass) landed on
+ * the prepared direct lane in FP-11 Task 4, so its refusal code is no longer residual. The
  * classification survives as residual evidence labels (the diagnostic still names the exact
  * residual); the pre-FP-09 fallback that consumed these codes was deleted with the legacy port,
  * and the router terminates every before-entry refusal since the FP-09 Task 5 collapse.
@@ -1086,7 +1087,6 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
 private val preparedRouteResidualRefusalCodes = setOf(
     "unsupported.native-core-primitive.multi-key-component",
     "unsupported.native-core-primitive.dst-read-formula",
-    "unsupported.native-core-primitive.multi-render-dst-copy",
     "unsupported.native-core-primitive.analytic-shape-multi-key",
 )
 

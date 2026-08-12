@@ -463,10 +463,11 @@ class GPUPreparedSurfaceProductRouterTest {
     fun `before-entry refusals for the terminal families are never legacy`() {
         // Hairline points (unsupported.core_primitive.point.hairline_exact_lowering) left this
         // matrix in FP-11 Task 3: they lower to one-device-pixel squares and route Prepared.
+        // The two-render dst-copy code left it in FP-11 Task 4: the destination-then-consumer
+        // dst-read shape is admitted on the prepared direct lane.
         val codes = listOf(
             "unsupported.recording.core_primitive_mixed_uniform_layouts",
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
-            "unsupported.native-core-primitive.multi-render-dst-copy",
             "unsupported.native-core-primitive.analytic-shape-multi-key",
             "unsupported.native-core-primitive.path-destination-read",
             "unsupported.test.builder",
