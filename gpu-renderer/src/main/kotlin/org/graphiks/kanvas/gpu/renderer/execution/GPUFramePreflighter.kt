@@ -3369,10 +3369,13 @@ internal class GPUFramePreflighter(
         // FP-11 Task 4: a destination-reading core frame legitimately splits into two renders with
         // the ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
         // pass runs after the copy in the same encoder). The shape is admitted when the ordered
-        // CopyDestinationStep consumer resolves to one packet of the second core render and both
-        // core renders share the exact same scene target.
+        // CopyDestinationStep consumer resolves to one packet of the second core render, both core
+        // renders share the exact same scene target, and every core packet of both renders
+        // classified Accepted (a malformed frame carrying a non-accepted packet in a core render
+        // must refuse at preflight instead of failing later at materialization).
         val twoRenderDstReadShape = copySteps.isNotEmpty() &&
             coreRenders.size == 2 &&
+            coreRenders.sumOf { render -> render.drawPackets.size } == accepted.size &&
             coreRenders.map { it.target }.distinct().size == 1 &&
             dstCopyConsumerPacketId != null &&
             coreRenders.any { render ->
@@ -6185,7 +6188,7 @@ internal fun gpuSurfaceAcquisitionDiagnostic(status: GPUSurfaceAcquisitionStatus
  * plan whose slots start at zero and per-packet seals whose offsets address only that pass's
  * payloads.
  */
-private fun sliceAnalyticShapeUniformSealsToCommands(
+internal fun sliceAnalyticShapeUniformSealsToCommands(
     seals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
     stepCommandIds: List<Int>,
     semanticsByCommandId: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
@@ -6247,7 +6250,7 @@ private fun diagnostic(code: String, message: String, facts: Map<String, String>
  * materializes each pass through its own pooled run, so each run must own a slab plan whose
  * slots start at zero and whose packed bytes carry only that pass's payloads.
  */
-private fun sliceUniformSlabSealToCommands(
+internal fun sliceUniformSlabSealToCommands(
     seal: GPUCorePrimitiveUniformSlabSeal,
     stepCommandIds: List<Int>,
 ): GPUCorePrimitiveUniformSlabSeal {

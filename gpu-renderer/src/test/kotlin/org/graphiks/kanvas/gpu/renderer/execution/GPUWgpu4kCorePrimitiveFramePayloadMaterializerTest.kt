@@ -1148,6 +1148,238 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `two render dst copy materializes producer copy consumer and readback with a composite lease`() {
+        val fixture = fixture(
+            useRealPreflight = true,
+            multiRenderDstRead = true,
+            readback = true,
+        )
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val payload = materialized.draft.payload
+        val scopes = payload.scopeOperands
+        val renders = scopes.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+        val copies = scopes.filterIsInstance<GPUPreparedNativeScopeOperand.Copy>()
+        val readbacks = scopes.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
+        assertEquals(2, renders.size)
+        assertEquals(1, copies.size)
+        assertEquals(1, readbacks.size)
+        // The ordered encoder shape: producer render, snapshot copy, consuming render, readback.
+        assertEquals(
+            listOf(
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.CopyDestination,
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.Readback,
+            ),
+            scopes.map { it.operationKind },
+        )
+        assertTrue(scopes.map { it.sourceStepIndex }.zipWithNext().all { (left, right) -> left < right })
+        val producer = renders[0]
+        val consumer = renders[1]
+        // The producer pass clears and stores the destination; the consuming pass loads it.
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, producer.pass.loadOperation)
+        assertEquals(GPUPreparedNativeLoadOperation.Load, consumer.pass.loadOperation)
+        assertEquals(1, producer.commands.count { it is GPUPreparedNativeRenderCommand.DrawIndexed })
+        assertEquals(1, consumer.commands.count { it is GPUPreparedNativeRenderCommand.DrawIndexed })
+        // Each pass owns its pooled bind group: the producer binds the shared uniform32 layout,
+        // the dst-read consumer binds the snapshot texture@1 and sampler@2 after the uniform@0.
+        val producerBindGroup = producer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .single().bindGroup
+        val consumerBindGroup = consumer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .single().bindGroup
+        val productionDescriptor = fixture.native.bindGroupDescriptors.single { descriptor ->
+            descriptor.label == "Kanvas.session.corePrimitive.framePool.bindGroup0"
+        }
+        val dstDescriptor = fixture.native.bindGroupDescriptors.single { descriptor ->
+            descriptor.label == "Kanvas.session.corePrimitive.framePool.bindGroup0." +
+                CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY
+        }
+        assertEquals(1, productionDescriptor.entries.size)
+        assertEquals(0u, productionDescriptor.entries[0].binding)
+        assertEquals(3, dstDescriptor.entries.size)
+        assertEquals(0u, dstDescriptor.entries[0].binding)
+        assertEquals(1u, dstDescriptor.entries[1].binding)
+        assertEquals(2u, dstDescriptor.entries[2].binding)
+        assertNotSame(producerBindGroup, consumerBindGroup)
+        // The two pooled runs share one composite lease released together after submission.
+        assertIs<GPUPreparedNativeCompositeFrameLeaseLifecycle>(payload.leaseLifecycle)
+        // The snapshot copy targets the frame-local destination snapshot texture.
+        val copy = copies.single()
+        assertEquals(GPUEncoderOperationKind.CopyDestination, copy.operationKind)
+        val layout = requireNotNull(copy.textureLayout)
+        assertEquals(TARGET.left, layout.sourceOriginX)
+        assertEquals(TARGET.top, layout.sourceOriginY)
+        assertEquals(TARGET.width, layout.width)
+        assertEquals(TARGET.height, layout.height)
+        assertTrue(
+            fixture.native.events.any { it == "createTexture:Kanvas.frame.corePrimitive.destinationSnapshot" },
+            fixture.native.events.toString(),
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `multi render dst copy lane refusal matrix refuses before any native action`() {
+        data class Scenario(
+            val label: String,
+            val build: () -> Fixture,
+            val mutate: (Fixture) -> Unit,
+            val expectedCode: String,
+        )
+        val scenarios = listOf(
+            Scenario(
+                "copy-after-consumer",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true, readback = true) },
+                { fixture ->
+                    val steps = fixture.plan.steps.toMutableList()
+                    val copy = steps.single { it is GPUFrameStep.CopyDestinationStep }
+                    val consumer = steps.filterIsInstance<GPUFrameStep.RenderPassStep>().last()
+                    steps.remove(copy)
+                    steps.add(steps.indexOf(consumer) + 1, copy)
+                    setPrivateField(fixture.plan, "steps", steps)
+                },
+                "invalid.native-core-primitive.multi-render-shape",
+            ),
+            Scenario(
+                "duplicate-readback",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true, readback = true) },
+                { fixture ->
+                    val steps = fixture.plan.steps.toMutableList()
+                    val readback = steps.single { it is GPUFrameStep.ReadbackCopyStep }
+                    steps.add(readback)
+                    setPrivateField(fixture.plan, "steps", steps)
+                },
+                "unsupported.native-core-primitive.scope-shape",
+            ),
+            Scenario(
+                "producer-scope-missing",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true) },
+                { fixture ->
+                    val producer = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().first()
+                    val producerIndex = fixture.plan.steps.indexOf(producer)
+                    setPrivateField(
+                        fixture.encoderPlan,
+                        "scopes",
+                        fixture.encoderPlan.scopes.filter { it.sourceStepIndex != producerIndex },
+                    )
+                },
+                "unsupported.native-core-primitive.render-plan",
+            ),
+            Scenario(
+                "copy-scope-missing",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true) },
+                { fixture ->
+                    setPrivateField(
+                        fixture.encoderPlan,
+                        "scopes",
+                        fixture.encoderPlan.scopes.filter {
+                            it.operationKind != GPUEncoderOperationKind.CopyDestination
+                        },
+                    )
+                },
+                "unsupported.native-core-primitive.destination-copy-plan",
+            ),
+            Scenario(
+                "scopes-reversed",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true, readback = true) },
+                { fixture ->
+                    setPrivateField(
+                        fixture.encoderPlan,
+                        "scopes",
+                        fixture.encoderPlan.scopes.reversed(),
+                    )
+                },
+                "unsupported.native-core-primitive.scope-order",
+            ),
+            Scenario(
+                "producer-semantic-missing",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true) },
+                { fixture ->
+                    val producer = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().first()
+                    setPrivateField(producer.drawPackets.first(), "semanticPayload", null)
+                },
+                "unsupported.native-core-primitive.semantic-payload",
+            ),
+            Scenario(
+                "scene-target-missing",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true) },
+                { fixture ->
+                    val prepare = fixture.plan.steps
+                        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                        .single()
+                    setPrivateField(
+                        prepare,
+                        "requests",
+                        prepare.requests.filter {
+                            it.role != GPUFrameResourceRole.SceneTarget
+                        },
+                    )
+                },
+                "unsupported.native-core-primitive.target-contract",
+            ),
+            Scenario(
+                "readback-without-output",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true, readback = true) },
+                { fixture ->
+                    setPrivateField(fixture.resources, "outputOwnedReadbacks", emptyList<Any>())
+                },
+                "unsupported.native-core-primitive.readback-output",
+            ),
+            Scenario(
+                "forged-staging-size",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true, readback = true) },
+                { fixture ->
+                    val output = fixture.resources.outputOwnedReadbacks.single()
+                    val staging = fixture.plan.steps
+                        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                        .single { it.role == GPUFrameResourceRole.ReadbackStaging }
+                    setPrivateField(staging, "byteSize", output.layout.totalBufferBytes + 1)
+                },
+                "unsupported.native-core-primitive.readback-layout",
+            ),
+            Scenario(
+                "producer-route-seal-lost",
+                { fixture(useRealPreflight = true, multiRenderDstRead = true) },
+                { fixture ->
+                    val producer = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().first()
+                    val producerIndex = fixture.plan.steps.indexOf(producer)
+                    val producerScope = fixture.encoderPlan.scopes.single {
+                        it.sourceStepIndex == producerIndex &&
+                            it.operationKind == GPUEncoderOperationKind.Render
+                    }
+                    setPrivateField(
+                        producerScope,
+                        "corePrimitiveNativeScopeRouteSeal",
+                        GPUCorePrimitiveNativeScopeRouteSeal.Empty,
+                    )
+                },
+                "invalid.native-core-primitive.frame-global-plan",
+            ),
+        )
+
+        scenarios.forEach { scenario ->
+            val fixture = scenario.build()
+            try {
+                scenario.mutate(fixture)
+                fixture.native.events.clear()
+                val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                    fixture.materializeCoreResult(),
+                )
+                assertEquals(scenario.expectedCode, refused.code, scenario.label)
+                assertEquals(emptyList(), fixture.native.events, scenario.label)
+            } finally {
+                fixture.close()
+            }
+        }
+    }
+
+    @Test
     fun `coverage mask corruption table refuses before any native action`() {
         data class Scenario(
             val label: String,
@@ -4379,16 +4611,21 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         sampleCount: Int = 1,
         targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
         dstRead: Boolean = false,
+        multiRenderDstRead: Boolean = false,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         require(!dstRead || routeShape == RouteShape.Direct)
         require(!dstRead || sampleCount == 1)
         require(!dstRead || !analyticClip && !analyticIntersection && clipStencilPlan == null)
+        require(!multiRenderDstRead || routeShape == RouteShape.Direct)
+        require(!multiRenderDstRead || sampleCount == 1)
+        require(!multiRenderDstRead || !dstRead)
+        require(!multiRenderDstRead || !analyticClip && !analyticIntersection && clipStencilPlan == null)
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities(sampleCount)
         val frameId = GPUFrameID(231L)
         val commandIds = when (routeShape) {
-            RouteShape.Direct -> if (dstRead) listOf(1) else listOf(1, 2)
+            RouteShape.Direct -> if (multiRenderDstRead) listOf(1, 2) else if (dstRead) listOf(1) else listOf(1, 2)
             RouteShape.AnalyticShape -> listOf(1, 2)
             RouteShape.PathOnly -> listOf(2)
             RouteShape.Mixed -> listOf(1, 2, 3)
@@ -4501,14 +4738,20 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 taskList
             }
         }
-        if (dstRead) {
-            // The recorder only plans fixed-function SRC_OVER rects; promote every base packet to
-            // the canonical full-coverage destination-read formula plan so the task-list builder
-            // plans the ordered snapshot copy (Graphite dst-copy recipe).
+        if (dstRead || multiRenderDstRead) {
+            // The recorder only plans fixed-function SRC_OVER rects; promote the destination
+            // consumer packet to the canonical full-coverage destination-read formula plan so
+            // the task-list builder plans the ordered snapshot copy (Graphite dst-copy recipe).
+            // The single-render dst fixture promotes every base packet; the multi-render dst
+            // fixture promotes only its last command so the frame splits into the producer
+            // render, the ordered snapshot copy, and the consuming render.
+            val consumerCommandId = if (multiRenderDstRead) commandIds.last() else null
             base.tasks.filterIsInstance<GPUTask.Render>()
                 .flatMap(GPUTask.Render::drawPackets)
                 .forEach { packet ->
-                    setPrivateField(packet, "blendPlan", dstReadBlendPlan())
+                    if (consumerCommandId == null || packet.commandIdValue == consumerCommandId) {
+                        setPrivateField(packet, "blendPlan", dstReadBlendPlan())
+                    }
                 }
         }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
