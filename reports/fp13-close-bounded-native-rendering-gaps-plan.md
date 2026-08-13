@@ -8,13 +8,13 @@ Branch: `codex/graphite-dawn-frame-fp13` (new, from `codex/graphite-dawn-frame-p
 
 ## Context: validated branch state
 
-- HEAD `codex/graphite-dawn-frame-plan-design` = `07a112fba` (FP-12 merge `8de5a000f` + docs correction of
-  the FP-12 GM registry accounting).
-- Roadmap: FP-12 `completed`; FP-12+ transfers list (`active-todo.md` §FP-12) carries 7 items:
-  analytic clips non-direct (4), dst-read formula mapped routes (2), analytic-shape multi-key dst-read (2),
-  complex-clip blur, path destination-read (60, requires path-stencil stencil-continuation), the
-  analytic-clip 64/160 split residual (199 blend rows on `mixed_uniform_layouts`), and the
-  `colr-v0-color-glyph` scenes oracle divergence (FP-12 §4.3).
+- HEAD `codex/graphite-dawn-frame-plan-design` = `ae7a772fb` (FP-12 merge `8de5a000f` + FP-12 GM registry docs
+  correction `07a112fba` + this plan `ae7a772fb`).
+- Roadmap: FP-12 `completed`; the "FP-12+ transfers" tracking note (physically under the FP-11 entry in
+  `active-todo.md`, ~lines 537-549) carries 7 items: analytic clips non-direct (4), dst-read formula
+  mapped routes (2), analytic-shape multi-key dst-read (2), complex-clip blur, path destination-read
+  (60, requires path-stencil stencil-continuation), the analytic-clip 64/160 split residual (199 blend
+  rows on `mixed_uniform_layouts`), and the `colr-v0-color-glyph` scenes oracle divergence (FP-12 §4.3).
 - Machine/evidence conventions: Linux, Temurin 25, Vulkan llvmpipe via Xvfb `:99` (GPU suites require
   `DISPLAY=:99`); `./gradlew -F off <tasks> --no-parallel --console=plain`; headless validation stays
   independent of opt-in Kadre.
@@ -33,14 +33,21 @@ Branch: `codex/graphite-dawn-frame-fp13` (new, from `codex/graphite-dawn-frame-p
 | 2 | analytic-shape multi-key dst-read | 2 | same root; multi-key analytic shape × dst-read matrix rows | shader-dst-read + formula |
 | 3 | complex-clip blur | 2 clip-suite pins (+ preflighter) | `core_primitive_clip_producer_authority`: mask-blur composite under complex (multi-rect) analytic clip refused at the clip producer preflight (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:883`) | composite × analytic clip (extend FP-11 Task 7 ABI) |
 | 4 | analytic-clip 64/160 split residual | 199 blend (RRect 29 ALPHA_MASK + Rect/Color 56 ALPHA_MASK non-DST + Path/DRRect 58 ALPHA_MASK + Point/Points 56 ALPHA_MASK non-DST) + clip pins (Coverage 1, Advanced 8, PathClip 1) | unwired 64/160 split: gate `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2132` (comment `:2108-2120`); needs per-step continuation/ownership design (fp-11 §4) + lease cleanup on the split-lane mid-loop refusal (`:5639-5676`, mirror `:5251-5261`) | direct split passes (uniform64/160) |
-| 5 | analytic clips over non-direct geometry | 4 (2 pre-FP-09 + 2 from Task 3 DrawPoint/DrawPoints ALPHA_MASK × DST re-route) | analytic clip refused on non-direct geometry; partial dependency on #6 (dst-read on a stencil-covered continuation) | analytic clip × non-direct passes |
+| 5 | analytic clips over non-direct geometry | 4 (2 pre-FP-09 + 2 from Task 3 DrawPoint/DrawPoints ALPHA_MASK × DST re-route) | `analytic_clip_non_direct_geometry` gate `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2009` (twin `:2016`): "Prepared analytic clips require one direct CorePrimitive shading geometry" — analytic clip over non-direct/stencil-shaded geometry is a new execution feature (fp-11 §2) | analytic clip × non-direct passes |
 | 6 | path destination-read | 60 | path-stencil execution model cannot express dst-read: recording refusal `TaskListBuilder.kt:2565-2575` (`:2572`), preflighter "exactly one pass" gate `GPUFramePreflighter.kt:2437-2440` (`:2401-2402`), materializer excludes dst-read from `supportedPathComponents` `GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:163-174`, per-run stencil Clear+Discard with no stencil-continuation (fp-11 §3) | stencil-continuation feature (see Task 8) |
 | 7 | colr-v0 scenes oracle divergence | 1 test (38/4096) | stale harness oracle fills opaque; product lane clears transparent (FP-12 §4.3) | harness only |
 | 8 | PipelineTypesTest order-dependence | 1 test | `fn main() {}` parses with the wgsl4k hook installed; assertion depends on fork order (test-isolation flake) | test hygiene + wgsl4k ticket |
 
-Re-pointed rows currently on `invalid.preflight.core_primitive_direct_geometry_resources` (2 + 30 DrawPoint)
-and `unsupported.native-core-primitive.frame-global-pipeline` (30) share root causes 1-2 and are
-accepted as natural fallout of Task 3 (verified, not presumed).
+The re-pointed rows currently on `invalid.preflight.core_primitive_direct_geometry_resources` (2 DrawRRect
+DST + 30 DrawPoint) and `unsupported.native-core-primitive.frame-global-pipeline` (30 DrawRRect dst-read)
+have **distinct roots** (fp-11 §5): only the 30 `frame-global-pipeline` rows share root cause 1-2 (no
+closed analytic-shape dst-read formula pipeline) and are accepted as Task 3 fallout; the 2 DrawRRect DST
+rows fail the split-lane geometry-slab authority ("the DST rrect pass cannot exact its shared geometry
+slab authority after the split") and the 30 DrawPoint rows fail the same direct-resource seal ("three
+separate point commands make a four-render shape") — both are Task 6 split-resource fallout, verified in
+Task 6, not presumed. M86 residual-row denominator (full set): 199 + 60 + 4 + 2 + 2 + 2 (complex-clip
+blur pins) + 62 re-points (2 + 30 + 30) + 10 clip pins = **341 rows**, plus the 489 SkiaGmRunner GM
+refusals, all enumerated per-row in Task 0.
 
 ## 2. Dependency graph (task ordering)
 
@@ -52,8 +59,8 @@ Task 3 (dst-read formula)   — independent root 1 ─┐
 Task 4 (multi-key dst-read) — depends on Task 3 ──┤ (same root)
 Task 5 (complex-clip blur)  — independent, reuses FP-11 Task 7 ABI
 Task 6 (64/160 split)       — independent of 3-5; mechanical, largest row count
-Task 7 (analytic clips non-direct) — depends on Task 6 (uniform64/160); rows needing
-                                     dst-read on stencil-covered continuation defer to Task 8
+Task 7 (analytic clips non-direct) — depends on Task 6 (uniform64/160); rows whose shading geometry is
+                                    stencil-shaded (path case, fp-11 §2) defer to Task 8 (partial edge)
 Task 8 (stencil-continuation) — independent of 3-6; largest risk, closes #6
 Task 9 (evidence reconciliation + roadmap) — closes the plan
 ```
@@ -93,8 +100,8 @@ execution feature) is isolated last so a scope drift cannot block the rest.
 - dst-read formula lane: analytic-shape dst-read formula pipeline wiring (core-primitive run
   materializer, `GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt`);
 - complex-clip blur: clip producer authority + composite analytic-clip ABI (FP-11 Task 7 extension);
-- 64/160 split: `GPUCorePrimitivePreparedFrameTaskListBuilder.kt` gate `:2132` + split-lane lease
-  cleanup mirror `:5639-5676`;
+- 64/160 split: `GPUCorePrimitivePreparedFrameTaskListBuilder.kt` gate `:2132` (the split-lane lease
+  cleanup `:5639-5676` already landed in FP-11 `3bd78e180`; preserved and re-verified, not rewritten);
 - analytic clips non-direct: non-direct pass admission (Task 6 frame);
 - stencil-continuation: `GPUFramePreflighter.kt` second path pass admission, run materializer
   `supportedPathComponents` + stencil Clear/Store/read-only load, path-cover dst-read pipeline,
@@ -119,13 +126,17 @@ execution feature) is isolated last so a scope drift cannot block the rest.
 
 ### Phase 0 — Wave M86 + small tasks
 
-**Task 0: M86 burn-down wave (evidence, no renderer code).** Produce the ranked candidate list from
-committed run data (`:integration-tests:skia:test` runner XML + blend-suite inventory): ~760 rows —
-the 270 residual rows (199 + 60 + 4 + 2 + 2 + blur cases + re-points) per-row (family, referenceKind
-cpu-oracle/skia-upstream/test-oracle, expected GPU route, PM value, risk) and the 489 SkiaGmRunner
-refusals per-row with root-cause bucket (generated programmatically from the XML, not hand-written).
-Required M86 statements: CPU-oracle rows do not count as Skia-comparable fidelity; no global threshold
-weakened; sprint report "renderer fixes applied" tracked task-by-task. Deliverable: evidence §1.
+**Task 0: M86 burn-down wave (evidence, no renderer code).**
+Task 0.0 (input snapshot): run `:integration-tests:skia:test` on `DISPLAY=:99`, commit the JUnit XML
+under the evidence dir, and generate a machine-readable residual-row inventory (script over the XML +
+blend-suite matrix) — the runner XML is gitignored build output today, so the committed snapshot is the
+auditable source for "full row preservation". Produce the ranked candidate list from that snapshot:
+**341 residual rows** (199 + 60 + 4 + 2 + 2 + 2 blur pins + 62 re-points + 10 clip pins) per-row
+(family, referenceKind cpu-oracle/skia-upstream/test-oracle, expected GPU route, PM value, risk) and
+the 489 SkiaGmRunner refusals per-row with root-cause bucket (generated programmatically, not
+hand-written). Required M86 statements: CPU-oracle rows do not count as Skia-comparable fidelity; no
+global threshold weakened; sprint report "renderer fixes applied" tracked task-by-task. Deliverable:
+evidence §1 + committed snapshot.
 
 **Task 1: colr-v0 scenes oracle fix.** `PreparedColorGlyphSceneFrame.composeCpuReference` clears
 transparent, aligned with the product lane (`GPULoadStorePlan("clear")`);
@@ -140,14 +151,20 @@ wiring hook and of fork order). Open the wgsl4k ticket with minimized evidence
 
 **Task 3: analytic-shape dst-read formula on the prepared lane.** Wire the closed
 `GPUBlendFormulaLibrary` formula + shader-dst-read pipeline onto the core-primitive run materializer
-for analytic shapes (rect/rrect), so the 2 mapped-route rows render. Verify natural fallout: the 30
-DrawRRect dst-read rows on `unsupported.native-core-primitive.frame-global-pipeline` and the 2 on
-`invalid.preflight.core_primitive_direct_geometry_resources` close; rows that stay refused are
+for analytic shapes (rect/rrect), so the 2 mapped-route rows render. Verified fallout (fp-11 §5): the
+30 DrawRRect dst-read rows on `unsupported.native-core-primitive.frame-global-pipeline` share this
+root and close with the pipeline. The 2 DrawRRect DST rows and the 30 DrawPoint rows on
+`invalid.preflight.core_primitive_direct_geometry_resources` do NOT share this root (split-lane
+geometry-slab authority) and are owned by Task 6. Rows that stay refused after the pipeline lands are
 re-classified and documented, not forced. Before/after per row (refusal code → render + diff +
-similarity).
+similarity). Update the blend-matrix rows owned by this task (`GPUAllApiBlendSurfaceTest.kt:640`,
+multi-key subset).
 
 **Task 4: analytic-shape multi-key dst-read.** The 2 multi-key rows close with the Task 3 pipeline;
-separate task for the before/after evidence and the route-matrix re-point.
+separate task for the before/after evidence and the route-matrix re-point
+(`GPUPreparedSurfaceProductRouterTest.kt:471` multi-key code and `GPUAllApiBlendSurfaceTest.kt:640`
+multi-key subset). Note: four tasks edit these two matrices (4/6/7/8) — each task removes exactly the
+rows its own code closes, so merge ordering stays clean and no stale pin survives the guard run.
 
 ### Phase 2 — Composite under complex clip
 
@@ -162,18 +179,28 @@ evidence on `GPUMaskBlurSurfaceTest` new cases.
 **Task 6: wire the analytic-clip 64/160 split.** Re-measure the 199-row distribution at the current
 HEAD before touching the gate (fp-11 §0.3 was closure-HEAD data). Extend the split admission from
 32+80 to the analytic-clip 64/160 combos at `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2132`
-(design note `:2108-2120`), with the per-step continuation/ownership design (fp-11 §4) and the
-split-lane mid-loop lease cleanup (`:5639-5676`, mirror `:5251-5261`) so the deterministic bypass
-failure (`session-close`/`GPUOwnedNativeCloseIncompleteException`) cannot recur. Re-point the clip
-pins (Coverage 1, Advanced 8, PathClip 1). Acceptance: 199 blend rows leave `mixed_uniform_layouts`
-(verified distribution), `GPUAllApiBlendSurfaceTest` 1864/1864 green, deterministic run with no
-session-close.
+(design note `:2108-2120`), with the per-step continuation/ownership design (fp-11 §4). The
+split-lane mid-loop lease cleanup (`:5639-5676`, mirror `:5251-5261`) already landed in FP-11
+(`3bd78e180`) — Task 6 preserves and re-verifies that invariant (deterministic run, no
+`session-close`/`GPUOwnedNativeCloseIncompleteException`), it is not new work. Verify the Task-6
+split-resource fallout: the 2 DrawRRect DST rows and the 30 DrawPoint rows on
+`invalid.preflight.core_primitive_direct_geometry_resources` (fp-11 §5 roots: split geometry-slab
+authority, four-render direct-resource seal) close or are re-pointed with evidence. Re-point the clip
+pins (Coverage 1, Advanced 8, PathClip 1) and the `mixed_uniform_layouts` code in
+`GPUPreparedSurfaceProductRouterTest.kt:471`. Acceptance: 199 blend rows leave `mixed_uniform_layouts`
+(verified distribution — primary gate), `GPUAllApiBlendSurfaceTest` 1864/1864 stays green (regression
+guard), deterministic run with no session-close.
 
 ### Phase 4 — Analytic clips on non-direct geometry
 
 **Task 7: analytic clips over non-direct passes.** Using the Task 6 uniform64/160 frame, admit the
-analytic clip on the non-direct core passes for the 4 rows. Rows whose shape requires dst-read on a
-stencil-covered continuation are re-classified into Task 8 (not blocked). Before/after per row.
+analytic clip authority for non-direct shading geometry at `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2009`
+(twin `:2016`) for the 4 rows (DrawRect/DrawColor/DrawPoint/DrawPoints ALPHA_MASK × DST, fp-11 §2). Rows
+whose shading geometry is stencil-shaded (the path case) defer to Task 8's stencil-continuation
+(partial edge, §2) — not blocked, re-classified. Verify the 30 DrawPoint rows on
+`direct_geometry_resources` close here or under Task 6 (four-render shape seal) and re-point the
+`analytic_clip_non_direct_geometry` code in `GPUPreparedSurfaceProductRouterTest.kt:471`. Before/after
+per row.
 
 ### Phase 5 — Stencil-continuation feature (path destination-read, 60 rows)
 
@@ -192,7 +219,8 @@ pieces in order:
    Clear+Discard per run for continued cover passes.
 Replace the recording refusal `TaskListBuilder.kt:2572` with the wired route; update
 `GPUPreparedSurfaceProductRouterTest.kt:471` and the route matrix `GPUAllApiBlendSurfaceTest.kt:640`
-(60 rows refusal → Prepared). Acceptance: 60 rows render, CPU-oracle exact on llvmpipe, native
+for the path-destination-read rows only (60 rows refusal → Prepared; the other codes are re-pointed by
+their own closing tasks 4/6/7). Acceptance: 60 rows render, CPU-oracle exact on llvmpipe, native
 stencil-cover + dst-read smoke green, no regression on existing stencil paths
 (`GPUClipCoverageSurfaceTest`, `GPUPathClipRegressionTest`, clip pins).
 
