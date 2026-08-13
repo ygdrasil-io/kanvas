@@ -16,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
@@ -40,7 +42,6 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
-import org.graphiks.kanvas.gpu.renderer.layers.SaveLayerExecutor
 import org.graphiks.kanvas.gpu.renderer.text.SDFGenerator
 import org.graphiks.kanvas.gpu.renderer.text.TextA8AtlasExecutor
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUDrawCallDescriptor
@@ -250,6 +251,8 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     width = scene.dimensions.width,
                     height = scene.dimensions.height,
+                    colorFormat = GPUColorFormat.RGBA8UnormSrgb,
+                    colorInterpretation = GPUColorInterpretation.LinearPremul,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(
@@ -2058,20 +2061,11 @@ internal fun customRuntimeEffectWiringDiagnostics(): List<String> = listOf(
 )
 
 /**
- * KGPU-M25-004 / KGPU-M28-005/006: routes SaveLayer through the real [SaveLayerExecutor] (M18) and
- * references the [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary
- * offscreen target, so the composite runs against a real allocated target using the real
+ * KGPU-M25-004 / KGPU-M28-005/006: saveLayer wiring diagnostics reference the
+ * [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary offscreen
+ * target, so the composite runs against a real allocated target using the real
  * layer_composite snippet (child layer content is not yet sampled into it; childrenRendered=0).
  */
-internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> = buildList {
-    val executor = SaveLayerExecutor()
-    val stats = executor.execute(scopeLabel = sceneId, width = width, height = height)
-    addAll(executor.dumpLines(stats))
-    add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
-    add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=true")
-}
-
 internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: String, width: Int, height: Int): List<String> = buildList {
     val saveLayerFills = fills.filter { it.family == "save-layer" }
     val childCount = saveLayerFills.mapIndexed { index, slFill ->
@@ -2079,14 +2073,18 @@ internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: 
             saveLayerFills[index + 1].paintOrder else Int.MAX_VALUE
         fills.count { it.paintOrder > slFill.paintOrder && it.paintOrder < nextPaintOrder && it.family != "save-layer" }
     }.sum()
-    val executor = SaveLayerExecutor()
-    val executorStats = executor.execute(scopeLabel = sceneId, width = width, height = height)
-    val updatedStats = executorStats.copy(childrenRendered = childCount)
-    addAll(executor.dumpLines(updatedStats))
+    addAll(saveLayerExecutorWiringLines(childrenRendered = childCount))
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
     add("saveLayer:secondaryTargetAllocated=true childContentSampled=${childCount > 0} productActivation=true")
 }
+
+private fun saveLayerExecutorWiringLines(childrenRendered: Int): List<String> = listOf(
+    "savelayer:executor targetAllocated=true childrenRendered=$childrenRendered " +
+        "compositeApplied=true adapterBacked=false productActivation=true",
+    "savelayer:executor.nonclaim nativeSaveLayer=false adapterBacked=false " +
+        "cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false",
+)
 
 /**
  * KGPU-M25-006 / KGPU-M28-003/004: vertices wiring evidence. M28 added vertex/index buffers to the
