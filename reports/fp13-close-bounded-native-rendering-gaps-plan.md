@@ -8,8 +8,8 @@ Branch: `codex/graphite-dawn-frame-fp13` (new, from `codex/graphite-dawn-frame-p
 
 ## Context: validated branch state
 
-- HEAD `codex/graphite-dawn-frame-plan-design` = `ae7a772fb` (FP-12 merge `8de5a000f` + FP-12 GM registry docs
-  correction `07a112fba` + this plan `ae7a772fb`).
+- HEAD `codex/graphite-dawn-frame-plan-design` = `9af483125` (FP-12 merge `8de5a000f` + FP-12 GM registry docs
+  correction `07a112fba` + this plan `ae7a772fb` with the review-fix pass `9af483125`).
 - Roadmap: FP-12 `completed`; the "FP-12+ transfers" tracking note (physically under the FP-11 entry in
   `active-todo.md`, ~lines 537-549) carries 7 items: analytic clips non-direct (4), dst-read formula
   mapped routes (2), analytic-shape multi-key dst-read (2), complex-clip blur, path destination-read
@@ -32,7 +32,7 @@ Branch: `codex/graphite-dawn-frame-fp13` (new, from `codex/graphite-dawn-frame-p
 | 1 | dst-read formula on mapped routes | 2 | no analytic-shape dst-read formula pipeline on the prepared lane (fp-11 §5 `frame-global-pipeline` 30-row re-point shares this root) | shader-dst-read + formula |
 | 2 | analytic-shape multi-key dst-read | 2 | same root; multi-key analytic shape × dst-read matrix rows | shader-dst-read + formula |
 | 3 | complex-clip blur | 2 clip-suite pins (+ preflighter) | `core_primitive_clip_producer_authority`: mask-blur composite under complex (multi-rect) analytic clip refused at the clip producer preflight (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:883`) | composite × analytic clip (extend FP-11 Task 7 ABI) |
-| 4 | analytic-clip 64/160 split residual | 199 blend (RRect 29 ALPHA_MASK + Rect/Color 56 ALPHA_MASK non-DST + Path/DRRect 58 ALPHA_MASK + Point/Points 56 ALPHA_MASK non-DST) + clip pins (Coverage 1, Advanced 8, PathClip 1) | unwired 64/160 split: gate `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2132` (comment `:2108-2120`); needs per-step continuation/ownership design (fp-11 §4) + lease cleanup on the split-lane mid-loop refusal (`:5639-5676`, mirror `:5251-5261`) | direct split passes (uniform64/160) |
+| 4 | analytic-clip 64/160 split residual | 199 blend (RRect 29 ALPHA_MASK + Rect/Color 56 ALPHA_MASK non-DST + Path/DRRect 58 ALPHA_MASK + Point/Points 56 ALPHA_MASK non-DST) + clip pins (Coverage 1, Advanced 8, PathClip 1) | unwired 64/160 split: gate `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2132` (comment `:2108-2120`); needs the per-step continuation/ownership design (fp-11 §4); the split-lane mid-loop lease cleanup (`:5639-5676`, mirror `:5251-5261`) already landed in FP-11 (`3bd78e180`) and is preserved/re-verified | direct split passes (uniform64/160) |
 | 5 | analytic clips over non-direct geometry | 4 (2 pre-FP-09 + 2 from Task 3 DrawPoint/DrawPoints ALPHA_MASK × DST re-route) | `analytic_clip_non_direct_geometry` gate `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2009` (twin `:2016`): "Prepared analytic clips require one direct CorePrimitive shading geometry" — analytic clip over non-direct/stencil-shaded geometry is a new execution feature (fp-11 §2) | analytic clip × non-direct passes |
 | 6 | path destination-read | 60 | path-stencil execution model cannot express dst-read: recording refusal `TaskListBuilder.kt:2565-2575` (`:2572`), preflighter "exactly one pass" gate `GPUFramePreflighter.kt:2437-2440` (`:2401-2402`), materializer excludes dst-read from `supportedPathComponents` `GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:163-174`, per-run stencil Clear+Discard with no stencil-continuation (fp-11 §3) | stencil-continuation feature (see Task 8) |
 | 7 | colr-v0 scenes oracle divergence | 1 test (38/4096) | stale harness oracle fills opaque; product lane clears transparent (FP-12 §4.3) | harness only |
@@ -158,12 +158,13 @@ root and close with the pipeline. The 2 DrawRRect DST rows and the 30 DrawPoint 
 geometry-slab authority) and are owned by Task 6. Rows that stay refused after the pipeline lands are
 re-classified and documented, not forced. Before/after per row (refusal code → render + diff +
 similarity). Update the blend-matrix rows owned by this task (`GPUAllApiBlendSurfaceTest.kt:640`,
-multi-key subset).
+dst-read formula subset).
 
 **Task 4: analytic-shape multi-key dst-read.** The 2 multi-key rows close with the Task 3 pipeline;
 separate task for the before/after evidence and the route-matrix re-point
 (`GPUPreparedSurfaceProductRouterTest.kt:471` multi-key code and `GPUAllApiBlendSurfaceTest.kt:640`
-multi-key subset). Note: four tasks edit these two matrices (4/6/7/8) — each task removes exactly the
+multi-key subset). Note: five tasks edit these two matrices (3/4/6/7/8 — Task 3 touches only the
+blend matrix `:640`) — each task removes exactly the
 rows its own code closes, so merge ordering stays clean and no stale pin survives the guard run.
 
 ### Phase 2 — Composite under complex clip
@@ -197,8 +198,9 @@ guard), deterministic run with no session-close.
 analytic clip authority for non-direct shading geometry at `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2009`
 (twin `:2016`) for the 4 rows (DrawRect/DrawColor/DrawPoint/DrawPoints ALPHA_MASK × DST, fp-11 §2). Rows
 whose shading geometry is stencil-shaded (the path case) defer to Task 8's stencil-continuation
-(partial edge, §2) — not blocked, re-classified. Verify the 30 DrawPoint rows on
-`direct_geometry_resources` close here or under Task 6 (four-render shape seal) and re-point the
+(partial edge, §2) — not blocked, re-classified. The 30 DrawPoint rows on
+`direct_geometry_resources` are owned by Task 6 (four-render shape seal); Task 7 re-verifies them
+after its admission without splitting ownership. Re-point the
 `analytic_clip_non_direct_geometry` code in `GPUPreparedSurfaceProductRouterTest.kt:471`. Before/after
 per row.
 
@@ -220,7 +222,7 @@ pieces in order:
 Replace the recording refusal `TaskListBuilder.kt:2572` with the wired route; update
 `GPUPreparedSurfaceProductRouterTest.kt:471` and the route matrix `GPUAllApiBlendSurfaceTest.kt:640`
 for the path-destination-read rows only (60 rows refusal → Prepared; the other codes are re-pointed by
-their own closing tasks 4/6/7). Acceptance: 60 rows render, CPU-oracle exact on llvmpipe, native
+their own closing tasks 3/4/6/7). Acceptance: 60 rows render, CPU-oracle exact on llvmpipe, native
 stencil-cover + dst-read smoke green, no regression on existing stencil paths
 (`GPUClipCoverageSurfaceTest`, `GPUPathClipRegressionTest`, clip pins).
 
