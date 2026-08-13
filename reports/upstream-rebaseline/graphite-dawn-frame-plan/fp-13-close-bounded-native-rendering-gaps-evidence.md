@@ -119,8 +119,8 @@ anywhere; the pin closed by making the oracle correct.
 
 ### 1.7 Commit
 
-- SHA: (filled after commit)
-- Message: conventional commit, Task 1 / FP-13 reference.
+- SHA: `cef92685c` — `fix(gpu-renderer-scenes): colr-v0 oracle clears transparent and mirrors lane srgb store (FP-13 task 1)`
+- Files: `PreparedColorGlyphSceneFrame.kt` (oracle) + this evidence doc.
 
 ### 1.8 Notes and non-claims
 
