@@ -2882,6 +2882,93 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `uniform32 and uniform80 split frame retains per step authorities and zero based sliced slabs`() {
+        // FP-11 Task 6: the direct pass splits by uniform layout — the two uniform32 rects
+        // merge into the first render, the analytic-shape rrect into the second. Each render
+        // scope retains its own prepared-pass seal: the uniform32 step slices the frame slab
+        // to zero-based offsets, the uniform80 step owns its analytic-shape pass, and every
+        // scope carries an exact unified route.
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                301 to GPUClipExecutionPlan.NoClip,
+                302 to GPUClipExecutionPlan.NoClip,
+                303 to GPUClipExecutionPlan.NoClip,
+            ),
+            geometries = mapOf(
+                301 to GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 2f, 2f),
+                302 to GPUCorePrimitiveGeometryInput.Rect(2f, 1f, 3f, 2f),
+                303 to GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 3f, 3f, List(8) { 1f }),
+            ),
+            coverageModes = mapOf(303 to GPUCorePrimitiveCoverageMode.ScalarAA),
+        )
+        val events = mutableListOf<String>()
+        val context = GPUFramePreflightContext(
+            targetId = "target.scene",
+            deviceGeneration = plan.capabilitySeal.deviceGeneration,
+            targetGeneration = 1L,
+            resourceGenerations = plan.steps
+                .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .associate { it.resource to 1L },
+        )
+        val preflight = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = context,
+            capabilities = pathCapabilities(includeRRect = true),
+        ).preflight(plan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            preflight,
+            (plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+                .mapNotNull { it.corePrimitivePreparedAuthority?.structuralPipelineKey?.uniformLayout }
+                .toString() + " :: " + (preflight as? GPUFramePreflightResult.Refused)?.diagnostic?.code?.value),
+        ).frame
+        val renders = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(2, renders.size)
+        assertEquals(listOf(301, 302), renders[0].drawPackets.map { it.commandIdValue })
+        assertEquals(listOf(303), renders[1].drawPackets.map { it.commandIdValue })
+        renders.forEach { render ->
+            val scope = prepared.encoderPlan.scopes.single {
+                it.sourceStepIndex == plan.steps.indexOf(render)
+            }
+            val passSeal = requireNotNull(
+                assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                    scope.corePrimitiveDirectNativeRouteSeal,
+                ).preparedPassSeal,
+            )
+            assertEquals(render.drawPackets.map { it.commandIdValue }, passSeal.commandIds)
+            val unified = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+                scope.corePrimitiveNativeScopeRouteSeal,
+            )
+            assertEquals(render.drawPackets.map { it.commandIdValue }, unified.commandIds)
+        }
+        val firstScope = prepared.encoderPlan.scopes.single {
+            it.sourceStepIndex == plan.steps.indexOf(renders[0])
+        }
+        val firstSeal = requireNotNull(
+            assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                firstScope.corePrimitiveDirectNativeRouteSeal,
+            ).preparedPassSeal?.uniformSlabSeal,
+        )
+        assertEquals(listOf(301, 302), firstSeal.commandIds)
+        assertEquals(2, firstSeal.plan.slots.size)
+        assertEquals(0L, firstSeal.plan.slots[0].alignedOffset)
+        assertEquals(256L, firstSeal.plan.slots[1].alignedOffset)
+        val secondScope = prepared.encoderPlan.scopes.single {
+            it.sourceStepIndex == plan.steps.indexOf(renders[1])
+        }
+        val secondSeal = requireNotNull(
+            assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                secondScope.corePrimitiveDirectNativeRouteSeal,
+            ).preparedPassSeal,
+        )
+        assertEquals(1, secondSeal.analyticShapeUniformSeals.size)
+        assertEquals(listOf(303), secondSeal.analyticShapeUniformSeals.map { it.commandId })
+        assertEquals(0L, secondSeal.analyticShapeUniformSeals.single().alignedOffset)
+    }
+
+    @Test
     fun `uniform slab slice rebases one step to zero based offsets and exact packed bytes`() {
         val framePacked = ByteArray(512) { index -> (index % 251).toByte() }
         val frameSlab = GPUCorePrimitiveUniformSlabSeal(

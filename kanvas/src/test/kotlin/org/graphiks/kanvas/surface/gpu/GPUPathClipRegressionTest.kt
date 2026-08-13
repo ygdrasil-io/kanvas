@@ -25,15 +25,20 @@ class GPUPathClipRegressionTest {
     fun `device rect clip path frame refuses with the mixed uniform layouts code`() {
         requireWebGpu()
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split remains pinned on
-        // the mixed-layout refusal while the split lane leaks a native session owner for
-        // fixed-function analytic-clip passes. Pre-FP-09 the legacy renderer rendered this
-        // frame (green at the FP-08 tip accaea616); the route collapse converted it to this
-        // stable code (Task 6 evidence family 4).
+        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
+        // the mixed-layout refusal pending the per-step continuation design (the materializer
+        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
+        // split itself is not wired). Pre-FP-09 the legacy renderer rendered this frame
+        // (green at the FP-08 tip accaea616); the route collapse converted it to this stable
+        // code (Task 6 evidence family 4).
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                    // The AA background paint (Paint.fill default) keeps this frame on the
+                    // mixed-layout refusal through the analytic-shape/analytic-clip mix gate;
+                    // a hard background would reach the same pinned code through the 64-mix
+                    // gate, so the input shape is irrelevant to the pinned outcome.
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                     save()
                     clipRect(Rect(8f, 8f, 24f, 24f))
                     drawPath(

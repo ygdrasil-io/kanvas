@@ -2107,10 +2107,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         // FP-11 Task 6: the direct pass splits by uniform layout, so consecutive same-layout
         // runs emit one render pass per layout group (each with its own slab). The uniform80
-        // (analytic-shape) split renders on the prepared lane; the analytic-clip (uniform64 /
-        // uniform160) split remains pinned on the mixed-layout refusal while the split lane
-        // leaks a native session owner for fixed-function analytic-clip passes (Task 8 B-row
-        // with the failing materializer evidence).
+        // (analytic-shape) split renders on the prepared lane. The analytic-clip (uniform64 /
+        // uniform160) split stays pinned on this mixed-layout refusal for a deterministic
+        // materializer residual: bypassing this gate and running the blend suite's
+        // fixed-function non-SRC_OVER analytic-clip rows (48 rows = 4 APIs x 12 modes) fails
+        // deterministically with `GPUOwnedNativeCloseIncompleteException`
+        // ("prepared-scene-child-cache close remains incomplete with 1 native owner(s)") on
+        // `failed.surface.prepared.session-close`; the SRC_OVER rows render clean. The leak
+        // was the split-lane materializer's mid-loop refusal path skipping the lease cleanup
+        // (now fixed), so the 64/160 split remains unwired pending the per-step continuation
+        // design rather than a leak. Task 8 records this as the mixed-layout residual B-row
+        // with this evidence.
         val activeDirectUniformLayouts = listOf(
             legacyUniformPackets.isNotEmpty() ||
                 pathStencilPlansByCommandId.keys.any { it !in analyticClipAuthoritiesByCommandId },
@@ -2933,6 +2940,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         // merge into one direct render pass; analytic-clip path pairs form their own pass.
         // The composition is derived up front so direct packets only retain the path-neutral
         // depth/stencil state when they actually batch into a path-bearing run.
+        // INVARIANT: [consumerRunKey] (base packets) and [consumerRenderRunKey] (consumer
+        // renders) must derive the SAME key — the base packet's clip equals the pair cover's
+        // clip for analytic path pairs (the producer alone is lowered to NoClip). If they
+        // ever diverge, the run grouping and [pathRunPacketIds] disagree and direct packets
+        // get mis-flagged path-neutral depth/stencil state. Today the analytic-clip 64-mix
+        // gate (above) backstops any such divergence by refusing the analytic-clip frames;
+        // relaxing that gate requires re-verifying this key agreement first.
         fun consumerRunKey(packet: GPUDrawPacket): String {
             val pathPlan = pathStencilPlansByCommandId[packet.commandIdValue]
             if (pathPlan != null) {

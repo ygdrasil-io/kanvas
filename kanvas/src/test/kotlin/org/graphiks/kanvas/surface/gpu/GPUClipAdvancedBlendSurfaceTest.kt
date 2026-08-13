@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.surface.gpu
 
-import kotlin.math.abs
 import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -44,11 +43,12 @@ class GPUClipAdvancedBlendSurfaceTest {
             BlendMode.EXCLUSION,
         )
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split remains pinned on
-        // the mixed-layout refusal while the split lane leaks a native session owner for
-        // fixed-function analytic-clip passes. Pre-FP-09 these frames rendered via the legacy
-        // renderer (green at the FP-08 tip accaea616); the route collapse converted them to
-        // this stable code (Task 6 evidence family 4).
+        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
+        // the mixed-layout refusal pending the per-step continuation design (the materializer
+        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
+        // split itself is not wired). Pre-FP-09 these frames rendered via the legacy renderer
+        // (green at the FP-08 tip accaea616); the route collapse converted them to this
+        // stable code (Task 6 evidence family 4).
         expectedByMode.forEach { mode ->
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 renderClippedBlend(destination, source, mode)
@@ -234,14 +234,5 @@ class GPUClipAdvancedBlendSurfaceTest {
     private fun sampleAt(pixels: UByteArray, x: Int, y: Int): UByteArray {
         val offset = (y * 32 + x) * 4
         return pixels.copyOfRange(offset, offset + 4)
-    }
-
-    private fun assertPixelsNear(expected: UByteArray, actual: UByteArray, tolerance: Int) {
-        expected.indices.forEach { channel ->
-            assertTrue(
-                abs(expected[channel].toInt() - actual[channel].toInt()) <= tolerance,
-                "channel=$channel expected=${expected.toList()} actual=${actual.toList()} tolerance=$tolerance",
-            )
-        }
     }
 }

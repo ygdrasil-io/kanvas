@@ -465,8 +465,8 @@ class GPUPreparedSurfaceProductRouterTest {
         // matrix in FP-11 Task 3: they lower to one-device-pixel squares and route Prepared.
         // The two-render dst-copy code left it in FP-11 Task 4: the destination-then-consumer
         // dst-read shape is admitted on the prepared direct lane. The mixed-layout code remains
-        // in FP-11 Task 6 as the pinned analytic-clip split residual (Task 8 B-row: the split
-        // lane leaks a native session owner for fixed-function analytic-clip passes).
+        // in FP-11 Task 6 as the pinned analytic-clip split residual (Task 8 B-row: the
+        // 64/160 split stays unwired pending the per-step continuation design).
         val codes = listOf(
             "unsupported.recording.core_primitive_mixed_uniform_layouts",
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",

@@ -572,10 +572,11 @@ class GPUAllApiBlendSurfaceTest {
             // refuses with the exact recording/builder code the evidence run produced: the
             // rrect analytic-shape (uniform80) pass splits from the uniform32 destination
             // pass for the fixed blends (renders Prepared); the analytic-clip (uniform64/
-            // uniform160) split remains pinned on the mixed-layout refusal while the split
-            // lane leaks a native session owner for fixed-function analytic-clip passes
-            // (Task 8 B-row with the failing materializer evidence); hairline points render
-            // prepared as one-device-px squares except where the clip or the dst-read
+            // uniform160) split remains pinned on the mixed-layout refusal (deterministic
+            // residual: bypassing the gate fails the fixed-function non-SRC_OVER rows with
+            // GPUOwnedNativeCloseIncompleteException on failed.surface.prepared.session-close
+            // until the per-step continuation design lands — Task 8 B-row); hairline points
+            // render prepared as one-device-px squares except where the clip or the dst-read
             // two-render frame keeps them terminal. Cases that still render prepared stay
             // null so the pixel oracle keeps proving them.
             return when (api.name) {
@@ -601,8 +602,7 @@ class GPUAllApiBlendSurfaceTest {
                 "DrawRRect" -> when {
                     context == BlendContext.ALPHA_MASK ->
                         // FP-11 Task 6: the analytic-shape rrect under the analytic AA mask
-                        // clip stays on the mixed-layout refusal (the analytic-clip split
-                        // residual family).
+                        // clip stays on the mixed-layout refusal (Task 8 B-row mixed-layout residual).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode == BlendMode.DST ->
                         // The DST rrect pass cannot exact its shared geometry slab authority.
@@ -623,7 +623,7 @@ class GPUAllApiBlendSurfaceTest {
                         ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
                         // FP-11 Task 6: the analytic-clip rect pass split remains pinned on
-                        // the mixed-layout refusal (the split lane session-leak residual).
+                        // the mixed-layout refusal (Task 8 B-row mixed-layout residual).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
                         // FP-11 Task 4: the two-render dst-copy shape (destination pass, ordered
@@ -634,7 +634,7 @@ class GPUAllApiBlendSurfaceTest {
                 "DrawPath", "DrawDRRect" -> when {
                     context == BlendContext.ALPHA_MASK ->
                         // FP-11 Task 6: the analytic-clip path pair pass remains pinned on the
-                        // mixed-layout refusal (the analytic-clip split residual family).
+                        // mixed-layout refusal (Task 8 B-row mixed-layout residual).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
                         ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)

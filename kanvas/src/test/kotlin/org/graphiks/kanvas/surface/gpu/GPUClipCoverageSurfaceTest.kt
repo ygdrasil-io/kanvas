@@ -108,8 +108,7 @@ class GPUClipCoverageSurfaceTest {
         }
 
         // FP-11 Task 6 residual (Task 8 B-row): the analytic-shape-under-analytic-clip frame
-        // stays on the mixed-layout refusal (the split lane leaks a native session owner for
-        // analytic-clip passes).
+        // stays on the mixed-layout refusal pending the per-step continuation design.
         assertTerminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL, surface::render)
     }
 

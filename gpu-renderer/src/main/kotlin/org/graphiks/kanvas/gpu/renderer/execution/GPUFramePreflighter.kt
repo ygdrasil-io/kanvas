@@ -3032,8 +3032,10 @@ internal class GPUFramePreflighter(
         }
         val uniformPreparationByResource = uniformSlabs.associateBy { it.resource }
         val stepUniformResourceByStepIndex = indexedCoreRenders.associate { (stepIndex, render) ->
-            stepIndex to render.resourceUses
-                .single { it.role == GPUFrameResourceRole.UniformData }.resource
+            val uniformUse = render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.UniformData
+            } ?: return refused("Path stencil render must retain its exact uniform slab use.")
+            stepIndex to uniformUse.resource
         }
         fun stepUniformPlan(stepIndex: Int): org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan =
             when (stepUniformAuthorityKinds.getValue(stepIndex)) {
@@ -3041,8 +3043,9 @@ internal class GPUFramePreflighter(
                 else -> requireNotNull(uniformSeal).plan
             }
         indexedCoreRenders.forEach { (stepIndex, render) ->
-            val stepPreparation = uniformPreparationByResource
-                .getValue(stepUniformResourceByStepIndex.getValue(stepIndex))
+            val stepPreparation = uniformPreparationByResource[
+                stepUniformResourceByStepIndex.getValue(stepIndex)
+            ] ?: return refused("Path stencil render references an undeclared uniform slab.")
             val descriptor = stepPreparation.descriptor as? GPUFrameBufferDescriptor
                 ?: return refused("Path stencil uniform slab descriptor is missing.")
             val plan = stepUniformPlan(stepIndex)
@@ -4107,13 +4110,18 @@ internal class GPUFramePreflighter(
         }
         val uniformPreparationByResource = uniformSlabs.associateBy { it.resource }
         val stepUniformResourceByStepIndex = acceptedStepIndexes.associateWith { stepIndex ->
-            accepted.first { it.sourceStepIndex == stepIndex }.render.resourceUses
-                .single { it.role == GPUFrameResourceRole.UniformData }.resource
+            val entry = accepted.firstOrNull { it.sourceStepIndex == stepIndex }
+                ?: return refuse("Direct CorePrimitive step is missing its accepted packet authority.")
+            val uniformUse = entry.render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.UniformData
+            } ?: return refuse("Direct CorePrimitive render must retain its exact uniform slab use.")
+            uniformUse.resource
         }
         acceptedStepIndexes.forEach { stepIndex ->
             val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
-            val stepPreparation = uniformPreparationByResource
-                .getValue(stepUniformResourceByStepIndex.getValue(stepIndex))
+            val stepPreparation = uniformPreparationByResource[
+                stepUniformResourceByStepIndex.getValue(stepIndex)
+            ] ?: return refuse("Direct CorePrimitive render references an undeclared uniform slab.")
             val descriptor = stepPreparation.descriptor as? GPUFrameBufferDescriptor
                 ?: return refuse("Direct CorePrimitive uniform slab descriptor is missing.")
             if (descriptor.byteSize != stepAuthority.uniformPlan.totalBytes ||
@@ -6389,6 +6397,11 @@ internal fun sliceAnalyticShapeUniformSealsToCommands(
 private fun diagnostic(code: String, message: String, facts: Map<String, String> = emptyMap()): GPUDiagnostic =
     preflightDiagnostic(code, message, facts)
 
+/**
+ * Rebases one direct CorePrimitive uniform32 slab seal to exactly one render scope's commands:
+ * the step owns a zero-based sliced plan and its own packed upload so the per-render-scope run
+ * materializer binds exact offsets (Task 4 dst-copy lanes; Task 6 layout-split steps).
+ */
 internal fun sliceUniformSlabSealToCommands(
     seal: GPUCorePrimitiveUniformSlabSeal,
     stepCommandIds: List<Int>,

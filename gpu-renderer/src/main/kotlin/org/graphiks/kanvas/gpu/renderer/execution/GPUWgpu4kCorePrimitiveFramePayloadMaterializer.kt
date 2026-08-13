@@ -5636,7 +5636,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     null
                 }
-            val readyPerPlan = runPlans.map { plan ->
+            // FP-11 Task 6 review fix: a mid-loop run refusal must release or quarantine every
+            // lease already materialized by the earlier runs and restore the materializer
+            // ledger state, mirroring the dst-copy lane's producer/consumer refusal cleanup
+            // (a plain `return` inside the loop would skip the catch and leak the pooled
+            // frame slots plus the pre-registration handles).
+            val readyPerPlan = mutableListOf<GPUCorePrimitiveRenderRunMaterialization.Ready>()
+            val runLifecycles = mutableListOf<GPUPreparedNativeFrameLeaseLifecycle>()
+            runPlans.forEach { plan ->
                 when (
                     val result = runMaterializer.materializeAcceptedRuns(
                         plans = listOf(plan),
@@ -5645,12 +5652,27 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         generationSeal = generationSeal,
                     )
                 ) {
-                    is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
-                    is GPUCorePrimitiveRenderRunMaterialization.Refused ->
+                    is GPUCorePrimitiveRenderRunMaterialization.Ready -> {
+                        readyPerPlan += result
+                        runLifecycles += result.leaseLifecycle
+                    }
+                    is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                        if (runLifecycles.any { lifecycle ->
+                                lifecycle.releaseBeforeSubmit() !is
+                                    GPUPreparedNativeFrameLeaseTransition.Applied
+                            }
+                        ) {
+                            runLifecycles.forEach { lifecycle -> lifecycle.quarantineUncertain() }
+                        }
+                        synchronized(this) {
+                            materializing = false
+                            preRegistrationHandles.closeRetainingFailures()
+                        }
                         return refused(result.code, result.message)
+                    }
                 }
             }
-            leases = readyPerPlan.map { it.leaseLifecycle }
+            leases = runLifecycles
             val operandsByStep = (
                 readyPerPlan.flatMap { it.renderOperands } +
                     listOfNotNull(readbackOperand)
@@ -5715,7 +5737,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             runMaterializer.close()
         }
     }
-
 
     private fun materializeSingleSampleFrameGlobalCore(
         framePlan: GPUFramePlan,
