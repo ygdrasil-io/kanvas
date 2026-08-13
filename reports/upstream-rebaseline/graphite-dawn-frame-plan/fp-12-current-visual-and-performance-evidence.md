@@ -56,8 +56,12 @@ Results:
   the console `Total 615` is the full registry fed to the generator, while
   `gms.json` holds 576 comparison entries — the 39-GM gap is the
   `RenderCost.BLOCKING` set the dashboard generator excludes
-  (`SkiaDashboardGenerator.kt:49`). The runner aborts 40 cases (BLOCKING GMs
-  plus untrustable-reference aborts such as `custommesh_uniforms`).
+  (`SkiaDashboardGenerator.kt:49`). The test runner aborts 40 cases: the same
+  39 BLOCKING GMs plus `custommesh_uniforms`, whose reference is marked
+  untrustable. The other untrustable-marked GMs do **not** abort — `custommesh`
+  fails with a terminal refusal because the render (line 64) precedes the
+  untrustable check (line 70), and `custommesh_cs` is not registered in the
+  runner's service list. So 40 is consistent with 39 + 1, not 39 + 3.
 - 23 generated-render PNGs changed vs. the committed baseline (last committed at
   PR #2051, pre-FP-08); the regenerated renders reflect the current prepared
   renderer after FP-08/09/10/11 retirement. Regeneration is deterministic
@@ -83,19 +87,34 @@ Results:
 
 `:integration-tests:skia:test` reports 686 tests, 504 failed, 40 skipped.
 Breakdown: the `SkiaGmRunner` contributes 615 GM cases (498 failures + 40
-blocked aborts + 77 passing); the other 71 tests across the module's remaining
+aborts (39 BLOCKING + 1 untrustable reference `custommesh_uniforms`) + 77
+passing); the other 71 tests across the module's remaining
 classes contribute 6 failures (`GradientColorFilterGpuSmokeTest` 1,
 `ImageFilterBlurContractTest` 2, `AAXfermodesRegressionTest` 2,
 `ThinRectsGpuCoverageTest` 1); 498 + 6 = 504.
-Every GM failure is a stable `GPUPreparedSurfaceTerminalException` refusal from
-a **fresh render** (the runner does not read `generated-renders/` PNGs). FP-12
-changes no production code, so this refusal profile is inherited verbatim from
-FP-11 HEAD. Of the 498 runner failures, 493 GMs have no committed score (never
-rendered) and 3 (`BlurDrawImage`, `BlurSmallSigma`, `OverStroke`) refuse on the
-post-retirement lane (`unsupported.image.native_binding` /
-`unsupported.geometry.path_key_nondeterministic`) while their committed scores
-date from PR #2051; 2 more have a zero committed score (`TiledBlurBigSigma`,
-`AlternateLuma`).
+
+The 498 runner failures break down by failure kind:
+
+| kind | count | detail |
+| --- | --- | --- |
+| terminal refusal | 489 | stable `GPUPreparedSurfaceTerminalException` from a fresh render (the runner renders first at `SkiaGmRunner.kt:64`, so refusals win over later reference checks) |
+| missing reference | 7 | `Reference PNG not found at /reference/<name>.png` — `color`, `filter`, `orientation`, `rect`, `clipped_bitmap_shaders`, `wacky_y_u_v_formats`, `linear_gradient_r_t` |
+| size mismatch | 1 | `scale_pixels` (`Buffer sizes differ`) |
+| below threshold | 1 | `text_scale_skew` (similarity 77.75% < 80%) |
+
+By committed score state, of the 498: **153** have a nonzero committed score
+(152 terminal refusals + `text_scale_skew`), **13** have a zero committed
+score, and **332** have no committed score entry. So "never rendered" would be
+a wrong characterization — 166 of the 498 (153 + 13) carry scores from the
+pre-retirement PR #2051-era evidence and now refuse or fall below threshold on
+the post-retirement lane (e.g. `BlurDrawImage` 70.75, `OverStroke` 48.55,
+`BlurSmallSigma`).
+
+FP-12 changes no production code, so this failure profile is inherited
+verbatim from FP-11 HEAD (the runner does not read `generated-renders/` PNGs;
+it renders fresh and compares to `reference/`). The dashboard's 30 no-score
+rows are a separate, dashboard-side view: GMs whose references are missing,
+size-mismatched, or marked untrustable are scored there but not in the runner.
 
 No assertion was weakened; no GM threshold was changed.
 
@@ -158,7 +177,10 @@ Scene: `solid-card-stack` (the rect-only offscreen lane; `frame-gate-blocker-
 board` is not rect-only on this route and returns `not-yet-rendered`). Raw
 samples: **60**, warmup: **3**, stable: **57**. Metric:
 `frame-time-ms` / `wall-clock-prepared-submit-completion` (0 measured
-readbacks, 1 final validation readback — the same source as §2.1).
+readbacks, 1 final validation readback — the same source as §2.1). The 60
+recorded samples correspond to 60 of the 61 native frames the sampler emits
+(`nativeFrames=${frames + 1}` — the +1 is the final validation readback frame
+that is not part of the timed samples, `OffscreenFrameSampler.kt:116`).
 
 | statistic | value (ms) |
 | --- | --- |
@@ -169,6 +191,11 @@ readbacks, 1 final validation readback — the same source as §2.1).
 | max | 9.4228 |
 | stdev | 1.1630 |
 | coefficient of variation | 0.2203 |
+
+p50/p95 use nearest-rank indexing on the 57 sorted stable samples
+(`p50 = stable[28]`, `p95 = stable[54]`); linear interpolation of the 95th
+percentile would give 7.1705 ms. All statistics are recomputed from the raw
+samples in the committed artifact, which stores every `durationNanos`.
 
 Artifact: `reports/gpu-renderer-scenes/frame-samples/solid-card-stack/
 frame-samples.json` SHA-256
@@ -253,7 +280,16 @@ Explicit non-claims:
 - No release-blocking performance gate is promoted: 60fps gate verdicts are
   frame-gate-policy **reporting** output (`productActivation=true`,
   `releaseBlocking` not asserted here), consistent with M67/M84 candidate
-  semantics.
+  semantics. Note: the per-family benchmark diagnostics transcript contains a
+  pre-existing stale nonclaim string `nonclaim:per-family-benchmark no-product-
+  activation ...` (`PerFamilyBenchmark.dumpLines()`, `PerFamilyBenchmark.kt:
+  130`) that contradicts the JSON reports' `productActivation=true`; the JSON
+  is authoritative and the string is unchanged by FP-12.
+- The `hardwareBaseline: "Apple M-series"` field in `per-family-benchmark.json`
+  and `frame-gate-policy.json` is a schema constant describing the frame-gate's
+  configured baseline policy, **not** the measured adapter — the actual adapter
+  is `llvmpipe/llvmpipe` per the `adapterInfo` field. It is not a hardware
+  claim.
 - PathFill / BitmapRect / Text families are **unsupported** on the prepared
   scene route (`unsupported.prepared-scene.family`) — no measurement claimed.
 - `pipeline-cache-telemetry.json` is draw-plan-derived ledger evidence (M85
@@ -266,14 +302,15 @@ Explicit non-claims:
 - No production prepared-renderer code was modified by FP-12; the two
   `:gpu-renderer-scenes` fixes are harness/scenes-module only.
 
-## 6. FP-12+ transfers (unchanged)
+## 6. FP-12+ transfers
 
 The FP-11 evidence's residual-refusal tracking list (§10) carries forward
 unchanged: analytic clips over non-direct geometry (4), dst-read formula on
 mapped routes (2), analytic-shape multi-key dst-read (2), complex-clip blur,
 path destination-read (60), and the analytic-clip 64/160 split residual (199
-blend rows on `mixed_uniform_layouts`). FP-12 adds the COLRv0 scene oracle
-divergence (§4.3) to that tracking list.
+blend rows on `mixed_uniform_layouts`). FP-12 appends the `colr-v0-color-glyph`
+scene CPU-oracle divergence (§4.3) to the roadmap's FP-12+ transfers list
+(`active-todo.md`); the fp-11 evidence §10 list itself is untouched.
 
 ## 7. Commit trail
 

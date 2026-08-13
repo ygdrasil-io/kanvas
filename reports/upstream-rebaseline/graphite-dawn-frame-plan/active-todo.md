@@ -542,7 +542,11 @@ the existing FP-12 entry remains "Current visual and performance evidence"):
 - complex-clip blur / `core_primitive_clip_producer_authority`;
 - path destination-read (60, reclassified A→B in Task 5);
 - multi-uniform-layout analytic-clip 64/160 split residual (the unwired
-  split; 199 blend rows stay on `mixed_uniform_layouts` at closure HEAD).
+  split; 199 blend rows stay on `mixed_uniform_layouts` at closure HEAD);
+- `colr-v0-color-glyph` scene CPU-oracle divergence (opaque vs. transparent
+  background; the product color-glyph lane clears transparent per
+  `GPUColorGlyphPreparedFrameSmokeTest`, the scenes-harness oracle fills opaque
+  — stale-oracle artifact of the July 29-30 clear-semantics change, FP-12 §4.3).
 
 ### FP-12 — Current visual and performance evidence
 
@@ -554,7 +558,7 @@ candidate after legacy retirement.
 Acceptance:
 
 - current render images and similarity scores are regenerated — done (23
-  generated-render PNGs + 18 score lines refreshed to the post-retirement
+  generated-render PNGs + 17 score lines refreshed to the post-retirement
   prepared renderer; dashboard regenerated, see `fp-12-current-visual-and-
   performance-evidence.md` §1);
 - benchmark inputs, raw samples, hashes, p50/p95 results, and verdicts are
@@ -575,5 +579,6 @@ owns the FP-12 benchmark lanes and had not compiled since `06844bc08`
 `RGBA8UnormSrgb` scene target (fixes `unsupported.prepared-scene-session.
 target-incompatible`). One pre-existing latent `colr-v0-color-glyph` scene
 oracle divergence (opaque vs. transparent background, from the July 29-30
-clear-semantics change) is documented and tracked, not FP-12-introduced. The
-FP-11 residual-refusal transfer list is unchanged.
+clear-semantics change) is documented and tracked in the FP-12+ transfer list
+below, not FP-12-introduced. The FP-11 residual-refusal transfer list is
+unchanged.
