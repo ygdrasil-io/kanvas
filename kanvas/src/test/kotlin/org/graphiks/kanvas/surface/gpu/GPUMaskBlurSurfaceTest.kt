@@ -219,13 +219,14 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `mask blur composites under coverage and analytic clips are terminal`() {
+    fun `mask blur composites under coverage clips are terminal`() {
         requireWebGpu()
 
-        // Task 11 lane scope: the blur composite applies NoClip or integer ScissorOnly
-        // clips. A stacked non-AA device-rect clip plans a coverage-mask clip and an
-        // AA device-rect clip plans an analytic clip; both refuse with the documented
-        // lane-scope code instead of rendering unclipped.
+        // Task 11 lane scope (extended): the blur composite applies NoClip, integer
+        // ScissorOnly, or analytic device-rect clips. A stacked non-AA device-rect clip
+        // plans a coverage-mask clip and refuses with the documented lane-scope code
+        // instead of rendering unclipped (the analytic device-rect case renders
+        // prepared under `mask blur composite under an analytic rect clip renders prepared`).
         val stacked = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderSourceCompositedBlur(RenderConfig.DEFAULT) {
                 clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
@@ -233,13 +234,20 @@ class GPUMaskBlurSurfaceTest {
             }
         }
         assertEquals("unsupported.native-mask-blur.clip", stacked.diagnostic.code.value)
+    }
 
-        val aaClipped = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
-            }
+    @Test
+    fun `mask blur composite under an analytic rect clip renders prepared`() {
+        requireWebGpu()
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
         }
-        assertEquals("unsupported.native-mask-blur.clip", aaClipped.diagnostic.code.value)
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.RectClip(14f, 14f, 18f, 18f, antiAlias = true),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
 
     @Test

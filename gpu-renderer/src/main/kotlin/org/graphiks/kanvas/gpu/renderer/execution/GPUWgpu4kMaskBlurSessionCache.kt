@@ -40,6 +40,7 @@ import io.ygdrasil.webgpu.StencilFaceState
 import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexState
+import org.graphiks.kanvas.gpu.renderer.recording.MASK_BLUR_COMPOSITE_CLIP_DST_WGSL
 import org.graphiks.kanvas.gpu.renderer.recording.MASK_BLUR_COMPOSITE_DST_WGSL
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_LAYOUT_BLUR
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_LAYOUT_COMPOSITE
@@ -65,12 +66,27 @@ internal class GPUWgpu4kMaskBlurCompositePipelines(
     private val owned: GPUMaskBlurCachedHandleSet,
 ) : AutoCloseable by owned
 
+/**
+ * Clip-variant composite pipelines for one exact scene color format (Task 7): the
+ * same src-over/src/dst program shapes with an extra analytic-clip uniform64 binding
+ * so the composite shader can multiply the blurred mask coverage by the clip coverage.
+ */
+internal class GPUWgpu4kMaskBlurCompositeClipPipelines(
+    val sceneFormat: GPUTextureFormat,
+    val srcOverPipeline: GPURenderPipeline,
+    val srcPipeline: GPURenderPipeline,
+    val dstPipeline: GPURenderPipeline,
+    private val owned: GPUMaskBlurCachedHandleSet,
+) : AutoCloseable by owned
+
 internal class GPUWgpu4kMaskBlurInvariantHandles(
     val maskBindGroupLayout: GPUBindGroupLayout,
     val blurBindGroupLayout: GPUBindGroupLayout,
     val styleBindGroupLayout: GPUBindGroupLayout,
     val compositeBindGroupLayout: GPUBindGroupLayout,
     val compositeDstBindGroupLayout: GPUBindGroupLayout,
+    val compositeClipBindGroupLayout: GPUBindGroupLayout,
+    val compositeDstClipBindGroupLayout: GPUBindGroupLayout,
     val maskPipeline: GPURenderPipeline,
     val blurHPipeline: GPURenderPipeline,
     val blurVPipeline: GPURenderPipeline,
@@ -111,6 +127,8 @@ internal class GPUWgpu4kMaskBlurSessionCache(
     private var intermediates: GPUWgpu4kMaskBlurIntermediateHandles? = null
     private val compositePipelinesByFormat =
         linkedMapOf<GPUTextureFormat, GPUWgpu4kMaskBlurCompositePipelines>()
+    private val compositeClipPipelinesByFormat =
+        linkedMapOf<GPUTextureFormat, GPUWgpu4kMaskBlurCompositeClipPipelines>()
     private var closed = false
     private var invariantCreations = 0L
     private var invariantReuses = 0L
@@ -175,6 +193,28 @@ internal class GPUWgpu4kMaskBlurSessionCache(
         }
     }
 
+    /**
+     * Returns (creating once per scene format) the clip-variant composite pipeline set
+     * (Task 7), used only when a mask blur composite carries an admitted analytic
+     * device-rect clip so clip-less frames keep the plain pipeline sets untouched.
+     */
+    @Synchronized
+    fun acquireCompositeClipPipelines(sceneFormat: GPUTextureFormat): GPUWgpu4kMaskBlurCompositeClipPipelines {
+        check(!closed) { "The mask blur native session cache is closed" }
+        return compositeClipPipelinesByFormat[sceneFormat] ?: run {
+            requireCleanSetupLedger()
+            try {
+                createCompositeClipPipelines(sceneFormat).also { set ->
+                    compositeClipPipelinesByFormat[sceneFormat] = set
+                    preRegistrationHandles.transferAll()
+                }
+            } catch (failure: Throwable) {
+                preRegistrationHandles.closeRetainingFailures()
+                throw failure
+            }
+        }
+    }
+
     @Synchronized
     fun counters(): GPUMaskBlurNativeCacheCounters = GPUMaskBlurNativeCacheCounters(
         invariantCreations,
@@ -222,6 +262,14 @@ internal class GPUWgpu4kMaskBlurSessionCache(
             }
         }
         compositePipelinesByFormat.clear()
+        compositeClipPipelinesByFormat.values.forEach { set ->
+            try {
+                set.close()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+            }
+        }
+        compositeClipPipelinesByFormat.clear()
     }
 
     private fun createCompositePipelines(sceneFormat: GPUTextureFormat): GPUWgpu4kMaskBlurCompositePipelines {
@@ -308,6 +356,67 @@ internal class GPUWgpu4kMaskBlurSessionCache(
         }
     }
 
+    private fun createCompositeClipPipelines(sceneFormat: GPUTextureFormat): GPUWgpu4kMaskBlurCompositeClipPipelines {
+        val pending = mutableListOf<AutoCloseable>()
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
+        return try {
+            val compositeClipLayout = requireNotNull(invariants).compositeClipBindGroupLayout
+            val compositeDstClipLayout = requireNotNull(invariants).compositeDstClipBindGroupLayout
+            val compositeClipShader = device.createShaderModule(
+                ShaderModuleDescriptor(
+                    label = "Kanvas.session.maskBlur.compositeClip.shader",
+                    code = MASK_BLUR_COMPOSITE_CLIP_WGSL,
+                ),
+            ).track()
+            val compositeDstClipShader = device.createShaderModule(
+                ShaderModuleDescriptor(
+                    label = "Kanvas.session.maskBlur.compositeDstClip.shader",
+                    code = MASK_BLUR_COMPOSITE_CLIP_DST_WGSL,
+                ),
+            ).track()
+
+            fun layout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout = device.createPipelineLayout(
+                PipelineLayoutDescriptor(
+                    label = "Kanvas.session.maskBlur.compositeClipPipelineLayout",
+                    bindGroupLayouts = listOf(bindGroupLayout),
+                ),
+            ).track()
+            val srcOverPipeline = compositePipeline(
+                "composite-src-over-clip",
+                layout(compositeClipLayout),
+                compositeClipShader,
+                srcOverBlendState(),
+                sceneFormat,
+            ).track()
+            val srcPipeline = compositePipeline(
+                "composite-src-clip",
+                layout(compositeClipLayout),
+                compositeClipShader,
+                replaceBlendState(),
+                sceneFormat,
+            ).track()
+            val dstPipeline = compositePipeline(
+                "composite-dst-clip",
+                layout(compositeDstClipLayout),
+                compositeDstClipShader,
+                replaceBlendState(),
+                sceneFormat,
+            ).track()
+            GPUWgpu4kMaskBlurCompositeClipPipelines(
+                sceneFormat,
+                srcOverPipeline,
+                srcPipeline,
+                dstPipeline,
+                GPUMaskBlurCachedHandleSet(pending.toList()),
+            )
+        } catch (failure: Throwable) {
+            throw failure
+        }
+    }
+
     private fun createInvariants(): GPUWgpu4kMaskBlurInvariantHandles {
         val pending = mutableListOf<AutoCloseable>()
         fun <T : AutoCloseable> T.track(): T = also {
@@ -365,6 +474,30 @@ internal class GPUWgpu4kMaskBlurSessionCache(
                     ),
                 ),
             ).track()
+            val compositeClipLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "Kanvas.session.maskBlur.compositeClipLayout",
+                    entries = listOf(
+                        uniformLayoutEntry(),
+                        textureLayoutEntry(1u),
+                        samplerLayoutEntry(2u),
+                        uniformLayoutEntry(binding = 3u),
+                    ),
+                ),
+            ).track()
+            val compositeDstClipLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "Kanvas.session.maskBlur.compositeDstClipLayout",
+                    entries = listOf(
+                        uniformLayoutEntry(),
+                        textureLayoutEntry(1u),
+                        samplerLayoutEntry(2u),
+                        textureLayoutEntry(3u),
+                        samplerLayoutEntry(4u),
+                        uniformLayoutEntry(binding = 5u),
+                    ),
+                ),
+            ).track()
             val maskShader = shader("mask", MASK_BLUR_MASK_WGSL).track()
             val blurHShader = shader("blur-h", MASK_BLUR_BLUR_WGSL(horizontal = true)).track()
             val blurVShader = shader("blur-v", MASK_BLUR_BLUR_WGSL(horizontal = false)).track()
@@ -414,6 +547,8 @@ internal class GPUWgpu4kMaskBlurSessionCache(
                 styleLayout,
                 compositeLayout,
                 compositeDstLayout,
+                compositeClipLayout,
+                compositeDstClipLayout,
                 maskPipeline,
                 blurHPipeline,
                 blurVPipeline,
@@ -513,8 +648,8 @@ internal class GPUWgpu4kMaskBlurSessionCache(
         ),
     )
 
-    private fun uniformLayoutEntry() = BindGroupLayoutEntry(
-        binding = 0u,
+    private fun uniformLayoutEntry(binding: UInt = 0u) = BindGroupLayoutEntry(
+        binding = binding,
         visibility = GPUShaderStage.Fragment,
         buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
     )
@@ -809,6 +944,59 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let localSize = max(uniforms.deviceBounds.zw - uniforms.deviceBounds.xy, vec2f(1.0));
     let uv = (position.xy - uniforms.deviceBounds.xy) / localSize;
     let coverage = textureSample(maskTexture, maskSampler, uv).a;
+    return uniforms.color * coverage;
+}
+""".trimIndent()
+
+/**
+ * Static scene composite with an analytic device-rect clip (Task 7): the blurred mask
+ * coverage is multiplied by the analytic clip coverage (the same rect signed-distance
+ * AA math as the core lane's `CorePrimitiveAnalyticClipBlock`, which matches the
+ * `TopLevelMaskBlurPixelOracle.RectClip(antiAlias = true)` linear falloff at pixel
+ * centers) before the color shade with the pipeline blend state (SRC_OVER or SRC).
+ */
+internal val MASK_BLUR_COMPOSITE_CLIP_WGSL: String = """
+struct CompositeUniforms {
+    deviceBounds: vec4f,
+    color: vec4f,
+};
+
+struct CorePrimitiveAnalyticClipBlock {
+    target_size: vec2f,
+    clip_type: u32,
+    anti_alias: u32,
+    premul_rgba: vec4f,
+    clip_bounds: vec4f,
+    clip_radii: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: CompositeUniforms;
+@group(0) @binding(1) var maskTexture: texture_2d<f32>;
+@group(0) @binding(2) var maskSampler: sampler;
+@group(0) @binding(3) var<uniform> clipUniforms: CorePrimitiveAnalyticClipBlock;
+
+$MASK_BLUR_VERTEX_WGSL
+
+fn rect_signed_distance(position: vec2f, bounds: vec4f) -> f32 {
+    let center = (bounds.xy + bounds.zw) * 0.5;
+    let half_extent = (bounds.zw - bounds.xy) * 0.5;
+    let q = abs(position - center) - half_extent;
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
+}
+
+fn clip_coverage(position: vec2f) -> f32 {
+    let distance = rect_signed_distance(position, clipUniforms.clip_bounds);
+    let hard = select(0.0, 1.0, distance <= 0.0);
+    let aa = clamp(0.5 - distance, 0.0, 1.0);
+    return select(hard, aa, clipUniforms.anti_alias != 0u);
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let localSize = max(uniforms.deviceBounds.zw - uniforms.deviceBounds.xy, vec2f(1.0));
+    let uv = (position.xy - uniforms.deviceBounds.xy) / localSize;
+    var coverage = textureSample(maskTexture, maskSampler, uv).a;
+    coverage *= clip_coverage(position.xy);
     return uniforms.color * coverage;
 }
 """.trimIndent()
