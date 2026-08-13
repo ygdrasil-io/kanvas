@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "hardwareBaseline": "Apple M-series",
+  "targetFps": 60,
+  "warnFps": 30,
+  "targetFrameMs": 16.6667,
+  "warnFrameMs": 33.3333,
+  "anyQuarantined": false,
+  "productActivation": true,
+  "families": [
+    {"family": "FillRect", "frameTimeMs": 4.6678, "fps": 214.2344, "status": "pass", "quarantined": false},
+    {"family": "LinearGradient", "frameTimeMs": 4.6792, "fps": 213.7118, "status": "pass", "quarantined": false},
+    {"family": "RadialGradient", "frameTimeMs": 3.9956, "fps": 250.2770, "status": "pass", "quarantined": false},
+    {"family": "SweepGradient", "frameTimeMs": 3.7131, "fps": 269.3202, "status": "pass", "quarantined": false},
+    {"family": "Blur", "frameTimeMs": 6.7312, "fps": 148.5630, "status": "pass", "quarantined": false},
+    {"family": "ColorMatrix", "frameTimeMs": 3.1033, "fps": 322.2370, "status": "pass", "quarantined": false},
+    {"family": "Stroke", "frameTimeMs": 3.2530, "fps": 307.4041, "status": "pass", "quarantined": false}
+  ]
+}
