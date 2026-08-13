@@ -1,7 +1,8 @@
 # FP-13 Close Bounded Native-Rendering Gaps — Evidence
 
 Status: **in progress** (Task 1 complete: `colr-v0-color-glyph` scene CPU-oracle
-fix closes the byte-exact pin; further tasks append their own sections).
+fix closes the byte-exact pin; Task 2 complete: `PipelineTypesTest` hygiene +
+wgsl4k ticket; further tasks append their own sections).
 
 Branch: `codex/graphite-dawn-frame-fp13`. Machine: Linux, JDK Temurin 25, GPU =
 Vulkan **llvmpipe** (software, CPU; Mesa 26.0.3, LLVM 21.1.8), Xvfb `:99`. All
@@ -110,7 +111,8 @@ item 6, 1 × `clip_producer_authority` → item 3; the remaining 493 map to
   | --- | --- | --- |
   | Task 0 (this task) | M86 wave — evidence only | **no renderer fix**; the sprint is a burn-down wave in progress |
   | Task 1 | colr-v0 scenes oracle fix | harness only — no renderer fix |
-  | Tasks 2-8 | PipelineTypesTest hygiene; dst-read formula; multi-key dst-read; complex-clip blur; 64/160 split; analytic clips non-direct; stencil-continuation | renderer fixes planned (Tasks 3-8) / test hygiene (Task 2); tracked in this evidence doc when each task lands |
+  | Task 2 | PipelineTypesTest hygiene + wgsl4k ticket | **no renderer fix** — test-hygiene only (unambiguously invalid WGSL sample + upstream ticket) |
+  | Tasks 3-8 | dst-read formula; multi-key dst-read; complex-clip blur; 64/160 split; analytic clips non-direct; stencil-continuation | renderer fixes planned (Tasks 3-8); tracked in this evidence doc when each task lands |
   | Task 9 | evidence reconciliation + roadmap | — |
 
 - **Root-cause classification requirement**: every residual row carries its
@@ -255,3 +257,93 @@ anywhere; the pin closed by making the oracle correct.
 - The oracle's color handling treats the font palette as the lane does (palette
   values carried as linear premul, encoded at store); the fix does not change
   the lane's semantics, only the oracle's fidelity to them.
+
+## Task 2 — PipelineTypesTest hygiene + wgsl4k ticket (test-hygiene only)
+
+### 2.1 Defect (before)
+
+`kanvas/src/test/kotlin/org/graphiks/kanvas/pipeline/PipelineTypesTest.kt:13`:
+
+```kotlin
+assertTrue(RuntimeEffect.compile("fn main() {}").isFailure)
+```
+
+`fn main() {}` is **valid** WGSL. When the runtime-effect wgsl4k wiring hook
+(`RuntimeEffectWgsl4kWiring.install()`, `kanvas/.../RuntimeEffectWgsl4kWiring.kt`)
+is installed in the same test JVM before this class runs — e.g. by
+`RuntimeEffectCompileTest` or `GPUClipCoverageSurfaceTest` in the same fork —
+`parseWgslResult`/`Lowerer` accept the empty-main module and `compile` returns
+`success`, so `isFailure` is false and the test fails. The outcome therefore
+depended on test-class execution order in the shared JVM fork (documented as a
+"wgsl4k hook-order JVM flake" in fp-06/fp-07 evidence; passed in isolation,
+failed in some full-suite runs).
+
+Observed red-state evidence (this machine, hook installed via throwaway probe
+test, removed before commit):
+
+```
+PROBE sample=<fn main() {}> isSuccess=true isFailure=false err=none
+```
+
+Full-module red run before the fix: `PipelineTypesTest` happened to run before
+the hook-installing classes in the JUnit hash-based order, so the class passed
+there; the order dependence is structural (probe above proves the failure mode
+when the hook precedes it).
+
+### 2.2 Fix (after)
+
+Sample replaced with unambiguously parse-invalid WGSL — an unterminated brace:
+
+```kotlin
+assertTrue(RuntimeEffect.compile("fn main() {").isFailure)
+```
+
+`fn main() {` can never parse as a WGSL program (missing closing brace), so the
+assertion holds whether or not the wgsl4k hook is installed. Test name
+(`RuntimeEffect compile fails validation`) and all other assertions unchanged.
+
+Probe evidence (hook installed, same throwaway probe):
+
+```
+PROBE sample=<fn main() {> isSuccess=false isFailure=true err=IllegalArgumentException: WGSL compilation failed: could not parse or reflect the source
+```
+
+### 2.3 Verification
+
+- Targeted class, isolated: PASSED (run 1), PASSED (run 2), PASSED (run 3) —
+  three consecutive `--rerun-tasks` runs of `--tests "…PipelineTypesTest"`, all
+  green (fork-order independence check).
+- Package run `--tests "org.graphiks.kanvas.pipeline.*"` (includes
+  `RuntimeEffectCompileTest`, which installs the hook in the same fork):
+  PASSED.
+- Full module `./gradlew -F off :kanvas:test --no-parallel --console=plain
+  --rerun-tasks`: 3,234 tests, **1 failure** —
+  `GPUPreparedSurfaceImagePixelTest` "UNORM 1-LSB on llvmpipe (documented
+  FP-03, unchanged)" — the documented pre-existing baseline from FP-12 §3, not
+  touched. A second, unrelated `GPUMaskBlurSurfaceTest` session-close flake
+  observed in the pre-fix full run (passes 19/19 in isolation with
+  `--rerun-tasks`) did not reproduce in the post-fix run.
+
+### 2.4 wgsl4k ticket
+
+Opened per AGENTS.md (wgsl4k behavior surprises go to a wgsl4k ticket with
+minimized evidence — no hidden workaround in this repo):
+
+- URL: https://github.com/ygdrasil-io/wgsl4k/issues/15
+  (`parseWgslResult`/`Lowerer` accept `fn main() {}` as a compilable module,
+  making a consumer test order-dependent)
+- wgsl4k version used by Kanvas: `1.0.0-20260629.231604-1`
+  (`org.graphiks:wgsl-core-jvm`, `org.graphiks:wgsl-parser-jvm`,
+  `gradle/libs.versions.toml:12`)
+- Ticket body: full minimized evidence at
+  `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp13-m86-wave/wgsl4k-ticket-body.md`
+  (committed copy); ticket filed via `gh issue create --repo ygdrasil-io/wgsl4k`.
+
+### 2.5 Harness-only statement
+
+- **No wgsl4k workaround** was added to Kanvas code; the wgsl4k acceptance gap
+  is tracked upstream in ygdrasil-io/wgsl4k#15.
+- **No production code** was touched — the only change is the WGSL sample
+  string in `PipelineTypesTest.kt:13` (+ this evidence doc).
+- **No similarity threshold or assertion semantics changed**; the assertion
+  remains `assertTrue(RuntimeEffect.compile(...).isFailure)`.
