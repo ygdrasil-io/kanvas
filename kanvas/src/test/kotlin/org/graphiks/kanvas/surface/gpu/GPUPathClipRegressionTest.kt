@@ -25,15 +25,15 @@ class GPUPathClipRegressionTest {
     fun `device rect clip path frame refuses with the mixed uniform layouts code`() {
         requireWebGpu()
 
-        // FP-09 terminal refusal: the frame mixes an unclipped uniform32 rect with a
-        // scissored path (path layout) — the designed mixed-uniform-layouts family.
-        // Pre-FP-09 the legacy renderer rendered this frame (green at the FP-08 tip
-        // accaea616); the route collapse converted it to this stable code (Task 6
-        // evidence family 4).
+        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split remains pinned on
+        // the mixed-layout refusal while the split lane leaks a native session owner for
+        // fixed-function analytic-clip passes. Pre-FP-09 the legacy renderer rendered this
+        // frame (green at the FP-08 tip accaea616); the route collapse converted it to this
+        // stable code (Task 6 evidence family 4).
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
                     save()
                     clipRect(Rect(8f, 8f, 24f, 24f))
                     drawPath(
@@ -57,12 +57,13 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `dst in path frame refuses with the mixed uniform layouts code`() {
+    fun `dst in path frame refuses on the path stencil machinery boundary`() {
         requireWebGpu()
 
-        // FP-09 terminal refusal: an unclipped rect plus a dst-read path mixes the
-        // uniform32 lane with the path dst-read lane — the designed mixed-uniform-layouts
-        // family. Pre-FP-09 the legacy renderer rendered it (green at accaea616).
+        // FP-11 Task 6: the DST_IN path frame splits into the analytic-shape background
+        // pass and the path pair pass; the path-stencil machinery's direct authority is
+        // uniform32-only, so the shape pass refuses on the path-stencil code. Pre-FP-09 the
+        // legacy renderer rendered it (green at accaea616).
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
@@ -84,7 +85,7 @@ class GPUPathClipRegressionTest {
             }
         }
         assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "invalid.preflight.core_primitive_path_stencil",
             failure.diagnostic.code.value,
         )
     }
@@ -126,12 +127,13 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `advanced path blend frame refuses with the mixed uniform layouts code`() {
+    fun `advanced path blend frame refuses with the path destination read code`() {
         requireWebGpu()
 
-        // FP-09 terminal refusal: an unclipped rect plus a dst-read path mixes the
-        // uniform32 lane with the path dst-read lane — the designed mixed-uniform-layouts
-        // family. Pre-FP-09 the legacy renderer rendered this frame with the
+        // FP-11 Task 5 designed refusal: an unclipped rect plus a destination-reading path
+        // mixes the uniform32 lane with the path dst-read lane; the recording refuses the
+        // path dst-read shape by name (the dst-read cover cannot resolve in the path-stencil
+        // topology). Pre-FP-09 the legacy renderer rendered this frame with the
         // copy-then-formula route (green at the FP-08 tip accaea616).
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
@@ -151,7 +153,7 @@ class GPUPathClipRegressionTest {
             }
         }
         assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "unsupported.native-core-primitive.path-destination-read",
             failure.diagnostic.code.value,
         )
     }

@@ -567,15 +567,17 @@ class GPUAllApiBlendSurfaceTest {
             }
         }
         if (api.name !in IMAGE_API_NAMES) {
-            // Core primitives after the FP-09 Task 5 route collapse. Every
-            // before-entry refusal is now Terminal, so each shape family refuses
-            // with the exact recording/builder code the evidence run produced:
-            // rrects always (the analytic-shape uniform80 mixes with the rect
-            // background layout); rect/color/draw-path/drrect per clip context
-            // and blend family; hairline points render prepared as one-device-px
-            // squares except where the clip (mixed layouts) or the dst-read
-            // two-render frame keeps them terminal. Cases that still render
-            // prepared stay null so the pixel oracle keeps proving them.
+            // Core primitives after the FP-09 Task 5 route collapse and the FP-11 Task 6
+            // layout split. Every before-entry refusal is now Terminal, so each shape family
+            // refuses with the exact recording/builder code the evidence run produced: the
+            // rrect analytic-shape (uniform80) pass splits from the uniform32 destination
+            // pass for the fixed blends (renders Prepared); the analytic-clip (uniform64/
+            // uniform160) split remains pinned on the mixed-layout refusal while the split
+            // lane leaks a native session owner for fixed-function analytic-clip passes
+            // (Task 8 B-row with the failing materializer evidence); hairline points render
+            // prepared as one-device-px squares except where the clip or the dst-read
+            // two-render frame keeps them terminal. Cases that still render prepared stay
+            // null so the pixel oracle keeps proving them.
             return when (api.name) {
                 "Clear" -> null
                 "DrawPoint", "DrawPoints" -> when {
@@ -596,12 +598,32 @@ class GPUAllApiBlendSurfaceTest {
                     }
                     else -> null
                 }
-                "DrawRRect" ->
-                    ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                "DrawRRect" -> when {
+                    context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-shape rrect under the analytic AA mask
+                        // clip stays on the mixed-layout refusal (the analytic-clip split
+                        // residual family).
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode == BlendMode.DST ->
+                        // The DST rrect pass cannot exact its shared geometry slab authority.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    mode.recordsDestinationRead() ->
+                        // FP-11 Task 6: the split dst-read rrect consumer stays on the
+                        // frame-global pipeline boundary (no closed analytic-shape dst-read
+                        // formula pipeline on the prepared lane).
+                        ProductRouteExpectation.Terminal(PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL)
+                    else ->
+                        // FP-11 Task 6: the rrect analytic-shape pass splits from the
+                        // uniform32 destination pass, so the fixed-blend rrect rows render
+                        // Prepared.
+                        null
+                }
                 "DrawRect", "DrawColor" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
                         ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-clip rect pass split remains pinned on
+                        // the mixed-layout refusal (the split lane session-leak residual).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
                         // FP-11 Task 4: the two-render dst-copy shape (destination pass, ordered
@@ -611,6 +633,8 @@ class GPUAllApiBlendSurfaceTest {
                 }
                 "DrawPath", "DrawDRRect" -> when {
                     context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-clip path pair pass remains pinned on the
+                        // mixed-layout refusal (the analytic-clip split residual family).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
                         ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
@@ -907,6 +931,10 @@ class GPUAllApiBlendSurfaceTest {
     private fun BlendMode.requiresDestinationRead(): Boolean =
         toGpuBlendFacts().needsDestinationTexture()
 
+    /** The recorded core lane treats PLUS as a destination-read formula, matching the evidence. */
+    private fun BlendMode.recordsDestinationRead(): Boolean =
+        requiresDestinationRead() || this == BlendMode.PLUS
+
     private data class BlendCase(
         val name: String,
         val sample: Point,
@@ -999,6 +1027,8 @@ class GPUAllApiBlendSurfaceTest {
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
         const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
             "unsupported.recording.core_primitive_mixed_uniform_layouts"
+        const val PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL =
+            "unsupported.native-core-primitive.frame-global-pipeline"
         const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =

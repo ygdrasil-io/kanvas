@@ -21,6 +21,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAut
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
@@ -2413,8 +2415,27 @@ internal class GPUFramePreflighter(
             }
         }
         val mixedPreparedSurface = hasExactPreparedSurfaceMixedNativeBoundary(framePlan)
+        // FP-11 Task 6: the direct pass splits by uniform layout, so a path-bearing frame may
+        // legitimately carry exactly one path pass plus direct-only split passes (each direct
+        // pass owns its own uniform slab). The path pass itself retains the producer/cover
+        // pair in one scope.
+        val pathCoreRenders = indexedCoreRenders.filter { (_, render) ->
+            render.drawPackets.any { packet ->
+                packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                    packet.role == GPUDrawPacketRole.PathStencilCover
+            }
+        }
+        val splitPathAdmission = !mixedPreparedSurface &&
+            pathCoreRenders.size == 1 &&
+            indexedCoreRenders.all { (_, render) ->
+                render.drawPackets.all { packet ->
+                    packet.role == GPUDrawPacketRole.Shading ||
+                        packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                        packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+            }
         if (indexedCoreRenders.isEmpty() ||
-            (!mixedPreparedSurface && indexedCoreRenders.size != 1)
+            (!mixedPreparedSurface && !splitPathAdmission)
         ) {
             return refused("Path stencil CorePrimitive requires exactly one prepared render pass.")
         }
@@ -2499,13 +2520,18 @@ internal class GPUFramePreflighter(
             ?: return refused("Path stencil requires one shared vertex slab.")
         val index = geometryPreparations.singleOrNull { it.role == GPUFrameResourceRole.IndexData }
             ?: return refused("Path stencil requires one shared index slab.")
-        val uniform = geometryPreparations.singleOrNull { it.role == GPUFrameResourceRole.UniformData }
-            ?: return refused("Path stencil requires one shared uniform slab.")
+        // FP-11 Task 6: the layout split owns one uniform slab per layout group, so a
+        // path-bearing frame may declare one uniform preparation per present layout.
+        val uniformSlabs = geometryPreparations.filter { it.role == GPUFrameResourceRole.UniformData }
+        if (uniformSlabs.isEmpty()) {
+            return refused("Path stencil requires at least one shared uniform slab.")
+        }
         val depthStencil = geometryPreparations.singleOrNull {
             it.role == GPUFrameResourceRole.PathDepthStencil
         } ?: return refused("Path stencil requires one full-target depth/stencil attachment.")
-        if (geometryPreparations.size != 4 ||
-            setOf(vertex.resource, index.resource, uniform.resource, depthStencil.resource).size != 4
+        if (geometryPreparations.size != 2 + uniformSlabs.size + 1 ||
+            setOf(vertex.resource, index.resource, depthStencil.resource).size != 3 ||
+            uniformSlabs.map { it.resource }.distinct().size != uniformSlabs.size
         ) {
             return refused("Path stencil shared resources must be unique and exact.")
         }
@@ -2541,6 +2567,18 @@ internal class GPUFramePreflighter(
         var sharedUniformSeal: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal? = null
         var sharedAnalyticPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan? = null
         var uniformSlotIndex = 0
+        // FP-11 Task 6: one render scope may retain exactly one uniform authority kind (the
+        // uniform32 slab or the analytic uniform64 plan). Direct-only split passes own the
+        // uniform32 slab while the path pass owns its own authority, so the mix refusal is
+        // per render scope instead of per frame.
+        val stepUniformAuthorityKinds = mutableMapOf<Int, String>()
+
+        fun requireStepUniformAuthority(stepIndex: Int, kind: String): Boolean {
+            val previous = stepUniformAuthorityKinds[stepIndex]
+            if (previous != null && previous != kind) return false
+            stepUniformAuthorityKinds[stepIndex] = kind
+            return true
+        }
 
         fun exactAuthority(
             render: GPUFrameStep.RenderPassStep,
@@ -2622,7 +2660,7 @@ internal class GPUFramePreflighter(
                     ) ?: return refused("A mixed direct packet has corrupt prepared pipeline or uniform authority.")
                     val directUniformSeal = authority.first.uniformSlabSeal
                         ?: return refused("A mixed direct packet is missing its exact uniform32 slab authority.")
-                    if (sharedAnalyticPlan != null) {
+                    if (!requireStepUniformAuthority(sourceStepIndex, "uniform32")) {
                         return refused("A path render cannot mix uniform32 and analytic uniform64 authority.")
                     }
                     if (sharedUniformSeal == null) sharedUniformSeal = directUniformSeal
@@ -2711,7 +2749,7 @@ internal class GPUFramePreflighter(
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                     ) ?: return refused("Path cover prepared pipeline or uniform authority is corrupt.")
                     if (hasAnalyticCorePrimitivePathClipPair(packet, cover)) {
-                        if (sharedUniformSeal != null) {
+                        if (!requireStepUniformAuthority(sourceStepIndex, "analytic64")) {
                             return refused("A path render cannot mix uniform32 and analytic uniform64 authority.")
                         }
                         val seal = coverAuthority.first.analyticClipUniformSeal
@@ -2728,7 +2766,11 @@ internal class GPUFramePreflighter(
                         val producerPrefix = semantic.payloadRef.uniformBlock?.bytes
                             ?: return refused("Analytic path producer is missing its uniform32 prefix.")
                         val plan = seal.plan
-                        val slot = plan.slots.getOrNull(uniformSlotIndex)
+                        // The pair addresses its cover's uniform64 plan slot; with a split
+                        // frame the frame-wide unit counter includes the direct steps, so the
+                        // authority derives the slot from the cover seal itself.
+                        val coverSlotIndex = seal.slotIndex
+                        val slot = plan.slots.getOrNull(coverSlotIndex)
                             ?: return refused("Analytic path cover slot is outside its uniform64 plan.")
                         val exactRange = try {
                             Math.addExact(slot.alignedOffset, 64L) <= plan.totalBytes
@@ -2742,7 +2784,7 @@ internal class GPUFramePreflighter(
                             coverAuthority.first.uniformSlabSeal != null ||
                             coverAuthority.first.analyticShapeUniformSeal != null ||
                             coverAuthority.first.analyticIntersectionUniformSeal != null ||
-                            seal.slotIndex != uniformSlotIndex ||
+                            seal.slotIndex != coverSlotIndex ||
                             seal.commandId != cover.commandIdValue ||
                             seal.packetId != cover.packetId ||
                             seal.clipCanonicalIdentity != packetClip.canonicalIdentity ||
@@ -2782,7 +2824,7 @@ internal class GPUFramePreflighter(
                         }
                         preparedPathAnalyticSeals += seal
                     } else {
-                        if (sharedAnalyticPlan != null) {
+                        if (!requireStepUniformAuthority(sourceStepIndex, "uniform32")) {
                             return refused("A path render cannot mix analytic uniform64 and uniform32 authority.")
                         }
                         val producerSlab = producerAuthority.first.uniformSlabSeal
@@ -2819,7 +2861,14 @@ internal class GPUFramePreflighter(
                     ] = pair
                     preparedPathPairs += GPUCorePrimitivePathStencilPreparedPairSeal(
                         packet.commandIdValue,
-                        uniformSlotIndex,
+                        if (hasAnalyticCorePrimitivePathClipPair(packet, cover)) {
+                            // Analytic pairs address their cover's uniform64 plan slot; the
+                            // pair's pass authority derives its command range from the analytic
+                            // seals, which are rebased per render scope for split frames.
+                            requireNotNull(coverAuthority.first.analyticClipUniformSeal).slotIndex
+                        } else {
+                            uniformSlotIndex
+                        },
                         packet.packetId,
                         cover.packetId,
                         producerAuthority.second,
@@ -2844,14 +2893,27 @@ internal class GPUFramePreflighter(
 
         val uniformSeal = sharedUniformSeal
         val analyticSeals = preparedPathAnalyticSealsByStep.values.flatten()
-        if ((uniformSeal != null) == (sharedAnalyticPlan != null)) {
-            return refused("Path stencil packets must retain exactly one uniform32 or analytic uniform64 authority.")
+        val limits = capabilities.limits
+            ?: return refused("Path stencil requires observed backend limits.")
+        // FP-11 Task 6: the uniform32 slab covers the direct units and the legacy path pairs,
+        // while the analytic uniform64 plan covers the analytic covers. Both authorities may
+        // coexist when they belong to different render scopes (the split path frame: the
+        // direct pass owns the slab, the path pass owns the analytic plan).
+        val slabUnitCommands = allUnifiedUnits.mapNotNull { unit ->
+            when (unit) {
+                is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> unit.commandIdValue
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> unit.commandIdValue.takeIf {
+                    unit.coverStructuralPipelineKey.uniformLayout ==
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+                }
+            }
         }
-        val pathUniformPlan = uniformSeal?.plan ?: requireNotNull(sharedAnalyticPlan)
         if (uniformSeal != null) {
-            if (uniformSeal.drawCount != allUnifiedUnits.size ||
-                allUnifiedUnits.indices.any { unitIndex ->
-                    val unit = allUnifiedUnits[unitIndex]
+            val unitByCommandId = allUnifiedUnits.associateBy { it.commandIdValue }
+            val slabExact = uniformSeal.commandIds == slabUnitCommands &&
+                uniformSeal.drawCount == slabUnitCommands.size &&
+                slabUnitCommands.withIndex().all { (index, commandId) ->
+                    val unit = unitByCommandId.getValue(commandId)
                     val packet = when (unit) {
                         is GPUCorePrimitiveNativeScopeRouteUnit.Direct ->
                             corePacketById.getValue(unit.packetId)
@@ -2862,15 +2924,20 @@ internal class GPUFramePreflighter(
                         .payloadRef.uniformBlock?.bytes ?: return refused(
                         "CorePrimitive uniform semantic bytes are missing.",
                     )
-                    !uniformSeal.hasExactPayload(unitIndex, unit.commandIdValue, bytes)
+                    uniformSeal.hasExactPayload(index, commandId, bytes)
                 }
-            ) {
+            if (!slabExact) {
                 return refused("The shared uniform slab does not exactly match original command order and bytes.")
             }
-        } else {
-            if (allUnifiedUnits.any { it !is GPUCorePrimitiveNativeScopeRouteUnit.PathPair } ||
-                analyticSeals.size != allUnifiedUnits.size ||
-                analyticSeals.any { seal -> seal.plan !== pathUniformPlan }
+        }
+        val analyticPairUnits = allUnifiedUnits.filterIsInstance<GPUCorePrimitiveNativeScopeRouteUnit.PathPair>()
+            .filter { pair ->
+                pair.coverStructuralPipelineKey.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1
+            }
+        if (sharedAnalyticPlan != null) {
+            if (analyticSeals.size != analyticPairUnits.size ||
+                analyticSeals.any { seal -> seal.plan !== sharedAnalyticPlan }
             ) {
                 return refused("Analytic path authority requires one exact uniform64 seal per ordered path pair.")
             }
@@ -2884,9 +2951,7 @@ internal class GPUFramePreflighter(
                     corePrimitiveAnalyticClipUniformBytes(semantic, clip.clip),
                 )
             }
-            val limits = capabilities.limits
-                ?: return refused("Analytic path authority requires observed backend limits.")
-            if (!pathUniformPlan.hasExactPayloads(
+            if (!sharedAnalyticPlan.hasExactPayloads(
                     "core-primitive-analytic-clip-uniform-pass",
                     context.deviceGeneration.value,
                     limits.minUniformBufferOffsetAlignment,
@@ -2897,49 +2962,57 @@ internal class GPUFramePreflighter(
             }
         }
 
-        val globalPathPreparedPass = if (uniformSeal == null) {
-            try {
-                GPUCorePrimitivePathStencilPreparedPassSeal(
-                    preparedPathPairsByStep.values.flatten(),
-                    analyticSeals,
-                )
-            } catch (_: IllegalArgumentException) {
-                return refused("Analytic path prepared-pass union is not exact.")
-            }
-        } else {
-            null
-        }
-
-        val geometrySizing = try {
-            val arena = packCorePrimitiveNativeScopeGeometry(
-                if (globalPathPreparedPass == null) {
-                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
-                        allUnifiedUnits,
+        val pathPasses = preparedPathPairsByStep
+            .filterValues(List<GPUCorePrimitivePathStencilPreparedPairSeal>::isNotEmpty)
+            .mapValues { (sourceStepIndex, preparedPathPairs) ->
+                val analyticSeals = preparedPathAnalyticSealsByStep.getValue(sourceStepIndex)
+                if (analyticSeals.isEmpty()) {
+                    GPUCorePrimitivePathStencilPreparedPassSeal(
+                        preparedPathPairs,
                         requireNotNull(uniformSeal),
                     )
                 } else {
-                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
-                        allUnifiedUnits,
-                        globalPathPreparedPass,
-                    )
-                },
-            )
-            Triple(
-                arena,
-                Math.multiplyExact(arena.vertexFloatCount.toLong(), Float.SIZE_BYTES.toLong()),
-                Math.multiplyExact(arena.indexCount.toLong(), Int.SIZE_BYTES.toLong()),
-            )
-        } catch (_: IllegalArgumentException) {
-            return refused(
-                "Unified path geometry cannot be sized or packed into exact immutable slabs.",
+                    GPUCorePrimitivePathStencilPreparedPassSeal(preparedPathPairs, analyticSeals)
+                }
+            }
+
+        val geometrySizing = try {
+            var vertexFloatCount = 0L
+            var indexCount = 0L
+            allUnifiedUnits.forEach { unit ->
+                when (unit) {
+                    is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> {
+                        vertexFloatCount = Math.addExact(
+                            vertexFloatCount,
+                            Math.multiplyExact(unit.route.vertexCount.toLong(), 2L),
+                        )
+                        indexCount = Math.addExact(indexCount, unit.route.indexCount.toLong())
+                    }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> {
+                        vertexFloatCount = Math.addExact(
+                            vertexFloatCount,
+                            Math.multiplyExact(unit.pair.producer.vertexCount.toLong(), 2L),
+                        )
+                        vertexFloatCount = Math.addExact(
+                            vertexFloatCount,
+                            Math.multiplyExact(unit.pair.cover.vertexCount.toLong(), 2L),
+                        )
+                        indexCount = Math.addExact(indexCount, unit.pair.producer.indexCount.toLong())
+                        indexCount = Math.addExact(indexCount, unit.pair.cover.indexCount.toLong())
+                    }
+                }
+            }
+            Pair(
+                Math.multiplyExact(vertexFloatCount, Float.SIZE_BYTES.toLong()),
+                Math.multiplyExact(indexCount, Int.SIZE_BYTES.toLong()),
             )
         } catch (_: ArithmeticException) {
             return refused(
                 "Unified path geometry cannot be sized or packed into exact immutable slabs.",
             )
         }
-        val expectedVertexBytes = geometrySizing.second
-        val expectedIndexBytes = geometrySizing.third
+        val expectedVertexBytes = geometrySizing.first
+        val expectedIndexBytes = geometrySizing.second
         fun exactBuffer(
             request: GPUResourcePreparationRequest,
             bytes: Long,
@@ -2957,23 +3030,36 @@ internal class GPUFramePreflighter(
         ) {
             return refused("Path stencil vertex or index slab topology is not exact.")
         }
-        val uniformDescriptor = uniform.descriptor as? GPUFrameBufferDescriptor
-            ?: return refused("Path stencil uniform slab descriptor is missing.")
-        val limits = capabilities.limits
-            ?: return refused("Path stencil requires observed backend limits.")
-        if (uniformDescriptor.byteSize != pathUniformPlan.totalBytes ||
-            uniformDescriptor.alignmentBytes != pathUniformPlan.alignmentBytes ||
-            uniform.byteSize != pathUniformPlan.totalBytes ||
-            uniform.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform) ||
-            uniform.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            pathUniformPlan.deviceGeneration != context.deviceGeneration.value ||
-            pathUniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-            pathUniformPlan.totalBytes > (limits.maxBufferSize ?: return refused(
-                "Path stencil requires observed maxBufferSize.",
-            )) ||
-            (limits.maxDynamicUniformBuffersPerPipelineLayout ?: 0) < 1
-        ) {
-            return refused("Path stencil uniform slab topology or device-limit authority is not exact.")
+        val uniformPreparationByResource = uniformSlabs.associateBy { it.resource }
+        val stepUniformResourceByStepIndex = indexedCoreRenders.associate { (stepIndex, render) ->
+            stepIndex to render.resourceUses
+                .single { it.role == GPUFrameResourceRole.UniformData }.resource
+        }
+        fun stepUniformPlan(stepIndex: Int): org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan =
+            when (stepUniformAuthorityKinds.getValue(stepIndex)) {
+                "analytic64" -> requireNotNull(sharedAnalyticPlan)
+                else -> requireNotNull(uniformSeal).plan
+            }
+        indexedCoreRenders.forEach { (stepIndex, render) ->
+            val stepPreparation = uniformPreparationByResource
+                .getValue(stepUniformResourceByStepIndex.getValue(stepIndex))
+            val descriptor = stepPreparation.descriptor as? GPUFrameBufferDescriptor
+                ?: return refused("Path stencil uniform slab descriptor is missing.")
+            val plan = stepUniformPlan(stepIndex)
+            if (descriptor.byteSize != plan.totalBytes ||
+                descriptor.alignmentBytes != plan.alignmentBytes ||
+                stepPreparation.byteSize != plan.totalBytes ||
+                stepPreparation.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform) ||
+                stepPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                plan.deviceGeneration != context.deviceGeneration.value ||
+                plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                plan.totalBytes > (limits.maxBufferSize ?: return refused(
+                    "Path stencil requires observed maxBufferSize.",
+                )) ||
+                (limits.maxDynamicUniformBuffersPerPipelineLayout ?: 0) < 1
+            ) {
+                return refused("Path stencil uniform slab topology or device-limit authority is not exact.")
+            }
         }
         val depthDescriptor = depthStencil.descriptor as? GPUFrameTextureDescriptor
             ?: return refused("Path depth/stencil preparation must be a texture.")
@@ -2997,55 +3083,52 @@ internal class GPUFramePreflighter(
         ) {
             return refused("Path depth/stencil descriptor, extent, format, usage, lifetime, or size is not exact.")
         }
-        val exactUses = setOf(
-            GPUFrameResourceUse(
-                vertex.resource,
-                GPUFrameResourceRole.VertexData,
-                GPUFrameResourceUsage.Vertex,
-                GPUFrameResourceLifetime.FrameLocal,
-                false,
-            ),
-            GPUFrameResourceUse(
-                index.resource,
-                GPUFrameResourceRole.IndexData,
-                GPUFrameResourceUsage.Index,
-                GPUFrameResourceLifetime.FrameLocal,
-                false,
-            ),
-            GPUFrameResourceUse(
-                uniform.resource,
-                GPUFrameResourceRole.UniformData,
-                GPUFrameResourceUsage.Uniform,
-                GPUFrameResourceLifetime.FrameLocal,
-                false,
-            ),
-            GPUFrameResourceUse(
-                depthStencil.resource,
-                GPUFrameResourceRole.PathDepthStencil,
-                GPUFrameResourceUsage.RenderAttachment,
-                GPUFrameResourceLifetime.FrameLocal,
-                true,
-            ),
+        val exactVertexUse = GPUFrameResourceUse(
+            vertex.resource,
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceUsage.Vertex,
+            GPUFrameResourceLifetime.FrameLocal,
+            false,
         )
-        if (indexedCoreRenders.any { (_, render) ->
-                val expectedUses = if (render.drawPackets.any { packet ->
-                        packet.role == GPUDrawPacketRole.PathStencilProducer ||
-                            packet.role == GPUDrawPacketRole.PathStencilCover
-                    }
-                ) {
-                    exactUses
+        val exactIndexUse = GPUFrameResourceUse(
+            index.resource,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceUsage.Index,
+            GPUFrameResourceLifetime.FrameLocal,
+            false,
+        )
+        val exactDepthUse = GPUFrameResourceUse(
+            depthStencil.resource,
+            GPUFrameResourceRole.PathDepthStencil,
+            GPUFrameResourceUsage.RenderAttachment,
+            GPUFrameResourceLifetime.FrameLocal,
+            true,
+        )
+        if (indexedCoreRenders.any { (stepIndex, render) ->
+                val hasPath = render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                        packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+                val expectedUniformUse = GPUFrameResourceUse(
+                    stepUniformResourceByStepIndex.getValue(stepIndex),
+                    GPUFrameResourceRole.UniformData,
+                    GPUFrameResourceUsage.Uniform,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    false,
+                )
+                val expectedUses = if (hasPath) {
+                    setOf(exactVertexUse, exactIndexUse, exactDepthUse, expectedUniformUse)
                 } else {
-                    exactUses.filterNot { use ->
-                        use.role == GPUFrameResourceRole.PathDepthStencil
-                    }.toSet()
+                    setOf(exactVertexUse, exactIndexUse, expectedUniformUse)
                 }
                 render.resourceUses.toSet() != expectedUses ||
                     render.resourceUses.size != expectedUses.size
             }
         ) {
-            return refused("Path stencil render must retain exactly the four shared resource uses.")
+            return refused("Path stencil render must retain exactly the shared resource uses.")
         }
-        val exclusiveRefs = exactUses.map(GPUFrameResourceUse::resource).toSet()
+        val exclusiveRefs = (uniformSlabs.map { it.resource } +
+            listOf(vertex.resource, index.resource, depthStencil.resource)).toSet()
         val coreStepIndices = indexedCoreRenders.map { (index, _) -> index }.toSet()
         val foreignGeometryUse = framePlan.steps.withIndex()
             .filter { indexed -> indexed.index !in coreStepIndices }
@@ -3063,7 +3146,7 @@ internal class GPUFramePreflighter(
                 "Path stencil shared geometry roles and resources are exclusive to its unique render scope.",
             )
         }
-        if (listOf(vertex, index, uniform, depthStencil).any {
+        if ((listOf(vertex, index, depthStencil) + uniformSlabs).any {
                 context.resourceGenerations[it.resource] == null
             }
         ) {
@@ -3080,20 +3163,17 @@ internal class GPUFramePreflighter(
                 }
                 directPasses[sourceStepIndex] = GPUCorePrimitiveDirectPreparedPassSeal(
                     directStructuralKeys.first(),
-                    exactUniform32,
+                    if (indexedCoreRenders.size == 1) {
+                        exactUniform32
+                    } else {
+                        sliceUniformSlabSealToCommands(
+                            exactUniform32,
+                            unifiedUnitsByStep.getValue(sourceStepIndex).map { it.commandIdValue },
+                        )
+                    },
                 )
             }
         }
-        val pathPasses = preparedPathPairsByStep
-            .filterValues(List<GPUCorePrimitivePathStencilPreparedPairSeal>::isNotEmpty)
-            .mapValues { (sourceStepIndex, preparedPathPairs) ->
-                if (uniformSeal != null) {
-                    GPUCorePrimitivePathStencilPreparedPassSeal(preparedPathPairs, uniformSeal)
-                } else {
-                    val seals = preparedPathAnalyticSealsByStep.getValue(sourceStepIndex)
-                    GPUCorePrimitivePathStencilPreparedPassSeal(preparedPathPairs, seals)
-                }
-            }
         val unifiedRoutesByKey = linkedMapOf<
             GPUCorePrimitiveNativeScopeFrameRouteKey,
             GPUCorePrimitiveNativeScopeRouteSeal.Routes,
@@ -3108,20 +3188,36 @@ internal class GPUFramePreflighter(
             } else {
                 GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope
             }
-            val routes = if (uniformSeal != null) {
-                GPUCorePrimitiveNativeScopeRouteSeal.Routes(
-                    unifiedUnits,
-                    uniformSeal,
-                    uniformCoverage,
-                )
-            } else {
-                val pathPass = pathPasses[sourceStepIndex]
-                    ?: return refused("Analytic path scope is missing its closed prepared-pass union.")
-                GPUCorePrimitiveNativeScopeRouteSeal.Routes(
-                    unifiedUnits,
-                    pathPass,
-                    uniformCoverage,
-                )
+            val routes = when {
+                preparedPathAnalyticSealsByStep.getValue(sourceStepIndex).isNotEmpty() ->
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        unifiedUnits,
+                        pathPasses.getValue(sourceStepIndex),
+                        uniformCoverage,
+                    )
+                mixedPreparedSurface ->
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        unifiedUnits,
+                        requireNotNull(uniformSeal),
+                        uniformCoverage,
+                    )
+                indexedCoreRenders.size == 1 ->
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        unifiedUnits,
+                        requireNotNull(uniformSeal),
+                        uniformCoverage,
+                    )
+                else -> {
+                    val stepSlab = sliceUniformSlabSealToCommands(
+                        requireNotNull(uniformSeal),
+                        unifiedUnits.map { it.commandIdValue },
+                    )
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        unifiedUnits,
+                        stepSlab,
+                        uniformCoverage,
+                    )
+                }
             }
             firstUniformIndex += unifiedUnits.size
             unifiedRoutesByKey[
@@ -3307,15 +3403,6 @@ internal class GPUFramePreflighter(
                 )
             }
         }
-        val directUniformLayouts = accepted.mapNotNull { entry ->
-            entry.packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.uniformLayout
-        }.distinct()
-        if (directUniformLayouts.size > 1) {
-            return diagnostic(
-                "unsupported.preflight.core_primitive_mixed_uniform_layouts",
-                "One direct CorePrimitive pass cannot mix uniform32, uniform64, uniform80, and uniform160 layouts.",
-            )
-        }
         if (accepted.any { entry ->
                 val block = entry.semantic.payloadRef.uniformBlock
                 block == null || entry.semantic.payloadRef.uniformSlot?.fingerprint != block.fingerprint ||
@@ -3381,7 +3468,18 @@ internal class GPUFramePreflighter(
             coreRenders.any { render ->
                 render.drawPackets.any { packet -> packet.packetId == dstCopyConsumerPacketId }
             }
-        if ((!exactPreparedSurfaceMixedBoundary && coreRenders.size != 1) ||
+        // FP-11 Task 6: the direct pass may split into N render passes when every render's
+        // packets retain exactly one uniform layout (each split pass owns its slab). The
+        // per-render seals are validated below; the render-count admission accepts the split
+        // shape without the old single-pass requirement, while a destination-copy frame keeps
+        // its two-render admission (the ordered snapshot copy must sit between exactly two
+        // passes).
+        val singleLayoutPerRender = accepted.groupBy(Direct::sourceStepIndex).all { (_, entries) ->
+            entries.map { it.packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.uniformLayout }
+                .distinct().size == 1
+        }
+        if ((!exactPreparedSurfaceMixedBoundary && coreRenders.size != 1 &&
+                !(singleLayoutPerRender && copySteps.isEmpty())) ||
             coreRenders.sumOf { render -> render.drawPackets.size } != accepted.size ||
             (!exactPreparedSurfaceMixedBoundary &&
                 renders.any {
@@ -3389,7 +3487,7 @@ internal class GPUFramePreflighter(
                 })
         ) {
             if (!twoRenderDstReadShape) {
-                return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
+                return refuse("Direct CorePrimitive requires one all-direct render pass per uniform layout.")
             }
         }
         val dstConsumerRender = if (twoRenderDstReadShape) {
@@ -3437,13 +3535,16 @@ internal class GPUFramePreflighter(
                             "snapshot copy, then the load/store consuming pass.",
                     )
                 }
-            } else if (directRender.loadStore.loadOp != "clear" ||
-                directRender.loadStore.storePlan != GPUStorePlan.Store ||
-                directRender.loadStore.clearColorLabel != null
+            } else if (coreRenders.indices.any { index ->
+                    val expectedLoad = if (index == 0) "clear" else "load"
+                    coreRenders[index].loadStore.loadOp != expectedLoad ||
+                        coreRenders[index].loadStore.storePlan != GPUStorePlan.Store ||
+                        coreRenders[index].loadStore.clearColorLabel != null
+                }
             ) {
                 return diagnostic(
                     "invalid.preflight.core_primitive_direct_load_store",
-                    "Direct CorePrimitive requires exactly one clear/store pass.",
+                    "Direct CorePrimitive requires the clear/store first pass followed by load/store split passes.",
                 )
             }
         }
@@ -3451,10 +3552,15 @@ internal class GPUFramePreflighter(
             ?: return refuse("Direct CorePrimitive requires exactly one shared vertex slab.")
         val index = directPreparations.filter { it.role == GPUFrameResourceRole.IndexData }.singleOrNull()
             ?: return refuse("Direct CorePrimitive requires exactly one shared index slab.")
-        val uniform = directPreparations.filter { it.role == GPUFrameResourceRole.UniformData }.singleOrNull()
-            ?: return refuse("Direct CorePrimitive requires exactly one shared uniform slab.")
-        if (directPreparations.size != 3 ||
-            setOf(vertex.resource, index.resource, uniform.resource).size != 3
+        // FP-11 Task 6: the layout split owns one uniform slab per layout group, so a direct
+        // frame may declare one uniform preparation per present layout instead of one slab.
+        val uniformSlabs = directPreparations.filter { it.role == GPUFrameResourceRole.UniformData }
+        if (uniformSlabs.isEmpty()) {
+            return refuse("Direct CorePrimitive requires at least one shared uniform slab.")
+        }
+        if (directPreparations.size != 2 + uniformSlabs.size ||
+            setOf(vertex.resource, index.resource).size != 2 ||
+            uniformSlabs.map { it.resource }.distinct().size != uniformSlabs.size
         ) {
             return refuse("Direct CorePrimitive vertex, index, and uniform slabs must be unique and distinct.")
         }
@@ -3499,8 +3605,6 @@ internal class GPUFramePreflighter(
                 "unsupported.native-core-primitive.limits-unavailable",
                 "Direct CorePrimitive requires observed backend limits.",
             )
-        val uniformDescriptor = uniform.descriptor as? GPUFrameBufferDescriptor
-            ?: return refuse("Direct CorePrimitive uniform slab descriptor is missing.")
         val packetAuthorities = accepted.map { entry ->
             entry.packet.corePrimitivePreparedAuthority
                 ?: return refuse("Direct CorePrimitive packet is missing its builder authority seal.")
@@ -3578,129 +3682,154 @@ internal class GPUFramePreflighter(
             "invalid.preflight.core_primitive_analytic_intersection_uniform_seal",
             message,
         )
-        val uniformLayout = structuralPipelineKey.uniformLayout
-        when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> return diagnostic(
-                "unsupported.native-core-primitive.coverage-mask-direct-route",
-                "Coverage-mask programs require their dedicated prepared multi-pass route.",
-            )
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+        val acceptedStepIndexes = accepted.map(Direct::sourceStepIndex).distinct()
+        val singleStepFrame = acceptedStepIndexes.size == 1
+        val stepCommandIdsByIndex = acceptedStepIndexes.associateWith { stepIndex ->
+            accepted.filter { it.sourceStepIndex == stepIndex }.map { it.packet.commandIdValue }
+        }
+        val stepAcceptedIndicesByIndex = acceptedStepIndexes.associateWith { stepIndex ->
+            accepted.indices.filter { accepted[it].sourceStepIndex == stepIndex }
+        }
+        // FP-11 Task 6: per-render-scope uniform authority. Every direct render pass retains
+        // exactly one uniform layout, and each layout owns its own slab (the recording emits
+        // one split pass per layout group). The step derives its seals from the packet
+        // authorities of its own scope.
+        data class StepUniformAuthority(
+            val layout: GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout,
+            val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+            val analyticShapeSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+            val analyticClipSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+            val analyticIntersectionSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
+            val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan,
+        )
+        val stepUniformAuthorities = linkedMapOf<Int, StepUniformAuthority>()
+        acceptedStepIndexes.forEach { stepIndex ->
+            val stepAcceptedIndices = stepAcceptedIndicesByIndex.getValue(stepIndex)
+            val stepAuthorities = stepAcceptedIndices.map { packetAuthorities[it] }
+            val stepLayouts = stepAuthorities
+                .map { it.structuralPipelineKey.uniformLayout }
+                .distinct()
+            if (stepLayouts.size != 1) {
+                return refuse("Every direct CorePrimitive render pass must retain exactly one uniform layout.")
+            }
+            val stepLayout = stepLayouts.single()
+            // FP-11 Task 6: a mask-clip direct packet in a mixed scope cannot execute on the
+            // direct lane (the coverage-mask producer topology requires the dedicated prepared
+            // multi-pass route), so the frame refuses on the designed coverage-mask code
+            // instead of rendering the non-native mask topology with a leaked session owner.
+            if (stepAcceptedIndices.any { acceptedIndex ->
+                    accepted[acceptedIndex].packet.clipExecutionPlan is
+                        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.CoverageMask
+                }
+            ) {
                 return diagnostic(
-                    "unsupported.native-core-primitive.no-bindings-direct-route",
-                    "The no-bindings clip-stencil producer is not a direct CorePrimitive route.",
+                    "unsupported.native-core-primitive.coverage-mask-direct-route",
+                    "Coverage-mask programs require their dedicated prepared multi-pass route.",
                 )
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 -> {
-                if (packetAuthorities.any { authority ->
-                        authority.analyticShapeUniformSeal != null ||
-                            authority.analyticClipUniformSeal != null ||
-                            authority.analyticIntersectionUniformSeal != null
-                    }
-                ) return refuse("Uniform32 packets cannot retain uniform64, uniform80, or uniform160 seals.")
             }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 -> {
-                if (packetAuthorities.any { authority ->
-                        authority.uniformSlabSeal != null ||
-                            authority.analyticClipUniformSeal != null ||
-                            authority.analyticIntersectionUniformSeal != null
+            when (stepLayout) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+                -> return diagnostic(
+                    "unsupported.native-core-primitive.coverage-mask-direct-route",
+                    "Coverage-mask programs require their dedicated prepared multi-pass route.",
+                )
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                    return diagnostic(
+                        "unsupported.native-core-primitive.no-bindings-direct-route",
+                        "The no-bindings clip-stencil producer is not a direct CorePrimitive route.",
+                    )
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 -> {
+                    if (stepAuthorities.any { authority ->
+                            authority.analyticShapeUniformSeal != null ||
+                                authority.analyticClipUniformSeal != null ||
+                                authority.analyticIntersectionUniformSeal != null
+                        }
+                    ) return refuse("Uniform32 packets cannot retain uniform64, uniform80, or uniform160 seals.")
+                    val stepSeal = stepAuthorities.first().uniformSlabSeal
+                        ?: return refuse("Direct CorePrimitive packet is missing its builder uniform32 slab seal.")
+                    if (stepAuthorities.any { authority -> authority.uniformSlabSeal !== stepSeal }) {
+                        return refuse("Direct CorePrimitive packets must share one exact builder uniform32 slab seal.")
                     }
-                ) return refuseShape("Uniform80 packets cannot retain uniform32, uniform64, or uniform160 seals.")
-            }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 -> {
-                if (packetAuthorities.any { authority ->
-                        authority.uniformSlabSeal != null || authority.analyticShapeUniformSeal != null ||
-                            authority.analyticIntersectionUniformSeal != null
-                    }
-                ) return refuseAnalytic("Uniform64 packets cannot retain uniform32, uniform80, or uniform160 seals.")
-            }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 -> {
-                if (packetAuthorities.any { authority ->
-                        authority.uniformSlabSeal != null || authority.analyticShapeUniformSeal != null ||
-                            authority.analyticClipUniformSeal != null
-                    }
-                ) return refuseIntersection("Uniform160 packets cannot retain uniform32, uniform64, or uniform80 seals.")
-            }
-        }
-        val uniformSeal = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                packetAuthorities.first().uniformSlabSeal
-                    ?: return refuse("Direct CorePrimitive packet is missing its builder uniform32 slab seal.")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
-            -> null
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before direct uniform authority selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before direct uniform authority selection")
-        }
-        if (uniformSeal != null && packetAuthorities.any { authority -> authority.uniformSlabSeal !== uniformSeal }) {
-            return refuse("Direct CorePrimitive packets must share one exact builder uniform32 slab seal.")
-        }
-        val analyticShapeSeals = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                packetAuthorities.map { authority ->
-                    authority.analyticShapeUniformSeal
-                        ?: return refuseShape("Analytic shape packet is missing its uniform80 seal.")
+                    stepUniformAuthorities[stepIndex] = StepUniformAuthority(
+                        stepLayout,
+                        stepSeal,
+                        emptyList(),
+                        emptyList(),
+                        emptyList(),
+                        stepSeal.plan,
+                    )
                 }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
-            -> emptyList()
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before analytic-shape uniform selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before analytic-shape uniform selection")
-        }
-        val analyticSeals = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
-                packetAuthorities.map { authority ->
-                    authority.analyticClipUniformSeal
-                        ?: return refuseAnalytic("Analytic direct CorePrimitive packet is missing its uniform64 seal.")
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 -> {
+                    if (stepAuthorities.any { authority ->
+                            authority.uniformSlabSeal != null ||
+                                authority.analyticClipUniformSeal != null ||
+                                authority.analyticIntersectionUniformSeal != null
+                        }
+                    ) return refuseShape("Uniform80 packets cannot retain uniform32, uniform64, or uniform160 seals.")
+                    val seals = stepAuthorities.map { authority ->
+                        authority.analyticShapeUniformSeal
+                            ?: return refuseShape("Analytic shape packet is missing its uniform80 seal.")
+                    }
+                    if (seals.any { seal -> seal.plan !== seals.first().plan }) {
+                        return refuseShape("Analytic shape packets must share one exact uniform80 slab plan.")
+                    }
+                    stepUniformAuthorities[stepIndex] = StepUniformAuthority(
+                        stepLayout,
+                        null,
+                        seals,
+                        emptyList(),
+                        emptyList(),
+                        seals.first().plan,
+                    )
                 }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
-            -> emptyList()
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before analytic uniform selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before analytic uniform authority selection")
-        }
-        val analyticIntersectionSeals = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
-                packetAuthorities.map { authority ->
-                    authority.analyticIntersectionUniformSeal
-                        ?: return refuseIntersection("Analytic intersection packet is missing its uniform160 seal.")
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 -> {
+                    if (stepAuthorities.any { authority ->
+                            authority.uniformSlabSeal != null ||
+                                authority.analyticShapeUniformSeal != null ||
+                                authority.analyticIntersectionUniformSeal != null
+                        }
+                    ) return refuseAnalytic("Uniform64 packets cannot retain uniform32, uniform80, or uniform160 seals.")
+                    val seals = stepAuthorities.map { authority ->
+                        authority.analyticClipUniformSeal
+                            ?: return refuseAnalytic("Analytic direct CorePrimitive packet is missing its uniform64 seal.")
+                    }
+                    if (seals.any { seal -> seal.plan !== seals.first().plan }) {
+                        return refuseAnalytic("Analytic direct CorePrimitive packets must share one exact uniform64 slab plan.")
+                    }
+                    stepUniformAuthorities[stepIndex] = StepUniformAuthority(
+                        stepLayout,
+                        null,
+                        emptyList(),
+                        seals,
+                        emptyList(),
+                        seals.first().plan,
+                    )
                 }
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
-            -> emptyList()
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before intersection uniform selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before intersection uniform authority selection")
-        }
-        val uniformPlan = when (uniformLayout) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                requireNotNull(uniformSeal).plan
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
-                analyticSeals.first().plan
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
-                analyticIntersectionSeals.first().plan
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                analyticShapeSeals.first().plan
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-            -> error("Coverage-mask layouts were refused before direct uniform plan selection")
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                error("NoBindingsV1 was refused before direct uniform plan selection")
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 -> {
+                    if (stepAuthorities.any { authority ->
+                            authority.uniformSlabSeal != null ||
+                                authority.analyticShapeUniformSeal != null ||
+                                authority.analyticClipUniformSeal != null
+                        }
+                    ) return refuseIntersection("Uniform160 packets cannot retain uniform32, uniform64, or uniform80 seals.")
+                    val seals = stepAuthorities.map { authority ->
+                        authority.analyticIntersectionUniformSeal
+                            ?: return refuseIntersection("Analytic intersection packet is missing its uniform160 seal.")
+                    }
+                    if (seals.any { seal -> seal.plan !== seals.first().plan }) {
+                        return refuseIntersection("Analytic intersection packets must share one exact uniform160 slab plan.")
+                    }
+                    stepUniformAuthorities[stepIndex] = StepUniformAuthority(
+                        stepLayout,
+                        null,
+                        emptyList(),
+                        emptyList(),
+                        seals,
+                        seals.first().plan,
+                    )
+                }
+            }
         }
         val maxBufferSize = limits.maxBufferSize ?: return diagnostic(
             "unsupported.native-core-primitive.max-buffer-size-unavailable",
@@ -3710,53 +3839,61 @@ internal class GPUFramePreflighter(
             "unsupported.native-core-primitive.dynamic-uniform-limit-unavailable",
             "Direct CorePrimitive requires the observed dynamic-uniform limit.",
         )
-        if (uniformPlan.deviceGeneration != context.deviceGeneration.value ||
-            uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-            uniformPlan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
-            when (uniformLayout) {
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
-                    requireNotNull(uniformSeal).drawCount != accepted.size || accepted.indices.any { indexAt ->
-                        val entry = accepted[indexAt]
-                        val bytes = entry.semantic.payloadRef.uniformBlock?.bytes
-                            ?: return diagnostic(
-                                "invalid.preflight.core_primitive_semantic_integrity",
-                                "Core primitive packet authority contradicts its immutable semantic input.",
-                            )
-                        !uniformSeal.hasExactPayload(indexAt, entry.packet.commandIdValue, bytes)
-                    }
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
-                -> false
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 -> false
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
-                -> error("Coverage-mask layouts were refused before direct uniform validation")
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
-                    error("NoBindingsV1 was refused before direct uniform validation")
-            }
-        ) {
-            val message = "Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority."
-            return if (uniformLayout ==
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+        fun layoutAcceptedIndices(
+            layout: GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout,
+        ): List<Int> = accepted.indices.filter { acceptedIndex ->
+            packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout == layout
+        }
+        val uniform32Authorities = stepUniformAuthorities.values.filter {
+            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        }
+        val frame32Seal = uniform32Authorities.firstOrNull()?.uniformSlabSeal
+        if (frame32Seal != null) {
+            if (uniform32Authorities.any { it.uniformSlabSeal !== frame32Seal } ||
+                frame32Seal.plan.deviceGeneration != context.deviceGeneration.value ||
+                frame32Seal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                frame32Seal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L
             ) {
-                refuseShape(message)
-            } else {
-                refuse(message)
+                return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
+            }
+            val uniform32AcceptedIndices = layoutAcceptedIndices(
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
+            )
+            if (frame32Seal.drawCount != uniform32AcceptedIndices.size ||
+                uniform32AcceptedIndices.withIndex().any { (indexAt, acceptedIndex) ->
+                    val entry = accepted[acceptedIndex]
+                    val bytes = entry.semantic.payloadRef.uniformBlock?.bytes
+                        ?: return diagnostic(
+                            "invalid.preflight.core_primitive_semantic_integrity",
+                            "Core primitive packet authority contradicts its immutable semantic input.",
+                        )
+                    !frame32Seal.hasExactPayload(indexAt, entry.packet.commandIdValue, bytes)
+                }
+            ) {
+                return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
             }
         }
-        if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1) {
-            if (uniformPlan.sourceLabel != "core-primitive-analytic-shape-uniform-pass" ||
-                uniformPlan.slots.size != accepted.size ||
-                analyticShapeSeals.any { seal -> seal.plan !== uniformPlan }
+        val analyticShapeSteps = stepUniformAuthorities.values.filter {
+            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+        }
+        if (analyticShapeSteps.isNotEmpty()) {
+            val uniform80AcceptedIndices = layoutAcceptedIndices(
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+            )
+            val frame80Plan = analyticShapeSteps.first().uniformPlan
+            if (frame80Plan.sourceLabel != "core-primitive-analytic-shape-uniform-pass" ||
+                frame80Plan.slots.size != uniform80AcceptedIndices.size ||
+                analyticShapeSteps.flatMap { it.analyticShapeSeals }.any { seal -> seal.plan !== frame80Plan }
             ) {
                 return refuseShape("Analytic shape packets must share one exact uniform80 slab plan.")
             }
             fun GPUPixelBounds.isContainedBy(outer: GPUPixelBounds): Boolean =
                 left >= outer.left && top >= outer.top && right <= outer.right && bottom <= outer.bottom
-            accepted.indices.forEach { indexAt ->
-                val entry = accepted[indexAt]
-                val seal = analyticShapeSeals[indexAt]
-                val slot = uniformPlan.slots[indexAt]
+            val shapeSeals = analyticShapeSteps.flatMap { it.analyticShapeSeals }
+            uniform80AcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
+                val entry = accepted[acceptedIndex]
+                val seal = shapeSeals[indexAt]
+                val slot = frame80Plan.slots[indexAt]
                 val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
                     entry.semantic,
                     GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
@@ -3771,7 +3908,7 @@ internal class GPUFramePreflighter(
                     "Analytic shape route is missing its exact non-empty render scissor.",
                 )
                 val exactRange = try {
-                    Math.addExact(slot.alignedOffset, 80L) <= uniformPlan.totalBytes
+                    Math.addExact(slot.alignedOffset, 80L) <= frame80Plan.totalBytes
                 } catch (_: ArithmeticException) {
                     false
                 }
@@ -3782,10 +3919,10 @@ internal class GPUFramePreflighter(
                     !seal.hasExactSemantic(entry.semantic) ||
                     seal.slotIndex != indexAt || seal.commandId != entry.packet.commandIdValue ||
                     seal.packetId != entry.packet.packetId ||
-                    seal.structuralPipelineKey != packetAuthorities[indexAt].structuralPipelineKey ||
+                    seal.structuralPipelineKey != packetAuthorities[acceptedIndex].structuralPipelineKey ||
                     seal.structuralPipelineKey.shader !=
                     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape ||
-                    seal.renderPipelineKey != packetAuthorities[indexAt].renderPipelineKey ||
+                    seal.renderPipelineKey != packetAuthorities[acceptedIndex].renderPipelineKey ||
                     seal.bindingLayoutHash != CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH ||
                     entry.packet.bindingLayoutHash != seal.bindingLayoutHash ||
                     seal.resourceGeneration != entry.packet.resourceGeneration ||
@@ -3803,27 +3940,35 @@ internal class GPUFramePreflighter(
                 }
             }
         }
-        if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1) {
-            if (uniformPlan.sourceLabel != "core-primitive-analytic-clip-uniform-pass" ||
-                uniformPlan.slots.size != accepted.size ||
-                analyticSeals.any { seal -> seal.plan !== uniformPlan }
+        val analyticClipSteps = stepUniformAuthorities.values.filter {
+            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1
+        }
+        val uniform64AcceptedIndices = layoutAcceptedIndices(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
+        )
+        val analytic64PackedBytes = if (analyticClipSteps.isNotEmpty()) {
+            val frame64Plan = analyticClipSteps.first().uniformPlan
+            if (frame64Plan.sourceLabel != "core-primitive-analytic-clip-uniform-pass" ||
+                frame64Plan.slots.size != uniform64AcceptedIndices.size ||
+                analyticClipSteps.flatMap { it.analyticClipSeals }.any { seal -> seal.plan !== frame64Plan }
             ) {
                 return refuseAnalytic("Analytic direct CorePrimitive packets must share one exact uniform64 slab plan.")
             }
             val exactPayloads = mutableListOf<GPUUniformSlabPayload>()
-            accepted.indices.forEach { indexAt ->
-                val entry = accepted[indexAt]
+            val clipSeals = analyticClipSteps.flatMap { it.analyticClipSeals }
+            uniform64AcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
+                val entry = accepted[acceptedIndex]
                 val packetClip = corePrimitiveAnalyticClipPacketAuthority(
                     entry.packet,
                     entry.semantic.targetBounds,
                 )
                     ?: return refuseAnalytic("Analytic direct CorePrimitive clip authority is no longer canonical.")
                 val expectedClip = packetClip.clip
-                val seal = analyticSeals[indexAt]
-                val slot = uniformPlan.slots[indexAt]
+                val seal = clipSeals[indexAt]
+                val slot = frame64Plan.slots[indexAt]
                 val expectedBytes = corePrimitiveAnalyticClipUniformBytes(entry.semantic, expectedClip)
                 val exactRange = try {
-                    Math.addExact(slot.alignedOffset, 64L) <= uniformPlan.totalBytes
+                    Math.addExact(slot.alignedOffset, 64L) <= frame64Plan.totalBytes
                 } catch (_: ArithmeticException) {
                     false
                 }
@@ -3834,8 +3979,8 @@ internal class GPUFramePreflighter(
                     seal.clipRadii != expectedClip.radii || seal.antiAlias != expectedClip.antiAlias ||
                     seal.conservativeScissor != expectedClip.conservativeScissor ||
                     entry.semantic.scissorBounds != expectedClip.conservativeScissor ||
-                    seal.structuralPipelineKey != packetAuthorities[indexAt].structuralPipelineKey ||
-                    seal.renderPipelineKey != packetAuthorities[indexAt].renderPipelineKey ||
+                    seal.structuralPipelineKey != packetAuthorities[acceptedIndex].structuralPipelineKey ||
+                    seal.renderPipelineKey != packetAuthorities[acceptedIndex].renderPipelineKey ||
                     seal.bindingLayoutHash != CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH ||
                     entry.packet.bindingLayoutHash != seal.bindingLayoutHash ||
                     seal.resourceGeneration != entry.packet.resourceGeneration ||
@@ -3853,7 +3998,7 @@ internal class GPUFramePreflighter(
                 }
                 exactPayloads += GPUUniformSlabPayload(slot.slotLabel, expectedBytes)
             }
-            if (!uniformPlan.hasExactPayloads(
+            if (!frame64Plan.hasExactPayloads(
                     "core-primitive-analytic-clip-uniform-pass",
                     context.deviceGeneration.value,
                     limits.minUniformBufferOffsetAlignment,
@@ -3864,27 +4009,54 @@ internal class GPUFramePreflighter(
                     "Analytic direct CorePrimitive uniform64 slab plan, slots, offsets, or hashes are not exact.",
                 )
             }
+            if (frame64Plan.totalBytes > Int.MAX_VALUE.toLong()) {
+                return refuseAnalytic(
+                    "Analytic direct CorePrimitive uniform64 slab exceeds the host-addressable packed size.",
+                )
+            }
+            try {
+                ByteArray(frame64Plan.totalBytes.toInt()).also { packed ->
+                    clipSeals.forEach { seal ->
+                        seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+                    }
+                }
+            } catch (_: Throwable) {
+                return refuseAnalytic(
+                    "Analytic direct CorePrimitive uniform64 packet ranges cannot form one exact packed slab.",
+                )
+            }
+        } else {
+            null
         }
-        if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1) {
-            if (uniformPlan.sourceLabel != "core-primitive-analytic-intersection-uniform-pass" ||
-                uniformPlan.slots.size != accepted.size ||
-                analyticIntersectionSeals.any { seal -> seal.plan !== uniformPlan }
+        val analyticIntersectionSteps = stepUniformAuthorities.values.filter {
+            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1
+        }
+        val uniform160AcceptedIndices = layoutAcceptedIndices(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
+        )
+        val analytic160PackedBytes = if (analyticIntersectionSteps.isNotEmpty()) {
+            val frame160Plan = analyticIntersectionSteps.first().uniformPlan
+            if (frame160Plan.sourceLabel != "core-primitive-analytic-intersection-uniform-pass" ||
+                frame160Plan.slots.size != uniform160AcceptedIndices.size ||
+                analyticIntersectionSteps.flatMap { it.analyticIntersectionSeals }
+                    .any { seal -> seal.plan !== frame160Plan }
             ) {
                 return refuseIntersection("Analytic intersection packets must share one exact uniform160 slab plan.")
             }
             val exactPayloads = mutableListOf<GPUUniformSlabPayload>()
-            accepted.indices.forEach { indexAt ->
-                val entry = accepted[indexAt]
+            val intersectionSeals = analyticIntersectionSteps.flatMap { it.analyticIntersectionSeals }
+            uniform160AcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
+                val entry = accepted[acceptedIndex]
                 val packetClip = corePrimitiveAnalyticIntersectionPacketAuthority(
                     entry.packet,
                     entry.semantic.targetBounds,
                 ) ?: return refuseIntersection("Analytic intersection authority is no longer canonical.")
                 val expectedClip = packetClip.clip
-                val seal = analyticIntersectionSeals[indexAt]
-                val slot = uniformPlan.slots[indexAt]
+                val seal = intersectionSeals[indexAt]
+                val slot = frame160Plan.slots[indexAt]
                 val expectedBytes = corePrimitiveAnalyticIntersectionUniformBytes(entry.semantic, expectedClip)
                 val exactRange = try {
-                    Math.addExact(slot.alignedOffset, 160L) <= uniformPlan.totalBytes
+                    Math.addExact(slot.alignedOffset, 160L) <= frame160Plan.totalBytes
                 } catch (_: ArithmeticException) {
                     false
                 }
@@ -3900,8 +4072,8 @@ internal class GPUFramePreflighter(
                     seal.clipCanonicalIdentity != packetClip.canonicalIdentity || !exactElements ||
                     seal.conservativeScissor != expectedClip.conservativeScissor ||
                     entry.semantic.scissorBounds != expectedClip.conservativeScissor ||
-                    seal.structuralPipelineKey != packetAuthorities[indexAt].structuralPipelineKey ||
-                    seal.renderPipelineKey != packetAuthorities[indexAt].renderPipelineKey ||
+                    seal.structuralPipelineKey != packetAuthorities[acceptedIndex].structuralPipelineKey ||
+                    seal.renderPipelineKey != packetAuthorities[acceptedIndex].renderPipelineKey ||
                     seal.bindingLayoutHash != CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH ||
                     entry.packet.bindingLayoutHash != seal.bindingLayoutHash ||
                     seal.resourceGeneration != entry.packet.resourceGeneration ||
@@ -3919,7 +4091,7 @@ internal class GPUFramePreflighter(
                 }
                 exactPayloads += GPUUniformSlabPayload(slot.slotLabel, expectedBytes)
             }
-            if (!uniformPlan.hasExactPayloads(
+            if (!frame160Plan.hasExactPayloads(
                     "core-primitive-analytic-intersection-uniform-pass",
                     context.deviceGeneration.value,
                     limits.minUniformBufferOffsetAlignment,
@@ -3930,38 +4102,12 @@ internal class GPUFramePreflighter(
                     "Analytic intersection uniform160 slab plan, slots, offsets, or hashes are not exact.",
                 )
             }
-        }
-        val analyticPackedBytes = if (
-            uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1
-        ) {
-            if (uniformPlan.totalBytes > Int.MAX_VALUE.toLong()) {
-                return refuseAnalytic(
-                    "Analytic direct CorePrimitive uniform64 slab exceeds the host-addressable packed size.",
-                )
-            }
-            try {
-                ByteArray(uniformPlan.totalBytes.toInt()).also { packed ->
-                    analyticSeals.forEach { seal ->
-                        seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
-                    }
-                }
-            } catch (_: Throwable) {
-                return refuseAnalytic(
-                    "Analytic direct CorePrimitive uniform64 packet ranges cannot form one exact packed slab.",
-                )
-            }
-        } else {
-            null
-        }
-        val analyticIntersectionPackedBytes = if (
-            uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1
-        ) {
-            if (uniformPlan.totalBytes > Int.MAX_VALUE.toLong()) {
+            if (frame160Plan.totalBytes > Int.MAX_VALUE.toLong()) {
                 return refuseIntersection("Analytic intersection uniform160 slab exceeds the host-addressable packed size.")
             }
             try {
-                ByteArray(uniformPlan.totalBytes.toInt()).also { packed ->
-                    analyticIntersectionSeals.forEach { seal ->
+                ByteArray(frame160Plan.totalBytes.toInt()).also { packed ->
+                    intersectionSeals.forEach { seal ->
                         seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
                     }
                 }
@@ -3973,115 +4119,136 @@ internal class GPUFramePreflighter(
         } else {
             null
         }
-        if (uniformDescriptor.byteSize != uniformPlan.totalBytes ||
-            uniformDescriptor.alignmentBytes != uniformPlan.alignmentBytes ||
-            uniform.byteSize != uniformPlan.totalBytes ||
-            uniform.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform) ||
-            uniform.lifetime != GPUFrameResourceLifetime.FrameLocal
-        ) {
-            val message = "Direct CorePrimitive uniform slab descriptor, size, alignment, usages, or lifetime is not exact."
-            return if (uniformLayout ==
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+        val uniformPreparationByResource = uniformSlabs.associateBy { it.resource }
+        val stepUniformResourceByStepIndex = acceptedStepIndexes.associateWith { stepIndex ->
+            accepted.first { it.sourceStepIndex == stepIndex }.render.resourceUses
+                .single { it.role == GPUFrameResourceRole.UniformData }.resource
+        }
+        acceptedStepIndexes.forEach { stepIndex ->
+            val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
+            val stepPreparation = uniformPreparationByResource
+                .getValue(stepUniformResourceByStepIndex.getValue(stepIndex))
+            val descriptor = stepPreparation.descriptor as? GPUFrameBufferDescriptor
+                ?: return refuse("Direct CorePrimitive uniform slab descriptor is missing.")
+            if (descriptor.byteSize != stepAuthority.uniformPlan.totalBytes ||
+                descriptor.alignmentBytes != stepAuthority.uniformPlan.alignmentBytes ||
+                stepPreparation.byteSize != stepAuthority.uniformPlan.totalBytes ||
+                stepPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.Uniform,
+                ) || stepPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal
             ) {
-                refuseShape(message)
-            } else {
-                refuse(message)
+                val message = "Direct CorePrimitive uniform slab descriptor, size, alignment, usages, or lifetime is not exact."
+                return if (stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                ) {
+                    refuseShape(message)
+                } else {
+                    refuse(message)
+                }
+            }
+            if (context.resourceGenerations[stepPreparation.resource] == null) {
+                return refuse("Direct CorePrimitive shared slabs require current resource-generation evidence.")
             }
         }
-        if (context.resourceGenerations[vertex.resource] == null ||
-            context.resourceGenerations[index.resource] == null ||
-            context.resourceGenerations[uniform.resource] == null
-        ) {
-            return refuse("Direct CorePrimitive shared slabs require current resource-generation evidence.")
-        }
-        val exactUses = setOf(
-            GPUFrameResourceUse(
-                vertex.resource,
-                GPUFrameResourceRole.VertexData,
-                GPUFrameResourceUsage.Vertex,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-            GPUFrameResourceUse(
-                index.resource,
-                GPUFrameResourceRole.IndexData,
-                GPUFrameResourceUsage.Index,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-            GPUFrameResourceUse(
-                uniform.resource,
-                GPUFrameResourceRole.UniformData,
-                GPUFrameResourceUsage.Uniform,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
+        val exactVertexUse = GPUFrameResourceUse(
+            vertex.resource,
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceUsage.Vertex,
+            GPUFrameResourceLifetime.FrameLocal,
+            write = false,
+        )
+        val exactIndexUse = GPUFrameResourceUse(
+            index.resource,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceUsage.Index,
+            GPUFrameResourceLifetime.FrameLocal,
+            write = false,
         )
         if (directUsesByRender.any { (render, uses) ->
                 if (render in coreRenders) {
-                    uses.size != 3 || uses.toSet() != exactUses
+                    val stepIndex = accepted.first { it.render === render }.sourceStepIndex
+                    val expectedUniformUse = GPUFrameResourceUse(
+                        stepUniformResourceByStepIndex.getValue(stepIndex),
+                        GPUFrameResourceRole.UniformData,
+                        GPUFrameResourceUsage.Uniform,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    )
+                    uses.toSet() != setOf(exactVertexUse, exactIndexUse, expectedUniformUse)
                 } else {
                     uses.isNotEmpty() && !exactPreparedSurfaceMixedBoundary
                 }
             }
         ) {
-            return refuse("The direct pass must read exactly all three shared slabs; non-direct draws may read none.")
+            return refuse(
+                "Every direct pass must read exactly the shared vertex/index slabs and its own uniform slab; " +
+                    "non-direct draws may read none.",
+            )
         }
         // The direct lane admits per-key structural pipelines per render scope (Graphite
         // DrawPass fFullPipelines): every packet's render pipeline key must match its own
-        // structural key's stable authority, and every scope shares one exact uniform layout.
+        // structural key's stable authority, and every scope owns one exact uniform layout.
         // The stable key is derived once per distinct structural key, never once per draw.
         // A two-render dst-copy frame retains one prepared pass seal per render scope (the
         // producer and consuming passes each seal over their own packets' structural keys).
-        val acceptedStepIndexes = accepted.map(Direct::sourceStepIndex).distinct()
-        val singleStepFrame = acceptedStepIndexes.size == 1
-        val stepCommandIdsByIndex = acceptedStepIndexes.associateWith { stepIndex ->
-            accepted.filter { it.sourceStepIndex == stepIndex }.map { it.packet.commandIdValue }
-        }
         val uniformSlabSealByStep: Map<Int, GPUCorePrimitiveUniformSlabSeal?> =
-            if (singleStepFrame || exactPreparedSurfaceMixedBoundary) {
-                // Single-render and exact-mixed-boundary frames keep the frame-global slab
-                // authority: the mixed preflight requires every core run to partition one shared
-                // uniform slab, and single-render passes already seal over their whole slab.
-                acceptedStepIndexes.associateWith { uniformSeal }
-            } else {
-                acceptedStepIndexes.associateWith { stepIndex ->
-                    uniformSeal?.let { frameSeal ->
-                        sliceUniformSlabSealToCommands(
-                            frameSeal,
-                            stepCommandIdsByIndex.getValue(stepIndex),
-                        )
+            acceptedStepIndexes.associateWith { stepIndex ->
+                val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
+                if (stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+                ) {
+                    if (singleStepFrame || exactPreparedSurfaceMixedBoundary) {
+                        stepAuthority.uniformSlabSeal
+                    } else {
+                        stepAuthority.uniformSlabSeal?.let { frameSeal ->
+                            sliceUniformSlabSealToCommands(
+                                frameSeal,
+                                stepCommandIdsByIndex.getValue(stepIndex),
+                            )
+                        }
                     }
+                } else {
+                    null
                 }
             }
         val preparedPassSealsByStep = buildMap<Int, GPUCorePrimitiveDirectPreparedPassAuthority> {
-            val analyticShapeFrame = uniformLayout ==
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
             acceptedStepIndexes.forEach { stepIndex ->
-                val stepAcceptedIndices = accepted.indices.filter {
-                    accepted[it].sourceStepIndex == stepIndex
-                }
+                val stepAcceptedIndices = stepAcceptedIndicesByIndex.getValue(stepIndex)
                 val stepStructuralKeys = stepAcceptedIndices.map { packetAuthorities[it].structuralPipelineKey }
                 val stepMultiKey = stepStructuralKeys.distinct().size > 1
-                val stepUniformSlabSeal = uniformSlabSealByStep.getValue(stepIndex)
-                val stepAnalyticShapeSeals = if (!analyticShapeFrame) {
-                    emptyList()
-                } else if (singleStepFrame) {
-                    stepAcceptedIndices.map { analyticShapeSeals[it] }
+                val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
+                val stepAnalyticShapeSeals = if (analyticShapeSteps.size <= 1) {
+                    stepAuthority.analyticShapeSeals
                 } else {
                     sliceAnalyticShapeUniformSealsToCommands(
-                        analyticShapeSeals,
+                        stepAuthority.analyticShapeSeals,
                         stepCommandIdsByIndex.getValue(stepIndex),
-                        accepted.filter { it.sourceStepIndex == stepIndex }
-                            .associate { it.packet.commandIdValue to it.semantic },
+                        stepAcceptedIndices.associate { accepted[it].packet.commandIdValue to accepted[it].semantic },
+                    )
+                }
+                val stepAnalyticClipSeals = if (analyticClipSteps.size <= 1) {
+                    stepAuthority.analyticClipSeals
+                } else {
+                    sliceAnalyticClipUniformSealsToCommands(
+                        stepAuthority.analyticClipSeals,
+                        stepCommandIdsByIndex.getValue(stepIndex),
+                    )
+                }
+                val stepAnalyticIntersectionSeals = if (analyticIntersectionSteps.size <= 1) {
+                    stepAuthority.analyticIntersectionSeals
+                } else {
+                    sliceAnalyticIntersectionUniformSealsToCommands(
+                        stepAuthority.analyticIntersectionSeals,
+                        stepCommandIdsByIndex.getValue(stepIndex),
                     )
                 }
                 val stepSeal = if (stepMultiKey) {
-                    when (uniformLayout) {
+                    when (stepAuthority.layout) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
                             GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
                                 structuralPipelineKeys = stepStructuralKeys.distinct(),
-                                uniformSlabSeal = requireNotNull(stepUniformSlabSeal),
+                                uniformSlabSeal = requireNotNull(uniformSlabSealByStep.getValue(stepIndex)),
                             )
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                             try {
@@ -4099,7 +4266,7 @@ internal class GPUFramePreflighter(
                         )
                     }
                 } else if (
-                    uniformLayout ==
+                    stepAuthority.layout ==
                     GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
                 ) {
                     try {
@@ -4113,24 +4280,49 @@ internal class GPUFramePreflighter(
                 } else {
                     GPUCorePrimitiveDirectPreparedPassSeal(
                         structuralPipelineKey = stepStructuralKeys.first(),
-                        uniformSlabSeal = stepUniformSlabSeal,
-                        analyticClipUniformSeals = if (analyticSeals.isEmpty()) {
-                            emptyList()
+                        uniformSlabSeal = uniformSlabSealByStep.getValue(stepIndex),
+                        analyticClipUniformSeals = stepAnalyticClipSeals,
+                        analyticClipPackedBytes = if (stepAnalyticClipSeals.isEmpty()) {
+                            null
+                        } else if (analyticClipSteps.size <= 1) {
+                            analytic64PackedBytes
                         } else {
-                            stepAcceptedIndices.map { analyticSeals[it] }
+                            try {
+                                ByteArray(stepAnalyticClipSeals.first().plan.totalBytes.toInt()).also { packed ->
+                                    stepAnalyticClipSeals.forEach { seal ->
+                                        seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+                                    }
+                                }
+                            } catch (_: Throwable) {
+                                return refuseAnalytic(
+                                    "Analytic direct CorePrimitive uniform64 packet ranges cannot form one exact packed slab.",
+                                )
+                            }
                         },
-                        analyticClipPackedBytes = analyticPackedBytes,
-                        analyticIntersectionUniformSeals = if (analyticIntersectionSeals.isEmpty()) {
-                            emptyList()
+                        analyticIntersectionUniformSeals = stepAnalyticIntersectionSeals,
+                        analyticIntersectionPackedBytes = if (stepAnalyticIntersectionSeals.isEmpty()) {
+                            null
+                        } else if (analyticIntersectionSteps.size <= 1) {
+                            analytic160PackedBytes
                         } else {
-                            stepAcceptedIndices.map { analyticIntersectionSeals[it] }
+                            try {
+                                ByteArray(stepAnalyticIntersectionSeals.first().plan.totalBytes.toInt()).also { packed ->
+                                    stepAnalyticIntersectionSeals.forEach { seal ->
+                                        seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+                                    }
+                                }
+                            } catch (_: Throwable) {
+                                return refuseIntersection(
+                                    "Analytic intersection uniform160 packet ranges cannot form one exact packed slab.",
+                                )
+                            }
                         },
-                        analyticIntersectionPackedBytes = analyticIntersectionPackedBytes,
                     )
                 }
                 put(stepIndex, stepSeal)
             }
         }
+
         retainAcceptedRoutes(
             accepted.associate { entry ->
                 GPUCorePrimitiveDirectNativeFrameRouteKey(entry.sourceStepIndex, entry.packet.packetId) to
@@ -6232,6 +6424,120 @@ internal fun sliceAnalyticShapeUniformSealsToCommands(
                 semanticsByCommandId.getValue(commandId),
             ),
             renderScissor = seal.renderScissor,
+            structuralPipelineKey = seal.structuralPipelineKey,
+            renderPipelineKey = seal.renderPipelineKey,
+            bindingLayoutHash = seal.bindingLayoutHash,
+            resourceGeneration = seal.resourceGeneration,
+            payloadBytes = seal.payloadBytesSnapshot(),
+        )
+    }
+}
+
+/**
+ * Rebases one layout's analytic-clip uniform64 seals to exactly one render scope's commands,
+ * mirroring [sliceAnalyticShapeUniformSealsToCommands]: the step owns a zero-based sliced plan
+ * and its own packed upload so the per-render-scope run materializer binds exact offsets.
+ */
+internal fun sliceAnalyticClipUniformSealsToCommands(
+    seals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+    stepCommandIds: List<Int>,
+): List<GPUCorePrimitiveAnalyticClipUniformSeal> {
+    val framePlan = seals.first().plan
+    val sealByCommand = seals.associateBy { it.commandId }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        val frameSlot = framePlan.slots[seal.slotIndex]
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = frameSlot.slotLabel,
+            payloadHash = frameSlot.payloadHash,
+            payloadBytes = frameSlot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = frameSlot.allocatedBytes,
+        )
+        nextOffset += frameSlot.allocatedBytes
+        rebased
+    }
+    val totalBytes = (
+        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
+        ) * framePlan.alignmentBytes
+    val slicedPlan = GPUUniformSlabPlan(
+        planHash = framePlan.planHash,
+        sourceLabel = framePlan.sourceLabel,
+        deviceGeneration = framePlan.deviceGeneration,
+        alignmentBytes = framePlan.alignmentBytes,
+        totalBytes = totalBytes,
+        uploadBudgetBytes = framePlan.uploadBudgetBytes,
+        slots = slots,
+    )
+    return stepCommandIds.mapIndexed { index, commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        GPUCorePrimitiveAnalyticClipUniformSeal(
+            plan = slicedPlan,
+            slotIndex = index,
+            commandId = seal.commandId,
+            packetId = seal.packetId,
+            clipCanonicalIdentity = seal.clipCanonicalIdentity,
+            clipType = seal.clipType,
+            clipBounds = seal.clipBounds,
+            clipRadii = seal.clipRadii,
+            antiAlias = seal.antiAlias,
+            conservativeScissor = seal.conservativeScissor,
+            structuralPipelineKey = seal.structuralPipelineKey,
+            renderPipelineKey = seal.renderPipelineKey,
+            bindingLayoutHash = seal.bindingLayoutHash,
+            resourceGeneration = seal.resourceGeneration,
+            payloadBytes = seal.payloadBytesSnapshot(),
+        )
+    }
+}
+
+/**
+ * Rebases one layout's analytic-intersection uniform160 seals to exactly one render scope's
+ * commands, mirroring [sliceAnalyticClipUniformSealsToCommands] for the uniform64 lane.
+ */
+internal fun sliceAnalyticIntersectionUniformSealsToCommands(
+    seals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
+    stepCommandIds: List<Int>,
+): List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> {
+    val framePlan = seals.first().plan
+    val sealByCommand = seals.associateBy { it.commandId }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        val frameSlot = framePlan.slots[seal.slotIndex]
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = frameSlot.slotLabel,
+            payloadHash = frameSlot.payloadHash,
+            payloadBytes = frameSlot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = frameSlot.allocatedBytes,
+        )
+        nextOffset += frameSlot.allocatedBytes
+        rebased
+    }
+    val totalBytes = (
+        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
+        ) * framePlan.alignmentBytes
+    val slicedPlan = GPUUniformSlabPlan(
+        planHash = framePlan.planHash,
+        sourceLabel = framePlan.sourceLabel,
+        deviceGeneration = framePlan.deviceGeneration,
+        alignmentBytes = framePlan.alignmentBytes,
+        totalBytes = totalBytes,
+        uploadBudgetBytes = framePlan.uploadBudgetBytes,
+        slots = slots,
+    )
+    return stepCommandIds.mapIndexed { index, commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+            plan = slicedPlan,
+            slotIndex = index,
+            commandId = seal.commandId,
+            packetId = seal.packetId,
+            clipCanonicalIdentity = seal.clipCanonicalIdentity,
+            elements = seal.elements,
+            conservativeScissor = seal.conservativeScissor,
             structuralPipelineKey = seal.structuralPipelineKey,
             renderPipelineKey = seal.renderPipelineKey,
             bindingLayoutHash = seal.bindingLayoutHash,

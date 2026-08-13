@@ -107,9 +107,9 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // The fractional AA rect clip is an analytic clip: the direct core lane
-        // mixes the rect layout with the analytic-clip layout and the route
-        // collapse terminates the frame instead of falling back.
+        // FP-11 Task 6 residual (Task 8 B-row): the analytic-shape-under-analytic-clip frame
+        // stays on the mixed-layout refusal (the split lane leaks a native session owner for
+        // analytic-clip passes).
         assertTerminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL, surface::render)
     }
 

@@ -10,6 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
@@ -2415,7 +2416,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `uniform32 and uniform80 shapes refuse atomically before budget planning`() {
+    fun `uniform32 and uniform80 split into two direct passes with per layout slabs`() {
         val base = recording(command(42, 0), command(44, 1)).taskList.withClipPlans(
             mapOf(
                 42 to GPUClipExecutionPlan.NoClip,
@@ -2437,14 +2438,31 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
 
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, semantics).copy(configuredAggregateBudgetBytes = 1L),
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, semantics),
+            ),
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertEquals(listOf(42), renders[0].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(listOf(44), renders[1].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertNotNull(renders[0].drawPackets.single().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertNotNull(
+            renders[1].drawPackets.single().corePrimitivePreparedAuthority?.analyticShapeUniformSeal,
         )
-
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        assertTrue(preparations.any { it.diagnosticLabel == "core-primitive.uniforms" })
+        assertTrue(
+            preparations.any { it.diagnosticLabel == "core-primitive.analytic-shape-uniforms" },
         )
+        assertTrue(
+            taskList.dependencies.any {
+                it.fromTaskId == renders[0].taskId && it.toTaskId == renders[1].taskId
+            },
+        )
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
     }
 
     @Test

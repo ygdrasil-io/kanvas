@@ -4903,8 +4903,7 @@ class GPUFramePreflighterTest {
         val uniform80PreflightValidation = directPreflight
             .substringAfter("Analytic shape packets must share one exact uniform80 slab plan.")
             .substringBefore(
-                "if (uniformLayout == " +
-                    "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1)",
+                "val analyticClipSteps =",
             )
         assertFalse(
             uniform80PreflightValidation.contains("GPUUniformSlabPayload("),
