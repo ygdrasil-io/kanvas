@@ -7,6 +7,129 @@ Branch: `codex/graphite-dawn-frame-fp13`. Machine: Linux, JDK Temurin 25, GPU =
 Vulkan **llvmpipe** (software, CPU; Mesa 26.0.3, LLVM 21.1.8), Xvfb `:99`. All
 GPU suite runs used `DISPLAY=:99`.
 
+## Task 0 — M86 burn-down wave (evidence only, no renderer code)
+
+Task 0 is the M86 Fidelity Burn-Down Wave 2 input snapshot (plan §5, Phase 0):
+the auditable JUnit XML snapshot of `:integration-tests:skia:test`, the
+machine-readable residual-row inventory (341 rows) and the SkiaGmRunner refusal
+inventory (498 rows), the ranked candidate list, and the required M86
+statements. **Task 0 applies no renderer fix** — it is burn-down planning
+evidence, not a completed visual correction.
+
+### 1.1 Snapshot run
+
+Command (headless, `DISPLAY=:99`):
+
+```bash
+./gradlew -F off :integration-tests:skia:test --no-parallel --console=plain
+```
+
+Result: **686 tests completed, 504 failed, 40 skipped** — matching FP-12 §1.2
+exactly: the `SkiaGmRunner` contributes 615 GM cases (498 failures + 40 aborts
+(39 `RenderCost.BLOCKING` + 1 untrustable reference `custommesh_uniforms`) + 77
+passing); the remaining 71 module tests contribute 6 failures (498 + 6 = 504).
+The 498 runner failures break down as: 489 terminal refusals
+(`GPUPreparedSurfaceTerminalException` from a fresh render) + 7 missing
+reference (`color`, `filter`, `orientation`, `rect`, `clippedbitmapshaders`,
+`wacky_yuv_formats`, `lineargradientrt`) + 1 size mismatch (`scale-pixels`,
+`Buffer sizes differ`) + 1 below threshold (`text_scale_skew`, similarity
+77.75% < 80%).
+
+Snapshot: 26 JUnit XML files committed under
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/fp13-m86-wave/
+junit-xml-2026-08-13/` (commit `53c68881b`, `docs(evidence): fp13 m86 wave
+junit xml snapshot`). The runner XML (`TEST-org.graphiks.kanvas.skia.
+SkiaGmRunner.xml`, 615 parameterized cases) is the auditable source for the
+refusal inventory; the build-dir copy is gitignored output, which is why the
+committed copy exists.
+
+### 1.2 Inventory generation (machine-readable)
+
+Scripts (Python 3, stdlib only, no external deps; `--check` verifies counts and
+writes nothing):
+
+- `fp13-m86-wave/residual-inventory.py` — parses the blend matrix source
+  (`GPUAllApiBlendSurfaceTest.kt`: `BlendMode.kt` enum order, `BlendContext`,
+  the `ARTISTIC_MODES` / `MULTI_RENDER_DST_COPY_MODES` expressions) and the
+  three clip pin files (`GPUClipCoverageSurfaceTest.kt`,
+  `GPUClipAdvancedBlendSurfaceTest.kt`, `GPUPathClipRegressionTest.kt`), and
+  emits:
+  - `fp13-m86-wave/residual-inventory.csv` — **341 rows**, one per residual row
+    (item, family, mode, context, refusalCode, referenceKind, expectedGpuRoute,
+    pmValue, risk, ownerTask);
+  - `fp13-m86-wave/ranked-candidates.md` — the 341 rows ranked by PM value ÷
+    risk, grouped by item with per-item summary and the full row enumeration.
+- `fp13-m86-wave/refusals-inventory.py` — parses the committed runner XML
+  (stdlib `xml.etree`) and resolves each GM's logical name from the GM Kotlin
+  sources (class-body `name` declaration; parent-constructor literal/named
+  argument; curated defaults for the computed-name classes, each pinned by a
+  source assertion); emits `fp13-m86-wave/refusals-inventory.csv` —
+  **498 rows** (gm, refusalCode, rootCauseBucket, item).
+
+Verified counts (both scripts `--check`, run at the commit above):
+
+| inventory | expected | measured |
+| --- | --- | --- |
+| residual rows | 341 | 341 |
+| …mixed-layout blend rows | 199 | 199 |
+| …clip pins on mixed-layout | 10 (Coverage 1, Advanced 8, PathClip 1) | 10 |
+| …path-destination-read | 60 | 60 |
+| …direct-geometry re-points (2 DrawRRect DST + 30 DrawPoint) | 32 | 32 |
+| …frame-global-pipeline re-points | 30 | 30 |
+| …analytic-clip-non-direct | 4 | 4 |
+| …dst-read-formula pins | 2 | 2 |
+| …analytic-shape-multi-key pins | 2 | 2 |
+| …complex-clip blur pins | 2 | 2 |
+| SkiaGmRunner failures | 498 | 498 |
+| …terminal refusals (51 distinct codes) | 489 | 489 |
+| …missing reference / size mismatch / below threshold | 7 + 1 + 1 | 7 + 1 + 1 |
+
+Item assignment cross-check (plan §1): item 1 = 32 (2 dst-read-formula pins +
+30 frame-global fallout sharing the root), item 2 = 2, item 3 = 2, item 4 = 241
+(199 blend + 10 clip pins + the 32 Task-6 split-resource fallout rows owned by
+Task 6), item 5 = 4, item 6 = 60. No discrepancy was found between the
+script-derived counts and the 341/489 arithmetic. Five GM rows map to plan §1
+items: 3 × `mixed_uniform_layouts` → item 4, 1 × `path-destination-read` →
+item 6, 1 × `clip_producer_authority` → item 3; the remaining 493 map to
+`none`.
+
+### 1.3 Required M86 statements
+
+- **"CPU-oracle rows do not count as Skia-comparable fidelity."** All 341
+  residual rows are `cpu-oracle` (verified against the pure-Kotlin pixel oracle
+  of the blend/clip suites), as are the 284 prepared blend-matrix rows and the
+  colr-v0 scene rows (Task 1). None is Skia-comparable: this wave can move
+  rendering breadth, runtime, and PM operability scores only (M86, spec
+  `03-skia-fidelity-and-gm-promotion.md`).
+- **"No global similarity threshold was weakened."** This wave changes no
+  thresholds and no assertion; `text_scale_skew` remains at its measured
+  77.75% < 80% state (documented divergence, FP-12 §1.1).
+- **Sprint report — "renderer fixes applied", tracked task-by-task:**
+
+  | task | scope | renderer fix applied |
+  | --- | --- | --- |
+  | Task 0 (this task) | M86 wave — evidence only | **no renderer fix**; the sprint is a burn-down wave in progress |
+  | Task 1 | colr-v0 scenes oracle fix | harness only — no renderer fix |
+  | Tasks 2-8 | PipelineTypesTest hygiene; dst-read formula; multi-key dst-read; complex-clip blur; 64/160 split; analytic clips non-direct; stencil-continuation | renderer fixes planned (Tasks 3-8) / test hygiene (Task 2); tracked in this evidence doc when each task lands |
+  | Task 9 | evidence reconciliation + roadmap | — |
+
+- **Root-cause classification requirement**: every residual row carries its
+  refusal code and expected GPU route (`residual-inventory.csv`); every GM
+  refusal carries a root-cause bucket in the fp-11 §1/§2 classification
+  (`refusals-inventory.csv`), e.g. `unsupported.native-core-primitive.*` →
+  "unsupported execution feature", `invalid.*` → "invalid frame plan / preflight
+  seal", `failed.*` → "runtime failure class", plus the non-terminal kinds
+  (missing reference → "missing reference artifact (chantier B)", size mismatch,
+  below-threshold similarity).
+- **341 rows full preservation**: every residual row of the plan §1 closure
+  inventory (199 + 60 + 4 + 2 + 2 + 2 + 62 + 10) is enumerated per-row in
+  `residual-inventory.csv`; the inventory is **not support status** (M86
+  acceptance: "Inventory status is not support status") — it is the auditable
+  burn-down baseline that Tasks 3-8 close row-by-row.
+
+No Gradle build was run for this task; verification is script-level
+(`--check` counts) against the committed snapshot and committed sources.
+
 ## Task 1 — colr-v0 scenes oracle fix (harness only)
 
 **Task 1 result: `RenderGpuRendererSceneOffscreenMainTest > real COLRv0 scene
