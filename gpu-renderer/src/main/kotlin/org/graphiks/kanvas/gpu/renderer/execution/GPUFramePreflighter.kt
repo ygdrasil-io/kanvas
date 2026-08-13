@@ -3713,20 +3713,6 @@ internal class GPUFramePreflighter(
                 return refuse("Every direct CorePrimitive render pass must retain exactly one uniform layout.")
             }
             val stepLayout = stepLayouts.single()
-            // FP-11 Task 6: a mask-clip direct packet in a mixed scope cannot execute on the
-            // direct lane (the coverage-mask producer topology requires the dedicated prepared
-            // multi-pass route), so the frame refuses on the designed coverage-mask code
-            // instead of rendering the non-native mask topology with a leaked session owner.
-            if (stepAcceptedIndices.any { acceptedIndex ->
-                    accepted[acceptedIndex].packet.clipExecutionPlan is
-                        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.CoverageMask
-                }
-            ) {
-                return diagnostic(
-                    "unsupported.native-core-primitive.coverage-mask-direct-route",
-                    "Coverage-mask programs require their dedicated prepared multi-pass route.",
-                )
-            }
             when (stepLayout) {
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
@@ -4227,22 +4213,13 @@ internal class GPUFramePreflighter(
                         stepAcceptedIndices.associate { accepted[it].packet.commandIdValue to accepted[it].semantic },
                     )
                 }
-                val stepAnalyticClipSeals = if (analyticClipSteps.size <= 1) {
-                    stepAuthority.analyticClipSeals
-                } else {
-                    sliceAnalyticClipUniformSealsToCommands(
-                        stepAuthority.analyticClipSeals,
-                        stepCommandIdsByIndex.getValue(stepIndex),
-                    )
-                }
-                val stepAnalyticIntersectionSeals = if (analyticIntersectionSteps.size <= 1) {
-                    stepAuthority.analyticIntersectionSeals
-                } else {
-                    sliceAnalyticIntersectionUniformSealsToCommands(
-                        stepAuthority.analyticIntersectionSeals,
-                        stepCommandIdsByIndex.getValue(stepIndex),
-                    )
-                }
+                // The analytic-clip (uniform64 / uniform160) pass split remains pinned on the
+                // recording's mixed-layout refusal (Task 8 B-row: the split lane leaks a native
+                // session owner for fixed-function analytic-clip passes), so every frame that
+                // reaches this seal construction owns at most one uniform64/uniform160 step and
+                // retains the frame-level seals unchanged.
+                val stepAnalyticClipSeals = stepAuthority.analyticClipSeals
+                val stepAnalyticIntersectionSeals = stepAuthority.analyticIntersectionSeals
                 val stepSeal = if (stepMultiKey) {
                     when (stepAuthority.layout) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
@@ -4284,38 +4261,14 @@ internal class GPUFramePreflighter(
                         analyticClipUniformSeals = stepAnalyticClipSeals,
                         analyticClipPackedBytes = if (stepAnalyticClipSeals.isEmpty()) {
                             null
-                        } else if (analyticClipSteps.size <= 1) {
-                            analytic64PackedBytes
                         } else {
-                            try {
-                                ByteArray(stepAnalyticClipSeals.first().plan.totalBytes.toInt()).also { packed ->
-                                    stepAnalyticClipSeals.forEach { seal ->
-                                        seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                return refuseAnalytic(
-                                    "Analytic direct CorePrimitive uniform64 packet ranges cannot form one exact packed slab.",
-                                )
-                            }
+                            analytic64PackedBytes
                         },
                         analyticIntersectionUniformSeals = stepAnalyticIntersectionSeals,
                         analyticIntersectionPackedBytes = if (stepAnalyticIntersectionSeals.isEmpty()) {
                             null
-                        } else if (analyticIntersectionSteps.size <= 1) {
-                            analytic160PackedBytes
                         } else {
-                            try {
-                                ByteArray(stepAnalyticIntersectionSeals.first().plan.totalBytes.toInt()).also { packed ->
-                                    stepAnalyticIntersectionSeals.forEach { seal ->
-                                        seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                return refuseIntersection(
-                                    "Analytic intersection uniform160 packet ranges cannot form one exact packed slab.",
-                                )
-                            }
+                            analytic160PackedBytes
                         },
                     )
                 }
@@ -6433,129 +6386,9 @@ internal fun sliceAnalyticShapeUniformSealsToCommands(
     }
 }
 
-/**
- * Rebases one layout's analytic-clip uniform64 seals to exactly one render scope's commands,
- * mirroring [sliceAnalyticShapeUniformSealsToCommands]: the step owns a zero-based sliced plan
- * and its own packed upload so the per-render-scope run materializer binds exact offsets.
- */
-internal fun sliceAnalyticClipUniformSealsToCommands(
-    seals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
-    stepCommandIds: List<Int>,
-): List<GPUCorePrimitiveAnalyticClipUniformSeal> {
-    val framePlan = seals.first().plan
-    val sealByCommand = seals.associateBy { it.commandId }
-    var nextOffset = 0L
-    val slots = stepCommandIds.map { commandId ->
-        val seal = sealByCommand.getValue(commandId)
-        val frameSlot = framePlan.slots[seal.slotIndex]
-        val rebased = GPUUniformSlabSlot(
-            slotLabel = frameSlot.slotLabel,
-            payloadHash = frameSlot.payloadHash,
-            payloadBytes = frameSlot.payloadBytes,
-            alignedOffset = nextOffset,
-            allocatedBytes = frameSlot.allocatedBytes,
-        )
-        nextOffset += frameSlot.allocatedBytes
-        rebased
-    }
-    val totalBytes = (
-        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
-        ) * framePlan.alignmentBytes
-    val slicedPlan = GPUUniformSlabPlan(
-        planHash = framePlan.planHash,
-        sourceLabel = framePlan.sourceLabel,
-        deviceGeneration = framePlan.deviceGeneration,
-        alignmentBytes = framePlan.alignmentBytes,
-        totalBytes = totalBytes,
-        uploadBudgetBytes = framePlan.uploadBudgetBytes,
-        slots = slots,
-    )
-    return stepCommandIds.mapIndexed { index, commandId ->
-        val seal = sealByCommand.getValue(commandId)
-        GPUCorePrimitiveAnalyticClipUniformSeal(
-            plan = slicedPlan,
-            slotIndex = index,
-            commandId = seal.commandId,
-            packetId = seal.packetId,
-            clipCanonicalIdentity = seal.clipCanonicalIdentity,
-            clipType = seal.clipType,
-            clipBounds = seal.clipBounds,
-            clipRadii = seal.clipRadii,
-            antiAlias = seal.antiAlias,
-            conservativeScissor = seal.conservativeScissor,
-            structuralPipelineKey = seal.structuralPipelineKey,
-            renderPipelineKey = seal.renderPipelineKey,
-            bindingLayoutHash = seal.bindingLayoutHash,
-            resourceGeneration = seal.resourceGeneration,
-            payloadBytes = seal.payloadBytesSnapshot(),
-        )
-    }
-}
-
-/**
- * Rebases one layout's analytic-intersection uniform160 seals to exactly one render scope's
- * commands, mirroring [sliceAnalyticClipUniformSealsToCommands] for the uniform64 lane.
- */
-internal fun sliceAnalyticIntersectionUniformSealsToCommands(
-    seals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
-    stepCommandIds: List<Int>,
-): List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> {
-    val framePlan = seals.first().plan
-    val sealByCommand = seals.associateBy { it.commandId }
-    var nextOffset = 0L
-    val slots = stepCommandIds.map { commandId ->
-        val seal = sealByCommand.getValue(commandId)
-        val frameSlot = framePlan.slots[seal.slotIndex]
-        val rebased = GPUUniformSlabSlot(
-            slotLabel = frameSlot.slotLabel,
-            payloadHash = frameSlot.payloadHash,
-            payloadBytes = frameSlot.payloadBytes,
-            alignedOffset = nextOffset,
-            allocatedBytes = frameSlot.allocatedBytes,
-        )
-        nextOffset += frameSlot.allocatedBytes
-        rebased
-    }
-    val totalBytes = (
-        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
-        ) * framePlan.alignmentBytes
-    val slicedPlan = GPUUniformSlabPlan(
-        planHash = framePlan.planHash,
-        sourceLabel = framePlan.sourceLabel,
-        deviceGeneration = framePlan.deviceGeneration,
-        alignmentBytes = framePlan.alignmentBytes,
-        totalBytes = totalBytes,
-        uploadBudgetBytes = framePlan.uploadBudgetBytes,
-        slots = slots,
-    )
-    return stepCommandIds.mapIndexed { index, commandId ->
-        val seal = sealByCommand.getValue(commandId)
-        GPUCorePrimitiveAnalyticIntersectionUniformSeal(
-            plan = slicedPlan,
-            slotIndex = index,
-            commandId = seal.commandId,
-            packetId = seal.packetId,
-            clipCanonicalIdentity = seal.clipCanonicalIdentity,
-            elements = seal.elements,
-            conservativeScissor = seal.conservativeScissor,
-            structuralPipelineKey = seal.structuralPipelineKey,
-            renderPipelineKey = seal.renderPipelineKey,
-            bindingLayoutHash = seal.bindingLayoutHash,
-            resourceGeneration = seal.resourceGeneration,
-            payloadBytes = seal.payloadBytesSnapshot(),
-        )
-    }
-}
-
 private fun diagnostic(code: String, message: String, facts: Map<String, String> = emptyMap()): GPUDiagnostic =
     preflightDiagnostic(code, message, facts)
 
-/**
- * Rebases one direct CorePrimitive uniform32 slab seal to exactly one render scope's commands:
- * the frame's shared slab covers every direct packet, but a two-render dst-copy frame
- * materializes each pass through its own pooled run, so each run must own a slab plan whose
- * slots start at zero and whose packed bytes carry only that pass's payloads.
- */
 internal fun sliceUniformSlabSealToCommands(
     seal: GPUCorePrimitiveUniformSlabSeal,
     stepCommandIds: List<Int>,

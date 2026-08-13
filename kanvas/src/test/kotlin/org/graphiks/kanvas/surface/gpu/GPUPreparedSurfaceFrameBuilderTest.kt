@@ -1162,30 +1162,6 @@ class GPUPreparedSurfaceFrameBuilderTest {
         }
     }
 
-    @Test
-    fun `scratch probe mask clip frame structure`() {
-        val request = request(listOf(
-            rect().copy(clip = ClipStack.DeviceRect(Rect.fromLTRB(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true)),
-            rect().copy(
-                paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC_OVER),
-                clip = ClipStack.DeviceRect(Rect.fromLTRB(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true),
-            ),
-        ))
-        val result = GPUPreparedSurfaceFrameBuilder.build(request)
-        println("PROBE-BUILD: " + result)
-        if (result !is GPUPreparedSurfaceFrameBuildResult.Ready) return
-        val ready = result
-        ready.taskList.tasks.forEach { task ->
-            println("PROBE-TASK " + task::class.simpleName + " id=" + task.taskId.value)
-            if (task is GPUTask.Render) {
-                task.drawPackets.forEach { packet ->
-                    println("PROBE   packet cmd=" + packet.commandIdValue + " role=" + packet.role + " step=" + packet.renderStepId.value)
-                }
-            }
-        }
-        ready.taskList.dependencies.forEach { println("PROBE-DEP " + it.fromTaskId.value + " -> " + it.toTaskId.value) }
-    }
-
     private fun request(
         operations: List<DisplayOp>,
         capabilities: GPUCapabilities = capabilities(),
