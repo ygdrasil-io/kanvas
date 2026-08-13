@@ -52,16 +52,28 @@ Results:
 
 - Dashboard: `Total 615, Pass 540, Fail 6, No score 30, Avg sim 54.4%`
   (summary in `integration-tests/skia/build/reports/skia-gm-dashboard/data/
-  gms.json`: `total 576, passing 540, failing 6, noScore 30`). Reconciliation:
-  the console `Total 615` is the full registry fed to the generator, while
+  gms.json`: `total 576, passing 540, failing 6, noScore 30`; reproduced by a
+  fresh `generateSkiaDashboard` run on this branch). Reconciliation:
+  `SkiaGmRegistry.all()` loads **615** of the 622 `META-INF/services/...SkiaGm`
+  entries (7 registered classes fail to instantiate and are skipped:
+  `MatrixConvolutionGm`, `ComplexClip2Gm`, `AnimCodecPlayerExifGm`,
+  `DrawBitmapRectGm`, `InnerShapesGm`, `TrickyCubicStrokesGm`, `GlyphPosGm`);
+  the console `Total 615` is this runtime registry fed to the generator, while
   `gms.json` holds 576 comparison entries — the 39-GM gap is the
   `RenderCost.BLOCKING` set the dashboard generator excludes
-  (`SkiaDashboardGenerator.kt:49`). The test runner aborts 40 cases: the same
-  39 BLOCKING GMs plus `custommesh_uniforms`, whose reference is marked
+  (`SkiaDashboardGenerator.kt:49`). A source-wide scan counts 72 classes whose
+  source file mentions `RenderCost.BLOCKING`, but the runtime registry —
+  `SkiaGmRegistry.all()` — contains exactly **39 BLOCKING** instances: the
+  remaining 33 are BLOCKING declarations of sibling classes in shared source
+  files (e.g. `SimpleAaclipGm.kt`, `GiantBitmapGm.kt`, `PictureShaderGm.kt`)
+  or classes that fail to instantiate. The test runner aborts 40 cases: the
+  same 39 BLOCKING GMs plus `custommesh_uniforms`, whose reference is marked
   untrustable. The other untrustable-marked GMs do **not** abort — `custommesh`
-  fails with a terminal refusal because the render (line 64) precedes the
-  untrustable check (line 70), and `custommesh_cs` is not registered in the
-  runner's service list. So 40 is consistent with 39 + 1, not 39 + 3.
+  fails with a terminal refusal (`invalid.frame_plan.destination_read_unbound`)
+  and `custommesh_cs`, though registered (service line 422), also fails with a
+  terminal refusal (`failed.prepared-surface.materialization`), because the
+  render (line 64) precedes the untrustable check (line 70) for both. So 40 is
+  consistent with 39 + 1, not 39 + 3.
 - 23 generated-render PNGs changed vs. the committed baseline (last committed at
   PR #2051, pre-FP-08); the regenerated renders reflect the current prepared
   renderer after FP-08/09/10/11 retirement. Regeneration is deterministic
