@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.GradientColorFilterGpuSmokeTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-08-13T21:41:07.284Z" hostname="b3-16-2026-08-13-16-13" time="0.506">
+  <properties/>
+  <testcase name="translated multi stop gradient color filter renders visible pixels()" classname="org.graphiks.kanvas.skia.GradientColorFilterGpuSmokeTest" time="0.506">
+    <failure message="org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing" type="org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException">org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+	at app//org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at app//org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at app//org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at app//org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at app//org.graphiks.kanvas.skia.SkiaGmRenderer.render(SkiaGmRenderer.kt:32)
+	at app//org.graphiks.kanvas.skia.SkiaGmRenderer.render$default(SkiaGmRenderer.kt:17)
+	at app//org.graphiks.kanvas.skia.GradientColorFilterGpuSmokeTest.translated multi stop gradient color filter renders visible pixels(GradientColorFilterGpuSmokeTest.kt:15)
+	at java.base@25.0.3/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base@25.0.3/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base@25.0.3/java.util.ArrayList.forEach(ArrayList.java:1604)
+</failure>
+  </testcase>
+  <system-out><![CDATA[running on X11
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

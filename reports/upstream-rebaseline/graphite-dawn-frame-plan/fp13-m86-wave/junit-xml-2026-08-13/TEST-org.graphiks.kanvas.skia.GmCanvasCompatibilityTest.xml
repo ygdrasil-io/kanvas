@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.GmCanvasCompatibilityTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:41:07.049Z" hostname="b3-16-2026-08-13-16-13" time="0.223">
+  <properties/>
+  <testcase name="drawColor compatibility API records a full-surface source fill()" classname="org.graphiks.kanvas.skia.GmCanvasCompatibilityTest" time="0.02"/>
+  <testcase name="drawStringAligned compatibility API shifts text by measured width()" classname="org.graphiks.kanvas.skia.GmCanvasCompatibilityTest" time="0.174"/>
+  <testcase name="portableFont compatibility API returns a usable emboldened font()" classname="org.graphiks.kanvas.skia.GmCanvasCompatibilityTest" time="0.027"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

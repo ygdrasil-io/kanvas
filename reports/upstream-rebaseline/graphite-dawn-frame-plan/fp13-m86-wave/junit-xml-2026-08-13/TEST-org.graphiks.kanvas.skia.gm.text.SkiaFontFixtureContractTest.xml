@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.510Z" hostname="b3-16-2026-08-13-16-13" time="0.004">
+  <properties/>
+  <testcase name="fonts/Stroking.ttf" classname="org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" time="0.003"/>
+  <testcase name="fonts/Stroking.otf" classname="org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" time="0.0"/>
+  <testcase name="fonts/Variable.ttf" classname="org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" time="0.001"/>
+  <testcase name="fonts/hintgasp.ttf" classname="org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
