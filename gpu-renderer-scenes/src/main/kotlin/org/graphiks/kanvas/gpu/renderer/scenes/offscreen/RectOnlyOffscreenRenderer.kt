@@ -305,7 +305,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                         appendLine("fixture=/fonts/skia/colr.ttf")
                         appendLine("baseGlyph=2")
                         appendLine("layerGlyphs=7,8")
-                        appendLine("reference=independent-cpu-source-over")
+                        appendLine("reference=cpu-source-over + mirrored-llvmpipe-srgb-store")
                         appendLine("matchingPixels=$matchingPixels/$totalPixels")
                         appendLine("pixelExact=${pixels.contentEquals(reference)}")
                         appendLine("targetSize=${scene.dimensions.width}x${scene.dimensions.height}")

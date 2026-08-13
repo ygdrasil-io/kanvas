@@ -175,7 +175,7 @@ internal class PreparedColorGlyphSceneFrameRecorder(
                     "colorTextRun:atlasFormat=r8unorm atlasSize=${upload.atlasWidth}x${upload.atlasHeight}",
                     "colorTextRun:uniformPack=784-byte-le",
                     "colorTextRun:frameRoute=one-encoder-one-command-buffer-one-submit",
-                    "colorTextRun:reference=independent-cpu-source-over",
+                    "colorTextRun:reference=cpu-source-over + mirrored-llvmpipe-srgb-store",
                     "colorTextRun:nonClaim=no-colrv1-no-shaping-no-emoji",
                 ),
             )
@@ -217,6 +217,17 @@ internal class PreparedColorGlyphSceneFrameRecorder(
         }
     }
 
+    /**
+     * Byte-exact mirror of the llvmpipe (Mesa 26.0.3) linear->sRGB store of the
+     * RGBA8UnormSrgb color-glyph lane: `lp_build_linear_to_srgb` rational polynomial
+     * `a*x^0.375 + b*x^0.5 + c` (constants below), this host's AMD Zen-3 `rsqrtps`
+     * approximation ([RSQRT_EVEN_TABLE]/[RSQRT_ODD_TABLE], 4096-entry mantissa LUTs
+     * extracted empirically), and round-to-nearest-even quantization. Harness-only
+     * oracle fidelity, not a generic sRGB conversion; the tables are host-specific,
+     * so other CPUs may differ by +/-1 on boundary pixels. Evidence:
+     * reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-13-close-bounded-native-rendering-gaps-evidence.md
+     * §1.3/§1.8.
+     */
     private fun llvmpipeSrgbEncode(linear: Float): Float {
         val x = linear.coerceIn(0f, 1f)
         if (x <= 0.0031308f) {

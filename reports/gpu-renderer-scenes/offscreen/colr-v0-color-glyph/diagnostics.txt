@@ -6,7 +6,7 @@ colorTextRun:baseGlyph=2 layerGlyphs=7,8
 colorTextRun:atlasFormat=r8unorm atlasSize=46x38
 colorTextRun:uniformPack=784-byte-le
 colorTextRun:frameRoute=one-encoder-one-command-buffer-one-submit
-colorTextRun:reference=independent-cpu-source-over
+colorTextRun:reference=cpu-source-over + mirrored-llvmpipe-srgb-store
 colorTextRun:nonClaim=no-colrv1-no-shaping-no-emoji
 colorTextRun:pixelExact=4096/4096
 colorTextRun:native encoders=1 commandBuffers=1 submits=1 readbacks=1

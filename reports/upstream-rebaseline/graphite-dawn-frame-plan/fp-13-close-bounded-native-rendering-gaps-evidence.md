@@ -42,7 +42,7 @@ COLRv0 color glyph parity report
 fixture=/fonts/skia/colr.ttf
 baseGlyph=2
 layerGlyphs=7,8
-reference=independent-cpu-source-over
+reference=cpu-source-over + mirrored-llvmpipe-srgb-store
 matchingPixels=38/4096
 pixelExact=false
 targetSize=64x64
