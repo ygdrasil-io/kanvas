@@ -9,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -39,6 +40,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.image.AlphaType
@@ -657,16 +660,6 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val cases = listOf(
             request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))) to
                 "unsupported.core_primitive.material.non_solid",
-            // The CLEAR fixture rect overrides the hard rect() paint with Paint.fill(...), whose
-            // antiAlias defaults to true, so this frame mixes a hard uniform32 rect with an
-            // analytic-shape uniform80 AA rect. The refusal is the layout-mixing gate, NOT the
-            // blend admission: the single hard CLEAR rect frame builds Ready (pinned by the
-            // `clear and src hard rects build ready` test below).
-            request(listOf(
-                rect(color = Color.BLUE),
-                rect(color = Color.RED).copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
-            )) to
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point(2f, 2f), Point(12f, 2f)),
@@ -687,6 +680,47 @@ class GPUPreparedSurfaceFrameBuilderTest {
             )
             assertEquals(expectedCode, refused.diagnostic.code.value)
         }
+    }
+
+    @Test
+    fun `hard rect and aa clear rect split into two direct passes with per layout slabs`() {
+        // FP-11 Task 6: the CLEAR fixture rect overrides the hard rect() paint with
+        // Paint.fill(...), whose antiAlias defaults to true, so this frame mixes a hard
+        // uniform32 rect with an analytic-shape uniform80 AA rect. The direct pass splits by
+        // uniform layout: one render per layout group, each with its own slab, instead of the
+        // FP-09 mixed-uniform-layouts refusal. The single hard CLEAR rect frame still builds
+        // Ready as one pass (pinned by the `clear and src hard rects build ready` test).
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(
+                    rect(color = Color.BLUE),
+                    rect(color = Color.RED).copy(
+                        paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR),
+                    ),
+                )),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertEquals(1, renders[0].drawPackets.size)
+        assertEquals(1, renders[1].drawPackets.size)
+        assertEquals(
+            GPULoadStorePlan("clear", GPUStorePlan.Store),
+            renders[0].loadStore,
+        )
+        assertEquals(
+            GPULoadStorePlan("load", GPUStorePlan.Store),
+            renders[1].loadStore,
+        )
+        val preparations = ready.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        assertTrue(preparations.any { it.diagnosticLabel == "core-primitive.uniforms" })
+        assertTrue(preparations.any { it.diagnosticLabel == "core-primitive.analytic-shape-uniforms" })
+        assertTrue(
+            ready.taskList.dependencies.any {
+                it.fromTaskId == renders[0].taskId && it.toTaskId == renders[1].taskId
+            },
+        )
     }
 
     @Test

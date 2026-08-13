@@ -219,13 +219,14 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `mask blur composites under coverage and analytic clips are terminal`() {
+    fun `mask blur composites under coverage clips are terminal`() {
         requireWebGpu()
 
-        // Task 11 lane scope: the blur composite applies NoClip or integer ScissorOnly
-        // clips. A stacked non-AA device-rect clip plans a coverage-mask clip and an
-        // AA device-rect clip plans an analytic clip; both refuse with the documented
-        // lane-scope code instead of rendering unclipped.
+        // Task 11 lane scope (extended): the blur composite applies NoClip, integer
+        // ScissorOnly, or analytic device-rect clips. A stacked non-AA device-rect clip
+        // plans a coverage-mask clip and refuses with the documented lane-scope code
+        // instead of rendering unclipped (the analytic device-rect case renders
+        // prepared under `mask blur composite under an analytic rect clip renders prepared`).
         val stacked = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderSourceCompositedBlur(RenderConfig.DEFAULT) {
                 clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
@@ -233,13 +234,39 @@ class GPUMaskBlurSurfaceTest {
             }
         }
         assertEquals("unsupported.native-mask-blur.clip", stacked.diagnostic.code.value)
+    }
 
-        val aaClipped = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
-            }
+    @Test
+    fun `mask blur composite under an analytic rect clip renders prepared`() {
+        requireWebGpu()
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
         }
-        assertEquals("unsupported.native-mask-blur.clip", aaClipped.diagnostic.code.value)
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.RectClip(14f, 14f, 18f, 18f, antiAlias = true),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `mask blur composite clip ramp renders prepared at half integer bounds`() {
+        requireWebGpu()
+        // Integer bounds (14..18) leave every pixel center at least half a pixel from the
+        // clip edge, so both the WGSL `0.5 - distance` ramp and the oracle evaluate to hard
+        // 0/1 and the clip term is numerically redundant. Half-integer bounds place pixel
+        // centers EXACTLY on the clip edge (coverage 0.5): this pins the AA ramp and the
+        // uniform64 packing of fractional bounds (compositeClipUniformBytes).
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(14.5f, 14.5f, 18.5f, 18.5f), ClipOp.INTERSECT, antiAlias = true)
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.RectClip(14.5f, 14.5f, 18.5f, 18.5f, antiAlias = true),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
 
     @Test
@@ -329,6 +356,64 @@ class GPUMaskBlurSurfaceTest {
             source, BlendMode.DARKEN, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `leading blur composite on a mixed retained frame clears instead of sampling the previous frame`() {
+        requireWebGpu()
+        // Frame 1 fills the retained session target with blue.
+        Surface(width = 32, height = 32).run {
+            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            render()
+        }
+        // Frame 2 is the leading-blur-mixed shape: the FIRST paint op is a mask blur, a later
+        // scene render draws only a small red rect. The blur composite sorts before the red
+        // rect and must clear the scene target itself (no clear scene render is ordered before
+        // it). Outside the blur region and the red rect the target must be transparent, never
+        // the retained blue. Probe pixel (0,0): the sigma-2 kernel (5 taps, half 2) reaches the
+        // shape [4,12) only at x>=2 or x<=13, so (0,0) lies outside the blur halo (coverage 0).
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(4f, 4f, 12f, 12f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(Rect(20f, 20f, 30f, 30f), Paint.fill(Color.RED))
+            }
+            render().pixels.toUByteArray()
+        }
+        assertEquals(0, pixels[(0 * 32 + 0) * 4 + 3].toInt(), "cleared region outside the blur must be transparent")
+        assertEquals(0, pixels[(0 * 32 + 0) * 4 + 2].toInt(), "cleared region must carry no retained blue")
+        assertEquals(255, pixels[(25 * 32 + 25) * 4 + 0].toInt(), "the later scene render must draw its red rect")
+    }
+
+    @Test
+    fun `second blur composite on a two blur frame loads the composited scene instead of clearing it`() {
+        requireWebGpu()
+        // Frame 1 fills the retained session target with blue.
+        Surface(width = 32, height = 32).run {
+            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            render()
+        }
+        // Frame 2 draws TWO blur rects and nothing else. Chain 0's composite is the frame's
+        // first scene-target writer and clears; chain 1's composite must LOAD the already
+        // composited scene — a "clear" loadOp wipes the entire attachment and only redraws
+        // within chain 1's scissor, erasing chain 0's output outside it. Both sigma-2 halos
+        // (radius 6) extend the local masks to the same 20x20 size (bounds [6,14) and [14,22)
+        // halo-extend to [0,20) and [8,28)), so the lane's one-local-mask-size-per-frame
+        // serialization admits the frame. Pixel (10,10) sits in chain 0's shape interior
+        // (4px from every [6,14) edge, full kernel coverage) while chain 1's blurred coverage
+        // there is zero (its shape edge is 14, out of the 5-tap reach), so the second
+        // composite must leave it as chain 0's output.
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(6f, 6f, 14f, 14f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(Rect(14f, 14f, 22f, 22f), blurPaint(BlurStyle.NORMAL, 2f))
+            }
+            render().pixels.toUByteArray()
+        }
+        val firstBlurAlpha = pixels[(10 * 32 + 10) * 4 + 3].toInt()
+        assertTrue(
+            firstBlurAlpha >= 200,
+            "the second composite must not clear away the first blur: alpha=$firstBlurAlpha",
+        )
     }
 
     @Test

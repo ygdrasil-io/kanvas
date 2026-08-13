@@ -16,6 +16,7 @@ import org.graphiks.kanvas.types.withAlphaByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -42,11 +43,12 @@ class GPUClipAdvancedBlendSurfaceTest {
             BlendMode.EXCLUSION,
         )
 
-        // FP-09 terminal refusal: an analytic (AA) clip over an analytic-shape dst-read
-        // draw mixes the analytic-shape uniform80 lane with the analytic-clip uniform64/
-        // uniform160 lane — the designed mixed-uniform-layouts family. Pre-FP-09 these
-        // frames rendered via the legacy renderer (green at the FP-08 tip accaea616); the
-        // route collapse converted them to this stable code (Task 6 evidence family 4).
+        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
+        // the mixed-layout refusal pending the per-step continuation design (the materializer
+        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
+        // split itself is not wired). Pre-FP-09 these frames rendered via the legacy renderer
+        // (green at the FP-08 tip accaea616); the route collapse converted them to this
+        // stable code (Task 6 evidence family 4).
         expectedByMode.forEach { mode ->
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 renderClippedBlend(destination, source, mode)
@@ -71,32 +73,31 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun `scissor destination read blend refuses with the mixed uniform layouts code before encoding`() {
+    fun `scissor destination read blend renders prepared via the copy then formula lane`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        // FP-09 terminal refusal: the frame mixes an unclipped uniform32 rect with a
-        // scissored dst-read rect (uniform64 lane); pre-FP-09 the legacy renderer
-        // rendered it. See the sibling analytic-clip case for the family reference.
-        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                    save()
-                    clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
-                    drawRect(
-                        Rect(4f, 4f, 28f, 28f),
-                        Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
-                    )
-                    restore()
-                }
-                render()
+        // FP-11 Task 6: the scissored dst-read rect shares the uniform32 layout with the
+        // background, so the frame is the admitted two-render dst-copy shape (destination
+        // pass, ordered snapshot copy, consuming pass) instead of the FP-09
+        // mixed-uniform-layouts refusal. CPU reference: DARKEN(black, white) = black inside
+        // the scissor and retained white outside.
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                save()
+                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                drawRect(
+                    Rect(4f, 4f, 28f, 28f),
+                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                )
+                restore()
             }
+            render().pixels.toUByteArray()
         }
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
-            failure.diagnostic.code.value,
-        )
+        assertEquals(0, sampleAt(pixels, 16, 16)[0].toInt(), "in-scissor pixel is DARKEN(black, white) = black")
+        assertEquals(255, sampleAt(pixels, 16, 16)[3].toInt(), "in-scissor pixel is opaque")
+        assertEquals(255, sampleAt(pixels, 2, 2)[0].toInt(), "outside the scissor the white destination is retained")
     }
 
     @Test
@@ -218,7 +219,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
     }
 
-    private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode) =
+    private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode): UByteArray =
         Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(destination))
@@ -227,6 +228,11 @@ class GPUClipAdvancedBlendSurfaceTest {
                 drawRect(Rect(4f, 4f, 28f, 28f), Paint.fill(source).copy(blendMode = mode))
                 restore()
             }
-            render()
+            render().pixels.toUByteArray()
         }
+
+    private fun sampleAt(pixels: UByteArray, x: Int, y: Int): UByteArray {
+        val offset = (y * 32 + x) * 4
+        return pixels.copyOfRange(offset, offset + 4)
+    }
 }

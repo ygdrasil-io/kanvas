@@ -1,6 +1,6 @@
 # Graphite/Dawn Frame Plan Active TODO
 
-Last updated: 2026-07-31
+Last updated: 2026-08-13
 
 This is the active, branch-specific backlog for
 `codex/graphite-dawn-frame-plan-design`. Items are processed strictly in the
@@ -503,46 +503,46 @@ FP-10 transfer (retained-session-exposed pre-existing gap, per evidence §11):
   `loadOp="load"` samples the retained previous-frame pixels; pre-FP-10 loaded
   undefined fresh-target content); correct condition is "no scene clear render
   ordered BEFORE the composite"; no test covers the leading-blur-mixed shape.
+  — **CLOSED by FP-11 Task 2** (commits `29949f297` + `f0b95fb4b`; pins at
+  `GPUMaskBlurSurfaceTest.kt:362`, `:388`; evidence `fp-11-close-bounded-native-rendering-gaps-evidence.md` §6).
 
 ### FP-11 — Close bounded native-rendering gaps
 
-Status: `pending`
+Status: `completed`
 
 Goal: address the native gaps explicitly retained by the completed migrations,
 including required stroke, coverage, sampling, filter, and runtime-effect
 cases.
 
-FP-09 transfers (stable terminal refusals, per `fp-09-retire-legacy-immediate-renderer-evidence.md`):
-- exact hairline point lowering — `unsupported.core_primitive.point.hairline_exact_lowering`
-  (GPUCorePrimitiveSemanticBuilder.kt:409, 411, 465; 175 cases);
-- multi-uniform-layout direct passes — `unsupported.recording.core_primitive_mixed_uniform_layouts`
-  (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1602, 2104; 202 cases);
-- analytic clips over non-direct shading geometry — `unsupported.recording.core_primitive_analytic_clip_non_direct_geometry`
-  (GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1994; 2 cases);
-- dst-read formula on mapped routes — `unsupported.native-core-primitive.dst-read-formula`
-  (2 cases);
-- multi-render dst-copy (destination-then-consumer dst-read frames) —
-  `unsupported.native-core-primitive.multi-render-dst-copy` (60 cases);
-- analytic-shape multi-key dst-read — `unsupported.native-core-primitive.analytic-shape-multi-key`
-  (2 cases);
-- path destination-read — `unsupported.native-core-primitive.path-destination-read`
-  (60 cases);
-- ~~top-level mask-blur rect/path/rrect frames~~ — **RESOLVED by FP-09 Task 11**
-  (commit `3e2a71b5e`): top-level mask blur renders prepared on core primitives
-  (mask -> blur-h -> blur-v -> style -> composite) with the CPU pixel oracle;
-  the budget gate (`unsupported.mask-filter.blur.intermediate-budget`) is
-  reachable again; the lane's composite applies NoClip or integer ScissorOnly
-  clips only (complex-clip blur stays terminal at
-  `invalid.preflight.core_primitive_clip_producer_authority`; coverage-mask and
-  analytic clips over the blur composite stay terminal at
-  `unsupported.native-mask-blur.clip`).
+Resolution evidence (`fp-11-close-bounded-native-rendering-gaps-evidence.md`):
+- covered with CPU/reference + native GPU evidence: mask-blur leading-composite
+  retained-target ordering (per-chain composite clear on retained sessions), exact
+  hairline point lowering (175), multi-render dst-copy direct lane (60),
+  multi-uniform-layout direct passes (uniform80 split; analytic-clip 64/160
+  split reclassified to B — see evidence §4), and analytic rect clips on the
+  top-level mask blur composite;
+- justified stable terminal refusals re-documented: analytic clips over non-direct
+  geometry (2 at FP-09; 4 at closure HEAD after the Task 3 hairline re-route),
+  dst-read formula on mapped routes (2), analytic-shape multi-key dst-read (2),
+  complex-clip blur (`core_primitive_clip_producer_authority`),
+  path destination-read (60, reclassified: path-stencil dst-read requires a
+  stencil-continuation feature — see evidence §3);
+- full run green except the two documented pre-existing failures (package
+  boundary — exactly 20 cycle violations, 0 rule violations, unchanged; stencil
+  smoke — reproduces at base SHA); the `failed.surface.prepared.session-close`
+  flake remains documented environmental (not observed in the closure full
+  run); the FP-10 retained-session contract is preserved
+  (`GPUPreparedSurfaceLifetimeStressTest` 6/6).
 
-Acceptance:
-
-- every accepted expansion has CPU/reference and native GPU evidence;
-- unsupported cases retain stable typed refusals;
-- no hidden fallback or unsupported Graphite/Ganesh/SkSL compiler path is
-  introduced.
+FP-12+ transfers (residual-refusal tracking note — bounded future work, not a new roadmap entry;
+the existing FP-12 entry remains "Current visual and performance evidence"):
+- analytic clips over non-direct shading geometry (4 at closure HEAD; 2 at FP-09);
+- dst-read formula on mapped routes (2);
+- analytic-shape multi-key dst-read (2);
+- complex-clip blur / `core_primitive_clip_producer_authority`;
+- path destination-read (60, reclassified A→B in Task 5);
+- multi-uniform-layout analytic-clip 64/160 split residual (the unwired
+  split; 199 blend rows stay on `mixed_uniform_layouts` at closure HEAD).
 
 ### FP-12 — Current visual and performance evidence
 

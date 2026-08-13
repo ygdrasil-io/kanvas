@@ -18,9 +18,21 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -544,10 +556,15 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
                 replacePacket(fixture, maskStep(fixture)) { packet -> packet.withTargetStateHash("target.forged") }
             },
             Scenario("clip", "unsupported.native-mask-blur.clip") { fixture ->
+                // Task 7 admits only analytic DEVICE-RECT clips on the composite; a
+                // complex-clip plan (analytic rrect) stays outside the lane scope.
                 replacePacket(fixture, compositeStep(fixture)) { packet ->
                     packet.withClipExecutionPlan(
                         GPUClipExecutionPlan.AnalyticCoverage(
-                            GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1f, 31f, 31f)),
+                            GPUClipExecutionGeometry.RRect(
+                                GPUBounds(1f, 1f, 31f, 31f),
+                                listOf(2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f),
+                            ),
                             scissor = null,
                             antiAlias = true,
                         ),
@@ -583,19 +600,88 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
             GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(0, 0, 16, 16)),
         )
         assertEquals(null, topLevelMaskBlurCompositeClipRefusal(scissorOnly))
-        val analytic = composite.withClipExecutionPlan(
+        val analyticRect = composite.withClipExecutionPlan(
             GPUClipExecutionPlan.AnalyticCoverage(
                 GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1f, 31f, 31f)),
                 scissor = null,
                 antiAlias = true,
             ),
         )
-        assertEquals("unsupported.native-mask-blur.clip", topLevelMaskBlurCompositeClipRefusal(analytic))
+        assertEquals(null, topLevelMaskBlurCompositeClipRefusal(analyticRect))
+        val analyticRRect = composite.withClipExecutionPlan(
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.RRect(
+                    GPUBounds(1f, 1f, 31f, 31f),
+                    listOf(2f, 2f, 2f, 2f, 2f, 2f, 2f, 2f),
+                ),
+                scissor = null,
+                antiAlias = true,
+            ),
+        )
+        assertEquals("unsupported.native-mask-blur.clip", topLevelMaskBlurCompositeClipRefusal(analyticRRect))
+        val coverageMask = composite.withClipExecutionPlan(
+            GPUClipExecutionPlan.CoverageMask(
+                contentKey = "clip.mask-blur.coverage-mask",
+                bounds = GPUPixelBounds(0, 0, 16, 16),
+                sampleCount = 1,
+                depthStencilRequired = false,
+                orderingToken = GPUClipOrderingToken("token.clip.mask-blur.coverage-mask"),
+                producers = listOf(
+                    GPUClipMaskProducerPlan(
+                        sourceOrder = 0,
+                        geometry = GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
+                        combine = GPUClipMaskCombine.Intersect,
+                        antiAlias = false,
+                    ),
+                    GPUClipMaskProducerPlan(
+                        sourceOrder = 1,
+                        geometry = GPUClipExecutionGeometry.Rect(GPUBounds(2f, 2f, 14f, 14f)),
+                        combine = GPUClipMaskCombine.Intersect,
+                        antiAlias = false,
+                    ),
+                ),
+                consumer = GPUClipMaskConsumerPlan(),
+            ),
+        )
+        assertEquals("unsupported.native-mask-blur.clip", topLevelMaskBlurCompositeClipRefusal(coverageMask))
+        val stencil = composite.withClipExecutionPlan(stencilClipPlan())
+        assertEquals("unsupported.native-mask-blur.clip", topLevelMaskBlurCompositeClipRefusal(stencil))
         fixture.close()
     }
 
     private fun compositePacket(fixture: Fixture): GPUDrawPacket =
         (fixture.plan.steps[5] as GPUFrameStep.RenderPassStep).drawPackets.single()
+
+    private fun stencilClipPlan(): GPUClipExecutionPlan.StencilCoverage =
+        GPUClipExecutionPlan.StencilCoverage(
+            contentKey = "clip.mask-blur.stencil",
+            bounds = GPUPixelBounds(0, 0, 16, 16),
+            sampleCount = 1,
+            atomicGroup = GPUClipAtomicGroupID("atomic.clip.mask-blur.stencil"),
+            orderingToken = GPUClipOrderingToken("token.clip.mask-blur.stencil"),
+            producer = GPUClipStencilProducerPlan(
+                geometry = GPUClipExecutionGeometry.Path(
+                    vertices = listOf(2f, 2f, 14f, 2f, 14f, 14f, 2f, 14f),
+                    contourStarts = listOf(0),
+                    fillRule = GPUClipFillRule.Winding,
+                    inverseFill = false,
+                ),
+                scissor = GPUPixelBounds(0, 0, 16, 16),
+                fillRule = GPUClipFillRule.Winding,
+                reference = 0u,
+                compare = GPUClipStencilCompare.Always,
+                frontPassOperation = GPUClipStencilOperation.IncrementWrap,
+                backPassOperation = GPUClipStencilOperation.DecrementWrap,
+                loadOperation = GPUClipStencilLoadOperation.Clear,
+                storeOperation = GPUClipStencilStoreOperation.Store,
+                clearValue = 0u,
+            ),
+            consumer = GPUClipStencilConsumerPlan(
+                scissor = GPUPixelBounds(0, 0, 16, 16),
+                reference = 0u,
+                compare = GPUClipStencilCompare.NotEqual,
+            ),
+        )
 
     // ---- Fixture ----
 

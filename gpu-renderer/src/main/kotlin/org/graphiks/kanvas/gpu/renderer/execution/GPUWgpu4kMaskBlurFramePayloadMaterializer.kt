@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.MASK_BLUR_COMPOSITE_RENDER_STEP
 import org.graphiks.kanvas.gpu.renderer.payloads.maskBlurStageFromRenderStepId
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeRectClip
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_H_STEP
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_V_STEP
@@ -33,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_TARGET_STA
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_TARGET_STATE_MASK
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeClipRefusal
+import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeRectClipOrNull
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -440,8 +442,8 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         if (unsupportedClipComposite != null) {
             return refused(
                 "unsupported.native-mask-blur.clip",
-                "The top-level mask blur composite applies only NoClip or ScissorOnly clip execution; " +
-                    "the composite clip is outside the lane scope.",
+                "The top-level mask blur composite applies only NoClip, ScissorOnly, or analytic device-rect clip execution; " +
+                    "stencil, coverage-mask, and complex clip plans are outside the lane scope.",
             )
         }
         val dstReadComposites = chains.filter { chain ->
@@ -657,6 +659,18 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             } else {
                 null
             }
+            val rectClip = topLevelMaskBlurCompositeRectClipOrNull(compositePacket)
+            val clipUniform = rectClip?.let { clip ->
+                createUniform(
+                    "Kanvas.frame.maskBlur.compositeClipUniform64",
+                    compositeClipUniformBytes(
+                        semantic.targetBounds.width,
+                        semantic.targetBounds.height,
+                        clip,
+                        semantic,
+                    ),
+                )
+            }
             val maskBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
                     label = "Kanvas.frame.maskBlur.maskBindGroup",
@@ -706,6 +720,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             auxiliaryUniforms += styleUniform
             auxiliaryUniforms += compositeUniform
             dstUniform?.let(auxiliaryUniforms::add)
+            clipUniform?.let(auxiliaryUniforms::add)
             auxiliaryBindGroups += maskBindGroup
             auxiliaryBindGroups += blurHBindGroup
             auxiliaryBindGroups += blurVBindGroup
@@ -724,6 +739,8 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         chain = chain,
                         uniform = compositeUniform,
                         dstUniform = dstUniform,
+                        clipUniform = clipUniform,
+                        rectClip = rectClip,
                         scissor = semantic.scissorBounds,
                         blendModeLabel = compositePacket.blendPlan?.mode?.gpuLabel.orEmpty(),
                         dstRead = dstRead,
@@ -774,17 +791,45 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             val snapshotView = snapshot.createView().tracked()
             dstSnapshotView = snapshotView
             onDestinationSnapshotCreated()
+            // Task 7: an admitted analytic device-rect clip on the composite binds the
+            // uniform64 clip block (mirroring the core lane's analytic clip ABI) so the
+            // dst-read composite shader multiplies the blurred mask coverage by the
+            // clip coverage. The shared dst bind group follows the existing first-chain
+            // dst uniform authority for multi-chain dst-read frames: it binds the FIRST
+            // chain's clip uniform AND the first-chain clip dst pipeline for ALL dst-read
+            // chains. If heterogeneous clip admission ever reaches the dst-read lane (e.g.
+            // chain 2 has a wide-open composite while chain 1 carries a device-rect clip),
+            // chain 2 would render with chain 1's clip — wrong-render risk. The single-chain
+            // dst-read lane is the tested surface; do NOT widen dst-read clip admission
+            // without splitting the bind group per chain.
+            val dstReadClip = compositeEntries.first().rectClip
             val dstBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
-                    label = "Kanvas.frame.maskBlur.compositeDstBindGroup",
-                    layout = invariants.compositeDstBindGroupLayout,
-                    entries = listOf(
-                        BindGroupEntry(0u, BufferBinding(compositeEntries.first().dstUniform!!, 0uL, 48uL)),
-                        BindGroupEntry(1u, intermediates.styledView),
-                        BindGroupEntry(2u, invariants.sampler),
-                        BindGroupEntry(3u, snapshotView),
-                        BindGroupEntry(4u, invariants.sampler),
-                    ),
+                    label = if (dstReadClip != null) {
+                        "Kanvas.frame.maskBlur.compositeDstClipBindGroup"
+                    } else {
+                        "Kanvas.frame.maskBlur.compositeDstBindGroup"
+                    },
+                    layout = if (dstReadClip != null) {
+                        invariants.compositeDstClipBindGroupLayout
+                    } else {
+                        invariants.compositeDstBindGroupLayout
+                    },
+                    entries = buildList {
+                        add(BindGroupEntry(0u, BufferBinding(compositeEntries.first().dstUniform!!, 0uL, 48uL)))
+                        add(BindGroupEntry(1u, intermediates.styledView))
+                        add(BindGroupEntry(2u, invariants.sampler))
+                        add(BindGroupEntry(3u, snapshotView))
+                        add(BindGroupEntry(4u, invariants.sampler))
+                        if (dstReadClip != null) {
+                            add(
+                                BindGroupEntry(
+                                    5u,
+                                    BufferBinding(compositeEntries.first().clipUniform!!, 0uL, 64uL),
+                                ),
+                            )
+                        }
+                    },
                 ),
             ).tracked()
             auxiliaryBindGroups += dstBindGroup
@@ -792,7 +837,11 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                 compositeOperands += renderOperand(
                     entry = pending.entry,
                     targetView = targetView,
-                    pipeline = compositePipelines.dstPipeline,
+                    pipeline = if (dstReadClip != null) {
+                        maskBlurCache.acquireCompositeClipPipelines(targetFormat).dstPipeline
+                    } else {
+                        compositePipelines.dstPipeline
+                    },
                     bindGroup = dstBindGroup,
                     clear = pending.entry.step.loadStore.loadOp == "clear",
                     scissor = pending.scissor,
@@ -824,25 +873,45 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         } else {
             compositeEntries.forEach { pending ->
                 val isSrcOver = pending.blendModeLabel == "src_over"
+                val clip = pending.rectClip
                 val compositeBindGroup = device.createBindGroup(
                     BindGroupDescriptor(
-                        label = "Kanvas.frame.maskBlur.compositeBindGroup",
-                        layout = invariants.compositeBindGroupLayout,
-                        entries = listOf(
-                            BindGroupEntry(0u, BufferBinding(pending.uniform, 0uL, 32uL)),
-                            BindGroupEntry(1u, intermediates.styledView),
-                            BindGroupEntry(2u, invariants.sampler),
-                        ),
+                        label = if (clip != null) {
+                            "Kanvas.frame.maskBlur.compositeClipBindGroup"
+                        } else {
+                            "Kanvas.frame.maskBlur.compositeBindGroup"
+                        },
+                        layout = if (clip != null) {
+                            invariants.compositeClipBindGroupLayout
+                        } else {
+                            invariants.compositeBindGroupLayout
+                        },
+                        entries = buildList {
+                            add(BindGroupEntry(0u, BufferBinding(pending.uniform, 0uL, 32uL)))
+                            add(BindGroupEntry(1u, intermediates.styledView))
+                            add(BindGroupEntry(2u, invariants.sampler))
+                            if (clip != null) {
+                                add(
+                                    BindGroupEntry(
+                                        3u,
+                                        BufferBinding(pending.clipUniform!!, 0uL, 64uL),
+                                    ),
+                                )
+                            }
+                        },
                     ),
                 ).tracked()
                 auxiliaryBindGroups += compositeBindGroup
                 compositeOperands += renderOperand(
                     entry = pending.entry,
                     targetView = targetView,
-                    pipeline = if (isSrcOver) {
-                        compositePipelines.srcOverPipeline
-                    } else {
-                        compositePipelines.srcPipeline
+                    pipeline = when {
+                        clip != null && isSrcOver ->
+                            maskBlurCache.acquireCompositeClipPipelines(targetFormat).srcOverPipeline
+                        clip != null ->
+                            maskBlurCache.acquireCompositeClipPipelines(targetFormat).srcPipeline
+                        isSrcOver -> compositePipelines.srcOverPipeline
+                        else -> compositePipelines.srcPipeline
                     },
                     bindGroup = compositeBindGroup,
                     clear = pending.entry.step.loadStore.loadOp == "clear",
@@ -1003,6 +1072,8 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         val chain: ChainEntry,
         val uniform: io.ygdrasil.webgpu.GPUBuffer,
         val dstUniform: io.ygdrasil.webgpu.GPUBuffer?,
+        val clipUniform: io.ygdrasil.webgpu.GPUBuffer?,
+        val rectClip: GPUTopLevelMaskBlurCompositeRectClip?,
         val scissor: GPUPixelBounds,
         val blendModeLabel: String,
         val dstRead: Boolean,
@@ -1203,6 +1274,30 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             putInt(0)
         }.array()
     }
+
+    /**
+     * Packs the 64-byte analytic clip block for the composite bind group (Task 7),
+     * mirroring the core lane's `CorePrimitiveAnalyticClipBlock` ABI byte-for-byte:
+     * target_size, clip_type (0 = rect), anti_alias, premul_rgba, clip_bounds,
+     * clip_radii (zeroed for a rect).
+     */
+    private fun compositeClipUniformBytes(
+        targetWidth: Int,
+        targetHeight: Int,
+        clip: GPUTopLevelMaskBlurCompositeRectClip,
+        semantic: GPUDrawSemanticPayload.MaskBlur,
+    ): ByteArray = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(targetWidth.toFloat())
+        putFloat(targetHeight.toFloat())
+        putInt(0)
+        putInt(if (clip.antiAlias) 1 else 0)
+        semantic.premultipliedRgba.forEach(::putFloat)
+        putFloat(clip.left)
+        putFloat(clip.top)
+        putFloat(clip.right)
+        putFloat(clip.bottom)
+        repeat(4) { putFloat(0f) }
+    }.array()
 
     private fun sceneTargetBounds(framePlan: GPUFramePlan): GPUPixelBounds? {
         val scenePreparation = framePlan.steps

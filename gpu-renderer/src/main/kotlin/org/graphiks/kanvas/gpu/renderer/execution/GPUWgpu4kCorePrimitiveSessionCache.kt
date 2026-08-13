@@ -45,7 +45,15 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val clipDepthStencilSlotReuses: Long = 0L,
 )
 
-internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 30
+/**
+ * Ceiling for live session pipelines. The key space is closed: the 29-program universe plus the
+ * per-mode dst-read component identities (16 modes), the analytic shape/clip/intersection
+ * components, the coverage-mask and clip-stencil producer/consumer lanes, and the path-stencil
+ * pair stay well under 64; the FP-11 dst-copy admission materializes the full dst-read mode set
+ * in one retained session, so the ceiling covers that closed universe with headroom instead of
+ * refusing every mode after the first handful.
+ */
+internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 64
 
 internal enum class GPUWgpu4kCorePrimitiveBindingPolicy {
     DynamicUniformRequired,

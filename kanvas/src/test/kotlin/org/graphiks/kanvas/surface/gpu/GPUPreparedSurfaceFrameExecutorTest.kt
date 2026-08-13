@@ -766,15 +766,15 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `mixed fixed and destination read core frame refuses before prepared entry`() {
+    fun `mixed fixed and destination read core frame executes ready after the multi render dst copy admission`() {
         // A destination rect (fixed SRC_OVER) followed by a DARKEN source rect over it: under the
         // production capability snapshot this splits into two renders with the ordered snapshot
-        // copy between them, and the recording preflight refuses the multi-render dst-copy shape
-        // so the frame continues on the legacy route. The fake capabilities here collapse the
-        // frame into the single-render shape (the copy lands before the whole pass), so the
-        // real-cap build outcome is reproduced through the executor's frameBuilder seam; the
-        // end-to-end real-cap behavior (Legacy + destination-read evidence) is pinned by
-        // GPUAllApiBlendSurfaceTest.
+        // copy between them. FP-11 Task 4 admitted that multi-render dst-copy shape on the
+        // prepared direct lane, so the executor now takes the real build and submits the frame
+        // instead of refusing before prepared entry. The fake capabilities collapse the frame
+        // into the single-render shape, so the executor-level behavior (prepare + submit, no
+        // close) is exercised through the default build seam; the end-to-end real-cap pixels are
+        // pinned by GPUAllApiBlendSurfaceTest and GPUPathClipRegressionTest.
         val operations = listOf(
             DisplayOp.DrawRect(
                 Rect.fromLTRB(0f, 0f, 32f, 24f),
@@ -789,21 +789,22 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 ClipStack.WideOpen,
             ),
         )
-        val backend = FakeBackend(capabilities(), FakeSession())
-        val refusal = diagnostic("unsupported.native-core-primitive.multi-render-dst-copy")
+        val session = FakeSession(submissionFactory = { readbackId ->
+            successSubmission(readbackId, ByteArray(32 * 24 * 4))
+        })
+        val backend = FakeBackend(capabilities(), session)
 
-        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
-            GPUPreparedSurfaceFrameExecutor(
-                backendFactory = GPUPreparedSurfaceBackendPortFactory { backend },
-                frameBuilder = { _ ->
-                    GPUPreparedSurfaceFrameBuildResult.Refused(refusal)
-                },
-            ).execute(executionRequest(operations, width = 32, height = 24)),
-        )
+        val result = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        ).execute(executionRequest(operations, width = 32, height = 24))
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result)
 
-        assertEquals("unsupported.native-core-primitive.multi-render-dst-copy", refused.diagnostic.code.value)
-        assertEquals(0, backend.prepareCalls)
-        assertEquals(1, backend.closeCalls)
+        assertEquals(1, success.evidence.destinationSnapshotCreations)
+        assertEquals(1, success.evidence.destinationCopies)
+        assertEquals(0, success.evidence.destinationReadbackSnapshots)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
+        assertEquals(0, session.closeCalls)
     }
 
     @Test

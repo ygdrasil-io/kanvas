@@ -40,7 +40,8 @@ import org.graphiks.kanvas.types.redByte
  *  4. style pass: NORMAL=blurred, SOLID=max(original,blurred),
  *     OUTER=blurred·(1-original), INNER=blurred·original (alpha only)
  *  5. composite: nearest-texel sample of the styled coverage at device pixel
- *     centers, source = linear premul color × coverage, blended into the
+ *     centers (clamp-to-edge for AA-clip lanes, mirroring the composite shader),
+ *     source = linear premul color × coverage, blended into the
  *     destination per the paint blend mode (Porter-Duff for SRC_OVER/SRC,
  *     W3C formula for DARKEN — the composite route's blend oracle math),
  *     encoded linear→sRGB (the surface target is RGBA8_UNORM_SRGB).
@@ -300,12 +301,22 @@ object TopLevelMaskBlurPixelOracle {
         val localH = plan.localHeight
         val srcLinear = source.toLinearPremul()
         val out = UByteArray(targetWidth * targetHeight * 4)
+        // An AA analytic clip folds into the composite SHADER: the styled mask is sampled
+        // from a fullscreen triangle with a clamp-to-edge sampler (the composite's
+        // `maskSampler`), so a pixel center exactly ON the device-bounds edge still reads
+        // the edge texel instead of hard zero. The oracle mirrors that for AA-clip lanes
+        // (the non-AA clip and no-clip lanes keep the strict in-bounds gate). The clip
+        // coverage is the shader's two-sided SDF ramp `0.5 - distance`, symmetric about
+        // each edge: half-integer bounds place pixel centers on the ramp at 0.5 coverage,
+        // and fractional bounds in (k+0.5, k+1) leave exterior half-pixels inside the ramp
+        // (e.g. `0.5 - (x - left)` at the left edge) — both oracle-exact.
+        val aaClip = clip?.antiAlias == true
         for (y in 0 until targetHeight) {
             for (x in 0 until targetWidth) {
                 val px = x + 0.5f
                 val py = y + 0.5f
                 val inBounds = px >= bounds.left && px < bounds.right && py >= bounds.top && py < bounds.bottom
-                var coverage = if (inBounds) {
+                var coverage = if (inBounds || aaClip) {
                     val u = ((px - bounds.left) / (bounds.right - bounds.left) * localW).toInt()
                     val v = ((py - bounds.top) / (bounds.bottom - bounds.top) * localH).toInt()
                     val tu = u.coerceIn(0, localW - 1)
@@ -315,9 +326,15 @@ object TopLevelMaskBlurPixelOracle {
                     0f
                 }
                 clip?.let { rect ->
-                    if (px < rect.left || px >= rect.right || py < rect.top || py >= rect.bottom) {
-                        coverage = 0f
-                    } else if (rect.antiAlias) {
+                    if (!rect.antiAlias) {
+                        if (px < rect.left || px >= rect.right || py < rect.top || py >= rect.bottom) {
+                            coverage = 0f
+                        }
+                    } else {
+                        // Two-sided SDF mirror: the ramp is symmetric about each edge, so a
+                        // pixel center exactly ON the clip bound (half-integer bounds) gets
+                        // 0.5 coverage and exterior half-pixels inside the ramp keep the
+                        // `0.5 - distance` falloff instead of hard zero.
                         val xEdge = min(px - rect.left + 0.5f, rect.right - px + 0.5f)
                         val yEdge = min(py - rect.top + 0.5f, rect.bottom - py + 0.5f)
                         coverage *= min(1f, min(xEdge, yEdge).coerceIn(0f, 1f))

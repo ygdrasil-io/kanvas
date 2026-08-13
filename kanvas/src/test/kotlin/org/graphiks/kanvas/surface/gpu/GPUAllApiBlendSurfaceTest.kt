@@ -567,30 +567,74 @@ class GPUAllApiBlendSurfaceTest {
             }
         }
         if (api.name !in IMAGE_API_NAMES) {
-            // Core primitives after the FP-09 Task 5 route collapse. Every
-            // before-entry refusal is now Terminal, so each shape family refuses
-            // with the exact recording/builder code the evidence run produced:
-            // hairline points always; rrects always (the analytic-shape uniform80
-            // mixes with the rect background layout); rect/color/draw-path/drrect
-            // per clip context and blend family. Cases that still render prepared
-            // stay null so the pixel oracle keeps proving them.
+            // Core primitives after the FP-09 Task 5 route collapse and the FP-11 Task 6
+            // layout split. Every before-entry refusal is now Terminal, so each shape family
+            // refuses with the exact recording/builder code the evidence run produced: the
+            // rrect analytic-shape (uniform80) pass splits from the uniform32 destination
+            // pass for the fixed blends (renders Prepared); the analytic-clip (uniform64/
+            // uniform160) split remains pinned on the mixed-layout refusal (deterministic
+            // residual: bypassing the gate fails the fixed-function non-SRC_OVER rows with
+            // GPUOwnedNativeCloseIncompleteException on failed.surface.prepared.session-close
+            // until the per-step continuation design lands — Task 8 B-row); hairline points
+            // render prepared as one-device-px squares except where the clip or the dst-read
+            // two-render frame keeps them terminal. Cases that still render prepared stay
+            // null so the pixel oracle keeps proving them.
             return when (api.name) {
                 "Clear" -> null
-                "DrawPoint", "DrawPoints" ->
-                    ProductRouteExpectation.Terminal(PREPARED_POINT_HAIRLINE_REFUSAL)
-                "DrawRRect" ->
-                    ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
-                "DrawRect", "DrawColor" -> when {
+                "DrawPoint", "DrawPoints" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
                         ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES -> if (api.name == "DrawPoint") {
+                        // The DrawPoint fixture draws three separate point commands, so its
+                        // dst-read frame is a four-render shape whose direct-resource seal
+                        // fails before the two-render dst-copy admission.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    } else {
+                        // FP-11 Task 4: the single DrawPoints command splits into the admitted
+                        // two-render dst-copy shape (destination pass, ordered snapshot copy,
+                        // consuming pass) on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
+                    }
+                    else -> null
+                }
+                "DrawRRect" -> when {
+                    context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-shape rrect under the analytic AA mask
+                        // clip stays on the mixed-layout refusal (Task 8 B-row mixed-layout residual).
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                    mode == BlendMode.DST ->
+                        // The DST rrect pass cannot exact its shared geometry slab authority.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    mode.recordsDestinationRead() ->
+                        // FP-11 Task 6: the split dst-read rrect consumer stays on the
+                        // frame-global pipeline boundary (no closed analytic-shape dst-read
+                        // formula pipeline on the prepared lane).
+                        ProductRouteExpectation.Terminal(PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL)
+                    else ->
+                        // FP-11 Task 6: the rrect analytic-shape pass splits from the
+                        // uniform32 destination pass, so the fixed-blend rrect rows render
+                        // Prepared.
+                        null
+                }
+                "DrawRect", "DrawColor" -> when {
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
+                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                    context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-clip rect pass split remains pinned on
+                        // the mixed-layout refusal (Task 8 B-row mixed-layout residual).
+                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        ProductRouteExpectation.Terminal(PREPARED_MULTI_RENDER_DST_COPY_REFUSAL)
+                        // FP-11 Task 4: the two-render dst-copy shape (destination pass, ordered
+                        // snapshot copy, consuming pass) is admitted on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
                     else -> null
                 }
                 "DrawPath", "DrawDRRect" -> when {
                     context == BlendContext.ALPHA_MASK ->
+                        // FP-11 Task 6: the analytic-clip path pair pass remains pinned on the
+                        // mixed-layout refusal (Task 8 B-row mixed-layout residual).
                         ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
                         ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
@@ -887,6 +931,10 @@ class GPUAllApiBlendSurfaceTest {
     private fun BlendMode.requiresDestinationRead(): Boolean =
         toGpuBlendFacts().needsDestinationTexture()
 
+    /** The recorded core lane treats PLUS as a destination-read formula, matching the evidence. */
+    private fun BlendMode.recordsDestinationRead(): Boolean =
+        requiresDestinationRead() || this == BlendMode.PLUS
+
     private data class BlendCase(
         val name: String,
         val sample: Point,
@@ -977,19 +1025,20 @@ class GPUAllApiBlendSurfaceTest {
         )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
-        const val PREPARED_POINT_HAIRLINE_REFUSAL =
-            "unsupported.core_primitive.point.hairline_exact_lowering"
         const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
             "unsupported.recording.core_primitive_mixed_uniform_layouts"
+        const val PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL =
+            "unsupported.native-core-primitive.frame-global-pipeline"
         const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
-        const val PREPARED_MULTI_RENDER_DST_COPY_REFUSAL =
-            "unsupported.native-core-primitive.multi-render-dst-copy"
+        const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
+            "invalid.preflight.core_primitive_direct_geometry_resources"
         const val PREPARED_PATH_DST_READ_REFUSAL =
             "unsupported.native-core-primitive.path-destination-read"
-        // The 15 dst-read modes that the direct lane refuses for a two-draw frame:
-        // every artistic mode except SCREEN (whose formula program is implemented)
-        // plus PLUS. Matches the evidence run's multi-render-dst-copy case list.
+        // The 15 dst-read modes whose two-draw frames route through the FP-11 Task 4
+        // multi-render dst-copy admission: every artistic mode except SCREEN (whose formula
+        // program is implemented) plus PLUS. Matches the FP-09 evidence run's
+        // multi-render-dst-copy case list.
         val MULTI_RENDER_DST_COPY_MODES = (ARTISTIC_MODES - BlendMode.SCREEN) + BlendMode.PLUS
 
         @AfterAll

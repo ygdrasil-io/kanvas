@@ -441,7 +441,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             key.uniformLayout,
         )
         assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
         assertEquals(8uL, descriptor.vertex.buffers.single().arrayStride)
@@ -576,7 +576,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             )
         }
         assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
     @Test
@@ -734,7 +734,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             }
         }
         assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
     @Test

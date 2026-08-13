@@ -29,9 +29,11 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawImageRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -1770,6 +1772,7 @@ internal enum class PreparedSurfaceFixtureShape {
     DirectImagePath,
     PathImageDirect,
     ImageOnly,
+    DstReadCore,
 }
 
 internal data class PreparedSurfacePreflightFixture(
@@ -1831,6 +1834,10 @@ internal fun preparedSurfacePreflightFixture(
         )
         PreparedSurfaceFixtureShape.ImageOnly -> listOf(
             preparedSurfaceImageCommand(0, 0),
+        )
+        PreparedSurfaceFixtureShape.DstReadCore -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceDstReadCoreCommand(1, 1),
         )
     }
     val recording = GPURecorder(
@@ -2945,6 +2952,18 @@ private fun preparedSurfaceCoreCommand(commandId: Int, paintOrder: Int) =
         target = PREPARED_SURFACE_TARGET,
         material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
         paintOrder = paintOrder,
+        source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
+    )
+
+/** Destination-reading core command (DARKEN over the destination) for the multi-render dst-copy shape. */
+private fun preparedSurfaceDstReadCoreCommand(commandId: Int, paintOrder: Int) =
+    GPUFillRectCommandBuilder.build(
+        commandId = GPUDrawCommandID(commandId),
+        rect = GPURect(1f, 1f, 8f, 8f),
+        target = PREPARED_SURFACE_TARGET,
+        material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+        paintOrder = paintOrder,
+        blend = GPUBlendFacts(GPUBlendMode.DARKEN, GPUSourceAlphaClassification.Translucent),
         source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
     )
 
