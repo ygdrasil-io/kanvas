@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.MASK_BLUR_COMPOSITE_RENDER_STEP
 import org.graphiks.kanvas.gpu.renderer.payloads.maskBlurStageFromRenderStepId
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeRectClip
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_H_STEP
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_V_STEP
@@ -34,7 +35,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_TARGET_STA
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeClipRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeRectClipOrNull
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeRectClip
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -442,8 +442,8 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         if (unsupportedClipComposite != null) {
             return refused(
                 "unsupported.native-mask-blur.clip",
-                "The top-level mask blur composite applies only NoClip or ScissorOnly clip execution; " +
-                    "the composite clip is outside the lane scope.",
+                "The top-level mask blur composite applies only NoClip, ScissorOnly, or analytic device-rect clip execution; " +
+                    "stencil, coverage-mask, and complex clip plans are outside the lane scope.",
             )
         }
         val dstReadComposites = chains.filter { chain ->
@@ -795,7 +795,13 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             // uniform64 clip block (mirroring the core lane's analytic clip ABI) so the
             // dst-read composite shader multiplies the blurred mask coverage by the
             // clip coverage. The shared dst bind group follows the existing first-chain
-            // dst uniform authority for multi-chain dst-read frames.
+            // dst uniform authority for multi-chain dst-read frames: it binds the FIRST
+            // chain's clip uniform AND the first-chain clip dst pipeline for ALL dst-read
+            // chains. If heterogeneous clip admission ever reaches the dst-read lane (e.g.
+            // chain 2 has a wide-open composite while chain 1 carries a device-rect clip),
+            // chain 2 would render with chain 1's clip — wrong-render risk. The single-chain
+            // dst-read lane is the tested surface; do NOT widen dst-read clip admission
+            // without splitting the bind group per chain.
             val dstReadClip = compositeEntries.first().rectClip
             val dstBindGroup = device.createBindGroup(
                 BindGroupDescriptor(

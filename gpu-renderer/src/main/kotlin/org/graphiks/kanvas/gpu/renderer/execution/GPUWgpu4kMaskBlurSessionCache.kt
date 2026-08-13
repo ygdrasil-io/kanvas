@@ -951,9 +951,16 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 /**
  * Static scene composite with an analytic device-rect clip (Task 7): the blurred mask
  * coverage is multiplied by the analytic clip coverage (the same rect signed-distance
- * AA math as the core lane's `CorePrimitiveAnalyticClipBlock`, which matches the
- * `TopLevelMaskBlurPixelOracle.RectClip(antiAlias = true)` linear falloff at pixel
- * centers) before the color shade with the pipeline blend state (SRC_OVER or SRC).
+ * AA math as the core lane's `CorePrimitiveAnalyticClipBlock`, evaluated at pixel
+ * centers as `clamp(0.5 - distance, 0, 1)` and symmetric about each edge). The
+ * `TopLevelMaskBlurPixelOracle.RectClip(antiAlias = true)` reference mirrors this
+ * two-sided SDF with clamp-to-edge styled sampling, so the covered contract is
+ * oracle-exact for integer and half-integer clip bounds: half-integer bounds place
+ * pixel centers exactly ON the ramp (coverage 0.5), where a one-sided oracle
+ * convention (hard zero outside the rect) would expect 0. Fractional bounds in
+ * (k+0.5, k+1) leave exterior half-pixels inside the ramp (the GPU renders
+ * `0.5 - (x - left)` coverage at the left edge, `0.5 - (right - x)` at the right),
+ * and the oracle models that two-sided falloff exactly.
  */
 internal val MASK_BLUR_COMPOSITE_CLIP_WGSL: String = """
 struct CompositeUniforms {

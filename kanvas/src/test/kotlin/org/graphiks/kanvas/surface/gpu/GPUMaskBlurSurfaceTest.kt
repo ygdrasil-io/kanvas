@@ -251,6 +251,25 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `mask blur composite clip ramp renders prepared at half integer bounds`() {
+        requireWebGpu()
+        // Integer bounds (14..18) leave every pixel center at least half a pixel from the
+        // clip edge, so both the WGSL `0.5 - distance` ramp and the oracle evaluate to hard
+        // 0/1 and the clip term is numerically redundant. Half-integer bounds place pixel
+        // centers EXACTLY on the clip edge (coverage 0.5): this pins the AA ramp and the
+        // uniform64 packing of fractional bounds (compositeClipUniformBytes).
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(14.5f, 14.5f, 18.5f, 18.5f), ClipOp.INTERSECT, antiAlias = true)
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.RectClip(14.5f, 14.5f, 18.5f, 18.5f, antiAlias = true),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
     fun `destination-read blur with a device clip renders prepared via the copy-then-formula lane`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {
