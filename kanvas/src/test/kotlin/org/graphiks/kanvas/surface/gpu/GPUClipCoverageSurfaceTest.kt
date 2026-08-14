@@ -61,6 +61,8 @@ private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
+private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
+    "unsupported.native-core-primitive.analytic-shape-multi-key"
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -312,7 +314,15 @@ class GPUClipCoverageSurfaceTest {
     fun `AA geometry coverage blends after clear src and dst in`() {
         requireWebGpu()
 
-        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
+        listOf(
+            BlendMode.CLEAR,
+            BlendMode.SRC,
+            BlendMode.DST_IN,
+            BlendMode.SRC_IN,
+            BlendMode.SRC_OUT,
+            BlendMode.DST_ATOP,
+            BlendMode.MODULATE,
+        ).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
@@ -334,6 +344,12 @@ class GPUClipCoverageSurfaceTest {
                     BlendMode.CLEAR -> Color.fromArgb(128, 188, 188, 188)
                     BlendMode.SRC -> Color.fromArgb(255, 255, 188, 188)
                     BlendMode.DST_IN -> Color.WHITE
+                    // SRC_IN/MODULATE over an opaque destination interpolate to the same
+                    // half-coverage RED edge as SRC; SRC_OUT clears the destination like CLEAR;
+                    // DST_ATOP with an opaque source preserves the destination like DST_IN.
+                    BlendMode.SRC_IN, BlendMode.MODULATE -> Color.fromArgb(255, 255, 188, 188)
+                    BlendMode.SRC_OUT -> Color.fromArgb(128, 188, 188, 188)
+                    BlendMode.DST_ATOP -> Color.WHITE
                     else -> error("unexpected test mode: $blendMode")
                 },
             )
@@ -362,6 +378,27 @@ class GPUClipCoverageSurfaceTest {
             assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
             assertRgbaNear(result.pixels, 16, 3, 8, Color.WHITE)
         }
+    }
+
+    @Test
+    fun `two aa rects with fixed function blends stay terminal on the multi key analytic shape refusal`() {
+        requireWebGpu()
+        // Both rects are analytic-shape (antiAlias defaults true) and both blends are
+        // modulate-compatible fixed-function (SRC_OVER / DST_OVER), so the frame seals one
+        // multi-key analytic-shape pass. Only the dst-read geometric modes closed in FP-13 Task 4;
+        // the fixed-function multi-key AA family stays refused with its stable code.
+        val surface = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                drawRect(
+                    Rect(3.5f, 2f, 14f, 14f),
+                    Paint.fill(Color.RED).copy(blendMode = BlendMode.DST_OVER, antiAlias = true),
+                )
+            }
+            this
+        }
+
+        assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
     }
 
     @Test
@@ -427,9 +464,9 @@ class GPUClipCoverageSurfaceTest {
     fun `clear and color dodge use their mapped clip composition routes`() {
         requireWebGpu()
 
-        // CLEAR rides the direct lane prepared; COLOR_DODGE uses the analytic-shape
-        // destination-read formula program (FP-13 Task 3) and composes over the transparent
-        // snapshot (COLOR_DODGE(src, transparent) = src = RED).
+        // CLEAR now rides the analytic-shape destination-read formula (FP-13 Task 4) and
+        // COLOR_DODGE the same (FP-13 Task 3); both compose over the transparent snapshot
+        // (CLEAR(src, transparent) = transparent; COLOR_DODGE(src, transparent) = src = RED).
         val clear = Surface(16, 16).run {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR))
