@@ -223,6 +223,18 @@ pixelExact=true
 `reference.png` vs `render.png` (`64x64`, RGBA8): `mismatched=0
 maxChannelDelta=0`, `render(0,0)=(0,0,0,0)` (transparent background).
 
+> **Final-review correction (2026-08-14):** the committed scene artifacts under
+> `reports/gpu-renderer-scenes/offscreen/colr-v0-color-glyph/` were regenerated on
+> this llvmpipe machine (the earlier committed `render.png`/`reference.png` were
+> stale base artifacts and `adapter=Apple M2 Max` was a misattributed base label).
+> The regenerated `diagnostics.txt`/`run.json` now read
+> `adapter=llvmpipe/llvmpipe (LLVM 21.1.8, 256 bits) desc=Mesa 26.0.3-1ubuntu1
+> (LLVM 21.1.8)` with `pixelExact=4096/4096`, `nonTransparentPixels=573` (the
+> transparent-clear glyph), and `render.png`/`reference.png` are byte-identical —
+> so §1.4's `mismatched=0` claim now matches the committed bytes. See "Final
+> review fixes" at the end of this document.
+
+
 ### 1.5 Full module regression
 
 ```bash
@@ -1509,3 +1521,58 @@ are removed from the transfers list.
 - Label-drift rulings recorded in the SDD ledger (Task 3/4 mapped-route vs clip-suite
   rows; Task 4 blend-matrix vs clip-suite multi-key) are resolved: the actual closed rows
   are the clip-suite pins, matching `residual-inventory.csv`.
+
+## Final review fixes
+
+Two Important whole-branch review findings, both addressed without touching any
+pinned baseline, guard, or threshold.
+
+### Finding A — colr-v0 scene artifacts regenerated on llvmpipe
+
+The committed `colr-v0-color-glyph` artifacts carried a stale `adapter=Apple M2
+Max` label and base-identical `render.png`/`reference.png` that could not reflect
+either the pre-fix 38/4096 divergence or the post-fix llvmpipe state. Regenerated
+on this machine:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer-scenes:renderGpuRendererSceneOffscreen \
+  -PsceneId=colr-v0-color-glyph --no-parallel --console=plain
+```
+
+Result: `diagnostics.txt`/`run.json` now read
+`adapter=llvmpipe/llvmpipe (LLVM 21.1.8, 256 bits) desc=Mesa 26.0.3-1ubuntu1
+(LLVM 21.1.8)`, `colorTextRun:pixelExact=4096/4096`,
+`nonTransparentPixels=573`; `parity.txt` reads `matchingPixels=4096/4096`,
+`pixelExact=true`; `render.png`/`reference.png` are byte-identical (both 707
+bytes, regenerated). §1.4 was amended to note the regeneration. No test or
+production code touched.
+
+### Finding B — AnalyticMultiRect lowering scoped to the blur composite lane
+
+`toAnalyticMultiRectOrNull()` ran in the shared `GPUOpMapper.toMaskExecutionPlan`,
+so a `rect INTERSECT + axis-aligned-orthogonal-polygon DIFFERENCE` clip lowered to
+`AnalyticMultiRect` for every consumer; a non-blur direct draw under that shape
+hit `corePrimitiveStructuralClip() → Clip.Refused` (`unsupported.native-core-
+primitive.clip`) instead of its prior CoverageMask route.
+
+Fix (`kanvas/.../GPUOpMapper.kt`): `toExecutionPlan` / `toMaskExecutionPlan` now
+take an `admitAnalyticMultiRect` flag, defaulting to `false` (text and any other
+non-blur consumer keep CoverageMask). `lowerPreparedCoreVisual` passes `true`
+only for a draw whose normalized command carries a mask filter
+(`rawNormalized.hasBlurMaskFilter()`). The INTERSECT-polygon and
+non-simple-Winding guards stay intact behind the flag.
+
+Regression pin (`GPUClipCoverageSurfaceTest.kt` `non blur core draw under a rect
+plus polygon difference clip stays on the coverage mask route`): a non-blur
+non-AA rect under the rect + orthogonal-polygon DIFFERENCE clip now refuses with
+the documented CoverageMask-route code
+`unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable`
+(the path-carrying mask requires the B3.4 topology), not the
+`AnalyticMultiRect → Clip.Refused` code.
+
+Covering runs: `GPUClipCoverageSurfaceTest` 44/44, `GPUMaskBlurSurfaceTest`
+20/20 (the Task 5 closed pins stay green), `GPUFramePreflighterTest` 110/110,
+`GPUAllApiBlendSurfaceTest` 1864/1864; `:gpu-renderer:test` 3304 (1 documented
+package-boundary baseline), `:kanvas:test` 3238 (1 documented image-pixel UNORM
+baseline; one `GPUAllApiBlendSurfaceTest` session-close flake observed in a first
+full run and clean in isolation + re-run), `:gpu-renderer-scenes:test` 274/274.
