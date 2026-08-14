@@ -7,6 +7,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
@@ -59,8 +60,6 @@ private const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
     "unsupported.recording.core_primitive_mixed_uniform_layouts"
 private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
-private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
-    "invalid.preflight.core_primitive_clip_producer_authority"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 
@@ -163,37 +162,39 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip blur is terminal at the clip producer preflight`() {
-        // FP-09 Task 11 admitted top-level blur (the frame records the mask blur
-        // chain), but the complex clip (AA rect intersect + path difference) plans a
-        // coverage-mask clip whose producer route rejects the blur composite consumer
-        // (invalid.preflight.core_primitive_clip_producer_authority). The combination
-        // stays terminal with evidence; the lane's composite applies NoClip or
-        // integer ScissorOnly clips only.
-        assertTerminal(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL) {
-            renderBlurredDifferenceClipScene()
-        }
+    fun `complex clip blur renders prepared under a multi rect analytic clip`() {
+        // FP-13 Task 5: the rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
+        // orthogonal polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage for the
+        // blur composite, which folds the per-rect coverage into the blurred mask.
+        val result = renderBlurredDifferenceClipScene()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(complexClipBlurOracle(sigma = 2f), result.pixels)
     }
 
     @Test
-    fun `complex mask blur frames are terminal at the clip producer preflight`() {
+    fun `complex mask blur frames render prepared with the multi rect analytic clip`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         session!!
         val readbacksBefore = session.runtimeTelemetry.destinationReadbackSnapshots
+        val copiesBefore = session.runtimeTelemetry.destinationCopies
 
-        // The refusal is sigma-independent: every complex-clip mask blur frame
-        // terminates at the coverage-mask clip producer preflight, and the refusal
-        // must not allocate a destination readback.
-        val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            renderBlurredDifferenceClipScene(sigma = 1.5f)
-        }
-        assertEquals(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL, terminal.diagnostic.code.value)
+        // The refusal is gone: every complex-clip mask blur frame now renders through the
+        // multi-rect analytic composite. The blur lane's destination-read composite allocates a
+        // NATIVE destination copy (destinationCopies), never a legacy CPU readback snapshot
+        // (destinationReadbackSnapshots stays unchanged for the rendered lane).
+        val result = renderBlurredDifferenceClipScene(sigma = 1.5f)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertEquals(
             readbacksBefore,
             session.runtimeTelemetry.destinationReadbackSnapshots,
-            "a terminal mask blur frame allocated a destination readback before refusal",
+            "a rendered mask blur frame must not allocate a legacy destination readback snapshot",
         )
+        assertTrue(
+            session.runtimeTelemetry.destinationCopies > copiesBefore,
+            "the rendered mask blur frame must allocate its native destination copy",
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(complexClipBlurOracle(sigma = 1.5f), result.pixels)
     }
 
     @Test
@@ -1384,6 +1385,56 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
         render()
+    }
+
+    /**
+     * CPU-oracle reference for [renderBlurredDifferenceClipScene]: the same DARKEN blur over
+     * the translucent background, with the rect-decomposed complex clip folded as ordered
+     * INTERSECT/DIFFERENCE rect coverage. The L-shape DIFFERENCE polygon decomposes into the
+     * two band rects [5,4,12,8] and [5,8,9,12]. The destination snapshot carries the literal
+     * unpremultiplied sRGB background bytes (the solid-fill lane stores the color as-is; the
+     * composite decodes sRGB on read), matching the observed GPU store.
+     */
+    private fun complexClipBlurOracle(sigma: Float): UByteArray {
+        val background = Color.fromArgb(128, 32, 64, 192)
+        val destination = UByteArray(16 * 16 * 4) { index ->
+            when (index % 4) {
+                0 -> background.redByte.toUByte()
+                1 -> background.greenByte.toUByte()
+                2 -> background.blueByte.toUByte()
+                else -> background.alphaByte.toUByte()
+            }
+        }
+        return TopLevelMaskBlurPixelOracle.render(
+            targetWidth = 16,
+            targetHeight = 16,
+            shape = TopLevelMaskBlurPixelOracle.Shape.Rect(4f, 4f, 12f, 12f),
+            clipBounds = GPUBounds(0f, 0f, 16f, 16f),
+            style = BlurStyle.NORMAL,
+            sigma = sigma,
+            source = Color.RED,
+            blendMode = BlendMode.DARKEN,
+            destinationEncoded = destination,
+            clip = TopLevelMaskBlurPixelOracle.ComplexClip(
+                listOf(
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        1f, 1f, 15f, 15f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Intersect,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        5f, 4f, 12f, 8f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        5f, 8f, 9f, 12f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                ),
+            ),
+        )
     }
 
     private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {

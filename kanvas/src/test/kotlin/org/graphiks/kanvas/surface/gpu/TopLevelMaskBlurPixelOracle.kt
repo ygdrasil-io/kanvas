@@ -126,7 +126,39 @@ object TopLevelMaskBlurPixelOracle {
     }
 
     /** Clip applied to the blur composite (device-rect scissor semantics). */
-    data class RectClip(val left: Float, val top: Float, val right: Float, val bottom: Float, val antiAlias: Boolean)
+    sealed interface Clip
+
+    /** One analytic device-rect clip (Task 7 single-rect lane scope). */
+    data class RectClip(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val antiAlias: Boolean,
+    ) : Clip
+
+    /**
+     * One ordered multi-rect analytic clip (FP-13 Task 5): an INTERSECT rect folds
+     * the per-rect coverage in, a DIFFERENCE rect folds one-minus-coverage in, both
+     * evaluated with the same two-sided SDF ramp as [RectClip] at pixel centers.
+     */
+    data class ComplexClip(val elements: List<ComplexClipElement>) : Clip {
+        init {
+            require(elements.isNotEmpty()) { "ComplexClip requires at least one element" }
+        }
+    }
+
+    /** One ordered element of a [ComplexClip]. */
+    data class ComplexClipElement(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val operation: ComplexClipOperation,
+        val antiAlias: Boolean,
+    )
+
+    enum class ComplexClipOperation { Intersect, Difference }
 
     /** Renders the full blur chain and returns the expected encoded RGBA target pixels. */
     fun render(
@@ -140,9 +172,9 @@ object TopLevelMaskBlurPixelOracle {
         blendMode: BlendMode,
         destinationEncoded: UByteArray,
         maxIntermediateBytes: Long = Long.MAX_VALUE,
-        clip: RectClip? = null,
+        clip: Clip? = null,
     ): UByteArray {
-        val planClipBounds = clip?.let { rect ->
+        val planClipBounds = (clip as? RectClip)?.let { rect ->
             GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
         } ?: clipBounds
         val plan = planShape(
@@ -294,7 +326,7 @@ object TopLevelMaskBlurPixelOracle {
         destinationEncoded: UByteArray,
         targetWidth: Int,
         targetHeight: Int,
-        clip: RectClip?,
+        clip: Clip?,
     ): UByteArray {
         val bounds = plan.deviceBounds
         val localW = plan.localWidth
@@ -310,7 +342,7 @@ object TopLevelMaskBlurPixelOracle {
         // each edge: half-integer bounds place pixel centers on the ramp at 0.5 coverage,
         // and fractional bounds in (k+0.5, k+1) leave exterior half-pixels inside the ramp
         // (e.g. `0.5 - (x - left)` at the left edge) — both oracle-exact.
-        val aaClip = clip?.antiAlias == true
+        val aaClip = clipAntiAliased(clip)
         for (y in 0 until targetHeight) {
             for (x in 0 until targetWidth) {
                 val px = x + 0.5f
@@ -325,20 +357,21 @@ object TopLevelMaskBlurPixelOracle {
                 } else {
                     0f
                 }
-                clip?.let { rect ->
-                    if (!rect.antiAlias) {
-                        if (px < rect.left || px >= rect.right || py < rect.top || py >= rect.bottom) {
-                            coverage = 0f
+                when (clip) {
+                    is RectClip -> coverage *= rectClipCoverage(
+                        px, py, clip.left, clip.top, clip.right, clip.bottom, clip.antiAlias,
+                    )
+                    is ComplexClip -> clip.elements.forEach { element ->
+                        val elementCoverage = rectClipCoverage(
+                            px, py, element.left, element.top, element.right, element.bottom,
+                            element.antiAlias,
+                        )
+                        coverage *= when (element.operation) {
+                            ComplexClipOperation.Intersect -> elementCoverage
+                            ComplexClipOperation.Difference -> 1f - elementCoverage
                         }
-                    } else {
-                        // Two-sided SDF mirror: the ramp is symmetric about each edge, so a
-                        // pixel center exactly ON the clip bound (half-integer bounds) gets
-                        // 0.5 coverage and exterior half-pixels inside the ramp keep the
-                        // `0.5 - distance` falloff instead of hard zero.
-                        val xEdge = min(px - rect.left + 0.5f, rect.right - px + 0.5f)
-                        val yEdge = min(py - rect.top + 0.5f, rect.bottom - py + 0.5f)
-                        coverage *= min(1f, min(xEdge, yEdge).coerceIn(0f, 1f))
                     }
+                    null -> Unit
                 }
                 val dstIndex = (y * targetWidth + x) * 4
                 val dstEncoded = FloatArray(4) { channel ->
@@ -400,6 +433,34 @@ object TopLevelMaskBlurPixelOracle {
             }
         }
         return out
+    }
+
+    private fun clipAntiAliased(clip: Clip?): Boolean = when (clip) {
+        null -> false
+        is RectClip -> clip.antiAlias
+        is ComplexClip -> clip.elements.all { it.antiAlias }
+    }
+
+    /**
+     * One rect's two-sided SDF coverage at a pixel center, mirroring the composite
+     * shader's `rect_coverage`: non-AA is a hard inside test, AA is the symmetric
+     * `clamp(0.5 - distance, 0, 1)` ramp (a pixel center exactly on an edge gets 0.5).
+     */
+    private fun rectClipCoverage(
+        px: Float,
+        py: Float,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        antiAlias: Boolean,
+    ): Float {
+        if (!antiAlias) {
+            return if (px < left || px >= right || py < top || py >= bottom) 0f else 1f
+        }
+        val xEdge = min(px - left + 0.5f, right - px + 0.5f)
+        val yEdge = min(py - top + 0.5f, bottom - py + 0.5f)
+        return min(1f, min(xEdge, yEdge).coerceIn(0f, 1f))
     }
 
     // --- blend math (composite route oracle: Porter-Duff + W3C formulas, linear) ---

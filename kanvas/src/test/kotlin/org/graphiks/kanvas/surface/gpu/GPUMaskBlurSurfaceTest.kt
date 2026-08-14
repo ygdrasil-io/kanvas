@@ -270,6 +270,55 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `mask blur composite under a multi rect analytic clip renders prepared`() {
+        requireWebGpu()
+        // FP-13 Task 5: a rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
+        // orthogonal polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage for the
+        // blur composite; the L-shape DIFFERENCE polygon decomposes into the band rects
+        // [10,8,24,16] and [10,16,18,24].
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
+            clipPath(
+                Path {
+                    moveTo(10f, 8f)
+                    lineTo(24f, 8f)
+                    lineTo(24f, 16f)
+                    lineTo(18f, 16f)
+                    lineTo(18f, 24f)
+                    lineTo(10f, 24f)
+                    close()
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = true,
+            )
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.ComplexClip(
+                listOf(
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        1f, 1f, 31f, 31f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Intersect,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        10f, 8f, 24f, 16f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        10f, 16f, 18f, 24f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                ),
+            ),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
     fun `destination-read blur with a device clip renders prepared via the copy-then-formula lane`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {
