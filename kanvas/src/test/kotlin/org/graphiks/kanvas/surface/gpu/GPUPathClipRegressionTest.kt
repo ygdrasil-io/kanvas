@@ -22,22 +22,20 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `device rect clip path frame refuses with the mixed uniform layouts code`() {
+    fun `device rect clip path frame refuses with the path stencil code`() {
         requireWebGpu()
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
-        // the mixed-layout refusal pending the per-step continuation design (the materializer
-        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
-        // split itself is not wired). Pre-FP-09 the legacy renderer rendered this frame
+        // FP-13 Task 6: the AA background (uniform80) and the analytic-clipped path pair now
+        // split into separate layout runs, but the path-stencil cover under an analytic clip
+        // still cannot exact the exactly-one-path-pass authority, so the frame re-points to the
+        // path-stencil preflight refusal. Pre-FP-09 the legacy renderer rendered this frame
         // (green at the FP-08 tip accaea616); the route collapse converted it to this stable
-        // code (Task 6 evidence family 4).
+        // code.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    // The AA background paint (Paint.fill default) keeps this frame on the
-                    // mixed-layout refusal through the analytic-shape/analytic-clip mix gate;
-                    // a hard background would reach the same pinned code through the 64-mix
-                    // gate, so the input shape is irrelevant to the pinned outcome.
+                    // The AA background paint (Paint.fill default) splits into its own uniform80
+                    // layout run; the clipped path pair is the path-analytic-clip run.
                     drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                     save()
                     clipRect(Rect(8f, 8f, 24f, 24f))
@@ -56,7 +54,7 @@ class GPUPathClipRegressionTest {
             }
         }
         assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "invalid.preflight.core_primitive_path_stencil",
             failure.diagnostic.code.value,
         )
     }

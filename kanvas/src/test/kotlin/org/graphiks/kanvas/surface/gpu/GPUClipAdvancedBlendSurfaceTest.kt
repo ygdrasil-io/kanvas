@@ -27,7 +27,7 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun `clipped destination-read blends refuse with the mixed uniform layouts code before native work`() {
+    fun `clipped destination-read blends refuse with the analytic shape clip code before native work`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         val before = session!!.runtimeTelemetry
@@ -43,18 +43,17 @@ class GPUClipAdvancedBlendSurfaceTest {
             BlendMode.EXCLUSION,
         )
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
-        // the mixed-layout refusal pending the per-step continuation design (the materializer
-        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
-        // split itself is not wired). Pre-FP-09 these frames rendered via the legacy renderer
-        // (green at the FP-08 tip accaea616); the route collapse converted them to this
-        // stable code (Task 6 evidence family 4).
+        // FP-13 Task 6: the default-AA (ScalarAA) source rect lowers to the analytic-shape
+        // (uniform80) lane, which cannot combine with the analytic-clip uniform64 authority in
+        // one draw; the single-draw mixed-layout gate is retired, so these frames re-point to
+        // the analytic-shape clip refusal (NoClip or ScissorOnly execution). Pre-FP-09 these
+        // frames rendered via the legacy renderer (green at the FP-08 tip accaea616).
         expectedByMode.forEach { mode ->
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 renderClippedBlend(destination, source, mode)
             }
             assertEquals(
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
+                "unsupported.recording.core_primitive_analytic_shape_clip",
                 failure.diagnostic.code.value,
             )
         }

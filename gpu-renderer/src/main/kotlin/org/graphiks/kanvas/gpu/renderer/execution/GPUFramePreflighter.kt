@@ -4221,13 +4221,27 @@ internal class GPUFramePreflighter(
                         stepAcceptedIndices.associate { accepted[it].packet.commandIdValue to accepted[it].semantic },
                     )
                 }
-                // The analytic-clip (uniform64 / uniform160) pass split remains pinned on the
-                // recording's mixed-layout refusal (Task 8 B-row: the split lane leaks a native
-                // session owner for fixed-function analytic-clip passes), so every frame that
-                // reaches this seal construction owns at most one uniform64/uniform160 step and
-                // retains the frame-level seals unchanged.
-                val stepAnalyticClipSeals = stepAuthority.analyticClipSeals
-                val stepAnalyticIntersectionSeals = stepAuthority.analyticIntersectionSeals
+                // FP-13 Task 6: when a frame owns multiple uniform64/uniform160 steps (the
+                // analytic-clip split), each step's seals are rebased to a zero-based sliced slab
+                // so the per-render-scope run materializer binds exact offsets (fp-11 §4 per-step
+                // continuation/ownership design). A single-step frame retains its frame-level
+                // seals unchanged.
+                val stepAnalyticClipSeals = if (analyticClipSteps.size <= 1) {
+                    stepAuthority.analyticClipSeals
+                } else {
+                    sliceAnalyticClipUniformSealsToCommands(
+                        stepAuthority.analyticClipSeals,
+                        stepCommandIdsByIndex.getValue(stepIndex),
+                    )
+                }
+                val stepAnalyticIntersectionSeals = if (analyticIntersectionSteps.size <= 1) {
+                    stepAuthority.analyticIntersectionSeals
+                } else {
+                    sliceAnalyticIntersectionUniformSealsToCommands(
+                        stepAuthority.analyticIntersectionSeals,
+                        stepCommandIdsByIndex.getValue(stepIndex),
+                    )
+                }
                 val stepSeal = if (stepMultiKey) {
                     when (stepAuthority.layout) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
@@ -4269,14 +4283,38 @@ internal class GPUFramePreflighter(
                         analyticClipUniformSeals = stepAnalyticClipSeals,
                         analyticClipPackedBytes = if (stepAnalyticClipSeals.isEmpty()) {
                             null
-                        } else {
+                        } else if (analyticClipSteps.size <= 1) {
                             analytic64PackedBytes
+                        } else {
+                            try {
+                                ByteArray(stepAnalyticClipSeals.first().plan.totalBytes.toInt()).also { packed ->
+                                    stepAnalyticClipSeals.forEach { seal ->
+                                        seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+                                    }
+                                }
+                            } catch (_: Throwable) {
+                                return refuseAnalytic(
+                                    "Analytic direct CorePrimitive uniform64 packet ranges cannot form one exact packed slab.",
+                                )
+                            }
                         },
                         analyticIntersectionUniformSeals = stepAnalyticIntersectionSeals,
                         analyticIntersectionPackedBytes = if (stepAnalyticIntersectionSeals.isEmpty()) {
                             null
-                        } else {
+                        } else if (analyticIntersectionSteps.size <= 1) {
                             analytic160PackedBytes
+                        } else {
+                            try {
+                                ByteArray(stepAnalyticIntersectionSeals.first().plan.totalBytes.toInt()).also { packed ->
+                                    stepAnalyticIntersectionSeals.forEach { seal ->
+                                        seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+                                    }
+                                }
+                            } catch (_: Throwable) {
+                                return refuseIntersection(
+                                    "Analytic intersection uniform160 packet ranges cannot form one exact packed slab.",
+                                )
+                            }
                         },
                     )
                 }
@@ -6385,6 +6423,120 @@ internal fun sliceAnalyticShapeUniformSealsToCommands(
                 semanticsByCommandId.getValue(commandId),
             ),
             renderScissor = seal.renderScissor,
+            structuralPipelineKey = seal.structuralPipelineKey,
+            renderPipelineKey = seal.renderPipelineKey,
+            bindingLayoutHash = seal.bindingLayoutHash,
+            resourceGeneration = seal.resourceGeneration,
+            payloadBytes = seal.payloadBytesSnapshot(),
+        )
+    }
+}
+
+/**
+ * Rebases one layout's analytic-clip uniform64 seals to exactly one render scope's commands,
+ * mirroring [sliceAnalyticShapeUniformSealsToCommands]: the step owns a zero-based sliced plan
+ * and its own packed upload so the per-render-scope run materializer binds exact offsets.
+ */
+internal fun sliceAnalyticClipUniformSealsToCommands(
+    seals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+    stepCommandIds: List<Int>,
+): List<GPUCorePrimitiveAnalyticClipUniformSeal> {
+    val framePlan = seals.first().plan
+    val sealByCommand = seals.associateBy { it.commandId }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        val frameSlot = framePlan.slots[seal.slotIndex]
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = frameSlot.slotLabel,
+            payloadHash = frameSlot.payloadHash,
+            payloadBytes = frameSlot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = frameSlot.allocatedBytes,
+        )
+        nextOffset += frameSlot.allocatedBytes
+        rebased
+    }
+    val totalBytes = (
+        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
+        ) * framePlan.alignmentBytes
+    val slicedPlan = GPUUniformSlabPlan(
+        planHash = framePlan.planHash,
+        sourceLabel = framePlan.sourceLabel,
+        deviceGeneration = framePlan.deviceGeneration,
+        alignmentBytes = framePlan.alignmentBytes,
+        totalBytes = totalBytes,
+        uploadBudgetBytes = framePlan.uploadBudgetBytes,
+        slots = slots,
+    )
+    return stepCommandIds.mapIndexed { index, commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        GPUCorePrimitiveAnalyticClipUniformSeal(
+            plan = slicedPlan,
+            slotIndex = index,
+            commandId = seal.commandId,
+            packetId = seal.packetId,
+            clipCanonicalIdentity = seal.clipCanonicalIdentity,
+            clipType = seal.clipType,
+            clipBounds = seal.clipBounds,
+            clipRadii = seal.clipRadii,
+            antiAlias = seal.antiAlias,
+            conservativeScissor = seal.conservativeScissor,
+            structuralPipelineKey = seal.structuralPipelineKey,
+            renderPipelineKey = seal.renderPipelineKey,
+            bindingLayoutHash = seal.bindingLayoutHash,
+            resourceGeneration = seal.resourceGeneration,
+            payloadBytes = seal.payloadBytesSnapshot(),
+        )
+    }
+}
+
+/**
+ * Rebases one layout's analytic-intersection uniform160 seals to exactly one render scope's
+ * commands, mirroring [sliceAnalyticClipUniformSealsToCommands] for the uniform64 lane.
+ */
+internal fun sliceAnalyticIntersectionUniformSealsToCommands(
+    seals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
+    stepCommandIds: List<Int>,
+): List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> {
+    val framePlan = seals.first().plan
+    val sealByCommand = seals.associateBy { it.commandId }
+    var nextOffset = 0L
+    val slots = stepCommandIds.map { commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        val frameSlot = framePlan.slots[seal.slotIndex]
+        val rebased = GPUUniformSlabSlot(
+            slotLabel = frameSlot.slotLabel,
+            payloadHash = frameSlot.payloadHash,
+            payloadBytes = frameSlot.payloadBytes,
+            alignedOffset = nextOffset,
+            allocatedBytes = frameSlot.allocatedBytes,
+        )
+        nextOffset += frameSlot.allocatedBytes
+        rebased
+    }
+    val totalBytes = (
+        (nextOffset + framePlan.alignmentBytes - 1L) / framePlan.alignmentBytes
+        ) * framePlan.alignmentBytes
+    val slicedPlan = GPUUniformSlabPlan(
+        planHash = framePlan.planHash,
+        sourceLabel = framePlan.sourceLabel,
+        deviceGeneration = framePlan.deviceGeneration,
+        alignmentBytes = framePlan.alignmentBytes,
+        totalBytes = totalBytes,
+        uploadBudgetBytes = framePlan.uploadBudgetBytes,
+        slots = slots,
+    )
+    return stepCommandIds.mapIndexed { index, commandId ->
+        val seal = sealByCommand.getValue(commandId)
+        GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+            plan = slicedPlan,
+            slotIndex = index,
+            commandId = seal.commandId,
+            packetId = seal.packetId,
+            clipCanonicalIdentity = seal.clipCanonicalIdentity,
+            elements = seal.elements,
+            conservativeScissor = seal.conservativeScissor,
             structuralPipelineKey = seal.structuralPipelineKey,
             renderPipelineKey = seal.renderPipelineKey,
             bindingLayoutHash = seal.bindingLayoutHash,

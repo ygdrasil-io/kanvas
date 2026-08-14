@@ -3048,6 +3048,100 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `analytic clip uniform slab slice rebases one step to zero based offsets`() {
+        // FP-13 Task 6: two analytic-clip (uniform64) packets share one frame slab; slicing one
+        // step rebases it to a zero-based plan with its own exact payload.
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                191 to GPUClipExecutionPlan.AnalyticCoverage(
+                    GPUClipExecutionGeometry.Rect(GPUBounds(0.75f, 1f, 2.5f, 3.25f)),
+                    scissor = null,
+                    antiAlias = true,
+                ),
+                192 to GPUClipExecutionPlan.AnalyticCoverage(
+                    GPUClipExecutionGeometry.Rect(GPUBounds(1.5f, 0.5f, 3.25f, 4f)),
+                    scissor = null,
+                    antiAlias = true,
+                ),
+            ),
+        )
+        val packets = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val sealsByCommand = packets.associate { packet ->
+            packet.commandIdValue to requireNotNull(
+                requireNotNull(packet.corePrimitivePreparedAuthority).analyticClipUniformSeal,
+            )
+        }
+        assertEquals(2, sealsByCommand.size)
+
+        val sliced = sliceAnalyticClipUniformSealsToCommands(
+            sealsByCommand.values.toList(),
+            listOf(packets[1].commandIdValue),
+        )
+
+        assertEquals(1, sliced.size)
+        assertEquals(0, sliced[0].slotIndex)
+        assertEquals(0L, sliced[0].alignedOffset)
+        assertEquals(256L, sliced[0].plan.totalBytes)
+        assertContentEquals(
+            sealsByCommand.getValue(packets[1].commandIdValue).payloadBytesSnapshot(),
+            sliced[0].payloadBytesSnapshot(),
+        )
+    }
+
+    @Test
+    fun `analytic intersection uniform slab slice rebases one step to zero based offsets`() {
+        // FP-13 Task 6: two analytic-intersection (uniform160) packets share one frame slab;
+        // slicing one step rebases it to a zero-based plan with its own exact payload.
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                193 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(0.75f, 1f, 2.5f, 3.25f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1.5f, 2.25f, 3f)),
+                        false,
+                    ),
+                ),
+                194 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1.5f, 0.5f, 3.25f, 4f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1.75f, 1f, 3f, 3.5f)),
+                        false,
+                    ),
+                ),
+            ),
+        )
+        val packets = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val sealsByCommand = packets.associate { packet ->
+            packet.commandIdValue to requireNotNull(
+                requireNotNull(packet.corePrimitivePreparedAuthority).analyticIntersectionUniformSeal,
+            )
+        }
+        assertEquals(2, sealsByCommand.size)
+
+        val sliced = sliceAnalyticIntersectionUniformSealsToCommands(
+            sealsByCommand.values.toList(),
+            listOf(packets[1].commandIdValue),
+        )
+
+        assertEquals(1, sliced.size)
+        assertEquals(0, sliced[0].slotIndex)
+        assertEquals(0L, sliced[0].alignedOffset)
+        assertEquals(256L, sliced[0].plan.totalBytes)
+        assertContentEquals(
+            sealsByCommand.getValue(packets[1].commandIdValue).payloadBytesSnapshot(),
+            sliced[0].payloadBytesSnapshot(),
+        )
+    }
+
+    @Test
     fun `two render dst copy admission requires every core packet accepted`() {
         // FP-11 Task 4 review hardening: a malformed two-render dst-copy frame whose consuming
         // render also carries a non-accepted packet must refuse at preflight instead of passing

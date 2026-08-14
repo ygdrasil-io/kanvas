@@ -1609,17 +1609,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 request.coreSemantics().getValue(it).usesAnalyticShapeUniform80()
             }
         }
-        if (analyticShapeCommandIds.any {
-                it in analyticClipAuthoritiesByCommandId ||
-                    it in analyticIntersectionAuthoritiesByCommandId
-            }
-        ) {
-            return refused(
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
-                "One direct CorePrimitive draw cannot combine analytic-shape uniform80 with analytic-clip " +
-                    "uniform64 or uniform160.",
-            )
-        }
+        // FP-13 Task 6: an analytic shape (uniform80) drawn under an analytic clip (uniform64/160)
+        // now falls through to the analytic-shape clip refusal below instead of a dedicated
+        // mixed-layout code: the analytic-shape shader still requires NoClip or ScissorOnly
+        // execution, so the accurate stable code is core_primitive_analytic_shape_clip. The
+        // former mixed_uniform_layouts code for this single-draw combination is retired with the
+        // uniform64/160 split admission (the frame-level mixed gate is gone too).
         val preparedAnalyticShapesByCommandId = linkedMapOf<Int, GPUCorePrimitivePreparedAnalyticShape>()
         for (render in baseRenders) {
             for (packet in render.drawPackets) {
@@ -2106,35 +2101,18 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 it.commandIdValue in analyticIntersectionAuthoritiesByCommandId ||
                 it in coverageMaskUniformPackets
         }
-        // FP-11 Task 6: the direct pass splits by uniform layout, so consecutive same-layout
+        // FP-13 Task 6: the direct pass splits by uniform layout, so consecutive same-layout
         // runs emit one render pass per layout group (each with its own slab). The uniform80
-        // (analytic-shape) split renders on the prepared lane. The analytic-clip (uniform64 /
-        // uniform160) split stays pinned on this mixed-layout refusal for a deterministic
-        // materializer residual: bypassing this gate and running the blend suite's
-        // fixed-function non-SRC_OVER analytic-clip rows (48 rows = 4 APIs x 12 modes) fails
-        // deterministically with `GPUOwnedNativeCloseIncompleteException`
-        // ("prepared-scene-child-cache close remains incomplete with 1 native owner(s)") on
-        // `failed.surface.prepared.session-close`; the SRC_OVER rows render clean. The leak
-        // was the split-lane materializer's mid-loop refusal path skipping the lease cleanup
-        // (now fixed), so the 64/160 split remains unwired pending the per-step continuation
-        // design rather than a leak. Task 8 records this as the mixed-layout residual B-row
-        // with this evidence.
-        val activeDirectUniformLayouts = listOf(
-            legacyUniformPackets.isNotEmpty() ||
-                pathStencilPlansByCommandId.keys.any { it !in analyticClipAuthoritiesByCommandId },
-            analyticShapeUniformPackets.isNotEmpty(),
-            analyticUniformPackets.isNotEmpty(),
-            analyticIntersectionUniformPackets.isNotEmpty(),
-        ).count { it }
-        if (activeDirectUniformLayouts > 1 &&
-            (analyticUniformPackets.isNotEmpty() || analyticIntersectionUniformPackets.isNotEmpty())
-        ) {
-            return refused(
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
-                "One direct CorePrimitive pass cannot mix analytic-clip uniform64 or uniform160 " +
-                    "with another uniform layout.",
-            )
-        }
+        // (analytic-shape), uniform64 (analytic-clip), and uniform160 (analytic-intersection)
+        // splits all render on the prepared lane via the split-lane materializer's per-step
+        // continuation/ownership design (fp-11 §4). The former mixed-layout refusal for the
+        // analytic-clip 64/160 mixes was the deterministic materializer-residual gate: before
+        // the split-lane mid-loop lease cleanup landed (FP-11 `3bd78e180`,
+        // `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:5639-5676`), bypassing it leaked a
+        // pooled frame slot (GPUOwnedNativeCloseIncompleteException on
+        // `failed.surface.prepared.session-close`). With the cleanup in place and the per-step
+        // uniform64/160 seal slicing restored, the gate is removed: each layout group owns its
+        // slab and the split lane materializes every pass in step order.
         val directPassStructuralKeys = geometryPackets
             .filter { packet ->
                 packet.role == GPUDrawPacketRole.Shading &&

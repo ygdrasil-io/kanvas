@@ -56,8 +56,6 @@ import kotlin.test.assertIs
 private const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
 private const val PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL =
     "unsupported.recording.core_primitive_analytic_shape_clip"
-private const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
-    "unsupported.recording.core_primitive_mixed_uniform_layouts"
 private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
@@ -106,9 +104,11 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-shape-under-analytic-clip frame
-        // stays on the mixed-layout refusal pending the per-step continuation design.
-        assertTerminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL, surface::render)
+        // FP-13 Task 6: the default-AA (ScalarAA) rect lowers to the analytic-shape (uniform80)
+        // lane, which cannot combine with the analytic-clip uniform64 authority in one draw; the
+        // single-draw mixed-layout gate is retired, so this frame re-points to the analytic-shape
+        // clip refusal (NoClip or ScissorOnly execution).
+        assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
     }
 
     @Test
