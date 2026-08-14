@@ -1345,6 +1345,8 @@ private fun GPUClipExecutionPlan.fractionalCoverageAuthority(): String? = when (
     is GPUClipExecutionPlan.AnalyticCoverage -> "clip.AnalyticCoverage.aa".takeIf { antiAlias }
     is GPUClipExecutionPlan.AnalyticIntersection ->
         "clip.AnalyticIntersection.aa".takeIf { elements.any { element -> element.antiAlias } }
+    is GPUClipExecutionPlan.AnalyticMultiRect ->
+        "clip.AnalyticMultiRect.aa".takeIf { elements.any { element -> element.antiAlias } }
     is GPUClipExecutionPlan.StencilCoverage -> "clip.StencilCoverage.msaa".takeIf { sampleCount > 1 }
     is GPUClipExecutionPlan.CoverageMask -> when {
         sampleCount > 1 -> "clip.CoverageMask.msaa"

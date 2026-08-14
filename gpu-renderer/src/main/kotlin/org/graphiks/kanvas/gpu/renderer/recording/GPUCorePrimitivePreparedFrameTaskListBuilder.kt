@@ -842,6 +842,7 @@ private fun GPUClipExecutionPlan.contentKeyOrNull(): String? = when (this) {
     is GPUClipExecutionPlan.ScissorOnly,
     is GPUClipExecutionPlan.AnalyticCoverage,
     is GPUClipExecutionPlan.AnalyticIntersection,
+    is GPUClipExecutionPlan.AnalyticMultiRect,
     is GPUClipExecutionPlan.Refused,
     -> null
 }
@@ -3810,6 +3811,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             is GPUClipExecutionPlan.ScissorOnly,
             is GPUClipExecutionPlan.AnalyticCoverage,
             is GPUClipExecutionPlan.AnalyticIntersection,
+            is GPUClipExecutionPlan.AnalyticMultiRect,
             is GPUClipExecutionPlan.Refused,
             -> error("Non-resource clip plans do not create artifact topology")
         }
