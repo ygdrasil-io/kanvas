@@ -632,8 +632,7 @@ green (CLEAR now renders through the same dst-read formula).
 
 - `GPUClipCoverageSurfaceTest.kt:313-339` and `:341-364` — re-pointed from
   `assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)`
-  to `render()` + `assertRgbaNear`; the now-unused
-  `PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL` constant was removed.
+  to `render()` + `assertRgbaNear`.
 - `GPUPreparedSurfaceFrameBuilderTest.kt:726-752` (`two analytic rects with
   mixed blend modes route the clear consumer through the dst read formula`)
   and `:782-801` (`scalar src rect routes through the dst read formula with a
@@ -643,10 +642,10 @@ green (CLEAR now renders through the same dst-read formula).
 
 No router-matrix change was required: the `analytic-shape-multi-key` code can
 still fire for the fixed-function multi-key analytic-shape family (two distinct
-modulate-compatible AA keys), which no current row exercises and which this
-task does not close; the code stays in
+modulate-compatible AA keys), which this task does not close; the code stays in
 `GPUPreparedSurfaceProductRouterTest.kt:473` and
 `preparedRouteResidualRefusalCodes` (`GPUPreparedSurfaceFrameExecution.kt:1090`).
+The fix round re-added a regression pin for that family (see §4.9).
 
 ### 4.7 Full-run summaries
 
@@ -682,3 +681,36 @@ Guards green: `GPUPreparedSurfaceProductRouterTest` 15/15,
 - One `GPUWgpu4kSolidRectFrameSmokeTest` (10 s native-completion timeout) flaked
   in one full `:gpu-renderer:test` run and passed in isolation and in the
   re-run; it is the documented environmental timeout family, not a task change.
+
+### 4.9 Fix round 1 (review: coverage of the refusal path + the four extra modes)
+
+Review finding 1 — the `analytic-shape-multi-key` path lost all test coverage.
+Re-added `PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL` and a regression pin:
+`GPUClipCoverageSurfaceTest.kt:382-403` `two aa rects with fixed function
+blends stay terminal on the multi key analytic shape refusal` — WHITE SRC_OVER +
+RED DST_OVER (both modulate-compatible fixed AA) seal a multi-key analytic-shape
+pass and `assertTerminal(unsupported.native-core-primitive.analytic-shape-multi-key)`
+at the `:1453` gate.
+
+Review finding 2 — the projection covered seven modes but only CLEAR/SRC/DST_IN
+were pixel-pinned. Extended the `AA geometry coverage blends after clear src and
+dst in` pin to the remaining AA modes with the same half-coverage edge oracle:
+
+| mode | oracle at (3,8) | latent pre-fix (`src*coverage`) value |
+| --- | --- | --- |
+| SRC_IN | `(255,255,188,188)` (== SRC over opaque dst) | `(188,0,0,128)` |
+| SRC_OUT | `(128,188,188,188)` (== CLEAR over opaque dst) | `(0,0,0,0)` |
+| DST_ATOP | `WHITE` (opaque src preserves dst) | `(188,188,188,128)` |
+| MODULATE | `(255,255,188,188)` (src*dst = RED over WHITE) | `(188,0,0,128)` |
+
+All four verified cleanly on llvmpipe at the established `assertRgbaNear`
+tolerance 8; the pre-fix fixed-function `src*coverage` AA values differ from the
+oracle, so the pins prove the dst-read formula (not the old modulate shader).
+Stale comment fixed: `GPUClipCoverageSurfaceTest.kt:467-469` (`clear and color
+dodge use their mapped clip composition routes`) — CLEAR now rides the
+analytic-shape dst-read formula (FP-13 Task 4), matching COLOR_DODGE.
+
+Fix-round runs: `GPUClipCoverageSurfaceTest` 42/42, `GPUAllApiBlendSurfaceTest`
+1864/1864, `GPUPreparedSurfaceProductRouterTest` 15/15; `:gpu-renderer:test`
+3301 (1 documented package-boundary baseline); `:kanvas:test` 3235 (1 documented
+image-pixel UNORM baseline).
