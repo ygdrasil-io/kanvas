@@ -60,6 +60,8 @@ private const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
     "unsupported.recording.core_primitive_mixed_uniform_layouts"
 private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
+private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
+    "invalid.preflight.core_primitive_clip_producer_authority"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 
@@ -195,6 +197,44 @@ class GPUClipCoverageSurfaceTest {
             "the rendered mask blur frame must allocate its native destination copy",
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(complexClipBlurOracle(sigma = 1.5f), result.pixels)
+    }
+
+    @Test
+    fun `intersect orthogonal polygon clip stays terminal at the clip producer preflight`() {
+        // FP-13 Task 5 fix round 1: only DIFFERENCE orthogonal polygons decompose to bounded
+        // analytic multi-rect coverage. An INTERSECT multi-band polygon (the L-shape) would
+        // multiply disjoint rect coverages to zero (an empty clip), so it stays on the
+        // coverage-mask route and terminates at the clip producer preflight.
+        assertTerminal(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL) {
+            Surface(16, 16).run {
+                requireWebGpu()
+                canvas {
+                    save()
+                    clipPath(
+                        Path {
+                            moveTo(5f, 4f)
+                            lineTo(12f, 4f)
+                            lineTo(12f, 8f)
+                            lineTo(9f, 8f)
+                            lineTo(9f, 12f)
+                            lineTo(5f, 12f)
+                            close()
+                        },
+                        ClipOp.INTERSECT,
+                        antiAlias = true,
+                    )
+                    drawRect(
+                        Rect(4f, 4f, 12f, 12f),
+                        Paint.fill(Color.RED).copy(
+                            blendMode = BlendMode.DARKEN,
+                            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
+                        ),
+                    )
+                    restore()
+                }
+                render()
+            }
+        }
     }
 
     @Test

@@ -60,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
@@ -1381,11 +1382,14 @@ private fun invalidClipGeometryRefusal(
 
 /**
  * Attempts the FP-13 Task 5 lowering: a complex clip whose elements are all
- * rect/rrect or a non-inverse axis-aligned orthogonal polygon DIFFERENCE path,
- * with at least one such path, decomposed into a bounded ordered rect list for
- * analytic multi-rect execution. Returns null when the clip must stay on the
- * coverage-mask route (rect-vs-rect differences, inverse fills, curved paths,
- * multi-contour paths, or decomposed counts beyond the fixed analytic block).
+ * rect/rrect or a non-inverse axis-aligned orthogonal polygon **DIFFERENCE** path
+ * (INTERSECT paths are rejected — the composite folds one-minus-coverage per rect,
+ * so only DIFFERENCE unions decompose exactly), with at least one such path,
+ * decomposed into a bounded ordered rect list for analytic multi-rect execution.
+ * Returns null when the clip must stay on the coverage-mask route (rect-vs-rect
+ * differences, inverse fills, curved or multi-contour paths, INTERSECT paths,
+ * self-intersecting Winding polygons, or decomposed counts beyond the fixed
+ * analytic block).
  */
 private fun GPUClipCoveragePlan.Mask.toAnalyticMultiRectOrNull(): List<GPUClipAnalyticRectElement>? {
     var sawRectDecomposedPath = false
@@ -1441,14 +1445,20 @@ private data class AnalyticRectPrimitive(
 )
 
 /**
- * Decomposes a single-contour, non-inverse axis-aligned orthogonal polygon into its
- * axis-aligned band rects (scanline even-odd). Returns null for anything outside
- * that closed shape family so the clip stays on the coverage-mask route.
+ * Decomposes a single-contour, non-inverse, axis-aligned orthogonal polygon DIFFERENCE
+ * path into its axis-aligned band rects (scanline even-odd). Returns null for anything
+ * outside that closed shape family so the clip stays on the coverage-mask route. Only
+ * DIFFERENCE paths decompose safely: the composite folds one-minus-coverage per rect, so
+ * a disjoint union of difference rects is exact, while an INTERSECT path would multiply
+ * disjoint rect coverages to zero (an empty clip). A Winding-filled polygon must also be
+ * simple — the even-odd scanline is exact for EvenOdd always and for Winding only when
+ * the non-zero winding number stays within {-1, 0, 1} along the sweep.
  */
 private fun decomposeOrthogonalPolygon(
     element: GPUClipCoverageElement,
 ): List<AnalyticRectPrimitive>? {
     if (element.inverseFill) return null
+    if (element.operation != GPUClipCoverageOperation.Difference) return null
     val values = element.values
     val vertexCount = element.vertexCount
     val contourCount = values.first().toInt()
@@ -1466,25 +1476,33 @@ private fun decomposeOrthogonalPolygon(
     }
     val ys = points.map { it.second }.distinct().sorted()
     if (ys.size < 2) return null
+    val requiresSimpleWinding = element.fillRule == GPUClipFillRule.Winding
     val rects = mutableListOf<AnalyticRectPrimitive>()
     for (bandIndex in 0 until ys.size - 1) {
         val top = ys[bandIndex]
         val bottom = ys[bandIndex + 1]
         val midY = (top + bottom) * 0.5f
-        val crossings = mutableListOf<Float>()
+        val crossings = mutableListOf<Pair<Float, Boolean>>()
         for (index in 0 until vertexCount) {
             val (x0, y0) = points[index]
             val (x1, y1) = points[(index + 1) % vertexCount]
             if (y0 == y1) continue
             val lo = minOf(y0, y1)
             val hi = maxOf(y0, y1)
-            if (midY >= lo && midY < hi) crossings.add(x0)
+            if (midY >= lo && midY < hi) crossings.add(x0 to (y1 < y0))
         }
-        crossings.sort()
+        crossings.sortBy { it.first }
         if (crossings.size % 2 != 0) return null
+        if (requiresSimpleWinding) {
+            var winding = 0
+            for ((_, upward) in crossings) {
+                winding += if (upward) 1 else -1
+                if (winding < -1 || winding > 1) return null
+            }
+        }
         for (pairIndex in 0 until crossings.size / 2) {
-            val left = crossings[pairIndex * 2]
-            val right = crossings[pairIndex * 2 + 1]
+            val left = crossings[pairIndex * 2].first
+            val right = crossings[pairIndex * 2 + 1].first
             if (right <= left) return null
             rects.add(
                 AnalyticRectPrimitive(left, top, right, bottom, element.operation, element.antiAlias),
