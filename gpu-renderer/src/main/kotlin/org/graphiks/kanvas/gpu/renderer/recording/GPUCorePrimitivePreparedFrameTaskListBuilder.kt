@@ -1587,11 +1587,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.forEach { packet ->
             val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticCoverage
                 ?: return@forEach
-            // FP-13 Task 7: a NoOp (destination-unchanged) draw shades nothing, so its analytic-clip
+            // A NoOp (destination-unchanged) draw shades nothing, so its analytic-clip
             // authority is vacuous — skip it and let the packet elide downstream like any other
             // NoOp. The path-stencil cover is the exception: it still runs the stencil test/reset
-            // even when its color blend is destination-only, so it keeps the authority (path rows
-            // defer to Task 8 unchanged). The intersections twin below applies the same rule.
+            // even when its color blend is destination-only, so it keeps the authority. The
+            // intersections twin below applies the same rule.
             if (packet.blendPlan is GPUBlendPlan.NoOp &&
                 !request.coreSemantics().getValue(packet.commandIdValue).hasPathStencilCoverGeometry()
             ) {
@@ -1628,7 +1628,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 request.coreSemantics().getValue(it).usesAnalyticShapeUniform80()
             }
         }
-        // FP-13 Task 6: an analytic shape (uniform80) drawn under an analytic clip (uniform64/160)
+        // An analytic shape (uniform80) drawn under an analytic clip (uniform64/160)
         // now falls through to the analytic-shape clip refusal below instead of a dedicated
         // mixed-layout code: the analytic-shape shader still requires NoClip or ScissorOnly
         // execution, so the accurate stable code is core_primitive_analytic_shape_clip. The
@@ -2120,14 +2120,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 it.commandIdValue in analyticIntersectionAuthoritiesByCommandId ||
                 it in coverageMaskUniformPackets
         }
-        // FP-13 Task 6: the direct pass splits by uniform layout, so consecutive same-layout
+        // The direct pass splits by uniform layout, so consecutive same-layout
         // runs emit one render pass per layout group (each with its own slab). The uniform80
         // (analytic-shape), uniform64 (analytic-clip), and uniform160 (analytic-intersection)
         // splits all render on the prepared lane via the split-lane materializer's per-step
-        // continuation/ownership design (fp-11 §4). The former mixed-layout refusal for the
+        // continuation/ownership design. The former mixed-layout refusal for the
         // analytic-clip 64/160 mixes was the deterministic materializer-residual gate: before
-        // the split-lane mid-loop lease cleanup landed (FP-11 `3bd78e180`,
-        // `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:5639-5676`), bypassing it leaked a
+        // the split-lane mid-loop lease cleanup landed, bypassing it leaked a
         // pooled frame slot (GPUOwnedNativeCloseIncompleteException on
         // `failed.surface.prepared.session-close`). With the cleanup in place and the per-step
         // uniform64/160 seal slicing restored, the gate is removed: each layout group owns its
@@ -2554,7 +2553,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Prepared core-primitive destination-snapshot byte accounting overflowed.",
             )
         }
-        // FP-13 Task 8: a destination-reading path-stencil (StencilEdgeFan) packet now routes
+        // A destination-reading path-stencil (StencilEdgeFan) packet now routes
         // through the admitted path dst-read cover shape: the destination snapshot consumer ref
         // keys to the assembled path-cover packet id (not the lowered producer/cover base id),
         // and the pair splits into a producer render and a continued cover render so the ordered
@@ -2801,7 +2800,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             GPUStorePlan.Discard,
             0u,
         )
-        // FP-13 Task 8: a continued destination-read path splits its producer (which clears and
+        // A continued destination-read path splits its producer (which clears and
         // stores the fan) from its cover (which loads the fan read-only and blends the snapshot).
         val pathDepthStencilProducerLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
             GPUStencilLoadOperation.Clear,
@@ -2929,7 +2928,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 if (basePacket.commandIdValue in destinationReadPlansByCommandId &&
                     pathPlan != null
                 ) {
-                    // FP-13 Task 8: a destination-reading path splits its producer/cover into
+                    // A destination-reading path splits its producer/cover into
                     // separate continued renders, so it never batches into the merged
                     // single-pass path pair geometry batch.
                     false
@@ -2949,7 +2948,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val directPathDepthStencilCompatible =
             pathStencilPlansByCommandId.isNotEmpty() && geometryBatchPredicted
-        // FP-11 Task 6 layout-run grouping: consecutive consumer renders whose packets share
+        // Layout-run grouping: consecutive consumer renders whose packets share
         // one uniform layout (or a path-stencil pair whose cover keeps the uniform32 layout)
         // merge into one direct render pass; analytic-clip path pairs form their own pass.
         // The composition is derived up front so direct packets only retain the path-neutral
@@ -2968,7 +2967,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 return when {
                     clip is GPUClipExecutionPlan.AnalyticCoverage -> "path-analytic-clip"
                     packet.commandIdValue in destinationReadPlansByCommandId ->
-                        // FP-13 Task 8: a destination-reading path pair splits from the
+                        // A destination-reading path pair splits from the
                         // background fill so the ordered snapshot copy lands between the two
                         // passes (the continued cover pass binds the snapshot).
                         "path-dst-read"
@@ -3097,7 +3096,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 } else {
                     null
                 }
-                // FP-13 Task 8: a destination-reading path lowers to two continued renders — the
+                // A destination-reading path lowers to two continued renders — the
                 // producer (Clear+Store fan) and the cover (read-only fan + snapshot blend) — so
                 // the ordered snapshot copy lands between them. Non-dst-read paths keep the merged
                 // producer+cover pair in one render.
@@ -3181,7 +3180,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Core primitive geometry batch prediction diverged from its constructed renders.",
             )
         }
-        // FP-11 Task 6: instead of merging every compatible consumer render into one batch, the
+        // Instead of merging every compatible consumer render into one batch, the
         // direct pass splits into one render per consecutive uniform-layout run (each layout
         // group owns its slab). A single-run frame produces the exact legacy batch identity so
         // single-layout frames keep their sealed shape byte-for-byte.
@@ -3325,7 +3324,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     write = false,
                 )
             }
-            // FP-13 Task 8: a continued destination-read path lowers to a producer render
+            // A continued destination-read path lowers to a producer render
             // (write + Store) and a cover render (read-only); the merged single-pass pair keeps
             // write + Discard.
             val exactPathAttachment = when {
@@ -3535,7 +3534,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val destinationReadTask = if (destinationReadPlans.isEmpty()) {
             null
         } else {
-            // FP-13 Task 8: a destination-reading path-stencil packet lowers to producer/cover
+            // A destination-reading path-stencil packet lowers to producer/cover
             // packets with fresh ids, so the snapshot consumer ref keys to the assembled cover
             // packet id rather than the base packet id the semantic builder retained.
             fun destinationConsumerPacketId(plan: GPUCorePrimitiveDestinationSnapshotPlan): GPUDrawPacketID =

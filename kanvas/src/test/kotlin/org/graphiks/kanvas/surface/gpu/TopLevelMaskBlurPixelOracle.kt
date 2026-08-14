@@ -27,7 +27,7 @@ import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.redByte
 
 /**
- * CPU pixel oracle for top-level mask blur (Task 11), faithful to the legacy
+ * CPU pixel oracle for top-level mask blur, faithful to the legacy
  * dispatcher semantics (GPUMaskBlurDispatch.kt + MASK_BLUR_* WGSL):
  *
  *  1. plan via [MaskBlurPlanner] (same production math: halo 3σ, scale
@@ -128,7 +128,7 @@ object TopLevelMaskBlurPixelOracle {
     /** Clip applied to the blur composite (device-rect scissor semantics). */
     sealed interface Clip
 
-    /** One analytic device-rect clip (Task 7 single-rect lane scope). */
+    /** One analytic device-rect clip. */
     data class RectClip(
         val left: Float,
         val top: Float,
@@ -138,7 +138,7 @@ object TopLevelMaskBlurPixelOracle {
     ) : Clip
 
     /**
-     * One ordered multi-rect analytic clip (FP-13 Task 5): an INTERSECT rect folds
+     * One ordered multi-rect analytic clip: an INTERSECT rect folds
      * the per-rect coverage in, a DIFFERENCE rect folds one-minus-coverage in, both
      * evaluated with the same two-sided SDF ramp as [RectClip] at pixel centers.
      */

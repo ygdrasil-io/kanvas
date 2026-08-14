@@ -49,8 +49,8 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
  * Ceiling for live session pipelines. The key space is closed: the 30-program universe plus the
  * per-mode dst-read component identities (16 direct-uniform32 + 16 analytic-shape-uniform80
  * modes), the analytic shape/clip/intersection components, the coverage-mask and clip-stencil
- * producer/consumer lanes, and the path-stencil pair stay well under 128; the FP-11 dst-copy
- * admission and the FP-13 analytic-shape dst-read admission materialize the full dst-read mode
+ * producer/consumer lanes, and the path-stencil pair stay well under 128; the dst-copy
+ * admission and the analytic-shape dst-read admission materialize the full dst-read mode
  * set in one retained session, so the ceiling covers that closed universe with headroom instead
  * of refusing every mode after the first handful.
  */

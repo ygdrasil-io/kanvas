@@ -511,7 +511,7 @@ sealed interface GPUPreparedColorFilterChildDescriptor {
             GPUMaterialDescriptorCanonicalizer().colorFilterText(this)
     }
 
-    /** Registered runtime-effect color filter; Task 4 validates its registry ABI. */
+    /** Registered runtime-effect color filter; its registry ABI is validated. */
     class RegisteredRuntimeEffect private constructor(
         private val effectSnapshot: GPUMaterialDescriptor.RuntimeEffect,
         @Suppress("UNUSED_PARAMETER") snapshotToken: GPUMaterialDescriptorSnapshotToken,
@@ -753,7 +753,7 @@ sealed interface GPUMaterialDescriptor {
         val uniforms: Map<String, GPURuntimeEffectUniformValue>
             get() = Collections.unmodifiableMap(LinkedHashMap(uniformSnapshot))
 
-        /** Legacy shader-only view retained for FP-05 source compatibility. */
+        /** Legacy shader-only view retained for source compatibility. */
         val children: Map<String, GPUMaterialDescriptor>
             get() = immutableLegacyShaderChildSnapshot()
 

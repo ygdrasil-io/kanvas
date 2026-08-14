@@ -53,7 +53,7 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteUnit {
         }
     }
 
-    /** FP-13 Task 8 continued producer half: the fan is stored in its own render pass. */
+    /** Continued producer half: the fan is stored in its own render pass. */
     class PathProducer(
         override val commandIdValue: Int,
         val packetId: GPUDrawPacketID,
@@ -71,7 +71,7 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteUnit {
         }
     }
 
-    /** FP-13 Task 8 continued cover half: the fan is read-only and the snapshot is bound. */
+    /** Continued cover half: the fan is read-only and the snapshot is bound. */
     class PathCover(
         override val commandIdValue: Int,
         val packetId: GPUDrawPacketID,

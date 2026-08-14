@@ -658,7 +658,7 @@ internal object GPUOpMapper {
                 maxOf(context.target.width, context.target.height),
             )
         } ?: GPUClipCoveragePlan.NoClip
-        // FP-13 Task 5: the rect-decomposable → AnalyticMultiRect lowering is only safe for
+        // The rect-decomposable → AnalyticMultiRect lowering is only safe for
         // the mask-blur composite consumer (whose shader folds per-rect coverage). Non-blur
         // core draws keep their prior CoverageMask route.
         val admitAnalyticMultiRect = rawNormalized.hasBlurMaskFilter()
@@ -1331,7 +1331,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             message = "Ordered clip-mask execution requires bounded clip support.",
         )
     }
-    // FP-13 Task 5: a rect-decomposable complex clip lowers to bounded analytic
+    // A rect-decomposable complex clip lowers to bounded analytic
     // multi-rect coverage instead of a coverage mask, scoped to the mask-blur
     // composite lane (the only consumer whose composite shader folds the per-rect
     // coverage). Non-blur consumers keep their prior CoverageMask route, so a
@@ -1405,7 +1405,7 @@ private fun invalidClipGeometryRefusal(
 )
 
 /**
- * Attempts the FP-13 Task 5 lowering: a complex clip whose elements are all
+ * Attempts the analytic multi-rect lowering: a complex clip whose elements are all
  * rect/rrect or a non-inverse axis-aligned orthogonal polygon **DIFFERENCE** path
  * (INTERSECT paths are rejected — the composite folds one-minus-coverage per rect,
  * so only DIFFERENCE unions decompose exactly), with at least one such path,

@@ -1,8 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.diagnostics
 
 /**
- * Canonical authority for every stable prepared-image refusal code in the
- * approved FP-04 contract.
+ * Canonical authority for every stable prepared-image refusal code.
  */
 object GPUPreparedImageRefusalCodes {
     const val PIXELS_MISSING = "unsupported.image.pixels_missing"

@@ -1187,7 +1187,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
 
-        // FP-13 Task 6: the single-draw mixed-layout gate is retired; the analytic-shape
+        // The single-draw mixed-layout gate is retired; the analytic-shape
         // (uniform80) shape under an analytic clip now re-points to the analytic-shape clip
         // refusal (NoClip or ScissorOnly execution).
         assertEquals(

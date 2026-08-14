@@ -184,7 +184,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         "and continued destination-read cover programs.",
                 )
             }
-            // FP-13 Task 8: a continued destination-read cover run binds its snapshot through
+            // A continued destination-read cover run binds its snapshot through
             // the per-mode dst-read component identity, so the frame slot adopts that identity
             // instead of the standard uniform cover component.
             val dstReadIdentities = cacheKeys.values
@@ -227,7 +227,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             .let { semantic ->
                 (semantic as GPUDrawSemanticPayload.CorePrimitive).targetBounds
             }
-        // FP-13 Task 8: a continued path fan is supplied by the caller (one shared D24S8 across
+        // A continued path fan is supplied by the caller (one shared D24S8 across
         // the producer and cover runs); the pool slot then owns no path attachment of its own.
         val pathRequirement = if (hasPath && pathDepthStencilView == null) {
             GPUWgpu4kCorePrimitivePathDepthStencilRequirement(

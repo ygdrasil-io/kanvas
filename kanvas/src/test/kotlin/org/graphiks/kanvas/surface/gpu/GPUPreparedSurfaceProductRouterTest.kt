@@ -296,7 +296,7 @@ class GPUPreparedSurfaceProductRouterTest {
         )
 
         // The composite preflight refuses nested vertices/meshes with this exact code
-        // before any native work; the route is Terminal after the FP-09 Task 5 collapse.
+        // before any native work; the route is Terminal.
         assertEquals("unsupported.picture.nested_vertices", verticesOp.coreRoutePreflightRefusalReason())
         assertEquals("unsupported.picture.nested_vertices", meshOp.coreRoutePreflightRefusalReason())
         assertEquals(
@@ -462,16 +462,16 @@ class GPUPreparedSurfaceProductRouterTest {
     @Test
     fun `before-entry refusals for the terminal families are never legacy`() {
         // Hairline points (unsupported.core_primitive.point.hairline_exact_lowering) left this
-        // matrix in FP-11 Task 3: they lower to one-device-pixel squares and route Prepared.
-        // The two-render dst-copy code left it in FP-11 Task 4: the destination-then-consumer
-        // dst-read shape is admitted on the prepared direct lane. The mixed-layout code left it
-        // in FP-13 Task 6: the uniform64/160 split is wired (per-step continuation/ownership),
+        // matrix: they lower to one-device-pixel squares and route Prepared.
+        // The two-render dst-copy code left it: the destination-then-consumer
+        // dst-read shape is admitted on the prepared direct lane. The mixed-layout code left it:
+        // the uniform64/160 split is wired (per-step continuation/ownership),
         // so `core_primitive_mixed_uniform_layouts` is no longer emitted by any builder gate.
-        // FP-13 Task 7 keeps `core_primitive_analytic_clip_non_direct_geometry` here: the NoOp
+        // `core_primitive_analytic_clip_non_direct_geometry` stays here: the NoOp
         // (DST) rows are now admitted (the authority is vacuous for a destination-unchanged draw),
         // but the gate still refuses other non-direct shading geometry (an inverse-fill or stroked
         // direct-triangle path under an analytic clip), so the code remains reachable.
-        // FP-13 Task 8 removed `unsupported.native-core-primitive.path-destination-read`: the
+        // `unsupported.native-core-primitive.path-destination-read` was removed: the
         // destination-reading path cover is now admitted (continued producer/cover renders), and
         // the analytic-clip dst-copy path rows re-point to `invalid.preflight.core_primitive_path_stencil`.
         val codes = listOf(

@@ -106,7 +106,7 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // FP-13 Task 6: the default-AA (ScalarAA) rect lowers to the analytic-shape (uniform80)
+        // The default-AA (ScalarAA) rect lowers to the analytic-shape (uniform80)
         // lane, which cannot combine with the analytic-clip uniform64 authority in one draw; the
         // single-draw mixed-layout gate is retired, so this frame re-points to the analytic-shape
         // clip refusal (NoClip or ScissorOnly execution).
@@ -141,7 +141,7 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // The route collapse (FP-09 Task 5) terminates the analytic-clip core frame
+        // The route collapse terminates the analytic-clip core frame
         // before lowering: the prepared analytic-shape lane accepts NoClip or
         // ScissorOnly execution only.
         assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
@@ -167,7 +167,7 @@ class GPUClipCoverageSurfaceTest {
 
     @Test
     fun `complex clip blur renders prepared under a multi rect analytic clip`() {
-        // FP-13 Task 5: the rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
+        // The rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
         // orthogonal polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage for the
         // blur composite, which folds the per-rect coverage into the blurred mask.
         val result = renderBlurredDifferenceClipScene()
@@ -203,7 +203,7 @@ class GPUClipCoverageSurfaceTest {
 
     @Test
     fun `intersect orthogonal polygon clip stays terminal at the clip producer preflight`() {
-        // FP-13 Task 5 fix round 1: only DIFFERENCE orthogonal polygons decompose to bounded
+        // Only DIFFERENCE orthogonal polygons decompose to bounded
         // analytic multi-rect coverage. An INTERSECT multi-band polygon (the L-shape) would
         // multiply disjoint rect coverages to zero (an empty clip), so it stays on the
         // coverage-mask route and terminates at the clip producer preflight.
@@ -241,7 +241,7 @@ class GPUClipCoverageSurfaceTest {
 
     @Test
     fun `non blur core draw under a rect plus polygon difference clip stays on the coverage mask route`() {
-        // FP-13 Task 5 final review: the AnalyticMultiRect lowering is scoped to the mask-blur
+        // The AnalyticMultiRect lowering is scoped to the mask-blur
         // composite lane only. A NON-BLUR direct draw under the rect INTERSECT + orthogonal
         // polygon DIFFERENCE clip must keep its prior CoverageMask route (which, for a
         // path-carrying mask, refuses with the documented depth/stencil topology code), NOT
@@ -463,7 +463,7 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         // Both rects are analytic-shape (antiAlias defaults true) and both blends are
         // modulate-compatible fixed-function (SRC_OVER / DST_OVER), so the frame seals one
-        // multi-key analytic-shape pass. Only the dst-read geometric modes closed in FP-13 Task 4;
+        // multi-key analytic-shape pass. Only the dst-read geometric modes closed;
         // the fixed-function multi-key AA family stays refused with its stable code.
         val surface = Surface(16, 16).run {
             canvas {
@@ -525,7 +525,7 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `no clip destination read composes against a transparent snapshot`() {
         requireWebGpu()
-        // FP-13 Task 3: the analytic-shape dst-read formula pipeline renders the DARKEN rect
+        // The analytic-shape dst-read formula pipeline renders the DARKEN rect
         // over the transparent snapshot (DARKEN(src, transparent) = src = RED).
         val result = Surface(16, 16).run {
             canvas {
@@ -542,8 +542,8 @@ class GPUClipCoverageSurfaceTest {
     fun `clear and color dodge use their mapped clip composition routes`() {
         requireWebGpu()
 
-        // CLEAR now rides the analytic-shape destination-read formula (FP-13 Task 4) and
-        // COLOR_DODGE the same (FP-13 Task 3); both compose over the transparent snapshot
+        // CLEAR now rides the analytic-shape destination-read formula and
+        // COLOR_DODGE the same; both compose over the transparent snapshot
         // (CLEAR(src, transparent) = transparent; COLOR_DODGE(src, transparent) = src = RED).
         val clear = Surface(16, 16).run {
             canvas {

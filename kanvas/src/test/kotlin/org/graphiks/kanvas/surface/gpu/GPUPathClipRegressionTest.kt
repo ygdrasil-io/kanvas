@@ -25,12 +25,10 @@ class GPUPathClipRegressionTest {
     fun `device rect clip path frame refuses with the path stencil code`() {
         requireWebGpu()
 
-        // FP-13 Task 6: the AA background (uniform80) and the analytic-clipped path pair now
+        // The AA background (uniform80) and the analytic-clipped path pair now
         // split into separate layout runs, but the path-stencil cover under an analytic clip
         // still cannot exact the exactly-one-path-pass authority, so the frame re-points to the
-        // path-stencil preflight refusal. Pre-FP-09 the legacy renderer rendered this frame
-        // (green at the FP-08 tip accaea616); the route collapse converted it to this stable
-        // code.
+        // path-stencil preflight refusal.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
@@ -63,10 +61,9 @@ class GPUPathClipRegressionTest {
     fun `dst in path frame refuses on the path stencil machinery boundary`() {
         requireWebGpu()
 
-        // FP-11 Task 6: the DST_IN path frame splits into the analytic-shape background
+        // The DST_IN path frame splits into the analytic-shape background
         // pass and the path pair pass; the path-stencil machinery's direct authority is
-        // uniform32-only, so the shape pass refuses on the path-stencil code. Pre-FP-09 the
-        // legacy renderer rendered it (green at accaea616).
+        // uniform32-only, so the shape pass refuses on the path-stencil code.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
@@ -97,14 +94,12 @@ class GPUPathClipRegressionTest {
     fun `darken rect over destination renders prepared via the multi render dst copy lane`() {
         requireWebGpu()
 
-        // FP-11 Task 4: a destination-read rect over an existing destination render is the
+        // A destination-read rect over an existing destination render is the
         // designed multi-render dst-copy shape (producer render, ordered snapshot copy,
         // consuming render). The prepared direct lane admits it and executes the Graphite
         // copy-then-formula recipe. The paints are hard (antiAlias = false) so the frame stays
         // on the full-coverage direct lane: default-AA rects lower to the analytic-shape
-        // dst-read family whose formula program is a designed closed refusal. Pre-FP-09 the
-        // legacy renderer rendered it (green at the FP-08 tip accaea616); the FP-09 route
-        // collapse refused it by name.
+        // dst-read family whose formula program is a designed closed refusal.
         val result = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
@@ -133,10 +128,9 @@ class GPUPathClipRegressionTest {
     fun `advanced path blend frame renders prepared via the continued path dst read lane`() {
         requireWebGpu()
 
-        // FP-13 Task 8: an unclipped rect plus a destination-reading path now admits the
+        // An unclipped rect plus a destination-reading path now admits the
         // continued path dst-read shape (background render, producer fan Store, ordered snapshot
-        // copy, cover fan read-only + dst-read formula). Pre-FP-09 the legacy renderer rendered
-        // this frame (green at accaea616); FP-11 Task 5 refused it by name; Task 8 wires it.
+        // copy, cover fan read-only + dst-read formula).
         val result = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))

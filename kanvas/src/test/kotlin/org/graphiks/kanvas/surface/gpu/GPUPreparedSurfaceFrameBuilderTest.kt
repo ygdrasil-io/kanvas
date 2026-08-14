@@ -684,12 +684,12 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
     @Test
     fun `hard rect and aa clear rect split into two direct passes with per layout slabs`() {
-        // FP-11 Task 6: the CLEAR fixture rect overrides the hard rect() paint with
+        // The CLEAR fixture rect overrides the hard rect() paint with
         // Paint.fill(...), whose antiAlias defaults to true, so this frame mixes a hard
         // uniform32 rect with an analytic-shape uniform80 AA rect. The direct pass splits by
-        // uniform layout: one render per layout group, each with its own slab, instead of the
-        // FP-09 mixed-uniform-layouts refusal. The single hard CLEAR rect frame still builds
-        // Ready as one pass (pinned by the `clear and src hard rects build ready` test).
+        // uniform layout: one render per layout group, each with its own slab. The single hard
+        // CLEAR rect frame still builds Ready as one pass (pinned by the `clear and src hard
+        // rects build ready` test).
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(
                 request(listOf(
@@ -727,8 +727,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
     fun `two analytic rects with mixed blend modes route the clear consumer through the dst read formula`() {
         // Both rects use Paint.fill(...) defaults (antiAlias = true), so they share the analytic
         // shape uniform80 layout. CLEAR cannot be expressed by the coverage-modulating analytic
-        // shader (geometric AA interpolation), so it routes through the dst-read formula
-        // (FP-13 Task 4): the frame keeps the SRC_OVER destination packet and orders a
+        // shader (geometric AA interpolation), so it routes through the dst-read formula:
+        // the frame keeps the SRC_OVER destination packet and orders a
         // destination snapshot for the CLEAR consumer instead of sealing one mixed fixed-function
         // multi-key pass.
         val mixed = request(listOf(
@@ -786,7 +786,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     fun `scalar src rect routes through the dst read formula with a destination snapshot`() {
         // Paint.fill defaults antiAlias=true, so this is the scalar-coverage SRC rect. SRC cannot
         // be expressed by the coverage-modulating analytic shader (geometric AA interpolation), so
-        // it routes through the dst-read formula (FP-13 Task 4), mirroring the MULTIPLY case below.
+        // it routes through the dst-read formula, mirroring the MULTIPLY case below.
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))),
         )

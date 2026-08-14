@@ -51,7 +51,7 @@ data class GPUPreparedMeshProgramMapping(
     val finalTargetBlendMode: GPUBlendMode? = null,
 )
 
-/** Typed, deterministic result used by later FP-06 lowering without exceptions or fallback. */
+/** Typed, deterministic result used by later prepared lowering without exceptions or fallback. */
 sealed interface GPUPreparedMeshProgramMappingResult {
     data class Ready(
         val mapping: GPUPreparedMeshProgramMapping,
@@ -156,7 +156,7 @@ internal fun MeshProgram.toPreparedMeshProgramMapping(
             throw GPUPreparedMeshProgramMappingRefusalException(result.code, result.facts)
     }
 
-/** Fail-closed MeshProgram mapping used by FP-06 lowering before material compilation. */
+/** Fail-closed MeshProgram mapping used by prepared lowering before material compilation. */
 internal fun MeshProgram.toPreparedMeshProgramMappingResult(
     paintAlpha: Float,
     descriptorAssembly: GPUMaterialDescriptorAssemblySession =

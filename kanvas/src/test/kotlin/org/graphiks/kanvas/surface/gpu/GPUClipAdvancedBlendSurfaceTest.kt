@@ -43,11 +43,10 @@ class GPUClipAdvancedBlendSurfaceTest {
             BlendMode.EXCLUSION,
         )
 
-        // FP-13 Task 6: the default-AA (ScalarAA) source rect lowers to the analytic-shape
+        // The default-AA (ScalarAA) source rect lowers to the analytic-shape
         // (uniform80) lane, which cannot combine with the analytic-clip uniform64 authority in
         // one draw; the single-draw mixed-layout gate is retired, so these frames re-point to
-        // the analytic-shape clip refusal (NoClip or ScissorOnly execution). Pre-FP-09 these
-        // frames rendered via the legacy renderer (green at the FP-08 tip accaea616).
+        // the analytic-shape clip refusal (NoClip or ScissorOnly execution).
         expectedByMode.forEach { mode ->
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 renderClippedBlend(destination, source, mode)
@@ -76,11 +75,10 @@ class GPUClipAdvancedBlendSurfaceTest {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        // FP-11 Task 6: the scissored dst-read rect shares the uniform32 layout with the
+        // The scissored dst-read rect shares the uniform32 layout with the
         // background, so the frame is the admitted two-render dst-copy shape (destination
-        // pass, ordered snapshot copy, consuming pass) instead of the FP-09
-        // mixed-uniform-layouts refusal. CPU reference: DARKEN(black, white) = black inside
-        // the scissor and retained white outside.
+        // pass, ordered snapshot copy, consuming pass). CPU reference: DARKEN(black, white) =
+        // black inside the scissor and retained white outside.
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
@@ -104,12 +102,11 @@ class GPUClipAdvancedBlendSurfaceTest {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
-        // FP-09 Task 11: top-level mask blur is prepared-covered. The DARKEN
+        // Top-level mask blur is prepared-covered. The DARKEN
         // blur rect over the white destination rides the copy-then-formula
         // destination-read lane with the blurred coverage as its source shade,
         // matching the CPU oracle (TopLevelMaskBlurPixelOracle + the composite
-        // route's blend oracle). Pre-FP-09 the legacy renderer materialized the
-        // blur mask the same way (green at the FP-08 tip accaea616).
+        // route's blend oracle).
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))

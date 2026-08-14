@@ -55,7 +55,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 /**
  * Records the prepared top-level mask blur lane for one surface frame.
  *
- * Task 11 restored top-level (non-saveLayer) mask blur on core primitives: each
+ * Top-level (non-saveLayer) mask blur on core primitives: each
  * `MaskBlur`-semantic draw expands into the closed five-stage chain
  * (local shape mask → blur-h → blur-v → style → scene composite), faithful to the
  * legacy dispatcher semantics (GPUMaskBlurDispatch.kt: local-space mask, separable
@@ -167,7 +167,7 @@ internal fun buildTopLevelMaskBlurFrame(
     val frameId = request.baseTaskList.frameId
     val recordingId = blurPacketRenders.first().recordingId
     // A frame whose first paint op is a mask blur has no clear scene render ordered BEFORE
-    // the leading composite: on a retained session (FP-10) the composite must clear the scene
+    // the leading composite: on a retained session the composite must clear the scene
     // target itself. The condition is per chain — "no scene clear render before THIS
     // composite" — not "no scene renders at all".
     val sceneRenderPaintOrders = sceneRenders.map { render ->
@@ -1022,15 +1022,15 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 """.trimIndent()
 
 /**
- * Destination-read scene composite with an analytic clip (Task 7 single rect,
- * Task 5 multi-rect): the blurred mask coverage is multiplied by the folded
+ * Destination-read scene composite with an analytic clip (single rect,
+ * multi-rect): the blurred mask coverage is multiplied by the folded
  * analytic clip coverage (the same rect signed-distance AA math as the core
  * lane's `CorePrimitiveAnalyticClipBlock`, evaluated at pixel centers as
  * `clamp(0.5 - distance, 0, 1)` and symmetric about each edge) before the
  * formula blend over the dst snapshot. The clip block folds an ordered list of
  * rects: INTERSECT multiplies the per-rect coverage and DIFFERENCE multiplies
  * one-minus-coverage. A single INTERSECT rect is `clip_count = 1`, byte-identical
- * to the Task 7 single-rect contract. The
+ * to the single-rect contract. The
  * `TopLevelMaskBlurPixelOracle` reference mirrors this two-sided SDF with
  * clamp-to-edge styled sampling, so the covered contract is oracle-exact for
  * integer and half-integer clip bounds: half-integer bounds place pixel centers
@@ -1148,7 +1148,7 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 internal enum class GPUTopLevelMaskBlurCompositeClipCombine { Intersect, Difference }
 
 /**
- * One ordered element of an admitted analytic composite clip (FP-13 Task 5): a
+ * One ordered element of an admitted analytic composite clip: a
  * device-space rect with a boolean combine, folded into the composite shader as
  * coverage (INTERSECT) or one-minus-coverage (DIFFERENCE).
  */
@@ -1163,8 +1163,8 @@ internal data class GPUTopLevelMaskBlurCompositeClipElement(
 
 /**
  * The admitted analytic clip of one mask blur composite packet: a single
- * INTERSECT device rect (the Task 7 lane scope) or a bounded ordered rect list
- * (the Task 5 multi-rect complex-clip extension). Both fold into the composite
+ * INTERSECT device rect (the single-rect scope) or a bounded ordered rect list
+ * (the multi-rect complex-clip extension). Both fold into the composite
  * shader's analytic clip block; the shader multiplies the blurred mask coverage
  * by the folded per-rect coverage.
  */

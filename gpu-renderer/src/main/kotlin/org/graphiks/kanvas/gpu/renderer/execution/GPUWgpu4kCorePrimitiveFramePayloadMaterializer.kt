@@ -207,7 +207,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
 
         val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         if (renderSteps.size == 2 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }) {
-            // FP-11 Task 4: the admitted two-render dst-copy shape (producer render, ordered
+            // The admitted two-render dst-copy shape (producer render, ordered
             // snapshot copy, consuming render) materializes through the dedicated core dst-copy
             // lane: each pass acquires its own pooled run (per-pass pipeline and bind group,
             // Graphite per-pass BindGraphicsPipeline recipe) and the ordered TextureCopy lands
@@ -220,7 +220,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         if (renderSteps.size == 3 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }) {
-            // FP-13 Task 8: the continued path dst-read shape (background render, producer
+            // The continued path dst-read shape (background render, producer
             // render, ordered snapshot copy, cover render) materializes through a dedicated
             // lane that shares one frame-local path D24S8 across the producer and cover runs.
             return materializeContinuedPathDstReadCore(
@@ -231,7 +231,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         if (renderSteps.size >= 2) {
-            // FP-11 Task 6: the layout split emits one render pass per uniform-layout group
+            // The layout split emits one render pass per uniform-layout group
             // (each pass owns its own slab). The split lane materializes every pass with its
             // own pooled run, in step order, without an ordered destination copy.
             return materializeDirectMultiRenderSplitCore(
@@ -920,7 +920,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         if (pipelineMapping == null) {
             // Destination-reading keys without a formula program (scalar-coverage dst-read on the
             // analytic-shape lane) refuse by name so the surface router continues on the legacy
-            // route. Task 6 classifies the residual.
+            // route.
             if (singleKeySeal.structuralPipelineKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
             ) {
@@ -1459,7 +1459,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             // multi-key pass seal, but their AA coverage semantics are not yet verified against
             // the CPU oracle on the prepared lane (the analytic shape shader modulates the source
             // by coverage, which cannot express every blend, e.g. CLEAR). Those frames continue
-            // on the legacy route; Task 6 classifies the residual.
+            // on the legacy route.
             return refused(
                 "unsupported.native-core-primitive.analytic-shape-multi-key",
                 "Multi-key analytic-shape CorePrimitive passes remain on the legacy route until " +
@@ -4987,7 +4987,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 
     /**
-     * Materializes the admitted two-render destination-copy shape (FP-11 Task 4): the producer
+     * Materializes the admitted two-render destination-copy shape: the producer
      * render pass writes the destination, the ordered TextureCopy snapshots it, and the consuming
      * pass runs the dst-read formula program against the snapshot (Graphite DrawContext.cpp
      * recipe, per-pass `BindGraphicsPipeline`). Each pass acquires its own pooled run because the
@@ -5411,7 +5411,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 
     /**
-     * FP-13 Task 8: materializes the continued path dst-read shape — background render, producer
+     * Materializes the continued path dst-read shape — background render, producer
      * render (fan Clear+Store), ordered snapshot copy, cover render (fan read-only + dst-read).
      * The producer and cover runs share one frame-local path D24S8 (created here, not per-run in
      * the pool) so the cover tests the exact fan the producer stored; the background owns its own
@@ -5895,7 +5895,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 
     /**
-     * FP-11 Task 6: materializes the layout-split direct shape (N render passes, no ordered
+     * Materializes the layout-split direct shape (N render passes, no ordered
      * destination copy). Every pass acquires its own pooled run with its own uniform slab and
      * per-pass pipeline, mirroring the per-render-scope recipe of the dst-copy lane; the
      * render operands land in step order with one optional trailing readback.
@@ -6137,7 +6137,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     null
                 }
-            // FP-11 Task 6 review fix: a mid-loop run refusal must release or quarantine every
+            // A mid-loop run refusal must release or quarantine every
             // lease already materialized by the earlier runs and restore the materializer
             // ledger state, mirroring the dst-copy lane's producer/consumer refusal cleanup
             // (a plain `return` inside the loop would skip the catch and leak the pooled
@@ -6490,7 +6490,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
      * consumer is a destination-reading packet of this scope.
      *
      * The two-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass)
-     * landed in FP-11 Task 4 through `materializeDirectMultiRenderDstCopyCore`; this validation
+     * is materialized through `materializeDirectMultiRenderDstCopyCore`; this validation
      * remains the authority for the single-render shape (the snapshot copy scheduled before its
      * single render pass, capturing the frame's cleared target) and for the consuming pass of
      * the two-render shape. The SolidRect destination-copy lane carries the background-then-

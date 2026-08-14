@@ -2415,7 +2415,7 @@ internal class GPUFramePreflighter(
             }
         }
         val mixedPreparedSurface = hasExactPreparedSurfaceMixedNativeBoundary(framePlan)
-        // FP-11 Task 6: the direct pass splits by uniform layout, so a path-bearing frame may
+        // The direct pass splits by uniform layout, so a path-bearing frame may
         // legitimately carry exactly one path pass plus direct-only split passes (each direct
         // pass owns its own uniform slab). The path pass itself retains the producer/cover
         // pair in one scope.
@@ -2434,7 +2434,7 @@ internal class GPUFramePreflighter(
                         packet.role == GPUDrawPacketRole.PathStencilCover
                 }
             }
-        // FP-13 Task 8: a continued destination-read path splits the producer (fan Store) from
+        // A continued destination-read path splits the producer (fan Store) from
         // the cover (fan read-only) into two path renders, with the ordered destination snapshot
         // copy between them. The two path renders are exactly one producer-only render and one
         // cover-only render, and the frame is exactly three render scopes total (one background
@@ -2557,7 +2557,7 @@ internal class GPUFramePreflighter(
             ?: return refused("Path stencil requires one shared vertex slab.")
         val index = geometryPreparations.singleOrNull { it.role == GPUFrameResourceRole.IndexData }
             ?: return refused("Path stencil requires one shared index slab.")
-        // FP-11 Task 6: the layout split owns one uniform slab per layout group, so a
+        // The layout split owns one uniform slab per layout group, so a
         // path-bearing frame may declare one uniform preparation per present layout.
         val uniformSlabs = geometryPreparations.filter { it.role == GPUFrameResourceRole.UniformData }
         if (uniformSlabs.isEmpty()) {
@@ -2604,7 +2604,7 @@ internal class GPUFramePreflighter(
         var sharedUniformSeal: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal? = null
         var sharedAnalyticPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan? = null
         var uniformSlotIndex = 0
-        // FP-11 Task 6: one render scope may retain exactly one uniform authority kind (the
+        // One render scope may retain exactly one uniform authority kind (the
         // uniform32 slab or the analytic uniform64 plan). Direct-only split passes own the
         // uniform32 slab while the path pass owns its own authority, so the mix refusal is
         // per render scope instead of per frame.
@@ -2800,7 +2800,7 @@ internal class GPUFramePreflighter(
                     ) ?: return refused("Path cover prepared pipeline or uniform authority is corrupt.")
                     val continued = sourceStepIndex != coverStepIndex
                     if (continued && hasAnalyticCorePrimitivePathClipPair(packet, cover)) {
-                        // FP-13 Task 8: an analytic-clip path cover cannot continue its fan
+                        // An analytic-clip path cover cannot continue its fan
                         // across the ordered snapshot copy yet; the analytic path pair stays on
                         // the path-stencil preflight authority.
                         return refused(
@@ -2936,7 +2936,7 @@ internal class GPUFramePreflighter(
                         coverAuthority.second,
                     )
                     if (continued) {
-                        // FP-13 Task 8: the producer stores the fan in its own render, and the
+                        // The producer stores the fan in its own render, and the
                         // cover loads it read-only in a second render with the snapshot bound.
                         val producerUnit = GPUCorePrimitiveNativeScopeRouteUnit.PathProducer(
                             packet.commandIdValue,
@@ -2977,7 +2977,7 @@ internal class GPUFramePreflighter(
         val analyticSeals = preparedPathAnalyticSealsByStep.values.flatten()
         val limits = capabilities.limits
             ?: return refused("Path stencil requires observed backend limits.")
-        // FP-11 Task 6: the uniform32 slab covers the direct units and the legacy path pairs,
+        // The uniform32 slab covers the direct units and the legacy path pairs,
         // while the analytic uniform64 plan covers the analytic covers. Both authorities may
         // coexist when they belong to different render scopes (the split path frame: the
         // direct pass owns the slab, the path pass owns the analytic plan).
@@ -3230,7 +3230,7 @@ internal class GPUFramePreflighter(
                     GPUFrameResourceLifetime.FrameLocal,
                     false,
                 )
-                // FP-13 Task 8: a continued destination-read path cover carries one extra
+                // A continued destination-read path cover carries one extra
                 // DestinationSnapshot TextureBinding use (the ordered snapshot the cover samples).
                 val destinationSnapshotUses = render.resourceUses.filter { use ->
                     use.role == GPUFrameResourceRole.DestinationSnapshot
@@ -3584,7 +3584,7 @@ internal class GPUFramePreflighter(
         if (!declaresDirectBoundary) return null
         val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
         val dstCopyConsumerPacketId = copySteps.singleOrNull()?.consumers?.singleOrNull()?.packetId
-        // FP-11 Task 4: a destination-reading core frame legitimately splits into two renders with
+        // A destination-reading core frame legitimately splits into two renders with
         // the ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
         // pass runs after the copy in the same encoder). The shape is admitted when the ordered
         // CopyDestinationStep consumer resolves to one packet of the second core render, both core
@@ -3599,7 +3599,7 @@ internal class GPUFramePreflighter(
             coreRenders.any { render ->
                 render.drawPackets.any { packet -> packet.packetId == dstCopyConsumerPacketId }
             }
-        // FP-11 Task 6: the direct pass may split into N render passes when every render's
+        // The direct pass may split into N render passes when every render's
         // packets retain exactly one uniform layout (each split pass owns its slab). The
         // per-render seals are validated below; the render-count admission accepts the split
         // shape without the old single-pass requirement, while a destination-copy frame keeps
@@ -3683,7 +3683,7 @@ internal class GPUFramePreflighter(
             ?: return refuse("Direct CorePrimitive requires exactly one shared vertex slab.")
         val index = directPreparations.filter { it.role == GPUFrameResourceRole.IndexData }.singleOrNull()
             ?: return refuse("Direct CorePrimitive requires exactly one shared index slab.")
-        // FP-11 Task 6: the layout split owns one uniform slab per layout group, so a direct
+        // The layout split owns one uniform slab per layout group, so a direct
         // frame may declare one uniform preparation per present layout instead of one slab.
         val uniformSlabs = directPreparations.filter { it.role == GPUFrameResourceRole.UniformData }
         if (uniformSlabs.isEmpty()) {
@@ -3821,7 +3821,7 @@ internal class GPUFramePreflighter(
         val stepAcceptedIndicesByIndex = acceptedStepIndexes.associateWith { stepIndex ->
             accepted.indices.filter { accepted[it].sourceStepIndex == stepIndex }
         }
-        // FP-11 Task 6: per-render-scope uniform authority. Every direct render pass retains
+        // Per-render-scope uniform authority. Every direct render pass retains
         // exactly one uniform layout, and each layout owns its own slab (the recording emits
         // one split pass per layout group). The step derives its seals from the packet
         // authorities of its own scope.
@@ -4349,11 +4349,10 @@ internal class GPUFramePreflighter(
                         stepAcceptedIndices.associate { accepted[it].packet.commandIdValue to accepted[it].semantic },
                     )
                 }
-                // FP-13 Task 6: when a frame owns multiple uniform64/uniform160 steps (the
+                // When a frame owns multiple uniform64/uniform160 steps (the
                 // analytic-clip split), each step's seals are rebased to a zero-based sliced slab
-                // so the per-render-scope run materializer binds exact offsets (fp-11 §4 per-step
-                // continuation/ownership design). A single-step frame retains its frame-level
-                // seals unchanged.
+                // so the per-render-scope run materializer binds exact offsets. A single-step
+                // frame retains its frame-level seals unchanged.
                 val stepAnalyticClipSeals = if (analyticClipSteps.size <= 1) {
                     stepAuthority.analyticClipSeals
                 } else {
@@ -6680,7 +6679,7 @@ private fun diagnostic(code: String, message: String, facts: Map<String, String>
 /**
  * Rebases one direct CorePrimitive uniform32 slab seal to exactly one render scope's commands:
  * the step owns a zero-based sliced plan and its own packed upload so the per-render-scope run
- * materializer binds exact offsets (Task 4 dst-copy lanes; Task 6 layout-split steps).
+ * materializer binds exact offsets for the dst-copy lanes and the layout-split steps.
  */
 internal fun sliceUniformSlabSealToCommands(
     seal: GPUCorePrimitiveUniformSlabSeal,

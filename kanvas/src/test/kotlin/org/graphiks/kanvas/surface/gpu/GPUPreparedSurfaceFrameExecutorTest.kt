@@ -769,7 +769,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     fun `mixed fixed and destination read core frame executes ready after the multi render dst copy admission`() {
         // A destination rect (fixed SRC_OVER) followed by a DARKEN source rect over it: under the
         // production capability snapshot this splits into two renders with the ordered snapshot
-        // copy between them. FP-11 Task 4 admitted that multi-render dst-copy shape on the
+        // copy between them. The multi-render dst-copy shape is admitted on the
         // prepared direct lane, so the executor now takes the real build and submits the frame
         // instead of refusing before prepared entry. The fake capabilities collapse the frame
         // into the single-render shape, so the executor-level behavior (prepare + submit, no

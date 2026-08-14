@@ -59,7 +59,7 @@ internal data class GPUPreparedSurfaceFrameBuildRequest(
     val includeReadback: Boolean = true,
 )
 
-/** Authenticated historical route facts carried from the exact prepared Task 5/8 graph. */
+/** Authenticated historical route facts carried from the exact prepared graph. */
 internal data class GPUPreparedSurfaceDestinationReadEvidence(
     val commandId: Int,
     val operationFamily: String,
@@ -121,7 +121,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // scene-target clear into that reader's render pass, while the destination
             // snapshot copy is ordered before the pass. On a fresh target the copy
             // accidentally captures the cleared state; on a retained prepared session
-            // target (FP-10 reuse) it captures the previous frame's pixels. Synthesize
+            // target it captures the previous frame's pixels. Synthesize
             // the frame's implicit clear as an explicit leading op so the copy always
             // captures the cleared target.
             val operations = request.candidate.operations.withSynthesizedDstReadSceneClear(
@@ -137,7 +137,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // records BeginLayer/EndLayer into the legacy dump and flat-renders layer
             // children), so a composite frame must either materialize through the real
             // saveLayer pipeline or refuse terminally — never silently fall back.
-            // Task 16: when composite commands are scheduled, the layer children are
+            // When composite commands are scheduled, the layer children are
             // elided from the flat pipeline (they render once into the isolated layer
             // target via RenderLayerChildren); mixed topologies whose coverage is
             // ambiguous (a DrawPicture the composite route cannot materialize) refuse
@@ -513,7 +513,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
  * Destination-reading prepared frames whose first visual op IS the reader fuse the scene-target
  * clear into that reader's render pass (`loadOp = "clear"` on the first scene render), while the
  * destination snapshot copy is ordered before that pass. On a fresh target the copy accidentally
- * captures the cleared state; on a retained prepared-session target (FP-10 reuse) it captures the
+ * captures the cleared state; on a retained prepared-session target it captures the
  * previous frame's pixels. Synthesize the frame's implicit clear as an explicit leading
  * [DisplayOp.Clear] so the copy always captures the cleared target, on fresh and retained sessions
  * alike.
@@ -1404,7 +1404,7 @@ private fun validateFrameIdentities(request: GPUPreparedSurfaceFrameBuildRequest
 }
 
 /**
- * Task 7 fail-closed preflight; the authenticated prepared-vertices native route replaces the
+ * Fail-closed preflight; the authenticated prepared-vertices native route replaces the
  * refusal once the semantic-only recording evidence bijects with the prepared vertices payloads.
  * The exact semantic-only packet evidence is validated by [GPUPreparedVerticesSemanticBuilder];
  * this function only keeps the bijection authority.

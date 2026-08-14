@@ -7,7 +7,7 @@ private const val GPU_CLIP_EXECUTION_IDENTITY_VERSION = "gpu-clip-execution-v1"
 private const val CLIP_TEXTURE_BYTES_PER_PIXEL = 4
 
 /**
- * Fixed capacity of the multi-rect analytic clip block (FP-13 Task 5). One complex
+ * Fixed capacity of the multi-rect analytic clip block. One complex
  * clip lowerable to bounded analytic coverage may retain at most this many ordered
  * rect elements; a rect-decomposable polygon that exceeds the capacity stays on the
  * coverage-mask route (terminal).
@@ -206,7 +206,7 @@ data class GPUClipAnalyticElement(
 }
 
 /**
- * One ordered rect/rrect element of a bounded multi-rect analytic clip (FP-13 Task 5),
+ * One ordered rect/rrect element of a bounded multi-rect analytic clip,
  * carrying a boolean combine so the composite shader can fold INTERSECT (multiply
  * coverage) and DIFFERENCE (multiply one-minus-coverage) terms.
  */

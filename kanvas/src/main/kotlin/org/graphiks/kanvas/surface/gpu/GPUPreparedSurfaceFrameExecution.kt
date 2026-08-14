@@ -702,9 +702,9 @@ internal class GPUPreparedSurfaceFrameExecutor(
             // execute. Multi-key passes that mix destination-reading keys with non-dst-reading
             // keys cannot share one bind-group layout (the dst-read fragment layout appends the
             // snapshot texture and sampler), and dst-read modes without a formula program have no
-            // shading pipeline. The classification still labels the diagnostic here; after the
-            // FP-09 Task 5 collapse the router terminates every before-entry refusal, and Task 6
-            // re-points the surface suites to the exact per-case codes.
+            // shading pipeline. The classification still labels the diagnostic here; the route
+            // collapse terminates every before-entry refusal, and the surface suites re-point to
+            // the exact per-case codes.
             if (completion.outcome == GPUFrameStructuralOutcome.Refused &&
                 diagnostic.code.value in preparedRouteResidualRefusalCodes
             ) {
@@ -1067,10 +1067,9 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
  * cannot execute: multi-key passes mixing destination-reading keys with non-dst-reading keys (no
  * shared bind-group layout) and destination-reading modes without a formula program. The
  * two-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass) landed on
- * the prepared direct lane in FP-11 Task 4, so its refusal code is no longer residual. The
+ * the prepared direct lane, so its refusal code is no longer residual. The
  * classification survives as residual evidence labels (the diagnostic still names the exact
- * residual); the pre-FP-09 fallback that consumed these codes was deleted with the legacy port,
- * and the router terminates every before-entry refusal since the FP-09 Task 5 collapse.
+ * residual), and the router terminates every before-entry refusal.
  *
  * The pre-3c mixed-lane dst-copy codes are deliberately NOT listed here. Verified empirically
  * (probes through the real builder/executor): `unsupported.prepared-surface.destination-copy`

@@ -35,7 +35,7 @@ sealed interface GPUPreparedVerticesPackingResult {
 }
 
 /**
- * Converts public DrawVertices geometry into the one closed FP-06 upload form.
+ * Converts public DrawVertices geometry into the one closed upload form.
  *
  * Source colors are straight RGBA8. RGB is converted to canonical premultiplied
  * RGBA8 with alpha interpreted as UNORM8 and `(channel * alpha + 127) / 255`,

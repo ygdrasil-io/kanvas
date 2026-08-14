@@ -185,7 +185,7 @@ internal sealed interface GPUCorePrimitivePathStencilNativeRouteSeal {
     }
 
     /**
-     * FP-13 Task 8: one continued half of a producer/cover pair that spans two render scopes.
+     * One continued half of a producer/cover pair that spans two render scopes.
      * The scope owns exactly the producer fan or the cover fan, not the merged pair.
      */
     class Continued internal constructor(
@@ -368,7 +368,7 @@ internal class GPUCorePrimitivePathStencilNativeFrameRouteSeal(
                 preparedPassByStep[sourceStepIndex],
             )
         }
-        // FP-13 Task 8: a continued producer/cover half lives in its own scope, so the half is
+        // A continued producer/cover half lives in its own scope, so the half is
         // resolved by its packet identity across the whole frame seal.
         val continuedPair = routesByFrameKey.values.singleOrNull { candidate ->
             packetIds == listOf(candidate.producerPacketId) ||

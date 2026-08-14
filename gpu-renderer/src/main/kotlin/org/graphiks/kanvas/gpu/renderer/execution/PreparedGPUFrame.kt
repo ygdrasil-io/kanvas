@@ -1402,7 +1402,7 @@ internal class PreparedGPUFrame(
                 val writablePathStencil = pathUses.size == 1 &&
                     step.depthStencilLoadStore is
                     org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil
-                // FP-13 Task 8: the continued cover reads the fan read-only (ReadOnlyKeep), so a
+                // The continued cover reads the fan read-only (ReadOnlyKeep), so a
                 // path render may retain a non-writable stencil authority too.
                 val hasPathStencilLoadStore = pathUses.size == 1 &&
                     step.depthStencilLoadStore != null

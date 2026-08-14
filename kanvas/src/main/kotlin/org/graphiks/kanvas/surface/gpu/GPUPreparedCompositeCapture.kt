@@ -429,7 +429,7 @@ internal object GPUPreparedCompositeCapturer {
                     // children (commandIdsByOperationIndex records only top-level mapped ops),
                     // so the layer children split would carry no commands and the picture
                     // content would be silently dropped. Refuse like every other non-core
-                    // child in a layer scope (FP-06 pattern) instead of expanding into the
+                    // child in a layer scope instead of expanding into the
                     // layer. Painted pictures keep their PaintedPicture scope: they refuse at
                     // the builder boundary (mixed-composite-topology / layer bounds).
                     if (parentScope.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer) {

@@ -294,7 +294,7 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         require(dstRead == null || sampleCount == 1) {
             "Destination-read frame slots remain single-sample"
         }
-        // FP-13 Task 8: a continued path cover run binds the destination snapshot AND retains the
+        // A continued path cover run binds the destination snapshot AND retains the
         // path D24S8 attachment (the producer wrote the fan in the preceding pass). Coverage-mask
         // and clip-stencil attachments remain color-only and refuse destination-read bindings.
         require(dstRead == null || (coverageMask == null && clipDepthStencil == null)) {

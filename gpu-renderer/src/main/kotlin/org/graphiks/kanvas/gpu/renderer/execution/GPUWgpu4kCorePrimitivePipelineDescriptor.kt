@@ -395,7 +395,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList -> null
             blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination -> {
-                // FP-13 Task 8: the continued cover shades the path with a destination-read
+                // The continued cover shades the path with a destination-read
                 // formula; the fan already supplies full coverage via the stencil test, so the
                 // source coverage must be None (full) and only NoClip/ScissorOnly is closed.
                 val shaderBlend =
@@ -940,7 +940,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
                 0xffu,
                 0u,
             )
-        // FP-13 Task 8: the continued cover pass loads the fan read-only, so its pipeline must not
+        // The continued cover pass loads the fan read-only, so its pipeline must not
         // write stencil; the test alone gates the destination-read shade (no reset is needed — the
         // fan is a frame-local attachment discarded after this pass).
         GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead ->

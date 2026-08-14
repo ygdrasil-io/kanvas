@@ -40,7 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedVerticesTopologyIden
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
 
 /**
- * FP-06 Task 12 batching tests for the prepared-vertices route.
+ * Batching tests for the prepared-vertices route.
  *
  * Draws are batch-compatible only when pipeline/layout/topology/material ABI/target/blend/clip
  * scope permit it, and barriers split the adjacency for clip change, destination read, layer
@@ -808,7 +808,7 @@ internal class BufferRecord(
     val label: String,
 )
 
-/** Recording wgpu4k fake shared by the FP-06 prepared-vertices batching and telemetry tests. */
+/** Recording wgpu4k fake shared by the prepared-vertices batching and telemetry tests. */
 internal class RecordingPreparedVerticesBatchNative {
     val pipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
     val bufferRecords = mutableListOf<BufferRecord>()

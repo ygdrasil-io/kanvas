@@ -15,11 +15,11 @@ import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
- * FP-10 lifetime stress contract. The native crash class (EXCEPTION_ACCESS_VIOLATION in
+ * Lifetime stress contract. The native crash class (EXCEPTION_ACCESS_VIOLATION in
  * wgpu_native.dll through Queue.writeBuffer after repeated GPUBackendRuntimeFactory.dispose()
- * /recreate churn — roadmap evidence) is probed with the minimal TDD reproduction: repeated
+ * /recreate churn) is probed with the minimal TDD reproduction: repeated
  * dispose/recreate followed by fullscreen-uniform-slab frames in one JVM. On hosts where the
- * native crash does not fire (this Mac's Metal backend), the assertions pin the FP-10
+ * native crash does not fire (this Mac's Metal backend), the assertions pin the
  * acceptance deterministically: compatible frames reuse one prepared session — the target
  * is created on the first frame, checked in (not closed) after every frame, and released
  * only when the runtime is disposed.
@@ -104,7 +104,7 @@ class GPUPreparedSurfaceLifetimeStressTest {
     @Test
     fun `repeated dispose and recreate churn completes every frame without native failure`() {
         assumeGpu()
-        // Repeated dispose/recreate churn: the documented predecessor of the native AV crash (roadmap FP-10 evidence).
+        // Repeated dispose/recreate churn: the documented predecessor of the native AV crash.
         repeat(16) { cycle ->
             try {
                 val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)

@@ -2805,7 +2805,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `two render destination reading core frame classifies accepted with the ordered copy`() {
-        // FP-11 Task 4: a destination-then-consumer dst-read frame (producer render, ordered
+        // A destination-then-consumer dst-read frame (producer render, ordered
         // snapshot copy, consuming render) is the valid direct dst-read shape and classifies
         // Prepared on the multi-render dst-copy lane.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
@@ -2885,7 +2885,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `uniform32 and uniform80 split frame retains per step authorities and zero based sliced slabs`() {
-        // FP-11 Task 6: the direct pass splits by uniform layout — the two uniform32 rects
+        // The direct pass splits by uniform layout — the two uniform32 rects
         // merge into the first render, the analytic-shape rrect into the second. Each render
         // scope retains its own prepared-pass seal: the uniform32 step slices the frame slab
         // to zero-based offsets, the uniform80 step owns its analytic-shape pass, and every
@@ -3051,7 +3051,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `analytic clip uniform slab slice rebases one step to zero based offsets`() {
-        // FP-13 Task 6: two analytic-clip (uniform64) packets share one frame slab; slicing one
+        // Two analytic-clip (uniform64) packets share one frame slab; slicing one
         // step rebases it to a zero-based plan with its own exact payload.
         val plan = preparedAnalyticFramePlan(
             plans = mapOf(
@@ -3093,7 +3093,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `analytic intersection uniform slab slice rebases one step to zero based offsets`() {
-        // FP-13 Task 6: two analytic-intersection (uniform160) packets share one frame slab;
+        // Two analytic-intersection (uniform160) packets share one frame slab;
         // slicing one step rebases it to a zero-based plan with its own exact payload.
         val plan = preparedAnalyticFramePlan(
             plans = mapOf(
@@ -3145,7 +3145,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `two render dst copy admission requires every core packet accepted`() {
-        // FP-11 Task 4 review hardening: a malformed two-render dst-copy frame whose consuming
+        // A malformed two-render dst-copy frame whose consuming
         // render also carries a non-accepted packet must refuse at preflight instead of passing
         // Prepared and failing later at materialization with a different code.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
@@ -3202,7 +3202,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `malformed third direct render refuses the two render dst copy admission at preflight`() {
-        // FP-11 Task 4 review hardening: two canonical dst-copy renders plus an accepted direct
+        // Two canonical dst-copy renders plus an accepted direct
         // packet in a third render must refuse at preflight, not fail later at materialization.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
         val renders = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -4136,7 +4136,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `continued path dst read with an extra direct render refuses on the path stencil code`() {
-        // FP-13 Task 8: the continued dst-read lane admits exactly three render scopes (background,
+        // The continued dst-read lane admits exactly three render scopes (background,
         // producer, cover); a frame carrying the producer+cover pair plus an extra direct render
         // refuses at preflight with the stable path-stencil code instead of the lane's later
         // three-scope shape refusal.
