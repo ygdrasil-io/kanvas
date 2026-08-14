@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.forCorePrimitiveAnalyticShapeCoverage
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.canvas.ClipStack
@@ -754,7 +755,10 @@ internal object GPUOpMapper {
                 .clampedTo(target)
         }
         val coverage = command.geometryCoverage()
-        val blendPlan = command.blend.canonicalBlendPlan(coverage)
+        val scalarCoverage = coverage == GPUCoverageConsumption.ScalarCoverage
+        val blendPlan = command.blend.canonicalBlendPlan(
+            if (scalarCoverage) GPUCoverageConsumption.FullOrScissor else coverage,
+        ).let { plan -> if (scalarCoverage) plan.forCorePrimitiveAnalyticShapeCoverage() else plan }
         val ordering = GPUOrderingFacts(
             paintOrder = paintOrder,
             dependsOnDestination = blendPlan.destinationReadRequirement ==

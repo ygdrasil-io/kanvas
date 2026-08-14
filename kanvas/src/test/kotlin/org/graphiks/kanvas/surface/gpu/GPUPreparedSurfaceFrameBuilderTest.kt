@@ -724,11 +724,13 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `two analytic rects with mixed blend modes build ready on the multi key direct pass`() {
+    fun `two analytic rects with mixed blend modes route the clear consumer through the dst read formula`() {
         // Both rects use Paint.fill(...) defaults (antiAlias = true), so they share the analytic
-        // shape uniform80 layout; only their blend modes differ. The direct pass assembler emits
-        // multi-key seals (distinct shading keys, shared slab) instead of refusing, so the mixed
-        // frame builds Ready at the recording boundary.
+        // shape uniform80 layout. CLEAR cannot be expressed by the coverage-modulating analytic
+        // shader (geometric AA interpolation), so it routes through the dst-read formula
+        // (FP-13 Task 4): the frame keeps the SRC_OVER destination packet and orders a
+        // destination snapshot for the CLEAR consumer instead of sealing one mixed fixed-function
+        // multi-key pass.
         val mixed = request(listOf(
             rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC_OVER)),
             rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
@@ -736,16 +738,17 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(mixed),
-            (GPUPreparedSurfaceFrameBuilder.build(mixed) as? GPUPreparedSurfaceFrameBuildResult.Refused)
-                ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
         )
         val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
         assertEquals(2, packets.size)
-        val blendModes = packets.mapNotNull { packet ->
-            (packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode
-        }
-        assertEquals(setOf(GPUBlendMode.SRC_OVER, GPUBlendMode.CLEAR), blendModes.toSet())
+        assertTrue(
+            packets.any { (it.blendPlan as? GPUBlendPlan.FixedFunctionBlend)?.mode == GPUBlendMode.SRC_OVER },
+        )
+        val clear = packets.mapNotNull { packet -> packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead }
+            .single { it.mode == GPUBlendMode.CLEAR }
+        assertEquals("clear@v1", clear.formulaId)
+        assertTrue(ready.taskList.tasks.any { it is GPUTask.DestinationSnapshots })
     }
 
     @Test
@@ -780,11 +783,10 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `scalar src rect builds ready with fixed function src packet and no destination snapshot`() {
-        // Paint.fill defaults antiAlias=true, so this is the scalar-coverage SRC rect. The
-        // recorded packet carries the full-coverage analysis plan (fixed-function SRC one-zero):
-        // SRC needs no destination read at all. The destination-read admission on core
-        // primitives is pinned by the MULTIPLY test below.
+    fun `scalar src rect routes through the dst read formula with a destination snapshot`() {
+        // Paint.fill defaults antiAlias=true, so this is the scalar-coverage SRC rect. SRC cannot
+        // be expressed by the coverage-modulating analytic shader (geometric AA interpolation), so
+        // it routes through the dst-read formula (FP-13 Task 4), mirroring the MULTIPLY case below.
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))),
         )
@@ -793,11 +795,13 @@ class GPUPreparedSurfaceFrameBuilderTest {
             (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
                 ?.let { "${it.diagnostic.code.value}: ${it.diagnostic.message}" }.orEmpty(),
         )
-        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+        val snapshotTasks = ready.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+        assertEquals(1, snapshotTasks.size)
         val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
-        val blend = assertIs<GPUBlendPlan.FixedFunctionBlend>(packets.single().blendPlan)
+        val blend = packets.mapNotNull { it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead }.single()
         assertEquals(GPUBlendMode.SRC, blend.mode)
+        assertEquals("src@v1", blend.formulaId)
     }
 
     @Test

@@ -61,8 +61,6 @@ private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
-private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
-    "unsupported.native-core-primitive.analytic-shape-multi-key"
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -315,7 +313,7 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
 
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
-            val surface = Surface(16, 16).run {
+            val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     drawRect(
@@ -323,10 +321,22 @@ class GPUClipCoverageSurfaceTest {
                         Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
                     )
                 }
-                this
+                render()
             }
 
-            assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(
+                result.pixels,
+                16,
+                3,
+                8,
+                when (blendMode) {
+                    BlendMode.CLEAR -> Color.fromArgb(128, 188, 188, 188)
+                    BlendMode.SRC -> Color.fromArgb(255, 255, 188, 188)
+                    BlendMode.DST_IN -> Color.WHITE
+                    else -> error("unexpected test mode: $blendMode")
+                },
+            )
         }
     }
 
@@ -335,7 +345,7 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
 
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
-            val surface = Surface(16, 16).run {
+            val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
@@ -346,10 +356,11 @@ class GPUClipCoverageSurfaceTest {
                     )
                     restore()
                 }
-                this
+                render()
             }
 
-            assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 3, 8, Color.WHITE)
         }
     }
 

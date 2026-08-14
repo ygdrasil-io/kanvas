@@ -130,6 +130,12 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
     // same Src state but keeps one distinct blend-program identity for the mode.
     DstReadPlus(GPUBlendMode.PLUS, "one", "zero", "add", "one", "zero", "add"),
     DstReadModulate(GPUBlendMode.MODULATE, "one", "zero", "add", "one", "zero", "add"),
+    DstReadClear(GPUBlendMode.CLEAR, "one", "zero", "add", "one", "zero", "add"),
+    DstReadSrc(GPUBlendMode.SRC, "one", "zero", "add", "one", "zero", "add"),
+    DstReadSrcIn(GPUBlendMode.SRC_IN, "one", "zero", "add", "one", "zero", "add"),
+    DstReadDstIn(GPUBlendMode.DST_IN, "one", "zero", "add", "one", "zero", "add"),
+    DstReadSrcOut(GPUBlendMode.SRC_OUT, "one", "zero", "add", "one", "zero", "add"),
+    DstReadDstAtop(GPUBlendMode.DST_ATOP, "one", "zero", "add", "one", "zero", "add"),
     DstReadMultiply(GPUBlendMode.MULTIPLY, "one", "zero", "add", "one", "zero", "add"),
     DstReadOverlay(GPUBlendMode.OVERLAY, "one", "zero", "add", "one", "zero", "add"),
     DstReadDarken(GPUBlendMode.DARKEN, "one", "zero", "add", "one", "zero", "add"),
@@ -543,6 +549,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendPr
     val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return null
     return GPUWgpu4kCorePrimitiveBlendProgram.entries.singleOrNull { candidate ->
         candidate.mode == fixed.mode &&
+            !candidate.isDstRead() &&
             candidate.colorSourceFactor != null &&
             fixed.sourceCoverage == GPUSourceCoverageEncoding.None &&
             fixed.state.color.sourceFactor == candidate.colorSourceFactor &&

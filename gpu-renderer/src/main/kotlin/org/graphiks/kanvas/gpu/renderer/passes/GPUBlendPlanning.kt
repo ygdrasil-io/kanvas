@@ -254,6 +254,37 @@ class GPUBlendPlanner {
     }
 }
 
+/**
+ * Projects a full-coverage blend plan onto the core-primitive analytic-shape lane. The
+ * analytic-shape shader emits `premul_rgba * coverage`, which reproduces the fixed-function
+ * Porter-Duff factors for SRC_OVER/DST_OVER/DST_OUT/SRC_ATOP/XOR/SCREEN but cannot express the
+ * geometric AA interpolation `dst + coverage * (blended - dst)` for CLEAR/SRC/SRC_IN/DST_IN/
+ * SRC_OUT/DST_ATOP/MODULATE. Those modes route through the shader dst-read formula
+ * (ScalarCoverageInShader) instead. Non-AA (full-or-scissor) plans stay fixed-function unchanged.
+ */
+fun GPUBlendPlan.forCorePrimitiveAnalyticShapeCoverage(): GPUBlendPlan = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend -> when (mode) {
+        GPUBlendMode.CLEAR,
+        GPUBlendMode.SRC,
+        GPUBlendMode.SRC_IN,
+        GPUBlendMode.DST_IN,
+        GPUBlendMode.SRC_OUT,
+        GPUBlendMode.DST_ATOP,
+        GPUBlendMode.MODULATE,
+        -> GPUBlendPlan.ShaderBlendWithDstRead(
+            mode = mode,
+            formulaId = "${mode.gpuLabel}@v1",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.ScalarCoverageInShader,
+        )
+        else -> this
+    }
+    else -> this
+}
+
+/** Applies [forCorePrimitiveAnalyticShapeCoverage] only when the shape consumes scalar coverage. */
+fun GPUBlendPlan.forCorePrimitiveAnalyticShapeCoverageIf(scalarCoverage: Boolean): GPUBlendPlan =
+    if (scalarCoverage) forCorePrimitiveAnalyticShapeCoverage() else this
+
 /** Evidence-only request built around the canonical exhaustive planner. */
 data class GPUBlendAllowlistRequest(
     val commandId: String,
