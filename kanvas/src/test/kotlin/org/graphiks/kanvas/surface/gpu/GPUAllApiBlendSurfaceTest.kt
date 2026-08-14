@@ -581,7 +581,10 @@ class GPUAllApiBlendSurfaceTest {
                 "Clear" -> null
                 "DrawPoint", "DrawPoints" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
-                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                        // FP-13 Task 7: the analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
                         // FP-13 Task 6: the analytic-clip uniform64 pass splits from the uniform32
                         // destination pass and renders Prepared (per-pixel oracle exact).
@@ -631,7 +634,10 @@ class GPUAllApiBlendSurfaceTest {
                 }
                 "DrawRect", "DrawColor" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
-                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                        // FP-13 Task 7: the analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
                         // FP-13 Task 6: the analytic-clip uniform64 pass splits from the uniform32
                         // destination pass and renders Prepared (per-pixel oracle exact).
@@ -1046,8 +1052,6 @@ class GPUAllApiBlendSurfaceTest {
         )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
-        const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
-            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
             "invalid.preflight.core_primitive_direct_geometry_resources"
         const val PREPARED_PATH_DST_READ_REFUSAL =

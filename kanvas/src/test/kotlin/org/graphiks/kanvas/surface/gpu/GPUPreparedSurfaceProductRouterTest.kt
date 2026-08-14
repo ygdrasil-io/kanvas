@@ -467,6 +467,10 @@ class GPUPreparedSurfaceProductRouterTest {
         // dst-read shape is admitted on the prepared direct lane. The mixed-layout code left it
         // in FP-13 Task 6: the uniform64/160 split is wired (per-step continuation/ownership),
         // so `core_primitive_mixed_uniform_layouts` is no longer emitted by any builder gate.
+        // FP-13 Task 7 keeps `core_primitive_analytic_clip_non_direct_geometry` here: the NoOp
+        // (DST) rows are now admitted (the authority is vacuous for a destination-unchanged draw),
+        // but the gate still refuses other non-direct shading geometry (an inverse-fill or stroked
+        // direct-triangle path under an analytic clip), so the code remains reachable.
         val codes = listOf(
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
             "unsupported.native-core-primitive.analytic-shape-multi-key",

@@ -641,6 +641,10 @@ private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): B
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
     }
 
+private fun GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry(): Boolean =
+    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode ==
+        GPUCorePrimitiveGeometryMode.StencilEdgeFan
+
 private data class GPUCorePrimitivePathStencilPacketPlan(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
     val scissorBounds: GPUPixelBounds,
@@ -1583,6 +1587,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.forEach { packet ->
             val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticCoverage
                 ?: return@forEach
+            // FP-13 Task 7: a NoOp (destination-unchanged) draw shades nothing, so its analytic-clip
+            // authority is vacuous — skip it and let the packet elide downstream like any other
+            // NoOp. The path-stencil cover is the exception: it still runs the stencil test/reset
+            // even when its color blend is destination-only, so it keeps the authority (path rows
+            // defer to Task 8 unchanged). The intersections twin below applies the same rule.
+            if (packet.blendPlan is GPUBlendPlan.NoOp &&
+                !request.coreSemantics().getValue(packet.commandIdValue).hasPathStencilCoverGeometry()
+            ) {
+                return@forEach
+            }
             when (val authority = corePrimitiveAnalyticClipAuthority(plan, request.targetBounds)) {
                 is GPUCorePrimitiveAnalyticClipAuthority.Accepted ->
                     analyticClipAuthoritiesByCommandId[packet.commandIdValue] = authority
@@ -1597,6 +1611,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.forEach { packet ->
             val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticIntersection
                 ?: return@forEach
+            if (packet.blendPlan is GPUBlendPlan.NoOp &&
+                !request.coreSemantics().getValue(packet.commandIdValue).hasPathStencilCoverGeometry()
+            ) {
+                return@forEach
+            }
             when (val authority = corePrimitiveAnalyticIntersectionAuthority(plan, request.targetBounds)) {
                 is GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted ->
                     analyticIntersectionAuthoritiesByCommandId[packet.commandIdValue] = authority
