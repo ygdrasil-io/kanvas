@@ -3,8 +3,9 @@
 Status: **in progress** (Task 1 complete: `colr-v0-color-glyph` scene CPU-oracle
 fix closes the byte-exact pin; Task 2 complete: `PipelineTypesTest` hygiene +
 wgsl4k ticket; Task 3 complete: analytic-shape dst-read formula; Task 4 complete:
-analytic-shape multi-key dst-read; Task 5 complete: complex-clip blur; further
-tasks append their own sections).
+analytic-shape multi-key dst-read; Task 5 complete: complex-clip blur; Task 6
+complete: analytic-clip uniform64/160 split; further tasks append their own
+sections).
 
 Branch: `codex/graphite-dawn-frame-fp13`. Machine: Linux, JDK Temurin 25, GPU =
 Vulkan **llvmpipe** (software, CPU; Mesa 26.0.3, LLVM 21.1.8), Xvfb `:99`. All
@@ -929,3 +930,170 @@ Covering runs: `GPUClipCoverageSurfaceTest` 43/43, `GPUMaskBlurSurfaceTest`
 20/20, `GPUFramePreflighterTest` 107/107; `:gpu-renderer:test` 3301 (1 documented
 package-boundary baseline); `:kanvas:test` 3237 (1 documented image-pixel UNORM
 baseline).
+
+## Task 6 — analytic-clip uniform64/160 split
+
+Task 6 wires the analytic-clip uniform64/160 split admission (the former
+`mixed_uniform_layouts` gate) with the per-step continuation/ownership design
+(fp-11 §4), preserving the split-lane mid-loop lease cleanup (`3bd78e180`). The
+result: the 199 blend rows leave `unsupported.recording.core_primitive_mixed_
+uniform_layouts`; SRC_OVER rows render prepared; the non-SRC_OVER analytic-clip
+rows, the analytic-shape-under-clip rows, and the path-stencil cover rows
+re-point to their accurate stable codes (the analytic-clip blend programs, the
+combined shape+clip shader, and the path-stencil continuation are separate
+features, not the split).
+
+### 6.1 Re-measured distribution (before → after)
+
+Before (closure-HEAD re-measure, green 1864-row matrix): 199 blend rows on
+`mixed_uniform_layouts` — DrawRRect 29 (ALPHA_MASK), DrawRect/DrawColor 56
+(ALPHA_MASK non-DST), DrawPath/DrawDRRect 58 (ALPHA_MASK), DrawPoint/DrawPoints
+56 (ALPHA_MASK non-DST). This matches fp-11 §0.3 exactly (no drift).
+
+After (the RED re-point → 199 failures captured per-row, then the split + re-point
+→ green 1864-row matrix):
+
+| code | rows | detail |
+| --- | --- | --- |
+| Prepared (renders, pixel-oracle exact) | **4** | DrawRect/DrawColor/DrawPoint/DrawPoints × SRC_OVER × ALPHA_MASK |
+| `unsupported.recording.core_primitive_analytic_shape_clip` | **29** | DrawRRect × ALPHA_MASK (analytic-shape uniform80 under analytic clip) |
+| `unsupported.native-core-primitive.session-cache-pipeline` | **93** | DrawRect 27 + DrawColor 27 + DrawPoint 12 + DrawPoints 27 (non-SRC_OVER fixed-function and artistic modes on the analytic-clip uniform64 lane) |
+| `invalid.preflight.core_primitive_path_stencil` | **28** | DrawPath 14 + DrawDRRect 14 (non-dst-copy path-stencil cover under analytic clip) |
+| `unsupported.native-core-primitive.path-destination-read` | **30** | DrawPath 15 + DrawDRRect 15 (dst-copy path cover under analytic clip) |
+| `invalid.preflight.core_primitive_direct_geometry_resources` | **15** | DrawPoint × dst-copy modes × ALPHA_MASK (the four-render shape seal) |
+| total | **199** | ✓ |
+
+The two distinct emission sites are captured per-row in the RED run:
+
+- `DrawRect/SRC_OVER/ALPHA_MASK` → "One direct CorePrimitive pass cannot mix
+  analytic-clip uniform64 or uniform160 with another uniform layout." (the former
+  frame-level gate `:2132`).
+- `DrawRRect/SRC_OVER/ALPHA_MASK` → "One direct CorePrimitive draw cannot combine
+  analytic-shape uniform80 with analytic-clip uniform64 or uniform160." (the
+  former single-draw gate `:1617`).
+
+Both gates are retired; `core_primitive_mixed_uniform_layouts` is no longer
+emitted by any builder gate (`rg` over `gpu-renderer/src` + `kanvas/src` → no
+production matches).
+
+### 6.2 The split wiring (production code)
+
+- `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:2103-2117` — the frame-level
+  `activeDirectUniformLayouts > 1` analytic-clip 64/160 gate is removed. The
+  direct pass now splits by uniform layout (uniform32/80/64/160), each group owns
+  its slab, and the split-lane materializer materializes every pass in step
+  order. The comment pins the retired deterministic-residual evidence (the
+  FP-11 leak `3bd78e180` at `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:
+  5639-5676`).
+- `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1612-1617` — the single-draw
+  "analytic-shape uniform80 + analytic-clip uniform64/160" gate is retired; the
+  analytic-shape-under-clip draw now falls through to the
+  `core_primitive_analytic_shape_clip` refusal (NoClip or ScissorOnly), which is
+  the accurate stable code.
+- `GPUFramePreflighter.kt:4224-4241` and `:4285-4314` — the per-step
+  uniform64/160 seal construction now rebases each step's seals to a zero-based
+  sliced slab when a frame owns multiple uniform64/uniform160 steps (fp-11 §4
+  per-step continuation/ownership), and rebuilds the per-step packed bytes.
+- `GPUFramePreflighter.kt:6439-6546` — restored
+  `sliceAnalyticClipUniformSealsToCommands` and
+  `sliceAnalyticIntersectionUniformSealsToCommands` (mirrors of
+  `sliceAnalyticShapeUniformSealsToCommands`), removed as FP-11 Task 6 probe
+  debris (`178c681fa`) when the gate still pinned the split.
+
+### 6.3 Lease-cleanup re-verification (deterministic)
+
+The split-lane mid-loop lease cleanup (`GPUWgpu4kCorePrimitiveFramePayload
+Materializer.kt:5639-5676`, mirroring the dst-copy lane at `:5251-5261`) is
+preserved and re-verified: the full `:kanvas:test` run completed with **zero**
+`failed.surface.prepared.session-close` / `GPUOwnedNativeCloseIncompleteException`
+occurrences (scanned all JUnit XML). The `session-cache-pipeline` refusals that
+surfaced for the non-SRC_OVER analytic-clip rows are clean (the FP-11 cleanup
+releases/quarantines the already-materialized run lifecycles), confirming the
+leak is fixed and not reintroduced.
+
+### 6.4 Task-6 split-resource fallout (32 rows)
+
+The 2 DrawRRect DST rows (UNCLIPPED/SCISSOR) and the 30 DrawPoint dst-copy rows
+(15 modes × 2 contexts) remain on `invalid.preflight.core_primitive_direct_
+geometry_resources`, unchanged (the green blend matrix still asserts that exact
+code per row). They are re-pointed with evidence, not closed: the DST rrect pass
+still cannot exact its shared geometry slab authority after the split, and the
+DrawPoint fixture's three separate point commands still make a four-render shape
+that fails the same direct-resource seal (fp-11 §5). The stable typed refusal is
+retained. In addition, the 15 DrawPoint dst-copy ALPHA_MASK rows that were part of
+the 199 re-point to the same code (the split now lets them reach the four-render
+seal).
+
+### 6.5 Clip pins + router re-points
+
+- `GPUClipCoverageSurfaceTest.kt:112` (Coverage 1) → `assertTerminal(
+  PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL)` (the default-AA rect lowers to the
+  analytic-shape uniform80 lane under an analytic clip).
+- `GPUClipAdvancedBlendSurfaceTest.kt:53-57` (Advanced 8) → the clipped
+  destination-read blends re-point to `unsupported.recording.core_primitive_
+  analytic_shape_clip` (the default-AA source rect is analytic-shape-under-clip).
+- `GPUPathClipRegressionTest.kt:25` (PathClip 1) → re-pointed to
+  `invalid.preflight.core_primitive_path_stencil` (the AA background splits to
+  its own uniform80 run; the analytic-clipped path pair fails the
+  exactly-one-path-pass authority).
+- `GPUPreparedSurfaceProductRouterTest.kt:470-478` → `core_primitive_mixed_
+  uniform_layouts` removed from the terminal-family matrix (verified unreachable
+  by `rg` over the production emitters).
+
+### 6.6 Test updates
+
+- `GPUAllApiBlendSurfaceTest.kt` — the 199 rows re-point per §6.1; the unused
+  `PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL` constant removed; three new constants
+  (`PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL`,
+  `PREPARED_SESSION_CACHE_PIPELINE_REFUSAL`, `PREPARED_PATH_STENCIL_REFUSAL`).
+- `GPUCorePrimitivePreparedFrameTaskListBuilderTest.kt` — the
+  "analytic shape and analytic clip uniform layouts refuse atomically" pin
+  re-pointed to `core_primitive_analytic_shape_clip`; the three mixed-frame
+  "refuse before slab budget planning" tests converted to split tests
+  (`uniform160 and uniform32 split…`, `uniform32 and uniform64 split…`,
+  `uniform64 and uniform160 split…`), each asserting two direct passes with per-
+  layout slabs and `GPUFramePlanner.plan(taskList).atomicallyRefused == false`.
+- `GPUFramePreflighterTest.kt` — two new slice-helper tests
+  (`analytic clip uniform slab slice rebases one step to zero based offsets`,
+  `analytic intersection uniform slab slice rebases one step to zero based
+  offsets`) cover the restored uniform64/160 per-step slicing.
+
+### 6.7 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3303 tests, 1 failure** — the documented pre-existing
+`GPURendererPackageBoundaryTest` baseline (exactly 20 package cycle violations /
+0 rule violations, unchanged).
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3237 tests, 1 failure** — the documented pre-existing
+`GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB llvmpipe baseline (unchanged).
+No `session-close` / `GPUOwnedNativeCloseIncompleteException` in either run.
+
+Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
+`GPUPreparedSurfaceProductRouterTest` 15/15,
+`GPUClipCoverageSurfaceTest` (green), `GPUClipAdvancedBlendSurfaceTest` (green),
+`GPUPathClipRegressionTest` (green), `GPUPreparedSurfaceLegacyAbsenceTest` 1/1,
+`GPUPreparedSurfaceLifetimeStressTest` 6/6, `GPUFramePreflighterTest` (green),
+`GPUCorePrimitivePreparedFrameTaskListBuilderTest` (green).
+
+### 6.8 Notes and non-claims
+
+- The split closes the SRC_OVER analytic-clip rows (per-pixel oracle exact). The
+  non-SRC_OVER fixed-function and artistic modes on the analytic-clip uniform64
+  lane need the analytic-clip blend programs (an `AnalyticClipDstRead` program +
+  the geometric projection, paralleling Tasks 3/4 for the analytic-shape lane),
+  which is a separate feature from the split; those rows re-point to the lane's
+  exact `session-cache-pipeline` identity refusal. The path-stencil cover rows
+  need the Task 8 stencil-continuation feature; the analytic-shape-under-clip
+  rows need a combined shape+clip shader. CPU-oracle evidence is not
+  Skia-comparable fidelity (M86 statement, Task 0).
+- No global similarity threshold or assertion was weakened; the only matrix
+  changes are re-points from `mixed_uniform_layouts` to the row's accurate code
+  or to Prepared.
