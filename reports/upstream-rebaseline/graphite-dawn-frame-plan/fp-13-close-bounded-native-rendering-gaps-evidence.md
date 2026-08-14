@@ -889,3 +889,43 @@ Guards green: `GPUPreparedSurfaceProductRouterTest` 15/15,
 - The L-shape DIFFERENCE polygon decomposes to exactly two band rects; a
   rect-decomposable orthogonal polygon exceeding the four-rect block stays on
   the coverage-mask route (terminal).
+
+### 5.10 Fix round 1 (review: INTERSECT over-admission + fill-rule + cross-lane note)
+
+Review finding 1 (Critical) — `toAnalyticMultiRectOrNull` over-admitted INTERSECT
+orthogonal polygons: the shader fold `factor0 * factor1` multiplies per-rect
+coverage, which is exact for a DIFFERENCE union (`(1-r0)*(1-r1)`) but collapses a
+multi-band INTERSECT polygon to zero (disjoint rect coverages multiply to an
+empty clip). `decomposeOrthogonalPolygon` now rejects non-`Difference` path
+elements (`if (element.operation != GPUClipCoverageOperation.Difference) return
+null`) alongside the existing inverse/contour/bounds guards
+(`GPUOpMapper.kt:1461`). Regression pin added:
+`GPUClipCoverageSurfaceTest.kt` `intersect orthogonal polygon clip stays terminal
+at the clip producer preflight` — an INTERSECT L-shape path + blur stays
+`invalid.preflight.core_primitive_clip_producer_authority`.
+
+Review finding 2 (Important) — the classification lives in the shared
+`GPUOpMapper.toMaskExecutionPlan`, so the rect + orthogonal-polygon DIFFERENCE
+clip now lowers to `AnalyticMultiRect` for **all** consumers, not just blur. The
+non-blur cross-lane change (no test pins this shape): a non-blur draw under this
+clip previously lowered to `CoverageMask` (coverage-mask producer route); it now
+lowers to `AnalyticMultiRect`, which the core lane refuses — analytic-shape draws
+still hit `unsupported.recording.core_primitive_analytic_shape_clip` (the
+`!= NoClip && !ScissorOnly` gate is unchanged), and direct non-analytic-shape
+draws are refused via `corePrimitiveDirectClipAuthority` `else -> Refused`
+(`unsupported.native-core-primitive.clip`) with the defensive
+`corePrimitiveStructuralClip → Clip.Refused` mapping. Both are refusals; the clip
+suite + core primitive suites stay green.
+
+Bundled hardening — `decomposeOrthogonalPolygon` now guards the fill rule: the
+even-odd scanline is exact for `EvenOdd` fill always, but for `Winding` fill only
+when the polygon is simple (a self-intersecting Winding polygon would be
+mis-decomposed). The sweep now accumulates the non-zero winding number and
+rejects any band where it leaves `{-1, 0, 1}` for Winding-filled polygons
+(`GPUOpMapper.kt:1479-1500`). The fixture's simple Winding L-shape still admits
+(|winding| max 1).
+
+Covering runs: `GPUClipCoverageSurfaceTest` 43/43, `GPUMaskBlurSurfaceTest`
+20/20, `GPUFramePreflighterTest` 107/107; `:gpu-renderer:test` 3301 (1 documented
+package-boundary baseline); `:kanvas:test` 3237 (1 documented image-pixel UNORM
+baseline).
