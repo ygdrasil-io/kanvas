@@ -530,3 +530,155 @@ Guards (all green, verified in the full runs):
 - CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0).
 - No global similarity threshold or assertion was weakened; the only matrix
   changes are re-points from Terminal to Prepared.
+
+## Task 4 — analytic-shape multi-key dst-read
+
+Task 4 closes the 2 `analytic-shape-multi-key` rows (plan §1 item 2) by
+routing the geometric-interpolation fixed-function blends (CLEAR/SRC/DST_IN)
+on the AA analytic-shape lane through the Task 3 shader dst-read formula. This
+task applies a **renderer fix** (blend planning + analysis re-point onto the
+closed AnalyticShapeDstRead program).
+
+### 4.1 Row identification
+
+The two rows are the clip-suite CLEAR/SRC/DST_IN AA rects over a WHITE
+background (fp-13 residual CSV item 2, ownerTask 4):
+
+- `GPUClipCoverageSurfaceTest.kt` `AA geometry coverage blends after clear src
+  and dst in` (UNCLIPPED).
+- `GPUClipCoverageSurfaceTest.kt` `AA scissor preserves destination outside
+  clear src and dst in` (SCISSOR).
+
+Both previously pinned `Terminal(unsupported.native-core-primitive.analytic-
+shape-multi-key)`. The plan's "blend-matrix :640 multi-key subset" label is a
+mismatch: the actual multi-key rows live in the clip suite (the blend matrix's
+`shapePaint` uses `antiAlias = false`, so no analytic-shape multi-key seal is
+ever formed there). The plan's "dst-read" label is also loose: the rows are the
+fixed-function CLEAR/SRC/DST_IN blends whose AA semantics the coverage-
+modulating shader cannot express.
+
+### 4.2 Before state (RED run)
+
+Re-pointed the 2 rows to the pre-FP-09 pixel pins (rendered) and ran:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **2 tests failed (6 sub-cases, 3 modes × 2 contexts)**, every one
+`GPUPreparedSurfaceTerminalException:
+unsupported.native-core-primitive.analytic-shape-multi-key: Multi-key
+analytic-shape CorePrimitive passes remain on the legacy route until their AA
+coverage semantics are verified on the prepared lane.` (emitted at
+`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:1453`).
+
+### 4.3 Root cause
+
+The analysis (`GPUFirstRoutePlanner.plan(FillRect/FillRRect)`) computed the
+packet's blend plan with full-or-scissor coverage (`canonicalPlan` default),
+so an AA CLEAR/SRC/DST_IN rect carried the full-coverage fixed-function states
+`zero_zero`/`one_zero`/`zero_sa`. The analytic-shape shader emits
+`premul_rgba * coverage`, which reproduces SRC_OVER/DST_OVER/DST_OUT/SRC_ATOP/
+XOR/SCREEN (modulate-compatible) but cannot express the geometric AA
+interpolation `dst + coverage * (blended - dst)` for CLEAR/SRC/SRC_IN/DST_IN/
+SRC_OUT/DST_ATOP/MODULATE. A two-draw AA frame (WHITE SRC_OVER + RED
+CLEAR/SRC/DST_IN) therefore sealed a fixed-function multi-key analytic-shape
+pass, which the `:1453` gate refused because its AA semantics were unverified.
+
+### 4.4 Fix (production code)
+
+- `GPUBlendPlanning.kt` — new `GPUBlendPlan.forCorePrimitiveAnalyticShapeCoverage()`
+  (+ `If(scalarCoverage)`) projects a full-coverage plan onto the
+  analytic-shape lane: the geometric modes (CLEAR/SRC/SRC_IN/DST_IN/SRC_OUT/
+  DST_ATOP/MODULATE) route through `ShaderBlendWithDstRead(mode,
+  "$modeLabel@v1", ScalarCoverageInShader)`; every other fixed state is left
+  untouched (the analytic shader supplies the modulation).
+- `GPUOpMapper.kt` (`mapCoreOperation`) and `AnalysisContracts.kt`
+  (`plan(FillRect)`/`plan(FillRRect)`) apply the projection only when the shape
+  consumes scalar coverage (AA), so the packet's blend plan and the mapper's
+  `dependsOnDestination` agree; non-AA shapes and the 30 non-AA DrawRRect
+  dst-read rows are unchanged.
+- `GPUWgpu4kCorePrimitivePipelineDescriptor.kt` — new
+  `DstReadClear/Src/SrcIn/DstIn/SrcOut/DstAtop` blend programs (exact-Src
+  fixed-function state, formula per mode) so those modes map onto the closed
+  `AnalyticShapeDstRead` program; `fixedNativeBlendProgramOrNull` now excludes
+  `isDstRead()` candidates so the new exact-Src states cannot collide with the
+  `PremulSrc` fixed-function program.
+
+The routing now makes the dst-read draw split into an ordered destination
+pass + snapshot + consumer pass (the existing dst-copy shape), so the frame no
+longer seals a multi-key pass. The `:415` (`dst-read-formula`) and `:1453`
+(`analytic-shape-multi-key`) gates are **unchanged**: the dst-read rows no
+longer reach them, and the fixed-function multi-key seal (e.g. SRC_OVER +
+DST_OVER AA) is not closed by this task and stays refused.
+
+### 4.5 After state (GREEN run)
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **41/41 green** — the 2 rows render Prepared and assert the pre-FP-09
+reference pixels at the half-coverage edge (3,8): CLEAR `(128,188,188,188)`,
+SRC `(255,255,188,188)`, DST_IN `WHITE`; the scissor row asserts `WHITE`
+outside the scissor. The single-key `clear and color dodge` clip row stays
+green (CLEAR now renders through the same dst-read formula).
+
+### 4.6 Re-pointed matrix pins
+
+- `GPUClipCoverageSurfaceTest.kt:313-339` and `:341-364` — re-pointed from
+  `assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)`
+  to `render()` + `assertRgbaNear`; the now-unused
+  `PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL` constant was removed.
+- `GPUPreparedSurfaceFrameBuilderTest.kt:726-752` (`two analytic rects with
+  mixed blend modes route the clear consumer through the dst read formula`)
+  and `:782-801` (`scalar src rect routes through the dst read formula with a
+  destination snapshot`) — re-pointed from the fixed-function multi-key /
+  no-snapshot assertions to the dst-read + `GPUTask.DestinationSnapshots`
+  assertions.
+
+No router-matrix change was required: the `analytic-shape-multi-key` code can
+still fire for the fixed-function multi-key analytic-shape family (two distinct
+modulate-compatible AA keys), which no current row exercises and which this
+task does not close; the code stays in
+`GPUPreparedSurfaceProductRouterTest.kt:473` and
+`preparedRouteResidualRefusalCodes` (`GPUPreparedSurfaceFrameExecution.kt:1090`).
+
+### 4.7 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3301 tests, 1 failure** — the documented pre-existing
+`GPURendererPackageBoundaryTest` baseline (20 package cycle violations / 0 rule
+violations, unchanged).
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3234 tests, 1 failure** — the documented pre-existing
+`GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB llvmpipe baseline (unchanged).
+
+Guards green: `GPUPreparedSurfaceProductRouterTest` 15/15,
+`GPUAllApiBlendSurfaceTest` 1864/1864, `GPUClipCoverageSurfaceTest` 41/41,
+`GPUPreparedSurfaceLegacyAbsenceTest` 1/1,
+`GPUPreparedCompositeCaptureSemanticTest` 19/19,
+`GPUPreparedCompositeFrameRouteIntegrationTest` 8/8,
+`GPUPreparedSurfaceLifetimeStressTest` 6/6,
+`GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest` 1/1.
+
+### 4.8 Notes and non-claims
+
+- The half-coverage edge pin reuses the pre-FP-09 reference values (sRGB-encoded
+  `linearToSrgb(0.5)=188` at alpha 128), so the dst-read formula is verified
+  against the geometric-interpolation oracle, not a weakened threshold.
+- CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0).
+- One `GPUWgpu4kSolidRectFrameSmokeTest` (10 s native-completion timeout) flaked
+  in one full `:gpu-renderer:test` run and passed in isolation and in the
+  re-run; it is the documented environmental timeout family, not a task change.
