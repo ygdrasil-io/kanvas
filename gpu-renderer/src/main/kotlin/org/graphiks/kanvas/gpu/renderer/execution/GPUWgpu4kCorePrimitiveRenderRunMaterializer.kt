@@ -65,6 +65,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         targetView: GPUTextureView,
         generationSeal: GPUPreparedGenerationSeal,
         dstRead: CorePrimitiveDestinationSnapshotHandles? = null,
+        pathDepthStencilView: GPUTextureView? = null,
     ): GPUCorePrimitiveRenderRunMaterialization {
         val routes = plans.mapNotNull { plan ->
             plan.routeSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -226,7 +227,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             .let { semantic ->
                 (semantic as GPUDrawSemanticPayload.CorePrimitive).targetBounds
             }
-        val pathRequirement = if (hasPath) {
+        // FP-13 Task 8: a continued path fan is supplied by the caller (one shared D24S8 across
+        // the producer and cover runs); the pool slot then owns no path attachment of its own.
+        val pathRequirement = if (hasPath && pathDepthStencilView == null) {
             GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
                 width = targetBounds.width,
                 height = targetBounds.height,
@@ -293,7 +296,13 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 generationSeal.deviceGeneration,
                 GPUPreparedNativeOperandOwnership.Borrowed,
             )
-            val depthStencilOperand = pathHandles?.let { handles ->
+            val depthStencilOperand = pathDepthStencilView?.let { view ->
+                GPUPreparedNativeTextureViewOperand(
+                    view,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            } ?: pathHandles?.let { handles ->
                 GPUPreparedNativeTextureViewOperand(
                     handles.view,
                     generationSeal.deviceGeneration,
@@ -369,7 +378,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 }
                 val sourceStepIndex = plan.sourceScopeIndices.single()
                 if (runHasPath) {
-                    pathAuthority[sourceStepIndex] = requireNotNull(pathHandles).view
+                    pathAuthority[sourceStepIndex] = requireNotNull(pathDepthStencilView ?: pathHandles?.view)
                 }
                 unitOffset += route.orderedUnits.size
                 packetOffset += runPackets.size

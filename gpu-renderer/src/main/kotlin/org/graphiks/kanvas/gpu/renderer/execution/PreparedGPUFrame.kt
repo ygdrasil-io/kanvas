@@ -148,7 +148,9 @@ class GPUCommandEncoderScopePlan internal constructor(
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
-            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
+            corePrimitivePathStencilNativeRouteSeal is
+            GPUCorePrimitivePathStencilNativeRouteSeal.Continued
         val clipStencilSeal = corePrimitiveClipStencilPreparedRouteSeal
         val clipStencilSealed =
             clipStencilSeal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
@@ -767,6 +769,8 @@ class GPUCommandEncoderScopePlan internal constructor(
         val pathPacketIds = when (corePrimitivePathStencilNativeRouteSeal) {
             is GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ->
                 corePrimitivePathStencilNativeRouteSeal.flattenedPacketIds
+            is GPUCorePrimitivePathStencilNativeRouteSeal.Continued ->
+                listOf(corePrimitivePathStencilNativeRouteSeal.packetId)
             GPUCorePrimitivePathStencilNativeRouteSeal.Empty,
             GPUCorePrimitivePathStencilNativeRouteSeal.Missing,
             -> emptyList()
@@ -775,11 +779,15 @@ class GPUCommandEncoderScopePlan internal constructor(
             "Path CorePrimitive route identities must be an ordered render-packet subset"
         }
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
-            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
+            corePrimitivePathStencilNativeRouteSeal is
+            GPUCorePrimitivePathStencilNativeRouteSeal.Continued
         val unifiedContainsPath = (
             corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
             )?.orderedUnits?.any { unit ->
-            unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+            unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                unit is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                unit is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
         } == true
         require(pathSealed == unifiedContainsPath) {
             "Path and unified CorePrimitive seals must agree on path-pair ownership"
@@ -1364,11 +1372,15 @@ internal class PreparedGPUFrame(
                     "PreparedGPUFrame render scopes require a pure-preflight unified CorePrimitive route seal"
                 }
                 val pathSealed = scope.corePrimitivePathStencilNativeRouteSeal is
-                    GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+                    GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
+                    scope.corePrimitivePathStencilNativeRouteSeal is
+                    GPUCorePrimitivePathStencilNativeRouteSeal.Continued
                 val unifiedContainsPath = (
                     scope.corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
                     )?.orderedUnits?.any { unit ->
-                    unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+                    unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                        unit is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                        unit is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
                 } == true
                 val pathUses = step.resourceUses.filter {
                     it.role == GPUFrameResourceRole.PathDepthStencil
@@ -1390,16 +1402,20 @@ internal class PreparedGPUFrame(
                 val writablePathStencil = pathUses.size == 1 &&
                     step.depthStencilLoadStore is
                     org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil
+                // FP-13 Task 8: the continued cover reads the fan read-only (ReadOnlyKeep), so a
+                // path render may retain a non-writable stencil authority too.
+                val hasPathStencilLoadStore = pathUses.size == 1 &&
+                    step.depthStencilLoadStore != null
                 val depthStencilKeys = scope.nativeOperandKeys.filter {
                     it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }
                 require(
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
-                        pathSealed == writablePathStencil &&
+                        pathSealed == hasPathStencilLoadStore &&
                         (!pathSealed || (
                             depthStencilKeys.size == 1 &&
-                            pathUses.single().write &&
+                            pathUses.single().write == (writablePathStencil) &&
                                 pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
                                 depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                                 depthStencilKeys.single().ownership ==

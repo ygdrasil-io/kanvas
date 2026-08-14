@@ -219,6 +219,17 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 generationSeal,
             )
         }
+        if (renderSteps.size == 3 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }) {
+            // FP-13 Task 8: the continued path dst-read shape (background render, producer
+            // render, ordered snapshot copy, cover render) materializes through a dedicated
+            // lane that shares one frame-local path D24S8 across the producer and cover runs.
+            return materializeContinuedPathDstReadCore(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+        }
         if (renderSteps.size >= 2) {
             // FP-11 Task 6: the layout split emits one render pass per uniform-layout group
             // (each pass owns its own slab). The split lane materializes every pass with its
@@ -5392,6 +5403,490 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             refused(
                 "failed.native-core-primitive.multi-render-dst-copy-materialization",
                 "Public wgpu4k direct dst-copy CorePrimitive assembly failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        } finally {
+            runMaterializer.close()
+        }
+    }
+
+    /**
+     * FP-13 Task 8: materializes the continued path dst-read shape — background render, producer
+     * render (fan Clear+Store), ordered snapshot copy, cover render (fan read-only + dst-read).
+     * The producer and cover runs share one frame-local path D24S8 (created here, not per-run in
+     * the pool) so the cover tests the exact fan the producer stored; the background owns its own
+     * standard pooled run.
+     */
+    private fun materializeContinuedPathDstReadCore(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (renderSteps.size != 3) {
+            return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The continued path dst-read lane requires exactly three render scopes.",
+            )
+        }
+        val backgroundStep = renderSteps[0]
+        val producerStep = renderSteps[1]
+        val coverStep = renderSteps[2]
+        val producerIndex = framePlan.steps.indexOf(producerStep)
+        val coverIndex = framePlan.steps.indexOf(coverStep)
+        val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        val copyStep = copySteps.singleOrNull()
+            ?: return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The continued path dst-read lane requires one ordered destination snapshot copy.",
+            )
+        val readbackSteps = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val readbackStep = readbackSteps.singleOrNull()
+        if (readbackSteps.size > 1 || framePlan.steps.any { it is GPUFrameStep.CopyResourceStep }) {
+            return refused(
+                "unsupported.native-core-primitive.scope-shape",
+                "The continued path dst-read lane accepts only its three renders, one ordered copy, and one optional readback.",
+            )
+        }
+        val copyIndex = framePlan.steps.indexOf(copyStep)
+        if (backgroundStep.target != producerStep.target ||
+            producerStep.target != coverStep.target ||
+            producerIndex >= copyIndex || copyIndex >= coverIndex
+        ) {
+            return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The continued path dst-read shape requires the background, producer, ordered snapshot copy, then cover on one target.",
+            )
+        }
+        fun renderScope(step: GPUFrameStep.RenderPassStep): GPUCommandEncoderScopePlan =
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Render
+            } ?: throw IllegalArgumentException("continued path dst-read render scope is absent")
+        val backgroundScope = try {
+            renderScope(backgroundStep)
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                "unsupported.native-core-primitive.render-plan",
+                "The continued path dst-read render scope is absent from the encoder plan.",
+            )
+        }
+        val producerScope = try {
+            renderScope(producerStep)
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                "unsupported.native-core-primitive.render-plan",
+                "The continued path dst-read render scope is absent from the encoder plan.",
+            )
+        }
+        val coverScope = try {
+            renderScope(coverStep)
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                "unsupported.native-core-primitive.render-plan",
+                "The continued path dst-read render scope is absent from the encoder plan.",
+            )
+        }
+        val copyScope = encoderPlan.scopes.singleOrNull {
+            it.operationKind == GPUEncoderOperationKind.CopyDestination
+        } ?: return refused(
+            "unsupported.native-core-primitive.destination-copy-plan",
+            "The continued path dst-read snapshot copy scope is absent from the encoder plan.",
+        )
+        val readbackScope = readbackStep?.let { step ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Readback
+            } ?: return refused(
+                "unsupported.native-core-primitive.readback-plan",
+                "The continued path dst-read readback scope is absent from the encoder plan.",
+            )
+        }
+        if (encoderPlan.scopes != listOf(backgroundScope, producerScope, copyScope, coverScope) +
+            listOfNotNull(readbackScope)
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.scope-order",
+                "The continued path dst-read scopes must remain background, producer, copy, cover, then optional readback.",
+            )
+        }
+        val targetBounds = (producerStep.drawPackets.first().semanticPayload
+            as? GPUDrawSemanticPayload.CorePrimitive)?.targetBounds ?: return refused(
+            "unsupported.native-core-primitive.semantic-payload",
+            "The continued path dst-read producer requires one typed CorePrimitive semantic payload.",
+        )
+        val declaredTargetDescriptor =
+            framePlan.corePrimitiveSceneTargetDescriptor(producerStep.target) ?: return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact supported scene target.",
+            )
+        val declaredTargetFormat = declaredTargetDescriptor.format
+        if (declaredTargetFormat.corePrimitiveInterpretationOrNull() == null) {
+            return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact supported scene target.",
+            )
+        }
+        val copyAuthority = when (
+            val validation = validateCorePrimitiveDestinationCopy(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                renderStep = coverStep,
+                consumerPacketIds = coverStep.drawPackets.map { packet -> packet.packetId }.toSet(),
+                targetBounds = targetBounds,
+                targetFormat = declaredTargetFormat,
+            )
+        ) {
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Refused ->
+                return refused(validation.code, validation.message)
+        } ?: return refused(
+            "invalid.native-core-primitive.multi-render-shape",
+            "The continued path dst-read shape requires its ordered destination snapshot authority.",
+        )
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+        if ((readbackStep == null) != (output == null) || resources.outputOwnedReadbacks.size > 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-output",
+                "The optional continued path dst-read readback must match one output-owned staging lease.",
+            )
+        }
+        val stagingPreparation = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .singleOrNull { request -> request.role == GPUFrameResourceRole.ReadbackStaging }
+        if (readbackStep != null && stagingPreparation != null && output != null) {
+            val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            if (readbackStep.source != producerStep.target ||
+                readbackStep.staging != stagingPreparation.resource ||
+                output.request != readbackStep.request ||
+                output.stagingResource != stagingPreparation.resource ||
+                output.request.sourceBounds != targetBounds ||
+                stagingDescriptor?.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.MapRead,
+                ) || stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                output.resourceGeneration != generationSeal.resourceGenerations[stagingPreparation.resource] ||
+                output.layout.width != targetBounds.width ||
+                output.layout.height != targetBounds.height ||
+                output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+                output.layout.paddedBytesPerRow % WEBGPU_COPY_ROW_ALIGNMENT != 0L ||
+                output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.readback-layout",
+                    "The output-owned continued path dst-read RGBA8 readback layout is not exact.",
+                )
+            }
+        }
+        if (preparedSceneTarget.width != targetBounds.width ||
+            preparedSceneTarget.height != targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.prepared-target",
+                "The prepared scene target differs from the sealed CorePrimitive dst-copy target.",
+            )
+        }
+
+        val preparationByResource = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .associateBy(GPUResourcePreparationRequest::resource)
+        val evidenceByResource = resources.ordinaryResources.associateBy(
+            GPUPreparedResourceEvidence::logicalResource,
+        )
+        fun buildRunPlan(
+            step: GPUFrameStep.RenderPassStep,
+            scope: GPUCommandEncoderScopePlan,
+            label: String,
+        ): GPUCorePrimitiveRenderRunPlan {
+            val unifiedRoute = scope.corePrimitiveNativeScopeRouteSeal as?
+                GPUCorePrimitiveNativeScopeRouteSeal.Routes ?: throw IllegalArgumentException(
+                "$label scope lost its unified CorePrimitive route seal",
+            )
+            return GPUCorePrimitiveRenderRunPlan(
+                sourceScopeIndices = listOf(scope.sourceStepIndex),
+                packetIds = step.drawPackets.map { packet -> packet.packetId },
+                renderStep = step,
+                preparationRequests = step.resourceUses.map { use ->
+                    preparationByResource.getValue(use.resource)
+                },
+                resourceEvidences = step.resourceUses.map { use ->
+                    evidenceByResource.getValue(use.resource)
+                },
+                routeSeal = unifiedRoute,
+                exactScopeKey = GPUPreparedNativeScopeKey(
+                    scope.sourceStepIndex,
+                    scope.operationKind,
+                    scope.resourceGenerationLabels,
+                    scope.nativeOperandKeys,
+                ),
+            )
+        }
+        val backgroundPlan = try {
+            buildRunPlan(backgroundStep, backgroundScope, "background")
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-plan",
+                "The continued path dst-read background run cannot form its frame-global plan: " +
+                    "${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+        val producerPlan = try {
+            buildRunPlan(producerStep, producerScope, "producer")
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-plan",
+                "The continued path dst-read producer run cannot form its frame-global plan: " +
+                    "${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+        val coverPlan = try {
+            buildRunPlan(coverStep, coverScope, "cover")
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-plan",
+                "The continued path dst-read cover run cannot form its frame-global plan: " +
+                    "${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-core-primitive.materializer-state",
+                    "The CorePrimitive materializer closed after full preflight.",
+                )
+            }
+            materializing = true
+        }
+        var backgroundLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
+        var producerLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
+        var coverLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
+        var leaseTransferred = false
+        val runMaterializer = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+            queue,
+            sessionCache,
+            limits,
+        )
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val dstRead = createCorePrimitiveDestinationSnapshot(
+                copyAuthority,
+                declaredTargetFormat,
+                targetBounds,
+            )
+            val pathDepthStencilTexture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(targetBounds.width.toUInt(), targetBounds.height.toUInt(), 1u),
+                    format = GPUTextureFormat.Depth24PlusStencil8,
+                    usage = GPUTextureUsage.RenderAttachment,
+                    label = "Kanvas.frame.corePrimitive.pathDepthStencil",
+                ),
+            ).tracked()
+            val pathDepthStencilView = pathDepthStencilTexture.createView().tracked()
+            val backgroundReady = when (
+                val result = runMaterializer.materializeAcceptedRuns(
+                    plans = listOf(backgroundPlan),
+                    targetTexture = targetTexture,
+                    targetView = targetView,
+                    generationSeal = generationSeal,
+                )
+            ) {
+                is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
+                is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                    synchronized(this) {
+                        materializing = false
+                        preRegistrationHandles.closeRetainingFailures()
+                    }
+                    return refused(result.code, result.message)
+                }
+            }
+            backgroundLifecycle = backgroundReady.leaseLifecycle
+            val producerReady = when (
+                val result = runMaterializer.materializeAcceptedRuns(
+                    plans = listOf(producerPlan),
+                    targetTexture = targetTexture,
+                    targetView = targetView,
+                    generationSeal = generationSeal,
+                    pathDepthStencilView = pathDepthStencilView,
+                )
+            ) {
+                is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
+                is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                    if (backgroundLifecycle?.releaseBeforeSubmit() !is
+                        GPUPreparedNativeFrameLeaseTransition.Applied
+                    ) {
+                        backgroundLifecycle?.quarantineUncertain()
+                    }
+                    synchronized(this) {
+                        materializing = false
+                        preRegistrationHandles.closeRetainingFailures()
+                    }
+                    return refused(result.code, result.message)
+                }
+            }
+            producerLifecycle = producerReady.leaseLifecycle
+            val coverReady = when (
+                val result = runMaterializer.materializeAcceptedRuns(
+                    plans = listOf(coverPlan),
+                    targetTexture = targetTexture,
+                    targetView = targetView,
+                    generationSeal = generationSeal,
+                    dstRead = dstRead,
+                    pathDepthStencilView = pathDepthStencilView,
+                )
+            ) {
+                is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
+                is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                    listOfNotNull(backgroundLifecycle, producerLifecycle).forEach { lifecycle ->
+                        if (lifecycle.releaseBeforeSubmit() !is
+                            GPUPreparedNativeFrameLeaseTransition.Applied
+                        ) {
+                            lifecycle.quarantineUncertain()
+                        }
+                    }
+                    synchronized(this) {
+                        materializing = false
+                        preRegistrationHandles.closeRetainingFailures()
+                    }
+                    return refused(result.code, result.message)
+                }
+            }
+            coverLifecycle = coverReady.leaseLifecycle
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.continuedPathDstRead.readback",
+                    ),
+                ).tracked()
+            }
+            val readbackOperand =
+                if (readbackScope != null && output != null && stagingBuffer != null) {
+                    GPUPreparedNativeScopeOperand.Readback(
+                        sourceStepIndex = readbackScope.sourceStepIndex,
+                        source = GPUPreparedNativeTextureOperand(
+                            targetTexture,
+                            generationSeal.deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.Borrowed,
+                        ),
+                        destination = GPUPreparedNativeBufferOperand(
+                            stagingBuffer,
+                            generationSeal.deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                        ),
+                        layout = GPUPreparedNativeReadbackLayout(
+                            originX = output.request.sourceBounds.left,
+                            originY = output.request.sourceBounds.top,
+                            width = output.layout.width,
+                            height = output.layout.height,
+                            bytesPerRow = output.layout.paddedBytesPerRow,
+                            rowsPerImage = output.layout.rowsPerImage,
+                            bufferOffset = output.layout.bufferOffset,
+                            mappedSize = output.layout.totalBufferBytes,
+                            format = declaredTargetFormat.toCorePrimitiveGPUTextureFormat(),
+                        ),
+                    )
+                } else {
+                    null
+                }
+            val copyOperand = GPUPreparedNativeScopeOperand.Copy(
+                sourceStepIndex = copyScope.sourceStepIndex,
+                operationKind = GPUEncoderOperationKind.CopyDestination,
+                source = GPUPreparedNativeTextureOperand(
+                    targetTexture,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                ),
+                destination = GPUPreparedNativeTextureOperand(
+                    dstRead.texture,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                ),
+                textureLayout = GPUPreparedNativeTextureCopyLayout(
+                    sourceOriginX = targetBounds.left,
+                    sourceOriginY = targetBounds.top,
+                    destinationOriginX = 0,
+                    destinationOriginY = 0,
+                    width = targetBounds.width,
+                    height = targetBounds.height,
+                ),
+            )
+            val operandsByStep = (
+                backgroundReady.renderOperands +
+                    producerReady.renderOperands +
+                    listOf(copyOperand) +
+                    coverReady.renderOperands +
+                    listOfNotNull(readbackOperand)
+                ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val exactScopeKeys = encoderPlan.scopes.map { scope ->
+                GPUPreparedNativeScopeKey(
+                    scope.sourceStepIndex,
+                    scope.operationKind,
+                    scope.resourceGenerationLabels,
+                    scope.nativeOperandKeys,
+                )
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = framePlan.frameId,
+                    contextIdentity = encoderPlan.contextIdentity,
+                    encoderPlanId = encoderPlan.planId,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    scopes = exactScopeKeys,
+                ),
+                scopeOperands = exactScopeKeys.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(
+                    listOf(
+                        backgroundReady.leaseLifecycle,
+                        producerReady.leaseLifecycle,
+                        coverReady.leaseLifecycle,
+                    ),
+                ),
+                pathDepthStencilViewAuthority =
+                    producerReady.pathDepthStencilViewAuthority + coverReady.pathDepthStencilViewAuthority,
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) {
+                    "Native CorePrimitive materializer closed during continued path dst-read materialization"
+                }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                leaseTransferred = true
+            }
+            result
+        } catch (failure: Throwable) {
+            if (!leaseTransferred) {
+                val lifecycles = listOfNotNull(backgroundLifecycle, producerLifecycle, coverLifecycle)
+                if (lifecycles.any { lifecycle ->
+                        lifecycle.releaseBeforeSubmit() !is
+                            GPUPreparedNativeFrameLeaseTransition.Applied
+                    }
+                ) {
+                    lifecycles.forEach { lifecycle -> lifecycle.quarantineUncertain() }
+                }
+            }
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-core-primitive.continued-path-dst-read-materialization",
+                "Public wgpu4k continued path dst-read CorePrimitive assembly failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         } finally {

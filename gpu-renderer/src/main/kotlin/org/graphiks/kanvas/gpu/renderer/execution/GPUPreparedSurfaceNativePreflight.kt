@@ -4809,7 +4809,9 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
         val unified = scope.corePrimitiveNativeScopeRouteSeal as?
             GPUCorePrimitiveNativeScopeRouteSeal.Routes
         val path = unified?.orderedUnits?.any {
-            it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+            it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
         } == true
         val direct = scope.corePrimitiveDirectNativeRouteSeal is
             GPUCorePrimitiveDirectNativeRouteSeal.Routes

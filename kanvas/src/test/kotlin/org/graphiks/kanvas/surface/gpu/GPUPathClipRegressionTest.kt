@@ -130,34 +130,40 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `advanced path blend frame refuses with the path destination read code`() {
+    fun `advanced path blend frame renders prepared via the continued path dst read lane`() {
         requireWebGpu()
 
-        // FP-11 Task 5 designed refusal: an unclipped rect plus a destination-reading path
-        // mixes the uniform32 lane with the path dst-read lane; the recording refuses the
-        // path dst-read shape by name (the dst-read cover cannot resolve in the path-stencil
-        // topology). Pre-FP-09 the legacy renderer rendered this frame with the
-        // copy-then-formula route (green at the FP-08 tip accaea616).
-        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                    drawPath(
-                        Path {
-                            moveTo(8f, 8f)
-                            lineTo(24f, 8f)
-                            lineTo(16f, 24f)
-                            close()
-                        },
-                        Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
-                    )
-                }
-                render()
+        // FP-13 Task 8: an unclipped rect plus a destination-reading path now admits the
+        // continued path dst-read shape (background render, producer fan Store, ordered snapshot
+        // copy, cover fan read-only + dst-read formula). Pre-FP-09 the legacy renderer rendered
+        // this frame (green at accaea616); FP-11 Task 5 refused it by name; Task 8 wires it.
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawPath(
+                    Path {
+                        moveTo(8f, 8f)
+                        lineTo(24f, 8f)
+                        lineTo(16f, 24f)
+                        close()
+                    },
+                    Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
+                )
             }
+            render()
         }
-        assertEquals(
-            "unsupported.native-core-primitive.path-destination-read",
-            failure.diagnostic.code.value,
+        val pixels = result.pixels
+        // CPU reference: DIFFERENCE(red, white) = |red - white| = cyan inside the path; the
+        // destination white is retained outside the path.
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 3].toInt(), "in-path pixel is opaque")
+        assertEquals(0, pixels[(16 * 32 + 12) * 4 + 0].toInt(), "in-path pixel red channel is DIFFERENCE(255, 255) = 0")
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 1].toInt(), "in-path pixel green channel is DIFFERENCE(0, 255) = 255")
+        assertEquals(255, pixels[(4 * 32 + 4) * 4 + 0].toInt(), "outside the path the white destination is retained")
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.code.startsWith("route:destination-read:DrawPath:") && entry.reason == "gpu-copy-then-formula"
+            },
+            "the continued path dst-read frame must emit the copy-then-formula route evidence",
         )
     }
 

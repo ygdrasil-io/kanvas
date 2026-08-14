@@ -227,7 +227,8 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.isCorePrimitiveDstReadPipelineKey(): Boolean =
     componentIdentity.isCorePrimitiveDstRead() &&
         (pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver ||
-            pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead)
+            pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ||
+            pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead)
 
 internal enum class GPUWgpu4kCorePrimitiveSessionCacheNativeResource {
     BindGroupLayout,

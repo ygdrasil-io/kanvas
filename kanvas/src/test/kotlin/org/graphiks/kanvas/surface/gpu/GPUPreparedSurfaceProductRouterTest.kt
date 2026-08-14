@@ -471,10 +471,12 @@ class GPUPreparedSurfaceProductRouterTest {
         // (DST) rows are now admitted (the authority is vacuous for a destination-unchanged draw),
         // but the gate still refuses other non-direct shading geometry (an inverse-fill or stroked
         // direct-triangle path under an analytic clip), so the code remains reachable.
+        // FP-13 Task 8 removed `unsupported.native-core-primitive.path-destination-read`: the
+        // destination-reading path cover is now admitted (continued producer/cover renders), and
+        // the analytic-clip dst-copy path rows re-point to `invalid.preflight.core_primitive_path_stencil`.
         val codes = listOf(
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
             "unsupported.native-core-primitive.analytic-shape-multi-key",
-            "unsupported.native-core-primitive.path-destination-read",
             "unsupported.test.builder",
         )
 

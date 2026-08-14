@@ -491,6 +491,7 @@ internal class GPUFramePreflighter(
                 corePrimitiveCoverageMaskPreparedRoutes,
             )
         } catch (failure: Throwable) {
+            failure.printStackTrace()
             return refuseWithRollback(
                 rollback,
                 acquiredAnyResource,
@@ -2749,6 +2750,11 @@ internal class GPUFramePreflighter(
                     }
                     val coverRender = renderByStepIndex.getValue(coverStepIndex)
                     val coverUnifiedUnits = unifiedUnitsByStep.getOrPut(coverStepIndex) { mutableListOf() }
+                    // The cover step must own an (empty) entry in every per-step map so the
+                    // per-step seal construction below addresses it exactly.
+                    preparedPathPairsByStep.getOrPut(coverStepIndex) { mutableListOf() }
+                    preparedPathAnalyticSealsByStep.getOrPut(coverStepIndex) { mutableListOf() }
+                    directStructuralKeysByStep.getOrPut(coverStepIndex) { mutableListOf() }
                     val coverSemantic = cover.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                         ?: return refused("Path cover is missing its CorePrimitive semantic payload.")
                     val producerGeometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
@@ -3199,18 +3205,22 @@ internal class GPUFramePreflighter(
             GPUFrameResourceLifetime.FrameLocal,
             false,
         )
-        val exactDepthUse = GPUFrameResourceUse(
-            depthStencil.resource,
-            GPUFrameResourceRole.PathDepthStencil,
-            GPUFrameResourceUsage.RenderAttachment,
-            GPUFrameResourceLifetime.FrameLocal,
-            true,
-        )
         if (indexedCoreRenders.any { (stepIndex, render) ->
-                val hasPath = render.drawPackets.any { packet ->
-                    packet.role == GPUDrawPacketRole.PathStencilProducer ||
-                        packet.role == GPUDrawPacketRole.PathStencilCover
+                val hasProducer = render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilProducer
                 }
+                val hasCover = render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+                val hasPath = hasProducer || hasCover
+                val exactDepthUse = GPUFrameResourceUse(
+                    depthStencil.resource,
+                    GPUFrameResourceRole.PathDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    // The continued cover only tests the fan (read-only); the producer writes it.
+                    write = hasProducer,
+                )
                 val expectedUniformUse = GPUFrameResourceUse(
                     stepUniformResourceByStepIndex.getValue(stepIndex),
                     GPUFrameResourceRole.UniformData,

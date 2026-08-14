@@ -655,16 +655,17 @@ class GPUAllApiBlendSurfaceTest {
                 }
                 "DrawPath", "DrawDRRect" -> when {
                     context == BlendContext.ALPHA_MASK && mode in MULTI_RENDER_DST_COPY_MODES ->
-                        // FP-13 Task 6: the dst-copy path cover under an analytic clip stays on
-                        // the path-destination-read refusal (Task 8 stencil-continuation).
-                        ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
+                        // FP-13 Task 8: the analytic-clip continued dst-read cover stays on the
+                        // path-stencil preflight authority (analytic-clip x stencil-cover is a
+                        // separate feature).
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
                         // FP-13 Task 6: the non-dst-copy path-stencil cover under an analytic clip
                         // cannot split from the uniform32 destination pass (exactly-one-path-pass
                         // authority), so it re-points to the path-stencil preflight refusal.
                         ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
+                        null
                     else -> null
                 }
                 else -> error("Unclassified core primitive API ${api.name}")
@@ -1054,8 +1055,6 @@ class GPUAllApiBlendSurfaceTest {
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
             "invalid.preflight.core_primitive_direct_geometry_resources"
-        const val PREPARED_PATH_DST_READ_REFUSAL =
-            "unsupported.native-core-primitive.path-destination-read"
         // FP-13 Task 6: the analytic-shape uniform80 pass can no longer combine with the
         // analytic-clip uniform64/160 authority in one draw, so the analytic-shape-under-clip
         // rows re-point to the analytic-shape clip refusal (the stable code for "analytic shapes
