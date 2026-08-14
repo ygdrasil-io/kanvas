@@ -55,7 +55,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 /**
  * Records the prepared top-level mask blur lane for one surface frame.
  *
- * Task 11 restored top-level (non-saveLayer) mask blur on core primitives: each
+ * Top-level (non-saveLayer) mask blur on core primitives: each
  * `MaskBlur`-semantic draw expands into the closed five-stage chain
  * (local shape mask → blur-h → blur-v → style → scene composite), faithful to the
  * legacy dispatcher semantics (GPUMaskBlurDispatch.kt: local-space mask, separable
@@ -167,7 +167,7 @@ internal fun buildTopLevelMaskBlurFrame(
     val frameId = request.baseTaskList.frameId
     val recordingId = blurPacketRenders.first().recordingId
     // A frame whose first paint op is a mask blur has no clear scene render ordered BEFORE
-    // the leading composite: on a retained session (FP-10) the composite must clear the scene
+    // the leading composite: on a retained session the composite must clear the scene
     // target itself. The condition is per chain — "no scene clear render before THIS
     // composite" — not "no scene renders at all".
     val sceneRenderPaintOrders = sceneRenders.map { render ->
@@ -673,11 +673,11 @@ private fun buildBlurChain(
         stepId = MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY,
         targetStateHash = TOP_LEVEL_MASK_BLUR_TARGET_STATE_COMPOSITE,
         layoutHash = when {
-            topLevelMaskBlurCompositeRectClipOrNull(packet) != null &&
+            topLevelMaskBlurCompositeClipOrNull(packet) != null &&
                 packet.blendPlan?.destinationReadRequirement ==
                 GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
                 TOP_LEVEL_MASK_BLUR_LAYOUT_COMPOSITE_CLIP_DST
-            topLevelMaskBlurCompositeRectClipOrNull(packet) != null ->
+            topLevelMaskBlurCompositeClipOrNull(packet) != null ->
                 TOP_LEVEL_MASK_BLUR_LAYOUT_COMPOSITE_CLIP
             packet.blendPlan?.destinationReadRequirement ==
                 GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
@@ -1022,19 +1022,20 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 """.trimIndent()
 
 /**
- * Destination-read scene composite with an analytic device-rect clip (Task 7): the
- * blurred mask coverage is multiplied by the analytic clip coverage (the same rect
- * signed-distance AA math as the core lane's `CorePrimitiveAnalyticClipBlock`,
- * evaluated at pixel centers as `clamp(0.5 - distance, 0, 1)` and symmetric about
- * each edge) before the formula blend over the dst snapshot. The
- * `TopLevelMaskBlurPixelOracle.RectClip(antiAlias = true)` reference mirrors this
- * two-sided SDF with clamp-to-edge styled sampling, so the covered contract is
- * oracle-exact for integer and half-integer clip bounds: half-integer bounds place
- * pixel centers exactly ON the ramp (coverage 0.5), where a one-sided oracle
- * convention (hard zero outside the rect) would expect 0. Fractional bounds in
- * (k+0.5, k+1) leave exterior half-pixels inside the ramp (the GPU renders
- * `0.5 - (x - left)` coverage at the left edge, `0.5 - (right - x)` at the right),
- * and the oracle models that two-sided falloff exactly.
+ * Destination-read scene composite with an analytic clip (single rect,
+ * multi-rect): the blurred mask coverage is multiplied by the folded
+ * analytic clip coverage (the same rect signed-distance AA math as the core
+ * lane's `CorePrimitiveAnalyticClipBlock`, evaluated at pixel centers as
+ * `clamp(0.5 - distance, 0, 1)` and symmetric about each edge) before the
+ * formula blend over the dst snapshot. The clip block folds an ordered list of
+ * rects: INTERSECT multiplies the per-rect coverage and DIFFERENCE multiplies
+ * one-minus-coverage. A single INTERSECT rect is `clip_count = 1`, byte-identical
+ * to the single-rect contract. The
+ * `TopLevelMaskBlurPixelOracle` reference mirrors this two-sided SDF with
+ * clamp-to-edge styled sampling, so the covered contract is oracle-exact for
+ * integer and half-integer clip bounds: half-integer bounds place pixel centers
+ * exactly ON the ramp (coverage 0.5), where a one-sided oracle convention (hard
+ * zero outside the rect) would expect 0.
  */
 internal val MASK_BLUR_COMPOSITE_CLIP_DST_WGSL: String = """
 struct CompositeDstUniforms {
@@ -1046,11 +1047,29 @@ struct CompositeDstUniforms {
 
 struct CorePrimitiveAnalyticClipBlock {
     target_size: vec2f,
-    clip_type: u32,
+    clip_count: u32,
     anti_alias: u32,
     premul_rgba: vec4f,
-    clip_bounds: vec4f,
-    clip_radii: vec4f,
+    clip0_bounds: vec4f,
+    clip0_operation: u32,
+    clip0_pad0: u32,
+    clip0_pad1: u32,
+    clip0_pad2: u32,
+    clip1_bounds: vec4f,
+    clip1_operation: u32,
+    clip1_pad0: u32,
+    clip1_pad1: u32,
+    clip1_pad2: u32,
+    clip2_bounds: vec4f,
+    clip2_operation: u32,
+    clip2_pad0: u32,
+    clip2_pad1: u32,
+    clip2_pad2: u32,
+    clip3_bounds: vec4f,
+    clip3_operation: u32,
+    clip3_pad0: u32,
+    clip3_pad1: u32,
+    clip3_pad2: u32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: CompositeDstUniforms;
@@ -1086,11 +1105,27 @@ fn rect_signed_distance(position: vec2f, bounds: vec4f) -> f32 {
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
 }
 
-fn clip_coverage(position: vec2f) -> f32 {
-    let distance = rect_signed_distance(position, clipUniforms.clip_bounds);
+fn rect_coverage(position: vec2f, bounds: vec4f) -> f32 {
+    let distance = rect_signed_distance(position, bounds);
     let hard = select(0.0, 1.0, distance <= 0.0);
     let aa = clamp(0.5 - distance, 0.0, 1.0);
     return select(hard, aa, clipUniforms.anti_alias != 0u);
+}
+
+fn clip_coverage(position: vec2f) -> f32 {
+    let cov0 = rect_coverage(position, clipUniforms.clip0_bounds);
+    let term0 = select(cov0, 1.0 - cov0, clipUniforms.clip0_operation == 1u);
+    let factor0 = select(1.0, term0, clipUniforms.clip_count > 0u);
+    let cov1 = rect_coverage(position, clipUniforms.clip1_bounds);
+    let term1 = select(cov1, 1.0 - cov1, clipUniforms.clip1_operation == 1u);
+    let factor1 = select(1.0, term1, clipUniforms.clip_count > 1u);
+    let cov2 = rect_coverage(position, clipUniforms.clip2_bounds);
+    let term2 = select(cov2, 1.0 - cov2, clipUniforms.clip2_operation == 1u);
+    let factor2 = select(1.0, term2, clipUniforms.clip_count > 2u);
+    let cov3 = rect_coverage(position, clipUniforms.clip3_bounds);
+    let term3 = select(cov3, 1.0 - cov3, clipUniforms.clip3_operation == 1u);
+    let factor3 = select(1.0, term3, clipUniforms.clip_count > 3u);
+    return factor0 * factor1 * factor2 * factor3;
 }
 
 @fragment
@@ -1109,49 +1144,83 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 }
 """.trimIndent()
 
+/** Boolean combine of one admitted analytic composite clip element (recording-package neutral type). */
+internal enum class GPUTopLevelMaskBlurCompositeClipCombine { Intersect, Difference }
+
 /**
- * The admitted analytic device-rect clip of one mask blur composite packet, or null.
- *
- * Task 7 widens the composite lane scope from NoClip/ScissorOnly to also admit an
- * analytic device-rect clip whose coverage folds into the composite shader. The four
- * scalars are the device-space clip bounds consumed by the composite clip uniform64
- * (mirroring the core lane's `CorePrimitiveAnalyticClipBlock` ABI), matching the
- * `TopLevelMaskBlurPixelOracle.RectClip` AA coverage reference at pixel centers.
- *
- * Covered contract: integer and half-integer clip bounds are oracle-exact — half-integer
- * bounds place pixel centers exactly ON the two-sided `0.5 - distance` ramp (coverage
- * 0.5), which the oracle mirrors. Fractional bounds in (k+0.5, k+1) leave exterior
- * half-pixels inside the ramp (e.g. `0.5 - (x - left)` at the left edge): the oracle
- * models the shader's two-sided SDF, so a one-sided hard-zero-outside convention
- * (the oracle's non-AA clip semantics) would diverge there.
+ * One ordered element of an admitted analytic composite clip: a
+ * device-space rect with a boolean combine, folded into the composite shader as
+ * coverage (INTERSECT) or one-minus-coverage (DIFFERENCE).
  */
-internal data class GPUTopLevelMaskBlurCompositeRectClip(
+internal data class GPUTopLevelMaskBlurCompositeClipElement(
     val left: Float,
     val top: Float,
     val right: Float,
     val bottom: Float,
+    val operation: GPUTopLevelMaskBlurCompositeClipCombine,
     val antiAlias: Boolean,
 )
 
-internal fun topLevelMaskBlurCompositeRectClipOrNull(
+/**
+ * The admitted analytic clip of one mask blur composite packet: a single
+ * INTERSECT device rect (the single-rect scope) or a bounded ordered rect list
+ * (the multi-rect complex-clip extension). Both fold into the composite
+ * shader's analytic clip block; the shader multiplies the blurred mask coverage
+ * by the folded per-rect coverage.
+ */
+internal data class GPUTopLevelMaskBlurCompositeClip(
+    val elements: List<GPUTopLevelMaskBlurCompositeClipElement>,
+)
+
+internal fun topLevelMaskBlurCompositeClipOrNull(
     packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
-): GPUTopLevelMaskBlurCompositeRectClip? {
-    val plan = packet.clipExecutionPlan as?
-        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.AnalyticCoverage ?: return null
-    val rect = plan.geometry as?
-        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry.Rect ?: return null
-    return GPUTopLevelMaskBlurCompositeRectClip(
-        left = rect.bounds.left,
-        top = rect.bounds.top,
-        right = rect.bounds.right,
-        bottom = rect.bounds.bottom,
-        antiAlias = plan.antiAlias,
+): GPUTopLevelMaskBlurCompositeClip? {
+    val plan = packet.clipExecutionPlan ?: return null
+    val single = plan as?
+        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.AnalyticCoverage
+    if (single != null) {
+        val rect = single.geometry as?
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry.Rect ?: return null
+        return GPUTopLevelMaskBlurCompositeClip(
+            listOf(
+                GPUTopLevelMaskBlurCompositeClipElement(
+                    left = rect.bounds.left,
+                    top = rect.bounds.top,
+                    right = rect.bounds.right,
+                    bottom = rect.bounds.bottom,
+                    operation = GPUTopLevelMaskBlurCompositeClipCombine.Intersect,
+                    antiAlias = single.antiAlias,
+                ),
+            ),
+        )
+    }
+    val multi = plan as?
+        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.AnalyticMultiRect ?: return null
+    return GPUTopLevelMaskBlurCompositeClip(
+        multi.elements.map { element ->
+            val rect = element.geometry as?
+                org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry.Rect ?: return null
+            GPUTopLevelMaskBlurCompositeClipElement(
+                left = rect.bounds.left,
+                top = rect.bounds.top,
+                right = rect.bounds.right,
+                bottom = rect.bounds.bottom,
+                operation = when (element.operation) {
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine.Intersect ->
+                        GPUTopLevelMaskBlurCompositeClipCombine.Intersect
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine.Difference ->
+                        GPUTopLevelMaskBlurCompositeClipCombine.Difference
+                },
+                antiAlias = element.antiAlias,
+            )
+        },
     )
 }
 
 /**
  * Refuses blur composites whose clip execution is beyond the lane scope (NoClip,
- * ScissorOnly, or one analytic device-rect clip only).
+ * ScissorOnly, one analytic device-rect clip, or a bounded multi-rect analytic
+ * clip). Coverage-mask, stencil, and stacked clips stay terminal.
  */
 internal fun topLevelMaskBlurCompositeClipRefusal(
     packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
@@ -1162,7 +1231,7 @@ internal fun topLevelMaskBlurCompositeClipRefusal(
     ) {
         return null
     }
-    if (topLevelMaskBlurCompositeRectClipOrNull(packet) != null) {
+    if (topLevelMaskBlurCompositeClipOrNull(packet) != null) {
         return null
     }
     return "unsupported.native-mask-blur.clip"

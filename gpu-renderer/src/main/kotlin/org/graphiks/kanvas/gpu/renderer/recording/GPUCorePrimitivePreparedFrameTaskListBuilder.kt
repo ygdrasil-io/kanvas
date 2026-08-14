@@ -641,6 +641,10 @@ private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): B
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
     }
 
+private fun GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry(): Boolean =
+    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode ==
+        GPUCorePrimitiveGeometryMode.StencilEdgeFan
+
 private data class GPUCorePrimitivePathStencilPacketPlan(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
     val scissorBounds: GPUPixelBounds,
@@ -842,6 +846,7 @@ private fun GPUClipExecutionPlan.contentKeyOrNull(): String? = when (this) {
     is GPUClipExecutionPlan.ScissorOnly,
     is GPUClipExecutionPlan.AnalyticCoverage,
     is GPUClipExecutionPlan.AnalyticIntersection,
+    is GPUClipExecutionPlan.AnalyticMultiRect,
     is GPUClipExecutionPlan.Refused,
     -> null
 }
@@ -1582,6 +1587,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.forEach { packet ->
             val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticCoverage
                 ?: return@forEach
+            // A NoOp (destination-unchanged) draw shades nothing, so its analytic-clip
+            // authority is vacuous — skip it and let the packet elide downstream like any other
+            // NoOp. The path-stencil cover is the exception: it still runs the stencil test/reset
+            // even when its color blend is destination-only, so it keeps the authority. The
+            // intersections twin below applies the same rule.
+            if (packet.blendPlan is GPUBlendPlan.NoOp &&
+                !request.coreSemantics().getValue(packet.commandIdValue).hasPathStencilCoverGeometry()
+            ) {
+                return@forEach
+            }
             when (val authority = corePrimitiveAnalyticClipAuthority(plan, request.targetBounds)) {
                 is GPUCorePrimitiveAnalyticClipAuthority.Accepted ->
                     analyticClipAuthoritiesByCommandId[packet.commandIdValue] = authority
@@ -1596,6 +1611,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         basePackets.forEach { packet ->
             val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticIntersection
                 ?: return@forEach
+            if (packet.blendPlan is GPUBlendPlan.NoOp &&
+                !request.coreSemantics().getValue(packet.commandIdValue).hasPathStencilCoverGeometry()
+            ) {
+                return@forEach
+            }
             when (val authority = corePrimitiveAnalyticIntersectionAuthority(plan, request.targetBounds)) {
                 is GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted ->
                     analyticIntersectionAuthoritiesByCommandId[packet.commandIdValue] = authority
@@ -1608,17 +1628,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 request.coreSemantics().getValue(it).usesAnalyticShapeUniform80()
             }
         }
-        if (analyticShapeCommandIds.any {
-                it in analyticClipAuthoritiesByCommandId ||
-                    it in analyticIntersectionAuthoritiesByCommandId
-            }
-        ) {
-            return refused(
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
-                "One direct CorePrimitive draw cannot combine analytic-shape uniform80 with analytic-clip " +
-                    "uniform64 or uniform160.",
-            )
-        }
+        // An analytic shape (uniform80) drawn under an analytic clip (uniform64/160)
+        // now falls through to the analytic-shape clip refusal below instead of a dedicated
+        // mixed-layout code: the analytic-shape shader still requires NoClip or ScissorOnly
+        // execution, so the accurate stable code is core_primitive_analytic_shape_clip. The
+        // former mixed_uniform_layouts code for this single-draw combination is retired with the
+        // uniform64/160 split admission (the frame-level mixed gate is gone too).
         val preparedAnalyticShapesByCommandId = linkedMapOf<Int, GPUCorePrimitivePreparedAnalyticShape>()
         for (render in baseRenders) {
             for (packet in render.drawPackets) {
@@ -2105,35 +2120,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 it.commandIdValue in analyticIntersectionAuthoritiesByCommandId ||
                 it in coverageMaskUniformPackets
         }
-        // FP-11 Task 6: the direct pass splits by uniform layout, so consecutive same-layout
+        // The direct pass splits by uniform layout, so consecutive same-layout
         // runs emit one render pass per layout group (each with its own slab). The uniform80
-        // (analytic-shape) split renders on the prepared lane. The analytic-clip (uniform64 /
-        // uniform160) split stays pinned on this mixed-layout refusal for a deterministic
-        // materializer residual: bypassing this gate and running the blend suite's
-        // fixed-function non-SRC_OVER analytic-clip rows (48 rows = 4 APIs x 12 modes) fails
-        // deterministically with `GPUOwnedNativeCloseIncompleteException`
-        // ("prepared-scene-child-cache close remains incomplete with 1 native owner(s)") on
-        // `failed.surface.prepared.session-close`; the SRC_OVER rows render clean. The leak
-        // was the split-lane materializer's mid-loop refusal path skipping the lease cleanup
-        // (now fixed), so the 64/160 split remains unwired pending the per-step continuation
-        // design rather than a leak. Task 8 records this as the mixed-layout residual B-row
-        // with this evidence.
-        val activeDirectUniformLayouts = listOf(
-            legacyUniformPackets.isNotEmpty() ||
-                pathStencilPlansByCommandId.keys.any { it !in analyticClipAuthoritiesByCommandId },
-            analyticShapeUniformPackets.isNotEmpty(),
-            analyticUniformPackets.isNotEmpty(),
-            analyticIntersectionUniformPackets.isNotEmpty(),
-        ).count { it }
-        if (activeDirectUniformLayouts > 1 &&
-            (analyticUniformPackets.isNotEmpty() || analyticIntersectionUniformPackets.isNotEmpty())
-        ) {
-            return refused(
-                "unsupported.recording.core_primitive_mixed_uniform_layouts",
-                "One direct CorePrimitive pass cannot mix analytic-clip uniform64 or uniform160 " +
-                    "with another uniform layout.",
-            )
-        }
+        // (analytic-shape), uniform64 (analytic-clip), and uniform160 (analytic-intersection)
+        // splits all render on the prepared lane via the split-lane materializer's per-step
+        // continuation/ownership design. The former mixed-layout refusal for the
+        // analytic-clip 64/160 mixes was the deterministic materializer-residual gate: before
+        // the split-lane mid-loop lease cleanup landed, bypassing it leaked a
+        // pooled frame slot (GPUOwnedNativeCloseIncompleteException on
+        // `failed.surface.prepared.session-close`). With the cleanup in place and the per-step
+        // uniform64/160 seal slicing restored, the gate is removed: each layout group owns its
+        // slab and the split lane materializes every pass in step order.
         val directPassStructuralKeys = geometryPackets
             .filter { packet ->
                 packet.role == GPUDrawPacketRole.Shading &&
@@ -2556,23 +2553,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Prepared core-primitive destination-snapshot byte accounting overflowed.",
             )
         }
-        // The snapshot consumer ref records the base packet id, but the assembler lowers a
-        // path-stencil (StencilEdgeFan) source into producer/cover packets with fresh ids, so
-        // the dst-read cover can never be resolved from the base packet. The dst-read formula
-        // also forces the cover into its own render pass, which the path-stencil authority
-        // rejects. Refuse the path dst-read shape by name at the recording authority instead
-        // of surfacing an internal frame-build contract wrapper from the assembler.
-        destinationReadPlans.firstOrNull { plan ->
-            val geometry = (request.semanticsByCommandId[plan.packet.commandIdValue]
-                as? GPUDrawSemanticPayload.CorePrimitive)?.geometry
-            geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-                geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
-        }?.let {
-            return refused(
-                "unsupported.native-core-primitive.path-destination-read",
-                "Prepared path-stencil packets cannot consume destination-read snapshots yet.",
-            )
-        }
+        // A destination-reading path-stencil (StencilEdgeFan) packet now routes
+        // through the admitted path dst-read cover shape: the destination snapshot consumer ref
+        // keys to the assembled path-cover packet id (not the lowered producer/cover base id),
+        // and the pair splits into a producer render and a continued cover render so the ordered
+        // snapshot copy lands between them.
         val destinationReadPlansByCommandId = destinationReadPlans.associateBy { it.packet.commandIdValue }
         val preparations = mutableListOf(
             corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
@@ -2815,11 +2800,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             GPUStorePlan.Discard,
             0u,
         )
+        // A continued destination-read path splits its producer (which clears and
+        // stores the fan) from its cover (which loads the fan read-only and blends the snapshot).
+        val pathDepthStencilProducerLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+            GPUStencilLoadOperation.Clear,
+            GPUStorePlan.Store,
+            0u,
+        )
+        val pathDepthStencilCoverLoadStore = GPUDepthStencilLoadStorePlan.ReadOnlyKeep
 
         fun consumerResourceUses(
             baseRender: GPUTask.Render,
             basePacket: GPUDrawPacket,
             pathPlan: GPUCorePrimitivePathStencilPacketPlan?,
+            pathPacketRole: GPUDrawPacketRole? = null,
         ): List<GPUFrameResourceUse> {
             val topology = basePacket.clipExecutionPlan?.contentKeyOrNull()?.let(topologiesByContentKey::get)
             val geometryUses = if (
@@ -2875,13 +2869,18 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         GPUFrameResourceRole.PathDepthStencil,
                         GPUFrameResourceUsage.RenderAttachment,
                         GPUFrameResourceLifetime.FrameLocal,
-                        write = true,
+                        // The continued cover only tests the fan; the producer (or the merged
+                        // single-pass pair) writes it.
+                        write = pathPacketRole != GPUDrawPacketRole.PathStencilCover,
                     ),
                 )
             } else {
                 emptyList()
             }
-            val destinationSnapshotUses = if (basePacket.commandIdValue in destinationReadPlansByCommandId) {
+            val destinationSnapshotUses = if (
+                basePacket.commandIdValue in destinationReadPlansByCommandId &&
+                pathPacketRole != GPUDrawPacketRole.PathStencilProducer
+            ) {
                 listOf(
                     GPUFrameResourceUse(
                         destinationReadPlansByCommandId.getValue(basePacket.commandIdValue).snapshot,
@@ -2901,7 +2900,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         fun consumerDepthStencilLoadStore(
             pathPlan: GPUCorePrimitivePathStencilPacketPlan?,
             resourceUses: List<GPUFrameResourceUse>,
+            pathPacketRole: GPUDrawPacketRole? = null,
         ): GPUDepthStencilLoadStorePlan? = when {
+            pathPlan != null && pathPacketRole == GPUDrawPacketRole.PathStencilProducer ->
+                pathDepthStencilProducerLoadStore
+            pathPlan != null && pathPacketRole == GPUDrawPacketRole.PathStencilCover ->
+                pathDepthStencilCoverLoadStore
             pathPlan != null -> pathDepthStencilLoadStore
             resourceUses.any { it.role == GPUFrameResourceRole.ClipDepthStencil } ->
                 GPUDepthStencilLoadStorePlan.ReadOnlyKeep
@@ -2921,21 +2925,30 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             baseRenders.isNotEmpty() && baseRenders.all { baseRender ->
             baseRender.drawPackets.all { basePacket ->
                 val pathPlan = pathStencilPlansByCommandId[basePacket.commandIdValue]
-                val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan)
-                isGeometryBatchCompatible(
-                    commandIds = if (pathPlan == null) {
-                        listOf(basePacket.commandIdValue)
-                    } else {
-                        listOf(basePacket.commandIdValue, basePacket.commandIdValue)
-                    },
-                    resourceUses = resourceUses,
-                    depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
-                )
+                if (basePacket.commandIdValue in destinationReadPlansByCommandId &&
+                    pathPlan != null
+                ) {
+                    // A destination-reading path splits its producer/cover into
+                    // separate continued renders, so it never batches into the merged
+                    // single-pass path pair geometry batch.
+                    false
+                } else {
+                    val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan)
+                    isGeometryBatchCompatible(
+                        commandIds = if (pathPlan == null) {
+                            listOf(basePacket.commandIdValue)
+                        } else {
+                            listOf(basePacket.commandIdValue, basePacket.commandIdValue)
+                        },
+                        resourceUses = resourceUses,
+                        depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
+                    )
+                }
             }
         }
         val directPathDepthStencilCompatible =
             pathStencilPlansByCommandId.isNotEmpty() && geometryBatchPredicted
-        // FP-11 Task 6 layout-run grouping: consecutive consumer renders whose packets share
+        // Layout-run grouping: consecutive consumer renders whose packets share
         // one uniform layout (or a path-stencil pair whose cover keeps the uniform32 layout)
         // merge into one direct render pass; analytic-clip path pairs form their own pass.
         // The composition is derived up front so direct packets only retain the path-neutral
@@ -2951,10 +2964,14 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             val pathPlan = pathStencilPlansByCommandId[packet.commandIdValue]
             if (pathPlan != null) {
                 val clip = requireNotNull(packet.clipExecutionPlan)
-                return if (clip is GPUClipExecutionPlan.AnalyticCoverage) {
-                    "path-analytic-clip"
-                } else {
-                    "uniform32"
+                return when {
+                    clip is GPUClipExecutionPlan.AnalyticCoverage -> "path-analytic-clip"
+                    packet.commandIdValue in destinationReadPlansByCommandId ->
+                        // A destination-reading path pair splits from the
+                        // background fill so the ordered snapshot copy lands between the two
+                        // passes (the continued cover pass binds the snapshot).
+                        "path-dst-read"
+                    else -> "uniform32"
                 }
             }
             val clip = requireNotNull(packet.clipExecutionPlan)
@@ -2977,10 +2994,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 // clip, so the group key follows the cover's layout.
                 val cover = packets.firstOrNull { it.role == GPUDrawPacketRole.PathStencilCover }
                 val clip = cover?.clipExecutionPlan ?: requireNotNull(pathPacket.clipExecutionPlan)
-                return if (clip is GPUClipExecutionPlan.AnalyticCoverage) {
-                    "path-analytic-clip"
-                } else {
-                    "uniform32"
+                return when {
+                    clip is GPUClipExecutionPlan.AnalyticCoverage -> "path-analytic-clip"
+                    pathPacket.commandIdValue in destinationReadPlansByCommandId -> "path-dst-read"
+                    else -> "uniform32"
                 }
             }
             return consumerRunKey(packets.single())
@@ -3006,113 +3023,144 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val consumersByBaseTask = linkedMapOf<GPUTaskID, List<GPUTask.Render>>()
         var consumerOrdinal = 0
         baseRenders.forEach { baseRender ->
-            consumersByBaseTask[baseRender.taskId] = baseRender.drawPackets.mapIndexed { packetIndex, basePacket ->
+            consumersByBaseTask[baseRender.taskId] = baseRender.drawPackets.flatMapIndexed { packetIndex, basePacket ->
                 val pathPlan = pathStencilPlansByCommandId[basePacket.commandIdValue]
-                val preparedPackets = if (pathPlan == null) {
-                    listOf(
-                        packet(
-                            basePacket,
-                            requireNotNull(request.coreSemantics()[basePacket.commandIdValue]),
-                            preparedSemanticOverride = preparedCoverageMaskSemanticsByCommandId[
-                                basePacket.commandIdValue
-                            ] ?: preparedAnalyticShapesByCommandId[basePacket.commandIdValue]?.semantic,
-                            direct = basePacket.commandIdValue in directGeometryBytesByCommandId ||
-                                basePacket.commandIdValue in
-                                nativeClipStencilConsumerGeometryBytesByCommandId,
-                            clipStencilCompatible = basePacket.commandIdValue in
-                                nativeClipStencilConsumerGeometryBytesByCommandId,
-                            pathDepthStencilCompatible = directPathDepthStencilCompatible &&
-                                basePacket.commandIdValue in directGeometryBytesByCommandId &&
-                                basePacket.commandIdValue in pathRunPacketIds,
-                            uniformSlabSeal = uniformSlabSeal,
-                            analyticShape = preparedAnalyticShapesByCommandId[basePacket.commandIdValue],
-                            analyticShapeUniformSlabPlan = analyticShapeUniformSlabPlan,
-                            analyticClipAuthority = analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
-                            analyticUniformSlabPlan = analyticUniformSlabPlan,
-                            analyticUniformBytes = analyticUniformBytesByCommandId[basePacket.commandIdValue],
-                            analyticIntersectionAuthority =
-                                analyticIntersectionAuthoritiesByCommandId[basePacket.commandIdValue],
-                            analyticIntersectionUniformSlabPlan = analyticIntersectionUniformSlabPlan,
-                            analyticIntersectionUniformBytes =
-                                analyticIntersectionUniformBytesByCommandId[basePacket.commandIdValue],
-                            coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
-                            sampleCount = preparedSamplePlan.sampleCount,
-                            targetFormat = request.targetFormat,
-                            publicPipelineKeys = publicPipelineKeys,
-                        ),
+                val isDstReadPath = basePacket.commandIdValue in destinationReadPlansByCommandId
+                val directPacket = if (pathPlan == null) {
+                    packet(
+                        basePacket,
+                        requireNotNull(request.coreSemantics()[basePacket.commandIdValue]),
+                        preparedSemanticOverride = preparedCoverageMaskSemanticsByCommandId[
+                            basePacket.commandIdValue
+                        ] ?: preparedAnalyticShapesByCommandId[basePacket.commandIdValue]?.semantic,
+                        direct = basePacket.commandIdValue in directGeometryBytesByCommandId ||
+                            basePacket.commandIdValue in
+                            nativeClipStencilConsumerGeometryBytesByCommandId,
+                        clipStencilCompatible = basePacket.commandIdValue in
+                            nativeClipStencilConsumerGeometryBytesByCommandId,
+                        pathDepthStencilCompatible = directPathDepthStencilCompatible &&
+                            basePacket.commandIdValue in directGeometryBytesByCommandId &&
+                            basePacket.commandIdValue in pathRunPacketIds,
+                        uniformSlabSeal = uniformSlabSeal,
+                        analyticShape = preparedAnalyticShapesByCommandId[basePacket.commandIdValue],
+                        analyticShapeUniformSlabPlan = analyticShapeUniformSlabPlan,
+                        analyticClipAuthority = analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
+                        analyticUniformSlabPlan = analyticUniformSlabPlan,
+                        analyticUniformBytes = analyticUniformBytesByCommandId[basePacket.commandIdValue],
+                        analyticIntersectionAuthority =
+                            analyticIntersectionAuthoritiesByCommandId[basePacket.commandIdValue],
+                        analyticIntersectionUniformSlabPlan = analyticIntersectionUniformSlabPlan,
+                        analyticIntersectionUniformBytes =
+                            analyticIntersectionUniformBytesByCommandId[basePacket.commandIdValue],
+                        coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
+                        sampleCount = preparedSamplePlan.sampleCount,
+                        targetFormat = request.targetFormat,
+                        publicPipelineKeys = publicPipelineKeys,
                     )
                 } else {
-                    listOf(
-                        pathStencilPacket(
-                            basePacket,
-                            pathPlan,
-                            GPUDrawPacketRole.PathStencilProducer,
-                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
-                            corePrimitiveColorWriteNoneBlendPlan(),
-                            uniformSlabSeal,
-                            analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
-                            analyticUniformSlabPlan,
-                            analyticUniformBytesByCommandId[basePacket.commandIdValue],
-                            preparedSamplePlan.sampleCount,
-                            request.targetFormat,
-                            publicPipelineKeys,
+                    null
+                }
+                val producerPacket = if (pathPlan != null) {
+                    pathStencilPacket(
+                        basePacket,
+                        pathPlan,
+                        GPUDrawPacketRole.PathStencilProducer,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+                        corePrimitiveColorWriteNoneBlendPlan(),
+                        uniformSlabSeal,
+                        analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
+                        analyticUniformSlabPlan,
+                        analyticUniformBytesByCommandId[basePacket.commandIdValue],
+                        preparedSamplePlan.sampleCount,
+                        request.targetFormat,
+                        publicPipelineKeys,
+                    )
+                } else {
+                    null
+                }
+                val coverPacket = if (pathPlan != null) {
+                    pathStencilPacket(
+                        basePacket,
+                        pathPlan,
+                        GPUDrawPacketRole.PathStencilCover,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+                        requireNotNull(basePacket.blendPlan),
+                        uniformSlabSeal,
+                        analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
+                        analyticUniformSlabPlan,
+                        analyticUniformBytesByCommandId[basePacket.commandIdValue],
+                        preparedSamplePlan.sampleCount,
+                        request.targetFormat,
+                        publicPipelineKeys,
+                    )
+                } else {
+                    null
+                }
+                // A destination-reading path lowers to two continued renders — the
+                // producer (Clear+Store fan) and the cover (read-only fan + snapshot blend) — so
+                // the ordered snapshot copy lands between them. Non-dst-read paths keep the merged
+                // producer+cover pair in one render.
+                val renderGroups: List<Pair<List<GPUDrawPacket>, GPUDrawPacketRole?>> = when {
+                    pathPlan == null -> listOf(listOf(requireNotNull(directPacket)) to null)
+                    isDstReadPath -> listOf(
+                        listOf(requireNotNull(producerPacket)) to GPUDrawPacketRole.PathStencilProducer,
+                        listOf(requireNotNull(coverPacket)) to GPUDrawPacketRole.PathStencilCover,
+                    )
+                    else -> listOf(listOf(requireNotNull(producerPacket), requireNotNull(coverPacket)) to null)
+                }
+                renderGroups.map { (preparedPackets, pathPacketRole) ->
+                    val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan, pathPacketRole)
+                    val batchEligibility = baseRender.batchEligibilityByPacketId[basePacket.packetId]
+                        ?: producerBatchEligibility()
+                    val roleSuffix = when (pathPacketRole) {
+                        GPUDrawPacketRole.PathStencilProducer -> ".producer"
+                        GPUDrawPacketRole.PathStencilCover -> ".cover"
+                        else -> ""
+                    }
+                    GPUTask.Render(
+                        taskId = GPUTaskID(
+                            "${baseRender.taskId.value}.core-consumer.$packetIndex$roleSuffix",
                         ),
-                        pathStencilPacket(
-                            basePacket,
+                        recordingId = baseRender.recordingId,
+                        phase = GPUTaskPhase.Render,
+                        target = request.target,
+                        loadStore = GPULoadStorePlan(
+                            if (nativeClipStencilPlan?.sampleCount == 4) {
+                                consumerOrdinal++
+                                "load"
+                            } else if (consumerOrdinal++ == 0) {
+                                if (nativeCoverageMaskPlan != null) {
+                                    baseRenders.first().loadStore.loadOp
+                                } else {
+                                    "clear"
+                                }
+                            } else {
+                                "load"
+                            },
+                            GPUStorePlan.Store,
+                        ),
+                        samplePlan = preparedSamplePlan,
+                        resourceUses = resourceUses,
+                        provisionalSegmentKey = if (nativeClipStencilPlan?.sampleCount == 4) {
+                            GPUProvisionalRenderSegmentKey(
+                                "${baseRender.provisionalSegmentKey.value}.clip-stencil-consumer.${basePacket.commandIdValue}",
+                            )
+                        } else {
+                            baseRender.provisionalSegmentKey
+                        },
+                        drawPackets = preparedPackets,
+                        batchEligibilityByPacketId = preparedPackets.associate { packet ->
+                            packet.packetId to batchEligibility
+                        },
+                        sampleContinuationKey = multisampleContinuationKey,
+                        compositeMembership = baseRender.compositeMembership,
+                        depthStencilLoadStore = consumerDepthStencilLoadStore(
                             pathPlan,
-                            GPUDrawPacketRole.PathStencilCover,
-                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
-                            requireNotNull(basePacket.blendPlan),
-                            uniformSlabSeal,
-                            analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
-                            analyticUniformSlabPlan,
-                            analyticUniformBytesByCommandId[basePacket.commandIdValue],
-                            preparedSamplePlan.sampleCount,
-                            request.targetFormat,
-                            publicPipelineKeys,
+                            resourceUses,
+                            pathPacketRole,
                         ),
                     )
                 }
-                val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan)
-                val batchEligibility = baseRender.batchEligibilityByPacketId[basePacket.packetId]
-                    ?: producerBatchEligibility()
-                GPUTask.Render(
-                    taskId = GPUTaskID("${baseRender.taskId.value}.core-consumer.$packetIndex"),
-                    recordingId = baseRender.recordingId,
-                    phase = GPUTaskPhase.Render,
-                    target = request.target,
-                    loadStore = GPULoadStorePlan(
-                        if (nativeClipStencilPlan?.sampleCount == 4) {
-                            consumerOrdinal++
-                            "load"
-                        } else if (consumerOrdinal++ == 0) {
-                            if (nativeCoverageMaskPlan != null) {
-                                baseRenders.first().loadStore.loadOp
-                            } else {
-                                "clear"
-                            }
-                        } else {
-                            "load"
-                        },
-                        GPUStorePlan.Store,
-                    ),
-                    samplePlan = preparedSamplePlan,
-                    resourceUses = resourceUses,
-                    provisionalSegmentKey = if (nativeClipStencilPlan?.sampleCount == 4) {
-                        GPUProvisionalRenderSegmentKey(
-                            "${baseRender.provisionalSegmentKey.value}.clip-stencil-consumer.${basePacket.commandIdValue}",
-                        )
-                    } else {
-                        baseRender.provisionalSegmentKey
-                    },
-                    drawPackets = preparedPackets,
-                    batchEligibilityByPacketId = preparedPackets.associate { packet ->
-                        packet.packetId to batchEligibility
-                    },
-                    sampleContinuationKey = multisampleContinuationKey,
-                    compositeMembership = baseRender.compositeMembership,
-                    depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
-                )
             }
         }
         val unbatchedPreparedRenders = consumersByBaseTask.values.flatten()
@@ -3132,7 +3180,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Core primitive geometry batch prediction diverged from its constructed renders.",
             )
         }
-        // FP-11 Task 6: instead of merging every compatible consumer render into one batch, the
+        // Instead of merging every compatible consumer render into one batch, the
         // direct pass splits into one render per consecutive uniform-layout run (each layout
         // group owns its slab). A single-run frame produces the exact legacy batch identity so
         // single-layout frames keep their sealed shape byte-for-byte.
@@ -3256,14 +3304,41 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val invalidPathDepthStencilRender = preparedRenders.firstOrNull { render ->
             val pathUses = render.resourceUses.filter { it.role == GPUFrameResourceRole.PathDepthStencil }
             val clipUses = render.resourceUses.filter { it.role == GPUFrameResourceRole.ClipDepthStencil }
-            val exactPathAttachment = pathDepthStencil != null && pathUses.size == 1 &&
-                pathUses.single() == GPUFrameResourceUse(
-                    pathDepthStencil,
+            val hasProducer = render.drawPackets.any { it.role == GPUDrawPacketRole.PathStencilProducer }
+            val hasCover = render.drawPackets.any { it.role == GPUDrawPacketRole.PathStencilCover }
+            val pathWriteUse = pathDepthStencil?.let { attachment ->
+                GPUFrameResourceUse(
+                    attachment,
                     GPUFrameResourceRole.PathDepthStencil,
                     GPUFrameResourceUsage.RenderAttachment,
                     GPUFrameResourceLifetime.FrameLocal,
                     write = true,
-                ) && render.depthStencilLoadStore == pathDepthStencilLoadStore
+                )
+            }
+            val pathReadUse = pathDepthStencil?.let { attachment ->
+                GPUFrameResourceUse(
+                    attachment,
+                    GPUFrameResourceRole.PathDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    write = false,
+                )
+            }
+            // A continued destination-read path lowers to a producer render
+            // (write + Store) and a cover render (read-only); the merged single-pass pair keeps
+            // write + Discard.
+            val exactPathAttachment = when {
+                hasProducer && hasCover -> pathDepthStencil != null && pathUses.size == 1 &&
+                    pathUses.single() == pathWriteUse &&
+                    render.depthStencilLoadStore == pathDepthStencilLoadStore
+                hasProducer -> pathDepthStencil != null && pathUses.size == 1 &&
+                    pathUses.single() == pathWriteUse &&
+                    render.depthStencilLoadStore == pathDepthStencilProducerLoadStore
+                hasCover -> pathDepthStencil != null && pathUses.size == 1 &&
+                    pathUses.single() == pathReadUse &&
+                    render.depthStencilLoadStore == pathDepthStencilCoverLoadStore
+                else -> false
+            }
             val hasPathAttachmentState = pathUses.isNotEmpty() ||
                 render.depthStencilLoadStore == pathDepthStencilLoadStore
             val exactClipConsumerAttachment =
@@ -3459,6 +3534,15 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val destinationReadTask = if (destinationReadPlans.isEmpty()) {
             null
         } else {
+            // A destination-reading path-stencil packet lowers to producer/cover
+            // packets with fresh ids, so the snapshot consumer ref keys to the assembled cover
+            // packet id rather than the base packet id the semantic builder retained.
+            fun destinationConsumerPacketId(plan: GPUCorePrimitiveDestinationSnapshotPlan): GPUDrawPacketID =
+                if (plan.packet.commandIdValue in pathStencilPlansByCommandId) {
+                    GPUDrawPacketID("${plan.packet.packetId.value}.path-stencil-cover")
+                } else {
+                    plan.packet.packetId
+                }
             val renderByPacketId = preparedRenders
                 .flatMap { render -> render.drawPackets.map { packet -> packet.packetId to render } }
                 .toMap()
@@ -3471,7 +3555,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 payload = GPUDestinationSnapshotTaskPayload(
                     grouping = GPUDestinationSnapshotGroupingResult(
                         groups = destinationReadPlans.map { plan ->
-                            val render = renderByPacketId.getValue(plan.packet.packetId)
+                            val render = renderByPacketId.getValue(destinationConsumerPacketId(plan))
                             GPUDestinationSnapshotGroup(
                                 key = GPUDestinationSnapshotGroupKey(
                                     target = GPUTargetIdentity(request.target.value),
@@ -3514,7 +3598,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         ),
                     ),
                     operations = destinationReadPlans.map { plan ->
-                        val render = renderByPacketId.getValue(plan.packet.packetId)
+                        val render = renderByPacketId.getValue(destinationConsumerPacketId(plan))
                         GPUDestinationSnapshotOperation.TextureCopy(
                             groupIndex = plan.groupIndex,
                             source = request.target,
@@ -3528,7 +3612,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 GPUDestinationSnapshotConsumerRef(
                                     groupingCommandId = plan.packet.commandIdValue.toString(),
                                     renderTaskId = render.taskId,
-                                    packetId = plan.packet.packetId,
+                                    packetId = destinationConsumerPacketId(plan),
                                     commandId = GPUDrawCommandID(plan.packet.commandIdValue),
                                 ),
                             ),
@@ -3810,6 +3894,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             is GPUClipExecutionPlan.ScissorOnly,
             is GPUClipExecutionPlan.AnalyticCoverage,
             is GPUClipExecutionPlan.AnalyticIntersection,
+            is GPUClipExecutionPlan.AnalyticMultiRect,
             is GPUClipExecutionPlan.Refused,
             -> error("Non-resource clip plans do not create artifact topology")
         }

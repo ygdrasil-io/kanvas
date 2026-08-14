@@ -892,6 +892,8 @@ private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
         )
     is GPUClipExecutionPlan.AnalyticIntersection ->
         GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4
+    is GPUClipExecutionPlan.AnalyticMultiRect ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Refused
     is GPUClipExecutionPlan.StencilCoverage -> GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Stencil(
         compare = consumer.compare,
         passOperation = consumer.passOperation,

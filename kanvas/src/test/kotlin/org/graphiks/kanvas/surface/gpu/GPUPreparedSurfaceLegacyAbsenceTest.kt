@@ -5,20 +5,19 @@ import kotlin.test.assertTrue
 import kotlin.test.Test
 
 /**
- * FP-08/FP-09 closure guard: the retired immediate/CPU-path adapter symbols must
+ * Closure guard: the retired immediate/CPU-path adapter symbols must
  * never reappear in the production surface/gpu sources.
  *
- * The adapter file (GPULegacyImmediatePathAdapter.kt), its display family, its
- * dump type, and the `legacyDump` plumbing were deleted by FP-08 Task 2
- * (commit dbf725d61). FP-09 then deleted the legacy immediate renderer
- * (`renderViaGpuLegacy`, Task 7), the legacy port
- * (`GPUPreparedSurfaceLegacyPort`, Task 5 route collapse), and the legacy-only
- * helper machinery (Task 8: `GPUClipExecution.kt` — `renderWithClip`,
- * `GPUClipRouteTrace`, `cachePixels`; the CPU text-atlas builders —
- * `buildTextAtlasMesh`; `LayerScissorOffscreenTarget`, `GPUClipUsePrepass`,
+ * The retired symbols are the adapter file (GPULegacyImmediatePathAdapter.kt),
+ * its display family, its dump type and the `legacyDump` plumbing, the legacy
+ * immediate renderer (`renderViaGpuLegacy`), the legacy port
+ * (`GPUPreparedSurfaceLegacyPort`), and the legacy-only helper machinery
+ * (`GPUClipExecution.kt` — `renderWithClip`, `GPUClipRouteTrace`,
+ * `cachePixels`; the CPU text-atlas builders — `buildTextAtlasMesh`;
+ * `LayerScissorOffscreenTarget`, `GPUClipUsePrepass`,
  * `GPUClipCoverageFrameCache`, `acquireClipMask`, `expandPicturesForGpuReplay`),
- * plus the two `legacy.surface.prepared.*` gate codes (Task 5). Task 10 pins
- * every retired token in the guard below.
+ * plus the two `legacy.surface.prepared.*` gate codes. The guard below pins
+ * every retired token.
  */
 class GPUPreparedSurfaceLegacyAbsenceTest {
 

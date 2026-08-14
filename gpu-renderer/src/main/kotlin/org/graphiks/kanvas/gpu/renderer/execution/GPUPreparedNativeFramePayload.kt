@@ -235,7 +235,7 @@ private fun preparedNativeRenderCommandEvidence(
 }
 
 /**
- * Sorted raw cold-frame samples with the FP-05 nearest-rank index policy.
+ * Sorted raw cold-frame samples with the nearest-rank index policy.
  *
  * No warmup sample is removed: every supplied independently rebuilt frame remains in
  * [sortedNanoseconds].

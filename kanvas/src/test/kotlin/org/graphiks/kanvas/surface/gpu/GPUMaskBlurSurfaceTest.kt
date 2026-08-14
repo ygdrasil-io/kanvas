@@ -24,17 +24,16 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
 
 /**
- * Top-level mask-blur frame pins after FP-09 Task 11.
+ * Top-level mask-blur frame pins.
  *
- * Task 11 restored top-level (non-saveLayer) mask blur on core primitives:
+ * Top-level (non-saveLayer) mask blur on core primitives:
  * rect/path/rrect draws with `paint.maskFilter = MaskFilter.Blur` now build and
  * execute prepared with A8 blur coverage materialization (mask → blur-h →
  * blur-v → style → composite), shaded color × blurred coverage. These tests
  * assert `Ready`-class pixels against the CPU oracle
  * [TopLevelMaskBlurPixelOracle] (legacy dispatcher blur math: MaskBlurPlanner +
  * blurKernelUniform kernel, decal sampling, style formulas, composite-route
- * blend oracle), flipping the FP-09 Task 10 terminal re-points back to
- * prepared. The genuinely non-blur families (mixed uniform layouts,
+ * blend oracle). The genuinely non-blur families (mixed uniform layouts,
  * multi-render dst copy) stay terminal elsewhere.
  */
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -222,7 +221,7 @@ class GPUMaskBlurSurfaceTest {
     fun `mask blur composites under coverage clips are terminal`() {
         requireWebGpu()
 
-        // Task 11 lane scope (extended): the blur composite applies NoClip, integer
+        // The blur composite applies NoClip, integer
         // ScissorOnly, or analytic device-rect clips. A stacked non-AA device-rect clip
         // plans a coverage-mask clip and refuses with the documented lane-scope code
         // instead of rendering unclipped (the analytic device-rect case renders
@@ -265,6 +264,55 @@ class GPUMaskBlurSurfaceTest {
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
             Color.BLACK, BlendMode.SRC_OVER, transparent(),
             clip = TopLevelMaskBlurPixelOracle.RectClip(14.5f, 14.5f, 18.5f, 18.5f, antiAlias = true),
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `mask blur composite under a multi rect analytic clip renders prepared`() {
+        requireWebGpu()
+        // A rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
+        // orthogonal polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage for the
+        // blur composite; the L-shape DIFFERENCE polygon decomposes into the band rects
+        // [10,8,24,16] and [10,16,18,24].
+        val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
+            clipRect(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
+            clipPath(
+                Path {
+                    moveTo(10f, 8f)
+                    lineTo(24f, 8f)
+                    lineTo(24f, 16f)
+                    lineTo(18f, 16f)
+                    lineTo(18f, 24f)
+                    lineTo(10f, 24f)
+                    close()
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = true,
+            )
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
+            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            clip = TopLevelMaskBlurPixelOracle.ComplexClip(
+                listOf(
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        1f, 1f, 31f, 31f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Intersect,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        10f, 8f, 24f, 16f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        10f, 16f, 18f, 24f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                ),
+            ),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }

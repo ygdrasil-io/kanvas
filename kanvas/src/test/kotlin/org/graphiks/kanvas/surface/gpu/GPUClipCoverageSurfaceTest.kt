@@ -7,6 +7,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
@@ -55,16 +56,14 @@ import kotlin.test.assertIs
 private const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
 private const val PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL =
     "unsupported.recording.core_primitive_analytic_shape_clip"
-private const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
-    "unsupported.recording.core_primitive_mixed_uniform_layouts"
 private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
+private const val PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL =
+    "unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
-private const val PREPARED_DST_READ_FORMULA_REFUSAL =
-    "unsupported.native-core-primitive.dst-read-formula"
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -107,9 +106,11 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-shape-under-analytic-clip frame
-        // stays on the mixed-layout refusal pending the per-step continuation design.
-        assertTerminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL, surface::render)
+        // The default-AA (ScalarAA) rect lowers to the analytic-shape (uniform80)
+        // lane, which cannot combine with the analytic-clip uniform64 authority in one draw; the
+        // single-draw mixed-layout gate is retired, so this frame re-points to the analytic-shape
+        // clip refusal (NoClip or ScissorOnly execution).
+        assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
     }
 
     @Test
@@ -140,7 +141,7 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // The route collapse (FP-09 Task 5) terminates the analytic-clip core frame
+        // The route collapse terminates the analytic-clip core frame
         // before lowering: the prepared analytic-shape lane accepts NoClip or
         // ScissorOnly execution only.
         assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
@@ -165,37 +166,112 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip blur is terminal at the clip producer preflight`() {
-        // FP-09 Task 11 admitted top-level blur (the frame records the mask blur
-        // chain), but the complex clip (AA rect intersect + path difference) plans a
-        // coverage-mask clip whose producer route rejects the blur composite consumer
-        // (invalid.preflight.core_primitive_clip_producer_authority). The combination
-        // stays terminal with evidence; the lane's composite applies NoClip or
-        // integer ScissorOnly clips only.
-        assertTerminal(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL) {
-            renderBlurredDifferenceClipScene()
-        }
+    fun `complex clip blur renders prepared under a multi rect analytic clip`() {
+        // The rect-decomposable complex clip (AA rect INTERSECT + axis-aligned
+        // orthogonal polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage for the
+        // blur composite, which folds the per-rect coverage into the blurred mask.
+        val result = renderBlurredDifferenceClipScene()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(complexClipBlurOracle(sigma = 2f), result.pixels)
     }
 
     @Test
-    fun `complex mask blur frames are terminal at the clip producer preflight`() {
+    fun `complex mask blur frames render prepared with the multi rect analytic clip`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         session!!
         val readbacksBefore = session.runtimeTelemetry.destinationReadbackSnapshots
+        val copiesBefore = session.runtimeTelemetry.destinationCopies
 
-        // The refusal is sigma-independent: every complex-clip mask blur frame
-        // terminates at the coverage-mask clip producer preflight, and the refusal
-        // must not allocate a destination readback.
-        val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            renderBlurredDifferenceClipScene(sigma = 1.5f)
-        }
-        assertEquals(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL, terminal.diagnostic.code.value)
+        // The refusal is gone: every complex-clip mask blur frame now renders through the
+        // multi-rect analytic composite. The blur lane's destination-read composite allocates a
+        // NATIVE destination copy (destinationCopies), never a legacy CPU readback snapshot
+        // (destinationReadbackSnapshots stays unchanged for the rendered lane).
+        val result = renderBlurredDifferenceClipScene(sigma = 1.5f)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertEquals(
             readbacksBefore,
             session.runtimeTelemetry.destinationReadbackSnapshots,
-            "a terminal mask blur frame allocated a destination readback before refusal",
+            "a rendered mask blur frame must not allocate a legacy destination readback snapshot",
         )
+        assertTrue(
+            session.runtimeTelemetry.destinationCopies > copiesBefore,
+            "the rendered mask blur frame must allocate its native destination copy",
+        )
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(complexClipBlurOracle(sigma = 1.5f), result.pixels)
+    }
+
+    @Test
+    fun `intersect orthogonal polygon clip stays terminal at the clip producer preflight`() {
+        // Only DIFFERENCE orthogonal polygons decompose to bounded
+        // analytic multi-rect coverage. An INTERSECT multi-band polygon (the L-shape) would
+        // multiply disjoint rect coverages to zero (an empty clip), so it stays on the
+        // coverage-mask route and terminates at the clip producer preflight.
+        assertTerminal(PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL) {
+            Surface(16, 16).run {
+                requireWebGpu()
+                canvas {
+                    save()
+                    clipPath(
+                        Path {
+                            moveTo(5f, 4f)
+                            lineTo(12f, 4f)
+                            lineTo(12f, 8f)
+                            lineTo(9f, 8f)
+                            lineTo(9f, 12f)
+                            lineTo(5f, 12f)
+                            close()
+                        },
+                        ClipOp.INTERSECT,
+                        antiAlias = true,
+                    )
+                    drawRect(
+                        Rect(4f, 4f, 12f, 12f),
+                        Paint.fill(Color.RED).copy(
+                            blendMode = BlendMode.DARKEN,
+                            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
+                        ),
+                    )
+                    restore()
+                }
+                render()
+            }
+        }
+    }
+
+    @Test
+    fun `non blur core draw under a rect plus polygon difference clip stays on the coverage mask route`() {
+        // The AnalyticMultiRect lowering is scoped to the mask-blur
+        // composite lane only. A NON-BLUR direct draw under the rect INTERSECT + orthogonal
+        // polygon DIFFERENCE clip must keep its prior CoverageMask route (which, for a
+        // path-carrying mask, refuses with the documented depth/stencil topology code), NOT
+        // the AnalyticMultiRect → Clip.Refused refusal.
+        assertTerminal(PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL) {
+            Surface(16, 16).run {
+                requireWebGpu()
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipPath(
+                        Path {
+                            moveTo(5f, 4f)
+                            lineTo(12f, 4f)
+                            lineTo(12f, 8f)
+                            lineTo(9f, 8f)
+                            lineTo(9f, 12f)
+                            lineTo(5f, 12f)
+                            close()
+                        },
+                        ClipOp.DIFFERENCE,
+                        antiAlias = true,
+                    )
+                    drawRect(Rect(2f, 2f, 14f, 14f), Paint.fill(Color.RED).copy(antiAlias = false))
+                    restore()
+                }
+                render()
+            }
+        }
     }
 
     @Test
@@ -316,8 +392,16 @@ class GPUClipCoverageSurfaceTest {
     fun `AA geometry coverage blends after clear src and dst in`() {
         requireWebGpu()
 
-        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
-            val surface = Surface(16, 16).run {
+        listOf(
+            BlendMode.CLEAR,
+            BlendMode.SRC,
+            BlendMode.DST_IN,
+            BlendMode.SRC_IN,
+            BlendMode.SRC_OUT,
+            BlendMode.DST_ATOP,
+            BlendMode.MODULATE,
+        ).forEach { blendMode ->
+            val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     drawRect(
@@ -325,10 +409,28 @@ class GPUClipCoverageSurfaceTest {
                         Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
                     )
                 }
-                this
+                render()
             }
 
-            assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(
+                result.pixels,
+                16,
+                3,
+                8,
+                when (blendMode) {
+                    BlendMode.CLEAR -> Color.fromArgb(128, 188, 188, 188)
+                    BlendMode.SRC -> Color.fromArgb(255, 255, 188, 188)
+                    BlendMode.DST_IN -> Color.WHITE
+                    // SRC_IN/MODULATE over an opaque destination interpolate to the same
+                    // half-coverage RED edge as SRC; SRC_OUT clears the destination like CLEAR;
+                    // DST_ATOP with an opaque source preserves the destination like DST_IN.
+                    BlendMode.SRC_IN, BlendMode.MODULATE -> Color.fromArgb(255, 255, 188, 188)
+                    BlendMode.SRC_OUT -> Color.fromArgb(128, 188, 188, 188)
+                    BlendMode.DST_ATOP -> Color.WHITE
+                    else -> error("unexpected test mode: $blendMode")
+                },
+            )
         }
     }
 
@@ -337,7 +439,7 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
 
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
-            val surface = Surface(16, 16).run {
+            val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
@@ -348,11 +450,33 @@ class GPUClipCoverageSurfaceTest {
                     )
                     restore()
                 }
-                this
+                render()
             }
 
-            assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 3, 8, Color.WHITE)
         }
+    }
+
+    @Test
+    fun `two aa rects with fixed function blends stay terminal on the multi key analytic shape refusal`() {
+        requireWebGpu()
+        // Both rects are analytic-shape (antiAlias defaults true) and both blends are
+        // modulate-compatible fixed-function (SRC_OVER / DST_OVER), so the frame seals one
+        // multi-key analytic-shape pass. Only the dst-read geometric modes closed;
+        // the fixed-function multi-key AA family stays refused with its stable code.
+        val surface = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                drawRect(
+                    Rect(3.5f, 2f, 14f, 14f),
+                    Paint.fill(Color.RED).copy(blendMode = BlendMode.DST_OVER, antiAlias = true),
+                )
+            }
+            this
+        }
+
+        assertTerminal(PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL, surface::render)
     }
 
     @Test
@@ -401,20 +525,26 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `no clip destination read composes against a transparent snapshot`() {
         requireWebGpu()
-        val surface = Surface(16, 16)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+        // The analytic-shape dst-read formula pipeline renders the DARKEN rect
+        // over the transparent snapshot (DARKEN(src, transparent) = src = RED).
+        val result = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+            }
+            render()
         }
 
-        assertTerminal(PREPARED_DST_READ_FORMULA_REFUSAL, surface::render)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 16, 4, 4, Color.RED)
     }
 
     @Test
     fun `clear and color dodge use their mapped clip composition routes`() {
         requireWebGpu()
 
-        // CLEAR rides the direct lane prepared; COLOR_DODGE needs the
-        // destination-read formula program, which terminates the frame.
+        // CLEAR now rides the analytic-shape destination-read formula and
+        // COLOR_DODGE the same; both compose over the transparent snapshot
+        // (CLEAR(src, transparent) = transparent; COLOR_DODGE(src, transparent) = src = RED).
         val clear = Surface(16, 16).run {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR))
@@ -428,9 +558,10 @@ class GPUClipCoverageSurfaceTest {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.COLOR_DODGE))
             }
-            this
+            render()
         }
-        assertTerminal(PREPARED_DST_READ_FORMULA_REFUSAL, dodge::render)
+        assertEquals(0, dodge.diagnostics.fatalCount, dodge.diagnostics.entries.toString())
+        assertRgbaNear(dodge.pixels, 16, 4, 4, Color.RED)
     }
 
     @Test
@@ -1331,6 +1462,56 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
         render()
+    }
+
+    /**
+     * CPU-oracle reference for [renderBlurredDifferenceClipScene]: the same DARKEN blur over
+     * the translucent background, with the rect-decomposed complex clip folded as ordered
+     * INTERSECT/DIFFERENCE rect coverage. The L-shape DIFFERENCE polygon decomposes into the
+     * two band rects [5,4,12,8] and [5,8,9,12]. The destination snapshot carries the literal
+     * unpremultiplied sRGB background bytes (the solid-fill lane stores the color as-is; the
+     * composite decodes sRGB on read), matching the observed GPU store.
+     */
+    private fun complexClipBlurOracle(sigma: Float): UByteArray {
+        val background = Color.fromArgb(128, 32, 64, 192)
+        val destination = UByteArray(16 * 16 * 4) { index ->
+            when (index % 4) {
+                0 -> background.redByte.toUByte()
+                1 -> background.greenByte.toUByte()
+                2 -> background.blueByte.toUByte()
+                else -> background.alphaByte.toUByte()
+            }
+        }
+        return TopLevelMaskBlurPixelOracle.render(
+            targetWidth = 16,
+            targetHeight = 16,
+            shape = TopLevelMaskBlurPixelOracle.Shape.Rect(4f, 4f, 12f, 12f),
+            clipBounds = GPUBounds(0f, 0f, 16f, 16f),
+            style = BlurStyle.NORMAL,
+            sigma = sigma,
+            source = Color.RED,
+            blendMode = BlendMode.DARKEN,
+            destinationEncoded = destination,
+            clip = TopLevelMaskBlurPixelOracle.ComplexClip(
+                listOf(
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        1f, 1f, 15f, 15f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Intersect,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        5f, 4f, 12f, 8f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                    TopLevelMaskBlurPixelOracle.ComplexClipElement(
+                        5f, 8f, 9f, 12f,
+                        TopLevelMaskBlurPixelOracle.ComplexClipOperation.Difference,
+                        antiAlias = true,
+                    ),
+                ),
+            ),
+        )
     }
 
     private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {

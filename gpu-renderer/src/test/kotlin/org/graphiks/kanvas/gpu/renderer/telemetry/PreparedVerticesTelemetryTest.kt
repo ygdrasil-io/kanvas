@@ -14,7 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.vertices.PREPARED_VERTICES_BATCH_NONCLAI
 import org.graphiks.kanvas.gpu.renderer.vertices.RecordingPreparedVerticesBatchNative
 
 /**
- * FP-06 Task 12 deterministic counters for the prepared-vertices batching pass.
+ * Deterministic counters for the prepared-vertices batching pass.
  *
  * Counter names are closed enum data, values are foldable longs, and snapshots carry no
  * object identity: equal passes produce byte-equal dump lines.

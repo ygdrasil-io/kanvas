@@ -440,7 +440,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(31, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -575,7 +575,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(31, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -733,7 +733,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(31, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -917,6 +917,92 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         assertEquals(GPUBlendOperation.Add, requireNotNull(target.blend).color.operation)
         assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).alpha.srcFactor)
         assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).alpha.dstFactor)
+    }
+
+    @Test
+    fun `analytic shape dst read shading keys map to the analytic dst read formula program`() {
+        val dstReadKey = analyticShapeKey().copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.DARKEN,
+                "darken@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(dstReadKey),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead, mapped.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitiveBlendProgram.DstReadDarken, mapped.identity.blendProgram)
+        assertTrue(isSupportedCorePrimitiveRenderPipelineIdentity(mapped.identity))
+        assertEquals(
+            "$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:darken",
+            mapped.componentIdentity.shaderIdentity,
+        )
+        assertEquals(
+            CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+            mapped.componentIdentity.bindingLayoutIdentity,
+        )
+        assertTrue(
+            isSupportedCorePrimitivePipelineCacheKey(
+                GPUWgpu4kCorePrimitivePipelineCacheKey(mapped.componentIdentity, mapped.identity),
+            ),
+        )
+
+        val layout = corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
+        val entries = layout.entries
+        assertEquals(3, entries.size)
+        assertEquals(0u, entries[0].binding)
+        assertEquals(GPUBufferBindingType.Uniform, requireNotNull(entries[0].buffer).type)
+        assertEquals(80uL, requireNotNull(entries[0].buffer).minBindingSize)
+        assertEquals(1u, entries[1].binding)
+        assertEquals(GPUTextureSampleType.Float, requireNotNull(entries[1].texture).sampleType)
+        assertEquals(2u, entries[2].binding)
+        assertEquals(GPUSamplerBindingType.Filtering, requireNotNull(entries[2].sampler).type)
+
+        // Fixed-function state is exact Src; the formula + analytic coverage apply in the shader.
+        val target = assertIs<ColorTargetState>(
+            requireNotNull(
+                corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment,
+            ).targets.single(),
+        )
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).color.dstFactor)
+        assertEquals(GPUBlendOperation.Add, requireNotNull(target.blend).color.operation)
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).alpha.srcFactor)
+        assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).alpha.dstFactor)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).vertex.entryPoint)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT, requireNotNull(corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).fragment).entryPoint)
+
+        // Scalar-coverage (AA) analytic-shape dst-read maps onto the same closed program.
+        val scalarDstReadKey = analyticShapeKey().copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.COLOR_DODGE,
+                "color_dodge@v1",
+                GPUSourceCoverageEncoding.ScalarCoverageInShader,
+            ),
+        )
+        val scalarMapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(scalarDstReadKey),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead, scalarMapped.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitiveBlendProgram.DstReadColorDodge, scalarMapped.identity.blendProgram)
+        assertEquals(
+            "$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:color_dodge",
+            scalarMapped.componentIdentity.shaderIdentity,
+        )
+
+        // LCD-coverage dst-read on the analytic-shape lane stays refused.
+        val lcdDstReadKey = analyticShapeKey().copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.DARKEN,
+                "lcd.darken@v1",
+                GPUSourceCoverageEncoding.LCDCoverageInShader,
+            ),
+        )
+        assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(lcdDstReadKey),
+        )
+        assertNull(lcdDstReadKey.corePrimitiveNativeComponentIdentityOrNull())
     }
 
     @Test

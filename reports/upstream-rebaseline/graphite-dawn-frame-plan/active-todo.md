@@ -1,6 +1,6 @@
 # Graphite/Dawn Frame Plan Active TODO
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 This is the active, branch-specific backlog for
 `codex/graphite-dawn-frame-plan-design`. Items are processed strictly in the
@@ -534,19 +534,27 @@ Resolution evidence (`fp-11-close-bounded-native-rendering-gaps-evidence.md`):
   run); the FP-10 retained-session contract is preserved
   (`GPUPreparedSurfaceLifetimeStressTest` 6/6).
 
-FP-12+ transfers (residual-refusal tracking note — bounded future work, not a new roadmap entry;
-the existing FP-12 entry remains "Current visual and performance evidence"):
-- analytic clips over non-direct shading geometry (4 at closure HEAD; 2 at FP-09);
-- dst-read formula on mapped routes (2);
-- analytic-shape multi-key dst-read (2);
-- complex-clip blur / `core_primitive_clip_producer_authority`;
-- path destination-read (60, reclassified A→B in Task 5);
-- multi-uniform-layout analytic-clip 64/160 split residual (the unwired
-  split; 199 blend rows stay on `mixed_uniform_layouts` at closure HEAD);
-- `colr-v0-color-glyph` scene CPU-oracle divergence (opaque vs. transparent
-  background; the product color-glyph lane clears transparent per
-  `GPUColorGlyphPreparedFrameSmokeTest`, the scenes-harness oracle fills opaque
-  — stale-oracle artifact of the July 29-30 clear-semantics change, FP-12 §4.3).
+FP-13+ transfers (residual-refusal tracking note — bounded future work, not a new
+roadmap entry; FP-13 closed 104 rows and re-pointed 227 blend-matrix rows + 10 clip
+pins to stable codes, see the FP-13 entry below):
+- analytic-clip blend programs (93 rows,
+  `unsupported.native-core-primitive.session-cache-pipeline`) — non-SRC_OVER
+  fixed-function and artistic modes on the analytic-clip uniform64 lane; needs an
+  `AnalyticClipDstRead` program + geometric projection (NEW feature, parallels
+  FP-13 Tasks 3/4);
+- combined shape+clip shader (29 rows,
+  `unsupported.recording.core_primitive_analytic_shape_clip`) — analytic-shape
+  uniform80 under an analytic clip (NEW feature);
+- analytic-clip × stencil-cover (58 rows,
+  `invalid.preflight.core_primitive_path_stencil`) — path-stencil continuation
+  under an analytic clip; the FP-13 Task 8 stencil-continuation does not yet
+  compose with the analytic-clip authority (NEW feature);
+- four-render / dst-slab direct-resource seal (47 rows,
+  `invalid.preflight.core_primitive_direct_geometry_resources`) — 2 DrawRRect DST +
+  30 DrawPoint + 15 DrawPoint dst-copy ALPHA_MASK (fp-11 §5 roots);
+- 489 SkiaGmRunner GM refusals — untouched by FP-13 (no GM row closed);
+- chantier B (missing-reference infra + committed gms.json) and chantier F
+  (real-adapter re-measurement) — tracked outside FP-13.
 
 ### FP-12 — Current visual and performance evidence
 
@@ -582,3 +590,41 @@ oracle divergence (opaque vs. transparent background, from the July 29-30
 clear-semantics change) is documented and tracked in the FP-12+ transfer list
 below, not FP-12-introduced. The FP-11 residual-refusal transfer list is
 unchanged.
+
+### FP-13 — Close bounded native-rendering gaps
+
+Status: `completed`
+
+Goal: close the M86 Wave-2 residual-refusal rows retained by FP-12 (the
+analytic-shape dst-read formula, multi-key dst-read, complex-clip blur, the
+analytic-clip 64/160 split, analytic clips over non-direct geometry, and the
+path destination-read stencil-continuation), plus the two small harness /
+test-hygiene items (`colr-v0` scenes oracle, `PipelineTypesTest`).
+
+Resolution evidence
+(`fp-13-close-bounded-native-rendering-gaps-evidence.md` §9):
+
+- **104 rows closed** against the 341-row Task 0 denominator: 32 dst-read
+  formula (30 frame-global DrawRRect + 2 clip:coverage DARKEN/COLOR_DODGE),
+  2 analytic-shape multi-key CLEAR/SRC/DST_IN (+ 4 latent AA modes pinned),
+  2 complex-clip blur pins, 4 SRC_OVER analytic-clip blend rows, 4
+  analytic-clip non-direct DST rows, 60 path destination-read rows
+  (stencil-continuation, CPU-oracle exact);
+- **227 blend-matrix rows re-pointed** to stable codes (93
+  session-cache-pipeline, 29 analytic_shape_clip, 58 path_stencil, 47
+  direct_geometry_resources) and **10 clip pins** re-pointed (Coverage 1 →
+  analytic_shape_clip, Advanced 8 → analytic_shape_clip, PathClip 1 →
+  path_stencil) — 104 + 227 + 10 = 341 ✓;
+- `colr-v0-color-glyph` scenes oracle fixed (harness-only, byte-exact
+  4096/4096); `PipelineTypesTest` made fork-order independent (test hygiene)
+  with the `fn main() {}` acceptance gap tracked upstream at
+  ygdrasil-io/wgsl4k#15;
+- full run green except the two documented baselines
+  (`GPURendererPackageBoundaryTest` exactly 20 cycle violations / 0 rule
+  violations; `GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB on llvmpipe);
+  `:gpu-renderer-scenes:test` 274/274; `GPUAllApiBlendSurfaceTest` 1864/1864;
+  guards green; no `session-close` / `GPUOwnedNativeCloseIncompleteException`;
+- dashboard gate unchanged: Total 615 / Pass 540 / Fail 6 / No score 30 — the
+  same 6 below-threshold and 30 no-score sets as the Task 0 snapshot (0 new
+  `fail`, 0 `tracked-gap`); no committed render/score drift (git status clean
+  after regeneration).

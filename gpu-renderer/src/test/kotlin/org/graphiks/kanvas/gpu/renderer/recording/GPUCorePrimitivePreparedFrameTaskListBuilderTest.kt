@@ -1187,8 +1187,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
 
+        // The single-draw mixed-layout gate is retired; the analytic-shape
+        // (uniform80) shape under an analytic clip now re-points to the analytic-shape clip
+        // refusal (NoClip or ScissorOnly execution).
         assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "unsupported.recording.core_primitive_analytic_shape_clip",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
         )
     }
@@ -1382,7 +1385,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `uniform160 refuses a mixed layout frame before slab budget planning`() {
+    fun `uniform160 and uniform32 split into two direct passes with per layout slabs`() {
         val plans = mapOf(
             230 to analyticIntersection(
                 GPUClipAnalyticElement(
@@ -1399,19 +1402,24 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val base = recording(command(230, 0), command(231, 1)).taskList.withClipPlans(plans)
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
 
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, packets.associate { it.commandIdValue to semantic(it) })
-                .copy(configuredAggregateBudgetBytes = 1L),
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertEquals(listOf(230), renders[0].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(listOf(231), renders[1].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertNotNull(
+            renders[0].drawPackets.single().corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal,
         )
-
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
-        )
+        assertNotNull(renders[1].drawPackets.single().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
     }
 
     @Test
-    fun `uniform32 and uniform64 refuse their mixed frame before slab budget planning`() {
+    fun `uniform32 and uniform64 split into two direct passes with per layout slabs`() {
         val plans = mapOf(
             232 to GPUClipExecutionPlan.NoClip,
             233 to GPUClipExecutionPlan.AnalyticCoverage(
@@ -1423,19 +1431,24 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val base = recording(command(232, 0), command(233, 1)).taskList.withClipPlans(plans)
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
 
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, packets.associate { it.commandIdValue to semantic(it) })
-                .copy(configuredAggregateBudgetBytes = 1L),
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertEquals(listOf(232), renders[0].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(listOf(233), renders[1].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertNotNull(renders[0].drawPackets.single().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertNotNull(
+            renders[1].drawPackets.single().corePrimitivePreparedAuthority?.analyticClipUniformSeal,
         )
-
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
-        )
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
     }
 
     @Test
-    fun `uniform64 and uniform160 refuse their mixed frame before slab budget planning`() {
+    fun `uniform64 and uniform160 split into two direct passes with per layout slabs`() {
         val plans = mapOf(
             234 to GPUClipExecutionPlan.AnalyticCoverage(
                 GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
@@ -1456,15 +1469,22 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val base = recording(command(234, 0), command(235, 1)).taskList.withClipPlans(plans)
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
 
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, packets.associate { it.commandIdValue to semantic(it) })
-                .copy(configuredAggregateBudgetBytes = 1L),
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertEquals(listOf(234), renders[0].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(listOf(235), renders[1].drawPackets.map(GPUDrawPacket::commandIdValue))
+        assertNotNull(
+            renders[0].drawPackets.single().corePrimitivePreparedAuthority?.analyticClipUniformSeal,
         )
-
-        assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        assertNotNull(
+            renders[1].drawPackets.single().corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal,
         )
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
     }
 
     @Test

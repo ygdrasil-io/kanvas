@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 /**
  * Independent CPU pixel oracle for prepared-vertices semantics.
  *
- * NOTE: This file mirrors the FP-06 Task 13 oracle kept in the kanvas TEST sources
+ * NOTE: This file mirrors the oracle kept in the kanvas TEST sources
  * (`org.graphiks.kanvas.surface.gpu.GPUPreparedVerticesCpuOracle` plus the fixture
  * types and factory fixtures). gpu-renderer tests cannot depend on the kanvas test
  * classpath (module dependency direction), so the oracle and its fixture contract are
@@ -555,7 +555,7 @@ class GPUPreparedVerticesImage private constructor(
 }
 
 /**
- * Immutable fixture contract shared with the Task 13 CPU oracle. The fixture
+ * Immutable fixture contract shared with the CPU oracle. The fixture
  * declares geometry and shading facts only; it imports no GPU production type.
  */
 class GPUPreparedVerticesTestFixture private constructor(

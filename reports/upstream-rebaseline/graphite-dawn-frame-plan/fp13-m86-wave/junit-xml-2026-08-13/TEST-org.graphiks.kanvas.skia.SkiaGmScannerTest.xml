@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.SkiaGmScannerTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:52.205Z" hostname="b3-16-2026-08-13-16-13" time="0.004">
+  <properties/>
+  <testcase name="index selection keeps duplicate display names distinct()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="parser accepts comma separated nonblank names()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="selection rejects unknown requested names()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="named selection reports normalized effective range and empty diagnostic total()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.001"/>
+  <testcase name="selection keeps registry order and original indices for requested names()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="parser accepts registry indices and makes output path absolute()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="blocking list retains original indexes for duplicate display names()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.0"/>
+  <testcase name="index selection rejects a missing registry index()" classname="org.graphiks.kanvas.skia.SkiaGmScannerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

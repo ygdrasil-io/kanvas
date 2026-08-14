@@ -183,6 +183,18 @@ internal sealed interface GPUCorePrimitivePathStencilNativeRouteSeal {
             )
         }
     }
+
+    /**
+     * One continued half of a producer/cover pair that spans two render scopes.
+     * The scope owns exactly the producer fan or the cover fan, not the merged pair.
+     */
+    class Continued internal constructor(
+        val pair: GPUCorePrimitivePathStencilNativeRoute.AcceptedPair,
+        val producerHalf: Boolean,
+        val preparedPassSeal: GPUCorePrimitivePathStencilPreparedPassSeal? = null,
+    ) : GPUCorePrimitivePathStencilNativeRouteSeal {
+        val packetId: GPUDrawPacketID = if (producerHalf) pair.producerPacketId else pair.coverPacketId
+    }
 }
 
 /** Exact producer/cover builder authority retained without recomputing either structural key. */
@@ -341,27 +353,43 @@ internal class GPUCorePrimitivePathStencilNativeFrameRouteSeal(
         sourceStepIndex: Int,
         packetIds: List<GPUDrawPacketID>,
     ): GPUCorePrimitivePathStencilNativeRouteSeal {
+        if (packetIds.isEmpty()) {
+            return GPUCorePrimitivePathStencilNativeRouteSeal.Empty
+        }
         val scopedPairs = routesByFrameKey.entries
             .filter { (key, _) -> key.sourceStepIndex == sourceStepIndex }
             .map { (_, route) -> route }
-        if (scopedPairs.isEmpty()) {
-            return if (packetIds.isEmpty()) {
-                GPUCorePrimitivePathStencilNativeRouteSeal.Empty
-            } else {
-                GPUCorePrimitivePathStencilNativeRouteSeal.Missing
-            }
-        }
         val expectedPacketIds = scopedPairs.flatMap { pair ->
             listOf(pair.producerPacketId, pair.coverPacketId)
         }
-        return if (packetIds == expectedPacketIds) {
-            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs(
+        if (packetIds == expectedPacketIds) {
+            return GPUCorePrimitivePathStencilNativeRouteSeal.Pairs(
                 scopedPairs,
                 preparedPassByStep[sourceStepIndex],
             )
-        } else {
-            GPUCorePrimitivePathStencilNativeRouteSeal.Missing
         }
+        // A continued producer/cover half lives in its own scope, so the half is
+        // resolved by its packet identity across the whole frame seal.
+        val continuedPair = routesByFrameKey.values.singleOrNull { candidate ->
+            packetIds == listOf(candidate.producerPacketId) ||
+                packetIds == listOf(candidate.coverPacketId)
+        }
+        if (continuedPair != null) {
+            return if (packetIds == listOf(continuedPair.producerPacketId)) {
+                GPUCorePrimitivePathStencilNativeRouteSeal.Continued(
+                    continuedPair,
+                    producerHalf = true,
+                    preparedPassByStep[sourceStepIndex],
+                )
+            } else {
+                GPUCorePrimitivePathStencilNativeRouteSeal.Continued(
+                    continuedPair,
+                    producerHalf = false,
+                    preparedPassByStep[sourceStepIndex],
+                )
+            }
+        }
+        return GPUCorePrimitivePathStencilNativeRouteSeal.Missing
     }
 
     companion object {

@@ -1,12 +1,12 @@
 rendered colr-v0-color-glyph via prepared WebGPU frame
-adapter=Apple M2 Max
+adapter=llvmpipe/llvmpipe (LLVM 21.1.8, 256 bits) desc=Mesa 26.0.3-1ubuntu1 (LLVM 21.1.8)
 colorTextRun:route=prepared-colr-v0
 colorTextRun:fontResource=/fonts/skia/colr.ttf
 colorTextRun:baseGlyph=2 layerGlyphs=7,8
 colorTextRun:atlasFormat=r8unorm atlasSize=46x38
 colorTextRun:uniformPack=784-byte-le
 colorTextRun:frameRoute=one-encoder-one-command-buffer-one-submit
-colorTextRun:reference=independent-cpu-source-over
+colorTextRun:reference=cpu-source-over + mirrored-llvmpipe-srgb-store
 colorTextRun:nonClaim=no-colrv1-no-shaping-no-emoji
 colorTextRun:pixelExact=4096/4096
 colorTextRun:native encoders=1 commandBuffers=1 submits=1 readbacks=1

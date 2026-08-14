@@ -351,7 +351,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
         )
     }
 
-    // Task 17 follow-up: an unpainted DrawPicture inside a saveLayer scope refuses at the
+    // An unpainted DrawPicture inside a saveLayer scope refuses at the
     // capture boundary (unsupported.composite.operation, like every other non-core child).
     // Its expanded children cannot ride the composite commands: the flat mapper never maps
     // them (commandIdsByOperationIndex only records top-level mapped ops), so the old
@@ -395,7 +395,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
         assertEquals(1, refused.operationIndex)
     }
 
-    // FP-06 boundary: vertices inside composite scopes (layer or picture) are not promoted to
+    // Vertices inside composite scopes (layer or picture) are not promoted to
     // prepared vertices — the capturer refuses them via the generic OPERATION code until a
     // dedicated vertices-in-composite scope lands. Do not relax without that scope.
     @Test

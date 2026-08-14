@@ -567,32 +567,46 @@ class GPUAllApiBlendSurfaceTest {
             }
         }
         if (api.name !in IMAGE_API_NAMES) {
-            // Core primitives after the FP-09 Task 5 route collapse and the FP-11 Task 6
-            // layout split. Every before-entry refusal is now Terminal, so each shape family
-            // refuses with the exact recording/builder code the evidence run produced: the
-            // rrect analytic-shape (uniform80) pass splits from the uniform32 destination
-            // pass for the fixed blends (renders Prepared); the analytic-clip (uniform64/
-            // uniform160) split remains pinned on the mixed-layout refusal (deterministic
-            // residual: bypassing the gate fails the fixed-function non-SRC_OVER rows with
-            // GPUOwnedNativeCloseIncompleteException on failed.surface.prepared.session-close
-            // until the per-step continuation design lands — Task 8 B-row); hairline points
-            // render prepared as one-device-px squares except where the clip or the dst-read
-            // two-render frame keeps them terminal. Cases that still render prepared stay
-            // null so the pixel oracle keeps proving them.
+            // Core primitives after the route collapse, the layout
+            // split, and the analytic-clip uniform64/160 split. The rrect
+            // analytic-shape (uniform80) pass splits from the uniform32 destination pass for the
+            // fixed blends (renders Prepared). The analytic-clip (uniform64/160) split is wired:
+            // SRC_OVER rows render Prepared (per-step continuation/ownership), while the
+            // non-SRC_OVER fixed-function and artistic modes stay refused on the analytic-clip
+            // lane's exact pipeline-identity code (the analytic-clip blend programs are a
+            // separate feature, not the split), the analytic-shape-under-clip rows re-point to
+            // the analytic-shape clip refusal, and the path-stencil cover rows stay on the
+            // path-stencil / path-destination-read codes.
             return when (api.name) {
                 "Clear" -> null
                 "DrawPoint", "DrawPoints" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
-                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                        // The analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
+                        // The analytic-clip uniform64 pass splits from the uniform32
+                        // destination pass and renders Prepared (per-pixel oracle exact).
+                        null
+                    context == BlendContext.ALPHA_MASK &&
+                        mode in MULTI_RENDER_DST_COPY_MODES &&
+                        api.name == "DrawPoint" ->
+                        // The DrawPoint fixture draws three separate point commands, so its
+                        // dst-read frame is a four-render shape whose direct-resource seal fails.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
-                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                        // Non-SRC_OVER analytic-clip blends stay refused on the
+                        // lane's exact pipeline-identity code (blend programs are a separate
+                        // feature).
+                        ProductRouteExpectation.Terminal(PREPARED_SESSION_CACHE_PIPELINE_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES -> if (api.name == "DrawPoint") {
                         // The DrawPoint fixture draws three separate point commands, so its
                         // dst-read frame is a four-render shape whose direct-resource seal
                         // fails before the two-render dst-copy admission.
                         ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
                     } else {
-                        // FP-11 Task 4: the single DrawPoints command splits into the admitted
+                        // The single DrawPoints command splits into the admitted
                         // two-render dst-copy shape (destination pass, ordered snapshot copy,
                         // consuming pass) on the prepared direct lane.
                         ProductRouteExpectation.Prepared
@@ -601,43 +615,57 @@ class GPUAllApiBlendSurfaceTest {
                 }
                 "DrawRRect" -> when {
                     context == BlendContext.ALPHA_MASK ->
-                        // FP-11 Task 6: the analytic-shape rrect under the analytic AA mask
-                        // clip stays on the mixed-layout refusal (Task 8 B-row mixed-layout residual).
-                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                        // An analytic-shape (uniform80) rrect cannot combine with
+                        // the analytic-clip uniform64/160 authority in one draw; it re-points to
+                        // the analytic-shape clip refusal (NoClip or ScissorOnly execution).
+                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL)
                     mode == BlendMode.DST ->
                         // The DST rrect pass cannot exact its shared geometry slab authority.
                         ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
                     mode.recordsDestinationRead() ->
-                        // FP-11 Task 6: the split dst-read rrect consumer stays on the
-                        // frame-global pipeline boundary (no closed analytic-shape dst-read
-                        // formula pipeline on the prepared lane).
-                        ProductRouteExpectation.Terminal(PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL)
+                        // The analytic-shape dst-read formula pipeline closes
+                        // these rows (renders Prepared, pixel-oracle proven).
+                        null
                     else ->
-                        // FP-11 Task 6: the rrect analytic-shape pass splits from the
+                        // The rrect analytic-shape pass splits from the
                         // uniform32 destination pass, so the fixed-blend rrect rows render
                         // Prepared.
                         null
                 }
                 "DrawRect", "DrawColor" -> when {
                     context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
-                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL)
+                        // The analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
+                        // The analytic-clip uniform64 pass splits from the uniform32
+                        // destination pass and renders Prepared (per-pixel oracle exact).
+                        null
                     context == BlendContext.ALPHA_MASK ->
-                        // FP-11 Task 6: the analytic-clip rect pass split remains pinned on
-                        // the mixed-layout refusal (Task 8 B-row mixed-layout residual).
-                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                        // Non-SRC_OVER analytic-clip blends stay refused on the
+                        // lane's exact pipeline-identity code (blend programs are a separate
+                        // feature).
+                        ProductRouteExpectation.Terminal(PREPARED_SESSION_CACHE_PIPELINE_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        // FP-11 Task 4: the two-render dst-copy shape (destination pass, ordered
+                        // The two-render dst-copy shape (destination pass, ordered
                         // snapshot copy, consuming pass) is admitted on the prepared direct lane.
                         ProductRouteExpectation.Prepared
                     else -> null
                 }
                 "DrawPath", "DrawDRRect" -> when {
+                    context == BlendContext.ALPHA_MASK && mode in MULTI_RENDER_DST_COPY_MODES ->
+                        // The analytic-clip continued dst-read cover stays on the
+                        // path-stencil preflight authority (analytic-clip x stencil-cover is a
+                        // separate feature).
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
                     context == BlendContext.ALPHA_MASK ->
-                        // FP-11 Task 6: the analytic-clip path pair pass remains pinned on the
-                        // mixed-layout refusal (Task 8 B-row mixed-layout residual).
-                        ProductRouteExpectation.Terminal(PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL)
+                        // The non-dst-copy path-stencil cover under an analytic clip
+                        // cannot split from the uniform32 destination pass (exactly-one-path-pass
+                        // authority), so it re-points to the path-stencil preflight refusal.
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
                     mode in MULTI_RENDER_DST_COPY_MODES ->
-                        ProductRouteExpectation.Terminal(PREPARED_PATH_DST_READ_REFUSAL)
+                        null
                     else -> null
                 }
                 else -> error("Unclassified core primitive API ${api.name}")
@@ -1025,20 +1053,28 @@ class GPUAllApiBlendSurfaceTest {
         )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
-        const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
-            "unsupported.recording.core_primitive_mixed_uniform_layouts"
-        const val PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL =
-            "unsupported.native-core-primitive.frame-global-pipeline"
-        const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
-            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
             "invalid.preflight.core_primitive_direct_geometry_resources"
-        const val PREPARED_PATH_DST_READ_REFUSAL =
-            "unsupported.native-core-primitive.path-destination-read"
-        // The 15 dst-read modes whose two-draw frames route through the FP-11 Task 4
-        // multi-render dst-copy admission: every artistic mode except SCREEN (whose formula
-        // program is implemented) plus PLUS. Matches the FP-09 evidence run's
-        // multi-render-dst-copy case list.
+        // The analytic-shape uniform80 pass can no longer combine with the
+        // analytic-clip uniform64/160 authority in one draw, so the analytic-shape-under-clip
+        // rows re-point to the analytic-shape clip refusal (the stable code for "analytic shapes
+        // require NoClip or ScissorOnly execution").
+        const val PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL =
+            "unsupported.recording.core_primitive_analytic_shape_clip"
+        // The analytic-clip uniform64 lane only exposes the canonical premul
+        // SRC_OVER blend program today, so every non-SRC_OVER fixed-function and artistic mode
+        // on the analytic-clip lane re-points to the session-cache's exact pipeline-identity
+        // refusal (the analytic-clip blend programs are a separate feature, not the split).
+        const val PREPARED_SESSION_CACHE_PIPELINE_REFUSAL =
+            "unsupported.native-core-primitive.session-cache-pipeline"
+        // The path-stencil cover under an analytic clip still cannot split from the
+        // uniform32 destination pass (the preflighter's exactly-one-path-pass authority), so the
+        // non-dst-copy path rows re-point to the path-stencil preflight refusal.
+        const val PREPARED_PATH_STENCIL_REFUSAL =
+            "invalid.preflight.core_primitive_path_stencil"
+        // The 15 dst-read modes whose two-draw frames route through the multi-render
+        // dst-copy admission: every artistic mode except SCREEN (whose formula
+        // program is implemented) plus PLUS.
         val MULTI_RENDER_DST_COPY_MODES = (ARTISTIC_MODES - BlendMode.SCREEN) + BlendMode.PLUS
 
         @AfterAll

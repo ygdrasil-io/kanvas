@@ -22,22 +22,18 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `device rect clip path frame refuses with the mixed uniform layouts code`() {
+    fun `device rect clip path frame refuses with the path stencil code`() {
         requireWebGpu()
 
-        // FP-11 Task 6 residual (Task 8 B-row): the analytic-clip pass split stays pinned on
-        // the mixed-layout refusal pending the per-step continuation design (the materializer
-        // cleanup gap behind the deterministic session-close residual is fixed; the 64/160
-        // split itself is not wired). Pre-FP-09 the legacy renderer rendered this frame
-        // (green at the FP-08 tip accaea616); the route collapse converted it to this stable
-        // code (Task 6 evidence family 4).
+        // The AA background (uniform80) and the analytic-clipped path pair now
+        // split into separate layout runs, but the path-stencil cover under an analytic clip
+        // still cannot exact the exactly-one-path-pass authority, so the frame re-points to the
+        // path-stencil preflight refusal.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    // The AA background paint (Paint.fill default) keeps this frame on the
-                    // mixed-layout refusal through the analytic-shape/analytic-clip mix gate;
-                    // a hard background would reach the same pinned code through the 64-mix
-                    // gate, so the input shape is irrelevant to the pinned outcome.
+                    // The AA background paint (Paint.fill default) splits into its own uniform80
+                    // layout run; the clipped path pair is the path-analytic-clip run.
                     drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                     save()
                     clipRect(Rect(8f, 8f, 24f, 24f))
@@ -56,7 +52,7 @@ class GPUPathClipRegressionTest {
             }
         }
         assertEquals(
-            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            "invalid.preflight.core_primitive_path_stencil",
             failure.diagnostic.code.value,
         )
     }
@@ -65,10 +61,9 @@ class GPUPathClipRegressionTest {
     fun `dst in path frame refuses on the path stencil machinery boundary`() {
         requireWebGpu()
 
-        // FP-11 Task 6: the DST_IN path frame splits into the analytic-shape background
+        // The DST_IN path frame splits into the analytic-shape background
         // pass and the path pair pass; the path-stencil machinery's direct authority is
-        // uniform32-only, so the shape pass refuses on the path-stencil code. Pre-FP-09 the
-        // legacy renderer rendered it (green at accaea616).
+        // uniform32-only, so the shape pass refuses on the path-stencil code.
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
@@ -99,14 +94,12 @@ class GPUPathClipRegressionTest {
     fun `darken rect over destination renders prepared via the multi render dst copy lane`() {
         requireWebGpu()
 
-        // FP-11 Task 4: a destination-read rect over an existing destination render is the
+        // A destination-read rect over an existing destination render is the
         // designed multi-render dst-copy shape (producer render, ordered snapshot copy,
         // consuming render). The prepared direct lane admits it and executes the Graphite
         // copy-then-formula recipe. The paints are hard (antiAlias = false) so the frame stays
         // on the full-coverage direct lane: default-AA rects lower to the analytic-shape
-        // dst-read family whose formula program is a designed closed refusal. Pre-FP-09 the
-        // legacy renderer rendered it (green at the FP-08 tip accaea616); the FP-09 route
-        // collapse refused it by name.
+        // dst-read family whose formula program is a designed closed refusal.
         val result = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
@@ -132,34 +125,39 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `advanced path blend frame refuses with the path destination read code`() {
+    fun `advanced path blend frame renders prepared via the continued path dst read lane`() {
         requireWebGpu()
 
-        // FP-11 Task 5 designed refusal: an unclipped rect plus a destination-reading path
-        // mixes the uniform32 lane with the path dst-read lane; the recording refuses the
-        // path dst-read shape by name (the dst-read cover cannot resolve in the path-stencil
-        // topology). Pre-FP-09 the legacy renderer rendered this frame with the
-        // copy-then-formula route (green at the FP-08 tip accaea616).
-        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
-            Surface(width = 32, height = 32).run {
-                canvas {
-                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                    drawPath(
-                        Path {
-                            moveTo(8f, 8f)
-                            lineTo(24f, 8f)
-                            lineTo(16f, 24f)
-                            close()
-                        },
-                        Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
-                    )
-                }
-                render()
+        // An unclipped rect plus a destination-reading path now admits the
+        // continued path dst-read shape (background render, producer fan Store, ordered snapshot
+        // copy, cover fan read-only + dst-read formula).
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawPath(
+                    Path {
+                        moveTo(8f, 8f)
+                        lineTo(24f, 8f)
+                        lineTo(16f, 24f)
+                        close()
+                    },
+                    Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
+                )
             }
+            render()
         }
-        assertEquals(
-            "unsupported.native-core-primitive.path-destination-read",
-            failure.diagnostic.code.value,
+        val pixels = result.pixels
+        // CPU reference: DIFFERENCE(red, white) = |red - white| = cyan inside the path; the
+        // destination white is retained outside the path.
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 3].toInt(), "in-path pixel is opaque")
+        assertEquals(0, pixels[(16 * 32 + 12) * 4 + 0].toInt(), "in-path pixel red channel is DIFFERENCE(255, 255) = 0")
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 1].toInt(), "in-path pixel green channel is DIFFERENCE(0, 255) = 255")
+        assertEquals(255, pixels[(4 * 32 + 4) * 4 + 0].toInt(), "outside the path the white destination is retained")
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.code.startsWith("route:destination-read:DrawPath:") && entry.reason == "gpu-copy-then-formula"
+            },
+            "the continued path dst-read frame must emit the copy-then-formula route evidence",
         )
     }
 

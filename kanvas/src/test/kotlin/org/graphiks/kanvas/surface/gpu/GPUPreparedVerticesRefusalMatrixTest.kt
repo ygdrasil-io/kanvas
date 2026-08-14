@@ -43,7 +43,7 @@ import org.junit.jupiter.params.provider.MethodSource
  * allocation/write, and zero submit by driving the native executor and verifying the
  * refusal surfaces before any submission.
  *
- * ### Documented limitation: no reachable preflight-stage refusal (FP-06 review finding 3)
+ * ### Documented limitation: no reachable preflight-stage refusal
  *
  * The preflight stage keeps prepared-vertices refusal guards for defense in depth, but
  * every one of them is unreachable through the public Surface chain with valid inputs,

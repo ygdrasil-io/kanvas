@@ -40,6 +40,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds as GPUCommandBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -2803,7 +2805,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `two render destination reading core frame classifies accepted with the ordered copy`() {
-        // FP-11 Task 4: a destination-then-consumer dst-read frame (producer render, ordered
+        // A destination-then-consumer dst-read frame (producer render, ordered
         // snapshot copy, consuming render) is the valid direct dst-read shape and classifies
         // Prepared on the multi-render dst-copy lane.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
@@ -2883,7 +2885,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `uniform32 and uniform80 split frame retains per step authorities and zero based sliced slabs`() {
-        // FP-11 Task 6: the direct pass splits by uniform layout — the two uniform32 rects
+        // The direct pass splits by uniform layout — the two uniform32 rects
         // merge into the first render, the analytic-shape rrect into the second. Each render
         // scope retains its own prepared-pass seal: the uniform32 step slices the frame slab
         // to zero-based offsets, the uniform80 step owns its analytic-shape pass, and every
@@ -3048,8 +3050,102 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `analytic clip uniform slab slice rebases one step to zero based offsets`() {
+        // Two analytic-clip (uniform64) packets share one frame slab; slicing one
+        // step rebases it to a zero-based plan with its own exact payload.
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                191 to GPUClipExecutionPlan.AnalyticCoverage(
+                    GPUClipExecutionGeometry.Rect(GPUBounds(0.75f, 1f, 2.5f, 3.25f)),
+                    scissor = null,
+                    antiAlias = true,
+                ),
+                192 to GPUClipExecutionPlan.AnalyticCoverage(
+                    GPUClipExecutionGeometry.Rect(GPUBounds(1.5f, 0.5f, 3.25f, 4f)),
+                    scissor = null,
+                    antiAlias = true,
+                ),
+            ),
+        )
+        val packets = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val sealsByCommand = packets.associate { packet ->
+            packet.commandIdValue to requireNotNull(
+                requireNotNull(packet.corePrimitivePreparedAuthority).analyticClipUniformSeal,
+            )
+        }
+        assertEquals(2, sealsByCommand.size)
+
+        val sliced = sliceAnalyticClipUniformSealsToCommands(
+            sealsByCommand.values.toList(),
+            listOf(packets[1].commandIdValue),
+        )
+
+        assertEquals(1, sliced.size)
+        assertEquals(0, sliced[0].slotIndex)
+        assertEquals(0L, sliced[0].alignedOffset)
+        assertEquals(256L, sliced[0].plan.totalBytes)
+        assertContentEquals(
+            sealsByCommand.getValue(packets[1].commandIdValue).payloadBytesSnapshot(),
+            sliced[0].payloadBytesSnapshot(),
+        )
+    }
+
+    @Test
+    fun `analytic intersection uniform slab slice rebases one step to zero based offsets`() {
+        // Two analytic-intersection (uniform160) packets share one frame slab;
+        // slicing one step rebases it to a zero-based plan with its own exact payload.
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                193 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(0.75f, 1f, 2.5f, 3.25f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1.5f, 2.25f, 3f)),
+                        false,
+                    ),
+                ),
+                194 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1.5f, 0.5f, 3.25f, 4f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1.75f, 1f, 3f, 3.5f)),
+                        false,
+                    ),
+                ),
+            ),
+        )
+        val packets = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val sealsByCommand = packets.associate { packet ->
+            packet.commandIdValue to requireNotNull(
+                requireNotNull(packet.corePrimitivePreparedAuthority).analyticIntersectionUniformSeal,
+            )
+        }
+        assertEquals(2, sealsByCommand.size)
+
+        val sliced = sliceAnalyticIntersectionUniformSealsToCommands(
+            sealsByCommand.values.toList(),
+            listOf(packets[1].commandIdValue),
+        )
+
+        assertEquals(1, sliced.size)
+        assertEquals(0, sliced[0].slotIndex)
+        assertEquals(0L, sliced[0].alignedOffset)
+        assertEquals(256L, sliced[0].plan.totalBytes)
+        assertContentEquals(
+            sealsByCommand.getValue(packets[1].commandIdValue).payloadBytesSnapshot(),
+            sliced[0].payloadBytesSnapshot(),
+        )
+    }
+
+    @Test
     fun `two render dst copy admission requires every core packet accepted`() {
-        // FP-11 Task 4 review hardening: a malformed two-render dst-copy frame whose consuming
+        // A malformed two-render dst-copy frame whose consuming
         // render also carries a non-accepted packet must refuse at preflight instead of passing
         // Prepared and failing later at materialization with a different code.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
@@ -3106,7 +3202,7 @@ class GPUFramePreflighterTest {
 
     @Test
     fun `malformed third direct render refuses the two render dst copy admission at preflight`() {
-        // FP-11 Task 4 review hardening: two canonical dst-copy renders plus an accepted direct
+        // Two canonical dst-copy renders plus an accepted direct
         // packet in a third render must refuse at preflight, not fail later at materialization.
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.DstReadCore)
         val renders = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -4036,6 +4132,33 @@ class GPUFramePreflighterTest {
                 },
             )
         }
+    }
+
+    @Test
+    fun `continued path dst read with an extra direct render refuses on the path stencil code`() {
+        // The continued dst-read lane admits exactly three render scopes (background,
+        // producer, cover); a frame carrying the producer+cover pair plus an extra direct render
+        // refuses at preflight with the stable path-stencil code instead of the lane's later
+        // three-scope shape refusal.
+        val plan = preparedPathDstReadFramePlan(
+            commandIds = listOf(70, 71, 72),
+            pathCommandIds = setOf(72),
+        )
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(),
+        ).preflight(plan)
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            result,
+            "an extra direct render beside the continued dst-read pair must refuse at preflight",
+        )
+        assertEquals("invalid.preflight.core_primitive_path_stencil", refused.diagnostic.code.value)
+        assertTrue(events.isEmpty(), "refusal must occur before any provider side effect")
     }
 
     @Test
@@ -7642,6 +7765,55 @@ class GPUFramePreflighterTest {
         }
     }
 
+    private fun preparedPathDstReadFramePlan(
+        commandIds: List<Int>,
+        pathCommandIds: Set<Int>,
+    ): GPUFramePlan {
+        require(pathCommandIds.isNotEmpty() && pathCommandIds.all(commandIds::contains))
+        val capabilities = pathCapabilities()
+        val dstReadFacts = GPUBlendFacts(GPUBlendMode.LIGHTEN, GPUSourceAlphaClassification.Translucent)
+        val base = GPURecorder(
+            GPURecordingID("recording.preflight.path-dst-read"),
+            GPUFrameID(109),
+            capabilities,
+        ).apply {
+            commandIds.forEachIndexed { paintOrder, commandId ->
+                record(
+                    pathBuilderCommand(
+                        commandId,
+                        paintOrder,
+                        blend = if (commandId in pathCommandIds) dstReadFacts else GPUBlendFacts.srcOver(),
+                    ),
+                )
+            }
+        }.close().taskList.withCoreClipPlans(commandIds.associateWith { GPUClipExecutionPlan.NoClip })
+            .withCoreSamplePlan(GPUSamplePlan.SingleSampleFrame)
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val semantics = commandIds.associateWith { commandId ->
+            if (commandId in pathCommandIds) {
+                pathCoreSemantic(commandIdValue = commandId, blendPlan = shaderDstBlend())
+            } else {
+                coreSemantic(commandIdValue = commandId)
+            }
+        }
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = GPUFrameTargetRef("target.scene"),
+                    targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                    semanticsByCommandId = semantics,
+                ),
+            ),
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan ->
+            check(!plan.atomicallyRefused) { plan.diagnostics.joinToString { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}"
+            } }
+        }
+    }
+
     private fun preparedAnalyticFramePlan(
         plans: Map<Int, GPUClipExecutionPlan>,
         geometries: Map<Int, GPUCorePrimitiveGeometryInput> = emptyMap(),
@@ -7794,7 +7966,11 @@ class GPUFramePreflighterTest {
         )
     }
 
-    private fun pathBuilderCommand(commandId: Int, paintOrder: Int) = GPUFillRectCommandBuilder.build(
+    private fun pathBuilderCommand(
+        commandId: Int,
+        paintOrder: Int,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+    ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
         rect = GPURect(1f, 1f, 3f, 3f),
         target = GPUTargetFacts(4, 4, "rgba8unorm"),
@@ -7805,6 +7981,7 @@ class GPUFramePreflighterTest {
             coveragePlan = GPUClipCoveragePlan.NoClip,
         ),
         paintOrder = paintOrder,
+        blend = blend,
         source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
     )
 
@@ -8944,8 +9121,9 @@ class GPUFramePreflighterTest {
         sourceFamily: GPUCorePrimitiveSourceFamily = GPUCorePrimitiveSourceFamily.Rect,
         geometry: GPUCorePrimitiveGeometryInput = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 3f, 3f),
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+        blendPlan: GPUBlendPlan? = null,
     ): GPUDrawSemanticPayload.CorePrimitive {
-        val blend = coreBlend(blendMode)
+        val blend = blendPlan ?: coreBlend(blendMode)
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = commandIdValue,
@@ -8992,6 +9170,7 @@ class GPUFramePreflighterTest {
         commandIdValue: Int = 72,
         clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+        blendPlan: GPUBlendPlan? = null,
     ): GPUDrawSemanticPayload.CorePrimitive = coreSemantic(
         clipExecutionPlan = clipExecutionPlan,
         commandIdValue = commandIdValue,
@@ -9010,6 +9189,7 @@ class GPUFramePreflighterTest {
             fillRule = GPUCorePrimitiveFillRule.Winding,
         ),
         coverageMode = coverageMode,
+        blendPlan = blendPlan,
     )
 
     private fun GPUDrawSemanticPayload.CorePrimitive.withBlendPlanIdentity(
@@ -9095,6 +9275,12 @@ class GPUFramePreflighterTest {
         mode = GPUBlendMode.MODULATE,
         formulaId = "modulate@v1",
         sourceCoverageEncoding = GPUSourceCoverageEncoding.ModulateRGBA,
+    )
+
+    private fun shaderDstBlend(): GPUBlendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+        mode = GPUBlendMode.LIGHTEN,
+        formulaId = "lighten@v1",
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
     )
 
     private fun coreColorWriteNoneBlend(): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(

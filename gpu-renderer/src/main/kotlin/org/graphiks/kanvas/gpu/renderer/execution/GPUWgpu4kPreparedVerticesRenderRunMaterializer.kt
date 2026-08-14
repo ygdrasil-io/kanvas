@@ -763,7 +763,7 @@ internal data class PreparedVerticesPacketEntry(
     )
 }
 
-/** Deterministic identity of one prepared-vertices draw for the FP-06 batching planner. */
+/** Deterministic identity of one prepared-vertices draw for the batching planner. */
 internal data class GPUPreparedVerticesBatchCandidate(
     val packetId: GPUDrawPacketID,
     val artifactKey: String,

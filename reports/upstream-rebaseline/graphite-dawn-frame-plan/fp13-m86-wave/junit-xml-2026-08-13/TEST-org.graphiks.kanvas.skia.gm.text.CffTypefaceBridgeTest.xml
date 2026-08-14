@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.gm.text.CffTypefaceBridgeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.508Z" hostname="b3-16-2026-08-13-16-13" time="0.0">
+  <properties/>
+  <testcase name="CFF OpenType fixture exposes a drawable glyph outline()" classname="org.graphiks.kanvas.skia.gm.text.CffTypefaceBridgeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -949,18 +949,17 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
 """.trimIndent()
 
 /**
- * Static scene composite with an analytic device-rect clip (Task 7): the blurred mask
- * coverage is multiplied by the analytic clip coverage (the same rect signed-distance
- * AA math as the core lane's `CorePrimitiveAnalyticClipBlock`, evaluated at pixel
- * centers as `clamp(0.5 - distance, 0, 1)` and symmetric about each edge). The
- * `TopLevelMaskBlurPixelOracle.RectClip(antiAlias = true)` reference mirrors this
- * two-sided SDF with clamp-to-edge styled sampling, so the covered contract is
- * oracle-exact for integer and half-integer clip bounds: half-integer bounds place
- * pixel centers exactly ON the ramp (coverage 0.5), where a one-sided oracle
- * convention (hard zero outside the rect) would expect 0. Fractional bounds in
- * (k+0.5, k+1) leave exterior half-pixels inside the ramp (the GPU renders
- * `0.5 - (x - left)` coverage at the left edge, `0.5 - (right - x)` at the right),
- * and the oracle models that two-sided falloff exactly.
+ * Static scene composite with an analytic clip (Task 7 single rect, Task 5
+ * multi-rect): the blurred mask coverage is multiplied by the folded analytic
+ * clip coverage (the same rect signed-distance AA math as the core lane's
+ * `CorePrimitiveAnalyticClipBlock`, evaluated at pixel centers as
+ * `clamp(0.5 - distance, 0, 1)` and symmetric about each edge). The clip block
+ * folds an ordered list of rects: INTERSECT multiplies the per-rect coverage and
+ * DIFFERENCE multiplies one-minus-coverage. A single INTERSECT rect is
+ * `clip_count = 1`, byte-identical to the Task 7 single-rect contract. The
+ * `TopLevelMaskBlurPixelOracle` reference mirrors this two-sided SDF with
+ * clamp-to-edge styled sampling, so the covered contract is oracle-exact for
+ * integer and half-integer clip bounds.
  */
 internal val MASK_BLUR_COMPOSITE_CLIP_WGSL: String = """
 struct CompositeUniforms {
@@ -970,11 +969,29 @@ struct CompositeUniforms {
 
 struct CorePrimitiveAnalyticClipBlock {
     target_size: vec2f,
-    clip_type: u32,
+    clip_count: u32,
     anti_alias: u32,
     premul_rgba: vec4f,
-    clip_bounds: vec4f,
-    clip_radii: vec4f,
+    clip0_bounds: vec4f,
+    clip0_operation: u32,
+    clip0_pad0: u32,
+    clip0_pad1: u32,
+    clip0_pad2: u32,
+    clip1_bounds: vec4f,
+    clip1_operation: u32,
+    clip1_pad0: u32,
+    clip1_pad1: u32,
+    clip1_pad2: u32,
+    clip2_bounds: vec4f,
+    clip2_operation: u32,
+    clip2_pad0: u32,
+    clip2_pad1: u32,
+    clip2_pad2: u32,
+    clip3_bounds: vec4f,
+    clip3_operation: u32,
+    clip3_pad0: u32,
+    clip3_pad1: u32,
+    clip3_pad2: u32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: CompositeUniforms;
@@ -991,11 +1008,27 @@ fn rect_signed_distance(position: vec2f, bounds: vec4f) -> f32 {
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0);
 }
 
-fn clip_coverage(position: vec2f) -> f32 {
-    let distance = rect_signed_distance(position, clipUniforms.clip_bounds);
+fn rect_coverage(position: vec2f, bounds: vec4f) -> f32 {
+    let distance = rect_signed_distance(position, bounds);
     let hard = select(0.0, 1.0, distance <= 0.0);
     let aa = clamp(0.5 - distance, 0.0, 1.0);
     return select(hard, aa, clipUniforms.anti_alias != 0u);
+}
+
+fn clip_coverage(position: vec2f) -> f32 {
+    let cov0 = rect_coverage(position, clipUniforms.clip0_bounds);
+    let term0 = select(cov0, 1.0 - cov0, clipUniforms.clip0_operation == 1u);
+    let factor0 = select(1.0, term0, clipUniforms.clip_count > 0u);
+    let cov1 = rect_coverage(position, clipUniforms.clip1_bounds);
+    let term1 = select(cov1, 1.0 - cov1, clipUniforms.clip1_operation == 1u);
+    let factor1 = select(1.0, term1, clipUniforms.clip_count > 1u);
+    let cov2 = rect_coverage(position, clipUniforms.clip2_bounds);
+    let term2 = select(cov2, 1.0 - cov2, clipUniforms.clip2_operation == 1u);
+    let factor2 = select(1.0, term2, clipUniforms.clip_count > 2u);
+    let cov3 = rect_coverage(position, clipUniforms.clip3_bounds);
+    let term3 = select(cov3, 1.0 - cov3, clipUniforms.clip3_operation == 1u);
+    let factor3 = select(1.0, term3, clipUniforms.clip_count > 3u);
+    return factor0 * factor1 * factor2 * factor3;
 }
 
 @fragment

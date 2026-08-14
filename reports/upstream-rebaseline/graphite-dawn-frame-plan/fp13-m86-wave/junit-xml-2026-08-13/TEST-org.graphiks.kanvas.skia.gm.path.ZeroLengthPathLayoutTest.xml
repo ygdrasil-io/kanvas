@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.504Z" hostname="b3-16-2026-08-13-16-13" time="0.003">
+  <properties/>
+  <testcase name="all four diagnostic GMs are blocking()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.0"/>
+  <testcase name="single contour cap expectations match Skia()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.0"/>
+  <testcase name="zero length forms construct Skia-compatible verbs and points()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.002"/>
+  <testcase name="validation cells have unique deterministic source ids across both matrices()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.001"/>
+  <testcase name="double contours use Skia's separated anchors()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.0"/>
+  <testcase name="double contour cap expectations match Skia()" classname="org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

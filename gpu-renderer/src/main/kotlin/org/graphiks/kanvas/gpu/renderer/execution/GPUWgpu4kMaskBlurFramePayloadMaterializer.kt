@@ -23,7 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.MASK_BLUR_COMPOSITE_RENDER_STEP
 import org.graphiks.kanvas.gpu.renderer.payloads.maskBlurStageFromRenderStepId
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeRectClip
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeClip
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_H_STEP
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_MASK_BLUR_V_STEP
@@ -34,7 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_TARGET_STA
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_TARGET_STATE_MASK
 import org.graphiks.kanvas.gpu.renderer.recording.TOP_LEVEL_MASK_BLUR_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeClipRefusal
-import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeRectClipOrNull
+import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurCompositeClipOrNull
 import org.graphiks.kanvas.gpu.renderer.recording.topLevelMaskBlurScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -659,14 +659,14 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             } else {
                 null
             }
-            val rectClip = topLevelMaskBlurCompositeRectClipOrNull(compositePacket)
-            val clipUniform = rectClip?.let { clip ->
+            val clip = topLevelMaskBlurCompositeClipOrNull(compositePacket)
+            val clipUniform = clip?.let { compositeClip ->
                 createUniform(
-                    "Kanvas.frame.maskBlur.compositeClipUniform64",
+                    "Kanvas.frame.maskBlur.compositeClipUniform160",
                     compositeClipUniformBytes(
                         semantic.targetBounds.width,
                         semantic.targetBounds.height,
-                        clip,
+                        compositeClip,
                         semantic,
                     ),
                 )
@@ -740,7 +740,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                         uniform = compositeUniform,
                         dstUniform = dstUniform,
                         clipUniform = clipUniform,
-                        rectClip = rectClip,
+                        clip = clip,
                         scissor = semantic.scissorBounds,
                         blendModeLabel = compositePacket.blendPlan?.mode?.gpuLabel.orEmpty(),
                         dstRead = dstRead,
@@ -802,7 +802,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
             // chain 2 would render with chain 1's clip — wrong-render risk. The single-chain
             // dst-read lane is the tested surface; do NOT widen dst-read clip admission
             // without splitting the bind group per chain.
-            val dstReadClip = compositeEntries.first().rectClip
+            val dstReadClip = compositeEntries.first().clip
             val dstBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
                     label = if (dstReadClip != null) {
@@ -825,7 +825,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                             add(
                                 BindGroupEntry(
                                     5u,
-                                    BufferBinding(compositeEntries.first().clipUniform!!, 0uL, 64uL),
+                                    BufferBinding(compositeEntries.first().clipUniform!!, 0uL, 160uL),
                                 ),
                             )
                         }
@@ -873,7 +873,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         } else {
             compositeEntries.forEach { pending ->
                 val isSrcOver = pending.blendModeLabel == "src_over"
-                val clip = pending.rectClip
+                val clip = pending.clip
                 val compositeBindGroup = device.createBindGroup(
                     BindGroupDescriptor(
                         label = if (clip != null) {
@@ -894,7 +894,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
                                 add(
                                     BindGroupEntry(
                                         3u,
-                                        BufferBinding(pending.clipUniform!!, 0uL, 64uL),
+                                        BufferBinding(pending.clipUniform!!, 0uL, 160uL),
                                     ),
                                 )
                             }
@@ -1073,7 +1073,7 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
         val uniform: io.ygdrasil.webgpu.GPUBuffer,
         val dstUniform: io.ygdrasil.webgpu.GPUBuffer?,
         val clipUniform: io.ygdrasil.webgpu.GPUBuffer?,
-        val rectClip: GPUTopLevelMaskBlurCompositeRectClip?,
+        val clip: GPUTopLevelMaskBlurCompositeClip?,
         val scissor: GPUPixelBounds,
         val blendModeLabel: String,
         val dstRead: Boolean,
@@ -1276,28 +1276,46 @@ internal class GPUWgpu4kMaskBlurFramePayloadMaterializer(
     }
 
     /**
-     * Packs the 64-byte analytic clip block for the composite bind group (Task 7),
-     * mirroring the core lane's `CorePrimitiveAnalyticClipBlock` ABI byte-for-byte:
-     * target_size, clip_type (0 = rect), anti_alias, premul_rgba, clip_bounds,
-     * clip_radii (zeroed for a rect).
+     * Packs the 160-byte analytic clip block for the composite bind group (Task 7
+     * single rect, Task 5 multi-rect), mirroring the core lane's analytic clip ABI
+     * layout: target_size, clip_count, anti_alias, premul_rgba, then four ordered
+     * rect entries (bounds + operation + padding). A single INTERSECT rect is packed
+     * as clip_count = 1 with one entry; extra entries are zeroed and inactive.
      */
     private fun compositeClipUniformBytes(
         targetWidth: Int,
         targetHeight: Int,
-        clip: GPUTopLevelMaskBlurCompositeRectClip,
+        clip: GPUTopLevelMaskBlurCompositeClip,
         semantic: GPUDrawSemanticPayload.MaskBlur,
-    ): ByteArray = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
-        putFloat(targetWidth.toFloat())
-        putFloat(targetHeight.toFloat())
-        putInt(0)
-        putInt(if (clip.antiAlias) 1 else 0)
-        semantic.premultipliedRgba.forEach(::putFloat)
-        putFloat(clip.left)
-        putFloat(clip.top)
-        putFloat(clip.right)
-        putFloat(clip.bottom)
-        repeat(4) { putFloat(0f) }
-    }.array()
+    ): ByteArray {
+        require(clip.elements.size in 1..4) { "The analytic composite clip block holds one to four rects" }
+        return ByteBuffer.allocate(160).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(targetWidth.toFloat())
+            putFloat(targetHeight.toFloat())
+            putInt(clip.elements.size)
+            putInt(if (clip.elements.first().antiAlias) 1 else 0)
+            semantic.premultipliedRgba.forEach(::putFloat)
+            for (index in 0 until 4) {
+                val element = clip.elements.getOrNull(index)
+                if (element != null) {
+                    putFloat(element.left)
+                    putFloat(element.top)
+                    putFloat(element.right)
+                    putFloat(element.bottom)
+                    putInt(
+                        when (element.operation) {
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeClipCombine.Intersect -> 0
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUTopLevelMaskBlurCompositeClipCombine.Difference -> 1
+                        },
+                    )
+                    repeat(3) { putInt(0) }
+                } else {
+                    repeat(4) { putFloat(0f) }
+                    repeat(4) { putInt(0) }
+                }
+            }
+        }.array()
+    }
 
     private fun sceneTargetBounds(framePlan: GPUFramePlan): GPUPixelBounds? {
         val scenePreparation = framePlan.steps

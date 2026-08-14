@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.gm.text.VariableFontRenderingTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.514Z" hostname="b3-16-2026-08-13-16-13" time="0.114">
+  <properties/>
+  <testcase name="weight coordinate reaches TrueType glyph outlines()" classname="org.graphiks.kanvas.skia.gm.text.VariableFontRenderingTest" time="0.114"/>
+  <system-out><![CDATA[running on X11
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

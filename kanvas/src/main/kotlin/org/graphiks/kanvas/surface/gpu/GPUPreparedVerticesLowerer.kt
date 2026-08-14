@@ -59,7 +59,7 @@ private val canonicalPreparedVerticesMaterialCompiler = GPUPreparedVerticesMater
     GPUPreparedMaterialProgramCompiler.compile(descriptor, paintAlpha, context)
 }
 
-/** Pure FP-06 lowering for a single recorded DrawVertices or DrawMesh operation. */
+/** Pure lowering for a single recorded DrawVertices or DrawMesh operation. */
 object GPUPreparedVerticesLowerer {
     fun lower(
         operation: DisplayOp,

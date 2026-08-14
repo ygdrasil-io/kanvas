@@ -46,14 +46,15 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
 )
 
 /**
- * Ceiling for live session pipelines. The key space is closed: the 29-program universe plus the
- * per-mode dst-read component identities (16 modes), the analytic shape/clip/intersection
- * components, the coverage-mask and clip-stencil producer/consumer lanes, and the path-stencil
- * pair stay well under 64; the FP-11 dst-copy admission materializes the full dst-read mode set
- * in one retained session, so the ceiling covers that closed universe with headroom instead of
- * refusing every mode after the first handful.
+ * Ceiling for live session pipelines. The key space is closed: the 30-program universe plus the
+ * per-mode dst-read component identities (16 direct-uniform32 + 16 analytic-shape-uniform80
+ * modes), the analytic shape/clip/intersection components, the coverage-mask and clip-stencil
+ * producer/consumer lanes, and the path-stencil pair stay well under 128; the dst-copy
+ * admission and the analytic-shape dst-read admission materialize the full dst-read mode
+ * set in one retained session, so the ceiling covers that closed universe with headroom instead
+ * of refusing every mode after the first handful.
  */
-internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 64
+internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 128
 
 internal enum class GPUWgpu4kCorePrimitiveBindingPolicy {
     DynamicUniformRequired,
@@ -128,14 +129,31 @@ internal fun corePrimitiveDstReadComponentIdentity(modeLabel: String):
     vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
 )
 
+internal fun corePrimitiveAnalyticShapeDstReadComponentIdentity(modeLabel: String):
+    GPUWgpu4kCorePrimitiveComponentIdentity = GPUWgpu4kCorePrimitiveComponentIdentity(
+    shaderIdentity = "$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:$modeLabel",
+    bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY,
+    vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+)
+
 internal fun GPUWgpu4kCorePrimitiveComponentIdentity.isCorePrimitiveDstRead(): Boolean =
+    isCorePrimitiveDirectDstRead() || isCorePrimitiveAnalyticShapeDstRead()
+
+private fun GPUWgpu4kCorePrimitiveComponentIdentity.isCorePrimitiveDirectDstRead(): Boolean =
     bindingLayoutIdentity == CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY &&
         vertexLayoutIdentity == CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY &&
         shaderIdentity.startsWith("$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:")
 
+internal fun GPUWgpu4kCorePrimitiveComponentIdentity.isCorePrimitiveAnalyticShapeDstRead(): Boolean =
+    bindingLayoutIdentity == CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY &&
+        vertexLayoutIdentity == CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY &&
+        shaderIdentity.startsWith("$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:")
+
 internal fun GPUWgpu4kCorePrimitiveComponentIdentity.dstReadModeLabelOrNull(): String? =
     shaderIdentity.removePrefix("$CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY:")
         .takeIf { suffix -> suffix != shaderIdentity }
+        ?: shaderIdentity.removePrefix("$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:")
+            .takeIf { suffix -> suffix != shaderIdentity }
 
 internal val PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
@@ -208,7 +226,9 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
 
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.isCorePrimitiveDstReadPipelineKey(): Boolean =
     componentIdentity.isCorePrimitiveDstRead() &&
-        pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
+        (pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver ||
+            pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ||
+            pipelineIdentity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead)
 
 internal enum class GPUWgpu4kCorePrimitiveSessionCacheNativeResource {
     BindGroupLayout,
@@ -669,7 +689,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY ->
                         buildCorePrimitiveCoverageMaskConsumerNativeShader()
                     else -> key.componentIdentity.dstReadModeLabelOrNull()?.let { modeLabel ->
-                        buildCorePrimitiveDstReadNativeShader(modeLabel)
+                        if (key.componentIdentity.isCorePrimitiveAnalyticShapeDstRead()) {
+                            buildCorePrimitiveAnalyticShapeDstReadNativeShader(modeLabel)
+                        } else {
+                            buildCorePrimitiveDstReadNativeShader(modeLabel)
+                        }
                     } ?: buildCorePrimitiveNativeShader()
                 }
             ) {
@@ -762,7 +786,7 @@ private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): U
     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
     -> 64uL
-    else -> 32uL
+    else -> if (isCorePrimitiveAnalyticShapeDstRead()) 80uL else 32uL
 }
 
 internal fun corePrimitiveBindGroupLayoutDescriptor(

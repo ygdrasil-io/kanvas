@@ -97,7 +97,7 @@ data class GPUVertexLayoutPlan(
     })
 }
 
-/** Single structural authority for the four FP-06 interleaved vertex layouts. */
+/** Single structural authority for the four interleaved vertex layouts. */
 internal object GPUPreparedVerticesLayoutAuthority {
     private val position = GPUVertexLayoutPlan(
         attributes = listOf("position"),
@@ -1465,7 +1465,7 @@ val GPU_PREPARED_VERTICES_BATCH_BARRIER_KINDS: List<String> = listOf(
 )
 
 /**
- * Non-claim line for the FP-06 prepared-vertices batching pass.
+ * Non-claim line for the prepared-vertices batching pass.
  *
  * Batching is materialized for compatible adjacent draws, but cross-layer batching,
  * destination-read batching, and sampled-material batching remain unclaimed and the route

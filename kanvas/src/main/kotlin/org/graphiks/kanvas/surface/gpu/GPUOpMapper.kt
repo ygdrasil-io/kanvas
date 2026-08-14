@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.forCorePrimitiveAnalyticShapeCoverage
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.canvas.ClipStack
@@ -59,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
@@ -69,6 +71,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticRectElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
@@ -654,7 +658,15 @@ internal object GPUOpMapper {
                 maxOf(context.target.width, context.target.height),
             )
         } ?: GPUClipCoveragePlan.NoClip
-        val clipExecutionPlan = clipPlan.toExecutionPlan(context.capabilities, context.target)
+        // The rect-decomposable → AnalyticMultiRect lowering is only safe for
+        // the mask-blur composite consumer (whose shader folds per-rect coverage). Non-blur
+        // core draws keep their prior CoverageMask route.
+        val admitAnalyticMultiRect = rawNormalized.hasBlurMaskFilter()
+        val clipExecutionPlan = clipPlan.toExecutionPlan(
+            context.capabilities,
+            context.target,
+            admitAnalyticMultiRect,
+        )
         val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
         return GPUFramePathVisualCommand(
             normalized = normalized,
@@ -754,7 +766,10 @@ internal object GPUOpMapper {
                 .clampedTo(target)
         }
         val coverage = command.geometryCoverage()
-        val blendPlan = command.blend.canonicalBlendPlan(coverage)
+        val scalarCoverage = coverage == GPUCoverageConsumption.ScalarCoverage
+        val blendPlan = command.blend.canonicalBlendPlan(
+            if (scalarCoverage) GPUCoverageConsumption.FullOrScissor else coverage,
+        ).let { plan -> if (scalarCoverage) plan.forCorePrimitiveAnalyticShapeCoverage() else plan }
         val ordering = GPUOrderingFacts(
             paintOrder = paintOrder,
             dependsOnDestination = blendPlan.destinationReadRequirement ==
@@ -1156,6 +1171,7 @@ private fun NormalizedDrawCommand.withClipPlans(
 private fun GPUClipCoveragePlan.toExecutionPlan(
     capabilities: GPUCapabilities,
     target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean = false,
 ): GPUClipExecutionPlan = when (this) {
     GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
     is GPUClipCoveragePlan.Scissor -> toScissorExecutionPlan(capabilities, target)
@@ -1164,7 +1180,15 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
         code = code,
         message = "Clip coverage planning refused before execution classification.",
     )
-    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target)
+    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target, admitAnalyticMultiRect)
+}
+
+/** True when the normalized command carries a mask blur filter (the mask-blur composite lane). */
+private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
+    is NormalizedDrawCommand.FillRect -> maskFilter != null
+    is NormalizedDrawCommand.FillRRect -> maskFilter != null
+    is NormalizedDrawCommand.FillPath -> maskFilter != null
+    else -> false
 }
 
 private fun GPUClipCoveragePlan.AnalyticIntersection.toAnalyticIntersectionExecutionPlan(
@@ -1220,6 +1244,7 @@ private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(
 private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
     capabilities: GPUCapabilities,
     target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean,
 ): GPUClipExecutionPlan {
     val single = elements.singleOrNull()
     if (
@@ -1306,6 +1331,23 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             message = "Ordered clip-mask execution requires bounded clip support.",
         )
     }
+    // A rect-decomposable complex clip lowers to bounded analytic
+    // multi-rect coverage instead of a coverage mask, scoped to the mask-blur
+    // composite lane (the only consumer whose composite shader folds the per-rect
+    // coverage). Non-blur consumers keep their prior CoverageMask route, so a
+    // rect INTERSECT + orthogonal-polygon DIFFERENCE clip keeps rendering through
+    // the coverage-mask producer/consumer topology. Admission is also scoped to the
+    // rect-decomposable case only: every element must be a rect/rrect or a
+    // non-inverse axis-aligned orthogonal polygon DIFFERENCE path (the blur
+    // fixture's notch), at least one element must be such a path, and the decomposed
+    // rect count must fit the fixed analytic block. Coverage-mask and stacked clips
+    // (including a plain rect-vs-rect difference and inverse fills) stay terminal.
+    if (admitAnalyticMultiRect) {
+        val analyticMultiRect = toAnalyticMultiRectOrNull()
+        if (analyticMultiRect != null) {
+            return GPUClipExecutionPlan.AnalyticMultiRect(analyticMultiRect)
+        }
+    }
     val producers = elements.mapIndexed { index, element ->
         val geometry = element.executionGeometryOrRefusal()
             ?: return invalidClipGeometryRefusal(element)
@@ -1361,6 +1403,139 @@ private fun invalidClipGeometryRefusal(
     code = "unsupported.clip.execution_geometry_invalid",
     message = "${element.kind.name} clip geometry cannot be represented by the execution contract.",
 )
+
+/**
+ * Attempts the analytic multi-rect lowering: a complex clip whose elements are all
+ * rect/rrect or a non-inverse axis-aligned orthogonal polygon **DIFFERENCE** path
+ * (INTERSECT paths are rejected — the composite folds one-minus-coverage per rect,
+ * so only DIFFERENCE unions decompose exactly), with at least one such path,
+ * decomposed into a bounded ordered rect list for analytic multi-rect execution.
+ * Returns null when the clip must stay on the coverage-mask route (rect-vs-rect
+ * differences, inverse fills, curved or multi-contour paths, INTERSECT paths,
+ * self-intersecting Winding polygons, or decomposed counts beyond the fixed
+ * analytic block).
+ */
+private fun GPUClipCoveragePlan.Mask.toAnalyticMultiRectOrNull(): List<GPUClipAnalyticRectElement>? {
+    var sawRectDecomposedPath = false
+    val primitives = mutableListOf<AnalyticRectPrimitive>()
+    for (element in elements) {
+        val elementPrimitives = when (element.kind) {
+            GPUClipCoverageElementKind.Rect -> {
+                if (element.values.size != 4) return null
+                listOf(
+                    AnalyticRectPrimitive(
+                        element.values[0],
+                        element.values[1],
+                        element.values[2],
+                        element.values[3],
+                        element.operation,
+                        element.antiAlias,
+                    ),
+                )
+            }
+            GPUClipCoverageElementKind.RRect -> return null
+            GPUClipCoverageElementKind.Path -> {
+                val decomposed = decomposeOrthogonalPolygon(element) ?: return null
+                sawRectDecomposedPath = true
+                decomposed
+            }
+        }
+        primitives += elementPrimitives
+    }
+    if (!sawRectDecomposedPath) return null
+    if (primitives.size !in 1..GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS) return null
+    if (primitives.map { it.antiAlias }.distinct().size != 1) return null
+    return primitives.map { primitive ->
+        GPUClipAnalyticRectElement(
+            geometry = GPUClipExecutionGeometry.Rect(
+                GPUClipBounds(primitive.left, primitive.top, primitive.right, primitive.bottom),
+            ),
+            antiAlias = primitive.antiAlias,
+            operation = when (primitive.operation) {
+                GPUClipCoverageOperation.Intersect -> GPUClipMaskCombine.Intersect
+                GPUClipCoverageOperation.Difference -> GPUClipMaskCombine.Difference
+            },
+        )
+    }
+}
+
+private data class AnalyticRectPrimitive(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val operation: GPUClipCoverageOperation,
+    val antiAlias: Boolean,
+)
+
+/**
+ * Decomposes a single-contour, non-inverse, axis-aligned orthogonal polygon DIFFERENCE
+ * path into its axis-aligned band rects (scanline even-odd). Returns null for anything
+ * outside that closed shape family so the clip stays on the coverage-mask route. Only
+ * DIFFERENCE paths decompose safely: the composite folds one-minus-coverage per rect, so
+ * a disjoint union of difference rects is exact, while an INTERSECT path would multiply
+ * disjoint rect coverages to zero (an empty clip). A Winding-filled polygon must also be
+ * simple — the even-odd scanline is exact for EvenOdd always and for Winding only when
+ * the non-zero winding number stays within {-1, 0, 1} along the sweep.
+ */
+private fun decomposeOrthogonalPolygon(
+    element: GPUClipCoverageElement,
+): List<AnalyticRectPrimitive>? {
+    if (element.inverseFill) return null
+    if (element.operation != GPUClipCoverageOperation.Difference) return null
+    val values = element.values
+    val vertexCount = element.vertexCount
+    val contourCount = values.first().toInt()
+    if (contourCount != 1) return null
+    val coordinateStart = 1 + contourCount
+    if (values.size != coordinateStart + vertexCount * 2) return null
+    if (vertexCount == 0) return null
+    val points = (0 until vertexCount).map { index ->
+        values[coordinateStart + index * 2] to values[coordinateStart + index * 2 + 1]
+    }
+    for (index in 0 until vertexCount) {
+        val (x0, y0) = points[index]
+        val (x1, y1) = points[(index + 1) % vertexCount]
+        if (x0 != x1 && y0 != y1) return null
+    }
+    val ys = points.map { it.second }.distinct().sorted()
+    if (ys.size < 2) return null
+    val requiresSimpleWinding = element.fillRule == GPUClipFillRule.Winding
+    val rects = mutableListOf<AnalyticRectPrimitive>()
+    for (bandIndex in 0 until ys.size - 1) {
+        val top = ys[bandIndex]
+        val bottom = ys[bandIndex + 1]
+        val midY = (top + bottom) * 0.5f
+        val crossings = mutableListOf<Pair<Float, Boolean>>()
+        for (index in 0 until vertexCount) {
+            val (x0, y0) = points[index]
+            val (x1, y1) = points[(index + 1) % vertexCount]
+            if (y0 == y1) continue
+            val lo = minOf(y0, y1)
+            val hi = maxOf(y0, y1)
+            if (midY >= lo && midY < hi) crossings.add(x0 to (y1 < y0))
+        }
+        crossings.sortBy { it.first }
+        if (crossings.size % 2 != 0) return null
+        if (requiresSimpleWinding) {
+            var winding = 0
+            for ((_, upward) in crossings) {
+                winding += if (upward) 1 else -1
+                if (winding < -1 || winding > 1) return null
+            }
+        }
+        for (pairIndex in 0 until crossings.size / 2) {
+            val left = crossings[pairIndex * 2].first
+            val right = crossings[pairIndex * 2 + 1].first
+            if (right <= left) return null
+            rects.add(
+                AnalyticRectPrimitive(left, top, right, bottom, element.operation, element.antiAlias),
+            )
+        }
+    }
+    if (rects.isEmpty()) return null
+    return rects
+}
 
 private fun clipExecutionRefusal(code: String, message: String): GPUClipExecutionPlan.Refused =
     GPUClipExecutionPlan.Refused(code = code, message = message)

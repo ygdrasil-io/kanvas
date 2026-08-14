@@ -49,6 +49,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.forCorePrimitiveAnalyticShapeCoverageIf
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
@@ -355,7 +356,9 @@ class GPUFirstRoutePlanner(
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
             pipelineKey = GPURenderPipelineKey(pipelineKey),
-            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat)
+                .forCorePrimitiveAnalyticShapeCoverageIf(command.corePrimitiveShadingCoverage() ==
+                    GPUCoverageConsumption.ScalarCoverage),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -603,7 +606,9 @@ class GPUFirstRoutePlanner(
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
             pipelineKey = GPURenderPipelineKey(pipelineKey),
-            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat)
+                .forCorePrimitiveAnalyticShapeCoverageIf(command.corePrimitiveShadingCoverage() ==
+                    GPUCoverageConsumption.ScalarCoverage),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -2402,6 +2407,26 @@ internal fun GPUBlendFacts.canonicalPlan(
             samplePlan = GPUSamplePlan.SingleSampleFrame,
         ),
     )
+
+/**
+ * Coverage consumption for the core-primitive shading lane: AA rects/rrects consume scalar
+ * coverage (the analytic-shape shader computes the fractional coverage), while non-AA shapes keep
+ * full-or-scissor coverage. This mirrors [NormalizedDrawCommand] geometry coverage so the packet's
+ * blend plan matches the mapper's destination-read decision for the same shape.
+ */
+private fun NormalizedDrawCommand.corePrimitiveShadingCoverage(): GPUCoverageConsumption = when (this) {
+    is NormalizedDrawCommand.FillRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    is NormalizedDrawCommand.FillRRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    else -> GPUCoverageConsumption.FullOrScissor
+}
 
 private const val maxStableAnalysisLocalMatrixLength = 64
 

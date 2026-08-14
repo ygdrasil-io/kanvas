@@ -6,6 +6,14 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 private const val GPU_CLIP_EXECUTION_IDENTITY_VERSION = "gpu-clip-execution-v1"
 private const val CLIP_TEXTURE_BYTES_PER_PIXEL = 4
 
+/**
+ * Fixed capacity of the multi-rect analytic clip block. One complex
+ * clip lowerable to bounded analytic coverage may retain at most this many ordered
+ * rect elements; a rect-decomposable polygon that exceeds the capacity stays on the
+ * coverage-mask route (terminal).
+ */
+const val GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS = 4
+
 /** Planner-local identity that keeps stencil producer and consumer work atomic. */
 @JvmInline
 value class GPUClipAtomicGroupID(val value: String) {
@@ -197,6 +205,23 @@ data class GPUClipAnalyticElement(
     }
 }
 
+/**
+ * One ordered rect/rrect element of a bounded multi-rect analytic clip,
+ * carrying a boolean combine so the composite shader can fold INTERSECT (multiply
+ * coverage) and DIFFERENCE (multiply one-minus-coverage) terms.
+ */
+data class GPUClipAnalyticRectElement(
+    val geometry: GPUClipExecutionGeometry,
+    val antiAlias: Boolean,
+    val operation: GPUClipMaskCombine,
+) {
+    init {
+        require(geometry is GPUClipExecutionGeometry.Rect || geometry is GPUClipExecutionGeometry.RRect) {
+            "GPUClipAnalyticRectElement accepts only rect or rrect geometry"
+        }
+    }
+}
+
 /** Ordered, handle-free execution authority produced once by Canvas-state mapping. */
 sealed interface GPUClipExecutionPlan {
     fun canonicalIdentity(): String
@@ -253,6 +278,30 @@ sealed interface GPUClipExecutionPlan {
         override fun hashCode(): Int = elements.hashCode()
 
         override fun toString(): String = "AnalyticIntersection(elements=$elements)"
+    }
+
+    class AnalyticMultiRect(
+        elements: List<GPUClipAnalyticRectElement>,
+    ) : GPUClipExecutionPlan {
+        val elements: List<GPUClipAnalyticRectElement> = immutableList(elements)
+
+        init {
+            require(elements.size in 1..GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS) {
+                "AnalyticMultiRect requires one to $GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS ordered analytic elements"
+            }
+        }
+
+        override fun canonicalIdentity(): String = identity("AnalyticMultiRect") {
+            integer(elements.size)
+            elements.forEach(::analyticRectElement)
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other || other is AnalyticMultiRect && elements == other.elements
+
+        override fun hashCode(): Int = elements.hashCode()
+
+        override fun toString(): String = "AnalyticMultiRect(elements=$elements)"
     }
 
     data class StencilCoverage(
@@ -453,6 +502,12 @@ private class GPUClipExecutionIdentityBuilder {
     fun analyticElement(element: GPUClipAnalyticElement) {
         geometry(element.geometry)
         boolean(element.antiAlias)
+    }
+
+    fun analyticRectElement(element: GPUClipAnalyticRectElement) {
+        geometry(element.geometry)
+        boolean(element.antiAlias)
+        string(element.operation.name)
     }
 
     fun maskConsumer(consumer: GPUClipMaskConsumerPlan) {

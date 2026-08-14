@@ -294,7 +294,7 @@ enum class GPUPreparedVerticesViolationKind {
     /** The semantic topology identity disagrees with the artifact topology. */
     TOPOLOGY_MISMATCH,
 
-    /** The artifact layout is not one of the four canonical FP-06 layouts. */
+    /** The artifact layout is not one of the four canonical vertex layouts. */
     NON_CANONICAL_LAYOUT,
 
     /** The index format is neither uint16 nor uint32. */

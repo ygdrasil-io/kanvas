@@ -3,7 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.text.FontTypeface
 
 /**
- * Deterministic FP-05 inputs. Accessors intentionally allocate fresh arrays/lists so tests
+ * Deterministic inputs. Accessors intentionally allocate fresh arrays/lists so tests
  * cannot turn a later cold frame into a shared mutable or cache-like sample.
  */
 object GPUPreparedTextTestFixtures {
