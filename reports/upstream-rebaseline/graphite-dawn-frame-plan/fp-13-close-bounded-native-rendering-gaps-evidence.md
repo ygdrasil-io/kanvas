@@ -1229,3 +1229,128 @@ Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
   their own tasks (Task 8, and later geometry-lowering work).
 - CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0). No
   global similarity threshold or assertion was weakened.
+
+## Task 8 — path-stencil stencil-continuation + dst-read path cover
+
+Task 8 wires the fp-11 §3 stencil-continuation feature: a destination-reading
+path (StencilEdgeFan) lowers to a background render, a producer render that
+stores the fan (Clear+Store), an ordered destination snapshot copy, and a
+continued cover render that loads the fan read-only and shades with the
+dst-read formula. The 60 UNCLIPPED/SCISSOR path dst-copy rows render Prepared
+(CPU-oracle exact); the analytic-clip path families re-document to the
+path-stencil preflight code (a separate analytic-clip × stencil-cover feature).
+
+### 8.1 Row scope (before → after)
+
+Before (green 1864-row matrix, closure-HEAD codes):
+
+| code | rows |
+| --- | --- |
+| `unsupported.native-core-primitive.path-destination-read` | 90 (60 UNCLIPPED/SCISSOR + 30 ALPHA_MASK dst-copy) |
+| `invalid.preflight.core_primitive_path_stencil` | 28 (non-dst-copy ALPHA_MASK) |
+
+After (green 1864-row matrix, re-pointed):
+
+| outcome | rows |
+| --- | --- |
+| Prepared (renders, CPU-oracle exact) | **60** (DrawPath/DrawDRRect × 15 dst-copy modes × UNCLIPPED/SCISSOR) |
+| `invalid.preflight.core_primitive_path_stencil` | **58** (30 ALPHA_MASK dst-copy + 28 non-dst-copy ALPHA_MASK) |
+
+`unsupported.native-core-primitive.path-destination-read` left production (`rg`
+over `gpu-renderer/src` + `kanvas/src` → no matches). The 30 ALPHA_MASK dst-copy
+rows and the 28 non-dst-copy ALPHA_MASK rows share the analytic-clip ×
+stencil-cover root (the preflighter's "Analytic path pair cannot continue its fan
+across the destination snapshot yet." / "Analytic path pair contradicts …")
+and re-point to the stable `invalid.preflight.core_primitive_path_stencil` code.
+
+### 8.2 The five feature pieces (file:line)
+
+1. **Producer stores the fan** — `GPUCorePrimitivePreparedFrameTaskListBuilder.kt`
+   splits a dst-read path into producer/cover render tasks (`flatMapIndexed`), the
+   producer with `pathDepthStencilProducerLoadStore = WritableStencil(Clear, Store, 0)`
+   and the cover with `pathDepthStencilCoverLoadStore = ReadOnlyKeep`;
+   `consumerResourceUses`/`consumerDepthStencilLoadStore` gain a `pathPacketRole`
+   parameter (producer `write=true`, cover `write=false` + snapshot).
+2. **TextureCopy snapshot between stencil and cover** — the destination snapshot
+   consumer ref keys to the assembled cover packet id
+   `${basePacket.packetId}.path-stencil-cover`; the linearizer places the ordered
+   copy between the producer and cover (`GPUFramePlanner.kt:766-784`).
+3. **Cover loads read-only + binds snapshot** — `GPUCorePrimitiveNativeScopeRouteUnit
+   .PathProducer`/`PathCover` halves; `GPUCorePrimitivePathStencilNativeRouteSeal
+   .Continued`; `GPUWgpu4kCorePrimitivePipelineDescriptor.PathStencilCoverDstRead`
+   (stencil `NotEqual`/`Keep`, `writeMask = 0`, dst-read shader
+   `buildCorePrimitiveDstReadNativeShader`).
+4. **Cross-step pair admission + second path render** — `GPUFramePreflighter.kt`
+   `continuedDstReadPathAdmission` (two path renders + a `CopyDestinationStep`);
+   the pair-building loop iterates a flattened `(stepIndex, packet)` stream so the
+   producer in one render pairs with the cover in the next.
+5. **Run materializer + frame pool** — `supportedPathComponents` accepts
+   `isCorePrimitiveDstRead()`; the frame slot allows `dstRead` + `pathDepthStencil`;
+   the native stencil config derives from `plan.renderStep.depthStencilLoadStore`
+   (`GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:399-426`).
+
+The materializer lane `materializeContinuedPathDstReadCore`
+(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:5408`) creates one shared
+frame-local path D24S8 and materializes background / producer / cover, passing the
+shared view to the producer and cover runs so the fan persists across the ordered
+snapshot copy.
+
+### 8.3 RED evidence
+
+Flipping all 118 path rows to Prepared:
+
+```
+./gradlew -F off :kanvas:test --tests "*GPUAllApiBlendSurfaceTest" --no-parallel --console=plain
+```
+
+→ **118 failures**: 90 × `unsupported.native-core-primitive.path-destination-read:
+Prepared path-stencil packets cannot consume destination-read snapshots yet.` and
+28 × `invalid.preflight.core_primitive_path_stencil: Analytic path pair contradicts
+command, geometry prefix, clip seal, slot, offset, layout, or generation authority.`
+
+### 8.4 GREEN evidence
+
+```
+./gradlew -F off :kanvas:test --tests "*GPUAllApiBlendSurfaceTest" --no-parallel --console=plain
+```
+
+→ **1864/1864** (0 failed, 0 skipped). The 60 UNCLIPPED/SCISSOR dst-copy rows render
+Prepared, per-pixel CPU-oracle exact (`assertPixelsNear(..., tolerance = 2)`).
+
+### 8.5 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain
+```
+→ **3303 tests, 1 failure** — the documented `GPURendererPackageBoundaryTest`
+baseline (20 cycles / 0 rules, unchanged).
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain
+```
+→ **3237 tests, 1 failure** — the documented `GPUPreparedSurfaceImagePixelTest`
+UNORM 1-LSB llvmpipe baseline (unchanged).
+
+Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
+`GPUClipCoverageSurfaceTest`, `GPUClipAdvancedBlendSurfaceTest`,
+`GPUPathClipRegressionTest`, `GPUPreparedSurfaceProductRouterTest` (the
+`path-destination-read` code left the terminal-family matrix),
+`GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest`.
+
+### 8.6 Re-points
+
+- `GPUAllApiBlendSurfaceTest.kt:656-669` — the 60 UNCLIPPED/SCISSOR dst-copy rows
+  → Prepared; the 30 ALPHA_MASK dst-copy rows → `PREPARED_PATH_STENCIL_REFUSAL`.
+- `GPUPreparedSurfaceProductRouterTest.kt:474-479` — `path-destination-read`
+  removed from the terminal-family matrix (left production).
+- `GPUPathClipRegressionTest.kt:133-166` — the destination-reading path frame now
+  renders Prepared (cyan DIFFERENCE-over-white, `route:destination-read:DrawPath:`
+  evidence) instead of refusing.
+
+### 8.7 Notes and non-claims
+
+- CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0).
+  No global similarity threshold or assertion was weakened.
+- The 58 analytic-clip path rows remain refused with their stable
+  `invalid.preflight.core_primitive_path_stencil` code (analytic-clip ×
+  stencil-cover is a separate feature; not forced).
