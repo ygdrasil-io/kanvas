@@ -2,7 +2,9 @@
 
 Status: **in progress** (Task 1 complete: `colr-v0-color-glyph` scene CPU-oracle
 fix closes the byte-exact pin; Task 2 complete: `PipelineTypesTest` hygiene +
-wgsl4k ticket; further tasks append their own sections).
+wgsl4k ticket; Task 3 complete: analytic-shape dst-read formula; Task 4 complete:
+analytic-shape multi-key dst-read; Task 5 complete: complex-clip blur; further
+tasks append their own sections).
 
 Branch: `codex/graphite-dawn-frame-fp13`. Machine: Linux, JDK Temurin 25, GPU =
 Vulkan **llvmpipe** (software, CPU; Mesa 26.0.3, LLVM 21.1.8), Xvfb `:99`. All
@@ -714,3 +716,176 @@ Fix-round runs: `GPUClipCoverageSurfaceTest` 42/42, `GPUAllApiBlendSurfaceTest`
 1864/1864, `GPUPreparedSurfaceProductRouterTest` 15/15; `:gpu-renderer:test`
 3301 (1 documented package-boundary baseline); `:kanvas:test` 3235 (1 documented
 image-pixel UNORM baseline).
+
+## Task 5 — complex-clip blur (mask-blur composite under multi-rect analytic clip)
+
+Task 5 closes the 2 clip-suite pins on
+`invalid.preflight.core_primitive_clip_producer_authority` (plan §1 item 3) by
+extending the FP-11 Task 7 analytic-clip ABI to the clip producer authority: a
+rect-decomposable complex clip (AA rect INTERSECT + axis-aligned orthogonal
+polygon DIFFERENCE) lowers to bounded analytic multi-rect coverage and the mask
+blur composite renders prepared. Coverage-mask and stacked clips stay terminal.
+This task applies a **renderer fix** (clip lowering + composite shader + uniform
+packing).
+
+### 5.1 Row identification
+
+The two rows (fp-13 residual CSV item 3, ownerTask 5):
+
+- `GPUClipCoverageSurfaceTest.kt` `complex clip blur is terminal at the clip
+  producer preflight` (sigma = 2).
+- `GPUClipCoverageSurfaceTest.kt` `complex mask blur frames are terminal at the
+  clip producer preflight` (sigma = 1.5; also asserted no destination readback
+  snapshot was allocated before refusal).
+
+Both rendered the fixture `renderBlurredDifferenceClipScene`: 16×16, a
+translucent `Color.fromArgb(128, 32, 64, 192)` background, an AA rect
+`clipRect(1,1,15,15) INTERSECT`, an AA `clipPath` of the axis-aligned orthogonal
+L-shape polygon `(5,4)(12,4)(12,8)(9,8)(9,12)(5,12)` DIFFERENCE, and a DARKEN
+`drawRect(4,4,12,12)` with `MaskFilter.Blur(NORMAL, sigma)`.
+
+### 5.2 Before state (RED run)
+
+Both pins asserted
+`Terminal(invalid.preflight.core_primitive_clip_producer_authority)`. Confirmed
+green at HEAD before the change (42/42 clip suite, both pins terminal).
+
+### 5.3 Root cause
+
+`GPUClipCoveragePlanner.planForFrameRoute` classifies a clip with a DIFFERENCE
+element as a `Mask` coverage plan (only INTERSECT rects/rrects are "simple
+analytic intersection"), and `toMaskExecutionPlan` then lowers it to
+`GPUClipExecutionPlan.CoverageMask`. The blur lane's composite packet inherits
+that `CoverageMask` `clipExecutionPlan`, so
+`validateCorePrimitiveClipProducerAuthority`
+(`GPUCorePrimitivePreparedFrameTaskListBuilder.kt`) rejects the composite
+Shading consumer — a coverage-mask clip whose producer topology the blur lane
+never builds — with `invalid.preflight.core_primitive_clip_producer_authority`.
+
+### 5.4 Fix (production code)
+
+- `clips/GPUClipExecutionPlan.kt` — new `GPUClipAnalyticRectElement`
+  (rect/rrect + `GPUClipMaskCombine` operation) and new
+  `GPUClipExecutionPlan.AnalyticMultiRect` (1..4 ordered elements), plus
+  `GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS = 4` and the identity-builder
+  serialization.
+- `kanvas/.../GPUOpMapper.kt` — in `toMaskExecutionPlan`, before the
+  CoverageMask fallback, `toAnalyticMultiRectOrNull()` lowers a complex clip
+  whose elements are all rect/rrect or a **non-inverse single-contour
+  axis-aligned orthogonal polygon** (at least one such path present) into an
+  ordered rect list (scanline band decomposition), admitting `AnalyticMultiRect`
+  only when the decomposed count fits the fixed block. Plain rect-vs-rect
+  differences, inverse fills, curved/multi-contour paths, and over-capacity
+  decompositions all return null → CoverageMask (terminal).
+- `recording/GPUTopLevelMaskBlurFrameRecording.kt` — `GPUTopLevelMaskBlurCompositeClip`
+  (ordered element list) replaces the single-rect clip;
+  `topLevelMaskBlurCompositeClipOrNull` now admits `AnalyticCoverage` (single
+  rect) and `AnalyticMultiRect`; `topLevelMaskBlurCompositeClipRefusal` admits
+  both; the composite-clip WGSL `CorePrimitiveAnalyticClipBlock` extends to a
+  160-byte block (`clip_count`, global `anti_alias`, four `clipN_bounds` +
+  `clipN_operation` entries) with `clip_coverage` folding `factor0*1*2*3` where
+  each factor is `1` (inactive), rect coverage (INTERSECT) or one-minus-coverage
+  (DIFFERENCE). A single INTERSECT rect is `clip_count = 1`, byte-identical to
+  the Task 7 single-rect contract.
+- `execution/GPUWgpu4kMaskBlurSessionCache.kt` — the non-dst composite-clip WGSL
+  mirrors the same block/fold.
+- `execution/GPUWgpu4kMaskBlurFramePayloadMaterializer.kt` —
+  `compositeClipUniformBytes` packs the 160-byte block; the clip uniform buffer
+  size is 64 → 160 bytes.
+- `passes/GPUCorePrimitivePreparedAuthority.kt` — `AnalyticMultiRect` maps to
+  `Clip.Refused` (the core lane never renders it; analytic shapes still refuse
+  any non-NoClip/non-ScissorOnly clip).
+- `kanvas/.../GPUPreparedSurfaceFrameBuilder.kt`,
+  `recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt` — exhaustive
+  `when` branches for the new variant.
+
+### 5.5 After state (GREEN run)
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest" \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUMaskBlurSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **63/63 green** — the 2 clip-suite pins render prepared and assert the
+CPU-oracle reference (`TopLevelMaskBlurPixelOracle.ComplexClip`) exactly within
+the lane's tolerance; the new `mask blur composite under a multi rect analytic
+clip renders prepared` case in `GPUMaskBlurSurfaceTest` is oracle-exact; the
+coverage-clip terminal pin (`unsupported.native-mask-blur.clip`) and the single
+analytic rect cases stay green unchanged.
+
+### 5.6 Re-pointed pins + new oracle mode
+
+- `GPUClipCoverageSurfaceTest.kt:165` → `complex clip blur renders prepared
+  under a multi rect analytic clip` (sigma = 2, oracle-exact); the
+  `PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL` constant is removed (no longer
+  reachable in the clip suite).
+- `GPUClipCoverageSurfaceTest.kt:175` → `complex mask blur frames render
+  prepared with the multi rect analytic clip` (sigma = 1.5). The readback
+  assertion is re-expressed for the rendered path: `destinationReadbackSnapshots`
+  stays unchanged (the blur lane never allocates a legacy CPU readback) while
+  `destinationCopies` is asserted > before (the lane legitimately allocates its
+  native destination copy for the DARKEN composite), and the pixels are
+  oracle-exact. Never weakened.
+- `GPUMaskBlurSurfaceTest.kt` new case `mask blur composite under a multi rect
+  analytic clip renders prepared` (SRC_OVER over transparent, L-shape DIFFERENCE
+  decomposed to `[10,8,24,16]` + `[10,16,18,24]`).
+- `TopLevelMaskBlurPixelOracle.kt` — new `Clip` sealed interface with the
+  existing `RectClip` and a new `ComplexClip` (`ComplexClipElement` +
+  `ComplexClipOperation`); `compositePass` folds ordered INTERSECT/DIFFERENCE
+  rect coverage with the same two-sided SDF ramp.
+
+### 5.7 What STAYS terminal
+
+- Coverage-mask/stacked clips: `GPUMaskBlurSurfaceTest.kt` `mask blur composites
+  under coverage clips are terminal` (`unsupported.native-mask-blur.clip`) and
+  the single analytic rect cases stay exactly as they are.
+- `core_primitive_clip_producer_authority` remains pinned for the stencil and
+  coverage-mask producer/consumer corruption scenarios in
+  `GPUFramePreflighterTest.kt` (107/107 green).
+- Rect-vs-rect DIFFERENCE clips (no path) still lower to `CoverageMask`; the
+  core-lane two-rect DIFFERENCE pins (`complex clip accepts every standard blend
+  mode`, `fixed alpha mask composition…`, `coverage alpha mask preserves
+  difference holes…`, `alpha mask retains geometric coverage…`) stay
+  `unsupported.recording.core_primitive_analytic_shape_clip`.
+
+### 5.8 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3301 tests, 1 failure** — the documented pre-existing
+`GPURendererPackageBoundaryTest` baseline (20 package cycle violations / 0 rule
+violations, unchanged; no new cycle or semantic-reference violation introduced).
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3236 tests, 1 failure** — the documented pre-existing
+`GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB llvmpipe baseline (unchanged).
+
+Guards green: `GPUPreparedSurfaceProductRouterTest` 15/15,
+`GPUAllApiBlendSurfaceTest` 1864/1864, `GPUPathClipRegressionTest` 4/4,
+`GPUPreparedSurfaceLegacyAbsenceTest` 1/1,
+`GPUPreparedCompositeCaptureSemanticTest` 19/19,
+`GPUPreparedCompositeFrameRouteIntegrationTest` 8/8,
+`GPUPreparedSurfaceLifetimeStressTest` 6/6,
+`GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest` 1/1,
+`GPUFramePreflighterTest` 107/107,
+`GPUCorePrimitiveSemanticHotPathSourceGuardTest` 2/2,
+`GPUCorePrimitiveNativeShaderTest` 13/13.
+
+### 5.9 Notes and non-claims
+
+- CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0).
+- The oracle destination for the translucent background is modeled as literal
+  unpremultiplied sRGB bytes (the solid-fill lane stores the color as-is; the
+  composite decodes sRGB on read), which diverges from the opaque-only
+  `fillRect` helper's premultiplied round-trip — the fixture's destination is
+  built literally to match the observed GPU store.
+- The L-shape DIFFERENCE polygon decomposes to exactly two band rects; a
+  rect-decomposable orthogonal polygon exceeding the four-rect block stays on
+  the coverage-mask route (terminal).
