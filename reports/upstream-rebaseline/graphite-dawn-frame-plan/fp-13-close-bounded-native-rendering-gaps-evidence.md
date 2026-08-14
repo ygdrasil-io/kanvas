@@ -1097,3 +1097,135 @@ Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
 - No global similarity threshold or assertion was weakened; the only matrix
   changes are re-points from `mixed_uniform_layouts` to the row's accurate code
   or to Prepared.
+
+## Task 7 — analytic clips over non-direct shading geometry
+
+Task 7 admits the analytic-clip authority for non-direct shading geometry on the
+Task 6 uniform64/160 frame, for the 4 rows (DrawRect/DrawColor/DrawPoint/DrawPoints
+× ALPHA_MASK × DST, fp-11 §2, residual-inventory item 5). Rows whose shading
+geometry is stencil-shaded (the path case) defer to Task 8 unchanged.
+
+### 7.1 Root cause — why the 4 rows' shading geometry is "non-direct"
+
+`BlendMode.DST` always specializes to `GPUBlendPlan.NoOp("destination is
+unchanged")` (`GPUBlendPlanning.kt:168`, `:205`, `:239`) regardless of coverage —
+a DST draw writes nothing, so there is no destination-read formula lane for it.
+
+`directCorePrimitiveGeometryBytes` (`GPUCorePrimitivePreparedFrameTaskListBuilder.kt:700-739`)
+excludes NoOp blends at `:709` (`packet.blendPlan is GPUBlendPlan.NoOp`), so a DST
+draw under an analytic clip never enters `directGeometryBytesByCommandId`. Its
+command id therefore fails the gate at `:2000` (`it !in directGeometryBytesByCommandId
+&& it !in pathStencilPlansByCommandId`), refusing with
+`unsupported.recording.core_primitive_analytic_clip_non_direct_geometry`.
+
+The clip is `AnalyticCoverage` (contentKey-less, `contentKeyOrNull() = null` at
+`:843`), so it is not a clip artifact — it is carried entirely by the analytic-clip
+authority + uniform64. Because a NoOp draw shades nothing, that authority is
+vacuous: the correct frame simply elides the NoOp packet (exactly how the already-
+green DST UNCLIPPED/SCISSOR rows behave), leaving the background fill as the whole
+result (oracle: destination unchanged).
+
+The other three exclusion classes of `directCorePrimitiveGeometryBytes` are NOT
+in scope here: path-stencil covers (StencilEdgeFan) are excluded from the gate via
+`pathStencilPlansByCommandId` and defer to Task 8; analytic-shape (uniform80)
+rrects under a clip refuse earlier at `core_primitive_analytic_shape_clip`; the
+30 DrawPoint dst-copy rows are ShaderBlendWithDstRead (not NoOp), so they stay on
+`direct_geometry_resources` (§7.5).
+
+### 7.2 Before state (RED run)
+
+The 4 rows re-pointed from Terminal to Prepared (`null`) in
+`GPUAllApiBlendSurfaceTest.kt`:
+
+```
+:kanvas:test --tests "*GPUAllApiBlendSurfaceTest" --rerun-tasks
+```
+
+Result: **1864 tests, 4 failed**, each exactly:
+
+```
+org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException:
+unsupported.recording.core_primitive_analytic_clip_non_direct_geometry:
+Prepared analytic clips require one direct CorePrimitive shading geometry.
+```
+
+per row: `DrawRect/DST/ALPHA_MASK`, `DrawColor/DST/ALPHA_MASK`,
+`DrawPoint/DST/ALPHA_MASK`, `DrawPoints/DST/ALPHA_MASK`. (The path and rrect DST
+rows stayed green on their own pins throughout — routing unchanged.)
+
+### 7.3 Admission (production code)
+
+- `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:644-646` — new
+  `GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry()` helper
+  (true for a `TriangulatedPath` in `StencilEdgeFan` mode).
+- `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1587-1599` — the analytic-clip
+  authority loop skips a `GPUBlendPlan.NoOp` packet unless it is a path-stencil
+  cover: a NoOp draw shades nothing, so its analytic-clip authority is vacuous and
+  the packet elides downstream like any other NoOp. The path-stencil cover keeps
+  the authority (it still runs the stencil test/reset even when its color blend is
+  destination-only), so path rows defer to Task 8 unchanged.
+- `GPUCorePrimitivePreparedFrameTaskListBuilder.kt:1611-1618` — the
+  analytic-intersection twin applies the same rule (consistent with the clip gate).
+
+The gate at `:2000` (twin `:2009` → now `:2024`/`:2031`) is unchanged; it still
+refuses non-direct, non-NoOp shading geometry (an inverse-fill or stroked
+direct-triangle path under an analytic clip), so the code remains reachable.
+
+### 7.4 After state (GREEN run)
+
+`:kanvas:test --tests "*GPUAllApiBlendSurfaceTest" --rerun-tasks` →
+**1864/1864**. The 4 rows render Prepared, per-pixel CPU-oracle exact via
+`assertPixelsNear(..., tolerance = 2)` (oracle = destination unchanged; the DST
+NoOp packet elides and only the background fill contributes).
+
+### 7.5 DrawPoint direct_geometry_resources re-verification (unchanged)
+
+The 30 DrawPoint four-render rows (15 dst-copy modes × UNCLIPPED/SCISSOR, fp-11
+§5 "three separate point commands make a four-render shape") plus the 15 DrawPoint
+dst-copy ALPHA_MASK rows re-pointed by Task 6, and the 2 DrawRRect DST rows, all
+remain on `invalid.preflight.core_primitive_direct_geometry_resources`. They are
+ShaderBlendWithDstRead, not NoOp, so the admission does not touch them; the green
+1864/1864 matrix asserts their exact code per row (no outcome change). No split of
+ownership with Task 6.
+
+### 7.6 Router re-point
+
+- `GPUPreparedSurfaceProductRouterTest.kt:470-481` — `core_primitive_analytic_
+  clip_non_direct_geometry` stays in the terminal-family matrix with an updated
+  comment: the NoOp (DST) rows are now admitted, but the gate still refuses other
+  non-direct shading geometry (inverse-fill / stroked direct-triangle path under
+  an analytic clip), so the code remains reachable and is kept (not removed).
+
+### 7.7 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain
+```
+
+Result: **3303 tests, 1 failure** — the documented pre-existing
+`GPURendererPackageBoundaryTest` baseline (exactly 20 package cycle violations /
+0 rule violations, unchanged).
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain
+```
+
+Result: **3237 tests, 1 failure** — the documented pre-existing
+`GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB llvmpipe baseline (unchanged).
+No `session-close` / `GPUOwnedNativeCloseIncompleteException` in either run
+(scanned all JUnit XML).
+
+Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
+`GPUPreparedSurfaceProductRouterTest` 15/15, `GPUClipCoverageSurfaceTest` (green),
+`GPUClipAdvancedBlendSurfaceTest` (green), `GPUPathClipRegressionTest` (green),
+`GPUCorePrimitivePreparedFrameTaskListBuilderTest` (green).
+
+### 7.8 Notes and non-claims
+
+- The admission is scoped to NoOp (DST) draws: the analytic clip is vacuous because
+  nothing is shaded. It does not admit analytic clips over any shading geometry
+  that actually samples coverage (path-stencil cover, inverse-fill/stroked
+  direct-triangle paths, stencil-covered rrects) — those stay refused and defer to
+  their own tasks (Task 8, and later geometry-lowering work).
+- CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0). No
+  global similarity threshold or assertion was weakened.
