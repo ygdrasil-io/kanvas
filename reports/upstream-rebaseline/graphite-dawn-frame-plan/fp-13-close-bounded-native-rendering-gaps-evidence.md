@@ -1,11 +1,9 @@
 # FP-13 Close Bounded Native-Rendering Gaps — Evidence
 
-Status: **in progress** (Task 1 complete: `colr-v0-color-glyph` scene CPU-oracle
-fix closes the byte-exact pin; Task 2 complete: `PipelineTypesTest` hygiene +
-wgsl4k ticket; Task 3 complete: analytic-shape dst-read formula; Task 4 complete:
-analytic-shape multi-key dst-read; Task 5 complete: complex-clip blur; Task 6
-complete: analytic-clip uniform64/160 split; further tasks append their own
-sections).
+Status: **complete** (Tasks 1-9 landed. Task 9 is the closure: full-run and
+dashboard gates reconciled, per-item closure ledger below in §9, roadmap
+`active-todo.md` FP-13 entry marked `completed` with the reduced FP-13+
+transfers list).
 
 Branch: `codex/graphite-dawn-frame-fp13`. Machine: Linux, JDK Temurin 25, GPU =
 Vulkan **llvmpipe** (software, CPU; Mesa 26.0.3, LLVM 21.1.8), Xvfb `:99`. All
@@ -1360,3 +1358,154 @@ Guards green: `GPUAllApiBlendSurfaceTest` 1864/1864,
 - The 58 analytic-clip path rows remain refused with their stable
   `invalid.preflight.core_primitive_path_stencil` code (analytic-clip ×
   stencil-cover is a separate feature; not forced).
+
+## Task 9 — evidence reconciliation + roadmap
+
+Task 9 closes the plan: it reconciles the Task 0 wave (341 residual rows + 489
+SkiaGmRunner refusals) against every row the renderer tasks closed or
+re-pointed, runs the three-module full-run gate and the dashboard gate, and
+updates the roadmap. No renderer code changed in this task.
+
+### 9.1 Per-item closure ledger (reconciled against Task 0 §1 and the SDD ledger)
+
+| # | item | rows | status | owner task | evidence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | dst-read formula on mapped routes | 32 (2 clip:coverage DARKEN/COLOR_DODGE AA rects + 30 frame-global DrawRRect) | CLOSED | Task 3 | §3 |
+| 2 | analytic-shape multi-key dst-read | 2 (clip fixed-function CLEAR/SRC/DST_IN AA rects) | CLOSED (+ 4 latent AA modes SRC_IN/SRC_OUT/DST_ATOP/MODULATE pinned) | Task 4 | §4 |
+| 3 | complex-clip blur | 2 pins | CLOSED (multi-rect analytic clip under mask blur) | Task 5 | §5 |
+| 4 | analytic-clip 64/160 split | 199 blend + 10 clip pins | PARTIAL — 4 SRC_OVER rows render; 195 re-pointed with stable codes; 10 clip pins re-pointed | Task 6 | §6 |
+| 5 | analytic clips over non-direct geometry | 4 | CLOSED (NoOp-skip admission) | Task 7 | §7 |
+| 6 | path destination-read | 60 closed; 58 re-documented | PARTIAL | Task 8 | §8 |
+| 7 | colr-v0 scenes oracle divergence | 1 test | CLOSED (harness only) | Task 1 | §1 |
+| 8 | PipelineTypesTest order-dependence | 1 test | CLOSED (test hygiene + wgsl4k#15) | Task 2 | §2 |
+
+Item 4 detail — the 199 blend rows after the split: 4 Prepared (DrawRect/DrawColor/
+DrawPoint/DrawPoints × SRC_OVER × ALPHA_MASK), 93
+`unsupported.native-core-primitive.session-cache-pipeline` (NEW feature: analytic-clip
+blend programs), 29 `unsupported.recording.core_primitive_analytic_shape_clip` (NEW
+feature: combined shape+clip shader), 28 `invalid.preflight.core_primitive_path_stencil`
++ 30 `unsupported.native-core-primitive.path-destination-read` (Task 8 domain), 15
+`invalid.preflight.core_primitive_direct_geometry_resources` (four-render seal). Clip
+pins re-pointed: Coverage 1 → `analytic_shape_clip`, Advanced 8 →
+`analytic_shape_clip`, PathClip 1 → `path_stencil`.
+
+Item 6 detail — after Task 8, `unsupported.native-core-primitive.path-destination-read`
+left production; the 58 ALPHA_MASK path rows (30 dst-copy + 28 non-dst-copy) re-document
+to `invalid.preflight.core_primitive_path_stencil` (analytic-clip × stencil-cover, a
+separate feature).
+
+Closure arithmetic against the 341-row denominator: **104 rows closed** (32 + 2 + 2 + 4 +
+4 + 60), **227 blend-matrix rows re-pointed to stable codes** (93 + 29 + 58 + 47), **10
+clip pins re-pointed** (Coverage 1, Advanced 8, PathClip 1) — 104 + 227 + 10 = 341 ✓. The
+47 `direct_geometry_resources` rows are 32 pre-existing fallout (2 DrawRRect DST + 30
+DrawPoint) + 15 DrawPoint dst-copy ALPHA_MASK re-pointed by Task 6 (fp-11 §5 four-render /
+dst-slab seal root; re-verified by Task 6 §6.4 and Task 7 §7.5, not closed).
+
+### 9.2 Full-run gate (the acceptance gate)
+
+Command: `DISPLAY=:99 ./gradlew -F off <module>:test --no-parallel --console=plain
+--rerun-tasks`. All three modules green except the four documented baselines.
+
+| module | tests | failed | baseline row(s) |
+| --- | --- | --- | --- |
+| `:gpu-renderer-scenes:test` | 274 | 0 | none (green) |
+| `:gpu-renderer:test` | 3304 | 1 | `GPURendererPackageBoundaryTest` "gpu renderer production source satisfies package boundary rules" — **exactly 20 package cycle violations, 0 rule violations** (unchanged, fp-11 §0.1) |
+| `:kanvas:test` | 3237 | 1 | `GPUPreparedSurfaceImagePixelTest` "all image families retain the direct prepared route and native pixel contract" — **UNORM 1-LSB on llvmpipe** (`oracleMaxChannelDelta=1`, `limit<=1`, documented FP-03, unchanged) |
+
+- `GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest` 1/1 green (llvmpipe; the
+  hardware-Mac class stays documented per the plan §3 pin).
+- No `failed.surface.prepared.session-close` / `GPUOwnedNativeCloseIncompleteException`
+  in any of the three modules (all JUnit XML scanned; 0 matches).
+- `GPUAllApiBlendSurfaceTest` **1864/1864**.
+- Guards green: `GPUPreparedSurfaceLegacyAbsenceTest` 1/1,
+  `GPUPreparedSurfaceProductRouterTest` 15/15,
+  `GPUPreparedCompositeCaptureSemanticTest` 19/19,
+  `GPUPreparedCompositeFrameRouteIntegrationTest` 8/8,
+  `GPUPreparedSurfaceLifetimeStressTest` 6/6.
+
+### 9.3 Dashboard gate
+
+Command: `DISPLAY=:99 ./gradlew -F off :integration-tests:skia:generateSkiaDashboard
+--no-parallel --console=plain`.
+
+Result: `Total: 615, Pass: 540, Fail: 6, No score: 30, Avg sim: 54.4%` — byte-identical to
+the Task 0 snapshot. `gms.json` summary `{total: 576, passing: 540, failing: 6, noScore:
+30, avgSimilarity: 54.4}`.
+
+- **0 new unexpected `fail`**: the 6 below-threshold GMs are exactly the FP-12 §1.1 set —
+  `emboss` (55.45), `inverseclip` (27.55), `picture_mesh` (27.07), `simpleshapes_bw`
+  (65.57), `widebuttcaps` (25.91), `text_scale_skew` (77.75).
+- **0 `tracked-gap`**: the 30 no-score entries are the same set as the snapshot
+  (16 reference-missing + 11 size-mismatch + 3 reference-untrustable), matching the
+  documented dashboard-side view (FP-12 §1.2).
+- **No committed artifact drift**: `git status` clean after the run — the regenerated
+  `generated-renders/` PNGs are byte-identical to HEAD and
+  `test-similarity-scores.properties` is unchanged. This is the expected outcome: FP-13
+  closed only CPU-oracle blend/clip-suite rows and touched no GM render; the 489
+  SkiaGmRunner GM refusals are untouched, so the dashboard has nothing to reflect. No
+  score/artifact change is committed for the dashboard.
+
+### 9.4 M86 sprint statement (renderer fixes actually applied)
+
+Renderer fixes **WERE** applied in this wave, task-by-task:
+
+| task | scope | renderer fix applied |
+| --- | --- | --- |
+| Task 0 | M86 wave — evidence only | no (burn-down snapshot) |
+| Task 1 | colr-v0 scenes oracle fix | no — harness only |
+| Task 2 | PipelineTypesTest hygiene + wgsl4k#15 | no — test-hygiene only |
+| Task 3 | analytic-shape dst-read formula | **yes** — new `AnalyticShapeDstRead` program + shader |
+| Task 4 | analytic-shape multi-key dst-read | **yes** — blend-planning projection onto the dst-read formula |
+| Task 5 | complex-clip blur | **yes** — `AnalyticMultiRect` clip lowering + 160-byte composite clip block |
+| Task 6 | analytic-clip 64/160 split | **yes** — direct split passes + per-step uniform-slab slicing |
+| Task 7 | analytic clips over non-direct geometry | **yes** — NoOp-skip admission |
+| Task 8 | path-stencil stencil-continuation | **yes** — producer/cover continuation + shared D24S8 |
+| Task 9 | reconciliation + roadmap | no — evidence only |
+
+The non-claims stand: no global similarity threshold was weakened (0 threshold/assertion
+changes anywhere in the wave); the CPU-oracle rows are not Skia-comparable fidelity (M86
+statement, Task 0 §1.3); no real-adapter (non-llvmpipe) claim is made — real-adapter
+re-measurement is chantier F; `PipelineTypesTest` is test hygiene, not a wgsl4k
+workaround (tracked upstream at ygdrasil-io/wgsl4k#15).
+
+### 9.5 Residuals carried forward (FP-13+ transfers, the reduced list)
+
+The items still open after this wave, all with stable re-documented codes (per-row in
+`residual-inventory.csv`), become the FP-13+ transfers list in `active-todo.md`:
+
+- **NEW feature — analytic-clip blend programs**: 93 rows
+  `unsupported.native-core-primitive.session-cache-pipeline` (non-SRC_OVER fixed-function
+  and artistic modes on the analytic-clip uniform64 lane; needs an `AnalyticClipDstRead`
+  program + geometric projection paralleling Tasks 3/4).
+- **NEW feature — combined shape+clip shader**: 29 rows
+  `unsupported.recording.core_primitive_analytic_shape_clip` (analytic-shape uniform80
+  under an analytic clip).
+- **NEW feature — analytic-clip × stencil-cover**: 58 rows
+  `invalid.preflight.core_primitive_path_stencil` (path-stencil continuation under an
+  analytic clip; the stencil-continuation feature from Task 8 does not yet compose with
+  the analytic-clip authority).
+- **four-render / dst-slab direct-resource seal**: 47 rows
+  `invalid.preflight.core_primitive_direct_geometry_resources` (2 DrawRRect DST + 30
+  DrawPoint + 15 DrawPoint dst-copy ALPHA_MASK; fp-11 §5 roots, re-verified not closed).
+- **489 SkiaGmRunner GM refusals** — untouched by this plan (no GM row closed; all closed
+  rows are blend-suite/clip-suite CPU-oracle rows).
+- **chantier B** (missing-reference infra + committed `gms.json`) and **chantier F**
+  (real-adapter re-measurement) — tracked outside FP-13, non-blocking (plan §7).
+
+The `colr-v0` scenes oracle row and the `PipelineTypesTest` row are CLOSED (Tasks 1/2) and
+are removed from the transfers list.
+
+### 9.6 Commits
+
+- Evidence: this section (Task 9) + `active-todo.md` FP-13 entry, committed separately
+  from any dashboard artifacts (none produced — see §9.3).
+
+### 9.7 Notes and non-claims
+
+- The closure ledger reconciles the verified context map against the evidence doc; no
+  arithmetic discrepancy was found (341 = 104 closed + 227 re-pointed + 10 clip pins).
+- CPU-oracle evidence is not Skia-comparable fidelity; no real-adapter claim; no global
+  threshold change (all M86 non-claims hold).
+- Label-drift rulings recorded in the SDD ledger (Task 3/4 mapped-route vs clip-suite
+  rows; Task 4 blend-matrix vs clip-suite multi-key) are resolved: the actual closed rows
+  are the clip-suite pins, matching `residual-inventory.csv`.
