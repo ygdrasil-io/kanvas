@@ -347,3 +347,186 @@ minimized evidence — no hidden workaround in this repo):
   string in `PipelineTypesTest.kt:13` (+ this evidence doc).
 - **No similarity threshold or assertion semantics changed**; the assertion
   remains `assertTrue(RuntimeEffect.compile(...).isFailure)`.
+
+## Task 3 — analytic-shape dst-read formula on the prepared lane
+
+Task 3 wires the closed `GPUBlendFormulaLibrary` formula + shader-dst-read
+pipeline onto the core-primitive run materializer for analytic shapes
+(rect/rrect), closing the analytic-shape dst-read rows (plan §1 item 1). The
+rows closed are the 2 `dst-read-formula` "mapped-route" clip rows and the 30
+`frame-global-pipeline` DrawRRect dst-read fallout rows (fp-11 §5). This task
+applies a **renderer fix** (a new closed analytic-shape dst-read program).
+
+### 3.1 Before state (RED run)
+
+Re-pointed the Task-3-owned rows in the blend matrix
+(`GPUAllApiBlendSurfaceTest.kt:610` — `recordsDestinationRead()` → Prepared)
+and ran the targeted class:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **1864 tests completed, 30 failed** — every re-pointed row refused with
+the exact refusal code, captured per-row in the JUnit XML. All 30 failures are
+`unsupported.native-core-primitive.frame-global-pipeline` (emitted at
+`GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:151`). A debug probe (removed
+before commit) confirmed the structural keys: all 15 modes (14 artistic +
+`PLUS` = `plus_exact@v1`) are `shader=AnalyticShape,
+blend=ShaderWithDestination(mode=X, formulaId=X@v1, sourceCoverage=None)`.
+
+The 2 clip-suite rows were pinned Terminal before the fix and rendered their
+refusal through the single-key materializer gate
+(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:917`,
+`unsupported.native-core-primitive.dst-read-formula`).
+
+### 3.2 Root cause
+
+`mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity` (in
+`GPUWgpu4kCorePrimitivePipelineDescriptor.kt`) explicitly refused
+`Shader.AnalyticShape` + `Blend.ShaderWithDestination` keys — the destination-
+read formula program existed only on the direct-geometry (uniform32) lane. The
+analytic-shape (uniform80) lane therefore had no closed dst-read pipeline, so
+the frame-global run materializer refused the 30 DrawRRect rows and the
+single-key materializer refused the 2 AA clip rows (the latter are scalar-
+coverage `ScalarCoverageInShader` keys whose coverage must be computed
+in-shader).
+
+### 3.3 Pipeline wiring (production code)
+
+- `GPUCorePrimitiveNativeShader.kt` — new
+  `buildCorePrimitiveAnalyticShapeDstReadNativeShader(modeLabel)` +
+  `corePrimitiveAnalyticShapeDstReadNativeWgsl(formulaWgsl)`: the analytic-
+  shape uniform80 block plus the destination snapshot texture/sampler
+  (bindings 1/2), the analytic coverage functions, and the scalar-coverage
+  result `return dst + coverage * (blended - dst);` (Graphite dst-read recipe
+  with shader-applied coverage). Hard coverage (`anti_alias == 0`) reduces the
+  factor to 0/1, so one exact program serves both the full-coverage (30
+  DrawRRect) and scalar-coverage (2 clip) rows. New shader/binding-layout
+  identity constants
+  `core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v1` /
+  `dynamic-uniform80-analytic-shape-dst-read-v1`.
+- `GPUWgpu4kCorePrimitivePipelineDescriptor.kt` — new
+  `GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead`; `nativeProgramOrNull`
+  maps `Shader.AnalyticShape` + `ShaderWithDestination` (formula present,
+  coverage in {None, ScalarCoverageInShader}) to the new program and still
+  refuses LCD coverage; `nativeBlendProgramOrNull` routes the new program to
+  `analyticShapeDstReadBlendProgramOrNull()` (the `DstRead*` blend program);
+  `mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity` and
+  `corePrimitiveNativeComponentIdentityOrNull()` select the analytic-shape
+  dst-read component; the render-pipeline descriptor uses the analytic-shape
+  vertex/fragment entry points and the exact-Src fixed-function state.
+- `GPUWgpu4kCorePrimitiveSessionCache.kt` — new
+  `corePrimitiveAnalyticShapeDstReadComponentIdentity(modeLabel)`;
+  `isCorePrimitiveDstRead()` recognizes both dst-read component families;
+  `dstReadModeLabelOrNull()` resolves both prefixes;
+  `uniformBindingSizeBytes()` returns 80 bytes for the analytic-shape dst-read
+  layout; `createFirstPipeline()` selects the analytic-shape dst-read shader
+  builder; `CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES` raised 64 → 128
+  (the closed 30-program + 32-dst-read-component universe now needs more than
+  64 live pipelines in one retained session).
+- `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt` — the single-key
+  `exactProgram` check for the uniform80 layout accepts
+  `isAnalyticShapeProgram()` (SrcOver or DstRead).
+
+No change was made to the multi-key authority (`GPUCorePrimitiveNativeRoute.kt:415`),
+the `analytic-shape-multi-key` gate (`:1453`), or the
+`preparedRouteResidualRefusalCodes` set; Task 4's multi-key rows still refuse
+with their stable codes (verified by the green guard run).
+
+### 3.4 After state (GREEN run)
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **1864/1864 green** — the 30 re-pointed DrawRRect rows render Prepared
+and are compared per-pixel against the pure-Kotlin CPU oracle
+(`assertPixelsNear`, tolerance 2), exact.
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest" \
+  --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **41/41 green** — the 2 re-pointed clip rows (DARKEN / COLOR_DODGE
+rects) render Prepared and assert RED (`DARKEN(src, transparent) = src`,
+`COLOR_DODGE(src, transparent) = src`).
+
+### 3.5 Re-pointed matrix pins
+
+- `GPUAllApiBlendSurfaceTest.kt:610-613` — `mode.recordsDestinationRead()` on
+  `DrawRRect` re-pointed from
+  `Terminal(unsupported.native-core-primitive.frame-global-pipeline)` to `null`
+  (Prepared, pixel-oracle proven). The now-unused
+  `PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL` constant was removed.
+- `GPUClipCoverageSurfaceTest.kt:399-410` (`no clip destination read composes
+  against a transparent snapshot`) and `:413-440` (`clear and color dodge use
+  their mapped clip composition routes`) re-pointed from
+  `Terminal(unsupported.native-core-primitive.dst-read-formula)` to Prepared
+  with `assertRgbaNear(..., Color.RED)`; the now-unused
+  `PREPARED_DST_READ_FORMULA_REFUSAL` constant was removed.
+- `GPUWgpu4kCorePrimitivePipelineDescriptorTest.kt` — 3 ×
+  `entries.size` assertion updated 29 → 30; new test
+  `analytic shape dst read shading keys map to the analytic dst read formula
+  program` covers the program, component identity, uniform80 bind-group layout,
+  exact-Src fixed-function state, scalar-coverage mapping, and LCD refusal.
+
+### 3.6 Rows that stayed refused (unchanged, re-classified with evidence)
+
+No row stayed refused as a forced re-classification. The rows that remain
+refused are owned by other tasks and were not re-pointed:
+
+- 2 DrawRRect DST rows and 30 DrawPoint rows on
+  `invalid.preflight.core_primitive_direct_geometry_resources` — Task 6
+  (split-lane geometry-slab authority); verified unaffected (blend matrix
+  pins `:607-609` and `:585-599` unchanged).
+- 2 `analytic-shape-multi-key` rows (`GPUClipCoverageSurfaceTest.kt:329,352`)
+  — Task 4; still refuse with their stable code (green guard run).
+- The multi-key `dst-read-formula` and `multi-key-component` defenses
+  (`GPUCorePrimitiveNativeRoute.kt:415`, `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:1453`)
+  are untouched; `dst-read-formula` stays in the residual set because the
+  multi-key scalar-coverage path still emits it.
+
+### 3.7 Full-run summaries
+
+```bash
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3301 tests, 1 failure** — the documented pre-existing
+`GPURendererPackageBoundaryTest` baseline (exactly 20 package cycle violations,
+0 rule violations, unchanged; fp-11 §0.1). No cycle was added or removed by
+this task.
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-parallel --console=plain --rerun-tasks
+```
+
+Result: **3234 tests, 1 failure** — the documented pre-existing
+`GPUPreparedSurfaceImagePixelTest` UNORM 1-LSB llvmpipe baseline (FP-03,
+unchanged).
+
+Guards (all green, verified in the full runs):
+`GPUPreparedSurfaceLegacyAbsenceTest` 1/1,
+`GPUPreparedSurfaceProductRouterTest` 15/15,
+`GPUPreparedCompositeCaptureSemanticTest` 19/19,
+`GPUPreparedCompositeFrameRouteIntegrationTest` 8/8,
+`GPUPreparedSurfaceLifetimeStressTest` 6/6,
+`GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest` 1/1.
+
+### 3.8 Notes and non-claims
+
+- The analytic-shape dst-read shader applies coverage with the scalar-coverage
+  lerp (`dst + coverage * (blended - dst)`); for the non-AA DrawRRect rows the
+  analytic coverage factor is 0/1, so the same program reproduces the CPU
+  oracle's full-coverage blend exactly. This is not a new AA oracle — it reuses
+  the existing analytic coverage functions unchanged.
+- CPU-oracle evidence is not Skia-comparable fidelity (M86 statement, Task 0).
+- No global similarity threshold or assertion was weakened; the only matrix
+  changes are re-points from Terminal to Prepared.
