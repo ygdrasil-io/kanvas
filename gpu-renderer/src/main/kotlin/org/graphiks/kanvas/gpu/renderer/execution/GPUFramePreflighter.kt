@@ -491,7 +491,6 @@ internal class GPUFramePreflighter(
                 corePrimitiveCoverageMaskPreparedRoutes,
             )
         } catch (failure: Throwable) {
-            failure.printStackTrace()
             return refuseWithRollback(
                 rollback,
                 acquiredAnyResource,
@@ -2438,9 +2437,12 @@ internal class GPUFramePreflighter(
         // FP-13 Task 8: a continued destination-read path splits the producer (fan Store) from
         // the cover (fan read-only) into two path renders, with the ordered destination snapshot
         // copy between them. The two path renders are exactly one producer-only render and one
-        // cover-only render.
+        // cover-only render, and the frame is exactly three render scopes total (one background
+        // render + producer + cover) so the continued lane's three-render materialization is the
+        // exact admitted shape — an extra direct render refuses here instead of later.
         val continuedDstReadPathAdmission = !mixedPreparedSurface &&
             pathCoreRenders.size == 2 &&
+            framePlan.steps.count { it is GPUFrameStep.RenderPassStep } == 3 &&
             framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep } &&
             indexedCoreRenders.all { (_, render) ->
                 render.drawPackets.all { packet ->

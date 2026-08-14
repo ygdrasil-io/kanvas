@@ -1281,7 +1281,8 @@ and re-point to the stable `invalid.preflight.core_primitive_path_stencil` code.
    (stencil `NotEqual`/`Keep`, `writeMask = 0`, dst-read shader
    `buildCorePrimitiveDstReadNativeShader`).
 4. **Cross-step pair admission + second path render** — `GPUFramePreflighter.kt`
-   `continuedDstReadPathAdmission` (two path renders + a `CopyDestinationStep`);
+   `continuedDstReadPathAdmission` (two path renders + a `CopyDestinationStep` +
+   exactly three render scopes, `GPUFramePreflighter.kt:2441`);
    the pair-building loop iterates a flattened `(stepIndex, packet)` stream so the
    producer in one render pairs with the cover in the next.
 5. **Run materializer + frame pool** — `supportedPathComponents` accepts
@@ -1290,10 +1291,15 @@ and re-point to the stable `invalid.preflight.core_primitive_path_stencil` code.
    (`GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:399-426`).
 
 The materializer lane `materializeContinuedPathDstReadCore`
-(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:5408`) creates one shared
-frame-local path D24S8 and materializes background / producer / cover, passing the
-shared view to the producer and cover runs so the fan persists across the ordered
-snapshot copy.
+(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:5408`) calls
+`materializeAcceptedRuns` **three times** — background, producer, cover. The
+continuation invariant is preserved by sharing **one** frame-local path D24S8:
+the lane creates the texture + view once and passes the same view to the
+producer and cover runs through the `pathDepthStencilView` parameter
+(`GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt:67`), which sets
+`pathRequirement = null` when the view is supplied (`:229`) so the pool does not
+allocate a second fan. The cover therefore tests the exact fan the producer
+stored, across the ordered snapshot copy.
 
 ### 8.3 RED evidence
 
