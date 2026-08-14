@@ -63,8 +63,6 @@ private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
-private const val PREPARED_DST_READ_FORMULA_REFUSAL =
-    "unsupported.native-core-primitive.dst-read-formula"
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -401,20 +399,26 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `no clip destination read composes against a transparent snapshot`() {
         requireWebGpu()
-        val surface = Surface(16, 16)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+        // FP-13 Task 3: the analytic-shape dst-read formula pipeline renders the DARKEN rect
+        // over the transparent snapshot (DARKEN(src, transparent) = src = RED).
+        val result = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+            }
+            render()
         }
 
-        assertTerminal(PREPARED_DST_READ_FORMULA_REFUSAL, surface::render)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 16, 4, 4, Color.RED)
     }
 
     @Test
     fun `clear and color dodge use their mapped clip composition routes`() {
         requireWebGpu()
 
-        // CLEAR rides the direct lane prepared; COLOR_DODGE needs the
-        // destination-read formula program, which terminates the frame.
+        // CLEAR rides the direct lane prepared; COLOR_DODGE uses the analytic-shape
+        // destination-read formula program (FP-13 Task 3) and composes over the transparent
+        // snapshot (COLOR_DODGE(src, transparent) = src = RED).
         val clear = Surface(16, 16).run {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR))
@@ -428,9 +432,10 @@ class GPUClipCoverageSurfaceTest {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.COLOR_DODGE))
             }
-            this
+            render()
         }
-        assertTerminal(PREPARED_DST_READ_FORMULA_REFUSAL, dodge::render)
+        assertEquals(0, dodge.diagnostics.fatalCount, dodge.diagnostics.entries.toString())
+        assertRgbaNear(dodge.pixels, 16, 4, 4, Color.RED)
     }
 
     @Test

@@ -960,7 +960,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 pipelineMapping.identity.program.isAnalyticIntersection4()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
-                pipelineMapping.identity.program.isAnalyticShape()
+                pipelineMapping.identity.program.isAnalyticShapeProgram()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct program validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,

@@ -608,10 +608,9 @@ class GPUAllApiBlendSurfaceTest {
                         // The DST rrect pass cannot exact its shared geometry slab authority.
                         ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
                     mode.recordsDestinationRead() ->
-                        // FP-11 Task 6: the split dst-read rrect consumer stays on the
-                        // frame-global pipeline boundary (no closed analytic-shape dst-read
-                        // formula pipeline on the prepared lane).
-                        ProductRouteExpectation.Terminal(PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL)
+                        // FP-13 Task 3: the analytic-shape dst-read formula pipeline closes
+                        // these rows (renders Prepared, pixel-oracle proven).
+                        null
                     else ->
                         // FP-11 Task 6: the rrect analytic-shape pass splits from the
                         // uniform32 destination pass, so the fixed-blend rrect rows render
@@ -1027,8 +1026,6 @@ class GPUAllApiBlendSurfaceTest {
         const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
         const val PREPARED_MIXED_UNIFORM_LAYOUTS_REFUSAL =
             "unsupported.recording.core_primitive_mixed_uniform_layouts"
-        const val PREPARED_FRAME_GLOBAL_PIPELINE_REFUSAL =
-            "unsupported.native-core-primitive.frame-global-pipeline"
         const val PREPARED_ANALYTIC_CLIP_NON_DIRECT_REFUSAL =
             "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry"
         const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =

@@ -245,6 +245,117 @@ internal fun buildCorePrimitiveDstReadNativeShader(
     }
 }
 
+/**
+ * Generates and parser-validates the destination-read analytic-shape (rect/rrect uniform80)
+ * variant for one formula mode. Mirrors [buildCorePrimitiveDstReadNativeShader] but carries the
+ * analytic-shape uniform80 ABI: the fragment computes the analytic shape coverage itself and
+ * applies it with the scalar-coverage result `dst + coverage * (blended - dst)` (Graphite's
+ * dst-read recipe with shader-applied coverage). Hard-coverage (anti_alias = 0) shapes reduce the
+ * coverage factor to 0/1, so the same module serves the full-coverage dst-read rows and the
+ * scalar-coverage (AA) rows with one exact program.
+ */
+internal fun buildCorePrimitiveAnalyticShapeDstReadNativeShader(
+    modeLabel: String,
+): GPUCorePrimitiveNativeShaderResult {
+    val formulaWgsl = GPUBlendFormulaProgramLibrary.selectedBlendFunctionWgsl(modeLabel)
+        ?: return GPUCorePrimitiveNativeShaderResult.Rejected(
+            "unsupported_blend_formula",
+            "The core analytic-shape destination-read lane has no formula program for mode $modeLabel.",
+        )
+    val wgsl = corePrimitiveAnalyticShapeDstReadNativeWgsl(formulaWgsl)
+    return when (
+        val validation = validateColorWgsl(
+            sourceId = "$CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY:$modeLabel",
+            wgslSource = wgsl,
+        )
+    ) {
+        is GPUColorWgslValidation.Validated -> GPUCorePrimitiveNativeShaderResult.Ready(
+            GPUCorePrimitiveNativeShaderPlan(wgsl, validation.reflection),
+        )
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+}
+
+internal fun corePrimitiveAnalyticShapeDstReadNativeWgsl(formulaWgsl: String): String = """
+    struct CorePrimitiveAnalyticShapeBlock {
+        target_size: vec2<f32>,
+        anti_alias: u32,
+        padding0: u32,
+        premul_rgba: vec4<f32>,
+        device_bounds: vec4<f32>,
+        radii0: vec4<f32>,
+        radii1: vec4<f32>,
+    }
+
+    @group(0) @binding(0) var<uniform> analytic: CorePrimitiveAnalyticShapeBlock;
+    @group(0) @binding(1) var destinationSnapshot: texture_2d<f32>;
+    @group(0) @binding(2) var destinationSampler: sampler;
+
+    @vertex
+    fn vs_main(@location(0) device_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+        let ndc_x = device_position.x / analytic.target_size.x * 2.0 - 1.0;
+        let ndc_y = 1.0 - device_position.y / analytic.target_size.y * 2.0;
+        return vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
+    }
+
+    fn corner_distance(
+        current_distance: f32,
+        corner_edge_distance: vec2<f32>,
+        radii: vec2<f32>,
+    ) -> f32 {
+        var distance = current_distance;
+        let uv = radii - corner_edge_distance;
+        if (uv.x > 0.0 && uv.y > 0.0 && radii.x > 0.0 && radii.y > 0.0) {
+            let normalized_uv = uv / (radii * radii);
+            let normalized_length = length(normalized_uv);
+            if (normalized_length > 0.0) {
+                let ellipse_inside = 0.5 * (1.0 - dot(uv, normalized_uv)) / normalized_length;
+                distance = min(distance, ellipse_inside);
+            }
+        }
+        return distance;
+    }
+
+    fn analytic_shape_distance(position: vec2<f32>) -> f32 {
+        let edge_distances = vec4<f32>(
+            position.x - analytic.device_bounds.x,
+            position.y - analytic.device_bounds.y,
+            analytic.device_bounds.z - position.x,
+            analytic.device_bounds.w - position.y,
+        );
+        var distance = min(min(edge_distances.x, edge_distances.y), min(edge_distances.z, edge_distances.w));
+        distance = corner_distance(distance, edge_distances.xy, analytic.radii0.xy);
+        distance = corner_distance(distance, edge_distances.zy, analytic.radii0.zw);
+        distance = corner_distance(distance, edge_distances.zw, analytic.radii1.xy);
+        distance = corner_distance(distance, edge_distances.xw, analytic.radii1.zw);
+        return distance;
+    }
+
+    fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
+        let distance = analytic_shape_distance(position);
+        let hard = select(0.0, 1.0, distance >= 0.0);
+        let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
+        let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
+        let bias = 1.0 - 0.5 * scale;
+        let aa = clamp(scale * (distance + bias), 0.0, 1.0);
+        return select(hard, aa, analytic.anti_alias != 0u);
+    }
+
+    $formulaWgsl
+
+    @fragment
+    fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+        let coverage = analytic_shape_coverage(fragment_position.xy);
+        let src = analytic.premul_rgba;
+        let dst = textureLoad(destinationSnapshot, vec2i(floor(fragment_position.xy)), 0);
+        let blended = kanvasBlendPremul(src, dst);
+        return dst + coverage * (blended - dst);
+    }
+""".trimIndent()
+
 internal fun corePrimitiveDstReadNativeWgsl(formulaWgsl: String): String = """
     struct CorePrimitiveBlock {
         target_size: vec2<f32>,
@@ -280,6 +391,10 @@ internal const val CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY =
     "core-primitive-dst-read-device-geometry-wgsl-v1"
 internal const val CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
     "vertex-fragment-dynamic-uniform32-dst-read-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY =
+    "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
+    "dynamic-uniform80-analytic-shape-dst-read-v1"
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uint32-triangle-list-v1"
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
