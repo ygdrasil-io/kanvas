@@ -60,6 +60,8 @@ private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
+private const val PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL =
+    "unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 
@@ -230,6 +232,41 @@ class GPUClipCoverageSurfaceTest {
                             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
                         ),
                     )
+                    restore()
+                }
+                render()
+            }
+        }
+    }
+
+    @Test
+    fun `non blur core draw under a rect plus polygon difference clip stays on the coverage mask route`() {
+        // FP-13 Task 5 final review: the AnalyticMultiRect lowering is scoped to the mask-blur
+        // composite lane only. A NON-BLUR direct draw under the rect INTERSECT + orthogonal
+        // polygon DIFFERENCE clip must keep its prior CoverageMask route (which, for a
+        // path-carrying mask, refuses with the documented depth/stencil topology code), NOT
+        // the AnalyticMultiRect → Clip.Refused refusal.
+        assertTerminal(PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL) {
+            Surface(16, 16).run {
+                requireWebGpu()
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipPath(
+                        Path {
+                            moveTo(5f, 4f)
+                            lineTo(12f, 4f)
+                            lineTo(12f, 8f)
+                            lineTo(9f, 8f)
+                            lineTo(9f, 12f)
+                            lineTo(5f, 12f)
+                            close()
+                        },
+                        ClipOp.DIFFERENCE,
+                        antiAlias = true,
+                    )
+                    drawRect(Rect(2f, 2f, 14f, 14f), Paint.fill(Color.RED).copy(antiAlias = false))
                     restore()
                 }
                 render()

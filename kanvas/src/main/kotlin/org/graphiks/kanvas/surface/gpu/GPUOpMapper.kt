@@ -658,7 +658,15 @@ internal object GPUOpMapper {
                 maxOf(context.target.width, context.target.height),
             )
         } ?: GPUClipCoveragePlan.NoClip
-        val clipExecutionPlan = clipPlan.toExecutionPlan(context.capabilities, context.target)
+        // FP-13 Task 5: the rect-decomposable → AnalyticMultiRect lowering is only safe for
+        // the mask-blur composite consumer (whose shader folds per-rect coverage). Non-blur
+        // core draws keep their prior CoverageMask route.
+        val admitAnalyticMultiRect = rawNormalized.hasBlurMaskFilter()
+        val clipExecutionPlan = clipPlan.toExecutionPlan(
+            context.capabilities,
+            context.target,
+            admitAnalyticMultiRect,
+        )
         val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
         return GPUFramePathVisualCommand(
             normalized = normalized,
@@ -1163,6 +1171,7 @@ private fun NormalizedDrawCommand.withClipPlans(
 private fun GPUClipCoveragePlan.toExecutionPlan(
     capabilities: GPUCapabilities,
     target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean = false,
 ): GPUClipExecutionPlan = when (this) {
     GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
     is GPUClipCoveragePlan.Scissor -> toScissorExecutionPlan(capabilities, target)
@@ -1171,7 +1180,15 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
         code = code,
         message = "Clip coverage planning refused before execution classification.",
     )
-    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target)
+    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target, admitAnalyticMultiRect)
+}
+
+/** True when the normalized command carries a mask blur filter (the mask-blur composite lane). */
+private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
+    is NormalizedDrawCommand.FillRect -> maskFilter != null
+    is NormalizedDrawCommand.FillRRect -> maskFilter != null
+    is NormalizedDrawCommand.FillPath -> maskFilter != null
+    else -> false
 }
 
 private fun GPUClipCoveragePlan.AnalyticIntersection.toAnalyticIntersectionExecutionPlan(
@@ -1227,6 +1244,7 @@ private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(
 private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
     capabilities: GPUCapabilities,
     target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean,
 ): GPUClipExecutionPlan {
     val single = elements.singleOrNull()
     if (
@@ -1314,15 +1332,21 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         )
     }
     // FP-13 Task 5: a rect-decomposable complex clip lowers to bounded analytic
-    // multi-rect coverage instead of a coverage mask. Admission is scoped to the
+    // multi-rect coverage instead of a coverage mask, scoped to the mask-blur
+    // composite lane (the only consumer whose composite shader folds the per-rect
+    // coverage). Non-blur consumers keep their prior CoverageMask route, so a
+    // rect INTERSECT + orthogonal-polygon DIFFERENCE clip keeps rendering through
+    // the coverage-mask producer/consumer topology. Admission is also scoped to the
     // rect-decomposable case only: every element must be a rect/rrect or a
-    // non-inverse axis-aligned orthogonal polygon (a DIFFERENCE notch in the blur
-    // fixture), at least one element must be such a path, and the decomposed rect
-    // count must fit the fixed analytic block. Coverage-mask and stacked clips
+    // non-inverse axis-aligned orthogonal polygon DIFFERENCE path (the blur
+    // fixture's notch), at least one element must be such a path, and the decomposed
+    // rect count must fit the fixed analytic block. Coverage-mask and stacked clips
     // (including a plain rect-vs-rect difference and inverse fills) stay terminal.
-    val analyticMultiRect = toAnalyticMultiRectOrNull()
-    if (analyticMultiRect != null) {
-        return GPUClipExecutionPlan.AnalyticMultiRect(analyticMultiRect)
+    if (admitAnalyticMultiRect) {
+        val analyticMultiRect = toAnalyticMultiRectOrNull()
+        if (analyticMultiRect != null) {
+            return GPUClipExecutionPlan.AnalyticMultiRect(analyticMultiRect)
+        }
     }
     val producers = elements.mapIndexed { index, element ->
         val geometry = element.executionGeometryOrRefusal()
