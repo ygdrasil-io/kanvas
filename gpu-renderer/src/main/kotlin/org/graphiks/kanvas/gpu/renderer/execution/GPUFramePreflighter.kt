@@ -2434,8 +2434,28 @@ internal class GPUFramePreflighter(
                         packet.role == GPUDrawPacketRole.PathStencilCover
                 }
             }
+        // FP-13 Task 8: a continued destination-read path splits the producer (fan Store) from
+        // the cover (fan read-only) into two path renders, with the ordered destination snapshot
+        // copy between them. The two path renders are exactly one producer-only render and one
+        // cover-only render.
+        val continuedDstReadPathAdmission = !mixedPreparedSurface &&
+            pathCoreRenders.size == 2 &&
+            framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep } &&
+            indexedCoreRenders.all { (_, render) ->
+                render.drawPackets.all { packet ->
+                    packet.role == GPUDrawPacketRole.Shading ||
+                        packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                        packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+            } &&
+            pathCoreRenders.map { (_, render) ->
+                render.drawPackets.map { packet -> packet.role }.toSet()
+            }.toSet() == setOf(
+                setOf(GPUDrawPacketRole.PathStencilProducer),
+                setOf(GPUDrawPacketRole.PathStencilCover),
+            )
         if (indexedCoreRenders.isEmpty() ||
-            (!mixedPreparedSurface && !splitPathAdmission)
+            (!mixedPreparedSurface && !splitPathAdmission && !continuedDstReadPathAdmission)
         ) {
             return refused("Path stencil CorePrimitive requires exactly one prepared render pass.")
         }
@@ -2450,15 +2470,14 @@ internal class GPUFramePreflighter(
         val allRenderSteps = framePlan.steps
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
         if (indexedCoreRenders.any { (_, render) ->
-                val hasPath = render.drawPackets.any { packet ->
-                    packet.role == GPUDrawPacketRole.PathStencilProducer ||
-                        packet.role == GPUDrawPacketRole.PathStencilCover
+                val hasProducer = render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilProducer
                 }
-                render.loadStore != GPULoadStorePlan(
-                    if (allRenderSteps.indexOf(render) == 0) "clear" else "load",
-                    GPUStorePlan.Store,
-                ) ||
-                    render.depthStencilLoadStore != if (hasPath) {
+                val hasCover = render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+                val expectedDepthStencil = when {
+                    hasProducer && hasCover ->
                         org.graphiks.kanvas.gpu.renderer.recording
                             .GPUDepthStencilLoadStorePlan.WritableStencil(
                                 org.graphiks.kanvas.gpu.renderer.recording
@@ -2466,12 +2485,27 @@ internal class GPUFramePreflighter(
                                 GPUStorePlan.Discard,
                                 0u,
                             )
-                    } else {
-                        null
-                    }
+                    hasProducer ->
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUDepthStencilLoadStorePlan.WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording
+                                    .GPUStencilLoadOperation.Clear,
+                                GPUStorePlan.Store,
+                                0u,
+                            )
+                    hasCover ->
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+                    else -> null
+                }
+                render.loadStore != GPULoadStorePlan(
+                    if (allRenderSteps.indexOf(render) == 0) "clear" else "load",
+                    GPUStorePlan.Store,
+                ) ||
+                    render.depthStencilLoadStore != expectedDepthStencil
             }
         ) {
-            return refused("Path stencil requires exact color clear/store and stencil clear/discard authority.")
+            return refused("Path stencil requires exact color clear/store and stencil clear/store/keep authority.")
         }
 
         val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
@@ -2638,7 +2672,14 @@ internal class GPUFramePreflighter(
             return authority to expected
         }
 
-        indexedCoreRenders.forEach { (sourceStepIndex, render) ->
+        val renderByStepIndex = indexedCoreRenders.associate { (index, render) -> index to render }
+        val flatEntries = indexedCoreRenders.flatMap { (stepIndex, render) ->
+            render.drawPackets.map { packet -> stepIndex to packet }
+        }
+        var flatIndex = 0
+        while (flatIndex < flatEntries.size) {
+            val (sourceStepIndex, packet) = flatEntries[flatIndex]
+            val render = renderByStepIndex.getValue(sourceStepIndex)
             val unifiedUnits = unifiedUnitsByStep.getOrPut(sourceStepIndex) { mutableListOf() }
             val preparedPathPairs =
                 preparedPathPairsByStep.getOrPut(sourceStepIndex) { mutableListOf() }
@@ -2646,9 +2687,6 @@ internal class GPUFramePreflighter(
                 preparedPathAnalyticSealsByStep.getOrPut(sourceStepIndex) { mutableListOf() }
             val directStructuralKeys =
                 directStructuralKeysByStep.getOrPut(sourceStepIndex) { mutableListOf() }
-            var packetIndex = 0
-            while (packetIndex < render.drawPackets.size) {
-                val packet = render.drawPackets[packetIndex]
             val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
             when (packet.role) {
                 GPUDrawPacketRole.Shading -> {
@@ -2690,23 +2728,27 @@ internal class GPUFramePreflighter(
                         GPUCorePrimitiveDirectNativeFrameRouteKey(sourceStepIndex, packet.packetId)
                     ] = route
                     directStructuralKeys += authority.second
-                    unifiedUnits += GPUCorePrimitiveNativeScopeRouteUnit.Direct(
+                    val directUnit = GPUCorePrimitiveNativeScopeRouteUnit.Direct(
                         packet.commandIdValue,
                         packet.packetId,
                         route,
                         authority.second,
                     )
-                    packetIndex += 1
+                    unifiedUnits += directUnit
+                    allUnifiedUnits += directUnit
+                    flatIndex += 1
                     uniformSlotIndex += 1
                 }
                 GPUDrawPacketRole.PathStencilProducer -> {
-                    val cover = render.drawPackets.getOrNull(packetIndex + 1)
+                    val (coverStepIndex, cover) = flatEntries.getOrNull(flatIndex + 1)
                         ?: return refused("Every path producer must be followed by one cover packet.")
                     if (cover.role != GPUDrawPacketRole.PathStencilCover ||
                         cover.commandIdValue != packet.commandIdValue
                     ) {
                         return refused("Path producer and cover order, role, or command identity is corrupt.")
                     }
+                    val coverRender = renderByStepIndex.getValue(coverStepIndex)
+                    val coverUnifiedUnits = unifiedUnitsByStep.getOrPut(coverStepIndex) { mutableListOf() }
                     val coverSemantic = cover.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                         ?: return refused("Path cover is missing its CorePrimitive semantic payload.")
                     val producerGeometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
@@ -2743,11 +2785,20 @@ internal class GPUFramePreflighter(
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                     ) ?: return refused("Path producer prepared pipeline or uniform authority is corrupt.")
                     val coverAuthority = exactAuthority(
-                        render,
+                        coverRender,
                         cover,
                         coverSemantic,
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                     ) ?: return refused("Path cover prepared pipeline or uniform authority is corrupt.")
+                    val continued = sourceStepIndex != coverStepIndex
+                    if (continued && hasAnalyticCorePrimitivePathClipPair(packet, cover)) {
+                        // FP-13 Task 8: an analytic-clip path cover cannot continue its fan
+                        // across the ordered snapshot copy yet; the analytic path pair stays on
+                        // the path-stencil preflight authority.
+                        return refused(
+                            "Analytic path pair cannot continue its fan across the destination snapshot yet.",
+                        )
+                    }
                     if (hasAnalyticCorePrimitivePathClipPair(packet, cover)) {
                         if (!requireStepUniformAuthority(sourceStepIndex, "analytic64")) {
                             return refused("A path render cannot mix uniform32 and analytic uniform64 authority.")
@@ -2824,7 +2875,9 @@ internal class GPUFramePreflighter(
                         }
                         preparedPathAnalyticSeals += seal
                     } else {
-                        if (!requireStepUniformAuthority(sourceStepIndex, "uniform32")) {
+                        if (!requireStepUniformAuthority(sourceStepIndex, "uniform32") ||
+                            (continued && !requireStepUniformAuthority(coverStepIndex, "uniform32"))
+                        ) {
                             return refused("A path render cannot mix analytic uniform64 and uniform32 authority.")
                         }
                         val producerSlab = producerAuthority.first.uniformSlabSeal
@@ -2874,21 +2927,42 @@ internal class GPUFramePreflighter(
                         producerAuthority.second,
                         coverAuthority.second,
                     )
-                    unifiedUnits += GPUCorePrimitiveNativeScopeRouteUnit.PathPair(
-                        packet.commandIdValue,
-                        pair,
-                        producerAuthority.second,
-                        coverAuthority.second,
-                    )
-                    packetIndex += 2
+                    if (continued) {
+                        // FP-13 Task 8: the producer stores the fan in its own render, and the
+                        // cover loads it read-only in a second render with the snapshot bound.
+                        val producerUnit = GPUCorePrimitiveNativeScopeRouteUnit.PathProducer(
+                            packet.commandIdValue,
+                            packet.packetId,
+                            producerAuthority.second,
+                            pair.producer,
+                        )
+                        val coverUnit = GPUCorePrimitiveNativeScopeRouteUnit.PathCover(
+                            cover.commandIdValue,
+                            cover.packetId,
+                            coverAuthority.second,
+                            pair.cover,
+                        )
+                        unifiedUnits += producerUnit
+                        allUnifiedUnits += producerUnit
+                        coverUnifiedUnits += coverUnit
+                        allUnifiedUnits += coverUnit
+                    } else {
+                        val pathPairUnit = GPUCorePrimitiveNativeScopeRouteUnit.PathPair(
+                            packet.commandIdValue,
+                            pair,
+                            producerAuthority.second,
+                            coverAuthority.second,
+                        )
+                        unifiedUnits += pathPairUnit
+                        allUnifiedUnits += pathPairUnit
+                    }
+                    flatIndex += 2
                     uniformSlotIndex += 1
                 }
                 GPUDrawPacketRole.PathStencilCover ->
                     return refused("A path cover cannot appear without its immediately preceding producer.")
                 else -> return refused("Path stencil render contains an unsupported packet role.")
             }
-            }
-            allUnifiedUnits += unifiedUnits
         }
 
         val uniformSeal = sharedUniformSeal
@@ -2906,10 +2980,17 @@ internal class GPUFramePreflighter(
                     unit.coverStructuralPipelineKey.uniformLayout ==
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
                 }
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> unit.commandIdValue.takeIf {
+                    unit.structuralPipelineKey.uniformLayout ==
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+                }
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> null
             }
         }
         if (uniformSeal != null) {
-            val unitByCommandId = allUnifiedUnits.associateBy { it.commandIdValue }
+            val unitByCommandId = allUnifiedUnits
+                .filterNot { it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover }
+                .associateBy { it.commandIdValue }
             val slabExact = uniformSeal.commandIds == slabUnitCommands &&
                 uniformSeal.drawCount == slabUnitCommands.size &&
                 slabUnitCommands.withIndex().all { (index, commandId) ->
@@ -2919,6 +3000,10 @@ internal class GPUFramePreflighter(
                             corePacketById.getValue(unit.packetId)
                         is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ->
                             corePacketById.getValue(unit.pair.producerPacketId)
+                        is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ->
+                            corePacketById.getValue(unit.packetId)
+                        is GPUCorePrimitiveNativeScopeRouteUnit.PathCover ->
+                            error("A path cover must not address the shared uniform slab.")
                     }
                     val bytes = (packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive)
                         .payloadRef.uniformBlock?.bytes ?: return refused(
@@ -2999,6 +3084,20 @@ internal class GPUFramePreflighter(
                         )
                         indexCount = Math.addExact(indexCount, unit.pair.producer.indexCount.toLong())
                         indexCount = Math.addExact(indexCount, unit.pair.cover.indexCount.toLong())
+                    }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> {
+                        vertexFloatCount = Math.addExact(
+                            vertexFloatCount,
+                            Math.multiplyExact(unit.geometry.vertexCount.toLong(), 2L),
+                        )
+                        indexCount = Math.addExact(indexCount, unit.geometry.indexCount.toLong())
+                    }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> {
+                        vertexFloatCount = Math.addExact(
+                            vertexFloatCount,
+                            Math.multiplyExact(unit.geometry.vertexCount.toLong(), 2L),
+                        )
+                        indexCount = Math.addExact(indexCount, unit.geometry.indexCount.toLong())
                     }
                 }
             }
@@ -3119,8 +3218,25 @@ internal class GPUFramePreflighter(
                     GPUFrameResourceLifetime.FrameLocal,
                     false,
                 )
+                // FP-13 Task 8: a continued destination-read path cover carries one extra
+                // DestinationSnapshot TextureBinding use (the ordered snapshot the cover samples).
+                val destinationSnapshotUses = render.resourceUses.filter { use ->
+                    use.role == GPUFrameResourceRole.DestinationSnapshot
+                }
+                if (destinationSnapshotUses.any { use ->
+                        use.usage != GPUFrameResourceUsage.TextureBinding ||
+                            use.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                            use.write
+                    } || destinationSnapshotUses.distinctBy { it.resource }.size !=
+                    destinationSnapshotUses.size
+                ) {
+                    return refused(
+                        "Path stencil destination snapshot uses must be exact read-only frame-local bindings.",
+                    )
+                }
                 val expectedUses = if (hasPath) {
-                    setOf(exactVertexUse, exactIndexUse, exactDepthUse, expectedUniformUse)
+                    setOf(exactVertexUse, exactIndexUse, exactDepthUse, expectedUniformUse) +
+                        destinationSnapshotUses
                 } else {
                     setOf(exactVertexUse, exactIndexUse, expectedUniformUse)
                 }

@@ -52,6 +52,42 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteUnit {
             ) { "A unified path cover must retain a cover structural key" }
         }
     }
+
+    /** FP-13 Task 8 continued producer half: the fan is stored in its own render pass. */
+    class PathProducer(
+        override val commandIdValue: Int,
+        val packetId: GPUDrawPacketID,
+        val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        val geometry: GPUCorePrimitivePathStencilGeometrySnapshot,
+    ) : GPUCorePrimitiveNativeScopeRouteUnit {
+        override val flattenedPacketIds: List<GPUDrawPacketID> = listOf(packetId)
+
+        init {
+            require(commandIdValue >= 0) { "A unified path producer command identity must be non-negative" }
+            require(
+                structuralPipelineKey.role ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+            ) { "A unified path producer must retain a producer structural key" }
+        }
+    }
+
+    /** FP-13 Task 8 continued cover half: the fan is read-only and the snapshot is bound. */
+    class PathCover(
+        override val commandIdValue: Int,
+        val packetId: GPUDrawPacketID,
+        val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        val geometry: GPUCorePrimitivePathStencilGeometrySnapshot,
+    ) : GPUCorePrimitiveNativeScopeRouteUnit {
+        override val flattenedPacketIds: List<GPUDrawPacketID> = listOf(packetId)
+
+        init {
+            require(commandIdValue >= 0) { "A unified path cover command identity must be non-negative" }
+            require(
+                structuralPipelineKey.role ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+            ) { "A unified path cover must retain a cover structural key" }
+        }
+    }
 }
 
 /** Primary render-scope seal. Direct/path seals are derived compatibility views of these units. */
@@ -328,6 +364,8 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
                 when (unit) {
                     is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> 1
                     is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> 2
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> 1
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> 1
                 }
             }
             var totalVertexCount = 0
@@ -343,6 +381,14 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
                         totalVertexCount = Math.addExact(totalVertexCount, unit.pair.cover.vertexCount)
                         totalIndexCount = Math.addExact(totalIndexCount, unit.pair.producer.indexCount)
                         totalIndexCount = Math.addExact(totalIndexCount, unit.pair.cover.indexCount)
+                    }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> {
+                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
+                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
+                    }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> {
+                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
+                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
                     }
                 }
             }
@@ -410,6 +456,24 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
                             unit.pair.cover::copyIndicesInto,
                         )
                     }
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> append(
+                        unit.packetId,
+                        GPUCorePrimitiveNativeScopeArenaRole.PathProducer,
+                        unit.geometry.vertexCount,
+                        unit.geometry.indexCount,
+                        unit.geometry.maxLocalIndex,
+                        unit.geometry::copyVerticesInto,
+                        unit.geometry::copyIndicesInto,
+                    )
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> append(
+                        unit.packetId,
+                        GPUCorePrimitiveNativeScopeArenaRole.PathCover,
+                        unit.geometry.vertexCount,
+                        unit.geometry.indexCount,
+                        unit.geometry.maxLocalIndex,
+                        unit.geometry::copyVerticesInto,
+                        unit.geometry::copyIndicesInto,
+                    )
                 }
             }
             check(baseVertex == totalVertexCount && firstIndex == totalIndexCount) {

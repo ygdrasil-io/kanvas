@@ -12,6 +12,8 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 internal sealed interface GPUCorePrimitiveRenderRunMaterialization {
@@ -138,6 +140,10 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     unit.producerStructuralPipelineKey,
                     unit.coverStructuralPipelineKey,
                 )
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ->
+                    listOf(unit.structuralPipelineKey)
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathCover ->
+                    listOf(unit.structuralPipelineKey)
             }
         }.distinct()
         val cacheKeys = linkedMapOf<
@@ -157,7 +163,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             )
         }
         val hasPath = frameRoutes.orderedUnits.any {
-            it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+            it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
         }
         val frameComponentIdentity = if (hasPath) {
             val supportedPathComponents = setOf(
@@ -165,15 +173,31 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
             )
             if (cacheKeys.values.any { key ->
-                    key.componentIdentity !in supportedPathComponents
+                    key.componentIdentity !in supportedPathComponents &&
+                        !key.componentIdentity.isCorePrimitiveDstRead()
                 }
             ) {
                 return refused(
                     "invalid.native-core-primitive.frame-global-path-pipeline",
-                    "PathPair runs require only the exact stencil producer and shared uniform cover programs.",
+                    "PathPair runs require only the exact stencil producer, shared uniform cover, " +
+                        "and continued destination-read cover programs.",
                 )
             }
-            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+            // FP-13 Task 8: a continued destination-read cover run binds its snapshot through
+            // the per-mode dst-read component identity, so the frame slot adopts that identity
+            // instead of the standard uniform cover component.
+            val dstReadIdentities = cacheKeys.values
+                .map(GPUWgpu4kCorePrimitivePipelineCacheKey::componentIdentity)
+                .filter(GPUWgpu4kCorePrimitiveComponentIdentity::isCorePrimitiveDstRead)
+                .distinct()
+            when (dstReadIdentities.size) {
+                0 -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+                1 -> dstReadIdentities.single()
+                else -> return refused(
+                    "invalid.native-core-primitive.frame-global-path-pipeline",
+                    "A continued path cover run cannot mix multiple destination-read component identities.",
+                )
+            }
         } else {
             val componentIdentities = cacheKeys.values
                 .map { key -> key.componentIdentity }
@@ -305,7 +329,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             val pathAuthority = linkedMapOf<Int, GPUTextureView>()
             val renderOperands = plans.zip(routes).map { (plan, route) ->
                 val runHasPath = route.orderedUnits.any {
-                    it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+                    it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                        it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                        it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
                 }
                 val runPackets = plan.renderStep.drawPackets
                 val runSlices = arena.slices.subList(
@@ -361,12 +387,30 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
                             .takeIf { plan.loadStore.loadOp == "clear" },
                         depthReadOnly = true,
-                        stencilClearValue = 0u.takeIf { runHasPath },
-                        stencilLoadOperation =
-                            GPUPreparedNativeLoadOperation.Clear.takeIf { runHasPath },
-                        stencilStoreOperation =
-                            GPUPreparedNativeStoreOperation.Discard.takeIf { runHasPath },
-                        stencilReadOnly = !runHasPath,
+                        stencilClearValue = when (val ds = plan.renderStep.depthStencilLoadStore) {
+                            is GPUDepthStencilLoadStorePlan.WritableStencil -> ds.clearValue
+                            else -> null
+                        },
+                        stencilLoadOperation = when (val ds = plan.renderStep.depthStencilLoadStore) {
+                            is GPUDepthStencilLoadStorePlan.WritableStencil -> when (ds.loadOperation) {
+                                GPUStencilLoadOperation.Clear -> GPUPreparedNativeLoadOperation.Clear
+                                GPUStencilLoadOperation.Load -> GPUPreparedNativeLoadOperation.Load
+                            }
+                            else -> null
+                        },
+                        stencilStoreOperation = when (val ds = plan.renderStep.depthStencilLoadStore) {
+                            is GPUDepthStencilLoadStorePlan.WritableStencil -> when (ds.storeOperation) {
+                                GPUStorePlan.Store -> GPUPreparedNativeStoreOperation.Store
+                                GPUStorePlan.Discard -> GPUPreparedNativeStoreOperation.Discard
+                                GPUStorePlan.ResolveAndStore ->
+                                    error("Path stencil authority cannot resolve-and-store the fan")
+                            }
+                            else -> null
+                        },
+                        stencilReadOnly = when (plan.renderStep.depthStencilLoadStore) {
+                            is GPUDepthStencilLoadStorePlan.WritableStencil -> false
+                            else -> true
+                        },
                     ),
                     commands = commands,
                     semanticPayloads = runPackets.map { packet ->
@@ -484,7 +528,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         }
         routes.zip(plans).forEach { (route, plan) ->
             val hasPath = route.orderedUnits.any {
-                it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+                it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
+                    it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
+                    it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
             }
             if (hasPath != (plan.renderStep.depthStencilLoadStore != null) ||
                 (!hasPath && route.orderedUnits.any {
@@ -646,6 +692,10 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     unit.producerStructuralPipelineKey,
                     unit.coverStructuralPipelineKey,
                 )
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ->
+                    listOf(unit.structuralPipelineKey)
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathCover ->
+                    listOf(unit.structuralPipelineKey)
             }
             structuralKeys.forEach { structuralKey ->
                 val semantic =
@@ -653,8 +703,10 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 val scissor = when (unit) {
                     is GPUCorePrimitiveNativeScopeRouteUnit.Direct ->
                         unit.route.renderScissor ?: semantic.scissorBounds
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ->
-                        semantic.scissorBounds
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair,
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer,
+                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover,
+                    -> semantic.scissorBounds
                 }
                 val slice = slices[packetIndex]
                 val pipeline = requireNotNull(pipelineOperands[structuralKey])

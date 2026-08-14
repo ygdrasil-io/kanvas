@@ -4129,6 +4129,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     )
                     packetIndex += 2
                 }
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer,
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathCover,
+                -> return refused(
+                    "invalid.native-core-primitive.indexed-packet-authority",
+                    "Indexed CorePrimitive cannot retain a continued producer/cover half.",
+                )
             }
         }
         if (packetIndex != renderStep.drawPackets.size ||
