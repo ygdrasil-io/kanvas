@@ -24,6 +24,7 @@ The current precondition is satisfied:
 ## Goals
 
 - Seal one fresh Skia GM baseline at the current source commit.
+- Generate the matching visual comparison dashboard from that same population.
 - Run SVG and relevant CPU/GPU suites separately so their failure populations
   cannot be conflated.
 - Record reference provenance, CPU/GPU pixels, route diagnostics, diffs, stats,
@@ -106,12 +107,36 @@ DISPLAY=:99 ./gradlew -F off :gpu-renderer:test \
   --no-daemon --no-parallel --console=plain
 ```
 
-The Skia and SVG commands run with `DISPLAY=:99` prefixed in the shell. Any
-additional focused CPU/GPU command must be recorded in the manifest rather than
-silently folded into a suite total.
+All listed lanes run with `DISPLAY=:99` prefixed in the shell. Any additional
+focused CPU/GPU command must be recorded in the manifest rather than silently
+folded into a suite total.
 
 The full Skia inventory is not replaced by a focused GM run. Focused runs are
 allowed only as supplemental probes after the inventory has been sealed.
+
+The dashboard is generated as a separate evidence lane from the same source
+population:
+
+```text
+DISPLAY=:99 ./gradlew -F off :integration-tests:skia:generateSkiaDashboard \
+  -Pgm.includeBlocking=true \
+  --no-daemon --no-parallel --console=plain
+```
+
+The task also regenerates the Kanvas GM PNGs in
+`integration-tests/skia/src/test/resources/generated-renders/`. Its dashboard
+output directory is
+`integration-tests/skia/build/reports/skia-gm-dashboard/`; the manifest records
+that directory and every consumed reference, generated image, score file, and
+dashboard data file by path and hash.
+
+Wave 0's reviewed full inventory was a 615-test population without
+`includeBlocking=true`. Wave 1 intentionally includes blocking rows so a newly
+repaired blocking family cannot disappear from the fresh classification. The
+runner uses `-Dkanvas.gm.includeBlocking=true`, while the dashboard generator
+uses `-Pgm.includeBlocking=true`. This is a deliberate population-policy
+change, not a directly comparable count; the manifest records both policies and
+marks the Wave 0 delta as population-shifted rather than as a renderer delta.
 
 ## Wave 1 Manifest
 
@@ -137,10 +162,21 @@ The JSON manifest contains at least:
 - CPU, GPU, diff, statistic, and route-artifact paths when present;
 - refusal codes, missing references, invalid sizes, similarity failures, and
   explicit non-claims;
-- `globalThresholdWeakened`, `assertionsWeakened`,
-  `referencesModified`, `memoryBudgetChanged`, and `readinessDelta` policy
+- `globalThresholdWeakened`, `assertionsWeakened`, `referencesModified`,
+  `scoresDirectlyEdited`, `memoryBudgetChanged`, and `readinessDelta` policy
   fields, all expected to remain false or zero;
+- score-file integrity for
+  `integration-tests/skia/test-similarity-scores.properties`, including
+  before/after hashes, whether the runner side effect was observed, whether a
+  direct edit was detected, and whether the known timestamp-only side effect
+  was restored;
+- explicit population-policy fields for the fresh `includeBlocking` setting
+  and the non-comparable Wave 0 population;
 - an evidence status of `classification`, `approved`, or `blocked`.
+
+The initial baseline manifest is always sealed with status `classification`.
+`approved` and `blocked` are reserved for the post-classification decision and
+the post-fix gate.
 
 The Markdown manifest is a human-readable projection of the same data. It must
 state that Wave 0 and FP-13 counts are context only and must never present them
@@ -182,6 +218,10 @@ starting hypotheses:
 - gradient material capability;
 - stencil edge-fan or coverage budget;
 - any other shared cause revealed by the fresh rows.
+
+Any cohort involving path lowering, clipping, edge fans, or coverage budgets
+must cite `.upstream/specs/geometry-coverage/README.md` in its eventual
+implementation plan and ownership decision.
 
 Every candidate cohort must return, without repository edits:
 
@@ -248,6 +288,15 @@ The fix agent must:
 The fix and focused-test changes are committed separately from evidence. The
 orchestrator integrates the reviewed fix serially into `codex/skia-fidelity-wave1`.
 
+Escalation is bounded. Wave 1 dispatches at most one implementation fix for the
+selected cohort. A failed fix hypothesis is one whose focused test or
+before/after evidence contradicts the proposed cause or produces no pixel
+improvement under unchanged policy. The first failed selected hypothesis leaves
+this wave `blocked`; it is not replaced by an unreviewed workaround. If a
+future authorized iteration accumulates three failed targeted hypotheses, work
+stops and the affected architecture is re-evaluated with the user before any
+additional fix is attempted.
+
 ## Review Contract
 
 The independent reviewer checks the selected plan, source diff, red-to-green
@@ -307,6 +356,8 @@ This design follows:
 - `.upstream/specs/skia-like-realtime/README.md`;
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`;
 - `.upstream/specs/wgsl-pipeline/README.md`;
+- `.upstream/specs/geometry-coverage/README.md` for any geometry or coverage
+  cohort;
 - `docs/superpowers/specs/2026-08-14-agentic-skia-fidelity-design.md`;
 - `docs/superpowers/plans/2026-08-14-agentic-skia-fidelity-wave0.md`;
 - `reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-review.md`.
