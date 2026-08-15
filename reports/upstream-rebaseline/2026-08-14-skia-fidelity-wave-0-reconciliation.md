@@ -626,3 +626,180 @@
 - FP-13 is historical context only and is not an acceptance baseline.
 - Skia, SVG, and CPU-oracle rows are separate evidence lanes.
 - This report does not weaken global thresholds or edit score inputs.
+
+## Provenance
+
+This evidence-owner addition preserves the CLI-generated sections above. It
+does not regenerate or edit the accepted JSON, dated XML/JSON inputs, score
+file, historical reports, or generated PNGs.
+
+### Environment
+
+- Evidence worktree: `/tmp/opencode/kanvas-agentic-skia-fidelity-wave0`
+- Review branch: `codex/agentic-skia-fidelity-wave0`
+- Review HEAD: `955d5233f3d8a6367b11381acca3bf2055810975`
+- Source commit recorded by the accepted reconciliation artifacts: `037d1fdd04419edd173837dac3522008e3c22373`
+- UTC run date: `Sat Aug 15 15:13:53 UTC 2026`
+- Host: `b3-16-2026-08-13-16-13`
+- OS: Linux `7.0.0-14-generic`, `x86_64`
+- JVM: OpenJDK `25.0.3`
+- Gradle: `9.2.0`
+- Display: `DISPLAY=:99`
+
+### Exact Command Sequence
+
+The focused evidence commands ran first:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :integration-tests:skia:test --tests "org.graphiks.kanvas.skia.SkiaGmRunner" -Dkanvas.gm.name=modecolorfilters -Dkanvas.gm.includeBlocking=true --no-daemon --no-parallel --console=plain
+```
+
+Process status: `0`.
+
+```bash
+DISPLAY=:99 ./gradlew -F off :integration-tests:svg:test --no-daemon --no-parallel --console=plain
+```
+
+Process status: `0`.
+
+The dashboard was generated before the dated dashboard copy:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :integration-tests:skia:generateSkiaDashboard --no-daemon --no-parallel --console=plain
+```
+
+Process status: `0`. The generated source was
+`integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`.
+
+The three immutable dated copies were made with:
+
+```bash
+mkdir -p reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs
+cp integration-tests/skia/build/test-results/test/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-gm-runner.xml
+cp integration-tests/svg/build/test-results/test/TEST-org.graphiks.kanvas.svg.SvgIntegrationTest.xml reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/svg-integration.xml
+cp integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-dashboard-gms.json
+```
+
+Directory creation and each copy returned status `0`. The four full headless
+suites then ran as separate commands:
+
+```bash
+DISPLAY=:99 ./gradlew -F off :kanvas:test --no-daemon --no-parallel --console=plain
+DISPLAY=:99 ./gradlew -F off :gpu-renderer:test --no-daemon --no-parallel --console=plain
+DISPLAY=:99 ./gradlew -F off :integration-tests:skia:test --no-daemon --no-parallel --console=plain
+DISPLAY=:99 ./gradlew -F off :integration-tests:svg:test --no-daemon --no-parallel --console=plain
+```
+
+The full-suite process/JUnit results were `:kanvas:test` status `1` with
+`3240` tests, `107` failures, `0` skips, and `0` errors;
+`:gpu-renderer:test` status `1` with `3313` tests, `1` failure, `0` skips, and
+`0` errors; full `:integration-tests:skia:test` status `1` with `686` tests,
+`503` failures, `40` skips, and `0` errors; and
+`:integration-tests:svg:test` status `0` with `17` tests, `0` failures,
+`12` skips, and `0` errors.
+
+The accepted corrected Task 1 JSON/Markdown pair was generated with this
+exact reconciliation command. The literal source commit is intentional and
+matches the accepted JSON; the JSON was not manually edited:
+
+```bash
+python3 scripts/gm/reconcile_skia_fidelity_wave0.py --skia-runner reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-gm-runner.xml --dashboard-json reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-dashboard-gms.json --svg-xml reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/svg-integration.xml --scores integration-tests/skia/test-similarity-scores.properties --fp13-runner reports/upstream-rebaseline/graphite-dawn-frame-plan/fp13-m86-wave/junit-xml-2026-08-13/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml --source-commit 037d1fdd04419edd173837dac3522008e3c22373 --output-json reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-delta.json --output-markdown reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-reconciliation.md --check
+```
+
+The corrected reconciliation command returned status `0` with no stdout or
+stderr output. The accepted JSON has `schemaVersion: 1`, exact kind
+`skia-fidelity-wave-0-delta`, and source commit
+`037d1fdd04419edd173837dac3522008e3c22373`.
+
+The final artifact review commands were:
+
+```bash
+git status --short
+git diff --check
+git diff -- integration-tests/skia/test-similarity-scores.properties
+git diff --name-only -- integration-tests/skia/src/test/resources/generated-renders
+```
+
+## Evidence Interpretation
+
+### Counts And Lanes
+
+- Focused current Skia runner: `2` tests, `0` failures, `0` errors, and `0` skips. Both `ModeColorFilterGm` and `ModeColorFiltersGm` rendered; the system output reports similarity `27.06%`, `dispatch=2382`, and `refuse=0`.
+- Current dashboard inventory: `576` nonblocking GM rows, with `540` passing, `6` failing, and `30` no-score rows. The dashboard generator also reported `Total: 615, Pass: 540, Fail: 6, No score: 30, Avg sim: 54.4%`; the extra rows are not additional focused runner testcases.
+- Focused current SVG: `17` tests, `0` failures, `0` errors, and `12` expected skips, leaving `5` passed cases.
+- CPU-oracle rows: `0`; they are not counted as Skia fidelity.
+- Historical FP-13 snapshot from `2026-08-13`: `615` tests, `498` failures, `40` skips, and `0` errors; `acceptanceBaseline: false` and `readinessDelta: 0.0`. It is historical context only, not a current acceptance baseline.
+
+The two current focused Skia JUnit rows and the `576` dashboard rows are
+separate evidence populations. The CLI-generated `Rows` section is retained
+unchanged; this addition makes no row-level reference, outcome, or
+classification claim that maps a dashboard row to either focused JUnit case.
+In particular, the dashboard rows are nonblocking visibility evidence and do
+not turn the focused two-case result into a claim about all dashboard rows.
+
+### Input Hashes
+
+The complete hashes recorded for the evidence inputs are:
+
+| Input | SHA-256 |
+| --- | --- |
+| `reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-gm-runner.xml` | `a6943588176ec2393469a3fca2e0991bc3fa89c45a2e348240eb6cc32101ebe9` |
+| `reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/skia-dashboard-gms.json` | `3c2ca43c92a3e973777477df4ea7e970f5fd9a411b71b8c7a6f354c436579d68` |
+| `reports/upstream-rebaseline/2026-08-14-skia-fidelity-wave-0-inputs/svg-integration.xml` | `169c07175c9822eded3ef7dc5f2d646e75b1acc361bef16ffd300e6259274391` |
+| `integration-tests/skia/test-similarity-scores.properties` before runner output | `7a1532e851900685734bfe52a9aecb43a9d663e851eabc621a45e424f54c57b3` |
+| `integration-tests/skia/test-similarity-scores.properties` consumed after runner output | `a938cdaa3954012464e9a07d149cc7a5f254727fb1084ac99f7c6a25ecd25325` |
+| frozen FP-13 `TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml` | `866e3912279e1d5db941e752ce61054fddd4e225e6e75fcdec4221f056151a9f` |
+
+The pre-existing generated artifact hashes before this evidence-owner
+addition were delta JSON
+`014aead55ed0177b8d5bd9d70ea3bb96b0bac862f4b2455fca99f4a0b28a15c6` and
+reconciliation Markdown
+`103284cf22d247d6379e21e18e0fc72862473128b6da1a815819db93ee1dd4ad`.
+
+### Score Ownership
+
+The score file timestamp follows the later full Skia command in the sequence
+above. The recorded score diff was:
+
+```diff
+-#Thu Aug 13 20:25:13 UTC 2026
++#Sat Aug 15 15:10:54 UTC 2026
+-modecolorfilters=25.079917907714844
++modecolorfilters=27.06298828125
+```
+
+The timestamp and value change were runner-produced by the final full Skia
+evidence invocation, `DISPLAY=:99 ./gradlew -F off
+:integration-tests:skia:test --no-daemon --no-parallel --console=plain`.
+Only the focused `modecolorfilters` key changed. There were no manual score
+edits and no unrelated score-key changes. This report addition does not alter
+the score file.
+
+### Stabilization Findings
+
+- The focused current XML contains zero occurrences of
+  `unsupported.frame_memory.aggregate_budget_exceeded`,
+  `unsupported.native-core-primitive.destination-copy-shape`, and
+  `failed.surface.prepared.session-close`.
+- Those two old materializer codes and `failed.surface.prepared.session-close`
+  were also absent from all `446` current module XML files inspected after the
+  full suites. No current XML contains `failed.surface.prepared.session-close`.
+- SVG `texture-3` is a current pixel pass at `1.49%` against a `1.0%`
+  threshold. It is not a pixel failure and not a lifecycle terminal.
+- Policy remains `readinessDelta: 0.0`, `globalThresholdWeakened: false`, and
+  `scoresDirectlyEdited: false`; there is no readiness movement from this
+  stabilization wave.
+
+### Non-claims
+
+- FP-13 is not an acceptance baseline and its failures are not current Skia
+  failures.
+- The `576` dashboard rows are not claimed to be represented by the two
+  focused JUnit rows, and no dashboard row-level reference or outcome is
+  fabricated here.
+- CPU-oracle rows are not counted as Skia fidelity.
+- This evidence addition does not claim full renderer support, remove any
+  refusal, weaken a threshold, edit a score value manually, or certify the
+  full Skia dashboard.
+- No renderer source, tests, thresholds, dated input XML/JSON, historical
+  report, or generated PNG was changed for this report addition.
