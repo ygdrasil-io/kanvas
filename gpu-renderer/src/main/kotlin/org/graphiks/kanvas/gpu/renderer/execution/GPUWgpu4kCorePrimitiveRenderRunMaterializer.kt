@@ -74,18 +74,8 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             return refusal
         }
 
-        val frameRoutes = try {
-            routes.first().withOrderedUnits(
-                routes.flatMap { route -> route.orderedUnits },
-            )
-        } catch (_: IllegalArgumentException) {
-            return refused(
-                "invalid.native-core-primitive.frame-global-route",
-                "Frame-global CorePrimitive routes do not form one exact command partition.",
-            )
-        }
-        val arena = try {
-            GPUCorePrimitiveNativeScopeGeometryArena.pack(frameRoutes)
+        val geometry = try {
+            batchGeometry(routes)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.frame-global-geometry-arena",
@@ -97,11 +87,11 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         val indexBytes: Long
         try {
             vertexBytes = Math.multiplyExact(
-                arena.vertexFloatCount.toLong(),
+                geometry.vertexFloatCount.toLong(),
                 Float.SIZE_BYTES.toLong(),
             )
             indexBytes = Math.multiplyExact(
-                arena.indexCount.toLong(),
+                geometry.indexCount.toLong(),
                 Int.SIZE_BYTES.toLong(),
             )
         } catch (_: ArithmeticException) {
@@ -113,7 +103,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         if (vertexBytes <= 0L || indexBytes <= 0L ||
             vertexBytes % (2L * Float.SIZE_BYTES) != 0L ||
             indexBytes % Int.SIZE_BYTES != 0L ||
-            arena.slices.map { slice -> slice.packetId } !=
+            geometry.slicesByPlan.flatten().map { slice -> slice.packetId } !=
             plans.flatMap { plan -> plan.packetIds }
         ) {
             return refused(
@@ -121,19 +111,24 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive slices differ from the sealed packet stream.",
             )
         }
-        val uniformPlan = frameRoutes.uniformPlan
-        if (uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
-            uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-            uniformPlan.totalBytes <= 0L ||
-            uniformPlan.totalBytes > Int.MAX_VALUE.toLong()
-        ) {
+        val uniformBatch = try {
+            batchUniforms(routes, generationSeal)
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-uniform",
+                "Frame-global CorePrimitive uniform authorities cannot be batched safely: " +
+                    "${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+        if (uniformBatch.totalBytes <= 0L || uniformBatch.totalBytes > Int.MAX_VALUE.toLong()) {
             return refused(
                 "invalid.native-core-primitive.frame-global-uniform",
                 "Frame-global CorePrimitive uniform authority is stale, unaligned, or not host-addressable.",
             )
         }
 
-        val structuralKeys = frameRoutes.orderedUnits.flatMap { unit ->
+        val orderedUnits = routes.flatMap { route -> route.orderedUnits }
+        val structuralKeys = orderedUnits.flatMap { unit ->
             when (unit) {
                 is GPUCorePrimitiveNativeScopeRouteUnit.Direct ->
                     listOf(unit.structuralPipelineKey)
@@ -163,7 +158,24 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 mapped.identity,
             )
         }
-        val hasPath = frameRoutes.orderedUnits.any {
+        val componentIdentities = cacheKeys.values
+            .map { key -> key.componentIdentity }
+            .distinct()
+        if (componentIdentities.isEmpty()) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-component",
+                "Frame-global CorePrimitive routes require at least one component identity.",
+            )
+        }
+        if (componentIdentities.any { identity -> identity.isCorePrimitiveDstRead() } !=
+            (dstRead != null)
+        ) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-dst-read-binding",
+                "Frame-global destination-read components require one exact snapshot binding.",
+            )
+        }
+        val hasPath = orderedUnits.any {
             it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
                 it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
                 it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
@@ -200,13 +212,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 )
             }
         } else {
-            val componentIdentities = cacheKeys.values
-                .map { key -> key.componentIdentity }
-                .distinct()
-            componentIdentities.singleOrNull() ?: return refused(
-                "unsupported.native-core-primitive.frame-global-component",
-                "Direct frame-global runs must share one exact bind-group component identity.",
-            )
+            componentIdentities.first()
         }
 
         val pipelineByStructural = linkedMapOf<
@@ -249,11 +255,14 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         deviceGeneration = generationSeal.deviceGeneration,
                         vertexBytes = vertexBytes,
                         indexBytes = indexBytes,
-                        uniformBytes = uniformPlan.totalBytes,
+                        uniformBytes = uniformBatch.totalBytes,
                         pathDepthStencil = pathRequirement,
                         componentIdentity = frameComponentIdentity,
                         sampleCount = 1,
                         dstRead = dstRead?.binding,
+                        additionalComponentIdentities = componentIdentities
+                            .filterNot { identity -> identity == frameComponentIdentity }
+                            .toSet(),
                     ),
                 )
             ) {
@@ -270,8 +279,8 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             ) {
                 "Pooled CorePrimitive handles differ from the frame-global single-sample requirements"
             }
-            val vertexData = FloatArray(arena.vertexFloatCount).also(arena::copyVerticesInto)
-            val indexData = IntArray(arena.indexCount).also(arena::copyIndicesInto)
+            val vertexData = geometry.vertices
+            val indexData = geometry.indices
             uploadExact(
                 pooled.handles.vertexBuffer,
                 ArrayBuffer.of(vertexData),
@@ -286,8 +295,8 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             )
             uploadExact(
                 pooled.handles.uniformBuffer,
-                ArrayBuffer.of(frameRoutes.packedUniformBytesForUpload()),
-                uniformPlan.totalBytes,
+                ArrayBuffer.of(uniformBatch.bytes),
+                uniformBatch.totalBytes,
                 pooled.capacities.uniformBytes,
             )
 
@@ -321,11 +330,13 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 GPUPreparedNativeOperandOwnership.Borrowed,
                 pooled.capacities.indexBytes,
             )
-            val bindGroupOperand = GPUPreparedNativeBindGroupOperand(
-                pooled.handles.bindGroup,
-                generationSeal.deviceGeneration,
-                GPUPreparedNativeOperandOwnership.Borrowed,
-            )
+            val bindGroupOperands = pooled.handles.bindGroupsByComponentIdentity.mapValues { (_, bindGroup) ->
+                GPUPreparedNativeBindGroupOperand(
+                    bindGroup,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            }
             val pipelineOperands = pipelineByStructural.mapValues { (_, acquired) ->
                 GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
                     acquired,
@@ -333,31 +344,28 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 )
             }
 
-            var unitOffset = 0
             var packetOffset = 0
             val pathAuthority = linkedMapOf<Int, GPUTextureView>()
-            val renderOperands = plans.zip(routes).map { (plan, route) ->
+            val renderOperands = plans.zip(routes).mapIndexed { planIndex, (plan, route) ->
                 val runHasPath = route.orderedUnits.any {
                     it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
                         it is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer ||
                         it is GPUCorePrimitiveNativeScopeRouteUnit.PathCover
                 }
                 val runPackets = plan.renderStep.drawPackets
-                val runSlices = arena.slices.subList(
-                    packetOffset,
-                    packetOffset + runPackets.size,
-                )
+                val runSlices = geometry.slicesByPlan[planIndex]
+                check(runSlices.size == runPackets.size)
+                val uniformOffsets = uniformBatch.offsetsByPlan[planIndex]
                 val commands = if (runHasPath) {
                     indexedCommands(
                         route = route,
                         packets = runPackets,
                         slices = runSlices,
-                        globalUnitOffset = unitOffset,
-                        uniformPlan = uniformPlan,
+                        uniformOffsets = uniformOffsets,
                         pipelineOperands = pipelineOperands,
                         vertexOperand = vertexOperand,
                         indexOperand = indexOperand,
-                        bindGroupOperand = bindGroupOperand,
+                        bindGroupOperands = bindGroupOperands,
                         vertexBytes = vertexBytes,
                         indexBytes = indexBytes,
                     )
@@ -366,12 +374,11 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         route = route,
                         packets = runPackets,
                         slices = runSlices,
-                        globalUnitOffset = unitOffset,
-                        uniformPlan = uniformPlan,
+                        uniformOffsets = uniformOffsets,
                         pipelineOperands = pipelineOperands,
                         vertexOperand = vertexOperand,
                         indexOperand = indexOperand,
-                        bindGroupOperand = bindGroupOperand,
+                        bindGroupOperands = bindGroupOperands,
                         vertexBytes = vertexBytes,
                         indexBytes = indexBytes,
                     )
@@ -380,7 +387,6 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 if (runHasPath) {
                     pathAuthority[sourceStepIndex] = requireNotNull(pathDepthStencilView ?: pathHandles?.view)
                 }
-                unitOffset += route.orderedUnits.size
                 packetOffset += runPackets.size
                 GPUPreparedNativeScopeOperand.Render(
                     sourceStepIndex = sourceStepIndex,
@@ -436,8 +442,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     },
                 )
             }
-            check(unitOffset == frameRoutes.orderedUnits.size &&
-                packetOffset == arena.slices.size
+            check(packetOffset == geometry.slicesByPlan.sumOf { slices -> slices.size }
             ) {
                 "Frame-global CorePrimitive run partitions diverged during materialization"
             }
@@ -458,6 +463,104 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         }
+    }
+
+    private data class BatchedGeometry(
+        val vertices: FloatArray,
+        val indices: IntArray,
+        val slicesByPlan: List<List<GPUCorePrimitiveNativeScopeGeometrySlice>>,
+    ) {
+        val vertexFloatCount: Int get() = vertices.size
+        val indexCount: Int get() = indices.size
+    }
+
+    private data class BatchedUniforms(
+        val bytes: ByteArray,
+        val totalBytes: Long,
+        val offsetsByPlan: List<List<Long>>,
+    )
+
+    private fun batchGeometry(
+        routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>,
+    ): BatchedGeometry {
+        val arenas = routes.map { route ->
+            GPUCorePrimitiveNativeScopeGeometryArena.pack(route)
+        }
+        val vertexFloatCount = arenas.fold(0) { total, arena ->
+            Math.addExact(total, arena.vertexFloatCount)
+        }
+        val indexCount = arenas.fold(0) { total, arena ->
+            Math.addExact(total, arena.indexCount)
+        }
+        val vertices = FloatArray(vertexFloatCount)
+        val indices = IntArray(indexCount)
+        var vertexCount = 0
+        var firstIndex = 0
+        val slicesByPlan = arenas.map { arena ->
+            arena.copyVerticesInto(vertices, Math.multiplyExact(vertexCount, 2))
+            arena.copyIndicesInto(indices, firstIndex)
+            val slices = arena.slices.map { slice ->
+                slice.copy(
+                    firstIndex = Math.addExact(slice.firstIndex, firstIndex),
+                    baseVertex = Math.addExact(slice.baseVertex, vertexCount),
+                )
+            }
+            vertexCount = Math.addExact(vertexCount, arena.vertexFloatCount / 2)
+            firstIndex = Math.addExact(firstIndex, arena.indexCount)
+            slices
+        }
+        check(vertexCount * 2 == vertices.size && firstIndex == indices.size) {
+            "Batched CorePrimitive geometry sizing and copy passes diverged"
+        }
+        return BatchedGeometry(vertices, indices, slicesByPlan)
+    }
+
+    private fun batchUniforms(
+        routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): BatchedUniforms {
+        val alignment = limits.minUniformBufferOffsetAlignment
+        require(alignment > 0L)
+        val payloads = routes.map { route ->
+            require(route.uniformPlan.deviceGeneration == generationSeal.deviceGeneration.value)
+            require(route.uniformPlan.alignmentBytes == alignment)
+            val bytes = route.uniformAuthority.packedBytesForUpload()
+            require(bytes.size.toLong() == route.uniformPlan.totalBytes)
+            bytes
+        }
+        var totalBytes = 0L
+        val bases = payloads.map { bytes ->
+            val base = alignUniformOffset(totalBytes, alignment)
+            totalBytes = Math.addExact(base, bytes.size.toLong())
+            require(totalBytes <= Int.MAX_VALUE.toLong())
+            base
+        }
+        val packed = ByteArray(Math.toIntExact(totalBytes))
+        payloads.forEachIndexed { index, bytes ->
+            bytes.copyInto(packed, bases[index].toInt())
+        }
+        val offsetsByPlan = routes.mapIndexed { index, route ->
+            val startIndex = when (val coverage = route.uniformCoverage) {
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope -> 0
+                is GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange -> coverage.startIndex
+            }
+            require(startIndex + route.orderedUnits.size <= route.uniformPlan.slots.size)
+            route.orderedUnits.indices.map { unitIndex ->
+                val offset = Math.addExact(
+                    bases[index],
+                    route.uniformPlan.slots[startIndex + unitIndex].alignedOffset,
+                )
+                require(offset <= UInt.MAX_VALUE.toLong())
+                offset
+            }
+        }
+        return BatchedUniforms(packed, totalBytes, offsetsByPlan)
+    }
+
+    private fun alignUniformOffset(value: Long, alignment: Long): Long {
+        require(value >= 0L && alignment > 0L)
+        val remainder = value % alignment
+        return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
     }
 
     private fun validateAcceptedPlans(
@@ -497,18 +600,15 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         // assembler redirects layer-target runs to their pooled attachments afterwards. The
         // legacy single-render routes never observe mixed targets.
         val target = plans.first().target
-        val uniformAuthorityRoute = routes.first()
-        if (routes.any { route ->
-                !route.hasSameUniformAuthority(uniformAuthorityRoute)
+        if (plans.any { plan -> plan.target != target } ||
+            routes.zip(plans).any { (route, plan) ->
+                route.flattenedPacketIds != plan.packetIds
             } ||
-            routes.flatMap { route -> route.commandIds } !=
-            uniformAuthorityRoute.uniformCommandIds ||
-            routes.flatMap { route -> route.flattenedPacketIds } !=
-            plans.flatMap { plan -> plan.packetIds }
+            routes.flatMap { route -> route.flattenedPacketIds } != plans.flatMap { plan -> plan.packetIds }
         ) {
             return refused(
                 "invalid.native-core-primitive.frame-global-route",
-                "CorePrimitive runs must exactly partition one frame-global route and uniform slab.",
+                "CorePrimitive runs must exactly partition one frame-global route and their sealed packet authorities.",
             )
         }
         val packets = plans.flatMap { plan -> plan.renderStep.drawPackets }
@@ -527,12 +627,16 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive packet and target-bound authorities must remain unique and exact.",
             )
         }
-        if (uniformAuthorityRoute.uniformPlan.deviceGeneration !=
-            generationSeal.deviceGeneration.value
+        if (routes.any { route ->
+                route.uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
+                    route.uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                    route.uniformPlan.totalBytes <= 0L ||
+                    route.uniformPlan.totalBytes > Int.MAX_VALUE.toLong()
+            }
         ) {
             return refused(
                 "stale.native-core-primitive.frame-global-generation",
-                "Frame-global CorePrimitive uniform authority does not match the sealed device generation.",
+                "A frame-global CorePrimitive uniform authority is stale, unaligned, or not host-addressable.",
             )
         }
         routes.zip(plans).forEach { (route, plan) ->
@@ -571,15 +675,17 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         route: GPUCorePrimitiveNativeScopeRouteSeal.Routes,
         packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
         slices: List<GPUCorePrimitiveNativeScopeGeometrySlice>,
-        globalUnitOffset: Int,
-        uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan,
+        uniformOffsets: List<Long>,
         pipelineOperands: Map<
             GPUCorePrimitiveRenderPipelineStructuralKey,
             GPUPreparedNativeRenderPipelineOperand
             >,
         vertexOperand: GPUPreparedNativeBufferOperand,
         indexOperand: GPUPreparedNativeBufferOperand,
-        bindGroupOperand: GPUPreparedNativeBindGroupOperand,
+        bindGroupOperands: Map<
+            GPUWgpu4kCorePrimitiveComponentIdentity,
+            GPUPreparedNativeBindGroupOperand,
+            >,
         vertexBytes: Long,
         indexBytes: Long,
     ): List<GPUPreparedNativeRenderCommand> {
@@ -627,11 +733,17 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 if (pipeline.bindingPolicy ==
                     GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
                 ) {
+                    val componentIdentity = requireNotNull(
+                        units[index].structuralPipelineKey.corePrimitiveNativeComponentIdentityOrNull(),
+                    )
+                    val bindGroupOperand = requireNotNull(bindGroupOperands[componentIdentity]) {
+                        "A direct CorePrimitive run requires an exact bind group per component identity"
+                    }
                     add(
                         GPUPreparedNativeRenderCommand.SetBindGroup(
                             0,
                             bindGroupOperand,
-                            listOf(uniformPlan.slots[globalUnitOffset + index].alignedOffset),
+                            listOf(uniformOffsets[index]),
                         ),
                     )
                 }
@@ -662,15 +774,17 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         route: GPUCorePrimitiveNativeScopeRouteSeal.Routes,
         packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
         slices: List<GPUCorePrimitiveNativeScopeGeometrySlice>,
-        globalUnitOffset: Int,
-        uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan,
+        uniformOffsets: List<Long>,
         pipelineOperands: Map<
             GPUCorePrimitiveRenderPipelineStructuralKey,
             GPUPreparedNativeRenderPipelineOperand
             >,
         vertexOperand: GPUPreparedNativeBufferOperand,
         indexOperand: GPUPreparedNativeBufferOperand,
-        bindGroupOperand: GPUPreparedNativeBindGroupOperand,
+        bindGroupOperands: Map<
+            GPUWgpu4kCorePrimitiveComponentIdentity,
+            GPUPreparedNativeBindGroupOperand,
+            >,
         vertexBytes: Long,
         indexBytes: Long,
     ): List<GPUPreparedNativeRenderCommand> = buildList {
@@ -727,12 +841,18 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 if (pipeline.bindingPolicy ==
                     GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
                 ) {
+                    val componentIdentity = requireNotNull(
+                        structuralKey.corePrimitiveNativeComponentIdentityOrNull(),
+                    )
+                    val bindGroupOperand = requireNotNull(bindGroupOperands[componentIdentity]) {
+                        "An indexed CorePrimitive run requires an exact bind group per component identity"
+                    }
                     add(
                         GPUPreparedNativeRenderCommand.SetBindGroup(
                             0,
                             bindGroupOperand,
                             listOf(
-                                uniformPlan.slots[globalUnitOffset + unitIndex].alignedOffset,
+                                uniformOffsets[unitIndex],
                             ),
                         ),
                     )

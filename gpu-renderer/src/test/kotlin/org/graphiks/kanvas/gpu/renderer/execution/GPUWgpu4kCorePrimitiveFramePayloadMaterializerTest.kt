@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 
 import io.ygdrasil.webgpu.ArrayBuffer
+import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
 import io.ygdrasil.webgpu.BufferBinding
@@ -12,6 +13,8 @@ import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPURenderPassEncoder
 import io.ygdrasil.webgpu.GPUTexture
@@ -19,6 +22,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import java.io.File
 import java.lang.reflect.Proxy
@@ -69,6 +73,7 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -1083,6 +1088,263 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `frame-global materializer binds mixed analytic and analytic destination-read components`() {
+        val fixture = fixture(
+            routeShape = RouteShape.AnalyticShape,
+            useRealPreflight = true,
+        )
+        try {
+            val renderStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+            val sourceStepIndex = fixture.plan.steps.indexOf(renderStep)
+            val scope = fixture.encoderPlan.scopes.single {
+                it.sourceStepIndex == sourceStepIndex &&
+                    it.operationKind == GPUEncoderOperationKind.Render
+            }
+            val originalRoute = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+                scope.corePrimitiveNativeScopeRouteSeal,
+            )
+            val firstUnit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.Direct>(
+                originalRoute.orderedUnits.first(),
+            )
+            val secondUnit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.Direct>(
+                originalRoute.orderedUnits.last(),
+            )
+            val mixedRoute = originalRoute.withOrderedUnits(
+                listOf(
+                    firstUnit,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct(
+                        secondUnit.commandIdValue,
+                        secondUnit.packetId,
+                        secondUnit.route,
+                        secondUnit.structuralPipelineKey.copy(
+                            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                                mode = GPUBlendMode.LIGHTEN,
+                                formulaId = "lighten@v1",
+                                sourceCoverage = GPUSourceCoverageEncoding.None,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val preparations = fixture.plan.steps
+                .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .associateBy(GPUResourcePreparationRequest::resource)
+            val evidence = fixture.resources.ordinaryResources.associateBy(
+                GPUPreparedResourceEvidence::logicalResource,
+            )
+            val runPlans = listOf(
+                GPUCorePrimitiveRenderRunPlan(
+                    sourceScopeIndices = listOf(sourceStepIndex),
+                    packetIds = renderStep.drawPackets.map(GPUDrawPacket::packetId),
+                    renderStep = renderStep,
+                    preparationRequests = renderStep.resourceUses.map { use ->
+                        preparations.getValue(use.resource)
+                    },
+                    resourceEvidences = renderStep.resourceUses.map { use ->
+                        evidence.getValue(use.resource)
+                    },
+                    routeSeal = mixedRoute,
+                    exactScopeKey = GPUPreparedNativeScopeKey(
+                        scope.sourceStepIndex,
+                        scope.operationKind,
+                        scope.resourceGenerationLabels,
+                        scope.nativeOperandKeys,
+                    ),
+                ),
+            )
+            val (targetTexture, targetView) = fixture.target.borrow()
+            val sampler = fixture.native.device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    addressModeW = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Nearest,
+                    minFilter = GPUFilterMode.Nearest,
+                    mipmapFilter = GPUMipmapFilterMode.Nearest,
+                    lodMinClamp = 0f,
+                    lodMaxClamp = 0f,
+                    compare = null,
+                    maxAnisotropy = 1u.toUShort(),
+                    label = "test.corePrimitive.destinationSnapshot.sampler",
+                ),
+            )
+            val dstRead = CorePrimitiveDestinationSnapshotHandles(
+                texture = targetTexture,
+                binding = GPUWgpu4kCorePrimitiveDstReadBinding(targetView, sampler),
+            )
+            fixture.native.events.clear()
+            val result = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+                fixture.native.queue,
+                fixture.cache,
+                fixture.limits,
+            ).materializeAcceptedRuns(
+                plans = runPlans,
+                targetTexture = targetTexture,
+                targetView = targetView,
+                generationSeal = fixture.generationSeal,
+                dstRead = dstRead,
+            )
+
+            val ready = assertIs<GPUCorePrimitiveRenderRunMaterialization.Ready>(
+                result,
+                (result as? GPUCorePrimitiveRenderRunMaterialization.Refused)?.let {
+                    "${it.code}: ${it.message}"
+                },
+            )
+            val render = ready.renderOperands.single()
+            val pipelines = render.commands
+                .filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+            val bindGroups = render.commands
+                .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            assertEquals(2, distinctIdentityCount(pipelines.map { it.pipeline.pipeline }))
+            assertEquals(2, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
+            assertEquals(2, fixture.native.renderPipelineDescriptors.size)
+            assertEquals(2, fixture.native.bindGroupDescriptors.size)
+            assertTrue(bindGroups.all { it.dynamicOffsets.size == 1 })
+            assertTrue(ready.leaseLifecycle.releaseBeforeSubmit() is GPUPreparedNativeFrameLeaseTransition.Applied)
+            sampler.close()
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `destination copy validation refuses every forged consumer relation field before native action`() {
+        val scenarios: List<
+            Pair<String, (GPUDestinationSnapshotConsumerRef) -> GPUDestinationSnapshotConsumerRef>
+            > = listOf(
+            "grouping-command" to { consumer ->
+                consumer.copy(groupingCommandId = "forged-grouping-command")
+            },
+            "render-task" to { consumer ->
+                consumer.copy(renderTaskId = GPUTaskID("task.foreign"))
+            },
+            "packet" to { consumer ->
+                consumer.copy(packetId = GPUDrawPacketID("packet.foreign"))
+            },
+            "command" to { consumer ->
+                consumer.copy(commandId = GPUDrawCommandID(99))
+            },
+        )
+        scenarios.forEach { (label, forge) ->
+            val fixture = fixture(useRealPreflight = true, dstRead = true)
+            try {
+                val copyStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+                setPrivateField(
+                    copyStep,
+                    "consumers",
+                    listOf(forge(copyStep.consumers.single())),
+                )
+                fixture.native.events.clear()
+
+                val result = fixture.materializeCoreResult()
+                if (result is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+                    assertTrue(result.draft.disposeBeforeRegistration(), label)
+                }
+                val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+                assertEquals("invalid.native-core-primitive.destination-copy-consumer", refused.code, label)
+                assertEquals(emptyList(), fixture.native.events, label)
+            } finally {
+                fixture.close()
+            }
+        }
+    }
+
+    @Test
+    fun `destination copy readback requires exactly one staging preparation`() {
+        val scenarios: List<Pair<String, (Fixture) -> Unit>> = listOf(
+            "missing" to { fixture ->
+                val prepare = fixture.plan.steps
+                    .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                    .single()
+                setPrivateField(
+                    prepare,
+                    "requests",
+                    prepare.requests.filter { it.role != GPUFrameResourceRole.ReadbackStaging },
+                )
+            },
+            "duplicate" to { fixture ->
+                val prepare = fixture.plan.steps
+                    .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                    .single()
+                val staging = prepare.requests.single { it.role == GPUFrameResourceRole.ReadbackStaging }
+                setPrivateField(prepare, "requests", prepare.requests + staging)
+            },
+        )
+        scenarios.forEach { (label, mutate) ->
+            val fixture = fixture(
+                useRealPreflight = true,
+                multiRenderDstRead = true,
+                readback = true,
+            )
+            try {
+                mutate(fixture)
+                fixture.native.events.clear()
+                val result = fixture.materializeCoreResult()
+                if (result is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+                    assertTrue(result.draft.disposeBeforeRegistration(), label)
+                }
+                val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+                assertEquals("unsupported.native-core-primitive.readback-staging", refused.code, label)
+                assertEquals(emptyList(), fixture.native.events, label)
+            } finally {
+                fixture.close()
+            }
+        }
+    }
+
+    @Test
+    fun `destination copy validation refuses stale source key generation and interpretation`() {
+        val fixture = fixture(useRealPreflight = true, dstRead = true)
+        try {
+            val copyStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+            val sourceKey = copyStep.sourceKey
+            setPrivateField(
+                copyStep,
+                "sourceKey",
+                sourceKey.copy(targetGeneration = fixture.generationSeal.targetGeneration + 1L),
+            )
+            fixture.native.events.clear()
+            val staleGenerationResult = fixture.materializeCoreResult()
+            if (staleGenerationResult is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+                assertTrue(staleGenerationResult.draft.disposeBeforeRegistration())
+            }
+            val staleGeneration = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                staleGenerationResult,
+            )
+            assertEquals("invalid.native-core-primitive.destination-copy-source", staleGeneration.code)
+            assertEquals(emptyList(), fixture.native.events)
+
+            setPrivateField(
+                copyStep,
+                "sourceKey",
+                sourceKey.copy(
+                    colorInterpretation = if (
+                        sourceKey.colorInterpretation == GPUColorInterpretation.LinearPremul
+                    ) {
+                        GPUColorInterpretation.EncodedPremulSrgb
+                    } else {
+                        GPUColorInterpretation.LinearPremul
+                    },
+                ),
+            )
+            fixture.native.events.clear()
+            val staleInterpretationResult = fixture.materializeCoreResult()
+            if (staleInterpretationResult is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+                assertTrue(staleInterpretationResult.draft.disposeBeforeRegistration())
+            }
+            val staleInterpretation = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                staleInterpretationResult,
+            )
+            assertEquals("invalid.native-core-primitive.destination-copy-source", staleInterpretation.code)
+            assertEquals(emptyList(), fixture.native.events)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `destination copy validation refuses partial snapshot bounds before native action`() {
         val fixture = fixture(useRealPreflight = true, dstRead = true)
         val copyStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
@@ -1252,6 +1514,43 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertEquals(1, fixture.native.events.count {
             it == "createTexture:Kanvas.frame.corePrimitive.destinationSnapshot"
         })
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `batches independent destination-copy render authorities within two pooled leases`() {
+        val fixture = fixture(
+            destinationReadCommandIds = setOf(2, 3, 4),
+            useRealPreflight = true,
+        )
+        fixture.native.events.clear()
+
+        val result = fixture.materializeCoreResult()
+        val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+            result,
+            (result as? GPUPreparedNativeFramePayloadMaterialization.Refused)?.let {
+                "${it.code}: ${it.message}"
+            },
+        )
+        val scopes = materialized.draft.payload.scopeOperands
+
+        assertEquals(
+            listOf(
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.CopyDestination,
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.CopyDestination,
+                GPUEncoderOperationKind.Render,
+                GPUEncoderOperationKind.CopyDestination,
+                GPUEncoderOperationKind.Render,
+            ),
+            scopes.map { it.operationKind },
+        )
+        assertEquals(1, fixture.native.events.count {
+            it == "createTexture:Kanvas.frame.corePrimitive.destinationSnapshot"
+        })
+        assertEquals(2, framePoolSlotCount(fixture.cache))
         assertTrue(materialized.draft.disposeBeforeRegistration())
         fixture.close()
     }
@@ -4681,14 +4980,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         require(!multiRenderDstRead || sampleCount == 1)
         require(!multiRenderDstRead || !dstRead)
         require(!multiRenderDstRead || !analyticClip && !analyticIntersection && clipStencilPlan == null)
-        require(destinationReadCommandIds.isEmpty() || routeShape == RouteShape.Direct)
+        require(destinationReadCommandIds.isEmpty() || routeShape == RouteShape.Direct ||
+            routeShape == RouteShape.AnalyticShape)
         require(destinationReadCommandIds.isEmpty() || !dstRead && !multiRenderDstRead)
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities(sampleCount)
         val frameId = GPUFrameID(231L)
         val commandIds = when (routeShape) {
             RouteShape.Direct -> when {
-                destinationReadCommandIds.isNotEmpty() -> listOf(1, 2, 3)
+                destinationReadCommandIds.isNotEmpty() ->
+                    (1..maxOf(3, destinationReadCommandIds.maxOrNull() ?: 0)).toList()
                 multiRenderDstRead -> listOf(1, 2)
                 dstRead -> listOf(1)
                 else -> listOf(1, 2)

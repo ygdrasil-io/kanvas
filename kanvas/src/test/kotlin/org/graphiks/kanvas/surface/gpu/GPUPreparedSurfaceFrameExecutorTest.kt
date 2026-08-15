@@ -808,6 +808,42 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
+    fun `deduplicated destination snapshot evidence allows multiple copy consumers`() {
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val session = FakeSession(submissionFactory = { readbackId ->
+            successSubmission(readbackId, ByteArray(32 * 24 * 4))
+        })
+        val backend = FakeBackend(capabilities(), session)
+
+        val result = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        ).execute(executionRequest(operations, width = 32, height = 24))
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result)
+
+        assertEquals(1, success.evidence.destinationSnapshotCreations)
+        assertEquals(2, success.evidence.destinationCopies)
+        assertEquals(2, success.evidence.destinationReadEvidence.size)
+        assertEquals(2, success.evidence.destinationReadTextCommandIds.size)
+        assertEquals(1, success.evidence.destinationReadEvidence.map { it.snapshotLabel }.toSet().size)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
+        assertEquals(0, session.closeCalls)
+    }
+
+    @Test
     fun `failed completion without diagnostic and successful completion without output are canonical terminals`() {
         val missingDiagnostic = FakeSession(submissionFactory = { readbackId ->
             val attempt = GPUFrameAttemptID("attempt-missing-diagnostic")
@@ -1321,9 +1357,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
             renderPasses = completedFrames.toLong(),
             draws = completedFrames.toLong(),
             pipelineBinds = completedFrames.toLong(),
-            destinationSnapshotCreations = destinationReadCommandIds().size.toLong() * completedFrames,
+            destinationSnapshotCreations = destinationSnapshotResourceCount() * completedFrames,
             destinationCopies = destinationReadCommandIds().size.toLong() * completedFrames,
         )
+
+        private fun destinationSnapshotResourceCount(): Long = submittedTaskLists.lastOrNull()?.tasks
+            ?.filterIsInstance<GPUTask.DestinationSnapshots>()
+            ?.flatMap { task -> task.payload.operations }
+            ?.map { operation -> operation.snapshot }
+            ?.toSet()
+            ?.size
+            ?.toLong()
+            ?: 0L
 
         private fun destinationReadCommandIds(): Set<Int> =
             submittedTaskLists.lastOrNull()?.tasks

@@ -942,7 +942,10 @@ internal class GPUPreparedSurfaceFrameExecutor(
             )
             check(
                 evidence.destinationSnapshotCreations ==
-                    pending.destinationReadTextCommandIds.size.toLong(),
+                    pending.destinationReadEvidence
+                        .mapTo(linkedSetOf()) { route -> route.snapshotLabel }
+                        .size
+                        .toLong(),
             )
             check(
                 evidence.destinationCopies ==
