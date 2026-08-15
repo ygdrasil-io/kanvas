@@ -5911,7 +5911,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 auxiliaryOwnedHandles = snapshotHandlesByResource.values.flatMap {
                     it.payloadOwnedAuxiliaryHandles()
                 },
-                leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(leases),
+                leaseLifecycle = combineCorePrimitiveLeaseLifecycles(leases),
                 pathDepthStencilViewAuthority = readyPerPlan.flatMap {
                     it.pathDepthStencilViewAuthority.entries
                 }.associate { it.toPair() },
@@ -6741,7 +6741,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
-                leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(leases),
+                leaseLifecycle = combineCorePrimitiveLeaseLifecycles(leases),
                 pathDepthStencilViewAuthority = readyPerPlan.flatMap { it.pathDepthStencilViewAuthority.entries }
                     .associate { it.toPair() },
             )
@@ -7331,6 +7331,17 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
         const val RGBA_BYTES_PER_PIXEL = 4L
         const val WEBGPU_COPY_ROW_ALIGNMENT = 256L
+    }
+}
+
+private fun combineCorePrimitiveLeaseLifecycles(
+    lifecycles: List<GPUPreparedNativeFrameLeaseLifecycle>,
+): GPUPreparedNativeFrameLeaseLifecycle {
+    require(lifecycles.isNotEmpty())
+    return if (lifecycles.size == 1) {
+        lifecycles.single()
+    } else {
+        GPUPreparedNativeCompositeFrameLeaseLifecycle(lifecycles)
     }
 }
 

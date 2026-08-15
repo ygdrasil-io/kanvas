@@ -599,9 +599,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         // Every run is still bound to the shared target operand below; the prepared-surface
         // assembler redirects layer-target runs to their pooled attachments afterwards. The
         // legacy single-render routes never observe mixed targets.
-        val target = plans.first().target
-        if (plans.any { plan -> plan.target != target } ||
-            routes.zip(plans).any { (route, plan) ->
+        if (routes.zip(plans).any { (route, plan) ->
                 route.flattenedPacketIds != plan.packetIds
             } ||
             routes.flatMap { route -> route.flattenedPacketIds } != plans.flatMap { plan -> plan.packetIds }
