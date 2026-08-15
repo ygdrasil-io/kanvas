@@ -267,6 +267,7 @@ class ReconcileSkiaFidelityWave0Test(unittest.TestCase):
                 "nonClaims",
             },
         )
+        self.assertEqual(delta["kind"], "skia-fidelity-wave-0-delta")
         self.assertEqual(delta["policy"]["readinessDelta"], 0.0)
         self.assertIn("# Skia Fidelity Wave 0 Reconciliation", output_markdown.read_text(encoding="utf-8"))
         self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})

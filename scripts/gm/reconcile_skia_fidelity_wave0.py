@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 
 
 SCHEMA_VERSION = 1
-KIND = "skia-fidelity-wave0-reconciliation"
+KIND = "skia-fidelity-wave-0-delta"
 GENERATED_BY = "reconcile_skia_fidelity_wave0.py"
 SESSION_CLOSE_CODE = "failed.surface.prepared.session-close"
 EXPECTED_UNSUPPORTED_CODES = {
