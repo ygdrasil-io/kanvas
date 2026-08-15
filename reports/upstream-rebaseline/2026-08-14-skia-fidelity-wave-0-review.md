@@ -12,9 +12,15 @@ known-baselines: listed-individually
 
 - Worktree: `/tmp/opencode/kanvas-agentic-skia-fidelity-wave0`
 - Branch: `codex/agentic-skia-fidelity-wave0`
-- Reviewed source HEAD: `dce75d98bd8a3361dd077f48f2b99fc05fe0d071`
-- Reviewed range: `f2e68b895..dce75d98bd8a3361dd077f48f2b99fc05fe0d071`
-- All twelve commits in the range were inspected, including the Task 5 evidence-owner delta.
+- Reviewed source HEAD: `d46a86f8dbe817be5ea801fe5501b518b6e53ced`
+- Reviewed range: `f2e68b895..d46a86f8d`
+- The twelve prior commits and the two final-fix commits are covered by the reviewed reports, including the Task 5 evidence-owner delta.
+
+## Final-Fix Verification
+
+- The terminal-gate, diagnostic extraction, dashboard classification, provenance, and copy-alignment fixes were covered by the reported Python/Kotlin and reconciliation tests.
+- The targeted Skia and SVG JUnit evidence cited below remains the previously sealed Task 5 evidence and was not regenerated for these final fixes.
+- `status: approved` is preserved with that explicit evidence distinction.
 
 ## Final Targeted Evidence
 
