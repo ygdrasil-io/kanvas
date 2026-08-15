@@ -36,10 +36,15 @@ def _element_message(element):
 
 
 def _failure_code(message, element, outcome):
-    match = FAILURE_CODE_PATTERN.search(message or "")
-    if match:
-        return match.group(0)
-    exception_type = element.attrib.get("type", "")
+    candidates = [message or ""]
+    if element is not None:
+        candidates.extend(element.attrib.values())
+        candidates.extend(element.itertext())
+    for candidate in candidates:
+        match = FAILURE_CODE_PATTERN.search(candidate)
+        if match:
+            return match.group(0)
+    exception_type = element.attrib.get("type", "") if element is not None else ""
     if outcome == "skipped" and (
         "TestAbortedException" in exception_type or "TestAbortedException" in message
     ):
@@ -75,8 +80,10 @@ def _is_similarity_failure(message):
     ) or "below-threshold" in lowered
 
 
-def _classify_row(outcome, message, failure_code, failure_type):
-    expected_unsupported = failure_code in EXPECTED_UNSUPPORTED_CODES
+def _classify_row(
+    outcome, message, failure_code, failure_type, expected_unsupported_codes
+):
+    expected_unsupported = failure_code in expected_unsupported_codes
     missing_reference = _is_missing_reference(message)
     size_mismatch = _is_size_mismatch(message)
     similarity_failure = _is_similarity_failure(message)
@@ -122,7 +129,7 @@ def _classify_row(outcome, message, failure_code, failure_type):
     }
 
 
-def _parse_junit(path):
+def _parse_junit(path, expected_unsupported_codes):
     root = ET.parse(path).getroot()
     rows = []
     for testcase in root.iter():
@@ -165,7 +172,15 @@ def _parse_junit(path):
             "failureType": failure_type,
             "failureCode": code,
         }
-        row.update(_classify_row(outcome, message, code, failure_type))
+        row.update(
+            _classify_row(
+                outcome,
+                message,
+                code,
+                failure_type,
+                expected_unsupported_codes,
+            )
+        )
         rows.append(row)
 
     declared = {}
@@ -213,7 +228,7 @@ def _parse_junit(path):
 
 def parse_skia_runner(path: pathlib.Path) -> dict:
     """Parse the current or historical Skia GM JUnit XML."""
-    return _parse_junit(path)
+    return _parse_junit(path, ())
 
 
 def parse_dashboard(path: pathlib.Path) -> dict:
@@ -235,27 +250,106 @@ def parse_dashboard(path: pathlib.Path) -> dict:
 
 def parse_svg_results(path: pathlib.Path) -> dict:
     """Parse SVG integration JUnit XML using the same row policy as Skia."""
-    return _parse_junit(path)
+    return _parse_junit(path, EXPECTED_UNSUPPORTED_CODES)
+
+
+def _logical_property_lines(lines):
+    logical = ""
+    continued = False
+    for raw_line in lines:
+        line = raw_line.rstrip("\r")
+        if continued:
+            line = line.lstrip(" \t\f")
+        logical += line
+        trailing_backslashes = 0
+        for character in reversed(logical):
+            if character != "\\":
+                break
+            trailing_backslashes += 1
+        if trailing_backslashes % 2:
+            logical = logical[:-1]
+            continued = True
+        else:
+            yield logical
+            logical = ""
+            continued = False
+    if continued:
+        yield logical
+
+
+def _split_property(line):
+    line = line.lstrip(" \t\f")
+    if not line or line[0] in "#!":
+        return None
+    escaped = False
+    separator_index = None
+    separator = None
+    for index, character in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
+        if character in "=: \t\f":
+            separator_index = index
+            separator = character
+            break
+    if separator_index is None:
+        return line, ""
+    key = line[:separator_index]
+    value_index = separator_index
+    if separator in " \t\f":
+        while value_index < len(line) and line[value_index] in " \t\f":
+            value_index += 1
+        if value_index < len(line) and line[value_index] in "=:":
+            value_index += 1
+    else:
+        value_index += 1
+    while value_index < len(line) and line[value_index] in " \t\f":
+        value_index += 1
+    return key, line[value_index:]
+
+
+def _unescape_property(value):
+    result = []
+    index = 0
+    escapes = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
+    while index < len(value):
+        character = value[index]
+        if character != "\\" or index + 1 == len(value):
+            result.append(character)
+            index += 1
+            continue
+        escaped = value[index + 1]
+        if escaped == "u" and index + 5 < len(value):
+            digits = value[index + 2 : index + 6]
+            if re.fullmatch(r"[0-9A-Fa-f]{4}", digits):
+                result.append(chr(int(digits, 16)))
+                index += 6
+                continue
+        result.append(escapes.get(escaped, escaped))
+        index += 2
+    return "".join(result)
 
 
 def load_scores(path: pathlib.Path) -> dict[str, float]:
     """Load numeric score properties without changing the source file."""
     scores = {}
-    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("!"):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for line_number, line in enumerate(_logical_property_lines(lines), 1):
+        property_pair = _split_property(line)
+        if property_pair is None:
             continue
-        separator = re.search(r"[:=]", line)
-        if separator is None:
-            continue
-        key = line[: separator.start()].strip()
-        value = line[separator.end() :].strip()
+        key, value = property_pair
+        key = _unescape_property(key).strip()
+        value = _unescape_property(value).strip()
         if not key or not value:
             continue
         try:
             scores[key] = float(value)
         except ValueError as error:
-            raise ValueError("invalid score on line %s: %s" % (line_number, raw_line)) from error
+            raise ValueError("invalid score on line %s: %s" % (line_number, line)) from error
     return scores
 
 
@@ -522,6 +616,24 @@ def _sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _same_file(path, other):
+    if path.resolve() == other.resolve():
+        return True
+    try:
+        path_stat = path.stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    try:
+        other_stat = other.stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return path_stat.st_dev == other_stat.st_dev and path_stat.st_ino == other_stat.st_ino
+
+
 def _argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skia-runner", required=True, type=pathlib.Path, help="current SkiaGmRunner.xml")
@@ -560,14 +672,13 @@ def main(argv=None):
         "fp13": args.fp13_runner,
     }
     missing = [path for path in paths.values() if not path.is_file()]
-    output_paths = {args.output_json.resolve(), args.output_markdown.resolve()}
-    input_paths = {path.resolve() for path in paths.values()}
-    if output_paths & input_paths:
-        print("reconciliation failed: output path would overwrite an input")
-        return 2
     if args.output_json.resolve() == args.output_markdown.resolve():
         print("reconciliation failed: JSON and Markdown outputs must differ")
         return 2
+    for output in (args.output_json, args.output_markdown):
+        if any(_same_file(output, input_path) for input_path in paths.values()):
+            print("reconciliation failed: output path would overwrite an input")
+            return 2
     if missing:
         if args.check:
             print("reconciliation check failed: missing input: %s" % ", ".join(map(str, missing)))
