@@ -30604,7 +30604,7 @@
       "unexpectedFailures": 0
     }
   },
-  "kind": "skia-fidelity-wave0-reconciliation",
+  "kind": "skia-fidelity-wave-0-delta",
   "nonClaims": [
     "FP-13 is historical context only and is not an acceptance baseline.",
     "Skia, SVG, and CPU-oracle rows are separate evidence lanes.",
@@ -49903,5 +49903,5 @@
     ]
   },
   "schemaVersion": 1,
-  "sourceCommit": "959b17ad81b0a2bdd1cb587166dc7c6c9bb14db7"
+  "sourceCommit": "037d1fdd04419edd173837dac3522008e3c22373"
 }

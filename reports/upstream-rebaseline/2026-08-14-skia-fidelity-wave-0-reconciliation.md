@@ -1,8 +1,8 @@
 # Skia Fidelity Wave 0 Reconciliation
 
 - schemaVersion: `1`
-- kind: `skia-fidelity-wave0-reconciliation`
-- sourceCommit: `959b17ad81b0a2bdd1cb587166dc7c6c9bb14db7`
+- kind: `skia-fidelity-wave-0-delta`
+- sourceCommit: `037d1fdd04419edd173837dac3522008e3c22373`
 
 ## Policy
 
