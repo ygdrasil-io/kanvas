@@ -43,6 +43,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
@@ -66,6 +67,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerRenderPipelineStructuralKey
@@ -2873,6 +2875,84 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         assertFalse(taskList.dependencies.any { it.fromTaskId == render.taskId && it.toTaskId == render.taskId })
     }
 
+    @Test
+    fun `non overlapping destination reads share one physical core snapshot`() {
+        val destinationTargetBounds = GPUPixelBounds(0, 0, 512, 1024)
+        val destinationTargetFacts = GPUTargetFacts(512, 1024, "rgba8unorm")
+        val destinationBlend = GPUBlendFacts(
+            mode = GPUBlendMode.MULTIPLY,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+        )
+        val base = recording(
+            GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(100),
+                rect = GPURect(1f, 1f, 8f, 8f),
+                target = destinationTargetFacts,
+                material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+                blend = destinationBlend,
+                paintOrder = 0,
+                source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+            ),
+            GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(101),
+                rect = GPURect(1f, 1f, 8f, 8f),
+                target = destinationTargetFacts,
+                material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+                blend = destinationBlend,
+                paintOrder = 1,
+                source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+            ),
+        ).taskList.withClipPlans(
+            mapOf(100 to GPUClipExecutionPlan.NoClip, 101 to GPUClipExecutionPlan.NoClip),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val semantics = packets.associate { packet ->
+            packet.commandIdValue to semantic(packet, semanticTargetBounds = destinationTargetBounds)
+        }
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, semantics).copy(
+                target = GPUFrameTargetRef("target.core.destination.512x1024"),
+                targetBounds = destinationTargetBounds,
+                configuredAggregateBudgetBytes = 4_300_000L,
+            ),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            result,
+            (result as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val destinationSnapshotPreparations = taskList.tasks
+            .filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .filter { it.role == GPUFrameResourceRole.DestinationSnapshot }
+        val destinationSnapshotAllocations = taskList.memoryBudget.allocations
+            .filter { it.category == GPUFrameMemoryCategory.DestinationSnapshot }
+        val destinationCopies = taskList.tasks
+            .filterIsInstance<GPUTask.DestinationSnapshots>()
+            .flatMap { task -> task.payload.operations }
+            .filterIsInstance<GPUDestinationSnapshotOperation.TextureCopy>()
+        val snapshotRefs = destinationCopies.map { operation -> operation.snapshot }
+        val framePlan = GPUFramePlanner.plan(taskList)
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
+        assertEquals(1, destinationSnapshotPreparations.size)
+        assertEquals(1, destinationSnapshotAllocations.size)
+        assertEquals(2_097_152L, destinationSnapshotAllocations.single().bytes)
+        assertEquals(1, snapshotRefs.distinct().size)
+        assertEquals(listOf(0, 1), destinationCopies.map { operation -> operation.groupIndex })
+        assertEquals(
+            listOf("100", "101"),
+            destinationCopies.flatMap { operation ->
+                assertEquals(1, operation.consumers.size)
+                operation.consumers.map { consumer -> consumer.groupingCommandId }
+            },
+        )
+        assertEquals(2, framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().size)
+        assertFalse(framePlan.atomicallyRefused, framePlan.diagnostics.joinToString())
+    }
+
     private fun request(
         base: GPUTaskList,
         semantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
@@ -2895,6 +2975,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         geometry: GPUCorePrimitiveGeometryInput = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
         sourceFamily: GPUCorePrimitiveSourceFamily? = null,
+        semanticTargetBounds: GPUPixelBounds = targetBounds,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
@@ -2907,8 +2988,8 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 sourceFamily = resolvedSourceFamily,
                 geometry = geometry,
                 premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
-                targetBounds = targetBounds,
-                scissorBounds = targetBounds,
+                targetBounds = semanticTargetBounds,
+                scissorBounds = semanticTargetBounds,
                 clipCoveragePlan = requireNotNull(packet.clipCoveragePlan),
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = packet.frameProvenance,
