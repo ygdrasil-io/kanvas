@@ -3584,7 +3584,7 @@ internal class GPUFramePreflighter(
         if (!declaresDirectBoundary) return null
         val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
         val dstCopyConsumerPacketId = copySteps.singleOrNull()?.consumers?.singleOrNull()?.packetId
-        // A destination-reading core frame legitimately splits into two renders with
+        // A destination-reading core frame uses ordered-copy admission, with
         // the ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
         // pass runs after the copy in the same encoder). The shape is admitted when the ordered
         // CopyDestinationStep consumer resolves to one packet of the second core render, both core

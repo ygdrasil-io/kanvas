@@ -1054,6 +1054,28 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `destination snapshot uses copy row alignment independently of uniform alignment`() {
+        val fixture = fixture(
+            useRealPreflight = true,
+            dstRead = true,
+            copyBytesPerRowAlignment = 256L,
+            minUniformBufferOffsetAlignment = 512L,
+        )
+        val copy = fixture.plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+        assertEquals(256L, copy.copyLayout.bytesPerRow)
+
+        val materialized = fixture.materializeCore()
+
+        assertTrue(
+            materialized.draft.payload.scopeOperands.any {
+                it is GPUPreparedNativeScopeOperand.Copy
+            },
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
     fun `destination read frame reuses the pooled slot and rebinds the frame local snapshot per frame`() {
         val fixture = fixture(useRealPreflight = true, dstRead = true)
         fixture.native.events.clear()
@@ -5052,6 +5074,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         dstRead: Boolean = false,
         multiRenderDstRead: Boolean = false,
         destinationReadCommandIds: Set<Int> = emptySet(),
+        copyBytesPerRowAlignment: Long = 256L,
+        minUniformBufferOffsetAlignment: Long = 256L,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         require(!dstRead || routeShape == RouteShape.Direct)
@@ -5065,7 +5089,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             routeShape == RouteShape.AnalyticShape)
         require(destinationReadCommandIds.isEmpty() || !dstRead && !multiRenderDstRead)
         val generation = GPUDeviceGenerationID(23L)
-        val capabilities = capabilities(sampleCount, includeRRect = routeShape == RouteShape.AnalyticSplit)
+        val capabilities = capabilities(
+            sampleCount,
+            includeRRect = routeShape == RouteShape.AnalyticSplit,
+            copyBytesPerRowAlignment = copyBytesPerRowAlignment,
+            minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
+        )
         val frameId = GPUFrameID(231L)
         val commandIds = when (routeShape) {
             RouteShape.Direct -> when {
@@ -6001,7 +6030,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
     )
 
-    private fun capabilities(sampleCount: Int = 1, includeRRect: Boolean = false) = GPUCapabilities(
+    private fun capabilities(
+        sampleCount: Int = 1,
+        includeRRect: Boolean = false,
+        copyBytesPerRowAlignment: Long = 256L,
+        minUniformBufferOffsetAlignment: Long = 256L,
+    ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
         facts = listOf(
             GPUCapabilityFact("first_slice.fill_rect.native", "unit", "supported", true, "core"),
@@ -6014,8 +6048,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         snapshotId = if (includeRRect) "core-proxy-rrect" else "core-proxy",
         limits = GPULimits(
             8192,
-            256,
-            256,
+            copyBytesPerRowAlignment,
+            minUniformBufferOffsetAlignment,
             maxBufferSize = 1L shl 30,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import importlib.util
 import json
 import pathlib
@@ -89,6 +91,88 @@ class ReconcileSkiaFidelityWave0Test(unittest.TestCase):
             "unsupported.frame_memory.aggregate_budget_exceeded",
         )
         self.assertTrue(result["rows"][0]["terminal"])
+
+    def test_extracts_invalid_surface_and_stale_preflight_codes(self):
+        xml = """<testsuite tests="2" failures="1" errors="1" skipped="0">
+          <testcase name="surface-contract" classname="SkiaGmRunner">
+            <failure message="GPUPreparedSurfaceTerminalException: invalid.surface.prepared.frame-build-contract"/>
+          </testcase>
+          <testcase name="stale-resource" classname="SkiaGmRunner">
+            <error message="GPUPreparedSurfaceTerminalException: stale.preflight.resource_generation"/>
+          </testcase>
+        </testsuite>"""
+        result = reconcile.parse_skia_runner(self.write_xml(xml))
+        self.assertEqual(
+            [row["failureCode"] for row in result["rows"]],
+            [
+                "invalid.surface.prepared.frame-build-contract",
+                "stale.preflight.resource_generation",
+            ],
+        )
+
+    def test_main_check_rejects_terminal_failure_and_error_rows(self):
+        fixtures = self.write_cli_fixtures(
+            runner_xml=(
+                '<testsuite tests="2" failures="1" errors="1" skipped="0">'
+                '<testcase name="aggregate-budget" classname="SkiaGmRunner">'
+                '<failure message="unsupported.frame_memory.aggregate_budget_exceeded"/>'
+                '</testcase>'
+                '<testcase name="one-copy" classname="SkiaGmRunner">'
+                '<error type="GPUPreparedSurfaceTerminalException" '
+                'message="unsupported.native-core-primitive.destination-copy-shape"/>'
+                '</testcase></testsuite>'
+            )
+        )
+        output_json = self.root / "terminal" / "delta.json"
+        output_markdown = self.root / "terminal" / "delta.md"
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = reconcile.main(
+                self.cli_args(fixtures, output_json, output_markdown, check=True)
+            )
+        self.assertEqual(status, 1)
+        self.assertIn("unsupported.frame_memory.aggregate_budget_exceeded", output.getvalue())
+        self.assertIn("unsupported.native-core-primitive.destination-copy-shape", output.getvalue())
+
+    def test_classifies_dashboard_rows_from_actual_fields_in_a_separate_lane(self):
+        dashboard = {
+            "gms": [
+                {"name": "pass", "isPassing": True, "renderFailed": False},
+                {"name": "failure", "isPassing": False, "renderFailed": True},
+                {
+                    "name": "missing",
+                    "isPassing": None,
+                    "noReference": True,
+                    "noScoreCause": "reference-missing",
+                },
+                {
+                    "name": "size",
+                    "isPassing": None,
+                    "sizeMismatch": True,
+                    "noScoreCause": "size-mismatch",
+                },
+                {"name": "similarity", "isPassing": False, "similarity": 12.0},
+            ]
+        }
+        rows = reconcile._dashboard_entries(dashboard)
+        by_name = {row["name"]: row for row in rows}
+        self.assertEqual(
+            {name: row["classification"] for name, row in by_name.items()},
+            {
+                "pass": "pass",
+                "failure": "failure",
+                "missing": "missing-reference",
+                "size": "size-mismatch",
+                "similarity": "similarity-failure",
+            },
+        )
+        self.assertTrue(all(row["evidenceLane"] == "skia-dashboard" for row in rows))
+        delta = reconcile.build_delta(
+            {"dashboard": dashboard, "runner": {"rows": []}}, "abc123"
+        )
+        markdown = reconcile.render_markdown(delta)
+        self.assertIn("| `skia-dashboard` |", markdown)
+        self.assertIn("similarity-failure", markdown)
 
     def test_keeps_cpu_oracle_and_skia_rows_distinct(self):
         dashboard_path = self.write_json(
@@ -270,6 +354,11 @@ class ReconcileSkiaFidelityWave0Test(unittest.TestCase):
         self.assertEqual(delta["kind"], "skia-fidelity-wave-0-delta")
         self.assertEqual(delta["policy"]["readinessDelta"], 0.0)
         self.assertIn("# Skia Fidelity Wave 0 Reconciliation", output_markdown.read_text(encoding="utf-8"))
+        markdown = output_markdown.read_text(encoding="utf-8")
+        self.assertIn("## CLI Provenance", markdown)
+        self.assertIn("SHA-256", markdown)
+        self.assertIn("CLI-generated", markdown)
+        self.assertIn("evidence-owner", markdown)
         self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})
 
     def test_main_check_rejects_unclassified_current_error(self):

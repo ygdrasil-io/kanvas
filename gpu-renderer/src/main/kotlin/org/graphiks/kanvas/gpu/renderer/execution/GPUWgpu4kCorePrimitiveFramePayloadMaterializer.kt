@@ -7139,7 +7139,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 copy.sourceKey.sourceIntermediate != null ||
                 copy.copyLayout.rowsPerImage != targetBounds.height ||
                 copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
-                copy.copyLayout.bytesPerRow % limits.minUniformBufferOffsetAlignment != 0L
+                copy.copyLayout.bytesPerRow % limits.copyBytesPerRowAlignment != 0L
             ) {
                 return CorePrimitiveDestinationCopyValidation.Refused(
                     "invalid.native-core-primitive.destination-copy-source",
