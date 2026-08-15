@@ -3584,7 +3584,7 @@ internal class GPUFramePreflighter(
         if (!declaresDirectBoundary) return null
         val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
         val dstCopyConsumerPacketId = copySteps.singleOrNull()?.consumers?.singleOrNull()?.packetId
-        // A destination-reading core frame legitimately splits into two renders with
+        // A destination-reading core frame uses ordered-copy admission, with
         // the ordered snapshot copy between them (Graphite DrawContext.cpp recipe: the consuming
         // pass runs after the copy in the same encoder). The shape is admitted when the ordered
         // CopyDestinationStep consumer resolves to one packet of the second core render, both core
@@ -3598,6 +3598,16 @@ internal class GPUFramePreflighter(
             dstCopyConsumerPacketId != null &&
             coreRenders.any { render ->
                 render.drawPackets.any { packet -> packet.packetId == dstCopyConsumerPacketId }
+            }
+        val multiRenderDstReadShape = copySteps.isNotEmpty() &&
+            coreRenders.size > 1 &&
+            coreRenders.sumOf { render -> render.drawPackets.size } == accepted.size &&
+            coreRenders.map { it.target }.distinct().size == 1 &&
+            copySteps.all { copy ->
+                val consumerPacketId = copy.consumers.singleOrNull()?.packetId
+                consumerPacketId != null && coreRenders.any { render ->
+                    render.drawPackets.any { packet -> packet.packetId == consumerPacketId }
+                }
             }
         // The direct pass may split into N render passes when every render's
         // packets retain exactly one uniform layout (each split pass owns its slab). The
@@ -3617,7 +3627,7 @@ internal class GPUFramePreflighter(
                     it !in coreRenders && directUsesByRender.getValue(it).isNotEmpty()
                 })
         ) {
-            if (!twoRenderDstReadShape) {
+            if (!twoRenderDstReadShape && !multiRenderDstReadShape) {
                 return refuse("Direct CorePrimitive requires one all-direct render pass per uniform layout.")
             }
         }
@@ -4340,10 +4350,12 @@ internal class GPUFramePreflighter(
                 val stepStructuralKeys = stepAcceptedIndices.map { packetAuthorities[it].structuralPipelineKey }
                 val stepMultiKey = stepStructuralKeys.distinct().size > 1
                 val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
-                val stepAnalyticShapeSeals = if (analyticShapeSteps.size <= 1) {
-                    stepAuthority.analyticShapeSeals
-                } else {
-                    sliceAnalyticShapeUniformSealsToCommands(
+                val stepAnalyticShapeSeals = when {
+                    stepAuthority.layout !=
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                        emptyList()
+                    analyticShapeSteps.size <= 1 -> stepAuthority.analyticShapeSeals
+                    else -> sliceAnalyticShapeUniformSealsToCommands(
                         stepAuthority.analyticShapeSeals,
                         stepCommandIdsByIndex.getValue(stepIndex),
                         stepAcceptedIndices.associate { accepted[it].packet.commandIdValue to accepted[it].semantic },
@@ -4353,18 +4365,22 @@ internal class GPUFramePreflighter(
                 // analytic-clip split), each step's seals are rebased to a zero-based sliced slab
                 // so the per-render-scope run materializer binds exact offsets. A single-step
                 // frame retains its frame-level seals unchanged.
-                val stepAnalyticClipSeals = if (analyticClipSteps.size <= 1) {
-                    stepAuthority.analyticClipSeals
-                } else {
-                    sliceAnalyticClipUniformSealsToCommands(
+                val stepAnalyticClipSeals = when {
+                    stepAuthority.layout !=
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                        emptyList()
+                    analyticClipSteps.size <= 1 -> stepAuthority.analyticClipSeals
+                    else -> sliceAnalyticClipUniformSealsToCommands(
                         stepAuthority.analyticClipSeals,
                         stepCommandIdsByIndex.getValue(stepIndex),
                     )
                 }
-                val stepAnalyticIntersectionSeals = if (analyticIntersectionSteps.size <= 1) {
-                    stepAuthority.analyticIntersectionSeals
-                } else {
-                    sliceAnalyticIntersectionUniformSealsToCommands(
+                val stepAnalyticIntersectionSeals = when {
+                    stepAuthority.layout !=
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                        emptyList()
+                    analyticIntersectionSteps.size <= 1 -> stepAuthority.analyticIntersectionSeals
+                    else -> sliceAnalyticIntersectionUniformSealsToCommands(
                         stepAuthority.analyticIntersectionSeals,
                         stepCommandIdsByIndex.getValue(stepIndex),
                     )

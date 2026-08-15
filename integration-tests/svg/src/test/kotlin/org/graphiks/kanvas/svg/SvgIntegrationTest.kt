@@ -3,6 +3,7 @@ package org.graphiks.kanvas.svg
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.GpuAvailability
 import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -69,8 +70,19 @@ class SvgIntegrationTest {
                 "(threshold: ${comparison.minSimilarity}%)"
             }
         } catch (e: IllegalStateException) {
-            throw TestAbortedException("SVG feature not yet supported: ${e.message}", e)
+            val code = extractSvgErrorCode(e.message)
+            if (code != null && isExpectedUnsupportedSvgCode(code)) {
+                throw TestAbortedException("SVG feature not yet supported: ${e.message}", e)
+            }
+            throw e
         }
+    }
+
+    @Test
+    fun `SVG expected unsupported classification is limited to the explicit allowlist`() {
+        assertTrue(isExpectedUnsupportedSvgCode("unsupported.geometry.path_key_nondeterministic"))
+        assertFalse(isExpectedUnsupportedSvgCode("failed.surface.prepared.session-close"))
+        assertFalse(isExpectedUnsupportedSvgCode("unsupported.frame_memory.aggregate_budget_exceeded"))
     }
 
     @Test
@@ -174,3 +186,15 @@ class SvgIntegrationTest {
         testSvg("/by-render-family/layers/layer-1.svg", minSimilarity = 10.0, tolerance = 2)
     }
 }
+
+private val expectedUnsupportedCodes = setOf(
+    "unsupported.core_primitive.geometry.invalid",
+    "unsupported.material.linear_gradient_capability_missing",
+    "unsupported.geometry.path_key_nondeterministic",
+    "unsupported.core_primitive.stencil_edge_fan_budget",
+)
+
+private fun extractSvgErrorCode(message: String?): String? =
+    message?.substringBefore(':')?.trim()?.takeIf { it.isNotEmpty() }
+
+private fun isExpectedUnsupportedSvgCode(code: String): Boolean = code in expectedUnsupportedCodes

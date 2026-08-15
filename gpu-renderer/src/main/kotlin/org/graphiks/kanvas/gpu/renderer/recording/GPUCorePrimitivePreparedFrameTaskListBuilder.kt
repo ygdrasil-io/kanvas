@@ -2562,7 +2562,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val preparations = mutableListOf(
             corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
         )
-        destinationReadPlans.forEach { plan -> preparations += plan.preparation }
+        destinationReadPlans
+            .map(GPUCorePrimitiveDestinationSnapshotPlan::preparation)
+            .distinctBy { it.resource }
+            .forEach { preparation -> preparations += preparation }
         if (geometryVertex != null && geometryIndex != null) {
             preparations += corePrimitiveGeometryBufferPreparation(
                 geometryVertex,
@@ -2765,7 +2768,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         allocations += clipTopologies.flatMap(GPUCoreClipArtifactTopology::allocations)
-        allocations += destinationReadPlans.map(GPUCorePrimitiveDestinationSnapshotPlan::allocation)
+        allocations += destinationReadPlans
+            .distinctBy { it.snapshot }
+            .map(GPUCorePrimitiveDestinationSnapshotPlan::allocation)
         if (readbackPlan != null) {
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.readback",
@@ -4369,7 +4374,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     )
 }
 
-/** One prepared core-primitive destination snapshot: texture, byte accounting, and resource plans. */
+/** One ordered core-primitive destination snapshot plan and its physical resource facts. */
 private data class GPUCorePrimitiveDestinationSnapshotPlan(
     val groupIndex: Int,
     val packet: GPUDrawPacket,
@@ -4383,10 +4388,9 @@ private data class GPUCorePrimitiveDestinationSnapshotPlan(
 /**
  * Plans one GPU-owned TextureCopy snapshot per destination-reading core packet.
  *
- * The snapshot texture captures the scene target before the shader-with-destination formula
- * render consumes it; the grouping is planned by command and blend only (family-agnostic), so
- * the same [GPUDestinationSnapshotOperation.TextureCopy] machinery the ColorGlyph lane uses
- * serves the core-primitive lane unchanged.
+ * The ordered plans share one full-target snapshot resource; the grouping remains planned by
+ * command and blend only (family-agnostic), so the same [GPUDestinationSnapshotOperation.TextureCopy]
+ * machinery the ColorGlyph lane uses serves the core-primitive lane unchanged.
  */
 private fun buildCorePrimitiveDestinationSnapshotPlans(
     request: GPUCorePrimitivePreparedFrameRequest,
@@ -4406,6 +4410,9 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
         logicalBytesPerRow,
         request.targetBounds.height.toLong(),
     )
+    val snapshot = GPUFrameTextureRef(
+        "texture.core-primitive.destination-snapshot.${request.baseTaskList.frameId.value}",
+    )
     return packets.mapNotNull { packet ->
         if (packet.blendPlan?.destinationReadRequirement !=
             GPUBlendDestinationReadRequirement.DestinationTextureRequired
@@ -4414,10 +4421,6 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
         }
         packet
     }.mapIndexed { index, packet ->
-        val snapshot = GPUFrameTextureRef(
-            "texture.core-primitive.destination-snapshot." +
-                "${request.baseTaskList.frameId.value}.$index",
-        )
         GPUCorePrimitiveDestinationSnapshotPlan(
             groupIndex = index,
             packet = packet,

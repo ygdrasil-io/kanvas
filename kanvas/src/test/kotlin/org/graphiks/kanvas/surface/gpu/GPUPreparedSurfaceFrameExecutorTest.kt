@@ -334,6 +334,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
+    fun `backend open failure is a terminal diagnostic with the thrown failure class`() {
+        val failure = assertIs<GPUPreparedSurfaceExecutionResult.TerminalFailure>(
+            GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceBackendPortFactory { throw IllegalStateException("open failed") },
+            ).execute(request()),
+        )
+
+        assertEquals("failed.surface.prepared.backend-open", failure.diagnostic.code.value)
+        assertEquals(IllegalStateException::class.java.name, failure.diagnostic.facts["failureClass"])
+    }
+
+    @Test
     fun `destination-read prepared text blend refuses before native entry`() {
         val session = FakeSession()
         val backend = FakeBackend(capabilities(preparedText = true), session)
@@ -514,13 +526,14 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
-    fun `device generation transition closes the stale session before creating the new one`() {
+    fun `device generation transition invalidates the stale session without a second close`() {
         val backend = TransitionBackend(capabilities())
         val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory { backend })
 
         val first = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
             executor.execute(transitionRequest(16, 16)),
         )
+        backend.disposeSession()
         backend.deviceGeneration = GPUDeviceGenerationID(backend.deviceGeneration.value + 1)
         val transition = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
             executor.execute(transitionRequest(16, 16)),
@@ -533,10 +546,10 @@ class GPUPreparedSurfaceFrameExecutorTest {
             "the generation change creates exactly one new session",
         )
         assertEquals(
-            1L, transition.evidence.targetCloses,
-            "the stale session is closed exactly once",
+            0L, transition.evidence.targetCloses,
+            "the factory-disposed session is invalidated without an executor close",
         )
-        assertEquals(1, backend.createdSessions[0].closeCalls, "the stale-generation session is closed exactly once")
+        assertEquals(1, backend.createdSessions[0].closeCalls, "the stale-generation session is already disposed")
         assertEquals(0, backend.createdSessions[1].closeCalls)
         assertEquals(
             listOf(91L, 92L), backend.prepareGenerations,
@@ -594,15 +607,12 @@ class GPUPreparedSurfaceFrameExecutorTest {
             "the disposed backend reopens one fresh session",
         )
         assertEquals(
-            1L, reopened.evidence.targetCloses,
-            "the stale session is closed exactly once by the executor",
+            0L, reopened.evidence.targetCloses,
+            "the disposed session is invalidated without a second executor close",
         )
-        // The fake dispose closed the session, and the executor's stale-session close is
-        // idempotent over it, exactly like the native session state machine tolerates a
-        // factory-disposed session.
         assertEquals(
-            2, backend.createdSessions[0].closeCalls,
-            "the disposed session is closed again idempotently by the executor",
+            1, backend.createdSessions[0].closeCalls,
+            "the disposed session is not closed again by the executor",
         )
         assertEquals(0, backend.createdSessions[1].closeCalls, "the reopened session is checked in")
     }
@@ -802,6 +812,42 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(1, success.evidence.destinationSnapshotCreations)
         assertEquals(1, success.evidence.destinationCopies)
         assertEquals(0, success.evidence.destinationReadbackSnapshots)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
+        assertEquals(0, session.closeCalls)
+    }
+
+    @Test
+    fun `deduplicated destination snapshot evidence allows multiple copy consumers`() {
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val session = FakeSession(submissionFactory = { readbackId ->
+            successSubmission(readbackId, ByteArray(32 * 24 * 4))
+        })
+        val backend = FakeBackend(capabilities(), session)
+
+        val result = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        ).execute(executionRequest(operations, width = 32, height = 24))
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result)
+
+        assertEquals(1, success.evidence.destinationSnapshotCreations)
+        assertEquals(2, success.evidence.destinationCopies)
+        assertEquals(2, success.evidence.destinationReadEvidence.size)
+        assertEquals(2, success.evidence.destinationReadTextCommandIds.size)
+        assertEquals(1, success.evidence.destinationReadEvidence.map { it.snapshotLabel }.toSet().size)
         assertEquals(1, backend.prepareCalls)
         assertEquals(1, session.submitCalls)
         assertEquals(0, session.closeCalls)
@@ -1321,9 +1367,18 @@ class GPUPreparedSurfaceFrameExecutorTest {
             renderPasses = completedFrames.toLong(),
             draws = completedFrames.toLong(),
             pipelineBinds = completedFrames.toLong(),
-            destinationSnapshotCreations = destinationReadCommandIds().size.toLong() * completedFrames,
+            destinationSnapshotCreations = destinationSnapshotResourceCount() * completedFrames,
             destinationCopies = destinationReadCommandIds().size.toLong() * completedFrames,
         )
+
+        private fun destinationSnapshotResourceCount(): Long = submittedTaskLists.lastOrNull()?.tasks
+            ?.filterIsInstance<GPUTask.DestinationSnapshots>()
+            ?.flatMap { task -> task.payload.operations }
+            ?.map { operation -> operation.snapshot }
+            ?.toSet()
+            ?.size
+            ?.toLong()
+            ?: 0L
 
         private fun destinationReadCommandIds(): Set<Int> =
             submittedTaskLists.lastOrNull()?.tasks

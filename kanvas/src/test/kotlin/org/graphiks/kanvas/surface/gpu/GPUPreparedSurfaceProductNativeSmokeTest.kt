@@ -72,9 +72,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         // Prime the shared executor's cached session deterministically, independent of test
         // order: render one frame through the shared port, then dispose the runtime. The dispose
         // forces the next frame to open a fresh runtime with a new device generation, which the
-        // executor observes as a generation boundary: it closes the primed session and prepares
-        // a new one. The asserted frame below therefore always sees (targetCreations 1,
-        // targetCloses 1), whether or not a previous test in the class already rendered.
+        // executor observes as a generation boundary: it invalidates the primed session and
+        // prepares a new one. The asserted frame below therefore always sees (targetCreations 1,
+        // targetCloses 0), whether or not a previous test in the class already rendered.
         renderViaGpu(
             buffer = StaticDisplayListBuffer(listOf(rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED))),
             width = 4,
@@ -116,9 +116,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertPixel(result.pixels.toByteArray(), 32, 31, 31, listOf(0, 0, 0, 0))
 
         assertEquals(1L, evidence.targetCreations)
-        // The primed session from above is closed at the device-generation boundary created by
-        // the dispose, so this frame's evidence is the boundary (close+recreate), not a checkin.
-        assertEquals(1L, evidence.targetCloses)
+        // The primed session from above is already closed by dispose at the device-generation
+        // boundary, so this frame's evidence is invalidation+recreate, not a second close.
+        assertEquals(0L, evidence.targetCloses)
         assertEquals(1L, evidence.frameCoordinatorCreations)
         assertEquals(1L, evidence.encoders)
         assertEquals(1L, evidence.commandBuffers)

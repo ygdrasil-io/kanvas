@@ -326,8 +326,12 @@ internal class GPUPreparedSurfaceFrameExecutor(
         }
         val backend = try {
             backendFactory.open()
-        } catch (_: Throwable) {
-            null
+        } catch (failure: Throwable) {
+            return terminal(
+                "failed.surface.prepared.backend-open",
+                "The prepared Surface backend could not be opened.",
+                mapOf("failureClass" to failure.javaClass.name),
+            )
         } ?: return beforeRefusal(
             "unavailable.surface.prepared.backend",
             "The prepared Surface backend is unavailable.",
@@ -415,22 +419,30 @@ internal class GPUPreparedSurfaceFrameExecutor(
                         }
                         if (primary == null) {
                             if (key != cachedKey) {
-                                val oldSession = cachedSession
-                                if (oldSession != null) {
-                                    try {
-                                        oldSession.close()
-                                    } catch (failure: Throwable) {
-                                        val existingCode = primaryCode(primary)
-                                        primary = terminal(
-                                            "failed.surface.prepared.session-close",
-                                            "The prepared Surface session could not close cleanly.",
-                                            closeFacts(failure, existingCode),
-                                        )
-                                    }
-                                    sessionClosedByFrame = true
+                                val generationChanged = cachedKey?.deviceGeneration != null &&
+                                    cachedKey?.deviceGeneration != key.deviceGeneration
+                                if (generationChanged) {
                                     cachedSession = null
                                     cachedKey = null
                                     cachedTarget = null
+                                } else {
+                                    val oldSession = cachedSession
+                                    if (oldSession != null) {
+                                        try {
+                                            oldSession.close()
+                                        } catch (failure: Throwable) {
+                                            val existingCode = primaryCode(primary)
+                                            primary = terminal(
+                                                "failed.surface.prepared.session-close",
+                                                "The prepared Surface session could not close cleanly.",
+                                                closeFacts(failure, existingCode),
+                                            )
+                                        }
+                                        sessionClosedByFrame = true
+                                        cachedSession = null
+                                        cachedKey = null
+                                        cachedTarget = null
+                                    }
                                 }
                                 if (primary == null) {
                                     var prepared: GPUPreparedSurfaceSessionPort? = null
@@ -942,7 +954,10 @@ internal class GPUPreparedSurfaceFrameExecutor(
             )
             check(
                 evidence.destinationSnapshotCreations ==
-                    pending.destinationReadTextCommandIds.size.toLong(),
+                    pending.destinationReadEvidence
+                        .mapTo(linkedSetOf()) { route -> route.snapshotLabel }
+                        .size
+                        .toLong(),
             )
             check(
                 evidence.destinationCopies ==

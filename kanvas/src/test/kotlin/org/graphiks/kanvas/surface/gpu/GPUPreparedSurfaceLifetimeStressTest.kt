@@ -157,7 +157,7 @@ class GPUPreparedSurfaceLifetimeStressTest {
                 executor.execute(lifetimeRequest()),
             )
             assertEquals(1L, after.evidence.targetCreations, "a disposed backend reopens one fresh session")
-            assertEquals(1L, after.evidence.targetCloses, "the stale session is closed exactly once")
+            assertEquals(0L, after.evidence.targetCloses, "the disposed session is invalidated without a second close")
             val reused = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
                 executor.execute(lifetimeRequest()),
             )

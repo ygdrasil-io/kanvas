@@ -130,8 +130,20 @@ internal data class CorePrimitiveDestinationSnapshotHandles(
     val binding: GPUWgpu4kCorePrimitiveDstReadBinding,
 )
 
+private fun CorePrimitiveDestinationSnapshotHandles.payloadOwnedAuxiliaryHandles(): List<GPUPreparedNativeAuxiliaryHandle> {
+    val completionOwnership = GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+    return listOf(
+        GPUPreparedNativeAuxiliaryHandle(binding.view, completionOwnership),
+        GPUPreparedNativeAuxiliaryHandle(binding.sampler, completionOwnership),
+        GPUPreparedNativeAuxiliaryHandle(
+            GPUPreparedNativeCompletionAnchor(listOf(texture)),
+            completionOwnership,
+        ),
+    )
+}
+
 internal sealed interface CorePrimitiveDestinationCopyValidation {
-    data class Accepted(val authority: CorePrimitiveDestinationCopyAuthority?) :
+    data class Accepted(val authorities: List<CorePrimitiveDestinationCopyAuthority>) :
         CorePrimitiveDestinationCopyValidation
 
     data class Refused(
@@ -206,7 +218,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-        if (renderSteps.size == 2 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }) {
+        val hasPathStencilScope = renderSteps.any { render ->
+            render.drawPackets.any { packet ->
+                packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                    packet.role == GPUDrawPacketRole.PathStencilCover
+            }
+        }
+        val destinationCopyCount = framePlan.steps.count { it is GPUFrameStep.CopyDestinationStep }
+        if (renderSteps.size == 2 && destinationCopyCount > 0 &&
+            (hasPathStencilScope || destinationCopyCount == 1)
+        ) {
             // The admitted two-render dst-copy shape (producer render, ordered
             // snapshot copy, consuming render) materializes through the dedicated core dst-copy
             // lane: each pass acquires its own pooled run (per-pass pipeline and bind group,
@@ -219,11 +240,23 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 generationSeal,
             )
         }
-        if (renderSteps.size == 3 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }) {
+        if (renderSteps.size == 3 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep } &&
+            hasPathStencilScope
+        ) {
             // The continued path dst-read shape (background render, producer
             // render, ordered snapshot copy, cover render) materializes through a dedicated
             // lane that shares one frame-local path D24S8 across the producer and cover runs.
             return materializeContinuedPathDstReadCore(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+        }
+        if (renderSteps.size >= 2 && framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep } &&
+            !hasPathStencilScope
+        ) {
+            return materializeDirectMultiRenderDestinationCopySequenceCore(
                 framePlan,
                 encoderPlan,
                 resources,
@@ -709,13 +742,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
                 encoderPlan = encoderPlan,
-                renderStep = renderStep,
-                consumerPacketIds = semanticPackets.map { it.second.packetId }.toSet(),
+                renderSteps = listOf(renderStep),
                 targetBounds = targetBounds,
                 targetFormat = declaredTargetFormat,
+                targetGeneration = generationSeal.targetGeneration,
             )
         ) {
-            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities.singleOrNull()
             is CorePrimitiveDestinationCopyValidation.Refused ->
                 return refused(validation.code, validation.message)
         }
@@ -1379,6 +1412,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
+                auxiliaryOwnedHandles = dstReadSnapshot?.payloadOwnedAuxiliaryHandles().orEmpty(),
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
@@ -1617,13 +1651,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
                 encoderPlan = encoderPlan,
-                renderStep = renderStep,
-                consumerPacketIds = semanticPackets.map { it.second.packetId }.toSet(),
+                renderSteps = listOf(renderStep),
                 targetBounds = targetBounds,
                 targetFormat = declaredTargetFormat,
+                targetGeneration = generationSeal.targetGeneration,
             )
         ) {
-            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities.singleOrNull()
             is CorePrimitiveDestinationCopyValidation.Refused ->
                 return refused(validation.code, validation.message)
         }
@@ -2221,6 +2255,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
+                auxiliaryOwnedHandles = dstReadSnapshot?.payloadOwnedAuxiliaryHandles().orEmpty(),
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
@@ -5098,13 +5133,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
                 encoderPlan = encoderPlan,
-                renderStep = consumerStep,
-                consumerPacketIds = consumerStep.drawPackets.map { packet -> packet.packetId }.toSet(),
+                renderSteps = listOf(producerStep, consumerStep),
                 targetBounds = targetBounds,
                 targetFormat = declaredTargetFormat,
+                targetGeneration = generationSeal.targetGeneration,
             )
         ) {
-            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities.singleOrNull()
             is CorePrimitiveDestinationCopyValidation.Refused ->
                 return refused(validation.code, validation.message)
         } ?: return refused(
@@ -5118,11 +5153,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The optional direct dst-copy readback must match one output-owned staging lease.",
             )
         }
-        val stagingPreparation = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        val stagingPreparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-            .singleOrNull { request ->
-                request.role == GPUFrameResourceRole.ReadbackStaging
-            }
+            .filter { request -> request.role == GPUFrameResourceRole.ReadbackStaging }
+        if (stagingPreparations.size != if (readbackStep == null) 0 else 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-staging",
+                "The optional direct dst-copy readback must have exactly one staging preparation.",
+            )
+        }
+        val stagingPreparation = stagingPreparations.singleOrNull()
         if (readbackStep != null && stagingPreparation != null && output != null) {
             val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
             if (readbackStep.source != producerStep.target ||
@@ -5367,6 +5407,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                auxiliaryOwnedHandles = dstRead.payloadOwnedAuxiliaryHandles(),
                 leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(
                     listOf(producerReady.leaseLifecycle, consumerReady.leaseLifecycle),
                 ),
@@ -5403,6 +5444,507 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             refused(
                 "failed.native-core-primitive.multi-render-dst-copy-materialization",
                 "Public wgpu4k direct dst-copy CorePrimitive assembly failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        } finally {
+            runMaterializer.close()
+        }
+    }
+
+    /**
+     * Materializes a direct sequence of render/copy/render segments. Render plans are batched by
+     * destination snapshot resource so independent uniform authorities share one pooled run where
+     * their bind-group topology permits it; ordered copies share native snapshot handles by
+     * logical snapshot resource.
+     */
+    private fun materializeDirectMultiRenderDestinationCopySequenceCore(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (renderSteps.size < 2) {
+            return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The direct destination-copy sequence requires at least two render scopes.",
+            )
+        }
+        val copySteps = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        if (copySteps.isEmpty()) {
+            return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The direct destination-copy sequence requires at least one ordered snapshot copy.",
+            )
+        }
+        val readbackSteps = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val readbackStep = readbackSteps.singleOrNull()
+        if (readbackSteps.size > 1 || framePlan.steps.any { step ->
+                step is GPUFrameStep.CopyResourceStep ||
+                    step is GPUFrameStep.CopyAsDrawMaterializationStep
+            }
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.scope-shape",
+                "The direct destination-copy sequence accepts only render scopes, ordered copies, " +
+                    "and one optional readback.",
+            )
+        }
+
+        val target = renderSteps.first().target
+        val renderStepIndices = renderSteps.map(framePlan.steps::indexOf)
+        if (renderSteps.any { step ->
+                step.target != target ||
+                    step.depthStencilLoadStore != null ||
+                    step.drawPackets.isEmpty() ||
+                    step.drawPackets.any { packet -> packet.role != GPUDrawPacketRole.Shading }
+            }
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.dedicated-multi-pass-route",
+                "Path-stencil and other depth/stencil CorePrimitive scopes require their dedicated " +
+                    "native routes.",
+            )
+        }
+        val targetBounds = (renderSteps.first().drawPackets.first().semanticPayload
+            as? GPUDrawSemanticPayload.CorePrimitive)?.targetBounds ?: return refused(
+            "unsupported.native-core-primitive.semantic-payload",
+            "The direct destination-copy sequence requires typed CorePrimitive semantic payloads.",
+        )
+        if (renderSteps.any { render ->
+                render.drawPackets.any { packet ->
+                    (packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)?.targetBounds !=
+                        targetBounds
+                }
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.multi-render-shape",
+                "The direct destination-copy sequence must share one exact target bounds.",
+            )
+        }
+        val declaredTargetDescriptor =
+            framePlan.corePrimitiveSceneTargetDescriptor(target) ?: return refused(
+            "unsupported.native-core-primitive.target-contract",
+            "CorePrimitive requires one exact supported scene target.",
+        )
+        val declaredTargetFormat = declaredTargetDescriptor.format
+        if (declaredTargetFormat.corePrimitiveInterpretationOrNull() == null) {
+            return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact supported scene target.",
+            )
+        }
+
+        val authorities = when (
+            val validation = validateCorePrimitiveDestinationCopy(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                renderSteps = renderSteps,
+                targetBounds = targetBounds,
+                targetFormat = declaredTargetFormat,
+                targetGeneration = generationSeal.targetGeneration,
+            )
+        ) {
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities
+            is CorePrimitiveDestinationCopyValidation.Refused ->
+                return refused(validation.code, validation.message)
+        }
+        if (authorities.size != copySteps.size) {
+            return refused(
+                "invalid.native-core-primitive.destination-copy-shape",
+                "The direct destination-copy sequence must retain one authority per copy step.",
+            )
+        }
+        val authorityByConsumerRenderIndex = linkedMapOf<Int, CorePrimitiveDestinationCopyAuthority>()
+        authorities.forEach { authority ->
+            val consumer = authority.step.consumers.single()
+            val consumerRender = renderSteps.singleOrNull { render ->
+                render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+            } ?: return refused(
+                "invalid.native-core-primitive.destination-copy-consumer",
+                "The destination snapshot consumer must resolve to one exact render scope.",
+            )
+            val consumerIndex = framePlan.steps.indexOf(consumerRender)
+            if (authorityByConsumerRenderIndex.put(consumerIndex, authority) != null) {
+                return refused(
+                    "unsupported.native-core-primitive.destination-copy-shape",
+                    "A direct CorePrimitive render run cannot bind more than one destination snapshot.",
+                )
+            }
+            val copyIndex = framePlan.steps.indexOf(authority.step)
+            val producerIndex = renderStepIndices.lastOrNull { it < copyIndex }
+            if (producerIndex == null || producerIndex >= copyIndex || copyIndex >= consumerIndex) {
+                return refused(
+                    "invalid.native-core-primitive.multi-render-shape",
+                    "Each destination snapshot copy must occur between a producer render and its consumer.",
+                )
+            }
+        }
+        val readbackScope = readbackStep?.let { step ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Readback
+            } ?: return refused(
+                "unsupported.native-core-primitive.readback-plan",
+                "The direct destination-copy sequence readback scope is absent from the encoder plan.",
+            )
+        }
+        if (readbackStep != null && framePlan.steps.indexOf(readbackStep) <= renderStepIndices.last()) {
+            return refused(
+                "unsupported.native-core-primitive.scope-order",
+                "The optional direct destination-copy readback must follow the final render.",
+            )
+        }
+        val authorityByCopyStepIndex = authorities.associateBy { authority ->
+            framePlan.steps.indexOf(authority.step)
+        }
+        val renderScopeByStepIndex = renderStepIndices.associateWith { sourceStepIndex ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == sourceStepIndex &&
+                    it.operationKind == GPUEncoderOperationKind.Render
+            } ?: return refused(
+                "unsupported.native-core-primitive.render-plan",
+                "A direct destination-copy sequence render scope is absent from the encoder plan.",
+            )
+        }
+        val expectedScopes = framePlan.steps.mapIndexedNotNull { index, step ->
+            when (step) {
+                is GPUFrameStep.RenderPassStep -> renderScopeByStepIndex[index]
+                is GPUFrameStep.CopyDestinationStep -> authorityByCopyStepIndex[index]?.copyScope
+                is GPUFrameStep.ReadbackCopyStep -> readbackScope
+                is GPUFrameStep.PrepareResourcesStep,
+                is GPUFrameStep.DependencyBarrierStep,
+                is GPUFrameStep.TargetTransitionStep,
+                is GPUFrameStep.AcquireSurfaceOutput,
+                is GPUFrameStep.PostSubmitPresentAction,
+                -> null
+                else -> return refused(
+                    "unsupported.native-core-primitive.scope-shape",
+                    "The direct destination-copy sequence contains an unsupported frame step.",
+                )
+            }
+        }
+        if (encoderPlan.scopes != expectedScopes) {
+            return refused(
+                "unsupported.native-core-primitive.scope-order",
+                "The direct destination-copy sequence must preserve render/copy/readback step order.",
+            )
+        }
+
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+        if ((readbackStep == null) != (output == null) || resources.outputOwnedReadbacks.size > 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-output",
+                "The optional direct destination-copy readback must match one output-owned staging lease.",
+            )
+        }
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val preparationByResource = preparations.associateBy(GPUResourcePreparationRequest::resource)
+        val stagingPreparations = preparations.filter { request ->
+            request.role == GPUFrameResourceRole.ReadbackStaging
+        }
+        if (stagingPreparations.size != if (readbackStep == null) 0 else 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-staging",
+                "The optional direct destination-copy readback must have exactly one staging preparation.",
+            )
+        }
+        val stagingPreparation = stagingPreparations.singleOrNull()
+        if (readbackStep != null && stagingPreparation != null && output != null) {
+            val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            if (readbackStep.source != target ||
+                readbackStep.staging != stagingPreparation.resource ||
+                output.request != readbackStep.request ||
+                output.stagingResource != stagingPreparation.resource ||
+                output.request.sourceBounds != targetBounds ||
+                stagingDescriptor?.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.MapRead,
+                ) || stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                output.resourceGeneration != generationSeal.resourceGenerations[stagingPreparation.resource] ||
+                output.layout.width != targetBounds.width || output.layout.height != targetBounds.height ||
+                output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+                output.layout.paddedBytesPerRow % WEBGPU_COPY_ROW_ALIGNMENT != 0L ||
+                output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.readback-layout",
+                    "The direct destination-copy sequence RGBA8 readback layout is not exact.",
+                )
+            }
+        }
+        if (preparedSceneTarget.width != targetBounds.width ||
+            preparedSceneTarget.height != targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.prepared-target",
+                "The prepared scene target differs from the sealed direct destination-copy target.",
+            )
+        }
+
+        val snapshotResources = authorities.map { authority ->
+            authority.snapshotPreparation.resource
+        }.distinct()
+        val evidenceByResource = resources.ordinaryResources.associateBy(
+            GPUPreparedResourceEvidence::logicalResource,
+        )
+        val expectedOrdinaryResources = preparations
+            .filter { request -> request.role != GPUFrameResourceRole.ReadbackStaging }
+            .map(GPUResourcePreparationRequest::resource)
+            .toSet()
+        if (resources.ordinaryResources.size != expectedOrdinaryResources.size ||
+            resources.ordinaryResources.map(GPUPreparedResourceEvidence::logicalResource).toSet() !=
+                expectedOrdinaryResources ||
+            snapshotResources.any { resource ->
+                val preparation = preparationByResource[resource]
+                val evidence = evidenceByResource[resource]
+                preparation == null || evidence == null ||
+                    evidence.role != GPUFrameResourceRole.DestinationSnapshot ||
+                    evidence.deviceGeneration != generationSeal.deviceGeneration ||
+                    evidence.resourceGeneration != generationSeal.resourceGenerations[resource] ||
+                    evidence.concreteResource !is GPUPreparedConcreteResourceRef.Texture
+            }
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.prepared-resources",
+                "Direct destination-copy snapshots require exact prepared frame-local texture evidence.",
+            )
+        }
+        val runPlans = renderSteps.map { step ->
+            val sourceStepIndex = framePlan.steps.indexOf(step)
+            val scope = renderScopeByStepIndex.getValue(sourceStepIndex)
+            val unifiedRoute = scope.corePrimitiveNativeScopeRouteSeal as?
+                GPUCorePrimitiveNativeScopeRouteSeal.Routes ?: return refused(
+                "invalid.native-core-primitive.frame-global-plan",
+                "A direct destination-copy sequence scope lost its unified CorePrimitive route seal.",
+            )
+            try {
+                GPUCorePrimitiveRenderRunPlan(
+                    sourceScopeIndices = listOf(sourceStepIndex),
+                    packetIds = step.drawPackets.map { packet -> packet.packetId },
+                    renderStep = step,
+                    preparationRequests = step.resourceUses.map { use ->
+                        preparationByResource.getValue(use.resource)
+                    },
+                    resourceEvidences = step.resourceUses.map { use ->
+                        evidenceByResource.getValue(use.resource)
+                    },
+                    routeSeal = unifiedRoute,
+                    exactScopeKey = GPUPreparedNativeScopeKey(
+                        scope.sourceStepIndex,
+                        scope.operationKind,
+                        scope.resourceGenerationLabels,
+                        scope.nativeOperandKeys,
+                    ),
+                )
+            } catch (failure: Throwable) {
+                return refused(
+                    "invalid.native-core-primitive.frame-global-plan",
+                    "A direct destination-copy run cannot form its frame-global plan: " +
+                        "${failure::class.simpleName.orEmpty()}.",
+                )
+            }
+        }
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-core-primitive.materializer-state",
+                    "The CorePrimitive materializer closed after full preflight.",
+                )
+            }
+            materializing = true
+        }
+
+        var leases: List<GPUPreparedNativeFrameLeaseLifecycle> = emptyList()
+        var leaseTransferred = false
+        val runMaterializer = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+            queue,
+            sessionCache,
+            limits,
+        )
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val snapshotHandlesByResource = linkedMapOf<GPUFrameResourceRef, CorePrimitiveDestinationSnapshotHandles>()
+            authorities.forEach { authority ->
+                snapshotHandlesByResource.getOrPut(authority.snapshotPreparation.resource) {
+                    createCorePrimitiveDestinationSnapshot(
+                        authority,
+                        declaredTargetFormat,
+                        targetBounds,
+                    )
+                }
+            }
+            val readyPerPlan = mutableListOf<GPUCorePrimitiveRenderRunMaterialization.Ready>()
+            val runLifecycles = mutableListOf<GPUPreparedNativeFrameLeaseLifecycle>()
+            val runBatches = runPlans.groupBy { plan ->
+                authorityByConsumerRenderIndex[plan.sourceScopeIndices.single()]
+                    ?.snapshotPreparation
+                    ?.resource
+            }
+            runBatches.forEach { (snapshotResource, batchPlans) ->
+                val dstRead = snapshotResource?.let(snapshotHandlesByResource::getValue)
+                when (
+                    val result = runMaterializer.materializeAcceptedRuns(
+                        plans = batchPlans,
+                        targetTexture = targetTexture,
+                        targetView = targetView,
+                        generationSeal = generationSeal,
+                        dstRead = dstRead,
+                    )
+                ) {
+                    is GPUCorePrimitiveRenderRunMaterialization.Ready -> {
+                        readyPerPlan += result
+                        runLifecycles += result.leaseLifecycle
+                    }
+                    is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                        if (runLifecycles.any { lifecycle ->
+                                lifecycle.releaseBeforeSubmit() !is
+                                    GPUPreparedNativeFrameLeaseTransition.Applied
+                            }
+                        ) {
+                            runLifecycles.forEach { lifecycle -> lifecycle.quarantineUncertain() }
+                        }
+                        synchronized(this) {
+                            materializing = false
+                            preRegistrationHandles.closeRetainingFailures()
+                        }
+                        return refused(result.code, result.message)
+                    }
+                }
+            }
+            leases = runLifecycles
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.destinationCopySequence.readback",
+                    ),
+                ).tracked()
+            }
+            val readbackOperand = if (readbackScope != null && output != null && stagingBuffer != null) {
+                GPUPreparedNativeScopeOperand.Readback(
+                    sourceStepIndex = readbackScope.sourceStepIndex,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeBufferOperand(
+                        stagingBuffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                    ),
+                    layout = GPUPreparedNativeReadbackLayout(
+                        originX = output.request.sourceBounds.left,
+                        originY = output.request.sourceBounds.top,
+                        width = output.layout.width,
+                        height = output.layout.height,
+                        bytesPerRow = output.layout.paddedBytesPerRow,
+                        rowsPerImage = output.layout.rowsPerImage,
+                        bufferOffset = output.layout.bufferOffset,
+                        mappedSize = output.layout.totalBufferBytes,
+                        format = declaredTargetFormat.toCorePrimitiveGPUTextureFormat(),
+                    ),
+                )
+            } else {
+                null
+            }
+            val copyOperands = authorities.map { authority ->
+                val snapshot = snapshotHandlesByResource.getValue(authority.snapshotPreparation.resource)
+                GPUPreparedNativeScopeOperand.Copy(
+                    sourceStepIndex = authority.copyScope.sourceStepIndex,
+                    operationKind = GPUEncoderOperationKind.CopyDestination,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeTextureOperand(
+                        snapshot.texture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(
+                        sourceOriginX = authority.step.logicalBounds.left,
+                        sourceOriginY = authority.step.logicalBounds.top,
+                        destinationOriginX = 0,
+                        destinationOriginY = 0,
+                        width = authority.step.logicalBounds.width,
+                        height = authority.step.logicalBounds.height,
+                    ),
+                )
+            }
+            val operandsByStep = (
+                readyPerPlan.flatMap { ready -> ready.renderOperands } +
+                    copyOperands +
+                    listOfNotNull(readbackOperand)
+                ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val exactScopeKeys = encoderPlan.scopes.map { scope ->
+                GPUPreparedNativeScopeKey(
+                    scope.sourceStepIndex,
+                    scope.operationKind,
+                    scope.resourceGenerationLabels,
+                    scope.nativeOperandKeys,
+                )
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = framePlan.frameId,
+                    contextIdentity = encoderPlan.contextIdentity,
+                    encoderPlanId = encoderPlan.planId,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    scopes = exactScopeKeys,
+                ),
+                scopeOperands = exactScopeKeys.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                auxiliaryOwnedHandles = snapshotHandlesByResource.values.flatMap {
+                    it.payloadOwnedAuxiliaryHandles()
+                },
+                leaseLifecycle = combineCorePrimitiveLeaseLifecycles(leases),
+                pathDepthStencilViewAuthority = readyPerPlan.flatMap {
+                    it.pathDepthStencilViewAuthority.entries
+                }.associate { it.toPair() },
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) {
+                    "Native CorePrimitive materializer closed during destination-copy sequence materialization"
+                }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                leaseTransferred = true
+            }
+            result
+        } catch (failure: Throwable) {
+            if (!leaseTransferred) {
+                if (leases.any { lifecycle ->
+                        lifecycle.releaseBeforeSubmit() !is
+                            GPUPreparedNativeFrameLeaseTransition.Applied
+                    }
+                ) {
+                    leases.forEach { lifecycle -> lifecycle.quarantineUncertain() }
+                }
+            }
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-core-primitive.multi-render-destination-copy-sequence-materialization",
+                "Public wgpu4k direct destination-copy sequence assembly failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         } finally {
@@ -5532,13 +6074,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
                 encoderPlan = encoderPlan,
-                renderStep = coverStep,
-                consumerPacketIds = coverStep.drawPackets.map { packet -> packet.packetId }.toSet(),
+                renderSteps = listOf(backgroundStep, producerStep, coverStep),
                 targetBounds = targetBounds,
                 targetFormat = declaredTargetFormat,
+                targetGeneration = generationSeal.targetGeneration,
             )
         ) {
-            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities.singleOrNull()
             is CorePrimitiveDestinationCopyValidation.Refused ->
                 return refused(validation.code, validation.message)
         } ?: return refused(
@@ -5552,9 +6094,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The optional continued path dst-read readback must match one output-owned staging lease.",
             )
         }
-        val stagingPreparation = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        val stagingPreparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-            .singleOrNull { request -> request.role == GPUFrameResourceRole.ReadbackStaging }
+            .filter { request -> request.role == GPUFrameResourceRole.ReadbackStaging }
+        if (stagingPreparations.size != if (readbackStep == null) 0 else 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-staging",
+                "The optional continued path dst-read readback must have exactly one staging preparation.",
+            )
+        }
+        val stagingPreparation = stagingPreparations.singleOrNull()
         if (readbackStep != null && stagingPreparation != null && output != null) {
             val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
             if (readbackStep.source != producerStep.target ||
@@ -5847,6 +6396,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                auxiliaryOwnedHandles = dstRead.payloadOwnedAuxiliaryHandles(),
                 leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(
                     listOf(
                         backgroundReady.leaseLifecycle,
@@ -5896,9 +6446,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
 
     /**
      * Materializes the layout-split direct shape (N render passes, no ordered
-     * destination copy). Every pass acquires its own pooled run with its own uniform slab and
-     * per-pass pipeline, mirroring the per-render-scope recipe of the dst-copy lane; the
-     * render operands land in step order with one optional trailing readback.
+     * destination copy). Independent per-render uniform authorities are packed into one pooled
+     * run; the render operands land in step order with one optional trailing readback.
      */
     private fun materializeDirectMultiRenderSplitCore(
         framePlan: GPUFramePlan,
@@ -5974,11 +6523,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The optional layout-split readback must match one output-owned staging lease.",
             )
         }
-        val stagingPreparation = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        val stagingPreparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-            .singleOrNull { request ->
-                request.role == GPUFrameResourceRole.ReadbackStaging
-            }
+            .filter { request -> request.role == GPUFrameResourceRole.ReadbackStaging }
+        if (stagingPreparations.size != if (readbackStep == null) 0 else 1) {
+            return refused(
+                "unsupported.native-core-primitive.readback-staging",
+                "The optional layout-split readback must have exactly one staging preparation.",
+            )
+        }
+        val stagingPreparation = stagingPreparations.singleOrNull()
         if (readbackStep != null && stagingPreparation != null && output != null) {
             val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
             if (readbackStep.source != renderSteps.last().target ||
@@ -6137,40 +6691,28 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     null
                 }
-            // A mid-loop run refusal must release or quarantine every
-            // lease already materialized by the earlier runs and restore the materializer
-            // ledger state, mirroring the dst-copy lane's producer/consumer refusal cleanup
-            // (a plain `return` inside the loop would skip the catch and leak the pooled
-            // frame slots plus the pre-registration handles).
+            // A batch refusal is returned before ownership transfer so the outer catch can
+            // restore the materializer ledger and release any resources created for the batch.
             val readyPerPlan = mutableListOf<GPUCorePrimitiveRenderRunMaterialization.Ready>()
             val runLifecycles = mutableListOf<GPUPreparedNativeFrameLeaseLifecycle>()
-            runPlans.forEach { plan ->
-                when (
-                    val result = runMaterializer.materializeAcceptedRuns(
-                        plans = listOf(plan),
-                        targetTexture = targetTexture,
-                        targetView = targetView,
-                        generationSeal = generationSeal,
-                    )
-                ) {
-                    is GPUCorePrimitiveRenderRunMaterialization.Ready -> {
-                        readyPerPlan += result
-                        runLifecycles += result.leaseLifecycle
+            when (
+                val result = runMaterializer.materializeAcceptedRuns(
+                    plans = runPlans,
+                    targetTexture = targetTexture,
+                    targetView = targetView,
+                    generationSeal = generationSeal,
+                )
+            ) {
+                is GPUCorePrimitiveRenderRunMaterialization.Ready -> {
+                    readyPerPlan += result
+                    runLifecycles += result.leaseLifecycle
+                }
+                is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                    synchronized(this) {
+                        materializing = false
+                        preRegistrationHandles.closeRetainingFailures()
                     }
-                    is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
-                        if (runLifecycles.any { lifecycle ->
-                                lifecycle.releaseBeforeSubmit() !is
-                                    GPUPreparedNativeFrameLeaseTransition.Applied
-                            }
-                        ) {
-                            runLifecycles.forEach { lifecycle -> lifecycle.quarantineUncertain() }
-                        }
-                        synchronized(this) {
-                            materializing = false
-                            preRegistrationHandles.closeRetainingFailures()
-                        }
-                        return refused(result.code, result.message)
-                    }
+                    return refused(result.code, result.message)
                 }
             }
             leases = runLifecycles
@@ -6199,7 +6741,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
-                leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(leases),
+                leaseLifecycle = combineCorePrimitiveLeaseLifecycles(leases),
                 pathDepthStencilViewAuthority = readyPerPlan.flatMap { it.pathDepthStencilViewAuthority.entries }
                     .associate { it.toPair() },
             )
@@ -6291,13 +6833,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val validation = validateCorePrimitiveDestinationCopy(
                 framePlan = framePlan,
                 encoderPlan = encoderPlan,
-                renderStep = renderStep,
-                consumerPacketIds = renderStep.drawPackets.map { packet -> packet.packetId }.toSet(),
+                renderSteps = listOf(renderStep),
                 targetBounds = targetBounds,
                 targetFormat = targetFormat,
+                targetGeneration = generationSeal.targetGeneration,
             )
         ) {
-            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authority
+            is CorePrimitiveDestinationCopyValidation.Accepted -> validation.authorities.singleOrNull()
             is CorePrimitiveDestinationCopyValidation.Refused ->
                 return refused(validation.code, validation.message)
         }
@@ -6436,6 +6978,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(operandsByStep[scope.sourceStepIndex])
                 },
                 scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                auxiliaryOwnedHandles = dstRead?.payloadOwnedAuxiliaryHandles().orEmpty(),
                 leaseLifecycle = ready.leaseLifecycle,
                 pathDepthStencilViewAuthority = ready.pathDepthStencilViewAuthority,
             )
@@ -6484,87 +7027,38 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         refusedWgpu4kPreRegistrationMaterialization(code, message, preRegistrationHandles)
 
     /**
-     * Validates the optional ordered destination snapshot for a direct CorePrimitive scope
-     * (Graphite DrawContext.cpp: the GPU-only copy runs before the consuming pass in the same
-     * encoder). The snapshot texture must be one exact frame-local full-target copy whose single
-     * consumer is a destination-reading packet of this scope.
-     *
-     * The two-render dst-copy shape (destination pass, ordered snapshot copy, consuming pass)
-     * is materialized through `materializeDirectMultiRenderDstCopyCore`; this validation
-     * remains the authority for the single-render shape (the snapshot copy scheduled before its
-     * single render pass, capturing the frame's cleared target) and for the consuming pass of
-     * the two-render shape. The SolidRect destination-copy lane carries the background-then-
-     * consumer pixel oracle in `GPUWgpu4kDestinationCopyFrameSmokeTest`.
+     * Validates every ordered destination snapshot in frame-step order. Each copy retains one
+     * exact consumer render and one exact copy scope; callers decide whether the resulting
+     * authorities can be materialized by their route-specific run shape.
      */
     private fun validateCorePrimitiveDestinationCopy(
         framePlan: GPUFramePlan,
         encoderPlan: GPUCommandEncoderPlan,
-        renderStep: GPUFrameStep.RenderPassStep,
-        consumerPacketIds: Set<GPUDrawPacketID>,
+        renderSteps: List<GPUFrameStep.RenderPassStep>,
         targetBounds: GPUPixelBounds,
         targetFormat: GPUColorFormat,
+        targetGeneration: Long,
     ): CorePrimitiveDestinationCopyValidation {
         val copies = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
-        if (copies.size > 1) {
-            return CorePrimitiveDestinationCopyValidation.Refused(
-                "unsupported.native-core-primitive.destination-copy-shape",
-                "Direct CorePrimitive accepts at most one ordered destination snapshot copy.",
-            )
-        }
-        val copy = copies.singleOrNull()
-        if (copy == null) return CorePrimitiveDestinationCopyValidation.Accepted(null)
-        if (copy.source != renderStep.target || copy.logicalBounds != targetBounds) {
-            return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-source",
-                "The destination snapshot must copy the exact scene target bounds.",
-            )
-        }
-        val consumer = copy.consumers.singleOrNull()
-            ?: return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-consumer",
-                "The ordered destination snapshot requires one exact consumer.",
-            )
-        if (consumer.packetId !in consumerPacketIds) {
-            return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-consumer",
-                "The destination snapshot consumer must be one exact destination-reading packet of this scope.",
-            )
-        }
         val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-        val snapshotPreparation = preparations.singleOrNull { request ->
-            request.resource == copy.snapshot
-        } ?: return CorePrimitiveDestinationCopyValidation.Refused(
-            "invalid.native-core-primitive.destination-copy-resource",
-            "The destination snapshot has no exact frame preparation.",
-        )
-        val snapshotDescriptor = snapshotPreparation.descriptor as? GPUFrameTextureDescriptor
-        val expectedSnapshotBytes = try {
-            Math.multiplyExact(
-                Math.multiplyExact(targetBounds.width.toLong(), 4L),
-                targetBounds.height.toLong(),
-            )
-        } catch (_: ArithmeticException) {
+        if (copies.isEmpty()) return CorePrimitiveDestinationCopyValidation.Accepted(emptyList())
+        if (renderSteps.isEmpty()) {
             return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-resource",
-                "The destination snapshot byte accounting overflowed.",
+                "invalid.native-core-primitive.destination-copy-consumer",
+                "Destination snapshot consumers require one exact render scope.",
             )
         }
-        if (snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
-            snapshotDescriptor == null ||
-            snapshotDescriptor.logicalBounds != targetBounds ||
-            snapshotDescriptor.format != targetFormat ||
-            snapshotDescriptor.sampleCount != 1 ||
-            snapshotPreparation.usages != setOf(
-                GPUFrameResourceUsage.CopyDestination,
-                GPUFrameResourceUsage.TextureBinding,
-            ) || snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            snapshotPreparation.byteSize != expectedSnapshotBytes
-        ) {
-            return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-resource",
-                "The destination snapshot preparation is not one exact frame-local full-target texture.",
-            )
+        val renderByPacketId = linkedMapOf<GPUDrawPacketID, GPUFrameStep.RenderPassStep>()
+        renderSteps.forEach { render ->
+            render.drawPackets.forEach { packet ->
+                if (renderByPacketId.put(packet.packetId, render) != null) {
+                    return CorePrimitiveDestinationCopyValidation.Refused(
+                        "invalid.native-core-primitive.destination-copy-consumer",
+                        "Destination snapshot packet ownership must be unique across render scopes.",
+                    )
+                }
+            }
         }
         val minimumBytesPerRow = try {
             Math.multiplyExact(targetBounds.width.toLong(), 4L)
@@ -6574,41 +7068,134 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "The destination snapshot row accounting overflowed.",
             )
         }
-        if (copy.sourceKey.target.value != renderStep.target.value ||
-            copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
-            copy.sourceKey.format != targetFormat ||
-            copy.sourceKey.sampleContinuation != null ||
-            copy.sourceKey.sourceIntermediate != null ||
-            copy.copyLayout.rowsPerImage != targetBounds.height ||
-            copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
-            copy.copyLayout.bytesPerRow % limits.minUniformBufferOffsetAlignment != 0L
-        ) {
+        val expectedSnapshotBytes = try {
+            Math.multiplyExact(minimumBytesPerRow, targetBounds.height.toLong())
+        } catch (_: ArithmeticException) {
             return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-source",
-                "The destination snapshot copy layout or source authority is not exact.",
+                "invalid.native-core-primitive.destination-copy-resource",
+                "The destination snapshot byte accounting overflowed.",
             )
         }
-        val copyScope = encoderPlan.scopes.singleOrNull { scope ->
-            scope.sourceStepIndex == framePlan.steps.indexOf(copy) &&
-                scope.operationKind == GPUEncoderOperationKind.CopyDestination
-        } ?: return CorePrimitiveDestinationCopyValidation.Refused(
-            "invalid.native-core-primitive.destination-copy-plan",
-            "The destination snapshot copy scope is absent from the encoder plan.",
-        )
-        if (framePlan.steps.indexOf(copy) >= framePlan.steps.indexOf(renderStep)) {
-            return CorePrimitiveDestinationCopyValidation.Refused(
-                "invalid.native-core-primitive.destination-copy-order",
-                "The destination snapshot copy must run before its consuming render scope.",
+        val authorities = copies.map { copy ->
+            val consumer = copy.consumers.singleOrNull()
+                ?: return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-consumer",
+                    "The ordered destination snapshot requires one exact consumer.",
+                )
+            val consumerRender = renderByPacketId[consumer.packetId]
+                ?: return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-consumer",
+                    "The destination snapshot consumer must be one exact destination-reading packet of the supplied render scopes.",
+                )
+            val consumerPacket = consumerRender.drawPackets.singleOrNull { packet ->
+                packet.packetId == consumer.packetId
+            }
+            if (consumerPacket == null ||
+                consumer.groupingCommandId != consumerPacket.commandIdValue.toString() ||
+                consumer.renderTaskId !in consumerRender.sourceTaskIds ||
+                consumer.commandId.value != consumerPacket.commandIdValue
+            ) {
+                return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-consumer",
+                    "The destination snapshot consumer must exactly identify one destination-reading packet.",
+                )
+            }
+            if (copy.source != consumerRender.target || copy.logicalBounds != targetBounds) {
+                return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-source",
+                    "The destination snapshot must copy the exact scene target bounds.",
+                )
+            }
+            val snapshotPreparation = preparations.singleOrNull { request ->
+                request.resource == copy.snapshot
+            } ?: return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-resource",
+                "The destination snapshot has no exact frame preparation.",
             )
-        }
-        return CorePrimitiveDestinationCopyValidation.Accepted(
+            val snapshotDescriptor = snapshotPreparation.descriptor as? GPUFrameTextureDescriptor
+            if (snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+                snapshotDescriptor == null ||
+                snapshotDescriptor.logicalBounds != targetBounds ||
+                snapshotDescriptor.format != targetFormat ||
+                snapshotDescriptor.sampleCount != 1 ||
+                snapshotPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ) || snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                snapshotPreparation.byteSize != expectedSnapshotBytes
+            ) {
+                return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-resource",
+                    "The destination snapshot preparation is not one exact frame-local full-target texture.",
+                )
+            }
+            if (copy.sourceKey.target.value != consumerRender.target.value ||
+                (copy.sourceKey.targetGeneration != targetGeneration &&
+                    copy.sourceKey.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION) ||
+                copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
+                copy.sourceKey.format != targetFormat ||
+                copy.sourceKey.colorInterpretation != targetFormat.corePrimitiveInterpretationOrNull() ||
+                copy.sourceKey.sampleContinuation != null ||
+                copy.sourceKey.sourceIntermediate != null ||
+                copy.copyLayout.rowsPerImage != targetBounds.height ||
+                copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
+                copy.copyLayout.bytesPerRow % limits.copyBytesPerRowAlignment != 0L
+            ) {
+                return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-source",
+                    "The destination snapshot copy layout or source authority is not exact.",
+                )
+            }
+            val copyScope = encoderPlan.scopes.singleOrNull { scope ->
+                scope.sourceStepIndex == framePlan.steps.indexOf(copy) &&
+                    scope.operationKind == GPUEncoderOperationKind.CopyDestination
+            } ?: return CorePrimitiveDestinationCopyValidation.Refused(
+                "invalid.native-core-primitive.destination-copy-plan",
+                "The destination snapshot copy scope is absent from the encoder plan.",
+            )
+            if (framePlan.steps.indexOf(copy) >= framePlan.steps.indexOf(consumerRender)) {
+                return CorePrimitiveDestinationCopyValidation.Refused(
+                    "invalid.native-core-primitive.destination-copy-order",
+                    "The destination snapshot copy must run before its consuming render scope.",
+                )
+            }
             CorePrimitiveDestinationCopyAuthority(
                 copy,
                 snapshotPreparation,
                 snapshotDescriptor,
                 copyScope,
-            ),
-        )
+            )
+        }
+        val consumerRenderIndices = authorities.map { authority ->
+            val consumer = authority.step.consumers.single()
+            framePlan.steps.indexOf(renderByPacketId.getValue(consumer.packetId))
+        }
+        if (consumerRenderIndices.distinct().size != consumerRenderIndices.size) {
+            return CorePrimitiveDestinationCopyValidation.Refused(
+                "unsupported.native-core-primitive.destination-copy-shape",
+                "A direct CorePrimitive render run cannot bind more than one destination snapshot.",
+            )
+        }
+        val copyLifetimes = authorities.mapIndexed { index, authority ->
+            val copyIndex = framePlan.steps.indexOf(authority.step)
+            val consumerIndex = consumerRenderIndices[index]
+            Triple(authority.snapshotPreparation.resource, copyIndex, consumerIndex)
+        }
+        copyLifetimes.indices.forEach { leftIndex ->
+            ((leftIndex + 1) until copyLifetimes.size).forEach { rightIndex ->
+                val left = copyLifetimes[leftIndex]
+                val right = copyLifetimes[rightIndex]
+                if (left.first == right.first &&
+                    left.second < right.third && right.second < left.third
+                ) {
+                    return CorePrimitiveDestinationCopyValidation.Refused(
+                        "unsupported.native-core-primitive.destination-copy-shape",
+                        "Shared destination snapshot aliases must have non-overlapping consumer lifetimes.",
+                    )
+                }
+            }
+        }
+        return CorePrimitiveDestinationCopyValidation.Accepted(authorities)
     }
 
     private fun refusedPoolCheckout(
@@ -6744,6 +7331,17 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
         const val RGBA_BYTES_PER_PIXEL = 4L
         const val WEBGPU_COPY_ROW_ALIGNMENT = 256L
+    }
+}
+
+private fun combineCorePrimitiveLeaseLifecycles(
+    lifecycles: List<GPUPreparedNativeFrameLeaseLifecycle>,
+): GPUPreparedNativeFrameLeaseLifecycle {
+    require(lifecycles.isNotEmpty())
+    return if (lifecycles.size == 1) {
+        lifecycles.single()
+    } else {
+        GPUPreparedNativeCompositeFrameLeaseLifecycle(lifecycles)
     }
 }
 

@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.svg.SvgIntegrationTest" tests="17" skipped="12" failures="0" errors="0" timestamp="2026-08-15T14:49:05.905Z" hostname="b3-16-2026-08-13-16-13" time="3.991">
+  <properties/>
+  <testcase name="test complex-paths-2()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.848">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test complex-paths-2(SvgIntegrationTest.kt:109)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test complex-paths-3()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.1">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test complex-paths-3(SvgIntegrationTest.kt:115)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test geometric-1()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="1.91"/>
+  <testcase name="test geometric-2()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.146">
+    <skipped message="SVG feature not yet supported: unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test geometric-2(SvgIntegrationTest.kt:97)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test geometric-3()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.176"/>
+  <testcase name="SVG expected unsupported classification is limited to the explicit allowlist()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.002"/>
+  <testcase name="test texture-2()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.479"/>
+  <testcase name="test texture-3()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.207"/>
+  <testcase name="test ghostscript-tiger()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.043">
+    <skipped message="SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test ghostscript-tiger(SvgIntegrationTest.kt:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test laptop-computer()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.007">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test laptop-computer(SvgIntegrationTest.kt:141)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test shadow-2()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.01">
+    <skipped message="SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test shadow-2(SvgIntegrationTest.kt:173)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test shadow-3()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.007">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test shadow-3(SvgIntegrationTest.kt:179)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test layer-1()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.007">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test layer-1(SvgIntegrationTest.kt:186)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test gradient-1()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.015">
+    <skipped message="SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test gradient-1(SvgIntegrationTest.kt:155)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test gradient-2()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.013">
+    <skipped message="SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test gradient-2(SvgIntegrationTest.kt:161)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test gradient-3()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.009">
+    <skipped message="SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic" type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test gradient-3(SvgIntegrationTest.kt:167)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <testcase name="test icon-computer()" classname="org.graphiks.kanvas.svg.SvgIntegrationTest" time="0.005">
+    <skipped message="SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route." type="org.opentest4j.TestAbortedException">org.opentest4j.TestAbortedException: SVG feature not yet supported: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:75)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.test icon-computer(SvgIntegrationTest.kt:148)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+Caused by: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException: unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntry.render(GPUPreparedSurfaceProductEntry.kt:61)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu(GPURenderer.kt:18)
+	at org.graphiks.kanvas.surface.gpu.GPURendererKt.renderViaGpu$default(GPURenderer.kt:9)
+	at org.graphiks.kanvas.surface.Surface.render(Surface.kt:57)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderToRgba(SvgGpuRenderer.kt:21)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba(SvgGpuRenderer.kt:33)
+	at org.graphiks.kanvas.svg.SvgGpuRenderer.renderSvgContentToRgba$default(SvgGpuRenderer.kt:25)
+	at org.graphiks.kanvas.svg.SvgIntegrationTest.testSvg(SvgIntegrationTest.kt:34)
+	... 4 more
+</skipped>
+  </testcase>
+  <system-out><![CDATA[running on X11
+[PASS] /by-render-family/geometric/geometric-1.svg: similarity=92.67% (threshold: 50.0%), matching=444824/480000
+[PASS] /by-render-family/geometric/geometric-3.svg: similarity=77.42% (threshold: 30.0%), matching=371603/480000
+[PASS] /by-render-family/textures/texture-2.svg: similarity=10.24% (threshold: 5.0%), matching=49140/480000
+[PASS] /by-render-family/textures/texture-3.svg: similarity=1.49% (threshold: 1.0%), matching=7161/480000
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
