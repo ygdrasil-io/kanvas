@@ -90,12 +90,14 @@ def _is_similarity_failure(message):
     ) or "below-threshold" in lowered
 
 
-def _is_lifecycle_failure(message, failure_code):
+def _is_lifecycle_failure(message, failure_code, failure_type=""):
     lowered = message.lower()
+    lowered_type = str(failure_type or "").lower()
     return bool(
         failure_code == "failed.surface.prepared.session-close"
         or "session-close" in lowered
         or "lifecycle" in lowered
+        or "lifecycle" in lowered_type
         or "teardown" in lowered
         or "shutdown" in lowered
     )
@@ -117,7 +119,7 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
     missing_reference = _is_missing_reference(message)
     size_mismatch = _is_size_mismatch(message)
     similarity_failure = _is_similarity_failure(message)
-    lifecycle_failure = _is_lifecycle_failure(message, failure_code)
+    lifecycle_failure = _is_lifecycle_failure(message, failure_code, failure_type)
     terminal_refusal = _is_terminal_failure(message, failure_type, failure_code)
 
     if outcome == "skipped" and lifecycle_failure:
@@ -253,6 +255,9 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
     )
     counts["unclassifiedFailures"] = sum(
         row["classification"] == "unclassified" for row in rows
+    )
+    counts["aborted"] = sum(
+        row["failureCode"] == "TestAbortedException" for row in rows
     )
     counts["terminalFailures"] = sum(row["terminalRefusal"] for row in rows)
     counts["expectedUnsupported"] = sum(row["expectedUnsupported"] for row in rows)
@@ -445,6 +450,10 @@ def _load_json_input(path):
             value = json.loads(child.read_text(encoding="utf-8"))
             values.append(value)
             rows.extend(_json_rows(value))
+            if not _json_rows(value) and isinstance(value, dict) and any(
+                key in value for key in ("name", "gm", "id")
+            ):
+                rows.append(value)
         if rows:
             return {"rows": rows}
         if len(values) == 1:
@@ -485,7 +494,7 @@ def _dashboard_entries(dashboard):
 
 
 def _merge_junit_fields(dashboard_rows, runner_rows):
-    by_name = {str(row.get("name", "")): row for row in runner_rows}
+    by_key = {_entry_key(row): row for row in runner_rows}
     fields = (
         "outcome",
         "message",
@@ -502,17 +511,18 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "lifecycleFailure",
     )
     for row in dashboard_rows:
-        junit = by_name.get(str(row.get("name", "")))
+        junit = by_key.get(_entry_key(row))
         if junit is None:
             continue
+        row["junit"] = _copy_value(junit)
         for field in fields:
-            if field in junit:
+            if field in junit and field not in row:
                 row[field] = _copy_value(junit[field])
 
 
 def _dashboard_classification(row):
     cause = str(row.get("noScoreCause") or "").strip().lower()
-    if row.get("routeOnly"):
+    if row.get("routeOnly") or _normalized_name(_row_name(row)) == "route-only":
         return "route-only"
     if row.get("renderFailed"):
         return "failure"
@@ -520,21 +530,36 @@ def _dashboard_classification(row):
         return "missing-reference"
     if row.get("sizeMismatch") or cause in {"size-mismatch", "dimension-mismatch"}:
         return "size-mismatch"
+    if row.get("dimensions") is not None:
+        render_dimensions, reference_dimensions = _entry_dimensions(row)
+        if (
+            render_dimensions is None
+            or reference_dimensions is None
+            or render_dimensions != reference_dimensions
+        ):
+            return "size-mismatch"
     if row.get("referenceUntrustable") or cause == "reference-untrustable":
         return "expected-unsupported"
     if row.get("isPassing") is False:
         return "similarity-failure"
     if row.get("isPassing") is True:
         return "pass"
-    score = _numeric(row.get("score", row.get("similarity")))
-    if score is not None:
+    score = _finite_number(row.get("score", row.get("similarity")))
+    if score is not None and 0 <= score <= 100:
         return "pass" if score >= 95.0 else "similarity-failure"
+    if row.get("score", row.get("similarity")) is not None:
+        return "similarity-failure"
     return "no-score"
 
 
 def _oracle_entries(value, lane, reference_kind):
     rows = []
-    for entry in _json_rows(value):
+    entries = _json_rows(value)
+    if not entries and isinstance(value, dict) and any(
+        key in value for key in ("name", "gm", "id")
+    ):
+        entries = [value]
+    for entry in entries:
         if isinstance(entry, dict):
             row = dict(entry)
             row["name"] = str(row.get("name", row.get("gm", row.get("id", ""))))
@@ -542,7 +567,7 @@ def _oracle_entries(value, lane, reference_kind):
             row = {"name": str(entry)}
         row.setdefault("referenceKind", reference_kind)
         row["evidenceLane"] = lane
-        row.setdefault("routeOnly", row["name"].lower() == "route-only")
+        row.setdefault("routeOnly", _normalized_name(row["name"]) == "route-only")
         if "classification" not in row:
             row["classification"] = "route-only" if row["routeOnly"] else "pass"
         rows.append(row)
@@ -558,6 +583,7 @@ def _summary(value, row_key="rows"):
         "failures",
         "errors",
         "skips",
+        "aborted",
         "passed",
         "unexpectedFailures",
         "unclassifiedFailures",
@@ -593,11 +619,51 @@ def _finite_number(value):
     return number
 
 
-def _copy_value(value):
+def _is_pixel_score_key(key):
+    return re.sub(r"[^a-z0-9]", "", str(key).lower()) in {
+        "score",
+        "similarity",
+        "scorebefore",
+        "scoreafter",
+        "similaritybefore",
+        "similarityafter",
+        "beforescore",
+        "afterscore",
+        "beforesimilarity",
+        "aftersimilarity",
+        "modecolorfilters",
+        "modecolorfiltersbefore",
+        "modecolorfiltersafter",
+    }
+
+
+def _copy_value(value, score_context=False):
     if isinstance(value, dict):
-        return {key: _copy_value(item) for key, item in value.items()}
+        copied = {}
+        for key, item in value.items():
+            normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            item_is_score = _is_pixel_score_key(key) or (
+                score_context
+                and normalized in {"before", "after", "baseline", "previous", "current", "value"}
+            )
+            if item_is_score and item is not None:
+                number = _finite_number(item)
+                if number is None or not 0 <= number <= 100:
+                    copied[key] = None
+                    continue
+            child_score_context = score_context or normalized in {
+                "comparison",
+                "similarity",
+                "scores",
+                "scoresbefore",
+                "scoresafter",
+            }
+            copied[key] = _copy_value(item, child_score_context)
+        return copied
     if isinstance(value, list):
-        return [_copy_value(item) for item in value]
+        return [_copy_value(item, score_context) for item in value]
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
     return value
 
 
@@ -666,34 +732,52 @@ def _has_causal_evidence(row, evidence):
     )
 
 
-def _runner_side_effect_observed(commands, score_file):
-    for source in (score_file, commands):
+def _runner_side_effect_observed(*sources):
+    for source in sources:
         if not isinstance(source, dict):
             continue
         for key in ("runnerSideEffectObserved", "sideEffectObserved"):
             if isinstance(source.get(key), bool):
                 return source[key]
-    if isinstance(commands, dict) and _nonempty(commands.get("runner")):
+        nested = [item for item in source.values() if isinstance(item, (dict, list))]
+        for item in nested:
+            values = item if isinstance(item, list) else [item]
+            observed = _runner_side_effect_observed(*values)
+            if observed:
+                return True
+    return False
+
+
+def _policy_violation(value):
+    if value is True:
         return True
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "on"}:
+            return True
+    number = _finite_number(value)
+    return number is not None and number != 0
 
-    def contains_runner(value):
-        if isinstance(value, dict):
-            return any(
-                ("runner" in str(key).lower() and _nonempty(item))
-                or contains_runner(item)
-                for key, item in value.items()
-            )
-        if isinstance(value, list):
-            return any(contains_runner(item) for item in value)
-        return "runner" in value.lower() if isinstance(value, str) else False
 
-    return contains_runner(commands)
+def _check_policy(policy):
+    violations = []
+    if not isinstance(policy, dict):
+        return ["policy object is missing"]
+    for key, label in (
+        ("globalThresholdWeakened", "global threshold"),
+        ("assertionsWeakened", "assertions"),
+        ("referencesModified", "references"),
+        ("memoryBudgetChanged", "memory budget"),
+    ):
+        if _policy_violation(policy.get(key, False)):
+            violations.append("policy violation: %s changed" % label)
+    readiness = policy.get("readinessDelta", 0.0)
+    if _finite_number(readiness) is None or _finite_number(readiness) != 0:
+        violations.append("policy violation: readinessDelta is non-zero or invalid")
+    return violations
 
 
 def _generated_at(inputs):
-    supplied = inputs.get("generatedAt")
-    if supplied:
-        return supplied
     return (
         datetime.datetime.now(datetime.timezone.utc)
         .isoformat()
@@ -711,8 +795,33 @@ def _evidence_entries(value):
     return [dict(entry) for entry in entries if isinstance(entry, dict)]
 
 
+def _normalized_name(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+
+
+def _row_name(row):
+    if not isinstance(row, dict):
+        return ""
+    for key in ("name", "gm", "id"):
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            return value
+    return ""
+
+
+def _is_route_only(row):
+    return bool(
+        isinstance(row, dict)
+        and (
+            row.get("routeOnly") is True
+            or row.get("classification") == "route-only"
+            or _normalized_name(_row_name(row)) == "route-only"
+        )
+    )
+
+
 def _entry_key(row):
-    return str(row.get("name", "")), str(row.get("referenceKind", ""))
+    return _normalized_name(_row_name(row)), str(row.get("referenceKind", ""))
 
 
 def _evidence_for_row(row, entries):
@@ -894,8 +1003,10 @@ def _artifact_records(entry):
 
 
 def _has_complete_pixel_evidence(row, evidence):
-    complete = {key: False for key in ("reference", "cpu", "gpu", "diff", "stat", "route")}
-    for source in _evidence_sources(row, evidence):
+    complete = {
+        key: False for key in ("render", "reference", "cpu", "gpu", "diff", "stat", "route")
+    }
+    for source in _evidence_sources({}, evidence):
         for record in _artifact_records(source):
             if (
                 record["label"] in complete
@@ -911,7 +1022,8 @@ def _has_complete_pixel_evidence(row, evidence):
             ):
                 complete[record["label"]] = True
     return (
-        complete["reference"]
+        complete["render"]
+        and complete["reference"]
         and complete["cpu"]
         and complete["gpu"]
         and complete["diff"]
@@ -923,6 +1035,9 @@ def _has_complete_pixel_evidence(row, evidence):
 def _comparison_value(sources, keys):
     for source in sources:
         if not isinstance(source, dict):
+            number = _finite_number(source)
+            if number is not None:
+                return number
             continue
         for key in keys:
             value = _finite_number(source.get(key))
@@ -942,6 +1057,9 @@ def _similarity_improved(row, evidence):
             "beforeScore",
             "similarity_before",
             "score_before",
+            "before",
+            "baseline",
+            "previous",
         ),
     )
     after = _comparison_value(
@@ -953,23 +1071,42 @@ def _similarity_improved(row, evidence):
             "afterScore",
             "similarity_after",
             "score_after",
+            "after",
+            "current",
         ),
     )
     for source in sources:
-        comparison = source.get("comparison")
-        if not isinstance(comparison, dict):
-            continue
-        before = before if before is not None else _comparison_value(
-            [comparison.get("before", {})], ("similarity", "score", "value")
-        )
-        after = after if after is not None else _comparison_value(
-            [comparison.get("after", {})], ("similarity", "score", "value")
-        )
-    return before is not None and after is not None and after > before
+        for container_name in (
+            "comparison",
+            "similarity",
+            "scores",
+            "scoresBefore",
+            "scoresAfter",
+        ):
+            container = source.get(container_name)
+            if not isinstance(container, dict):
+                continue
+            before = before if before is not None else _comparison_value(
+                [container.get("before", container.get("baseline", container.get("previous")))],
+                ("similarity", "score", "value"),
+            )
+            after = after if after is not None else _comparison_value(
+                [container.get("after", container.get("current"))],
+                ("similarity", "score", "value"),
+            )
+    return (
+        before is not None
+        and after is not None
+        and 0 <= before <= 100
+        and 0 <= after <= 100
+        and after > before
+    )
 
 
 def _valid_comparable(row, evidence):
     if row.get("referenceKind") != "skia-upstream":
+        return False
+    if _is_route_only(row) or _is_route_only(evidence):
         return False
     if row.get("classification") in {
         "missing-reference",
@@ -984,10 +1121,10 @@ def _valid_comparable(row, evidence):
         "route-only",
     }:
         return False
-    if row.get("sizeMismatch") or row.get("noReference") or row.get("routeOnly"):
+    if row.get("sizeMismatch") or row.get("noReference"):
         return False
     score = _finite_number(row.get("score", row.get("similarity")))
-    if score is None:
+    if score is None or not 0 <= score <= 100:
         return False
     if evidence is None:
         return False
@@ -1019,18 +1156,8 @@ def _route_only_names(lanes):
     names = set()
     for rows in lanes:
         for row in rows:
-            name = str(row.get("name", ""))
-            if (
-                row.get("pixelImproved") is True
-                or row.get("supportedAfter") is True
-            ):
-                continue
-            if (
-                row.get("routeOnly")
-                or row.get("classification") == "route-only"
-                or name.lower() == "route-only"
-            ):
-                names.add(name)
+            if _is_route_only(row):
+                names.add(str(_row_name(row)))
     return names
 
 
@@ -1081,9 +1208,6 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     scores_after = inputs.get("scoresAfter", inputs.get("scores_after", {}))
     commands = inputs.get("commands", inputs.get("commandsJson", {}))
     environment = inputs.get("environment", inputs.get("environmentJson", {}))
-    policy_input = inputs.get("policy", {})
-    if not isinstance(policy_input, dict):
-        policy_input = {}
     score_file = inputs.get("scoreFile", {})
     if not isinstance(score_file, dict):
         score_file = {}
@@ -1094,7 +1218,9 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         row.setdefault("referenceKind", "skia-upstream")
         row.setdefault("evidenceLane", "skia-junit")
     _merge_junit_fields(dashboard_rows, runner_rows)
-    skia_rows = dashboard_rows or runner_rows
+    skia_rows = [
+        _copy_value(row) for row in (dashboard_rows or runner_rows)
+    ]
     if not dashboard_rows:
         for row in skia_rows:
             row.setdefault("referenceKind", "skia-upstream")
@@ -1107,6 +1233,11 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     cpu_oracle_rows = _oracle_entries(cpu, "cpuOracle", "cpu-oracle")
     evidence_value = inputs.get("evidenceIndexData", inputs.get("evidenceIndex", {}))
     evidence_rows = _evidence_entries(evidence_value)
+    policy_input = inputs.get("policy", {})
+    if isinstance(evidence_value, dict) and isinstance(evidence_value.get("policy"), dict):
+        policy_input = evidence_value["policy"]
+    if not isinstance(policy_input, dict):
+        policy_input = {}
 
     for row in skia_rows:
         evidence = _evidence_for_row(row, evidence_rows)
@@ -1115,6 +1246,14 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
             row["evidence"] = _copy_value(evidence)
             for key, value in evidence.items():
                 row.setdefault(key, _copy_value(value))
+            render_dimensions, reference_dimensions = _entry_dimensions(evidence)
+            if evidence.get("dimensions") is not None and (
+                render_dimensions is None
+                or reference_dimensions is None
+                or render_dimensions != reference_dimensions
+            ):
+                row["classification"] = "size-mismatch"
+                row["sizeMismatch"] = True
 
     comparable_rows = [
         row
@@ -1126,21 +1265,21 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         for row in skia_rows
         if row.get("referenceKind") == "skia-upstream"
         and _valid_comparable(row, _evidence_for_row(row, evidence_rows))
-        and _has_causal_evidence(row, _evidence_for_row(row, evidence_rows))
+        and _has_causal_evidence({}, _evidence_for_row(row, evidence_rows))
     ]
     supported_rows = []
     for row in comparable_rows:
         evidence = _evidence_for_row(row, evidence_rows) or {}
         pixel_improved = any(
             source.get("pixelImproved") is True or source.get("supportedAfter") is True
-            for source in _evidence_sources(row, evidence)
+            for source in _evidence_sources({}, evidence)
         )
         if (
             pixel_improved
-            and _similarity_improved(row, evidence)
-            and _has_causal_evidence(row, evidence)
-            and not row.get("routeOnly")
-            and not evidence.get("routeOnly")
+            and _similarity_improved({}, evidence)
+            and _has_causal_evidence({}, evidence)
+            and not _is_route_only(row)
+            and not _is_route_only(evidence)
             and _has_complete_pixel_evidence(row, evidence)
         ):
             supported_rows.append(row)
@@ -1193,13 +1332,18 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
 
     before_hash = score_file.get("beforeSha256")
     after_hash = score_file.get("afterSha256")
-    direct_edit = bool(score_file.get("directEditDetected", before_hash != after_hash))
-    integrity = bool(score_file.get("integrityPreserved", not direct_edit))
-    restored = bool(score_file.get("restored", before_hash == after_hash))
+    if before_hash is not None and after_hash is not None:
+        direct_edit = before_hash != after_hash
+        integrity = not direct_edit
+        restored = not direct_edit
+    else:
+        direct_edit = bool(score_file.get("directEditDetected", False))
+        integrity = bool(score_file.get("integrityPreserved", not direct_edit))
+        restored = bool(score_file.get("restored", not direct_edit))
     runner_side_effect = bool(
         score_file.get(
             "runnerSideEffectObserved",
-            _runner_side_effect_observed(commands, score_file),
+            _runner_side_effect_observed(score_file, environment, evidence_value),
         )
     )
     score_manifest = {
@@ -1313,7 +1457,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
             "wave0DirectlyComparable": False,
             "comparisonNote": "population-shifted",
         },
-        "policy": policy_manifest,
+        "policy": _copy_value(policy_manifest),
         "commands": _copy_value(commands),
         "environment": _copy_value(environment),
         "repository": environment.get("repository", environment.get("repo"))
@@ -1323,14 +1467,14 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         if isinstance(environment, dict)
         else None,
         "dashboard": dashboard_manifest,
-        "scoreFile": score_manifest,
-        "current": current,
+        "scoreFile": _copy_value(score_manifest),
+        "current": _copy_value(current),
         "rows": {
-            "skia": skia_rows,
-            "skiaJunit": runner_rows,
-            "svg": svg_rows,
-            "testOracle": test_oracle_rows,
-            "cpuOracle": cpu_oracle_rows,
+            "skia": _copy_value(skia_rows),
+            "skiaJunit": _copy_value(runner_rows),
+            "svg": _copy_value(svg_rows),
+            "testOracle": _copy_value(test_oracle_rows),
+            "cpuOracle": _copy_value(cpu_oracle_rows),
         },
         "observedComparableRows": observed_comparable,
         "candidateUnlockedRows": candidate_unlocked,
@@ -1536,7 +1680,7 @@ def _dashboard_output(directory, data_path):
         directory / "index.json",
     )
     for candidate in candidates:
-        if candidate.is_file():
+        if candidate.is_file() and not _same_file(candidate, data_path):
             return candidate
     for candidate in sorted(directory.rglob("*.json")):
         if not _same_file(candidate, data_path):
@@ -1629,11 +1773,20 @@ def _entry_has_required_evidence(entry):
 
 def _check_evidence_index(value, index_path=None, rows=None):
     violations = []
+    raw_entries = (
+        value.get("entries", value.get("rows", []))
+        if isinstance(value, dict)
+        else value
+    )
+    if not isinstance(raw_entries, list):
+        return ["evidence-index entries must be an array"]
     entries = _evidence_entries(value)
     if not entries:
         return ["evidence-index has zero entries"]
     rows = rows if isinstance(rows, list) else []
+    row_keys = {_entry_key(row) for row in rows if isinstance(row, dict)}
     seen_keys = set()
+    artifact_roles = {}
     for index, entry in enumerate(entries):
         key = _entry_key(entry)
         if key in seen_keys:
@@ -1641,6 +1794,11 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 "evidence-index contains duplicate key: %s/%s" % key
             )
         seen_keys.add(key)
+        if key not in row_keys:
+            violations.append(
+                "evidence-index entry %s is orphaned: %s/%s"
+                % (index, key[0], key[1])
+            )
         if not _entry_has_required_evidence(entry):
             violations.append(
                 "evidence-index entry %s is missing required paths, SHA-256 hashes, or dimensions"
@@ -1651,6 +1809,14 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 continue
             artifact_path = _resolve_evidence_path(record["path"], index_path)
             label = "%s.%s" % (entry.get("name", index), record["label"])
+            if artifact_path is not None:
+                artifact_key = str(artifact_path.resolve())
+                previous_label = artifact_roles.get(artifact_key)
+                if previous_label is not None and previous_label != record["label"]:
+                    violations.append(
+                        "evidence-index artifact path has duplicate roles: %s" % artifact_path
+                    )
+                artifact_roles[artifact_key] = record["label"]
             if artifact_path is None or not artifact_path.is_file():
                 violations.append("evidence-index artifact path is absent: %s" % label)
                 continue
@@ -1658,27 +1824,22 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 actual = _sha256_file(artifact_path)
                 if actual.lower() != record["sha256"].lower():
                     violations.append("evidence-index artifact hash mismatch: %s" % label)
-        matching_rows = [
-            row
-            for row in rows
-            if isinstance(row, dict)
-            and row.get("name") == entry.get("name")
-            and row.get("referenceKind", entry.get("referenceKind"))
-            == entry.get("referenceKind")
-        ]
+        matching_rows = [row for row in rows if isinstance(row, dict) and _entry_key(row) == key]
         for row in matching_rows:
-            sources = _evidence_sources(row, entry)
-            if any(source.get("candidateUnlocked") is True for source in sources) and not _has_causal_evidence(row, entry):
+            if entry.get("candidateUnlocked") is True and not _has_causal_evidence({}, entry):
                 violations.append(
                     "evidence-index entry %s is missing candidate causal evidence" % index
                 )
-            if any(
-                source.get("pixelImproved") is True or source.get("supportedAfter") is True
-                for source in sources
+            if (
+                entry.get("pixelImproved") is True
+                or entry.get("supportedAfter") is True
             ) and not _has_complete_pixel_evidence(row, entry):
                 violations.append(
                     "evidence-index entry %s is missing complete pixel evidence" % index
                 )
+    for index, raw_entry in enumerate(raw_entries):
+        if not isinstance(raw_entry, dict):
+            violations.append("evidence-index entry %s must be an object" % index)
     return violations
 
 
@@ -1740,7 +1901,13 @@ def _command_text(value):
 
 def _check_execution_contract(commands, environment):
     violations = []
-    if not isinstance(environment, dict) or environment.get("DISPLAY") != ":99":
+    display = None
+    if isinstance(environment, dict):
+        for key, value in environment.items():
+            if str(key).lower() == "display":
+                display = value
+                break
+    if display != ":99":
         violations.append("execution environment must preserve DISPLAY=:99")
     if not isinstance(environment, dict) or not _nonempty(environment.get("repository")):
         violations.append("execution environment is missing repository identity")
@@ -1750,14 +1917,26 @@ def _check_execution_contract(commands, environment):
     required_commands = ("skiaRunner", "svg", "cpu", "gpu", "dashboard")
     if not isinstance(commands, dict):
         return violations + ["execution commands must contain all five command entries"]
+    task_tokens = {
+        "skiaRunner": (":integration-tests:skia:test", "--tests"),
+        "svg": (":integration-tests:svg:test",),
+        "cpu": (":kanvas:test",),
+        "gpu": (":gpu-renderer:test",),
+        "dashboard": (":integration-tests:skia:generateSkiaDashboard",),
+    }
     for name in required_commands:
         command = _command_text(commands.get(name))
         if not command:
             violations.append("execution command is missing: %s" % name)
             continue
-        for flag in ("DISPLAY=:99", "-F off", "--no-daemon", "--no-parallel", "--console=plain"):
+        if not re.search(r"(?:DISPLAY|display)=:99(?:\s|$)", command):
+            violations.append("execution command %s is missing DISPLAY=:99" % name)
+        for flag in ("-F off", "--no-daemon", "--no-parallel", "--console=plain"):
             if flag not in command:
                 violations.append("execution command %s is missing %s" % (name, flag))
+        for token in task_tokens[name]:
+            if token not in command:
+                violations.append("execution command %s is missing task token %s" % (name, token))
         if name == "skiaRunner" and "-Dkanvas.gm.includeBlocking=true" not in command:
             violations.append("execution command skiaRunner is missing includeBlocking")
         if name == "dashboard" and "-Pgm.includeBlocking=true" not in command:
@@ -1772,9 +1951,56 @@ def _check_scores(scores_before, scores_after):
             violations.append("score %s properties are missing" % label)
             continue
         for key in SCORE_KEYS:
-            if key not in scores or _finite_number(scores.get(key)) is None:
+            number = _finite_number(scores.get(key)) if key in scores else None
+            if number is None or not 0 <= number <= 100:
                 violations.append("score %s is missing finite %s" % (label, key))
     return violations
+
+
+def _pixel_score_values(value, score_context=False):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if _is_pixel_score_key(key) or (
+                score_context
+                and normalized in {
+                    "before",
+                    "after",
+                    "baseline",
+                    "previous",
+                    "current",
+                    "value",
+                }
+            ):
+                yield str(key), item
+            child_score_context = score_context or normalized in {
+                "comparison",
+                "similarity",
+                "scores",
+                "scoresbefore",
+                "scoresafter",
+            }
+            yield from _pixel_score_values(item, child_score_context)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _pixel_score_values(item, score_context)
+
+
+def _check_pixel_score_range(value):
+    violations = []
+    for key, item in _pixel_score_values(value):
+        if item is None:
+            continue
+        number = _finite_number(item)
+        if number is None or not 0 <= number <= 100:
+            violations.append("similarity/score %s is outside the valid 0..100 range" % key)
+    return violations
+
+
+def _check_source_commit(source_commit):
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", str(source_commit)):
+        return ["sourceCommit must be a 40-hex commit"]
+    return []
 
 
 def _prepare_inputs(args, dashboard_output):
@@ -1842,7 +2068,9 @@ def _prepare_inputs(args, dashboard_output):
             != hashes["scoresAfter"]["sha256"],
             "integrityPreserved": hashes["scoresBefore"]["sha256"]
             == hashes["scoresAfter"]["sha256"],
-            "runnerSideEffectObserved": _runner_side_effect_observed(commands, {}),
+            "runnerSideEffectObserved": _runner_side_effect_observed(
+                environment, evidence_value
+            ),
             "restored": hashes["scoresBefore"]["sha256"]
             == hashes["scoresAfter"]["sha256"],
         },
@@ -1871,7 +2099,8 @@ def _write_outputs(manifest, output_json, output_markdown):
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_markdown.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
     )
     output_markdown.write_text(render_markdown(manifest), encoding="utf-8")
 
@@ -1879,6 +2108,9 @@ def _write_outputs(manifest, output_json, output_markdown):
 def main(argv=None):
     parser = _argument_parser()
     args = parser.parse_args(argv)
+    if args.status == "approved" and not args.check:
+        print("reconciliation rejected: --status approved requires --check")
+        return 2
     input_paths = _fatal_paths(args)
     violations = []
     missing = [
@@ -1947,6 +2179,12 @@ def main(argv=None):
         check_violations.extend(
             _check_execution_contract(inputs["commands"], inputs["environment"])
         )
+        check_violations.extend(_check_policy(manifest["policy"]))
+        check_violations.extend(_check_source_commit(args.source_commit))
+        check_violations.extend(
+            _check_pixel_score_range(inputs["evidenceIndexData"])
+        )
+        check_violations.extend(_check_pixel_score_range(inputs["dashboard"]))
         if args.status == "approved" and manifest["supportedRowsAfter"] == 0:
             check_violations.append(
                 "approved status requires at least one supported row with actual similarity improvement"
@@ -1955,7 +2193,7 @@ def main(argv=None):
             _check_evidence_index(
                 inputs["evidenceIndexData"],
                 args.evidence_index,
-                manifest["rows"]["skia"],
+                manifest["rows"]["skia"] + manifest["rows"]["skiaJunit"],
             )
         )
 
@@ -1965,7 +2203,7 @@ def main(argv=None):
             print("reconciliation check failed: %s" % "; ".join(check_violations))
             return 1
         _write_outputs(manifest, args.output_json, args.output_markdown)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         print("reconciliation failed: %s" % error)
         return 2
     return 0
