@@ -58,7 +58,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         return self.write_text(name, xml)
 
     @staticmethod
-    def testcase(name, body="", classname="SkiaGmRunner"):
+    def _testcase(name, body="", classname="SkiaGmRunner"):
         return '<testcase name="%s" classname="%s">%s</testcase>' % (
             name,
             classname,
@@ -86,7 +86,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         if skia_runner is None:
             skia_runner = self.write_runner(
                 "skia-runner.xml",
-                [self.testcase("pass"), self.testcase("route-only")],
+                [self._testcase("pass"), self._testcase("route-only")],
             )
         if dashboard_output is None:
             dashboard_output = {
@@ -155,7 +155,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
         svg_xml = self.write_runner(
             "svg-results.xml",
-            [self.testcase("pass", classname="SvgIntegrationTest")],
+            [self._testcase("pass", classname="SvgIntegrationTest")],
         )
         cpu_results = self.write_json("cpu-results.json", cpu_oracle)
         gpu_results = self.write_json("gpu-results.json", test_oracle)
@@ -394,27 +394,27 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         runner = self.write_runner(
             "classification-runner.xml",
             [
-                self.testcase(
+                self._testcase(
                     "missing-reference",
                     '<failure message="Reference PNG not found at /reference/missing.png"/>',
                 ),
-                self.testcase(
+                self._testcase(
                     "size-mismatch",
                     '<failure message="Buffer sizes differ: expected 64x64, got 32x32"/>',
                 ),
-                self.testcase(
+                self._testcase(
                     "similarity-failure",
                     '<failure message="similarity 25.0 below threshold 95.0"/>',
                 ),
-                self.testcase(
+                self._testcase(
                     "terminal-refusal",
                     '<error type="GPUPreparedSurfaceTerminalException" message="terminal refusal"/>',
                 ),
-                self.testcase(
+                self._testcase(
                     "unclassified-error",
                     '<error message="unexpected renderer error"/>',
                 ),
-                self.testcase(
+                self._testcase(
                     "aborted-blocking",
                     '<skipped message="GM is BLOCKING" type="org.opentest4j.TestAbortedException"/>',
                 ),
@@ -456,7 +456,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         runner = self.write_runner(
             "escalation-runner.xml",
             [
-                self.testcase(
+                self._testcase(
                     "failure-%s" % index,
                     '<error message="unsupported.route.%s"/>' % index,
                 )
@@ -534,7 +534,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
     def test_check_rejects_unclassified_runner_error(self):
         runner = self.write_runner(
             "unclassified-runner.xml",
-            [self.testcase("unknown", '<error message="unclassified renderer error"/>')],
+            [self._testcase("unknown", '<error message="unclassified renderer error"/>')],
         )
         fixtures = self.write_cli_fixtures(
             skia_runner=runner,
