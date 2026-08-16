@@ -479,13 +479,15 @@ def _dashboard_entries(dashboard):
             name = entry
         row["name"] = str(name)
         if not row.get("referenceKind"):
-            row["referenceKind"] = (
-                "skia-upstream"
-                if row.get("reference")
-                or row.get("referencePath")
-                or row.get("referenceImage")
-                else "unknown"
-            )
+            row["referenceKind"] = "skia-upstream"
+        if row.get("dimensions") is None:
+            render_dimensions, reference_dimensions = _entry_dimensions(row)
+            if render_dimensions is not None and render_dimensions == reference_dimensions:
+                width, height = render_dimensions
+                row["dimensions"] = {
+                    "render": {"width": width, "height": height},
+                    "reference": {"width": width, "height": height},
+                }
         row["evidenceLane"] = "skia-dashboard"
         row.setdefault("routeOnly", False)
         row["classification"] = _dashboard_classification(row)
@@ -494,7 +496,9 @@ def _dashboard_entries(dashboard):
 
 
 def _merge_junit_fields(dashboard_rows, runner_rows):
-    by_key = {_lane_key(row): row for row in runner_rows}
+    by_key = {}
+    for row in runner_rows:
+        by_key.setdefault(_lane_key(row), []).append(row)
     fields = (
         "outcome",
         "message",
@@ -511,9 +515,12 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "lifecycleFailure",
     )
     for row in dashboard_rows:
-        junit = by_key.get(_lane_key(row))
-        if junit is None:
+        matches = by_key.get(_lane_key(row), [])
+        if len(matches) != 1:
+            if len(matches) > 1:
+                row["junitAmbiguous"] = True
             continue
+        junit = matches[0]
         row["junit"] = _copy_value(junit)
         for field in fields:
             if field in junit and field not in row:
@@ -521,6 +528,8 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
 
 
 def _junit_is_pass(row):
+    if row.get("junitAmbiguous"):
+        return False
     junit = row.get("junit") if isinstance(row, dict) else None
     if junit is None:
         return True
@@ -530,6 +539,11 @@ def _junit_is_pass(row):
 def _junit_approval_violations(rows):
     violations = []
     for row in rows:
+        if row.get("junitAmbiguous"):
+            violations.append(
+                "ambiguous JUnit identity blocks approval for %s" % row.get("name", "")
+            )
+            continue
         junit = row.get("junit") if isinstance(row, dict) else None
         if not isinstance(junit, dict) or junit.get("outcome") == "passed":
             continue
@@ -898,37 +912,60 @@ def _is_route_only(row):
 
 
 def _entry_key(row):
+    metadata = _identity_metadata(row)
+    return _lane_key(row) + (metadata,)
+
+
+def _identity_metadata(row):
     metadata = []
+    sources = [row] if isinstance(row, dict) else []
+    for key in ("source", "sourceMetadata", "metadata"):
+        nested = row.get(key) if isinstance(row, dict) else None
+        if isinstance(nested, dict):
+            sources.append(nested)
     for label, keys in (
         ("class", ("class", "className", "sourceClass")),
         (
             "sourceRegistration",
-            ("sourceRegistration", "registration", "sourceRegistrationId"),
+            ("sourceRegistration", "registration", "sourceRegistrationId", "source"),
         ),
     ):
         value = next(
             (
-                row.get(key)
+                source.get(key)
+                for source in sources
                 for key in keys
-                if isinstance(row, dict) and _nonempty(row.get(key))
+                if _nonempty(source.get(key))
             ),
             None,
         )
         if value is not None:
             metadata.append((label, str(value)))
-    return str(_row_name(row)), str(row.get("referenceKind", "")), tuple(metadata)
+    return tuple(metadata)
 
 
 def _lane_key(row):
     return str(_row_name(row)), str(row.get("referenceKind", ""))
 
 
+def _identity_matches(left, right):
+    if _lane_key(left) != _lane_key(right):
+        return False
+    left_metadata = dict(_identity_metadata(left))
+    right_metadata = dict(_identity_metadata(right))
+    return all(
+        left_metadata[key] == right_metadata[key]
+        for key in left_metadata.keys() & right_metadata.keys()
+    )
+
+
+def _matching_evidence(row, entries):
+    return [entry for entry in entries if _identity_matches(row, entry)]
+
+
 def _evidence_for_row(row, entries):
-    key = _entry_key(row)
-    for entry in entries:
-        if _entry_key(entry) == key:
-            return entry
-    return None
+    matches = _matching_evidence(row, entries)
+    return matches[0] if len(matches) == 1 else None
 
 
 def _dimension_pair(value):
@@ -961,20 +998,30 @@ def _has_valid_dimensions(value):
 def _entry_dimensions(entry):
     if not isinstance(entry, dict):
         return None, None
+
+    render_candidates = []
+    reference_candidates = []
+    dimensions_present = "dimensions" in entry and entry.get("dimensions") is not None
     dimensions = entry.get("dimensions")
     if isinstance(dimensions, dict):
         render = _dimension_pair(dimensions.get("render", dimensions.get("generated")))
         reference = _dimension_pair(dimensions.get("reference", dimensions.get("ref")))
-        if render or reference:
-            return render, reference
+        if render is not None:
+            render_candidates.append(render)
+        if reference is not None:
+            reference_candidates.append(reference)
         pair = _dimension_pair(dimensions)
         if pair:
-            return pair, pair
-        return None, None
+            render_candidates.append(pair)
+            reference_candidates.append(pair)
+        elif render is None and reference is None:
+            return None, None
     render = _dimension_pair(entry.get("renderDimensions", entry.get("generatedDimensions")))
     reference = _dimension_pair(entry.get("referenceDimensions"))
-    if render or reference:
-        return render, reference
+    if render is not None:
+        render_candidates.append(render)
+    if reference is not None:
+        reference_candidates.append(reference)
     width = _finite_number(entry.get("width", entry.get("renderWidth")))
     height = _finite_number(entry.get("height", entry.get("renderHeight")))
     if width is not None and height is not None:
@@ -985,17 +1032,40 @@ def _entry_dimensions(entry):
             reference = _dimension_pair(
                 {"width": reference_width, "height": reference_height}
             )
-            if render or reference:
-                return render, reference
+            if render is not None:
+                render_candidates.append(render)
+            if reference is not None:
+                reference_candidates.append(reference)
     records = _artifact_records(entry)
-    render = next(
-        (record["dimensions"] for record in records if record["label"] == "render"),
-        None,
+    if any(
+        record.get("dimensionsInvalid")
+        for record in records
+        if record["label"] in {"render", "reference"}
+    ):
+        return None, None
+    render_candidates.extend(
+        record["dimensions"]
+        for record in records
+        if record["label"] == "render" and record["dimensions"] is not None
     )
-    reference = next(
-        (record["dimensions"] for record in records if record["label"] == "reference"),
-        None,
+    reference_candidates.extend(
+        record["dimensions"]
+        for record in records
+        if record["label"] == "reference" and record["dimensions"] is not None
     )
+
+    def consistent(candidates):
+        if not candidates:
+            return None
+        first = candidates[0]
+        return first if all(candidate == first for candidate in candidates) else False
+
+    render = consistent(render_candidates)
+    reference = consistent(reference_candidates)
+    if render is False or reference is False:
+        return None, None
+    if dimensions_present and not render_candidates and not reference_candidates:
+        return None, None
     return render, reference
 
 
@@ -1026,10 +1096,10 @@ def _artifact_records(entry):
     if common_pair is None and isinstance(entry, dict):
         common_pair = _dimension_pair(entry)
 
-    def add(label, path, sha256, dimensions=None):
+    def add(label, path, sha256, dimensions=None, inherit_common=True, dimensions_invalid=False):
         if path is None and sha256 is None:
             return
-        if dimensions is None and isinstance(common_dimensions, dict):
+        if dimensions is None and inherit_common and isinstance(common_dimensions, dict):
             for component, value in common_dimensions.items():
                 if _canonical_artifact(component) == _canonical_artifact(label):
                     dimensions = _dimension_pair(value) or _dimension_pair(
@@ -1045,7 +1115,10 @@ def _artifact_records(entry):
                 "label": _canonical_artifact(label),
                 "path": path,
                 "sha256": sha256,
-                "dimensions": dimensions or common_pair,
+                "dimensions": dimensions if dimensions is not None else (
+                    common_pair if inherit_common else None
+                ),
+                "dimensionsInvalid": dimensions_invalid,
             }
         )
 
@@ -1078,8 +1151,18 @@ def _artifact_records(entry):
         if isinstance(value, dict):
             path = value.get("path", value.get("file", value.get("artifactPath")))
             sha256 = value.get("sha256", value.get("hash", fallback_hash))
+            dimensions_declared = any(
+                key in value for key in ("dimensions", "width", "height", "w", "h")
+            )
             dimensions = _dimension_pair(value.get("dimensions")) or _dimension_pair(value)
-            add(label, path, sha256, dimensions)
+            add(
+                label,
+                path,
+                sha256,
+                dimensions,
+                inherit_common=not dimensions_declared,
+                dimensions_invalid=dimensions_declared and dimensions is None,
+            )
         elif isinstance(value, str):
             add(label, value, fallback_hash)
 
@@ -1290,14 +1373,15 @@ def _requires_current_evidence(row):
         return False
     if not _junit_is_pass(row) or _is_route_only(row):
         return False
-    if row.get("isPassing") is False:
-        return False
+    if row.get("classification") == "similarity-failure":
+        render_dimensions, reference_dimensions = _entry_dimensions(row)
+        if render_dimensions is None or reference_dimensions is None:
+            return False
     if row.get("classification") in {
         "missing-reference",
         "size-mismatch",
         "expected-unsupported",
         "no-score",
-        "similarity-failure",
         "skip",
         "terminal-refusal",
         "lifecycle-failure",
@@ -1466,7 +1550,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     )
     observed_comparable = len(comparable_rows)
     candidate_unlocked = max(candidate_cohorts.values(), default=0)
-    supported_after = len(supported_rows) if status == "approved" else 0
+    supported_after = 0 if status == "classification" else len(supported_rows)
     route_only = len(route_names)
 
     paths = inputs.get("paths", {})
@@ -1845,6 +1929,9 @@ def _argument_parser():
 def _dashboard_output(directory, data_path):
     if not directory.is_dir():
         return None
+    html_output = directory / "index.html"
+    if html_output.is_file():
+        return html_output
     candidates = (
         directory / "dashboard.json",
         directory / "gms.json",
@@ -1925,9 +2012,11 @@ def _entry_has_required_evidence(entry):
     if not entry.get("name") or not entry.get("referenceKind"):
         return False
     records = _artifact_records(entry)
+    entry_render_dimensions, entry_reference_dimensions = _entry_dimensions(entry)
     if not records or any(
         not record["path"]
         or not _has_hash(record["sha256"])
+        or record.get("dimensionsInvalid", False)
         or (
             record["dimensions"] is not None
             and not _has_valid_dimensions(record["dimensions"])
@@ -1935,6 +2024,10 @@ def _entry_has_required_evidence(entry):
         or (
             record["label"] in {"render", "reference"}
             and record["dimensions"] is None
+            and (
+                entry_render_dimensions is None
+                or entry_reference_dimensions is None
+            )
         )
         for record in records
     ):
@@ -1943,7 +2036,10 @@ def _entry_has_required_evidence(entry):
         labels = {record["label"] for record in records}
         if "render" not in labels or "reference" not in labels:
             return False
-        render_dimensions, reference_dimensions = _entry_dimensions(entry)
+        render_dimensions, reference_dimensions = (
+            entry_render_dimensions,
+            entry_reference_dimensions,
+        )
         if (
             render_dimensions is None
             or reference_dimensions is None
@@ -1964,11 +2060,22 @@ def _check_evidence_index(value, index_path=None, rows=None):
     )
     if not isinstance(raw_entries, list):
         return ["evidence-index entries must be an array"]
+    rows = rows if isinstance(rows, list) else []
+    duplicate_current_keys = set()
+    current_keys = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = _lane_key(row)
+        if key in current_keys and key not in duplicate_current_keys:
+            violations.append(
+                "current Skia rows contain duplicate identity: %s/%s" % key
+            )
+            duplicate_current_keys.add(key)
+        current_keys.add(key)
     entries = _evidence_entries(value)
     if not entries:
-        return ["evidence-index has zero entries"]
-    rows = rows if isinstance(rows, list) else []
-    row_keys = {_entry_key(row) for row in rows if isinstance(row, dict)}
+        return violations + ["evidence-index has zero entries"]
     seen_keys = set()
     artifact_paths = {}
     for index, entry in enumerate(entries):
@@ -1978,9 +2085,12 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 "evidence-index contains duplicate key: %s/%s" % (key[0], key[1])
             )
         seen_keys.add(key)
-        if key not in row_keys:
+        matching_rows = [
+            row for row in rows if isinstance(row, dict) and _identity_matches(row, entry)
+        ]
+        if not matching_rows:
             violations.append(
-                "evidence-index entry %s is orphaned: %s/%s"
+                "evidence-index entry %s is orphaned/missing evidence match: %s/%s"
                 % (index, key[0], key[1])
             )
         if not _entry_has_required_evidence(entry):
@@ -2025,7 +2135,6 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 actual = _sha256_file(artifact_path)
                 if actual.lower() != record["sha256"].lower():
                     violations.append("evidence-index artifact hash mismatch: %s" % label)
-        matching_rows = [row for row in rows if isinstance(row, dict) and _entry_key(row) == key]
         for row in matching_rows:
             if entry.get("candidateUnlocked") is True and not _has_causal_evidence({}, entry):
                 violations.append(
@@ -2041,9 +2150,15 @@ def _check_evidence_index(value, index_path=None, rows=None):
     for index, raw_entry in enumerate(raw_entries):
         if not isinstance(raw_entry, dict):
             violations.append("evidence-index entry %s must be an object" % index)
-    evidence_keys = {_entry_key(entry) for entry in entries}
     for row in rows:
-        if _requires_current_evidence(row) and _entry_key(row) not in evidence_keys:
+        if not _requires_current_evidence(row):
+            continue
+        matches = _matching_evidence(row, entries)
+        if len(matches) > 1:
+            violations.append(
+                "current Skia row %s has ambiguous evidence-index matches" % _row_name(row)
+            )
+        elif not matches:
             violations.append(
                 "current Skia row %s is missing evidence-index evidence" % _row_name(row)
             )
@@ -2125,7 +2240,7 @@ def _check_execution_contract(commands, environment):
     if not isinstance(commands, dict):
         return violations + ["execution commands must contain all five command entries"]
     task_tokens = {
-        "skiaRunner": (":integration-tests:skia:test", "--tests"),
+        "skiaRunner": (":integration-tests:skia:test",),
         "svg": (":integration-tests:svg:test",),
         "cpu": (":kanvas:test",),
         "gpu": (":gpu-renderer:test",),
@@ -2144,6 +2259,13 @@ def _check_execution_contract(commands, environment):
         for token in task_tokens[name]:
             if token not in command:
                 violations.append("execution command %s is missing task token %s" % (name, token))
+        if name == "skiaRunner" and not re.search(
+            r"(?:^|\s)--tests(?:=|\s+)org\.graphiks\.kanvas\.skia\.SkiaGmRunner(?:\s|$)",
+            command,
+        ):
+            violations.append(
+                "execution command skiaRunner must select org.graphiks.kanvas.skia.SkiaGmRunner"
+            )
         if name == "skiaRunner" and "-Dkanvas.gm.includeBlocking=true" not in command:
             violations.append("execution command skiaRunner is missing includeBlocking")
         if name == "dashboard" and "-Pgm.includeBlocking=true" not in command:
