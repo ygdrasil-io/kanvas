@@ -2,6 +2,7 @@
 """Reconcile the Skia fidelity Wave 1 evidence without rewriting inputs."""
 
 import argparse
+import datetime
 import hashlib
 import json
 import pathlib
@@ -544,6 +545,106 @@ def _copy_value(value):
     return value
 
 
+def _nonempty(value):
+    return value is not None and value is not False and value != "" and value != [] and value != {}
+
+
+def _evidence_sources(row, evidence):
+    sources = []
+    for value in (row, evidence):
+        if not isinstance(value, dict):
+            continue
+        sources.append(value)
+        for key in ("evidence", "causalEvidence", "pixelEvidence", "current"):
+            nested = value.get(key)
+            if isinstance(nested, dict):
+                sources.append(nested)
+    return sources
+
+
+def _has_any_evidence_value(sources, keys):
+    return any(_nonempty(source.get(key)) for source in sources for key in keys)
+
+
+def _has_causal_evidence(row, evidence):
+    sources = _evidence_sources(row, evidence)
+    return (
+        any(source.get("candidateUnlocked") is True for source in sources)
+        and _has_any_evidence_value(
+            sources,
+            (
+                "causalBucket",
+                "currentCausalBucket",
+                "rootCause",
+                "rootCauseBucket",
+            ),
+        )
+        and _has_any_evidence_value(
+            sources,
+            (
+                "routeDiagnostic",
+                "routeDiagnostics",
+                "routeSignature",
+                "route",
+            ),
+        )
+        and _has_any_evidence_value(
+            sources,
+            (
+                "minimalOperationTrace",
+                "operationTrace",
+                "operationTracePath",
+                "opTrace",
+                "trace",
+            ),
+        )
+        and _has_any_evidence_value(
+            sources,
+            (
+                "ownershipBoundary",
+                "ownership",
+                "owner",
+                "boundary",
+            ),
+        )
+    )
+
+
+def _runner_side_effect_observed(commands, score_file):
+    for source in (score_file, commands):
+        if not isinstance(source, dict):
+            continue
+        for key in ("runnerSideEffectObserved", "sideEffectObserved"):
+            if isinstance(source.get(key), bool):
+                return source[key]
+    if isinstance(commands, dict) and _nonempty(commands.get("runner")):
+        return True
+
+    def contains_runner(value):
+        if isinstance(value, dict):
+            return any(
+                ("runner" in str(key).lower() and _nonempty(item))
+                or contains_runner(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, list):
+            return any(contains_runner(item) for item in value)
+        return "runner" in value.lower() if isinstance(value, str) else False
+
+    return contains_runner(commands)
+
+
+def _generated_at(inputs):
+    supplied = inputs.get("generatedAt")
+    if supplied:
+        return supplied
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
 def _evidence_entries(value):
     if isinstance(value, dict):
         entries = value.get("entries", value.get("rows", []))
@@ -602,6 +703,138 @@ def _entry_dimensions(entry):
     return (int(width), int(height)), (
         int(reference_width),
         int(reference_height),
+    )
+
+
+def _canonical_artifact(label):
+    normalized = re.sub(r"[^a-z0-9]", "", str(label).lower())
+    if "reference" in normalized or normalized in {"ref", "refimage"}:
+        return "reference"
+    if "render" in normalized or "generated" in normalized or normalized == "output":
+        return "render"
+    if "cpu" in normalized:
+        return "cpu"
+    if "gpu" in normalized:
+        return "gpu"
+    if "diff" in normalized:
+        return "diff"
+    if "stat" in normalized:
+        return "stat"
+    if "route" in normalized:
+        return "route"
+    return normalized or "artifact"
+
+
+def _artifact_records(entry):
+    records = []
+    seen = set()
+    common_dimensions = entry.get("dimensions") if isinstance(entry, dict) else None
+    common_pair = _dimension_pair(common_dimensions)
+    if common_pair is None and isinstance(entry, dict):
+        common_pair = _dimension_pair(entry)
+
+    def add(label, path, sha256, dimensions=None):
+        if path is None and sha256 is None:
+            return
+        if dimensions is None and isinstance(common_dimensions, dict):
+            for component, value in common_dimensions.items():
+                if _canonical_artifact(component) == _canonical_artifact(label):
+                    dimensions = _dimension_pair(value) or _dimension_pair(
+                        value.get("dimensions") if isinstance(value, dict) else None
+                    )
+                    break
+        key = (str(label), str(path), str(sha256))
+        if key in seen:
+            return
+        seen.add(key)
+        records.append(
+            {
+                "label": _canonical_artifact(label),
+                "path": path,
+                "sha256": sha256,
+                "dimensions": dimensions or common_pair,
+            }
+        )
+
+    def hash_for(label, names=()):
+        normalized = _canonical_artifact(label)
+        if isinstance(entry.get("hashes"), dict):
+            for name in (label, normalized, *names):
+                if entry["hashes"].get(name) is not None:
+                    return entry["hashes"][name]
+        for name in names:
+            if entry.get(name) is not None:
+                return entry[name]
+        return None
+
+    direct_specs = (
+        ("render", ("renderPath", "generatedPath", "outputPath"), ("renderSha256", "generatedSha256", "renderHash")),
+        ("reference", ("referencePath", "referenceImage", "refPath"), ("referenceSha256", "referenceHash", "refSha256")),
+        ("cpu", ("cpuPath", "cpuResultPath"), ("cpuSha256", "cpuHash")),
+        ("gpu", ("gpuPath", "gpuResultPath"), ("gpuSha256", "gpuHash")),
+        ("diff", ("diffPath",), ("diffSha256", "diffHash")),
+        ("stat", ("statPath", "statsPath"), ("statSha256", "statsSha256", "statHash")),
+        ("route", ("routePath", "routeDiagnosticPath"), ("routeSha256", "routeDiagnosticSha256", "routeHash")),
+    )
+    for label, path_names, hash_names in direct_specs:
+        for path_name in path_names:
+            if entry.get(path_name) is not None:
+                add(label, entry.get(path_name), hash_for(label, hash_names))
+
+    def add_value(label, value, fallback_hash=None):
+        if isinstance(value, dict):
+            path = value.get("path", value.get("file", value.get("artifactPath")))
+            sha256 = value.get("sha256", value.get("hash", fallback_hash))
+            dimensions = _dimension_pair(value.get("dimensions")) or _dimension_pair(value)
+            add(label, path, sha256, dimensions)
+        elif isinstance(value, str):
+            add(label, value, fallback_hash)
+
+    for container_name in ("paths", "artifacts"):
+        container = entry.get(container_name)
+        if isinstance(container, dict):
+            for label, value in container.items():
+                add_value(label, value, hash_for(label))
+        elif isinstance(container, list):
+            for value in container:
+                if isinstance(value, dict):
+                    add_value(
+                        value.get("kind", value.get("name", "artifact")),
+                        value,
+                        value.get("sha256", value.get("hash")),
+                    )
+
+    for label in ("render", "generated", "reference", "ref", "cpu", "gpu", "diff", "stat", "route"):
+        if entry.get(label) is not None:
+            add_value(label, entry.get(label), hash_for(label))
+
+    if entry.get("path") is not None:
+        add("artifact", entry.get("path"), entry.get("sha256", entry.get("hash")))
+
+    for container_name in ("evidence", "causalEvidence", "pixelEvidence"):
+        nested = entry.get(container_name)
+        if isinstance(nested, dict):
+            records.extend(_artifact_records(nested))
+    return records
+
+
+def _has_complete_pixel_evidence(row, evidence):
+    complete = {key: False for key in ("reference", "cpu", "gpu", "diff", "stat", "route")}
+    for source in _evidence_sources(row, evidence):
+        for record in _artifact_records(source):
+            if (
+                record["label"] in complete
+                and _nonempty(record["path"])
+                and _has_hash(record["sha256"])
+                and record["dimensions"] is not None
+            ):
+                complete[record["label"]] = True
+    return (
+        complete["reference"]
+        and complete["cpu"]
+        and complete["gpu"]
+        and (complete["diff"] or complete["stat"])
+        and complete["route"]
     )
 
 
@@ -701,12 +934,17 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     fp13 = inputs.get("fp13Runner", inputs.get("fp13", {}))
     scores_before = inputs.get("scoresBefore", inputs.get("scores_before", {}))
     scores_after = inputs.get("scoresAfter", inputs.get("scores_after", {}))
+    commands = inputs.get("commands", inputs.get("commandsJson", {}))
+    environment = inputs.get("environment", inputs.get("environmentJson", {}))
     score_file = inputs.get("scoreFile", {})
     if not isinstance(score_file, dict):
         score_file = {}
 
     dashboard_rows = _dashboard_entries(dashboard)
     runner_rows = [dict(row) for row in runner.get("rows", [])] if isinstance(runner, dict) else []
+    for row in runner_rows:
+        row.setdefault("referenceKind", "skia-upstream")
+        row.setdefault("evidenceLane", "skia-junit")
     skia_rows = dashboard_rows or runner_rows
     if not dashboard_rows:
         for row in skia_rows:
@@ -738,30 +976,17 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         row
         for row in skia_rows
         if row.get("referenceKind") == "skia-upstream"
-        and (
-            row.get("classification") == "similarity-failure"
-            or row.get("candidateUnlocked") is True
-            or (
-                _evidence_for_row(row, evidence_rows) or {}
-            ).get("candidateUnlocked") is True
-        )
+        and _valid_comparable(row, _evidence_for_row(row, evidence_rows))
+        and _has_causal_evidence(row, _evidence_for_row(row, evidence_rows))
     ]
     supported_rows = []
     for row in comparable_rows:
         evidence = _evidence_for_row(row, evidence_rows) or {}
-        pixel_improved = (
-            row.get("pixelImproved") is True
-            or row.get("supportedAfter") is True
-            or evidence.get("pixelImproved") is True
-            or evidence.get("supportedAfter") is True
+        pixel_improved = any(
+            source.get("pixelImproved") is True or source.get("supportedAfter") is True
+            for source in _evidence_sources(row, evidence)
         )
-        if (
-            (row.get("classification") == "pass" or pixel_improved)
-            and (_numeric(row.get("score", row.get("similarity"))) is not None or pixel_improved)
-            and evidence.get("pixelImproved") is not False
-            and evidence.get("supportedAfter") is not False
-            and evidence.get("completeEvidence") is not False
-        ):
+        if pixel_improved and _has_complete_pixel_evidence(row, evidence):
             supported_rows.append(row)
     route_names = _route_only_names(
         [
@@ -814,8 +1039,13 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     after_hash = score_file.get("afterSha256")
     direct_edit = bool(score_file.get("directEditDetected", before_hash != after_hash))
     integrity = bool(score_file.get("integrityPreserved", not direct_edit))
-    restored = bool(score_file.get("restored", integrity))
-    runner_side_effect = bool(score_file.get("runnerSideEffectObserved", bool(runner)))
+    restored = bool(score_file.get("restored", before_hash == after_hash))
+    runner_side_effect = bool(
+        score_file.get(
+            "runnerSideEffectObserved",
+            _runner_side_effect_observed(commands, score_file),
+        )
+    )
     score_manifest = {
         "beforePath": str(paths.get("scoresBefore", "")),
         "afterPath": str(paths.get("scoresAfter", "")),
@@ -884,6 +1114,13 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     ):
         if key in hashes:
             provenance[field] = _copy_value(hashes[key])
+            provenance[field]["value"] = _copy_value(
+                {
+                    "commandsJson": commands,
+                    "environmentJson": environment,
+                    "evidenceIndex": evidence_value,
+                }[key]
+            )
 
     non_claims = [
         "Wave 0 population is historical context only; Wave 1 includes blocking rows and is population-shifted.",
@@ -898,7 +1135,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         "schemaVersion": SCHEMA_VERSION,
         "kind": KIND,
         "generatedBy": GENERATED_BY,
-        "generatedAt": "not-recorded",
+        "generatedAt": _generated_at(inputs),
         "sourceCommit": source_commit,
         "status": status,
         "populationPolicy": {
@@ -922,6 +1159,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         "current": current,
         "rows": {
             "skia": skia_rows,
+            "skiaJunit": runner_rows,
             "svg": svg_rows,
             "testOracle": test_oracle_rows,
             "cpuOracle": cpu_oracle_rows,
@@ -939,6 +1177,8 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         "provenance": provenance,
         "inputs": {
             "fp13": _summary(fp13),
+            "commands": _copy_value(commands),
+            "environment": _copy_value(environment),
             "scoresBefore": _copy_value(scores_before),
             "scoresAfter": _copy_value(scores_after),
             "evidenceIndex": _copy_value(evidence_value),
@@ -1021,7 +1261,7 @@ def render_markdown(manifest: dict) -> str:
             "| --- | --- | --- | --- | --- |",
         ]
     )
-    for lane in ("skia", "svg", "testOracle", "cpuOracle"):
+    for lane in ("skia", "skiaJunit", "svg", "testOracle", "cpuOracle"):
         for row in manifest.get("rows", {}).get(lane, []):
             lines.append(
                 "| `%s` | `%s` | %s | %s | %s |"
@@ -1147,16 +1387,10 @@ def _evidence_file_paths(index_value, index_path):
     paths = {}
     for index, entry in enumerate(_evidence_entries(index_value)):
         name = str(entry.get("name", index))
-        for key in ("renderPath", "referencePath", "generatedPath", "path"):
-            path = _resolve_evidence_path(entry.get(key), index_path)
+        for artifact_index, record in enumerate(_artifact_records(entry)):
+            path = _resolve_evidence_path(record["path"], index_path)
             if path is not None and path.is_file():
-                paths["%s.%s" % (name, key)] = path
-        nested = entry.get("paths")
-        if isinstance(nested, dict):
-            for key, value in nested.items():
-                path = _resolve_evidence_path(value, index_path)
-                if path is not None and path.is_file():
-                    paths["%s.%s" % (name, key)] = path
+                paths["%s.%s.%s" % (name, record["label"], artifact_index)] = path
     return paths
 
 
@@ -1165,74 +1399,27 @@ def _has_hash(value):
 
 
 def _entry_hashes(entry):
-    hashes = []
-    for key in ("renderSha256", "referenceSha256", "generatedSha256", "sha256", "hash"):
-        if key in entry:
-            hashes.append(entry[key])
-    nested = entry.get("hashes")
-    if isinstance(nested, dict):
-        hashes.extend(nested.values())
-    paths = entry.get("paths")
-    if isinstance(paths, dict):
-        for value in paths.values():
-            if isinstance(value, dict):
-                hashes.extend(value.get(key) for key in ("sha256", "hash"))
-    for key in ("render", "generated", "reference", "ref"):
-        value = entry.get(key)
-        if isinstance(value, dict):
-            hashes.extend(value.get(name) for name in ("sha256", "hash"))
-    return [value for value in hashes if value is not None]
+    return [record["sha256"] for record in _artifact_records(entry) if record["sha256"] is not None]
 
 
 def _entry_paths(entry):
-    paths = []
-    for key in ("renderPath", "referencePath", "generatedPath", "path"):
-        if isinstance(entry.get(key), str) and entry[key]:
-            paths.append(entry[key])
-    nested = entry.get("paths")
-    if isinstance(nested, dict):
-        for value in nested.values():
-            if isinstance(value, str) and value:
-                paths.append(value)
-            elif isinstance(value, dict) and isinstance(value.get("path"), str):
-                paths.append(value["path"])
-    for key in ("render", "generated", "reference", "ref"):
-        value = entry.get(key)
-        if isinstance(value, dict) and isinstance(value.get("path"), str):
-            paths.append(value["path"])
-    return paths
+    return [record["path"] for record in _artifact_records(entry) if record["path"]]
 
 
 def _entry_has_required_evidence(entry):
     if not entry.get("name") or not entry.get("referenceKind"):
         return False
-    hashes = _entry_hashes(entry)
-    if not hashes or not all(_has_hash(value) for value in hashes):
-        return False
-    paths = _entry_paths(entry)
-    if not paths:
+    records = _artifact_records(entry)
+    if not records or any(
+        not record["path"]
+        or not _has_hash(record["sha256"])
+        or record["dimensions"] is None
+        for record in records
+    ):
         return False
     if entry.get("referenceKind") == "skia-upstream":
-        has_render_hash = any(
-            key in entry for key in ("renderSha256", "generatedSha256")
-        ) or any(
-            isinstance(entry.get(key), dict)
-            and ("sha256" in entry[key] or "hash" in entry[key])
-            for key in ("render", "generated")
-        )
-        has_reference_hash = "referenceSha256" in entry or any(
-            isinstance(entry.get(key), dict)
-            and ("sha256" in entry[key] or "hash" in entry[key])
-            for key in ("reference", "ref")
-        )
-        if isinstance(entry.get("hashes"), dict):
-            has_render_hash = has_render_hash or any(
-                key in entry["hashes"] for key in ("render", "generated")
-            )
-            has_reference_hash = has_reference_hash or any(
-                key in entry["hashes"] for key in ("reference", "ref")
-            )
-        if not has_render_hash or not has_reference_hash:
+        labels = {record["label"] for record in records}
+        if "render" not in labels or "reference" not in labels:
             return False
     dimensions = entry.get("dimensions")
     if dimensions is not None:
@@ -1243,22 +1430,59 @@ def _entry_has_required_evidence(entry):
                 dimensions.get("reference")
             ):
                 return True
+            if any(record["dimensions"] is not None for record in records):
+                return True
         return False
-    return (
-        _dimension_pair(entry) is not None
-        or _dimension_pair(entry.get("renderDimensions")) is not None
+    return _dimension_pair(entry) is not None or any(
+        record["dimensions"] is not None for record in records
     )
 
 
-def _check_evidence_index(value):
+def _check_evidence_index(value, index_path=None, rows=None):
     violations = []
     entries = _evidence_entries(value)
+    if not entries:
+        return ["evidence-index has zero entries"]
+    rows = rows if isinstance(rows, list) else []
     for index, entry in enumerate(entries):
         if not _entry_has_required_evidence(entry):
             violations.append(
                 "evidence-index entry %s is missing required paths, SHA-256 hashes, or dimensions"
                 % index
             )
+        for artifact_index, record in enumerate(_artifact_records(entry)):
+            if index_path is None:
+                continue
+            artifact_path = _resolve_evidence_path(record["path"], index_path)
+            label = "%s.%s" % (entry.get("name", index), record["label"])
+            if artifact_path is None or not artifact_path.is_file():
+                violations.append("evidence-index artifact path is absent: %s" % label)
+                continue
+            if _has_hash(record["sha256"]):
+                actual = _sha256_file(artifact_path)
+                if actual.lower() != record["sha256"].lower():
+                    violations.append("evidence-index artifact hash mismatch: %s" % label)
+        matching_rows = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and row.get("name") == entry.get("name")
+            and row.get("referenceKind", entry.get("referenceKind"))
+            == entry.get("referenceKind")
+        ]
+        for row in matching_rows:
+            sources = _evidence_sources(row, entry)
+            if any(source.get("candidateUnlocked") is True for source in sources) and not _has_causal_evidence(row, entry):
+                violations.append(
+                    "evidence-index entry %s is missing candidate causal evidence" % index
+                )
+            if any(
+                source.get("pixelImproved") is True or source.get("supportedAfter") is True
+                for source in sources
+            ) and not _has_complete_pixel_evidence(row, entry):
+                violations.append(
+                    "evidence-index entry %s is missing complete pixel evidence" % index
+                )
     return violations
 
 
@@ -1271,7 +1495,8 @@ def _check_current_failures(lanes):
         unclassified = [
             row
             for row in rows
-            if row.get("outcome") in {"failure", "error"}
+            if isinstance(row, dict)
+            and row.get("outcome") in {"failure", "error"}
             and row.get("classification") == "unclassified"
         ]
         if unclassified:
@@ -1282,9 +1507,14 @@ def _check_current_failures(lanes):
         terminal = [
             row
             for row in rows
-            if row.get("outcome") in {"failure", "error"}
-            and row.get("terminalRefusal")
-            and not row.get("expectedUnsupported")
+            if isinstance(row, dict)
+            and row.get("outcome") in {"failure", "error"}
+            and row.get("classification") not in {"terminal-refusal", "expected-unsupported"}
+            and (
+                row.get("lifecycleFailure")
+                or row.get("terminalRefusal")
+                or row.get("classification") in {"lifecycle-failure", "terminal-failure"}
+            )
         ]
         if terminal:
             violations.append(
@@ -1333,6 +1563,8 @@ def _prepare_inputs(args, dashboard_output):
         dashboard = parse_dashboard(args.dashboard_json)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise ValueError("dashboard: %s" % error) from error
+    commands = json.loads(args.commands_json.read_text(encoding="utf-8"))
+    environment = json.loads(args.environment_json.read_text(encoding="utf-8"))
     return {
         "paths": {
             **input_paths,
@@ -1349,8 +1581,8 @@ def _prepare_inputs(args, dashboard_output):
         "scoresBefore": load_scores(args.scores_before),
         "scoresAfter": load_scores(args.scores_after),
         "fp13Runner": parse_junit(args.fp13_runner, "fp13", EXPECTED_UNSUPPORTED_CODES),
-        "commands": json.loads(args.commands_json.read_text(encoding="utf-8")),
-        "environment": json.loads(args.environment_json.read_text(encoding="utf-8")),
+        "commands": commands,
+        "environment": environment,
         "evidenceIndexData": evidence_value,
         "scoreFile": {
             "beforeSha256": hashes["scoresBefore"]["sha256"],
@@ -1359,7 +1591,7 @@ def _prepare_inputs(args, dashboard_output):
             != hashes["scoresAfter"]["sha256"],
             "integrityPreserved": hashes["scoresBefore"]["sha256"]
             == hashes["scoresAfter"]["sha256"],
-            "runnerSideEffectObserved": True,
+            "runnerSideEffectObserved": _runner_side_effect_observed(commands, {}),
             "restored": hashes["scoresBefore"]["sha256"]
             == hashes["scoresAfter"]["sha256"],
         },
@@ -1440,7 +1672,13 @@ def main(argv=None):
         )
         if manifest["scoreFile"]["directEditDetected"]:
             check_violations.append("score before/after content diverges")
-        check_violations.extend(_check_evidence_index(inputs["evidenceIndexData"]))
+        check_violations.extend(
+            _check_evidence_index(
+                inputs["evidenceIndexData"],
+                args.evidence_index,
+                manifest["rows"]["skia"],
+            )
+        )
 
     try:
         if check_violations:
