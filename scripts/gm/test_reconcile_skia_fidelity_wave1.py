@@ -71,8 +71,16 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         runner_after=None,
         dashboard_output=None,
         dashboard_data=None,
-        score_before="supported=85.0\nroute-only=99.0\n",
-        score_after="supported=98.0\nroute-only=99.0\n",
+        score_before=(
+            "modecolorfilters=98.75\n"
+            "pass=98.75\n"
+            "route-only=99.0\n"
+        ),
+        score_after=(
+            "modecolorfilters=98.75\n"
+            "pass=98.75\n"
+            "route-only=99.0\n"
+        ),
         test_oracle=None,
         cpu_oracle=None,
     ):
@@ -81,7 +89,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
                 "runner-before.xml",
                 [
                     self.testcase(
-                        "supported",
+                        "pass",
                         '<failure message="similarity 85.0 below threshold 95.0"/>',
                     ),
                     self.testcase("route-only"),
@@ -90,24 +98,40 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         if runner_after is None:
             runner_after = self.write_runner(
                 "runner-after.xml",
-                [self.testcase("supported"), self.testcase("route-only")],
+                [self.testcase("pass"), self.testcase("route-only")],
             )
         if dashboard_output is None:
             dashboard_output = {
                 "gms": [
                     {
-                        "name": "supported",
+                        "name": "pass",
                         "referenceKind": "skia-upstream",
                         "isPassing": True,
                         "similarity": 98.0,
                         "routeOnly": False,
                     },
                     {
-                        "name": "route-only",
-                        "referenceKind": "test-oracle",
-                        "isPassing": True,
-                        "similarity": 99.0,
-                        "routeOnly": True,
+                        "name": "below-threshold",
+                        "referenceKind": "skia-upstream",
+                        "isPassing": False,
+                        "similarity": 90.0,
+                        "routeOnly": False,
+                    },
+                    {
+                        "name": "missing-reference",
+                        "referenceKind": "skia-upstream",
+                        "isPassing": None,
+                        "noReference": True,
+                        "noScoreCause": "reference-missing",
+                        "routeOnly": False,
+                    },
+                    {
+                        "name": "size-mismatch",
+                        "referenceKind": "skia-upstream",
+                        "isPassing": None,
+                        "sizeMismatch": True,
+                        "noScoreCause": "size-mismatch",
+                        "routeOnly": False,
                     },
                 ]
             }
@@ -115,21 +139,31 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             dashboard_data = {
                 "rows": [
                     {
-                        "name": "supported",
+                        "name": "pass",
                         "referenceKind": "skia-upstream",
                         "score": 98.0,
                     },
                     {
-                        "name": "route-only",
-                        "referenceKind": "test-oracle",
-                        "score": 99.0,
+                        "name": "below-threshold",
+                        "referenceKind": "skia-upstream",
+                        "score": 90.0,
+                    },
+                    {
+                        "name": "missing-reference",
+                        "referenceKind": "skia-upstream",
+                        "score": None,
+                    },
+                    {
+                        "name": "size-mismatch",
+                        "referenceKind": "skia-upstream",
+                        "score": None,
                     },
                 ]
             }
         if test_oracle is None:
-            test_oracle = {"rows": [{"name": "supported", "referenceKind": "test-oracle"}]}
+            test_oracle = {"rows": [{"name": "route-only", "referenceKind": "test-oracle"}]}
         if cpu_oracle is None:
-            cpu_oracle = {"rows": [{"name": "supported", "referenceKind": "cpu-oracle"}]}
+            cpu_oracle = {"rows": [{"name": "route-only", "referenceKind": "cpu-oracle"}]}
 
         wave0 = self.write_runner("wave0-runner.xml", [], tests=615)
         dashboard_output_path = self.write_json("dashboard/output.json", dashboard_output)
@@ -231,14 +265,22 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
     def test_dashboard_provenance_records_output_data_paths_and_sha256_hashes(self):
         fixtures = self.write_cli_fixtures()
+        dashboard_fixture = json.loads(
+            fixtures["dashboardOutput"].read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            [row["name"] for row in dashboard_fixture["gms"]],
+            ["pass", "below-threshold", "missing-reference", "size-mismatch"],
+        )
         status, stdout, manifest, _, _ = self.run_main(fixtures)
 
         self.assertEqual(status, 0, stdout)
         dashboard = manifest["dashboard"]
-        self.assertEqual(dashboard["outputPath"], str(fixtures["dashboardOutput"]))
+        self.assertEqual(dashboard["outputDir"], str(fixtures["dashboardOutput"].parent))
         self.assertEqual(dashboard["dataPath"], str(fixtures["dashboardData"]))
         self.assertEqual(dashboard["outputSha256"], self.sha256(fixtures["dashboardOutput"]))
         self.assertEqual(dashboard["dataSha256"], self.sha256(fixtures["dashboardData"]))
+        self.assertEqual(manifest["current"]["dashboard"]["rows"], 4)
 
     def test_score_before_after_integrity_and_runner_side_effect_restore_are_reported(self):
         fixtures = self.write_cli_fixtures()
@@ -251,10 +293,15 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertEqual(score_file["afterPath"], str(fixtures["scoreAfter"]))
         self.assertEqual(score_file["beforeSha256"], self.sha256(fixtures["scoreBefore"]))
         self.assertEqual(score_file["afterSha256"], self.sha256(fixtures["scoreAfter"]))
+        self.assertEqual(score_file["beforeSha256"], score_file["afterSha256"])
         self.assertTrue(score_file["integrityPreserved"])
-        self.assertFalse(score_file["directEdit"])
+        self.assertFalse(score_file["directEditDetected"])
         self.assertTrue(score_file["restored"])
         self.assertFalse(manifest["policy"]["scoresDirectlyEdited"])
+        self.assertEqual(
+            reconcile.load_scores(fixtures["scoreBefore"])["modecolorfilters"],
+            98.75,
+        )
 
         runner = manifest["current"]["runner"]
         self.assertTrue(runner["sideEffect"])
@@ -267,14 +314,17 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
         self.assertEqual(status, 0, stdout)
         rows = manifest["rows"]
-        self.assertIsInstance(rows, list)
-        reference_kinds = {row["referenceKind"] for row in rows}
-        self.assertIn("skia-upstream", reference_kinds)
-        self.assertIn("test-oracle", reference_kinds)
-        self.assertIn("cpu-oracle", reference_kinds)
-        self.assertNotEqual(
-            self.rows_by_name(rows)["supported"]["referenceKind"],
-            "test-oracle",
+        self.assertEqual(
+            {row["referenceKind"] for row in rows["skia"]},
+            {"skia-upstream"},
+        )
+        self.assertEqual(
+            {row["referenceKind"] for row in rows["testOracle"]},
+            {"test-oracle"},
+        )
+        self.assertEqual(
+            {row["referenceKind"] for row in rows["cpuOracle"]},
+            {"cpu-oracle"},
         )
 
     def test_runner_classifies_missing_size_similarity_terminal_and_aborted_rows(self):
@@ -317,7 +367,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         status, stdout, manifest, _, _ = self.run_main(fixtures)
 
         self.assertEqual(status, 0, stdout)
-        rows = self.rows_by_name(manifest["rows"])
+        rows = self.rows_by_name(manifest["rows"]["skia"])
         self.assertEqual(rows["missing-reference"]["classification"], "missing-reference")
         self.assertEqual(rows["size-mismatch"]["classification"], "size-mismatch")
         self.assertEqual(rows["similarity-failure"]["classification"], "similarity-failure")
@@ -333,13 +383,11 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
         self.assertEqual(status, 0, stdout)
         current = manifest["current"]
-        self.assertEqual(current["comparableRowsBefore"], 1)
-        self.assertEqual(current["comparableRowsAfter"], 1)
-        self.assertEqual(current["comparableRowsImproved"], 1)
-        self.assertEqual(current["routeOnlyRows"], 1)
-        self.assertEqual(manifest["supportedRowsAfter"], ["supported"])
-        self.assertEqual(manifest["routeOnlyRows"], ["route-only"])
-        self.assertEqual(manifest["routeOnlyRowsPromoted"], [])
+        self.assertEqual(current["observedComparableRows"], 1)
+        self.assertEqual(current["candidateUnlockedRows"], 1)
+        self.assertEqual(manifest["supportedRowsAfter"], 1)
+        self.assertEqual(manifest["routeOnlyRows"], 1)
+        self.assertFalse(manifest["routeOnlyRowsPromoted"])
 
     def test_escalation_limits_failed_hypotheses_to_three(self):
         runner = self.write_runner(
@@ -398,6 +446,27 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             if name != "dashboardOutput":
                 self.assertEqual(path.read_bytes(), before[name])
 
+    def test_check_rejects_divergent_score_after_as_score_integrity_violation(self):
+        fixtures = self.write_cli_fixtures(
+            score_after=(
+                "modecolorfilters=98.75\n"
+                "pass=97.0\n"
+                "route-only=99.0\n"
+            )
+        )
+        before = {name: path.read_bytes() for name, path in fixtures.items()}
+        self.assertNotEqual(
+            self.sha256(fixtures["scoreBefore"]),
+            self.sha256(fixtures["scoreAfter"]),
+        )
+        status, stdout, manifest, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertNotEqual(status, 0)
+        self.assertIn("score", stdout.lower())
+        self.assertIsNotNone(manifest)
+        self.assertTrue(manifest["scoreFile"]["directEditDetected"])
+        self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})
+
     def test_check_rejects_unclassified_runner_error(self):
         runner = self.write_runner(
             "unclassified-runner.xml",
@@ -419,7 +488,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertTrue(output_json.exists())
         self.assertTrue(output_markdown.exists())
         self.assertIsNotNone(manifest)
-        rows = self.rows_by_name(manifest["rows"])
+        rows = self.rows_by_name(manifest["rows"]["skia"])
         self.assertEqual(rows["unknown"]["classification"], "unclassified")
 
     def test_successful_report_does_not_mutate_any_fixture_input(self):
