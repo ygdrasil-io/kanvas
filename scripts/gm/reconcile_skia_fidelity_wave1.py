@@ -7,6 +7,8 @@ import hashlib
 import json
 import pathlib
 import re
+import shlex
+import subprocess
 import xml.etree.ElementTree as ET
 
 
@@ -114,6 +116,66 @@ def _is_terminal_failure(message, failure_type, failure_code):
     )
 
 
+def _truthy(value):
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "on", "1"}
+    return False
+
+
+def _compact_name(value):
+    return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
+
+
+def _junit_identity(name, attributes=None):
+    display_name = str(name or "").strip()
+    attributes = attributes if isinstance(attributes, dict) else {}
+    registration = re.sub(r"^\s*\[[^]]+\]\s*", "", display_name)
+    source_registration = next(
+        (
+            str(attributes[key]).strip()
+            for key in ("sourceRegistration", "registration", "sourceRegistrationId")
+            if _nonempty(attributes.get(key))
+        ),
+        registration,
+    )
+    source_class_path = source_registration.split("@", 1)[0].strip()
+    simple_source_class = source_class_path.rsplit(".", 1)[-1]
+    if not simple_source_class:
+        simple_source_class = source_registration.rsplit(".", 1)[-1]
+    source_class = next(
+        (
+            str(attributes[key]).strip()
+            for key in ("sourceClass", "sourceClassName")
+            if _nonempty(attributes.get(key))
+        ),
+        simple_source_class,
+    )
+    logical_name = _compact_name(source_class)
+    if logical_name.endswith("gm"):
+        logical_name = logical_name[:-2]
+    candidates = []
+    for candidate in (
+        display_name,
+        source_registration,
+        source_class_path,
+        simple_source_class,
+        source_class,
+        logical_name,
+    ):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    return {
+        "displayName": display_name,
+        "sourceRegistration": source_registration,
+        "sourceClass": source_class,
+        "sourceClassPath": source_class_path,
+        "logicalName": logical_name,
+        "nameCandidates": candidates,
+    }
+
+
 def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
     expected_unsupported = failure_code in expected_codes
     missing_reference = _is_missing_reference(message)
@@ -162,9 +224,14 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
     """Parse JUnit testcase rows and classify failures without changing the XML."""
     root = ET.parse(path).getroot()
     rows = []
-    for testcase in root.iter():
-        if _local_name(testcase.tag) != "testcase":
-            continue
+    suites = [
+        element for element in root.iter() if _local_name(element.tag) == "testsuite"
+    ]
+    if not suites:
+        suites = [root]
+    seen_testcases = set()
+
+    def append_testcase(testcase, suite_element):
         failure = next(
             (child for child in testcase if _local_name(child.tag) == "failure"), None
         )
@@ -198,16 +265,21 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
             else None
         )
         class_name = testcase.attrib.get("classname", testcase.attrib.get("class", ""))
+        identity = _junit_identity(testcase.attrib.get("name", ""), testcase.attrib)
         row = {
             "name": testcase.attrib.get("name", ""),
             "class": class_name,
             "className": class_name,
+            "sourceClass": identity["sourceClass"],
+            "sourceRegistration": identity["sourceRegistration"],
+            "gmIdentity": identity,
             "suite": suite,
             "evidenceLane": suite,
             "outcome": outcome,
             "message": message,
             "failureType": failure_type,
             "failureCode": failure_code,
+            "_junitSuiteId": id(suite_element),
         }
         row.update(
             _classify_row(
@@ -219,6 +291,71 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
             )
         )
         rows.append(row)
+
+    for suite_element in suites:
+        for element in suite_element.iter():
+            if _local_name(element.tag) != "testcase" or id(element) in seen_testcases:
+                continue
+            seen_testcases.add(id(element))
+            append_testcase(element, suite_element)
+
+        for child in suite_element:
+            child_name = _local_name(child.tag).lower()
+            if child_name == "testcase":
+                continue
+            if child_name not in {
+                "error",
+                "failure",
+                "skipped",
+                "lifecycle",
+                "lifecycleerror",
+                "lifecyclefailure",
+            } and "lifecycle" not in child_name:
+                continue
+            outcome = (
+                "failure"
+                if child_name == "failure"
+                else "skipped"
+                if child_name == "skipped"
+                else "error"
+            )
+            message = _element_message(child)
+            failure_type = child.attrib.get("type", "")
+            if "lifecycle" in child_name and not failure_type:
+                failure_type = "lifecycle"
+            failure_code = _failure_code(message, child, outcome, expected_codes)
+            suite_name = suite_element.attrib.get("name", suite)
+            identity = _junit_identity(suite_name, suite_element.attrib)
+            class_name = suite_element.attrib.get(
+                "classname", suite_element.attrib.get("class", "")
+            )
+            row = {
+                "name": "[suite] %s:%s" % (suite_name, child_name),
+                "class": class_name,
+                "className": class_name,
+                "sourceClass": identity["sourceClass"],
+                "sourceRegistration": identity["sourceRegistration"],
+                "gmIdentity": identity,
+                "suite": suite,
+                "evidenceLane": suite,
+                "outcome": outcome,
+                "message": message,
+                "failureType": failure_type,
+                "failureCode": failure_code,
+                "synthetic": True,
+                "suiteLevel": True,
+                "_junitSuiteId": id(suite_element),
+            }
+            row.update(
+                _classify_row(
+                    outcome,
+                    message,
+                    failure_code,
+                    failure_type,
+                    expected_codes,
+                )
+            )
+            rows.append(row)
 
     declared = {}
     for field in ("tests", "failures", "errors", "skipped"):
@@ -265,7 +402,65 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
     counts["sizeMismatches"] = sum(row["sizeMismatch"] for row in rows)
     counts["similarityFailures"] = sum(row["similarityFailure"] for row in rows)
     counts["lifecycleFailures"] = sum(row["lifecycleFailure"] for row in rows)
-    return {**counts, "suite": suite, "rows": rows}
+    parsed_counts = {
+        "tests": len(rows),
+        "failures": sum(row["outcome"] == "failure" for row in rows),
+        "errors": sum(row["outcome"] == "error" for row in rows),
+        "skipped": sum(row["outcome"] == "skipped" for row in rows),
+    }
+    count_mismatches = []
+
+    def check_declared(scope, attributes, scoped_rows):
+        if not isinstance(attributes, dict):
+            return
+        scoped_counts = {
+            "tests": len(scoped_rows),
+            "failures": sum(row["outcome"] == "failure" for row in scoped_rows),
+            "errors": sum(row["outcome"] == "error" for row in scoped_rows),
+            "skipped": sum(row["outcome"] == "skipped" for row in scoped_rows),
+        }
+        for field in ("tests", "failures", "errors", "skipped"):
+            if field not in attributes:
+                continue
+            try:
+                expected = int(attributes[field])
+            except (TypeError, ValueError):
+                count_mismatches.append(
+                    "%s declares non-integer %s=%r"
+                    % (scope, field, attributes[field])
+                )
+                continue
+            actual = scoped_counts[field]
+            if expected != actual:
+                count_mismatches.append(
+                    "%s declares %s=%s but parsed %s row(s)"
+                    % (scope, field, expected, actual)
+                )
+
+    check_declared("root", root.attrib, rows)
+    for suite_element in suites:
+        if suite_element is root:
+            continue
+        scoped_rows = [
+            row
+            for row in rows
+            if row.get("_junitSuiteId") == id(suite_element)
+        ]
+        check_declared(
+            "testsuite %s" % suite_element.attrib.get("name", suite),
+            suite_element.attrib,
+            scoped_rows,
+        )
+    for row in rows:
+        row.pop("_junitSuiteId", None)
+    return {
+        **counts,
+        "parsedCounts": parsed_counts,
+        "declaredCounts": declared,
+        "countMismatches": list(dict.fromkeys(count_mismatches)),
+        "suite": suite,
+        "rows": rows,
+    }
 
 
 def parse_dashboard(path: pathlib.Path) -> dict:
@@ -281,6 +476,27 @@ def parse_dashboard(path: pathlib.Path) -> dict:
         raise ValueError("dashboard rows must contain an array")
     if "results" in value and not isinstance(value["results"], list):
         raise ValueError("dashboard results must contain an array")
+    containers = []
+    for key in ("gms", "rows", "results"):
+        if key not in value:
+            continue
+        container = value[key]
+        if key == "gms" and isinstance(container, dict):
+            container = [
+                dict(entry, name=name) if isinstance(entry, dict) else {"name": name, "value": entry}
+                for name, entry in container.items()
+            ]
+        containers.append(
+            (
+                key,
+                json.dumps(container, sort_keys=True, separators=(",", ":")),
+            )
+        )
+    if len({serialized for _, serialized in containers}) > 1:
+        raise ValueError(
+            "dashboard JSON contains contradictory row containers: %s"
+            % ", ".join(key for key, _ in containers)
+        )
     if "gms" not in value:
         for key in ("rows", "results"):
             if isinstance(value.get(key), list):
@@ -495,10 +711,27 @@ def _dashboard_entries(dashboard):
     return rows
 
 
+def _name_keys(value):
+    text = str(value or "").strip()
+    return {
+        ("raw", text),
+        ("normalized", _normalized_name(text)),
+        ("compact", _compact_name(text)),
+    }
+
+
+def _junit_name_keys(row):
+    identity = row.get("gmIdentity") if isinstance(row, dict) else None
+    candidates = identity.get("nameCandidates", []) if isinstance(identity, dict) else []
+    if not candidates:
+        candidates = [_row_name(row)]
+    keys = set()
+    for candidate in candidates:
+        keys.update(_name_keys(candidate))
+    return keys
+
+
 def _merge_junit_fields(dashboard_rows, runner_rows):
-    by_key = {}
-    for row in runner_rows:
-        by_key.setdefault(_lane_key(row), []).append(row)
     fields = (
         "outcome",
         "message",
@@ -514,38 +747,117 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "similarityFailure",
         "lifecycleFailure",
     )
-    for row in dashboard_rows:
-        matches = by_key.get(_lane_key(row), [])
+    metadata_fields = (
+        "class",
+        "className",
+        "sourceClass",
+        "sourceRegistration",
+        "gmIdentity",
+    )
+    dashboard_keys = [_name_keys(_row_name(row)) for row in dashboard_rows]
+    claims = {}
+    ambiguous_dashboard = set()
+    for runner_index, junit in enumerate(runner_rows):
+        matches = [
+            dashboard_index
+            for dashboard_index, keys in enumerate(dashboard_keys)
+            if _junit_name_keys(junit) & keys
+        ]
         if len(matches) != 1:
             if len(matches) > 1:
+                ambiguous_dashboard.update(matches)
+            continue
+        claims.setdefault(matches[0], []).append((runner_index, junit))
+
+    for dashboard_index, row in enumerate(dashboard_rows):
+        row["junitMissing"] = True
+        claimants = claims.get(dashboard_index, [])
+        if len(claimants) != 1 or dashboard_index in ambiguous_dashboard:
+            if claimants or dashboard_index in ambiguous_dashboard:
                 row["junitAmbiguous"] = True
             continue
-        junit = matches[0]
+        _, junit = claimants[0]
+        row["junitMissing"] = False
         row["junit"] = _copy_value(junit)
         for field in fields:
-            if field in junit and field not in row:
+            if field not in junit:
+                continue
+            if not _nonempty(row.get(field)):
+                row[field] = _copy_value(junit[field])
+        for field in metadata_fields:
+            if field not in junit:
+                continue
+            if _nonempty(row.get(field)) and _nonempty(junit.get(field)):
+                if _copy_value(row[field]) != _copy_value(junit[field]):
+                    row["junitMetadataConflict"] = True
+            elif not _nonempty(row.get(field)):
                 row[field] = _copy_value(junit[field])
 
 
 def _junit_is_pass(row):
-    if row.get("junitAmbiguous"):
+    if row.get("junitAmbiguous") or row.get("junitMissing"):
         return False
     junit = row.get("junit") if isinstance(row, dict) else None
     if junit is None:
-        return True
+        return False
+    if row.get("junitMetadataConflict"):
+        return False
     return junit.get("outcome") == "passed" and junit.get("classification") == "pass"
+
+
+def _junit_candidate_for_approval(row):
+    if not isinstance(row, dict) or row.get("referenceKind") != "skia-upstream":
+        return False
+    if _is_route_only(row) or row.get("sizeMismatch") or row.get("noReference"):
+        return False
+    if row.get("classification") in {
+        "missing-reference",
+        "size-mismatch",
+        "expected-unsupported",
+        "no-score",
+        "skip",
+        "route-only",
+        "failure",
+        "terminal-refusal",
+        "lifecycle-failure",
+        "unclassified",
+    }:
+        return False
+    score = _finite_number(row.get("score", row.get("similarity")))
+    if score is None or not 0 <= score <= 100:
+        return False
+    render_dimensions, reference_dimensions = _entry_dimensions(row)
+    return (
+        render_dimensions is not None
+        and reference_dimensions is not None
+        and render_dimensions == reference_dimensions
+    )
 
 
 def _junit_approval_violations(rows):
     violations = []
     for row in rows:
+        if not _junit_candidate_for_approval(row):
+            continue
         if row.get("junitAmbiguous"):
             violations.append(
                 "ambiguous JUnit identity blocks approval for %s" % row.get("name", "")
             )
             continue
+        if row.get("junitMissing"):
+            violations.append("missing JUnit result blocks approval for %s" % row.get("name", ""))
+            continue
+        if row.get("junitMetadataConflict"):
+            violations.append(
+                "JUnit identity metadata conflict blocks approval for %s"
+                % row.get("name", "")
+            )
+            continue
         junit = row.get("junit") if isinstance(row, dict) else None
-        if not isinstance(junit, dict) or junit.get("outcome") == "passed":
+        if not isinstance(junit, dict):
+            violations.append("missing JUnit result blocks approval for %s" % row.get("name", ""))
+            continue
+        if _junit_is_pass(row):
             continue
         classification = junit.get("classification", "non-pass")
         if classification in {"terminal-refusal", "lifecycle-failure"}:
@@ -562,7 +874,7 @@ def _junit_approval_violations(rows):
 
 def _dashboard_classification(row):
     cause = str(row.get("noScoreCause") or "").strip().lower()
-    if row.get("routeOnly") or _normalized_name(_row_name(row)) == "route-only":
+    if _truthy(row.get("routeOnly")) or _normalized_name(_row_name(row)) == "route-only":
         return "route-only"
     if row.get("renderFailed"):
         return "failure"
@@ -580,15 +892,23 @@ def _dashboard_classification(row):
             return "size-mismatch"
     if row.get("referenceUntrustable") or cause == "reference-untrustable":
         return "expected-unsupported"
+    score_supplied = False
+    score = None
+    for score_key in ("score", "similarity"):
+        if score_key in row and row.get(score_key) is not None:
+            score_supplied = True
+            score = _finite_number(row.get(score_key))
+            break
+    if score is not None:
+        minimum = _finite_number(row.get("minSimilarity"))
+        minimum = 95.0 if minimum is None else minimum
+        if not 0 <= score <= 100 or score < minimum or row.get("isPassing") is False:
+            return "similarity-failure"
+        return "pass"
     if row.get("isPassing") is False:
         return "similarity-failure"
-    if row.get("isPassing") is True:
+    if row.get("isPassing") is True and not score_supplied:
         return "pass"
-    score = _finite_number(row.get("score", row.get("similarity")))
-    if score is not None and 0 <= score <= 100:
-        return "pass" if score >= 95.0 else "similarity-failure"
-    if row.get("score", row.get("similarity")) is not None:
-        return "similarity-failure"
     return "no-score"
 
 
@@ -609,7 +929,7 @@ def _oracle_entries(value, lane, reference_kind):
         row["evidenceLane"] = lane
         row.setdefault("routeOnly", _normalized_name(row["name"]) == "route-only")
         if "classification" not in row:
-            row["classification"] = "route-only" if row["routeOnly"] else "pass"
+            row["classification"] = "route-only" if _truthy(row["routeOnly"]) else "pass"
         rows.append(row)
     return rows
 
@@ -813,6 +1133,22 @@ def _causal_cohort_key(evidence):
     )
 
 
+def _causal_cohort_keys(rows):
+    cohorts = set()
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        evidence = row.get("evidenceIndexEntry", row.get("evidence"))
+        if (
+            _valid_comparable(row, evidence)
+            and _has_causal_evidence({}, evidence)
+        ):
+            cohort = _causal_cohort_key(evidence)
+            if cohort is not None:
+                cohorts.add(cohort)
+    return cohorts
+
+
 def _runner_side_effect_observed(*sources):
     for source in sources:
         if not isinstance(source, dict):
@@ -904,8 +1240,8 @@ def _is_route_only(row):
     return bool(
         isinstance(row, dict)
         and (
-            row.get("routeOnly") is True
-            or row.get("classification") == "route-only"
+            _truthy(row.get("routeOnly"))
+            or str(row.get("classification", "")).lower() == "route-only"
             or _normalized_name(_row_name(row)) == "route-only"
         )
     )
@@ -919,12 +1255,13 @@ def _entry_key(row):
 def _identity_metadata(row):
     metadata = []
     sources = [row] if isinstance(row, dict) else []
-    for key in ("source", "sourceMetadata", "metadata"):
+    for key in ("source", "sourceMetadata", "metadata", "gmIdentity"):
         nested = row.get(key) if isinstance(row, dict) else None
         if isinstance(nested, dict):
             sources.append(nested)
     for label, keys in (
-        ("class", ("class", "className", "sourceClass")),
+        ("className", ("className", "class")),
+        ("sourceClass", ("sourceClass", "sourceClassName")),
         (
             "sourceRegistration",
             ("sourceRegistration", "registration", "sourceRegistrationId", "source"),
@@ -936,6 +1273,7 @@ def _identity_metadata(row):
                 for source in sources
                 for key in keys
                 if _nonempty(source.get(key))
+                and not isinstance(source.get(key), (dict, list))
             ),
             None,
         )
@@ -955,6 +1293,15 @@ def _identity_matches(left, right):
     right_metadata = dict(_identity_metadata(right))
     return all(
         left_metadata[key] == right_metadata[key]
+        for key in left_metadata.keys() & right_metadata.keys()
+    )
+
+
+def _identity_metadata_conflicts(left, right):
+    left_metadata = dict(_identity_metadata(left))
+    right_metadata = dict(_identity_metadata(right))
+    return any(
+        left_metadata[key] != right_metadata[key]
         for key in left_metadata.keys() & right_metadata.keys()
     )
 
@@ -1003,7 +1350,13 @@ def _entry_dimensions(entry):
     reference_candidates = []
     dimensions_present = "dimensions" in entry and entry.get("dimensions") is not None
     dimensions = entry.get("dimensions")
+    explicit_invalid = False
     if isinstance(dimensions, dict):
+        for component in ("render", "generated", "reference", "ref"):
+            if component in dimensions and _dimension_pair(dimensions[component]) is None:
+                explicit_invalid = True
+        if any(key in dimensions for key in ("width", "height", "w", "h")):
+            explicit_invalid = _dimension_pair(dimensions) is None
         render = _dimension_pair(dimensions.get("render", dimensions.get("generated")))
         reference = _dimension_pair(dimensions.get("reference", dimensions.get("ref")))
         if render is not None:
@@ -1016,17 +1369,33 @@ def _entry_dimensions(entry):
             reference_candidates.append(pair)
         elif render is None and reference is None:
             return None, None
+    elif dimensions_present:
+        explicit_invalid = True
+    for key in ("renderDimensions", "generatedDimensions", "referenceDimensions"):
+        if key in entry and _dimension_pair(entry.get(key)) is None:
+            explicit_invalid = True
     render = _dimension_pair(entry.get("renderDimensions", entry.get("generatedDimensions")))
     reference = _dimension_pair(entry.get("referenceDimensions"))
     if render is not None:
         render_candidates.append(render)
     if reference is not None:
         reference_candidates.append(reference)
+    render_width_present = any(key in entry for key in ("width", "renderWidth"))
+    render_height_present = any(key in entry for key in ("height", "renderHeight"))
     width = _finite_number(entry.get("width", entry.get("renderWidth")))
     height = _finite_number(entry.get("height", entry.get("renderHeight")))
+    if render_width_present or render_height_present:
+        if _dimension_pair({"width": width, "height": height}) is None:
+            explicit_invalid = True
     if width is not None and height is not None:
+        reference_width_present = "referenceWidth" in entry
+        reference_height_present = "referenceHeight" in entry
         reference_width = _finite_number(entry.get("referenceWidth", width))
         reference_height = _finite_number(entry.get("referenceHeight", height))
+        if (reference_width_present or reference_height_present) and _dimension_pair(
+            {"width": reference_width, "height": reference_height}
+        ) is None:
+            explicit_invalid = True
         if reference_width is not None and reference_height is not None:
             render = _dimension_pair({"width": width, "height": height})
             reference = _dimension_pair(
@@ -1036,6 +1405,8 @@ def _entry_dimensions(entry):
                 render_candidates.append(render)
             if reference is not None:
                 reference_candidates.append(reference)
+    if explicit_invalid:
+        return None, None
     records = _artifact_records(entry)
     if any(
         record.get("dimensionsInvalid")
@@ -1099,9 +1470,16 @@ def _artifact_records(entry):
     def add(label, path, sha256, dimensions=None, inherit_common=True, dimensions_invalid=False):
         if path is None and sha256 is None:
             return
-        if dimensions is None and inherit_common and isinstance(common_dimensions, dict):
+        normalized_label = _canonical_artifact(label)
+        can_inherit_common = normalized_label in {"render", "reference"}
+        if (
+            dimensions is None
+            and inherit_common
+            and can_inherit_common
+            and isinstance(common_dimensions, dict)
+        ):
             for component, value in common_dimensions.items():
-                if _canonical_artifact(component) == _canonical_artifact(label):
+                if _canonical_artifact(component) == normalized_label:
                     dimensions = _dimension_pair(value) or _dimension_pair(
                         value.get("dimensions") if isinstance(value, dict) else None
                     )
@@ -1116,7 +1494,7 @@ def _artifact_records(entry):
                 "path": path,
                 "sha256": sha256,
                 "dimensions": dimensions if dimensions is not None else (
-                    common_pair if inherit_common else None
+                    common_pair if inherit_common and can_inherit_common else None
                 ),
                 "dimensionsInvalid": dimensions_invalid,
             }
@@ -1342,28 +1720,10 @@ def _valid_comparable(row, evidence):
     score = _finite_number(row.get("score", row.get("similarity")))
     if score is None or not 0 <= score <= 100:
         return False
-    if evidence is None:
-        return False
-    if evidence.get("comparable") is False:
-        return False
-    if evidence.get("dimensions") is not None and _entry_dimensions(evidence) == (None, None):
-        return False
     row_render_dimensions, row_reference_dimensions = _entry_dimensions(row)
-    if (
-        row.get("dimensions") is not None
-        and (row_render_dimensions is None or row_reference_dimensions is None)
-    ):
+    if row_render_dimensions is None or row_reference_dimensions is None:
         return False
-    if (
-        row_render_dimensions is not None
-        and row_reference_dimensions is not None
-        and row_render_dimensions != row_reference_dimensions
-    ):
-        return False
-    render_dimensions, reference_dimensions = _entry_dimensions(evidence)
-    if render_dimensions is None or reference_dimensions is None:
-        return False
-    if render_dimensions != reference_dimensions:
+    if row_render_dimensions != row_reference_dimensions:
         return False
     return True
 
@@ -1371,7 +1731,7 @@ def _valid_comparable(row, evidence):
 def _requires_current_evidence(row):
     if not isinstance(row, dict) or row.get("referenceKind") != "skia-upstream":
         return False
-    if not _junit_is_pass(row) or _is_route_only(row):
+    if _is_route_only(row):
         return False
     if row.get("classification") == "similarity-failure":
         render_dimensions, reference_dimensions = _entry_dimensions(row)
@@ -1930,8 +2290,6 @@ def _dashboard_output(directory, data_path):
     if not directory.is_dir():
         return None
     html_output = directory / "index.html"
-    if html_output.is_file():
-        return html_output
     candidates = (
         directory / "dashboard.json",
         directory / "gms.json",
@@ -1948,10 +2306,14 @@ def _dashboard_output(directory, data_path):
             return all(isinstance(item, (dict, str)) for item in value)
         if not isinstance(value, dict):
             return False
-        return any(
+        shaped = any(
             key in value and isinstance(value[key], (list, dict))
             for key in ("gms", "rows", "results")
         )
+        if not shaped:
+            return False
+        parse_dashboard(candidate)
+        return True
 
     for candidate in candidates:
         if (
@@ -1963,6 +2325,10 @@ def _dashboard_output(directory, data_path):
     for candidate in sorted(directory.rglob("*.json")):
         if not _same_file(candidate, data_path) and is_dashboard_shaped(candidate):
             return candidate
+    if html_output.is_file():
+        data_output = directory / "data" / "gms.json"
+        if _same_file(data_path, data_output) or not data_output.exists():
+            return html_output
     return None
 
 
@@ -2051,7 +2417,21 @@ def _entry_has_required_evidence(entry):
     return True
 
 
-def _check_evidence_index(value, index_path=None, rows=None):
+def _path_within(path, root):
+    try:
+        pathlib.Path(path).resolve().relative_to(pathlib.Path(root).resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _check_evidence_index(
+    value,
+    index_path=None,
+    rows=None,
+    input_paths=None,
+    allowed_roots=None,
+):
     violations = []
     raw_entries = (
         value.get("entries", value.get("rows", []))
@@ -2060,6 +2440,9 @@ def _check_evidence_index(value, index_path=None, rows=None):
     )
     if not isinstance(raw_entries, list):
         return ["evidence-index entries must be an array"]
+    for index, raw_entry in enumerate(raw_entries):
+        if not isinstance(raw_entry, dict):
+            violations.append("evidence-index entry %s must be an object" % index)
     rows = rows if isinstance(rows, list) else []
     duplicate_current_keys = set()
     current_keys = set()
@@ -2077,7 +2460,9 @@ def _check_evidence_index(value, index_path=None, rows=None):
     if not entries:
         return violations + ["evidence-index has zero entries"]
     seen_keys = set()
+    seen_lane_keys = set()
     artifact_paths = {}
+    matched_entry_owners = {}
     for index, entry in enumerate(entries):
         key = _entry_key(entry)
         if key in seen_keys:
@@ -2085,12 +2470,32 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 "evidence-index contains duplicate key: %s/%s" % (key[0], key[1])
             )
         seen_keys.add(key)
+        lane_key = _lane_key(entry)
+        if lane_key in seen_lane_keys:
+            violations.append(
+                "evidence-index contains duplicate identity: %s/%s"
+                % (lane_key[0], lane_key[1])
+            )
+        seen_lane_keys.add(lane_key)
         matching_rows = [
             row for row in rows if isinstance(row, dict) and _identity_matches(row, entry)
         ]
+        same_lane_rows = [
+            row for row in rows if isinstance(row, dict) and _lane_key(row) == lane_key
+        ]
         if not matching_rows:
+            if any(_identity_metadata_conflicts(row, entry) for row in same_lane_rows):
+                violations.append(
+                    "evidence-index entry %s conflicts with current identity metadata"
+                    % index
+                )
             violations.append(
                 "evidence-index entry %s is orphaned/missing evidence match: %s/%s"
+                % (index, key[0], key[1])
+            )
+        elif len(matching_rows) > 1:
+            violations.append(
+                "evidence-index entry %s has ambiguous current identity matches: %s/%s"
                 % (index, key[0], key[1])
             )
         if not _entry_has_required_evidence(entry):
@@ -2131,11 +2536,28 @@ def _check_evidence_index(value, index_path=None, rows=None):
             if artifact_path is None or not artifact_path.is_file():
                 violations.append("evidence-index artifact path is absent: %s" % label)
                 continue
-            if _has_hash(record["sha256"]):
+            if not _has_hash(record["sha256"]):
+                violations.append("evidence-index artifact hash is missing or invalid: %s" % label)
+            else:
                 actual = _sha256_file(artifact_path)
                 if actual.lower() != record["sha256"].lower():
                     violations.append("evidence-index artifact hash mismatch: %s" % label)
+            if allowed_roots and not any(
+                _path_within(artifact_path, root) for root in allowed_roots
+            ):
+                violations.append(
+                    "evidence-index artifact path is outside allowed roots: %s" % artifact_path
+                )
+            for input_name, input_path in (input_paths or {}).items():
+                if input_path is None:
+                    continue
+                if _same_file(artifact_path, input_path):
+                    violations.append(
+                        "evidence-index artifact path aliases input %s: %s"
+                        % (input_name, artifact_path)
+                    )
         for row in matching_rows:
+            matched_entry_owners.setdefault(id(entry), []).append(row)
             if entry.get("candidateUnlocked") is True and not _has_causal_evidence({}, entry):
                 violations.append(
                     "evidence-index entry %s is missing candidate causal evidence" % index
@@ -2147,9 +2569,12 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 violations.append(
                     "evidence-index entry %s is missing complete pixel evidence" % index
                 )
-    for index, raw_entry in enumerate(raw_entries):
-        if not isinstance(raw_entry, dict):
-            violations.append("evidence-index entry %s must be an object" % index)
+    for entry_id, owners in matched_entry_owners.items():
+        if len(owners) > 1:
+            violations.append(
+                "evidence-index entry is reused by multiple current identities: %s"
+                % ", ".join(str(_row_name(row)) for row in owners)
+            )
     for row in rows:
         if not _requires_current_evidence(row):
             continue
@@ -2171,6 +2596,18 @@ def _check_current_failures(lanes):
         if not isinstance(result, dict):
             continue
         rows = result.get("rows", [])
+        suite_failures = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and row.get("suiteLevel")
+            and row.get("outcome") in {"failure", "error"}
+        ]
+        if suite_failures:
+            violations.append(
+                "%s has %s suite-level failure/error row(s)"
+                % (lane, len(suite_failures))
+            )
         unclassified = [
             row
             for row in rows
@@ -2209,6 +2646,16 @@ def _check_current_failures(lanes):
     return violations
 
 
+def _check_junit_counts(lanes):
+    violations = []
+    for lane, result in lanes:
+        if not isinstance(result, dict):
+            continue
+        for mismatch in result.get("countMismatches", []):
+            violations.append("%s JUnit count mismatch: %s" % (lane, mismatch))
+    return violations
+
+
 def _command_text(value):
     if isinstance(value, str):
         return value
@@ -2219,6 +2666,38 @@ def _command_text(value):
             if isinstance(value.get(key), str):
                 return value[key]
     return ""
+
+
+def _command_tokens(value):
+    if isinstance(value, str):
+        try:
+            return shlex.split(value)
+        except ValueError:
+            return None
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, dict):
+        for key in ("command", "cmd", "value"):
+            if key in value:
+                return _command_tokens(value[key])
+    return []
+
+
+def _has_adjacent_tokens(tokens, expected):
+    width = len(expected)
+    return any(tokens[index : index + width] == list(expected) for index in range(len(tokens)))
+
+
+def _has_test_selector(tokens, expected):
+    return any(
+        token == "--tests=%s" % expected
+        or (
+            token == "--tests"
+            and index + 1 < len(tokens)
+            and tokens[index + 1] == expected
+        )
+        for index, token in enumerate(tokens)
+    )
 
 
 def _check_execution_contract(commands, environment):
@@ -2247,28 +2726,32 @@ def _check_execution_contract(commands, environment):
         "dashboard": (":integration-tests:skia:generateSkiaDashboard",),
     }
     for name in required_commands:
-        command = _command_text(commands.get(name))
-        if not command:
+        tokens = _command_tokens(commands.get(name))
+        if tokens is None:
+            violations.append("execution command %s cannot be parsed" % name)
+            continue
+        if not tokens:
             violations.append("execution command is missing: %s" % name)
             continue
-        if not re.search(r"(?:DISPLAY|display)=:99(?:\s|$)", command):
+        if "DISPLAY=:99" not in tokens and "display=:99" not in tokens:
             violations.append("execution command %s is missing DISPLAY=:99" % name)
-        for flag in ("-F off", "--no-daemon", "--no-parallel", "--console=plain"):
-            if flag not in command:
+        if not _has_adjacent_tokens(tokens, ("-F", "off")):
+            violations.append("execution command %s is missing -F off" % name)
+        for flag in ("--no-daemon", "--no-parallel", "--console=plain"):
+            if flag not in tokens:
                 violations.append("execution command %s is missing %s" % (name, flag))
         for token in task_tokens[name]:
-            if token not in command:
+            if token not in tokens:
                 violations.append("execution command %s is missing task token %s" % (name, token))
-        if name == "skiaRunner" and not re.search(
-            r"(?:^|\s)--tests(?:=|\s+)org\.graphiks\.kanvas\.skia\.SkiaGmRunner(?:\s|$)",
-            command,
+        if name == "skiaRunner" and not _has_test_selector(
+            tokens, "org.graphiks.kanvas.skia.SkiaGmRunner"
         ):
             violations.append(
                 "execution command skiaRunner must select org.graphiks.kanvas.skia.SkiaGmRunner"
             )
-        if name == "skiaRunner" and "-Dkanvas.gm.includeBlocking=true" not in command:
+        if name == "skiaRunner" and "-Dkanvas.gm.includeBlocking=true" not in tokens:
             violations.append("execution command skiaRunner is missing includeBlocking")
-        if name == "dashboard" and "-Pgm.includeBlocking=true" not in command:
+        if name == "dashboard" and "-Pgm.includeBlocking=true" not in tokens:
             violations.append("execution command dashboard is missing includeBlocking")
     return violations
 
@@ -2329,6 +2812,17 @@ def _check_pixel_score_range(value):
 def _check_source_commit(source_commit):
     if not re.fullmatch(r"[0-9a-fA-F]{40}", str(source_commit)):
         return ["sourceCommit must be a 40-hex commit"]
+    try:
+        current = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ["sourceCommit could not be resolved from the current repository"]
+    if str(source_commit).lower() != current.lower():
+        return ["sourceCommit does not match the current repository HEAD"]
     return []
 
 
@@ -2478,7 +2972,11 @@ def main(argv=None):
         print("reconciliation %s failed: %s" % ("check" if args.check else "", "; ".join(message)))
         return 2
 
-    dashboard_output = _dashboard_output(args.dashboard_dir, args.dashboard_json)
+    try:
+        dashboard_output = _dashboard_output(args.dashboard_dir, args.dashboard_json)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print("reconciliation failed: dashboard: %s" % error)
+        return 2
     if args.check and dashboard_output is None:
         print("reconciliation check failed: dashboard output is missing")
         return 2
@@ -2494,6 +2992,14 @@ def main(argv=None):
     if args.check:
         check_violations.extend(
             _check_current_failures(
+                [
+                    ("skia", inputs["skiaRunner"]),
+                    ("svg", inputs["svg"]),
+                ]
+            )
+        )
+        check_violations.extend(
+            _check_junit_counts(
                 [
                     ("skia", inputs["skiaRunner"]),
                     ("svg", inputs["svg"]),
@@ -2520,11 +3026,26 @@ def main(argv=None):
             check_violations.append(
                 "approved status requires at least one supported row with actual similarity improvement"
             )
+        if args.status == "approved" and len(
+            _causal_cohort_keys(manifest["rows"]["skia"])
+        ) > 1:
+            check_violations.append(
+                "approved status requires at most one causal evidence cohort"
+            )
         check_violations.extend(
             _check_evidence_index(
                 inputs["evidenceIndexData"],
                 args.evidence_index,
                 manifest["rows"]["skia"],
+                input_paths={
+                    **input_paths,
+                    "dashboardOutput": dashboard_output,
+                },
+                allowed_roots=(
+                    args.evidence_index.parent,
+                    args.generated_renders,
+                    args.dashboard_dir,
+                ),
             )
         )
         if args.status == "approved":
