@@ -67,8 +67,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
     def write_cli_fixtures(
         self,
-        runner_before=None,
-        runner_after=None,
+        skia_runner=None,
         dashboard_output=None,
         dashboard_data=None,
         score_before=(
@@ -84,20 +83,9 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         test_oracle=None,
         cpu_oracle=None,
     ):
-        if runner_before is None:
-            runner_before = self.write_runner(
-                "runner-before.xml",
-                [
-                    self.testcase(
-                        "pass",
-                        '<failure message="similarity 85.0 below threshold 95.0"/>',
-                    ),
-                    self.testcase("route-only"),
-                ],
-            )
-        if runner_after is None:
-            runner_after = self.write_runner(
-                "runner-after.xml",
+        if skia_runner is None:
+            skia_runner = self.write_runner(
+                "skia-runner.xml",
                 [self.testcase("pass"), self.testcase("route-only")],
             )
         if dashboard_output is None:
@@ -165,47 +153,92 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         if cpu_oracle is None:
             cpu_oracle = {"rows": [{"name": "route-only", "referenceKind": "cpu-oracle"}]}
 
-        wave0 = self.write_runner("wave0-runner.xml", [], tests=615)
-        dashboard_output_path = self.write_json("dashboard/output.json", dashboard_output)
-        dashboard_data_path = self.write_json("dashboard/data.json", dashboard_data)
+        svg_xml = self.write_runner(
+            "svg-results.xml",
+            [self.testcase("pass", classname="SvgIntegrationTest")],
+        )
+        cpu_results = self.write_json("cpu-results.json", cpu_oracle)
+        gpu_results = self.write_json("gpu-results.json", test_oracle)
+        fp13_runner = self.write_runner("fp13-runner.xml", [], tests=615)
+        dashboard_json_path = self.write_json("dashboard.json", dashboard_output)
+        dashboard_dir = self.root / "dashboard-output"
+        dashboard_dir.mkdir(parents=True, exist_ok=True)
+        dashboard_output_path = self.write_json(
+            "dashboard-output/dashboard.json", dashboard_data
+        )
+        generated_renders = self.root / "generated-renders"
+        generated_renders.mkdir(parents=True, exist_ok=True)
+        self.write_text("generated-renders/pass.png", "fixture render\n")
         score_before_path = self.write_text("scores/before.properties", score_before)
         score_after_path = self.write_text("scores/after.properties", score_after)
-        test_oracle_path = self.write_json("oracles/test.json", test_oracle)
-        cpu_oracle_path = self.write_json("oracles/cpu.json", cpu_oracle)
+        commands_json = self.write_json(
+            "provenance/commands.json",
+            {"runner": "./gradlew :integration-tests:skia:test"},
+        )
+        environment_json = self.write_json(
+            "provenance/environment.json",
+            {"os": "test", "display": ":99"},
+        )
+        evidence_index = self.write_json(
+            "provenance/evidence-index.json",
+            {"entries": [{"name": "pass", "referenceKind": "skia-upstream"}]},
+        )
         return {
-            "wave0": wave0,
-            "runnerBefore": runner_before,
-            "runnerAfter": runner_after,
+            "skiaRunner": skia_runner,
+            "dashboardJson": dashboard_json_path,
+            "dashboardDir": dashboard_dir,
             "dashboardOutput": dashboard_output_path,
-            "dashboardData": dashboard_data_path,
+            "generatedRenders": generated_renders,
+            "svgXml": svg_xml,
+            "cpuResults": cpu_results,
+            "gpuResults": gpu_results,
             "scoreBefore": score_before_path,
             "scoreAfter": score_after_path,
-            "testOracle": test_oracle_path,
-            "cpuOracle": cpu_oracle_path,
+            "fp13Runner": fp13_runner,
+            "commandsJson": commands_json,
+            "environmentJson": environment_json,
+            "evidenceIndex": evidence_index,
         }
 
-    def cli_args(self, fixtures, output_json, output_markdown, check=False):
+    def cli_args(
+        self,
+        fixtures,
+        output_json,
+        output_markdown,
+        status="classification",
+        check=False,
+    ):
         args = [
-            "--wave0-runner",
-            str(fixtures["wave0"]),
-            "--runner-before",
-            str(fixtures["runnerBefore"]),
-            "--runner-after",
-            str(fixtures["runnerAfter"]),
-            "--dashboard-output",
-            str(fixtures["dashboardOutput"]),
-            "--dashboard-data",
-            str(fixtures["dashboardData"]),
-            "--score-before",
+            "--skia-runner",
+            str(fixtures["skiaRunner"]),
+            "--dashboard-json",
+            str(fixtures["dashboardJson"]),
+            "--dashboard-dir",
+            str(fixtures["dashboardDir"]),
+            "--generated-renders",
+            str(fixtures["generatedRenders"]),
+            "--svg-xml",
+            str(fixtures["svgXml"]),
+            "--cpu-results",
+            str(fixtures["cpuResults"]),
+            "--gpu-results",
+            str(fixtures["gpuResults"]),
+            "--scores-before",
             str(fixtures["scoreBefore"]),
-            "--score-after",
+            "--scores-after",
             str(fixtures["scoreAfter"]),
-            "--test-oracle",
-            str(fixtures["testOracle"]),
-            "--cpu-oracle",
-            str(fixtures["cpuOracle"]),
+            "--fp13-runner",
+            str(fixtures["fp13Runner"]),
+            "--commands-json",
+            str(fixtures["commandsJson"]),
+            "--environment-json",
+            str(fixtures["environmentJson"]),
+            "--evidence-index",
+            str(fixtures["evidenceIndex"]),
             "--source-commit",
             "abc123",
+            "--status",
+            status,
             "--output-json",
             str(output_json),
             "--output-markdown",
@@ -215,20 +248,26 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             args.append("--check")
         return args
 
-    def run_main(self, fixtures, check=False):
+    def run_main(self, fixtures, check=False, status="classification"):
         output_json = self.root / "reports" / "wave1.json"
         output_markdown = self.root / "reports" / "wave1.md"
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = reconcile.main(
-                self.cli_args(fixtures, output_json, output_markdown, check=check)
+            exit_status = reconcile.main(
+                self.cli_args(
+                    fixtures,
+                    output_json,
+                    output_markdown,
+                    status=status,
+                    check=check,
+                )
             )
         manifest = (
             json.loads(output_json.read_text(encoding="utf-8"))
             if output_json.is_file()
             else None
         )
-        return status, output.getvalue(), manifest, output_json, output_markdown
+        return exit_status, output.getvalue(), manifest, output_json, output_markdown
 
     @staticmethod
     def sha256(path):
@@ -237,6 +276,19 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
     @staticmethod
     def rows_by_name(rows):
         return {row["name"]: row for row in rows}
+
+    @staticmethod
+    def snapshot_path(path):
+        if path.is_dir():
+            return {
+                str(child.relative_to(path)): child.read_bytes()
+                for child in sorted(path.rglob("*"))
+                if child.is_file()
+            }
+        return path.read_bytes()
+
+    def snapshot_fixtures(self, fixtures):
+        return {name: self.snapshot_path(path) for name, path in fixtures.items()}
 
     def test_manifest_declares_classification_and_include_blocking_population_policy(self):
         fixtures = self.write_cli_fixtures()
@@ -266,7 +318,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
     def test_dashboard_provenance_records_output_data_paths_and_sha256_hashes(self):
         fixtures = self.write_cli_fixtures()
         dashboard_fixture = json.loads(
-            fixtures["dashboardOutput"].read_text(encoding="utf-8")
+            fixtures["dashboardJson"].read_text(encoding="utf-8")
         )
         self.assertEqual(
             [row["name"] for row in dashboard_fixture["gms"]],
@@ -276,15 +328,26 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
         self.assertEqual(status, 0, stdout)
         dashboard = manifest["dashboard"]
-        self.assertEqual(dashboard["outputDir"], str(fixtures["dashboardOutput"].parent))
-        self.assertEqual(dashboard["dataPath"], str(fixtures["dashboardData"]))
+        self.assertEqual(dashboard["outputDir"], str(fixtures["dashboardDir"]))
+        self.assertEqual(dashboard["dataPath"], str(fixtures["dashboardJson"]))
         self.assertEqual(dashboard["outputSha256"], self.sha256(fixtures["dashboardOutput"]))
-        self.assertEqual(dashboard["dataSha256"], self.sha256(fixtures["dashboardData"]))
+        self.assertEqual(dashboard["dataSha256"], self.sha256(fixtures["dashboardJson"]))
         self.assertEqual(manifest["current"]["dashboard"]["rows"], 4)
+        provenance = manifest["provenance"]
+        for field, fixture_key in (
+            ("commands", "commandsJson"),
+            ("environment", "environmentJson"),
+            ("evidenceIndex", "evidenceIndex"),
+        ):
+            self.assertEqual(provenance[field]["path"], str(fixtures[fixture_key]))
+            self.assertEqual(
+                provenance[field]["sha256"],
+                self.sha256(fixtures[fixture_key]),
+            )
 
     def test_score_before_after_integrity_and_runner_side_effect_restore_are_reported(self):
         fixtures = self.write_cli_fixtures()
-        before = {name: path.read_bytes() for name, path in fixtures.items()}
+        before = self.snapshot_fixtures(fixtures)
         status, stdout, manifest, _, _ = self.run_main(fixtures)
 
         self.assertEqual(status, 0, stdout)
@@ -306,7 +369,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         runner = manifest["current"]["runner"]
         self.assertTrue(runner["sideEffect"])
         self.assertTrue(runner["restored"])
-        self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})
+        self.assertEqual(before, self.snapshot_fixtures(fixtures))
 
     def test_reference_lanes_keep_skia_upstream_test_oracle_and_cpu_oracle_distinct(self):
         fixtures = self.write_cli_fixtures()
@@ -358,7 +421,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             ],
         )
         fixtures = self.write_cli_fixtures(
-            runner_after=runner,
+            skia_runner=runner,
             dashboard_output={"gms": []},
             dashboard_data={"rows": []},
             test_oracle={"rows": []},
@@ -401,7 +464,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             ],
         )
         fixtures = self.write_cli_fixtures(
-            runner_after=runner,
+            skia_runner=runner,
             dashboard_output={"gms": []},
             dashboard_data={"rows": []},
             test_oracle={"rows": []},
@@ -412,11 +475,12 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertEqual(status, 0, stdout)
         escalation = manifest["escalation"]
         self.assertEqual(escalation["maxFailedHypotheses"], 3)
+        self.assertGreaterEqual(len(escalation["failedHypotheses"]), 1)
         self.assertLessEqual(len(escalation["failedHypotheses"]), 3)
 
     def test_check_rejects_missing_dashboard_without_writing_report(self):
         fixtures = self.write_cli_fixtures()
-        fixtures["dashboardOutput"].unlink()
+        fixtures["dashboardJson"].unlink()
         status, stdout, manifest, output_json, output_markdown = self.run_main(
             fixtures, check=True
         )
@@ -429,9 +493,9 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
     def test_check_rejects_malformed_dashboard_without_mutating_fixture_inputs(self):
         fixtures = self.write_cli_fixtures()
-        before = {name: path.read_bytes() for name, path in fixtures.items()}
-        fixtures["dashboardOutput"].write_text("{ malformed json\n", encoding="utf-8")
-        malformed_before = fixtures["dashboardOutput"].read_bytes()
+        before = self.snapshot_fixtures(fixtures)
+        fixtures["dashboardJson"].write_text("{ malformed json\n", encoding="utf-8")
+        malformed_before = fixtures["dashboardJson"].read_bytes()
         status, stdout, manifest, output_json, output_markdown = self.run_main(
             fixtures, check=True
         )
@@ -441,10 +505,10 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertIsNone(manifest)
         self.assertFalse(output_json.exists())
         self.assertFalse(output_markdown.exists())
-        self.assertEqual(fixtures["dashboardOutput"].read_bytes(), malformed_before)
+        self.assertEqual(fixtures["dashboardJson"].read_bytes(), malformed_before)
         for name, path in fixtures.items():
-            if name != "dashboardOutput":
-                self.assertEqual(path.read_bytes(), before[name])
+            if name != "dashboardJson":
+                self.assertEqual(self.snapshot_path(path), before[name])
 
     def test_check_rejects_divergent_score_after_as_score_integrity_violation(self):
         fixtures = self.write_cli_fixtures(
@@ -454,7 +518,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
                 "route-only=99.0\n"
             )
         )
-        before = {name: path.read_bytes() for name, path in fixtures.items()}
+        before = self.snapshot_fixtures(fixtures)
         self.assertNotEqual(
             self.sha256(fixtures["scoreBefore"]),
             self.sha256(fixtures["scoreAfter"]),
@@ -465,7 +529,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertIn("score", stdout.lower())
         self.assertIsNotNone(manifest)
         self.assertTrue(manifest["scoreFile"]["directEditDetected"])
-        self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})
+        self.assertEqual(before, self.snapshot_fixtures(fixtures))
 
     def test_check_rejects_unclassified_runner_error(self):
         runner = self.write_runner(
@@ -473,7 +537,7 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
             [self.testcase("unknown", '<error message="unclassified renderer error"/>')],
         )
         fixtures = self.write_cli_fixtures(
-            runner_after=runner,
+            skia_runner=runner,
             dashboard_output={"gms": []},
             dashboard_data={"rows": []},
             test_oracle={"rows": []},
@@ -493,11 +557,11 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
 
     def test_successful_report_does_not_mutate_any_fixture_input(self):
         fixtures = self.write_cli_fixtures()
-        before = {name: path.read_bytes() for name, path in fixtures.items()}
+        before = self.snapshot_fixtures(fixtures)
         status, stdout, _, _, _ = self.run_main(fixtures)
 
         self.assertEqual(status, 0, stdout)
-        self.assertEqual(before, {name: path.read_bytes() for name, path in fixtures.items()})
+        self.assertEqual(before, self.snapshot_fixtures(fixtures))
 
 
 if __name__ == "__main__":
