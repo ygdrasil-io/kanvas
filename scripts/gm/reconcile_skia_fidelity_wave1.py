@@ -494,7 +494,7 @@ def _dashboard_entries(dashboard):
 
 
 def _merge_junit_fields(dashboard_rows, runner_rows):
-    by_key = {_entry_key(row): row for row in runner_rows}
+    by_key = {_lane_key(row): row for row in runner_rows}
     fields = (
         "outcome",
         "message",
@@ -511,13 +511,39 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "lifecycleFailure",
     )
     for row in dashboard_rows:
-        junit = by_key.get(_entry_key(row))
+        junit = by_key.get(_lane_key(row))
         if junit is None:
             continue
         row["junit"] = _copy_value(junit)
         for field in fields:
             if field in junit and field not in row:
                 row[field] = _copy_value(junit[field])
+
+
+def _junit_is_pass(row):
+    junit = row.get("junit") if isinstance(row, dict) else None
+    if junit is None:
+        return True
+    return junit.get("outcome") == "passed" and junit.get("classification") == "pass"
+
+
+def _junit_approval_violations(rows):
+    violations = []
+    for row in rows:
+        junit = row.get("junit") if isinstance(row, dict) else None
+        if not isinstance(junit, dict) or junit.get("outcome") == "passed":
+            continue
+        classification = junit.get("classification", "non-pass")
+        if classification in {"terminal-refusal", "lifecycle-failure"}:
+            violations.append(
+                "terminal/lifecycle JUnit result blocks approval for %s"
+                % row.get("name", "")
+            )
+        else:
+            violations.append(
+                "non-pass JUnit result blocks approval for %s" % row.get("name", "")
+            )
+    return violations
 
 
 def _dashboard_classification(row):
@@ -732,6 +758,47 @@ def _has_causal_evidence(row, evidence):
     )
 
 
+def _causal_value(sources, keys):
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            value = source.get(key)
+            if _nonempty(value):
+                return value
+    return None
+
+
+def _causal_cohort_key(evidence):
+    sources = _evidence_sources({}, evidence)
+    values = (
+        _causal_value(
+            sources,
+            ("currentCausalBucket", "causalBucket", "rootCauseBucket", "rootCause"),
+        ),
+        _causal_value(
+            sources,
+            ("routeSignature", "routeDiagnostic", "routeDiagnostics", "route"),
+        ),
+        _causal_value(
+            sources,
+            ("minimalOperationTrace", "operationTrace", "operationTracePath", "opTrace", "trace"),
+        ),
+        _causal_value(
+            sources,
+            ("ownershipBoundary", "ownership", "owner", "boundary"),
+        ),
+    )
+    if any(value is None for value in values):
+        return None
+    return tuple(
+        json.dumps(_copy_value(value), sort_keys=True, separators=(",", ":"))
+        if isinstance(value, (dict, list))
+        else str(value)
+        for value in values
+    )
+
+
 def _runner_side_effect_observed(*sources):
     for source in sources:
         if not isinstance(source, dict):
@@ -763,6 +830,16 @@ def _check_policy(policy):
     violations = []
     if not isinstance(policy, dict):
         return ["policy object is missing"]
+    required_keys = (
+        "globalThresholdWeakened",
+        "assertionsWeakened",
+        "referencesModified",
+        "memoryBudgetChanged",
+        "readinessDelta",
+    )
+    missing_keys = [key for key in required_keys if key not in policy]
+    if missing_keys:
+        violations.append("policy evidence is missing: %s" % ", ".join(missing_keys))
     for key, label in (
         ("globalThresholdWeakened", "global threshold"),
         ("assertionsWeakened", "assertions"),
@@ -821,7 +898,29 @@ def _is_route_only(row):
 
 
 def _entry_key(row):
-    return _normalized_name(_row_name(row)), str(row.get("referenceKind", ""))
+    metadata = []
+    for label, keys in (
+        ("class", ("class", "className", "sourceClass")),
+        (
+            "sourceRegistration",
+            ("sourceRegistration", "registration", "sourceRegistrationId"),
+        ),
+    ):
+        value = next(
+            (
+                row.get(key)
+                for key in keys
+                if isinstance(row, dict) and _nonempty(row.get(key))
+            ),
+            None,
+        )
+        if value is not None:
+            metadata.append((label, str(value)))
+    return str(_row_name(row)), str(row.get("referenceKind", "")), tuple(metadata)
+
+
+def _lane_key(row):
+    return str(_row_name(row)), str(row.get("referenceKind", ""))
 
 
 def _evidence_for_row(row, entries):
@@ -871,21 +970,31 @@ def _entry_dimensions(entry):
         pair = _dimension_pair(dimensions)
         if pair:
             return pair, pair
+        return None, None
     render = _dimension_pair(entry.get("renderDimensions", entry.get("generatedDimensions")))
     reference = _dimension_pair(entry.get("referenceDimensions"))
     if render or reference:
         return render, reference
     width = _finite_number(entry.get("width", entry.get("renderWidth")))
     height = _finite_number(entry.get("height", entry.get("renderHeight")))
-    if width is None or height is None:
-        return None, None
-    reference_width = _finite_number(entry.get("referenceWidth", width))
-    reference_height = _finite_number(entry.get("referenceHeight", height))
-    if reference_width is None or reference_height is None:
-        return None, None
-    render = _dimension_pair({"width": width, "height": height})
-    reference = _dimension_pair(
-        {"width": reference_width, "height": reference_height}
+    if width is not None and height is not None:
+        reference_width = _finite_number(entry.get("referenceWidth", width))
+        reference_height = _finite_number(entry.get("referenceHeight", height))
+        if reference_width is not None and reference_height is not None:
+            render = _dimension_pair({"width": width, "height": height})
+            reference = _dimension_pair(
+                {"width": reference_width, "height": reference_height}
+            )
+            if render or reference:
+                return render, reference
+    records = _artifact_records(entry)
+    render = next(
+        (record["dimensions"] for record in records if record["label"] == "render"),
+        None,
+    )
+    reference = next(
+        (record["dimensions"] for record in records if record["label"] == "reference"),
+        None,
     )
     return render, reference
 
@@ -1086,14 +1195,36 @@ def _similarity_improved(row, evidence):
             container = source.get(container_name)
             if not isinstance(container, dict):
                 continue
-            before = before if before is not None else _comparison_value(
-                [container.get("before", container.get("baseline", container.get("previous")))],
-                ("similarity", "score", "value"),
-            )
-            after = after if after is not None else _comparison_value(
-                [container.get("after", container.get("current"))],
-                ("similarity", "score", "value"),
-            )
+            score_keys = ("modecolorfilters", "similarity", "score", "value")
+            normalized_name = re.sub(r"[^a-z0-9]", "", container_name.lower())
+            if before is None:
+                before_source = (
+                    container
+                    if normalized_name == "scoresbefore"
+                    else next(
+                        (
+                            container.get(key)
+                            for key in ("scoresBefore", "before", "baseline", "previous")
+                            if container.get(key) is not None
+                        ),
+                        None,
+                    )
+                )
+                before = _comparison_value([before_source], score_keys)
+            if after is None:
+                after_source = (
+                    container
+                    if normalized_name == "scoresafter"
+                    else next(
+                        (
+                            container.get(key)
+                            for key in ("scoresAfter", "after", "current")
+                            if container.get(key) is not None
+                        ),
+                        None,
+                    )
+                )
+                after = _comparison_value([after_source], score_keys)
     return (
         before is not None
         and after is not None
@@ -1105,6 +1236,8 @@ def _similarity_improved(row, evidence):
 
 def _valid_comparable(row, evidence):
     if row.get("referenceKind") != "skia-upstream":
+        return False
+    if not _junit_is_pass(row):
         return False
     if _is_route_only(row) or _is_route_only(evidence):
         return False
@@ -1150,6 +1283,33 @@ def _valid_comparable(row, evidence):
     if render_dimensions != reference_dimensions:
         return False
     return True
+
+
+def _requires_current_evidence(row):
+    if not isinstance(row, dict) or row.get("referenceKind") != "skia-upstream":
+        return False
+    if not _junit_is_pass(row) or _is_route_only(row):
+        return False
+    if row.get("isPassing") is False:
+        return False
+    if row.get("classification") in {
+        "missing-reference",
+        "size-mismatch",
+        "expected-unsupported",
+        "no-score",
+        "similarity-failure",
+        "skip",
+        "terminal-refusal",
+        "lifecycle-failure",
+        "unclassified",
+        "failure",
+        "route-only",
+    }:
+        return False
+    if row.get("sizeMismatch") or row.get("noReference"):
+        return False
+    score = _finite_number(row.get("score", row.get("similarity")))
+    return score is not None and 0 <= score <= 100
 
 
 def _route_only_names(lanes):
@@ -1234,8 +1394,13 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     evidence_value = inputs.get("evidenceIndexData", inputs.get("evidenceIndex", {}))
     evidence_rows = _evidence_entries(evidence_value)
     policy_input = inputs.get("policy", {})
-    if isinstance(evidence_value, dict) and isinstance(evidence_value.get("policy"), dict):
-        policy_input = evidence_value["policy"]
+    policy_evidence_present = False
+    if isinstance(evidence_value, dict) and "policy" in evidence_value:
+        policy_evidence_present = isinstance(evidence_value.get("policy"), dict)
+        if policy_evidence_present:
+            policy_input = evidence_value["policy"]
+    elif "policy" in inputs:
+        policy_evidence_present = isinstance(inputs.get("policy"), dict)
     if not isinstance(policy_input, dict):
         policy_input = {}
 
@@ -1260,13 +1425,19 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         for row in skia_rows
         if _valid_comparable(row, _evidence_for_row(row, evidence_rows))
     ]
-    candidate_rows = [
-        row
-        for row in skia_rows
-        if row.get("referenceKind") == "skia-upstream"
-        and _valid_comparable(row, _evidence_for_row(row, evidence_rows))
-        and _has_causal_evidence({}, _evidence_for_row(row, evidence_rows))
-    ]
+    candidate_rows = []
+    candidate_cohorts = {}
+    for row in skia_rows:
+        evidence = _evidence_for_row(row, evidence_rows)
+        if (
+            row.get("referenceKind") == "skia-upstream"
+            and _valid_comparable(row, evidence)
+            and _has_causal_evidence({}, evidence)
+        ):
+            candidate_rows.append(row)
+            cohort = _causal_cohort_key(evidence)
+            if cohort is not None:
+                candidate_cohorts[cohort] = candidate_cohorts.get(cohort, 0) + 1
     supported_rows = []
     for row in comparable_rows:
         evidence = _evidence_for_row(row, evidence_rows) or {}
@@ -1294,7 +1465,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         ]
     )
     observed_comparable = len(comparable_rows)
-    candidate_unlocked = len(candidate_rows)
+    candidate_unlocked = max(candidate_cohorts.values(), default=0)
     supported_after = len(supported_rows) if status == "approved" else 0
     route_only = len(route_names)
 
@@ -1458,6 +1629,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
             "comparisonNote": "population-shifted",
         },
         "policy": _copy_value(policy_manifest),
+        "policyEvidencePresent": policy_evidence_present,
         "commands": _copy_value(commands),
         "environment": _copy_value(environment),
         "repository": environment.get("repository", environment.get("repo"))
@@ -1679,11 +1851,30 @@ def _dashboard_output(directory, data_path):
         directory / "data" / "gms.json",
         directory / "index.json",
     )
+
+    def is_dashboard_shaped(candidate):
+        try:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        if isinstance(value, list):
+            return all(isinstance(item, (dict, str)) for item in value)
+        if not isinstance(value, dict):
+            return False
+        return any(
+            key in value and isinstance(value[key], (list, dict))
+            for key in ("gms", "rows", "results")
+        )
+
     for candidate in candidates:
-        if candidate.is_file() and not _same_file(candidate, data_path):
+        if (
+            candidate.is_file()
+            and not _same_file(candidate, data_path)
+            and is_dashboard_shaped(candidate)
+        ):
             return candidate
     for candidate in sorted(directory.rglob("*.json")):
-        if not _same_file(candidate, data_path):
+        if not _same_file(candidate, data_path) and is_dashboard_shaped(candidate):
             return candidate
     return None
 
@@ -1752,23 +1943,16 @@ def _entry_has_required_evidence(entry):
         labels = {record["label"] for record in records}
         if "render" not in labels or "reference" not in labels:
             return False
+        render_dimensions, reference_dimensions = _entry_dimensions(entry)
+        if (
+            render_dimensions is None
+            or reference_dimensions is None
+            or render_dimensions != reference_dimensions
+        ):
+            return False
     else:
         return True
-    dimensions = entry.get("dimensions")
-    if dimensions is not None:
-        if isinstance(dimensions, dict):
-            if _dimension_pair(dimensions):
-                return True
-            if _dimension_pair(dimensions.get("render")) and _dimension_pair(
-                dimensions.get("reference")
-            ):
-                return True
-            if any(record["dimensions"] is not None for record in records):
-                return True
-        return False
-    return _dimension_pair(entry) is not None or any(
-        record["dimensions"] is not None for record in records
-    )
+    return True
 
 
 def _check_evidence_index(value, index_path=None, rows=None):
@@ -1786,12 +1970,12 @@ def _check_evidence_index(value, index_path=None, rows=None):
     rows = rows if isinstance(rows, list) else []
     row_keys = {_entry_key(row) for row in rows if isinstance(row, dict)}
     seen_keys = set()
-    artifact_roles = {}
+    artifact_paths = {}
     for index, entry in enumerate(entries):
         key = _entry_key(entry)
         if key in seen_keys:
             violations.append(
-                "evidence-index contains duplicate key: %s/%s" % key
+                "evidence-index contains duplicate key: %s/%s" % (key[0], key[1])
             )
         seen_keys.add(key)
         if key not in row_keys:
@@ -1804,19 +1988,36 @@ def _check_evidence_index(value, index_path=None, rows=None):
                 "evidence-index entry %s is missing required paths, SHA-256 hashes, or dimensions"
                 % index
             )
+        if entry.get("referenceKind") == "skia-upstream":
+            render_dimensions, reference_dimensions = _entry_dimensions(entry)
+            if (
+                render_dimensions is not None
+                and reference_dimensions is not None
+                and render_dimensions != reference_dimensions
+            ):
+                violations.append(
+                    "evidence-index entry %s has mismatched render/reference dimensions"
+                    % index
+                )
         for artifact_index, record in enumerate(_artifact_records(entry)):
-            if index_path is None:
-                continue
-            artifact_path = _resolve_evidence_path(record["path"], index_path)
+            artifact_path = (
+                _resolve_evidence_path(record["path"], index_path)
+                if index_path is not None
+                else pathlib.Path(record["path"]) if record["path"] else None
+            )
             label = "%s.%s" % (entry.get("name", index), record["label"])
             if artifact_path is not None:
                 artifact_key = str(artifact_path.resolve())
-                previous_label = artifact_roles.get(artifact_key)
-                if previous_label is not None and previous_label != record["label"]:
+                previous_owner = artifact_paths.get(artifact_key)
+                if previous_owner is not None:
                     violations.append(
-                        "evidence-index artifact path has duplicate roles: %s" % artifact_path
+                        "evidence-index artifact path has duplicate roles/entries: %s"
+                        % artifact_path
                     )
-                artifact_roles[artifact_key] = record["label"]
+                else:
+                    artifact_paths[artifact_key] = (index, record["label"])
+            if index_path is None:
+                continue
             if artifact_path is None or not artifact_path.is_file():
                 violations.append("evidence-index artifact path is absent: %s" % label)
                 continue
@@ -1840,6 +2041,12 @@ def _check_evidence_index(value, index_path=None, rows=None):
     for index, raw_entry in enumerate(raw_entries):
         if not isinstance(raw_entry, dict):
             violations.append("evidence-index entry %s must be an object" % index)
+    evidence_keys = {_entry_key(entry) for entry in entries}
+    for row in rows:
+        if _requires_current_evidence(row) and _entry_key(row) not in evidence_keys:
+            violations.append(
+                "current Skia row %s is missing evidence-index evidence" % _row_name(row)
+            )
     return violations
 
 
@@ -2179,6 +2386,8 @@ def main(argv=None):
         check_violations.extend(
             _check_execution_contract(inputs["commands"], inputs["environment"])
         )
+        if not manifest.get("policyEvidencePresent", False):
+            check_violations.append("policy evidence is missing")
         check_violations.extend(_check_policy(manifest["policy"]))
         check_violations.extend(_check_source_commit(args.source_commit))
         check_violations.extend(
@@ -2193,12 +2402,16 @@ def main(argv=None):
             _check_evidence_index(
                 inputs["evidenceIndexData"],
                 args.evidence_index,
-                manifest["rows"]["skia"] + manifest["rows"]["skiaJunit"],
+                manifest["rows"]["skia"],
             )
         )
+        if args.status == "approved":
+            check_violations.extend(_junit_approval_violations(manifest["rows"]["skia"]))
 
     try:
         if check_violations:
+            if args.status == "approved":
+                manifest["status"] = "blocked"
             _write_outputs(manifest, args.output_json, args.output_markdown)
             print("reconciliation check failed: %s" % "; ".join(check_violations))
             return 1
