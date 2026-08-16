@@ -175,6 +175,33 @@ class SkiaDashboardGeneratorTest {
     }
 
     @Test
+    fun `includes blocking rows when explicitly requested`() {
+        val refDir = File(tempDir, "reference").apply { mkdirs() }
+        val genDir = File(tempDir, "generated/image").apply { mkdirs() }
+        val scoresFile = File(tempDir, "scores.properties")
+        val outputDir = File(tempDir, "dashboard")
+        val image = byteArrayOf(
+            255.toByte(), 0, 0, 255.toByte(),
+            0, 255.toByte(), 0, 255.toByte(),
+        )
+        ComparisonUtils.saveRgbaAsPng(image, 2, 1, refDir.resolve("blocking_dashboard_score_probe.png"))
+        ComparisonUtils.saveRgbaAsPng(image, 2, 1, genDir.resolve("blocking_dashboard_score_probe.png"))
+
+        val args = arrayOf(
+            "--ref-dir", refDir.absolutePath,
+            "--gen-dir", File(tempDir, "generated").absolutePath,
+            "--scores", scoresFile.absolutePath,
+            "--output-dir", outputDir.absolutePath,
+            "--include-blocking",
+        )
+        generateSkiaDashboard(args, gms = listOf(BlockingDashboardScoreProbeGm()))
+
+        val json = outputDir.resolve("data/gms.json").readText()
+        assertTrue(json.contains("\"total\": 1,"))
+        assertTrue(json.contains("blocking_dashboard_score_probe"))
+    }
+
+    @Test
     fun `scores dashboard entry using reference name while preserving logical name`() {
         val refDir = File(tempDir, "reference").apply { mkdirs() }
         val genDir = File(tempDir, "generated/text").apply { mkdirs() }

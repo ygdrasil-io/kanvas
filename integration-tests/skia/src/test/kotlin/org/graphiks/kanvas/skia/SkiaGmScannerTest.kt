@@ -96,6 +96,21 @@ class SkiaGmScannerTest {
         assertEquals(emptyList<IndexedValue<SkiaGm>>(), selection.gms)
         assertEquals("[SKIP] --from=2 >= total=2", selection.emptyDiagnostic)
     }
+
+    @Test
+    fun `range selection rejects invalid bounds`() {
+        val gms = listOf(ScannerStubGm("a"), ScannerStubGm("b"), ScannerStubGm("c"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForScan(gms, SkiaGmScanOptions(from = -1, to = 2))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForScan(gms, SkiaGmScanOptions(from = 1, to = 0))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForScan(gms, SkiaGmScanOptions(from = 0, to = 4))
+        }
+    }
 }
 
 private class ScannerStubGm(

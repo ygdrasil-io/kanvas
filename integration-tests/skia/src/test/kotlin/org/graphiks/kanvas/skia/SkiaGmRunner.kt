@@ -12,6 +12,7 @@ import org.graphiks.kanvas.test.ComparisonUtils
 import org.graphiks.kanvas.test.ReferenceManager
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Named
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
@@ -30,9 +31,13 @@ class SkiaGmRunner {
         }
 
         @JvmStatic
-        fun allGms() = selectSkiaGmsForRunner(
-            SkiaGmRegistry.all(),
-            System.getProperty("kanvas.gm.name"),
+        fun allGms() = namedSkiaGmsForRunner(
+            selectSkiaGmsForRunner(
+                SkiaGmRegistry.all(),
+                System.getProperty("kanvas.gm.name"),
+                System.getProperty("kanvas.gm.from")?.toInt(),
+                System.getProperty("kanvas.gm.to")?.toInt(),
+            ),
         )
 
         @AfterAll
@@ -42,7 +47,7 @@ class SkiaGmRunner {
         }
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("allGms")
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
     fun `render GM`(gm: SkiaGm) {
@@ -160,5 +165,29 @@ internal fun referenceResourcePath(gm: SkiaGm): String =
 internal fun missingReferenceMessage(refPath: String): String =
     "Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources$refPath"
 
-internal fun selectSkiaGmsForRunner(gms: List<SkiaGm>, name: String?): List<SkiaGm> =
-    if (name == null) gms else gms.filter { it.name == name }
+internal fun selectSkiaGmsForRunner(
+    gms: List<SkiaGm>,
+    name: String?,
+    from: Int? = null,
+    to: Int? = null,
+): List<SkiaGm> {
+    validateSkiaGmRange(from, to, gms.size)
+    val start = from ?: 0
+    val end = to ?: gms.size
+    return gms.withIndex()
+        .filter { (index, gm) -> index in start until end && (name == null || gm.name == name) }
+        .map { it.value }
+}
+
+internal fun namedSkiaGmsForRunner(gms: List<SkiaGm>): List<Named<SkiaGm>> =
+    gms.map { Named.of(it.name, it) }
+
+internal fun validateSkiaGmRange(from: Int?, to: Int?, size: Int) {
+    val start = from ?: 0
+    val end = to ?: size
+    require(start >= 0) { "GM range start must be non-negative: $start" }
+    require(end >= 0) { "GM range end must be non-negative: $end" }
+    require(start <= end) { "GM range start must not exceed end: $start > $end" }
+    require(start <= size) { "GM range start is outside registry: $start > $size" }
+    require(end <= size) { "GM range end is outside registry: $end > $size" }
+}

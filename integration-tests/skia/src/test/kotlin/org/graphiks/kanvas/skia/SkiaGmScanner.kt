@@ -69,8 +69,10 @@ fun resolveSkiaGmScanSelection(
     require(missingNames.isEmpty()) { "Unknown Skia GM names: ${missingNames.joinToString(", ")}" }
     val missingIndices = options.indices - namedGms.map { it.index }.toSet()
     require(missingIndices.isEmpty()) { "Unknown Skia GM indices: ${missingIndices.sorted().joinToString(", ")}" }
-    val effectiveFrom = options.from.coerceIn(0, namedGms.size)
-    val effectiveTo = options.to.coerceIn(effectiveFrom, namedGms.size)
+    val requestedTo = options.to.takeUnless { it == Int.MAX_VALUE }
+    validateSkiaGmRange(options.from, requestedTo, namedGms.size)
+    val effectiveFrom = options.from
+    val effectiveTo = requestedTo ?: namedGms.size
     return SkiaGmScanSelection(
         gms = namedGms.subList(effectiveFrom, effectiveTo),
         total = namedGms.size,
@@ -95,7 +97,7 @@ fun listBlockingSkiaGmEntries(gms: List<SkiaGm>): List<IndexedValue<SkiaGm>> =
  *
  * Args:
  *   --from=N     first GM index (default 0)
- *   --to=N       last GM index (default all)
+ *   --to=N       exclusive end GM index (default all)
  *   --timeout=N  seconds per GM (default 30)
  *   --output=PATH  append result lines to a file (default stdout only)
  *

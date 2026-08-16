@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     id("java-library")
@@ -28,6 +30,8 @@ tasks.withType<Test> {
     }
     listOf(
         "kanvas.gm.includeBlocking",
+        "kanvas.gm.from",
+        "kanvas.gm.to",
         "kanvas.gm.name",
         "kanvas.render.debugLevel",
     ).forEach { propertyName ->
@@ -43,9 +47,12 @@ tasks.register<JavaExec>("generateSkiaRenders") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
-    val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+    val outputDir = project.findProperty("gm.outputDir")?.toString()?.let(::File)
+        ?: layout.projectDirectory.dir("src/test/resources/generated-renders").asFile
     val gmIncludeBlocking = project.findProperty("gm.includeBlocking")?.toString()?.toBoolean() ?: false
-    args(outputDir.asFile.absolutePath)
+    args(outputDir.absolutePath)
+    project.findProperty("gm.from")?.let { args("--from", it.toString()) }
+    project.findProperty("gm.to")?.let { args("--to", it.toString()) }
     if (gmIncludeBlocking) {
         args("--include-blocking")
     }
@@ -70,13 +77,18 @@ tasks.register<JavaExec>("generateSkiaRendersFor") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
-    val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+    val outputDir = project.findProperty("gm.outputDir")?.toString()?.let(::File)
+        ?: layout.projectDirectory.dir("src/test/resources/generated-renders").asFile
     val gmFamily = project.findProperty("gm.family")?.toString()
     val gmName = project.findProperty("gm.name")?.toString()
+    val gmFrom = project.findProperty("gm.from")?.toString()
+    val gmTo = project.findProperty("gm.to")?.toString()
     val gmIncludeBlocking = project.findProperty("gm.includeBlocking")?.toString()?.toBoolean() ?: false
-    val renderArgs = mutableListOf(outputDir.asFile.absolutePath)
+    val renderArgs = mutableListOf(outputDir.absolutePath)
     if (gmFamily != null) { renderArgs.add("--family"); renderArgs.add(gmFamily) }
     if (gmName != null) { renderArgs.add("--name"); renderArgs.add(gmName) }
+    if (gmFrom != null) { renderArgs.add("--from"); renderArgs.add(gmFrom) }
+    if (gmTo != null) { renderArgs.add("--to"); renderArgs.add(gmTo) }
     if (gmIncludeBlocking) { renderArgs.add("--include-blocking") }
     args(renderArgs)
     jvmArgs(buildList {
@@ -122,16 +134,24 @@ tasks.register<JavaExec>("generateSkiaDashboard") {
     dependsOn(tasks.named("generateSkiaRenders"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaDashboardGeneratorKt")
-    val refDir = layout.projectDirectory.dir("src/test/resources/reference")
-    val genDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
-    val scoresFile = layout.projectDirectory.file("test-similarity-scores.properties")
-    val outputDir = layout.buildDirectory.dir("reports/skia-gm-dashboard")
+    val refDir = project.findProperty("gm.referenceDir")?.toString()?.let(::File)
+        ?: layout.projectDirectory.dir("src/test/resources/reference").asFile
+    val genDir = project.findProperty("gm.outputDir")?.toString()?.let(::File)
+        ?: layout.projectDirectory.dir("src/test/resources/generated-renders").asFile
+    val scoresFile = project.findProperty("gm.scores")?.toString()?.let(::File)
+        ?: layout.projectDirectory.file("test-similarity-scores.properties").asFile
+    val outputDir = project.findProperty("gm.dashboardOutputDir")?.toString()?.let(::File)
+        ?: layout.buildDirectory.dir("reports/skia-gm-dashboard").get().asFile
     args(
-        "--ref-dir", refDir.asFile.absolutePath,
-        "--gen-dir", genDir.asFile.absolutePath,
-        "--scores", scoresFile.asFile.absolutePath,
-        "--output-dir", outputDir.get().asFile.absolutePath,
+        "--ref-dir", refDir.absolutePath,
+        "--gen-dir", genDir.absolutePath,
+        "--scores", scoresFile.absolutePath,
+        "--output-dir", outputDir.absolutePath,
     )
+    val gmIncludeBlocking = project.findProperty("gm.includeBlocking")?.toString()?.toBoolean() ?: false
+    if (gmIncludeBlocking) {
+        args("--include-blocking")
+    }
     jvmArgs(buildList {
         add("--add-opens=java.base/java.lang=ALL-UNNAMED")
         add("--enable-native-access=ALL-UNNAMED")

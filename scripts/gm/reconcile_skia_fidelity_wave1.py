@@ -24,6 +24,7 @@ EXPECTED_UNSUPPORTED_CODES = {
 FAILURE_CODE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.-])(?:unsupported|failed|invalid|stale)\.[A-Za-z0-9_.-]+"
 )
+STUB_CODE_PATTERN = re.compile(r"\bSTUB\.[A-Za-z0-9_.-]+")
 SCORE_KEYS = ("modecolorfilters",)
 
 
@@ -49,6 +50,9 @@ def _failure_code(message, element, outcome, expected_codes):
         for expected_code in sorted(expected_codes, key=len, reverse=True):
             if expected_code and expected_code in candidate:
                 return expected_code
+        match = STUB_CODE_PATTERN.search(candidate)
+        if match:
+            return match.group(0)
         match = FAILURE_CODE_PATTERN.search(candidate)
         if match:
             return match.group(0)
@@ -124,6 +128,20 @@ def _truthy(value):
     return False
 
 
+def _optional_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "on", "1"}:
+            return True
+        if normalized in {"false", "no", "off", "0"}:
+            return False
+    return None
+
+
 def _compact_name(value):
     return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
 
@@ -178,6 +196,7 @@ def _junit_identity(name, attributes=None):
 
 def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
     expected_unsupported = failure_code in expected_codes
+    implementation_failure = bool(failure_code and failure_code.startswith("STUB."))
     missing_reference = _is_missing_reference(message)
     size_mismatch = _is_size_mismatch(message)
     similarity_failure = _is_similarity_failure(message)
@@ -202,6 +221,8 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
         classification = "similarity-failure"
     elif terminal_refusal:
         classification = "terminal-refusal"
+    elif implementation_failure:
+        classification = "implementation-failure"
     elif outcome in {"failure", "error"}:
         classification = "unclassified"
     else:
@@ -217,6 +238,7 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
         "sizeMismatch": size_mismatch,
         "similarityFailure": similarity_failure,
         "lifecycleFailure": lifecycle_failure,
+        "implementationFailure": implementation_failure,
     }
 
 
@@ -731,6 +753,46 @@ def _junit_name_keys(row):
     return keys
 
 
+def _junit_dashboard_matches(junit, dashboard_rows):
+    identity = junit.get("gmIdentity") if isinstance(junit, dict) else None
+    exact_candidates = (
+        (
+            identity.get("sourceRegistration"),
+            identity.get("sourceClassPath"),
+            identity.get("sourceClass"),
+        )
+        if isinstance(identity, dict)
+        else ()
+    )
+    exact_names = {
+        str(candidate).strip()
+        for candidate in exact_candidates
+        if str(candidate or "").strip()
+    }
+    if not exact_names:
+        exact_names = {str(_row_name(junit)).strip()}
+    junit_lane = str(junit.get("referenceKind") or "").strip()
+
+    def same_lane(row):
+        dashboard_lane = str(row.get("referenceKind") or "").strip()
+        return not junit_lane or not dashboard_lane or junit_lane == dashboard_lane
+
+    exact_matches = [
+        index
+        for index, row in enumerate(dashboard_rows)
+        if same_lane(row) and str(_row_name(row)).strip() in exact_names
+    ]
+    if exact_matches:
+        return exact_matches
+
+    junit_keys = _junit_name_keys(junit)
+    return [
+        index
+        for index, row in enumerate(dashboard_rows)
+        if same_lane(row) and junit_keys & _name_keys(_row_name(row))
+    ]
+
+
 def _merge_junit_fields(dashboard_rows, runner_rows):
     fields = (
         "outcome",
@@ -746,6 +808,7 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "sizeMismatch",
         "similarityFailure",
         "lifecycleFailure",
+        "implementationFailure",
     )
     metadata_fields = (
         "class",
@@ -754,15 +817,10 @@ def _merge_junit_fields(dashboard_rows, runner_rows):
         "sourceRegistration",
         "gmIdentity",
     )
-    dashboard_keys = [_name_keys(_row_name(row)) for row in dashboard_rows]
     claims = {}
     ambiguous_dashboard = set()
     for runner_index, junit in enumerate(runner_rows):
-        matches = [
-            dashboard_index
-            for dashboard_index, keys in enumerate(dashboard_keys)
-            if _junit_name_keys(junit) & keys
-        ]
+        matches = _junit_dashboard_matches(junit, dashboard_rows)
         if len(matches) != 1:
             if len(matches) > 1:
                 ambiguous_dashboard.update(matches)
@@ -858,6 +916,11 @@ def _junit_approval_violations(rows):
             violations.append("missing JUnit result blocks approval for %s" % row.get("name", ""))
             continue
         if _junit_is_pass(row):
+            if row.get("classification") == "similarity-failure":
+                violations.append(
+                    "dashboard similarity failure blocks approval for %s"
+                    % row.get("name", "")
+                )
             continue
         classification = junit.get("classification", "non-pass")
         if classification in {"terminal-refusal", "lifecycle-failure"}:
@@ -902,12 +965,27 @@ def _dashboard_classification(row):
     if score is not None:
         minimum = _finite_number(row.get("minSimilarity"))
         minimum = 95.0 if minimum is None else minimum
-        if not 0 <= score <= 100 or score < minimum or row.get("isPassing") is False:
+        passing = _optional_bool(row.get("isPassing"))
+        if (
+            not 0 <= score <= 100
+            or score < minimum
+            or passing is False
+            or (
+                "isPassing" in row
+                and row.get("isPassing") is not None
+                and passing is None
+            )
+        ):
             return "similarity-failure"
         return "pass"
-    if row.get("isPassing") is False:
+    passing = _optional_bool(row.get("isPassing"))
+    if passing is False or (
+        "isPassing" in row
+        and row.get("isPassing") is not None
+        and passing is None
+    ):
         return "similarity-failure"
-    if row.get("isPassing") is True and not score_supplied:
+    if passing is True and not score_supplied:
         return "pass"
     return "no-score"
 
@@ -1006,7 +1084,7 @@ def _copy_value(value, score_context=False):
                 score_context
                 and normalized in {"before", "after", "baseline", "previous", "current", "value"}
             )
-            if item_is_score and item is not None:
+            if item_is_score and item is not None and not isinstance(item, (dict, list)):
                 number = _finite_number(item)
                 if number is None or not 0 <= number <= 100:
                     copied[key] = None
@@ -1141,6 +1219,8 @@ def _causal_cohort_keys(rows):
         evidence = row.get("evidenceIndexEntry", row.get("evidence"))
         if (
             _valid_comparable(row, evidence)
+            and row.get("classification") == "pass"
+            and _junit_is_pass(row)
             and _has_causal_evidence({}, evidence)
         ):
             cohort = _causal_cohort_key(evidence)
@@ -1165,15 +1245,22 @@ def _runner_side_effect_observed(*sources):
     return False
 
 
-def _policy_violation(value):
-    if value is True:
-        return True
+def _policy_boolean(value):
+    if isinstance(value, bool):
+        return value
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"true", "yes", "on"}:
+        if normalized == "true":
             return True
-    number = _finite_number(value)
-    return number is not None and number != 0
+        if normalized == "false":
+            return False
+    return None
+
+
+def _policy_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return _finite_number(value)
 
 
 def _check_policy(policy):
@@ -1196,12 +1283,33 @@ def _check_policy(policy):
         ("referencesModified", "references"),
         ("memoryBudgetChanged", "memory budget"),
     ):
-        if _policy_violation(policy.get(key, False)):
+        if key not in policy:
+            continue
+        value = _policy_boolean(policy[key])
+        if value is None:
+            violations.append("policy evidence is invalid: %s must be boolean" % key)
+        elif value:
             violations.append("policy violation: %s changed" % label)
     readiness = policy.get("readinessDelta", 0.0)
-    if _finite_number(readiness) is None or _finite_number(readiness) != 0:
+    readiness_number = _policy_number(readiness)
+    if readiness_number is None or readiness_number != 0:
         violations.append("policy violation: readinessDelta is non-zero or invalid")
     return violations
+
+
+def _has_complete_policy_evidence(policy):
+    if not isinstance(policy, dict):
+        return False
+    boolean_keys = (
+        "globalThresholdWeakened",
+        "assertionsWeakened",
+        "referencesModified",
+        "memoryBudgetChanged",
+    )
+    return (
+        all(_policy_boolean(policy.get(key)) is not None for key in boolean_keys)
+        and _policy_number(policy.get("readinessDelta")) is not None
+    )
 
 
 def _generated_at(inputs):
@@ -1698,8 +1806,6 @@ def _similarity_improved(row, evidence):
 def _valid_comparable(row, evidence):
     if row.get("referenceKind") != "skia-upstream":
         return False
-    if not _junit_is_pass(row):
-        return False
     if _is_route_only(row) or _is_route_only(evidence):
         return False
     if row.get("classification") in {
@@ -1840,11 +1946,13 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     policy_input = inputs.get("policy", {})
     policy_evidence_present = False
     if isinstance(evidence_value, dict) and "policy" in evidence_value:
-        policy_evidence_present = isinstance(evidence_value.get("policy"), dict)
-        if policy_evidence_present:
+        policy_evidence_present = _has_complete_policy_evidence(
+            evidence_value.get("policy")
+        )
+        if isinstance(evidence_value.get("policy"), dict):
             policy_input = evidence_value["policy"]
     elif "policy" in inputs:
-        policy_evidence_present = isinstance(inputs.get("policy"), dict)
+        policy_evidence_present = _has_complete_policy_evidence(inputs.get("policy"))
     if not isinstance(policy_input, dict):
         policy_input = {}
 
@@ -1876,6 +1984,8 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         if (
             row.get("referenceKind") == "skia-upstream"
             and _valid_comparable(row, evidence)
+            and row.get("classification") == "pass"
+            and _junit_is_pass(row)
             and _has_causal_evidence({}, evidence)
         ):
             candidate_rows.append(row)
@@ -1885,6 +1995,8 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
     supported_rows = []
     for row in comparable_rows:
         evidence = _evidence_for_row(row, evidence_rows) or {}
+        if row.get("classification") != "pass" or not _junit_is_pass(row):
+            continue
         pixel_improved = any(
             source.get("pixelImproved") is True or source.get("supportedAfter") is True
             for source in _evidence_sources({}, evidence)
@@ -2656,6 +2768,45 @@ def _check_junit_counts(lanes):
     return violations
 
 
+def _check_junit_population(dashboard_rows, runner_rows):
+    violations = []
+    dashboard_rows = dashboard_rows if isinstance(dashboard_rows, list) else []
+    runner_rows = runner_rows if isinstance(runner_rows, list) else []
+    claims = {}
+    for junit in runner_rows:
+        if (
+            not isinstance(junit, dict)
+            or junit.get("suiteLevel")
+            or _is_route_only(junit)
+            or junit.get("classification")
+            in {"terminal-refusal", "expected-unsupported", "lifecycle-failure"}
+        ):
+            continue
+        junit_identity = dict(junit)
+        junit_identity.setdefault("referenceKind", "skia-upstream")
+        matches = _junit_dashboard_matches(junit_identity, dashboard_rows)
+        if not matches:
+            violations.append(
+                "JUnit testcase has no dashboard row: %s" % _row_name(junit)
+            )
+        elif len(matches) > 1:
+            violations.append(
+                "JUnit testcase has ambiguous dashboard rows: %s" % _row_name(junit)
+            )
+        else:
+            claims.setdefault(matches[0], []).append(junit)
+    for dashboard_index, claimants in claims.items():
+        if len(claimants) > 1:
+            violations.append(
+                "dashboard row %s has multiple JUnit testcases: %s"
+                % (
+                    _row_name(dashboard_rows[dashboard_index]),
+                    ", ".join(_row_name(junit) for junit in claimants),
+                )
+            )
+    return violations
+
+
 def _command_text(value):
     if isinstance(value, str):
         return value
@@ -2700,30 +2851,48 @@ def _has_test_selector(tokens, expected):
     )
 
 
+def _has_exact_property(tokens, prefix, expected):
+    return [token for token in tokens if token.startswith(prefix)] == [expected]
+
+
+def _is_macos_environment(environment):
+    if not isinstance(environment, dict):
+        return False
+    values = (
+        environment.get("os"),
+        environment.get("platform"),
+        environment.get("operatingSystem"),
+    )
+    normalized = " ".join(str(value).lower() for value in values if value is not None)
+    return "macos" in normalized or "darwin" in normalized
+
+
 def _check_execution_contract(commands, environment):
     violations = []
+    requires_display = not _is_macos_environment(environment)
     display = None
     if isinstance(environment, dict):
         for key, value in environment.items():
             if str(key).lower() == "display":
                 display = value
                 break
-    if display != ":99":
+    if requires_display and display != ":99":
         violations.append("execution environment must preserve DISPLAY=:99")
     if not isinstance(environment, dict) or not _nonempty(environment.get("repository")):
         violations.append("execution environment is missing repository identity")
     if not isinstance(environment, dict) or not _nonempty(environment.get("worktree")):
         violations.append("execution environment is missing worktree identity")
 
-    required_commands = ("skiaRunner", "svg", "cpu", "gpu", "dashboard")
+    required_commands = ("skiaRunner", "svg", "cpu", "gpu", "dashboard", "scan")
     if not isinstance(commands, dict):
-        return violations + ["execution commands must contain all five command entries"]
+        return violations + ["execution commands must contain all required command entries"]
     task_tokens = {
         "skiaRunner": (":integration-tests:skia:test",),
         "svg": (":integration-tests:svg:test",),
         "cpu": (":kanvas:test",),
         "gpu": (":gpu-renderer:test",),
         "dashboard": (":integration-tests:skia:generateSkiaDashboard",),
+        "scan": (":integration-tests:skia:generateSkiaScan",),
     }
     for name in required_commands:
         tokens = _command_tokens(commands.get(name))
@@ -2733,7 +2902,7 @@ def _check_execution_contract(commands, environment):
         if not tokens:
             violations.append("execution command is missing: %s" % name)
             continue
-        if "DISPLAY=:99" not in tokens and "display=:99" not in tokens:
+        if requires_display and "DISPLAY=:99" not in tokens and "display=:99" not in tokens:
             violations.append("execution command %s is missing DISPLAY=:99" % name)
         if not _has_adjacent_tokens(tokens, ("-F", "off")):
             violations.append("execution command %s is missing -F off" % name)
@@ -2749,10 +2918,69 @@ def _check_execution_contract(commands, environment):
             violations.append(
                 "execution command skiaRunner must select org.graphiks.kanvas.skia.SkiaGmRunner"
             )
-        if name == "skiaRunner" and "-Dkanvas.gm.includeBlocking=true" not in tokens:
-            violations.append("execution command skiaRunner is missing includeBlocking")
-        if name == "dashboard" and "-Pgm.includeBlocking=true" not in tokens:
-            violations.append("execution command dashboard is missing includeBlocking")
+        if name == "skiaRunner" and not _has_exact_property(
+            tokens,
+            "-Dkanvas.gm.includeBlocking=",
+            "-Dkanvas.gm.includeBlocking=true",
+        ):
+            violations.append(
+                "execution command skiaRunner must set includeBlocking exactly to true"
+            )
+        if name == "dashboard" and not _has_exact_property(
+            tokens,
+            "-Pgm.includeBlocking=",
+            "-Pgm.includeBlocking=true",
+        ):
+            violations.append(
+                "execution command dashboard must set includeBlocking exactly to true"
+            )
+
+    script_commands = {
+        "junitMerge": "scripts/gm/merge_skia_junit.py",
+        "timeoutRows": "scripts/gm/scan_results_to_junit.py",
+    }
+    for name, required_token in script_commands.items():
+        tokens = _command_tokens(commands.get(name))
+        if tokens is None:
+            violations.append("execution command %s cannot be parsed" % name)
+            continue
+        if not tokens:
+            violations.append("execution command is missing: %s" % name)
+            continue
+        if required_token not in tokens:
+            violations.append(
+                "execution command %s is missing script token %s" % (name, required_token)
+            )
+
+    chunks = commands.get("skiaRunnerChunks")
+    if not isinstance(chunks, list) or not chunks:
+        violations.append("execution command skiaRunnerChunks must contain at least one chunk")
+    else:
+        for index, chunk in enumerate(chunks):
+            tokens = _command_tokens(chunk)
+            if tokens is None or not tokens:
+                violations.append(
+                    "execution command skiaRunnerChunks[%s] cannot be parsed" % index
+                )
+                continue
+            if ":integration-tests:skia:test" not in tokens:
+                violations.append(
+                    "execution command skiaRunnerChunks[%s] is missing the Skia runner task"
+                    % index
+                )
+            if not _has_test_selector(tokens, "org.graphiks.kanvas.skia.SkiaGmRunner"):
+                violations.append(
+                    "execution command skiaRunnerChunks[%s] must select SkiaGmRunner" % index
+                )
+            if not _has_exact_property(
+                tokens,
+                "-Dkanvas.gm.includeBlocking=",
+                "-Dkanvas.gm.includeBlocking=true",
+            ):
+                violations.append(
+                    "execution command skiaRunnerChunks[%s] must set includeBlocking exactly to true"
+                    % index
+                )
     return violations
 
 
@@ -2773,16 +3001,22 @@ def _pixel_score_values(value, score_context=False):
     if isinstance(value, dict):
         for key, item in value.items():
             normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
-            if _is_pixel_score_key(key) or (
-                score_context
-                and normalized in {
-                    "before",
-                    "after",
-                    "baseline",
-                    "previous",
-                    "current",
-                    "value",
-                }
+            if (
+                not isinstance(item, (dict, list))
+                and (
+                    _is_pixel_score_key(key)
+                    or (
+                        score_context
+                        and normalized in {
+                            "before",
+                            "after",
+                            "baseline",
+                            "previous",
+                            "current",
+                            "value",
+                        }
+                    )
+                )
             ):
                 yield str(key), item
             child_score_context = score_context or normalized in {
@@ -2806,6 +3040,114 @@ def _check_pixel_score_range(value):
         number = _finite_number(item)
         if number is None or not 0 <= number <= 100:
             violations.append("similarity/score %s is outside the valid 0..100 range" % key)
+    return violations
+
+
+def _score_observations(value, score_context=None):
+    observations = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if normalized in {"score", "similarity"} and score_context in {
+                None,
+                "before",
+                "after",
+            }:
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(
+                        (score_context or "current", str(key), number)
+                    )
+            elif normalized in {
+                "scoreafter",
+                "similarityafter",
+                "afterscore",
+                "aftersimilarity",
+                "modecolorfiltersafter",
+            }:
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(("after", str(key), number))
+            elif score_context == "after" and (
+                normalized in {"after", "current", "value"}
+                or _is_pixel_score_key(key)
+            ):
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(("after", str(key), number))
+            elif score_context == "before" and _is_pixel_score_key(key):
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(("before", str(key), number))
+            elif score_context == "comparison" and normalized in {
+                "before",
+                "baseline",
+                "previous",
+            }:
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(("before", str(key), number))
+            elif score_context == "comparison" and normalized in {
+                "after",
+                "current",
+                "value",
+            }:
+                number = _finite_number(item)
+                if number is not None:
+                    observations.append(("after", str(key), number))
+            if normalized == "scoresbefore" and isinstance(item, dict):
+                child_score_context = "before"
+            elif normalized == "scoresafter" and isinstance(item, dict):
+                child_score_context = "after"
+            elif normalized == "comparison":
+                child_score_context = "comparison"
+            elif score_context == "comparison" and normalized in {
+                "before",
+                "baseline",
+                "previous",
+            }:
+                child_score_context = "before"
+            elif score_context == "comparison" and normalized in {
+                "after",
+                "current",
+                "value",
+            }:
+                child_score_context = "after"
+            elif normalized == "scores":
+                child_score_context = "after"
+            else:
+                child_score_context = score_context
+            observations.extend(_score_observations(item, child_score_context))
+    elif isinstance(value, list):
+        for item in value:
+            observations.extend(_score_observations(item, score_context))
+    return observations
+
+
+def _check_score_consistency(rows):
+    violations = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        observations = _score_observations(row)
+        by_kind = {"current": [], "before": [], "after": []}
+        for kind, key, value in observations:
+            by_kind[kind].append((key, value))
+        current_values = {value for _, value in by_kind["current"]}
+        after_values = {value for _, value in by_kind["after"]}
+        if len(current_values) > 1:
+            violations.append(
+                "dashboard current scores disagree for %s" % _row_name(row)
+            )
+        if len(after_values) > 1:
+            violations.append(
+                "nested after scores disagree for %s" % _row_name(row)
+            )
+        if current_values and after_values and current_values != after_values:
+            violations.append(
+                "dashboard score disagrees with nested after score for %s"
+                % _row_name(row)
+            )
     return violations
 
 
@@ -3006,6 +3348,12 @@ def main(argv=None):
                 ]
             )
         )
+        check_violations.extend(
+            _check_junit_population(
+                _dashboard_entries(inputs["dashboard"]),
+                inputs["skiaRunner"].get("rows", []),
+            )
+        )
         if manifest["scoreFile"]["directEditDetected"]:
             check_violations.append("score before/after content diverges")
         check_violations.extend(
@@ -3022,6 +3370,7 @@ def main(argv=None):
             _check_pixel_score_range(inputs["evidenceIndexData"])
         )
         check_violations.extend(_check_pixel_score_range(inputs["dashboard"]))
+        check_violations.extend(_check_score_consistency(manifest["rows"]["skia"]))
         if args.status == "approved" and manifest["supportedRowsAfter"] == 0:
             check_violations.append(
                 "approved status requires at least one supported row with actual similarity improvement"

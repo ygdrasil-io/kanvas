@@ -31,6 +31,16 @@ class SkiaRenderGeneratorFilterTest {
     }
 
     @Test
+    fun `parser accepts a half open registry index range`() {
+        val options = parseSkiaRenderGeneratorOptions(
+            arrayOf("/tmp/renders", "--from", "10", "--to", "20"),
+        )
+
+        assertEquals(10, options.from)
+        assertEquals(20, options.to)
+    }
+
+    @Test
     fun `parser rejects unknown family`() {
         val error = assertThrows(IllegalArgumentException::class.java) {
             parseSkiaRenderGeneratorOptions(arrayOf("/tmp/renders", "--family", "NOT_A_FAMILY"))
@@ -92,6 +102,51 @@ class SkiaRenderGeneratorFilterTest {
         )
 
         assertEquals(listOf("fast-image", "blocking-image"), selected.map { it.name })
+    }
+
+    @Test
+    fun `selection applies a half open registry index range`() {
+        val selected = selectSkiaGmsForRender(
+            listOf(
+                StubGm("first", RenderFamily.IMAGE),
+                StubGm("second", RenderFamily.IMAGE),
+                StubGm("third", RenderFamily.IMAGE),
+            ),
+            SkiaRenderGeneratorOptions(
+                outputDir = File("/tmp/renders"),
+                family = null,
+                name = null,
+                includeBlocking = true,
+                from = 1,
+                to = 3,
+            ),
+        )
+
+        assertEquals(listOf("second", "third"), selected.map { it.name })
+    }
+
+    @Test
+    fun `selection rejects invalid registry index ranges`() {
+        val gms = listOf(StubGm("first", RenderFamily.IMAGE), StubGm("second", RenderFamily.IMAGE))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRender(
+                gms,
+                SkiaRenderGeneratorOptions(File("/tmp/renders"), null, null, true, from = -1, to = 1),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRender(
+                gms,
+                SkiaRenderGeneratorOptions(File("/tmp/renders"), null, null, true, from = 1, to = 0),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRender(
+                gms,
+                SkiaRenderGeneratorOptions(File("/tmp/renders"), null, null, true, from = 0, to = 3),
+            )
+        }
     }
 
     @Test

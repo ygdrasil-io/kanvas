@@ -75,6 +75,5 @@ class LocalMatrixShaderPerspGm : SkiaGm {
 
         draw(canvas, Shader.WithLocalMatrix(gradShader, scale), true)
         draw(canvas, Shader.WithLocalMatrix(gradShader, scale * Matrix33.makeAll(1f, 0.5f, 0f, -0.2f, 1f, 0f, 0.001f, 0f, 1f)), true)
-        canvas.restore()
     }
 }

@@ -44,7 +44,6 @@ class DrawimageSamplingGm : SkiaGm {
                 canvas.translate(dst.width + 4f, 0f)
 
                 canvas.drawImageRect(img, src, dst)
-                canvas.restore()
                 canvas.translate(0f, dst.height + 8f)
             }
         }

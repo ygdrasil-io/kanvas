@@ -169,7 +169,6 @@ org.graphiks.kanvas.skia.gm.composite.LocalMatrixImageFilterGm
 org.graphiks.kanvas.skia.gm.composite.LuminosityOverflowGm
 org.graphiks.kanvas.skia.gm.composite.MatrixImageFilterGm
 org.graphiks.kanvas.skia.gm.composite.MixercfGm
-org.graphiks.kanvas.skia.gm.composite.ModeColorFilterGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFiltersGm
 org.graphiks.kanvas.skia.gm.composite.OffsetImageFilterGm
 org.graphiks.kanvas.skia.gm.composite.OverdrawCanvasGm
@@ -293,7 +292,6 @@ org.graphiks.kanvas.skia.gm.image.CgimageGm
 org.graphiks.kanvas.skia.gm.image.ChildSamplingRTGm
 org.graphiks.kanvas.skia.gm.image.ClippedBitmapShadersGm
 org.graphiks.kanvas.skia.gm.image.ColorCubeColorFilterRTGm
-org.graphiks.kanvas.skia.gm.image.ColorCubeGm
 org.graphiks.kanvas.skia.gm.image.ColorWheelAlphaTypesGm
 org.graphiks.kanvas.skia.gm.image.ColorWheelGm
 org.graphiks.kanvas.skia.gm.image.Colorspace2Gm
@@ -376,7 +374,6 @@ org.graphiks.kanvas.skia.gm.image.NotNative32BitmapConfigGm
 org.graphiks.kanvas.skia.gm.image.NullChildRTGm
 org.graphiks.kanvas.skia.gm.image.P3Gm
 org.graphiks.kanvas.skia.gm.image.PerspImagesGm
-org.graphiks.kanvas.skia.gm.image.PictureGeneratorGm
 org.graphiks.kanvas.skia.gm.image.PictureImageFilterGm
 org.graphiks.kanvas.skia.gm.image.PictureImageGeneratorGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderAlphaGm
@@ -472,7 +469,6 @@ org.graphiks.kanvas.skia.gm.path.MandolineGm
 org.graphiks.kanvas.skia.gm.path.ManyCirclesGm
 org.graphiks.kanvas.skia.gm.path.ManyPathAtlasesGm
 org.graphiks.kanvas.skia.gm.path.NestedGm
-org.graphiks.kanvas.skia.gm.path.NestedSimpleGm
 org.graphiks.kanvas.skia.gm.path.NonClosedPathsGm
 org.graphiks.kanvas.skia.gm.path.OverStrokeGm
 org.graphiks.kanvas.skia.gm.path.ParsedPathsGm
@@ -500,7 +496,6 @@ org.graphiks.kanvas.skia.gm.path.StLouisArchGm
 org.graphiks.kanvas.skia.gm.path.StrokeRectShaderGm
 org.graphiks.kanvas.skia.gm.path.StrokedLineCapsGm
 org.graphiks.kanvas.skia.gm.path.Strokes3Gm
-org.graphiks.kanvas.skia.gm.path.Strokes5Gm
 org.graphiks.kanvas.skia.gm.path.StrokesGm
 org.graphiks.kanvas.skia.gm.path.TeenyStrokesGm
 org.graphiks.kanvas.skia.gm.path.ThinAaDashLinesGm
