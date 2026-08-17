@@ -620,6 +620,38 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         with self.assertRaises(ValueError):
             reconcile.select_cohort_rows(wrong_lane, FAILURE_CODE)
 
+    def test_cli_rejects_unhashable_cohort_family_and_unselected_identity(self):
+        variants = ("family", "name", "gm", "id")
+        for variant in variants:
+            with self.subTest(variant=variant):
+                fixtures = self.write_cli_fixtures()
+                cohort = json.loads(
+                    fixtures["cohortManifest"].read_text(encoding="utf-8")
+                )
+                rows = cohort["rows"]["skia"]
+                if variant == "family":
+                    selected = next(
+                        row for row in rows if row.get("failureCode") == FAILURE_CODE
+                    )
+                    selected["family"] = []
+                else:
+                    rows.append(
+                        {
+                            variant: [],
+                            "failureCode": FOLLOW_UP_FAILURE_CODE,
+                        }
+                    )
+                fixtures["cohortManifest"].write_text(
+                    json.dumps(cohort, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIsNone(manifest)
+                self.assertIn("cohort", stdout.lower())
+
     def test_source_and_input_bytes_are_unchanged_after_classification(self):
         fixtures = self.write_cli_fixtures()
         before = self.snapshot_fixtures(fixtures)

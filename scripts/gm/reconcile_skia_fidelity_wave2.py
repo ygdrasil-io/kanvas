@@ -176,6 +176,18 @@ def _identity_set(rows):
     return {_lane_key(row) for row in rows if isinstance(row, dict)}
 
 
+def _validate_cohort_row_types(rows):
+    string_fields = ("name", "gm", "id", "referenceKind", "family")
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise ValueError("cohort row %s must be an object" % index)
+        for field in string_fields:
+            if field in row and not isinstance(row[field], str):
+                raise ValueError(
+                    "cohort row %s %s must be a string" % (index, field)
+                )
+
+
 def _expected_name_set():
     return {name for name, _ in COHORT_IDENTITIES}
 
@@ -190,6 +202,7 @@ def select_cohort_rows(manifest, failure_code):
     rows = rows_container.get("skia") if isinstance(rows_container, dict) else None
     if not isinstance(rows, list):
         raise ValueError("cohort manifest rows.skia must contain an array")
+    _validate_cohort_row_types(rows)
 
     selected = [copy.deepcopy(row) for row in rows if isinstance(row, dict) and row.get("failureCode") == failure_code]
     if len(selected) != EXPECTED_COHORT_SIZE:
@@ -213,6 +226,8 @@ def select_cohort_rows(manifest, failure_code):
     family_counts = {}
     for row in selected:
         family = row.get("family")
+        if not isinstance(family, str) or not family.strip():
+            raise ValueError("selected cohort family must be a non-empty string")
         family_counts[family] = family_counts.get(family, 0) + 1
     if family_counts != EXPECTED_FAMILY_COUNTS:
         raise ValueError(
