@@ -61,6 +61,33 @@ class PreparedImageContractsTest {
     }
 
     @Test
+    fun `factory accepts unpremultiplied straight encoded RGBA for color upload`() {
+        val artifact = ready(
+            input(
+                alpha = AlphaType.UNPREMUL,
+                bytes = byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
+            ),
+        )
+
+        assertContentEquals(
+            byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
+            artifact.tightRgba8BytesForUpload(),
+        )
+        assertEquals(
+            ArtifactColorUploadEncoding.StraightEncodedSrgb,
+            artifact.colorUploadEncoding,
+        )
+        assertEquals(
+            GPUColorInterpretation.StraightEncodedSrgb.value,
+            artifact.colorUploadInterpretation,
+        )
+        assertTrue(
+            artifact.key.value.contains(ArtifactColorUploadEncoding.StraightEncodedSrgb.name),
+        )
+        assertTrue(artifact.key.value.contains(artifact.contentHash))
+    }
+
+    @Test
     fun `factory zeroes transparent color and keeps opaque straight bytes bounded`() {
         val transparent = ready(input(bytes = byteArrayOf(12, 34, 56, 0)))
         val opaque = ready(
