@@ -141,7 +141,7 @@ class PreparedImageContractsTest {
     }
 
     @Test
-    fun `factory converts BGRA and accepts only authoritative opaque RGBA`() {
+    fun `factory accepts BGRA and opaque RGBA while retaining opaque alpha refusals`() {
         assertContentEquals(
             byteArrayOf(64, 128.toByte(), 191.toByte(), 4),
             ready(input()).tightRgba8BytesForUpload(),

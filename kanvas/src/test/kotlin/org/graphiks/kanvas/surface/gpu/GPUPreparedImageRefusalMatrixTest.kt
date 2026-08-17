@@ -60,7 +60,7 @@ class GPUPreparedImageRefusalMatrixTest {
     }
 
     @Test
-    fun `constructible source refusals preserve one code through source surface recording and preflight`() {
+    fun `constructible source acceptance reaches success and remaining refusals preserve one code through the route`() {
         val cases = listOf(
             ConstructibleCase(
                 "missing-pixels",
@@ -137,19 +137,56 @@ class GPUPreparedImageRefusalMatrixTest {
             ),
         )
 
-        assertIs<GPUPreparedImageArtifactResult.Ready>(
-            GPUPreparedSurfaceImageSource.prepare(
-                Image(
-                    width = 1,
-                    height = 1,
-                    colorType = ColorType.RGBA_8888,
-                    sourceId = "unpremultiplied-alpha",
-                    pixels = byteArrayOf(1, 2, 3, 4),
-                    alphaType = AlphaType.UNPREMUL,
-                ),
-            ),
-            "unpremultiplied-alpha",
+        val acceptedImage = Image(
+            width = 1,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "unpremultiplied-alpha",
+            pixels = byteArrayOf(1, 2, 3, 4),
+            alphaType = AlphaType.UNPREMUL,
         )
+        val acceptedOperation = drawImage(acceptedImage)
+        val acceptedCapabilities = capabilities()
+        assertIs<GPUPreparedImageArtifactResult.Ready>(
+            GPUPreparedSurfaceImageSource.prepare(acceptedImage),
+            "unpremultiplied-alpha:source",
+        )
+
+        val acceptedInventory = GPUFramePathApiInventory.plan(
+            operations = listOf(acceptedOperation),
+            target = TARGET,
+            config = RenderConfig.DEFAULT,
+            capabilities = acceptedCapabilities,
+        )
+        assertEquals(null, acceptedInventory.preparedRefusal, "unpremultiplied-alpha:inventory")
+        assertTrue(acceptedInventory.visualCommands.isNotEmpty(), "unpremultiplied-alpha:inventory")
+
+        val acceptedRecording = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUFramePathApiInventory.preparePreparedNativeTaskList(
+                inventory = acceptedInventory,
+                capabilities = acceptedCapabilities,
+                targetBounds = BOUNDS,
+            ),
+            "unpremultiplied-alpha:preflight",
+        )
+        assertTrue(acceptedRecording.taskList.tasks.isNotEmpty(), "unpremultiplied-alpha:preflight")
+
+        val acceptedSurface = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                buildRequest(listOf(acceptedOperation), acceptedCapabilities),
+            ),
+            "unpremultiplied-alpha:surface",
+        )
+        assertEquals(1, acceptedSurface.visualOperationCount)
+
+        val acceptedHarness = PreparedProductExecutionHarness(width = 16, height = 16)
+        val acceptedExecution = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            acceptedHarness.port.execute(executionRequest(listOf(acceptedOperation))),
+            "unpremultiplied-alpha:executor",
+        )
+        assertEquals(1, acceptedExecution.visualOperationCount)
+        assertEquals(1, acceptedHarness.backend.prepareCalls)
+        assertEquals(1, acceptedHarness.backend.session.submitCalls)
 
         cases.forEach { row ->
             val operation = drawImage(row.image)
