@@ -205,6 +205,19 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "failureCode": FAILURE_CODE,
             }
         )
+        row.update(
+            {
+                "classification": (
+                    "route-only"
+                    if route_only
+                    else "similarity-failure"
+                    if after_score < 95.0 or is_passing is False
+                    else "pass"
+                ),
+                "terminal": False,
+                "terminalRefusal": False,
+            }
+        )
         if remove_is_passing:
             del row["isPassing"]
         if comparable:
@@ -217,6 +230,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "render": {"width": 32, "height": 32},
                 "reference": {"width": 31, "height": 32},
             }
+        if not comparable:
+            row["classification"] = "size-mismatch"
         dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
         fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
         dashboard_output = fixtures["dashboardDir"] / "data/gms.json"
@@ -250,7 +265,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
         dashboard["gms"][0].update(
             {
-                "classification": "terminal-refusal",
+                "classification": "failure",
                 "terminal": True,
                 "terminalRefusal": True,
                 "failureCode": failure_code,
@@ -288,7 +303,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "family": row["family"],
                 "referenceKind": "skia-upstream",
                 "failureCode": FOLLOW_UP_FAILURE_CODE,
-                "classification": "terminal-refusal",
+                "classification": "failure",
                 "terminal": True,
                 "terminalRefusal": True,
                 "isPassing": None,
@@ -320,7 +335,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         gpu_results = self.write_json("gpu-results.json", {"rows": []})
         fp13_runner = self.write_text(
             "fp13-runner.xml",
-            '<testsuite tests="615" failures="0" errors="0" skipped="0"/>',
+            '<testsuite tests="0" failures="0" errors="0" skipped="0"/>',
         )
         commands = {
             "skiaRunner": (
@@ -436,6 +451,34 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             encoding="utf-8",
         )
         return fixtures
+
+    @staticmethod
+    def small_selection():
+        row = {
+            "name": "small-gm",
+            "family": "IMAGE",
+            "referenceKind": "skia-upstream",
+            "evidenceLane": "skia-dashboard",
+            "className": "SmallRunner",
+            "sourceClass": "SmallGm",
+            "sourceRegistration": "small-gm",
+            "gmIdentity": {
+                "displayName": "small-gm",
+                "sourceClass": "SmallGm",
+                "sourceClassPath": "small-gm",
+                "sourceRegistration": "small-gm",
+            },
+            "classification": "failure",
+            "terminal": True,
+            "terminalRefusal": True,
+            "failureCode": FAILURE_CODE,
+        }
+        return reconcile.CohortSelection(
+            rows=(row,),
+            identities=frozenset({("small-gm", "skia-upstream")}),
+            family_counts={"IMAGE": 1},
+            failure_code=FAILURE_CODE,
+        )
 
     def cli_args(self, fixtures, output_json=None, output_markdown=None, status="classification", check=False, source_commit=None):
         output_json = output_json or self.root / "reports/wave2.json"
@@ -634,8 +677,6 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                         fixtures["dashboardJson"].read_text(encoding="utf-8")
                     )
                     first = dashboard["gms"][0]
-                    for field in ("classification", "terminal", "terminalRefusal"):
-                        first.pop(field, None)
                     if failure_code is None:
                         del first["failureCode"]
                     else:
@@ -706,6 +747,221 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 )
                 self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
                 self.assertEqual(manifest["current"]["runner"]["rows"], 58)
+
+    def test_every_selected_identity_requires_an_evidence_entry(self):
+        for supported in (False, True):
+            for check in (False, True):
+                with self.subTest(supported=supported, check=check):
+                    fixtures = self.write_cli_fixtures()
+                    if supported:
+                        self.configure_supported_fixture(fixtures)
+                    evidence = json.loads(
+                        fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                    )
+                    del evidence["entries"][0]
+                    fixtures["evidenceIndex"].write_text(
+                        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+
+                    status, stdout, _, _, _ = self.run_main(
+                        fixtures,
+                        check=check,
+                        status="blocked" if check else "classification",
+                    )
+
+                    self.assertEqual(status, 1 if check else 2, stdout)
+                    self.assertIn("evidence", stdout.lower())
+
+    def test_check_preserves_suite_lifecycle_rows_and_junit_counts(self):
+        variants = ("suite-error", "malformed-counts", "unclassified-error")
+        for variant in variants:
+            with self.subTest(variant=variant):
+                fixtures = self.write_cli_fixtures()
+                xml = fixtures["skiaRunner"].read_text(encoding="utf-8")
+                if variant == "suite-error":
+                    xml = xml.replace(
+                        "</testsuite>",
+                        '<error type="suite-error" message="suite lifecycle error"/>'
+                        "</testsuite>",
+                    )
+                elif variant == "malformed-counts":
+                    xml = xml.replace('tests="58"', 'tests="not-an-integer"', 1)
+                else:
+                    xml = xml.replace(
+                        '<testsuite tests="58" failures="58" errors="0" skipped="0">',
+                        '<testsuite tests="59" failures="58" errors="1" skipped="0">',
+                        1,
+                    ).replace(
+                        "</testsuite>",
+                        '<testcase name="unclassified-orphan">'
+                        '<error message="unexpected renderer error"/>'
+                        "</testcase></testsuite>",
+                    )
+                fixtures["skiaRunner"].write_text(xml, encoding="utf-8")
+
+                status, stdout, manifest, _, _ = self.run_main(
+                    fixtures, check=True, status="blocked"
+                )
+
+                self.assertEqual(status, 1, stdout)
+                self.assertIsNotNone(manifest)
+                if variant == "suite-error":
+                    self.assertIn("suite-level", stdout.lower())
+                    self.assertEqual(
+                        manifest["current"]["runner"]["parsedCounts"]["errors"], 1
+                    )
+                elif variant == "malformed-counts":
+                    self.assertIn("count mismatch", stdout.lower())
+                    self.assertTrue(manifest["current"]["runner"]["countMismatches"])
+                else:
+                    self.assertIn("unclassified", stdout.lower())
+                    self.assertEqual(manifest["current"]["runner"]["rows"], 59)
+
+    def test_enriched_dashboard_requires_complete_normalized_metadata(self):
+        selection = self.small_selection()
+        fields = (
+            "className",
+            "sourceClass",
+            "sourceRegistration",
+            "gmIdentity",
+            "classification",
+            "terminal",
+            "terminalRefusal",
+            "referenceKind",
+            "family",
+            "evidenceLane",
+            "failureCode",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                dashboard = copy.deepcopy(selection.rows[0])
+                dashboard["renderFailed"] = True
+                dashboard.pop(field, None)
+                with self.assertRaises(ValueError):
+                    rows = reconcile._select_dashboard_rows(
+                        {"gms": [dashboard]}, selection.identities
+                    )
+                    reconcile._validate_fresh_dashboard_metadata(
+                        rows,
+                        selection,
+                        reconcile._raw_dashboard_identity_map({"gms": [dashboard]}),
+                    )
+
+        dashboard = copy.deepcopy(selection.rows[0])
+        dashboard["renderFailed"] = True
+        dashboard["sourceRegistration"] = "wrong-registration"
+        with self.assertRaisesRegex(ValueError, "sourceRegistration"):
+            rows = reconcile._select_dashboard_rows(
+                {"gms": [dashboard]}, selection.identities
+            )
+            reconcile._validate_fresh_dashboard_metadata(
+                rows,
+                selection,
+                reconcile._raw_dashboard_identity_map({"gms": [dashboard]}),
+            )
+
+    def test_oracle_inputs_are_filtered_and_reported(self):
+        fixtures = self.write_cli_fixtures()
+        name = self.selected_rows[0]["name"]
+        fixtures["cpuResults"].write_text(
+            json.dumps(
+                {
+                    "rows": [
+                        {
+                            "name": name,
+                            "referenceKind": "cpu-oracle",
+                            "evidenceLane": "cpu-oracle",
+                            "score": 87.0,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        fixtures["gpuResults"].write_text(
+            json.dumps(
+                {
+                    "rows": [
+                        {
+                            "name": name,
+                            "referenceKind": "test-oracle",
+                            "evidenceLane": "test-oracle",
+                            "score": 88.0,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["current"]["cpuOracle"]["rows"], 1)
+        self.assertEqual(manifest["current"]["testOracle"]["rows"], 1)
+        self.assertEqual(manifest["rows"]["cpuOracle"][0]["name"], name)
+        self.assertEqual(
+            manifest["rows"]["cpuOracle"][0]["evidenceLane"], "cpu-oracle"
+        )
+        self.assertEqual(
+            manifest["rows"]["testOracle"][0]["referenceKind"], "test-oracle"
+        )
+
+    def test_oracle_inputs_reject_malformed_shape_or_lane(self):
+        variants = (
+            ("cpuResults", {"rows": [{"name": "small", "referenceKind": "test-oracle"}]}),
+            ("gpuResults", {"rows": ["not-an-object"]}),
+            ("cpuResults", {"rows": "not-an-array"}),
+        )
+        for path_key, value in variants:
+            with self.subTest(path_key=path_key, value=value):
+                fixtures = self.write_cli_fixtures()
+                fixtures[path_key].write_text(
+                    json.dumps(value), encoding="utf-8"
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIn("oracle", stdout.lower())
+
+    def test_check_validates_and_reports_fp13_runner(self):
+        fixtures = self.write_cli_fixtures()
+        fixtures["fp13Runner"].write_text(
+            '<testsuite tests="0" failures="0" errors="1" skipped="0">'
+            '<error type="fp13-error" message="fp13 lifecycle error"/>'
+            "</testsuite>",
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(
+            fixtures, check=True, status="blocked"
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIsNotNone(manifest)
+        self.assertIn("fp13", stdout.lower())
+        self.assertEqual(manifest["current"]["fp13"]["parsedCounts"]["errors"], 1)
+
+    def test_candidate_unlocked_count_uses_causal_candidates_not_supported_rows(self):
+        fixtures = self.write_cli_fixtures()
+        self.configure_supported_fixture(fixtures)
+        evidence = json.loads(
+            fixtures["evidenceIndex"].read_text(encoding="utf-8")
+        )
+        for field in ("supportedAfter", "pixelImproved"):
+            del evidence["entries"][0][field]
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["supportedRowsAfter"], 0)
+        self.assertEqual(manifest["candidateUnlockedRows"], 1)
 
     def test_residual_followup_failure_code_must_be_present_and_consistent(self):
         variants = (

@@ -118,6 +118,8 @@ _merge_junit_fields = _wave1._merge_junit_fields
 _junit_identity = _wave1._junit_identity
 _identity_metadata = _wave1._identity_metadata
 _junit_dashboard_matches = _wave1._junit_dashboard_matches
+_load_json_input = _wave1._load_json_input
+_oracle_entries = _wave1._oracle_entries
 _lane_key = _wave1._lane_key
 _identity_matches = _wave1._identity_matches
 _artifact_records = _wave1._artifact_records
@@ -132,6 +134,7 @@ _evidence_entries = _wave1._evidence_entries
 _evidence_sources = _wave1._evidence_sources
 _entry_has_required_evidence = _wave1._entry_has_required_evidence
 _has_causal_evidence = _wave1._has_causal_evidence
+_causal_cohort_key = _wave1._causal_cohort_key
 _similarity_improved = _wave1._similarity_improved
 _valid_comparable = _wave1._valid_comparable
 _junit_is_pass = _wave1._junit_is_pass
@@ -315,8 +318,31 @@ _ENRICHED_DASHBOARD_FIELDS = frozenset(
         "sourceClass",
         "sourceRegistration",
         "gmIdentity",
+        "classification",
+        "terminal",
+        "terminalRefusal",
     }
 )
+
+_ENRICHED_REQUIRED_METADATA = (
+    "className",
+    "sourceClass",
+    "sourceRegistration",
+    "gmIdentity",
+    "classification",
+    "terminal",
+    "terminalRefusal",
+    "referenceKind",
+    "family",
+    "evidenceLane",
+    "failureCode",
+)
+
+
+def _metadata_present(value):
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None and value not in ([], {})
 
 
 def _is_enriched_dashboard_row(row):
@@ -366,6 +392,39 @@ def _validate_fresh_dashboard_metadata(selected_rows, selection, raw_by_identity
         expected_row = expected[key]
         raw = raw_by_identity.get(key)
         enriched = _is_enriched_dashboard_row(raw)
+        if enriched:
+            for field in _ENRICHED_REQUIRED_METADATA:
+                if field not in raw or not _metadata_present(raw.get(field)):
+                    violations.append(
+                        "fresh dashboard is missing %s: %s" % (field, name)
+                    )
+            for field in (
+                "className",
+                "sourceClass",
+                "sourceRegistration",
+                "gmIdentity",
+            ):
+                actual_value = row.get(field)
+                expected_value = expected_row.get(field)
+                if not _metadata_present(actual_value):
+                    continue
+                if actual_value != expected_value:
+                    violations.append(
+                        "fresh dashboard has wrong %s: %s" % (field, name)
+                    )
+            if "classification" in raw and raw.get("classification") != row.get("classification"):
+                violations.append("fresh dashboard has wrong classification: %s" % name)
+            for field in ("terminal", "terminalRefusal"):
+                if field in raw and not isinstance(raw.get(field), bool):
+                    violations.append(
+                        "fresh dashboard has invalid %s: %s" % (field, name)
+                    )
+            if (
+                isinstance(raw.get("terminal"), bool)
+                and isinstance(raw.get("terminalRefusal"), bool)
+                and raw["terminal"] != raw["terminalRefusal"]
+            ):
+                violations.append("fresh dashboard terminal metadata disagrees: %s" % name)
         if not _nonempty(row.get("referenceKind")):
             violations.append("fresh dashboard is missing referenceKind: %s" % name)
         elif row.get("referenceKind") != expected_row.get("referenceKind"):
@@ -395,6 +454,7 @@ def _validate_fresh_dashboard_metadata(selected_rows, selection, raw_by_identity
 
 def _select_runner_rows(runner_rows, dashboard_rows, identities):
     claims = {}
+    preserved = []
     selected = []
     for original in runner_rows:
         row = copy.deepcopy(original)
@@ -406,6 +466,13 @@ def _select_runner_rows(runner_rows, dashboard_rows, identities):
         if len(matches) > 1:
             raise ValueError("fresh runner identity is ambiguous: %s" % _row_name(row))
         if len(matches) != 1:
+            if (
+                row.get("suiteLevel")
+                or row.get("classification") in {"unclassified", "lifecycle-failure", "timeout"}
+                or row.get("lifecycleFailure")
+                or row.get("timeout")
+            ):
+                preserved.append(row)
             continue
         dashboard_index = matches[0]
         claims.setdefault(dashboard_index, []).append(row)
@@ -424,6 +491,7 @@ def _select_runner_rows(runner_rows, dashboard_rows, identities):
         raise ValueError("fresh runner is missing cohort identities: %s" % missing)
     for index in sorted(claims):
         selected.append(claims[index][0])
+    selected.extend(preserved)
     _require_exact_rows(dashboard_rows, identities, "fresh dashboard rows")
     return selected
 
@@ -808,30 +876,24 @@ def _failure_code_violations(dashboard_rows, entries, failure_code):
 
 def _filtered_junit_result(parsed, rows):
     result = copy.deepcopy(parsed)
-    result["rows"] = copy.deepcopy(rows)
-    result["tests"] = len(rows)
-    result["failures"] = sum(row.get("outcome") == "failure" for row in rows)
-    result["errors"] = sum(row.get("outcome") == "error" for row in rows)
-    result["skipped"] = sum(row.get("outcome") == "skipped" for row in rows)
-    result["passed"] = sum(row.get("outcome") == "passed" for row in rows)
-    result["classifiedFailures"] = sum(
-        row.get("outcome") in {"failure", "error"}
-        and row.get("classification") not in {"unclassified", "skip"}
-        for row in rows
-    )
-    result["unclassifiedFailures"] = sum(
-        row.get("classification") == "unclassified" for row in rows
-    )
-    result["aborted"] = sum(row.get("failureCode") == "TestAbortedException" for row in rows)
-    result["terminalFailures"] = sum(bool(row.get("terminalRefusal")) for row in rows)
-    result["timeoutFailures"] = sum(bool(row.get("timeout")) for row in rows)
-    result["expectedUnsupported"] = sum(bool(row.get("expectedUnsupported")) for row in rows)
-    result["missingReferences"] = sum(bool(row.get("missingReference")) for row in rows)
-    result["sizeMismatches"] = sum(bool(row.get("sizeMismatch")) for row in rows)
-    result["similarityFailures"] = sum(bool(row.get("similarityFailure")) for row in rows)
-    result["lifecycleFailures"] = sum(bool(row.get("lifecycleFailure")) for row in rows)
-    result["countMismatches"] = []
+    result["selectedRows"] = copy.deepcopy(rows)
     return result
+
+
+def _junit_summary(parsed):
+    summary = _summary(parsed)
+    for key in ("parsedCounts", "declaredCounts", "countMismatches"):
+        if key in parsed:
+            summary[key] = _copy_value(parsed[key])
+    summary["suiteLevelRows"] = sum(
+        bool(row.get("suiteLevel"))
+        for row in parsed.get("rows", [])
+        if isinstance(row, dict)
+    )
+    selected_rows = parsed.get("selectedRows")
+    if isinstance(selected_rows, list):
+        summary["selectedRows"] = len(selected_rows)
+    return summary
 
 
 def _dashboard_summary(rows):
@@ -841,6 +903,75 @@ def _dashboard_summary(rows):
         "failing": sum(row.get("classification") == "failure" for row in rows),
         "noScore": sum(row.get("classification") == "no-score" for row in rows),
     }
+
+
+def _oracle_summary(rows):
+    summary = _dashboard_summary(rows)
+    summary["routeOnly"] = sum(_is_route_only(row) for row in rows)
+    return summary
+
+
+_ORACLE_NUMERIC_FIELDS = (
+    "score",
+    "similarity",
+    "similarityBefore",
+    "similarityAfter",
+    "scoreBefore",
+    "scoreAfter",
+    "minSimilarity",
+    "threshold",
+)
+
+
+def _load_oracle_rows(path, label, reference_kind, evidence_lane, identities):
+    value = _load_json_input(path)
+    if not isinstance(value, dict):
+        raise ValueError("%s oracle input must be a JSON object" % label)
+    containers = [key for key in ("rows", "gms", "results") if key in value]
+    if not containers:
+        raise ValueError("%s oracle input must contain rows" % label)
+    if any(not isinstance(value[key], list) for key in containers):
+        raise ValueError("%s oracle rows must be an array" % label)
+    serialized = {
+        json.dumps(value[key], sort_keys=True, separators=(",", ":"))
+        for key in containers
+    }
+    if len(serialized) != 1:
+        raise ValueError("%s oracle input contains contradictory row containers" % label)
+
+    raw_rows = value[containers[0]]
+    normalized = _oracle_entries(value, evidence_lane, reference_kind)
+    if len(normalized) != len(raw_rows):
+        raise ValueError("%s oracle input contains malformed rows" % label)
+    expected_names = {name for name, _ in identities}
+    filtered = []
+    for index, (raw, row) in enumerate(zip(raw_rows, normalized)):
+        if not isinstance(raw, dict):
+            raise ValueError("%s oracle row %s is not an object" % (label, index))
+        name = _row_name(row)
+        if not str(name).strip():
+            raise ValueError("%s oracle row %s has no usable identity" % (label, index))
+        for field, expected in (
+            ("referenceKind", reference_kind),
+            ("evidenceLane", evidence_lane),
+        ):
+            if field in raw and (
+                not isinstance(raw[field], str)
+                or not raw[field].strip()
+                or raw[field] != expected
+            ):
+                raise ValueError(
+                    "%s oracle row %s has invalid %s" % (label, index, field)
+                )
+        for field in _ORACLE_NUMERIC_FIELDS:
+            if field in raw and raw[field] is not None and _finite_number(raw[field]) is None:
+                raise ValueError(
+                    "%s oracle row %s has invalid %s" % (label, index, field)
+                )
+        if name not in expected_names and not _is_route_only(row):
+            raise ValueError("%s oracle row has unknown identity: %s" % (label, name))
+        filtered.append(row)
+    return filtered
 
 
 def _generated_at():
@@ -868,6 +999,9 @@ def _provenance(hashes, inputs, evidence_value, dashboard_output):
     for field, key, value in (
         ("commands", "commandsJson", inputs["commands"]),
         ("environment", "environmentJson", inputs["environment"]),
+        ("cpuResults", "cpuResults", inputs["cpuResults"]),
+        ("gpuResults", "gpuResults", inputs["gpuResults"]),
+        ("fp13Runner", "fp13Runner", _junit_summary(inputs["fp13Runner"])),
         ("evidenceIndex", "evidenceIndex", evidence_value),
     ):
         if key in hashes:
@@ -902,6 +1036,19 @@ def build_manifest(inputs, selection, source_commit, status):
             supported_rows.append(row)
         elif _is_residual_refusal(row, evidence):
             residual_rows.append(row)
+    candidate_cohorts = {}
+    for row in rows:
+        evidence = evidence_by_key.get(_lane_key(row), {})
+        if (
+            row.get("referenceKind") == "skia-upstream"
+            and _valid_comparable(row, evidence)
+            and row.get("classification") == "pass"
+            and _junit_is_pass(row)
+            and _has_causal_evidence(row, evidence)
+        ):
+            cohort = _causal_cohort_key(evidence)
+            if cohort is not None:
+                candidate_cohorts[cohort] = candidate_cohorts.get(cohort, 0) + 1
     generic_rows = [
         entry
         for entry in evidence_rows
@@ -938,6 +1085,7 @@ def build_manifest(inputs, selection, source_commit, status):
     policy["scoresDirectlyEdited"] = direct_edit
     dashboard_summary = _dashboard_summary(dashboard_rows)
     runner_result = _filtered_junit_result(inputs["skiaRunner"], runner_rows)
+    fp13_result = inputs["fp13Runner"]
     residual_codes = sorted(
         {
             str(_first_value(_evidence_sources(row, evidence_by_key.get(_lane_key(row), {})), ("failureCode",)))
@@ -970,21 +1118,25 @@ def build_manifest(inputs, selection, source_commit, status):
     if dashboard_output is not None:
         dashboard_manifest["outputSha256"] = _metadata("dashboardOutput", inputs["hashes"]).get("sha256")
     current = {
-        "runner": _summary(runner_result),
+        "runner": _junit_summary(runner_result),
         "dashboard": {"rows": len(dashboard_rows), "summary": dashboard_summary},
         "svg": {"rows": len(inputs["svgRows"])},
-        "testOracle": {"rows": 0},
-        "cpuOracle": {"rows": 0},
+        "testOracle": {
+            "rows": len(inputs["testOracleRows"]),
+            "summary": _oracle_summary(inputs["testOracleRows"]),
+        },
+        "cpuOracle": {
+            "rows": len(inputs["cpuOracleRows"]),
+            "summary": _oracle_summary(inputs["cpuOracleRows"]),
+        },
+        "fp13": _junit_summary(fp13_result),
         "evidence": {
             "rows": len(evidence_rows),
             "beforeRows": before_count,
             "afterRows": after_count,
         },
         "observedComparableRows": len(comparable_rows),
-        "candidateUnlockedRows": sum(
-            _has_causal_evidence(row, evidence_by_key.get(_lane_key(row), {}))
-            for row in supported_rows
-        ),
+        "candidateUnlockedRows": max(candidate_cohorts.values(), default=0),
         "supportedRowsAfter": len(supported_rows) if status != "classification" else 0,
         "beforeRows": before_count,
         "afterRows": after_count,
@@ -1037,8 +1189,8 @@ def build_manifest(inputs, selection, source_commit, status):
             "skia": _copy_value(rows),
             "skiaJunit": _copy_value(runner_rows),
             "svg": _copy_value(inputs["svgRows"]),
-            "testOracle": [],
-            "cpuOracle": [],
+            "testOracle": _copy_value(inputs["testOracleRows"]),
+            "cpuOracle": _copy_value(inputs["cpuOracleRows"]),
             "evidence": _copy_value(evidence_rows),
         },
         "beforeCount": before_count,
@@ -1070,6 +1222,9 @@ def build_manifest(inputs, selection, source_commit, status):
             "scoresBefore": _copy_value(inputs["scoresBefore"]),
             "scoresAfter": _copy_value(inputs["scoresAfter"]),
             "evidenceIndex": _copy_value(inputs["evidenceValue"]),
+            "cpuResults": _copy_value(inputs["cpuResults"]),
+            "gpuResults": _copy_value(inputs["gpuResults"]),
+            "fp13": _junit_summary(inputs["fp13Runner"]),
             "genericEvidenceRows": _copy_value(generic_rows),
         },
     }
@@ -1110,7 +1265,7 @@ def render_markdown(manifest):
         "| Lane | Rows | Failures | Errors | Skipped | Terminal |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for lane in ("runner", "dashboard", "svg", "evidence"):
+    for lane in ("runner", "fp13", "dashboard", "svg", "testOracle", "cpuOracle", "evidence"):
         summary = current.get(lane, {})
         if lane == "dashboard" and isinstance(summary.get("summary"), dict):
             summary = {**summary["summary"], "rows": summary.get("rows", 0)}
@@ -1233,6 +1388,9 @@ def _prepare_inputs(args, dashboard_output, selection):
     evidence_rows, unknown_evidence = _filter_evidence_with_families(
         _evidence_entries(copy.deepcopy(evidence_value)), selection
     )
+    missing_evidence = sorted(
+        selection.identities - {_lane_key(entry) for entry in evidence_rows}
+    )
     evidence_by_key = {_lane_key(entry): entry for entry in evidence_rows}
     for row in merged_dashboard_rows:
         evidence = evidence_by_key.get(_lane_key(row))
@@ -1249,6 +1407,25 @@ def _prepare_inputs(args, dashboard_output, selection):
     scores_before = load_scores(args.scores_before)
     scores_after = load_scores(args.scores_after)
     cohort_manifest = _json_file(args.cohort_manifest)
+    cpu_results = _load_json_input(args.cpu_results)
+    gpu_results = _load_json_input(args.gpu_results)
+    cpu_oracle_rows = _load_oracle_rows(
+        args.cpu_results,
+        "cpu",
+        "cpu-oracle",
+        "cpu-oracle",
+        selection.identities,
+    )
+    test_oracle_rows = _load_oracle_rows(
+        args.gpu_results,
+        "gpu",
+        "test-oracle",
+        "test-oracle",
+        selection.identities,
+    )
+    fp13_runner = parse_junit(
+        args.fp13_runner, "fp13", _wave1.EXPECTED_UNSUPPORTED_CODES
+    )
     policy = evidence_value.get("policy", {}) if isinstance(evidence_value, dict) else {}
     score_file = {
         "beforePath": str(args.scores_before),
@@ -1280,11 +1457,16 @@ def _prepare_inputs(args, dashboard_output, selection):
         "evidenceValue": evidence_value,
         "evidenceRows": evidence_rows,
         "unknownEvidence": unknown_evidence,
+        "missingEvidence": missing_evidence,
+        "cpuResults": cpu_results,
+        "gpuResults": gpu_results,
+        "cpuOracleRows": cpu_oracle_rows,
+        "testOracleRows": test_oracle_rows,
         "policy": policy if isinstance(policy, dict) else {},
         "policyEvidencePresent": _wave1._has_complete_policy_evidence(policy),
         "scoreFile": score_file,
         "cohortManifest": cohort_manifest,
-        "fp13Runner": parse_junit(args.fp13_runner, "fp13", _wave1.EXPECTED_UNSUPPORTED_CODES),
+        "fp13Runner": fp13_runner,
     }
 
 
@@ -1329,12 +1511,10 @@ def _validate_selected_evidence(inputs, args, manifest):
             if not _entry_has_required_evidence(entry):
                 violations.append("generic evidence entry is incomplete: %s" % _row_name(entry))
     for row in rows:
-        if _lane_key(row) in matched_keys:
-            continue
-        if _is_supported_after(row, {}):
-            violations.extend(_validate_supported_after(row, {}))
-        elif _is_residual_refusal(row, {}):
-            violations.extend(_validate_residual_refusal(row, {}, args.cohort_failure_code))
+        if _lane_key(row) not in matched_keys:
+            violations.append(
+                "selected cohort row is missing evidence entry: %s" % _row_name(row)
+            )
     if generic_entries:
         generic_value = {"entries": generic_entries}
         violations.extend(
@@ -1431,6 +1611,11 @@ def main(argv=None):
             print("reconciliation check failed: dashboard output is missing")
             return 2
         inputs = _prepare_inputs(args, dashboard_output, selection)
+        if not args.check and inputs["missingEvidence"]:
+            raise ValueError(
+                "classification cannot omit evidence for selected identities: %s"
+                % inputs["missingEvidence"]
+            )
         evidence_failure_code_violations = _failure_code_violations(
             inputs["dashboardRows"],
             inputs["evidenceRows"],
@@ -1452,14 +1637,16 @@ def main(argv=None):
 
     check_violations = []
     if args.check:
+        skia_junit = inputs["skiaRunner"]
+        fp13_junit = inputs["fp13Runner"]
         check_violations.extend(
             _check_current_failures(
-                [("skia", _filtered_junit_result(inputs["skiaRunner"], inputs["runnerRows"]))]
+                [("skia", skia_junit), ("fp13", fp13_junit)]
             )
         )
         check_violations.extend(
             _check_junit_counts(
-                [("skia", _filtered_junit_result(inputs["skiaRunner"], inputs["runnerRows"]))]
+                [("skia", skia_junit), ("fp13", fp13_junit)]
             )
         )
         check_violations.extend(
