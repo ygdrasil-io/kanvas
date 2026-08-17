@@ -1,0 +1,333 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/Users/chaos/.gradle/wrapper/dists/gradle-9.2.0-bin/11i5gvueggl8a5cioxuftxrik/gradle-9.2.0/lib/native-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders UP-TO-DATE
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins UP-TO-DATE
+> Task :buildSrc:compilePluginsBlocks UP-TO-DATE
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors UP-TO-DATE
+> Task :buildSrc:generateScriptPluginAdapters UP-TO-DATE
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :codec:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :color-management:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:kmpPartiallyResolvedDependenciesChecker
+> Task :math:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:compileKotlinJvm UP-TO-DATE
+> Task :math:compileJvmMainJava NO-SOURCE
+> Task :math:jvmProcessResources NO-SOURCE
+> Task :math:processJvmMainResources SKIPPED
+> Task :math:jvmMainClasses UP-TO-DATE
+> Task :math:jvmJar UP-TO-DATE
+> Task :color-management:compileKotlin UP-TO-DATE
+> Task :color-management:compileJava NO-SOURCE
+> Task :font:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:compileKotlin UP-TO-DATE
+> Task :font:core:compileJava NO-SOURCE
+> Task :font:colr:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:compileKotlin UP-TO-DATE
+> Task :font:sfnt:compileJava NO-SOURCE
+> Task :font:colr:compileKotlin UP-TO-DATE
+> Task :font:colr:compileJava NO-SOURCE
+> Task :font:colr:processResources NO-SOURCE
+> Task :font:colr:classes UP-TO-DATE
+> Task :font:colr:jar UP-TO-DATE
+> Task :font:glyph:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:compileKotlin UP-TO-DATE
+> Task :font:gpu-api:compileJava NO-SOURCE
+> Task :font:scaler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:scaler:compileKotlin UP-TO-DATE
+> Task :font:scaler:compileJava NO-SOURCE
+> Task :font:text:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:text:compileKotlin UP-TO-DATE
+> Task :font:text:compileJava NO-SOURCE
+> Task :font:glyph:compileKotlin UP-TO-DATE
+> Task :font:glyph:compileJava NO-SOURCE
+> Task :font:compileKotlin UP-TO-DATE
+> Task :font:compileJava NO-SOURCE
+> Task :gpu-renderer:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gpu-renderer:compileKotlin UP-TO-DATE
+> Task :gpu-renderer:compileJava NO-SOURCE
+> Task :kanvas:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kanvas:compileKotlin UP-TO-DATE
+> Task :kanvas:compileJava NO-SOURCE
+> Task :codec:api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:api:compileKotlin UP-TO-DATE
+> Task :codec:api:compileJava NO-SOURCE
+> Task :codec:bmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:compileKotlin UP-TO-DATE
+> Task :codec:common:compileJava NO-SOURCE
+> Task :codec:common:processResources NO-SOURCE
+> Task :codec:common:classes UP-TO-DATE
+> Task :codec:common:jar UP-TO-DATE
+> Task :codec:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:core:compileKotlin NO-SOURCE
+> Task :codec:core:compileJava NO-SOURCE
+> Task :codec:bmp:compileKotlin UP-TO-DATE
+> Task :codec:bmp:compileJava NO-SOURCE
+> Task :codec:bmp:processResources UP-TO-DATE
+> Task :codec:bmp:classes UP-TO-DATE
+> Task :codec:bmp:jar UP-TO-DATE
+> Task :codec:extended:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:extended:compileKotlin UP-TO-DATE
+> Task :codec:extended:compileJava NO-SOURCE
+> Task :codec:extended:processResources UP-TO-DATE
+> Task :codec:extended:classes UP-TO-DATE
+> Task :codec:extended:jar UP-TO-DATE
+> Task :codec:gif:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:gif:compileKotlin UP-TO-DATE
+> Task :codec:gif:compileJava NO-SOURCE
+> Task :codec:gif:processResources UP-TO-DATE
+> Task :codec:gif:classes UP-TO-DATE
+> Task :codec:gif:jar UP-TO-DATE
+> Task :codec:ico:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:compileKotlin UP-TO-DATE
+> Task :codec:png:compileJava NO-SOURCE
+> Task :codec:png:processResources UP-TO-DATE
+> Task :codec:png:classes UP-TO-DATE
+> Task :codec:png:jar UP-TO-DATE
+> Task :codec:ico:compileKotlin UP-TO-DATE
+> Task :codec:ico:compileJava NO-SOURCE
+> Task :codec:ico:processResources UP-TO-DATE
+> Task :codec:ico:classes UP-TO-DATE
+> Task :codec:ico:jar UP-TO-DATE
+> Task :codec:jpeg:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg:compileKotlin UP-TO-DATE
+> Task :codec:jpeg:compileJava NO-SOURCE
+> Task :codec:jpeg:processResources UP-TO-DATE
+> Task :codec:jpeg:classes UP-TO-DATE
+> Task :codec:jpeg:jar UP-TO-DATE
+> Task :codec:jpeg-ls:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg-ls:compileKotlin UP-TO-DATE
+> Task :codec:jpeg-ls:compileJava NO-SOURCE
+> Task :codec:jpeg-ls:processResources UP-TO-DATE
+> Task :codec:jpeg-ls:classes UP-TO-DATE
+> Task :codec:jpeg-ls:jar UP-TO-DATE
+> Task :codec:jpeg2000:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg2000:compileKotlin UP-TO-DATE
+> Task :codec:jpeg2000:compileJava NO-SOURCE
+> Task :codec:jpeg2000:processResources UP-TO-DATE
+> Task :codec:jpeg2000:classes UP-TO-DATE
+> Task :codec:jpeg2000:jar UP-TO-DATE
+> Task :codec:jpegxl:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpegxl:compileKotlin UP-TO-DATE
+> Task :codec:jpegxl:compileJava NO-SOURCE
+> Task :codec:jpegxl:processResources UP-TO-DATE
+> Task :codec:jpegxl:classes UP-TO-DATE
+> Task :codec:jpegxl:jar UP-TO-DATE
+> Task :codec:wbmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:wbmp:compileKotlin UP-TO-DATE
+> Task :codec:wbmp:compileJava NO-SOURCE
+> Task :codec:wbmp:processResources UP-TO-DATE
+> Task :codec:wbmp:classes UP-TO-DATE
+> Task :codec:wbmp:jar UP-TO-DATE
+> Task :codec:webp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:webp:compileKotlin UP-TO-DATE
+> Task :codec:webp:compileJava NO-SOURCE
+> Task :codec:webp:processResources UP-TO-DATE
+> Task :codec:webp:classes UP-TO-DATE
+> Task :codec:webp:jar UP-TO-DATE
+> Task :codec:compileKotlin NO-SOURCE
+> Task :codec:compileJava NO-SOURCE
+> Task :codec:processResources NO-SOURCE
+> Task :codec:classes UP-TO-DATE
+> Task :codec:jar UP-TO-DATE
+> Task :color-management:processResources NO-SOURCE
+> Task :color-management:classes UP-TO-DATE
+> Task :color-management:jar UP-TO-DATE
+> Task :font:processResources NO-SOURCE
+> Task :font:classes UP-TO-DATE
+> Task :font:jar UP-TO-DATE
+> Task :gpu-renderer:processResources UP-TO-DATE
+> Task :gpu-renderer:classes UP-TO-DATE
+> Task :gpu-renderer:jar UP-TO-DATE
+> Task :kanvas:processResources NO-SOURCE
+> Task :kanvas:classes UP-TO-DATE
+> Task :kanvas:jar UP-TO-DATE
+> Task :codec:api:processResources UP-TO-DATE
+> Task :codec:api:classes UP-TO-DATE
+> Task :codec:api:jar UP-TO-DATE
+> Task :codec:core:processResources NO-SOURCE
+> Task :codec:core:classes UP-TO-DATE
+> Task :codec:core:jar UP-TO-DATE
+> Task :font:core:processResources NO-SOURCE
+> Task :font:core:classes UP-TO-DATE
+> Task :font:core:jar UP-TO-DATE
+> Task :font:glyph:processResources NO-SOURCE
+> Task :font:glyph:classes UP-TO-DATE
+> Task :font:glyph:jar UP-TO-DATE
+> Task :font:gpu-api:processResources NO-SOURCE
+> Task :font:gpu-api:classes UP-TO-DATE
+> Task :font:gpu-api:jar UP-TO-DATE
+> Task :font:scaler:processResources NO-SOURCE
+> Task :font:scaler:classes UP-TO-DATE
+> Task :font:scaler:jar UP-TO-DATE
+> Task :font:sfnt:processResources NO-SOURCE
+> Task :font:sfnt:classes UP-TO-DATE
+> Task :font:sfnt:jar UP-TO-DATE
+> Task :font:text:processResources UP-TO-DATE
+> Task :font:text:classes UP-TO-DATE
+> Task :font:text:jar UP-TO-DATE
+> Task :integration-tests:diagnostic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:compileKotlin UP-TO-DATE
+> Task :integration-tests:test-utils:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:compileKotlin UP-TO-DATE
+> Task :integration-tests:diagnostic:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:processResources NO-SOURCE
+> Task :integration-tests:diagnostic:classes UP-TO-DATE
+> Task :integration-tests:diagnostic:jar UP-TO-DATE
+> Task :integration-tests:skia:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:skia:compileKotlin NO-SOURCE
+> Task :integration-tests:skia:compileJava NO-SOURCE
+> Task :integration-tests:skia:processResources NO-SOURCE
+> Task :integration-tests:skia:classes UP-TO-DATE
+> Task :integration-tests:skia:jar UP-TO-DATE
+> Task :integration-tests:skia:compileTestKotlin UP-TO-DATE
+> Task :integration-tests:skia:compileTestJava NO-SOURCE
+> Task :integration-tests:skia:processTestResources UP-TO-DATE
+> Task :integration-tests:skia:testClasses UP-TO-DATE
+> Task :integration-tests:test-utils:processResources NO-SOURCE
+> Task :integration-tests:test-utils:classes UP-TO-DATE
+> Task :integration-tests:test-utils:jar UP-TO-DATE
+
+> Task :integration-tests:skia:generateSkiaRendersFor
+[SKIP] org.graphiks.kanvas.skia.gm.blur.MatrixConvolutionGm
+[SKIP] org.graphiks.kanvas.skia.gm.clip.ComplexClip2Gm
+[SKIP] org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm
+[SKIP] org.graphiks.kanvas.skia.gm.image.DrawBitmapRectGm
+[SKIP] org.graphiks.kanvas.skia.gm.path.InnerShapesGm
+[SKIP] org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesGm
+[SKIP] org.graphiks.kanvas.skia.gm.text.GlyphPosGm
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.lwjgl.system.MemoryUtil (file:/Users/chaos/.gradle/caches/modules-2/files-2.1/org.lwjgl/lwjgl/3.3.3/29589b5f87ed335a6c7e7ee6a5775f81f97ecb84/lwjgl-3.3.3.jar)
+WARNING: Please consider reporting this to the maintainers of class org.lwjgl.system.MemoryUtil
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[FAIL] lit_shader_linear_rt — unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+[FAIL] localmatriximageshader_filtering — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] localmatriximageshader — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] localmatrixshader_nested — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] localmatrixshader_persp — null
+[FAIL] local_matrix_shader_rt — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] localmatrix_order — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] makecolorspace — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[RENDER] image/makecolortypeandspace.png (384x512, dispatch=13, refuse=0)
+[FAIL] makeRasterImage — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] mipmap_gray8_srgb — unsupported.image.pixel.format: Prepared Surface operation could not be lowered.
+[FAIL] mipmap_srgb — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] mirror_tile — unsupported.transform.affine_material: unsupported.transform.affine_material
+[FAIL] nearest_half_pixel_image — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[RENDER] image/new_texture_image.png (280x115, dispatch=1, refuse=0)
+[FAIL] ninepatch-stretch — unsupported.image.nine_geometry: Prepared Surface operation could not be lowered.
+[FAIL] not_native32_bitmap_config — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] null_child_rt — unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] p3 — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] persp_images — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] pictureimagefilter — unsupported.composite.paint: Prepared Surface composite could not be lowered.
+[FAIL] pictureimagegenerator — unsupported.composite.operation: Prepared Surface composite could not be lowered.
+[FAIL] pictureshader_alpha — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] pictureshadercache — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] pictureshader — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] pictureshader_localwrapper — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] pictureshader_persp — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] pictureshadertile — unsupported.transform.class_downgrade: unsupported.transform.class_downgrade
+[RENDER] image/poster_circle.png (600x450, dispatch=1, refuse=0)
+[RENDER] image/raw_image_shader_normals_rt.png (768x512, dispatch=8, refuse=0)
+[FAIL] readpixelscodec — unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+[FAIL] readpixelspicture — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] reinterpretcolorspace — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] repeated_bitmap — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] repeated_bitmap_jpg — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[RENDER] image/scale-pixels.png (960x720, dispatch=1, refuse=0)
+[FAIL] scaled_tilemode_bitmap — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[RENDER] image/scaled_tilemodes.png (880x880, dispatch=1, refuse=0)
+[RENDER] image/scaled_tilemodes_npot.png (880x880, dispatch=1, refuse=0)
+[FAIL] scalepixels_unpremul — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] shaderpath — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[RENDER] image/showmiplevels_explicit.png (1130x970, dispatch=2, refuse=0)
+[FAIL] skbug_8664 — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] skbug_9819 — unsupported.composite.operation: Prepared Surface composite could not be lowered.
+[FAIL] stoplight_animated_image — unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.
+[FAIL] surface_underdraw — unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+[FAIL] texture — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] textureimage_and_shader — unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+[FAIL] tiled_picture_shader — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] tiledscaledbitmap — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] tilemode_decal — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] tilemodes_alpha — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] tilemodes — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[FAIL] tilemode_bitmap — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[FAIL] tilemode_gradient — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[FAIL] tinybitmap — unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+[FAIL] unpremul — unsupported.composite.operation: Prepared Surface composite could not be lowered.
+[FAIL] verylargebitmap — unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+[FAIL] verylarge_picture_image — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[RENDER] image/wacky_yuv_formats.png (1880x1430, dispatch=1, refuse=0)
+[RENDER] image/yuv420_odd_dim.png (50x50, dispatch=1, refuse=0)
+[RENDER] image/yuv420_odd_dim_repeat.png (1000x500, dispatch=1, refuse=0)
+[FAIL] custommesh_cs — failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+[FAIL] custommesh_cs_uniforms — failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+[FAIL] custommesh — invalid.frame_plan.destination_read_unbound: Destination-reading packet has no exact Task 5 copy or refusal association
+[RENDER] mesh/custommesh_uniforms.png (140x250, dispatch=1, refuse=0)
+[FAIL] mesh_updates — failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+[FAIL] mesh_with_effects — unsupported.vertices.material: Prepared Surface operation could not be lowered.
+[FAIL] mesh_with_image — unsupported.prepared-vertices.sampled-material: Prepared-vertices material sha256:f27e08a553990ae560b958ae261c67e9db35955cc20dd3426867414789f7c986 samples frame resources that require the sampled-material materializer.
+[RENDER] mesh/mesh_with_paint_color.png (320x320, dispatch=2, refuse=0)
+[FAIL] mesh_with_paint_image — unsupported.prepared-vertices.sampled-material: Prepared-vertices material sha256:5ca44f7445e37f527df1d45e22613291afab5ec1cec0592c1194840af0fa6e43 samples frame resources that require the sampled-material materializer.
+[FAIL] mesh_zero_init — STUB.MESH.GPU_ZERO_INIT
+[FAIL] picture_mesh — unsupported.composite.operation: Prepared Surface composite could not be lowered.
+[FAIL] skbug_13047 — unsupported.vertices.material: Prepared Surface operation could not be lowered.
+[FAIL] vertices_batching — unsupported.vertices.topology: Prepared Surface operation could not be lowered.
+[FAIL] vertices_collapsed — unsupported.vertices.material: Prepared Surface operation could not be lowered.
+[FAIL] vertices — unsupported.vertices.material: Prepared Surface operation could not be lowered.
+[FAIL] vertices_perspective — unsupported.vertices.material: Prepared Surface operation could not be lowered.
+[FAIL] bezier_conic_effects — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] bezier_quad_effects — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] bug41422450 — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] ctmpatheffect — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] circle_sizes — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] clockwise — unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+[FAIL] concavepaths — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] conicpaths — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] convex_lineonly_paths — unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+[FAIL] convex_lineonly_paths_stroke_and_fill — unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+[FAIL] convexpaths — unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+[FAIL] convex-polygon-inset — An operation is not implemented: STUB.CONVEX_POLYGON_INSET — requires SkInsetConvexPolygon (Skia-internal utility)
+[RENDER] path/crbug_640176.png (250x250, dispatch=2, refuse=0)
+[FAIL] crbug_691386 — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] cubicclosepath — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] cubicpath — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] cubicpath_shader — unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+[FAIL] dashcircle — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] dashtextcaps — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] dashing5_aa — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] dashing — unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+[FAIL] drawlines_with_local_matrix — unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+
+Done: 14 rendered, 86 failed
+
+[Incubating] Problems report is available at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 11s
+84 actionable tasks: 2 executed, 82 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.2.0/userguide/configuration_cache_enabling.html

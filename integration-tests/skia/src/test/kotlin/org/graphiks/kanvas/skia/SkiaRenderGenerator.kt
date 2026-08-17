@@ -61,6 +61,8 @@ internal data class SkiaRenderGeneratorOptions(
     val family: RenderFamily?,
     val name: String?,
     val includeBlocking: Boolean,
+    val from: Int? = null,
+    val to: Int? = null,
 )
 
 internal fun parseSkiaRenderGeneratorOptions(args: Array<String>): SkiaRenderGeneratorOptions {
@@ -69,6 +71,8 @@ internal fun parseSkiaRenderGeneratorOptions(args: Array<String>): SkiaRenderGen
     var family: RenderFamily? = null
     var name: String? = null
     var includeBlocking = false
+    var from: Int? = null
+    var to: Int? = null
     var index = 1
     while (index < args.size) {
         when (val arg = args[index]) {
@@ -88,18 +92,35 @@ internal fun parseSkiaRenderGeneratorOptions(args: Array<String>): SkiaRenderGen
                 includeBlocking = true
                 index += 1
             }
+            "--from" -> {
+                require(index + 1 < args.size) { "--from requires a value" }
+                from = args[index + 1].toInt()
+                index += 2
+            }
+            "--to" -> {
+                require(index + 1 < args.size) { "--to requires a value" }
+                to = args[index + 1].toInt()
+                index += 2
+            }
             else -> throw IllegalArgumentException("Unknown SkiaRenderGenerator argument: $arg")
         }
     }
-    return SkiaRenderGeneratorOptions(outputDir, family, name, includeBlocking)
+    return SkiaRenderGeneratorOptions(outputDir, family, name, includeBlocking, from, to)
 }
 
 internal fun selectSkiaGmsForRender(
     gms: List<SkiaGm>,
     options: SkiaRenderGeneratorOptions,
-): List<SkiaGm> =
-    gms.filter { gm ->
-        (options.includeBlocking || gm.renderCost != RenderCost.BLOCKING) &&
-            (options.family == null || gm.renderFamily == options.family) &&
-            (options.name == null || gm.name == options.name)
-    }
+): List<SkiaGm> {
+    validateSkiaGmRange(options.from, options.to, gms.size)
+    val start = options.from ?: 0
+    val end = options.to ?: gms.size
+    return gms.withIndex()
+        .filter { (index, gm) ->
+            index in start until end &&
+                (options.includeBlocking || gm.renderCost != RenderCost.BLOCKING) &&
+                (options.family == null || gm.renderFamily == options.family) &&
+                (options.name == null || gm.name == options.name)
+        }
+        .map { it.value }
+}

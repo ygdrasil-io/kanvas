@@ -1,0 +1,2439 @@
+{
+  "entries": [
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 500,
+            "width": 700
+          },
+          "path": "../dashboard/images/reference/blur2rects.png",
+          "sha256": "d01b6be47a36fad37563ed35397b2be84154933069a1e23128cd17a2fc09bef9"
+        },
+        "render": {
+          "dimensions": {
+            "height": 500,
+            "width": 700
+          },
+          "path": "../dashboard/images/generated/blur2rects.png",
+          "sha256": "013921a8821bacce1ed3ec2c629d2e8047614e150e7c69069cf21e54c248f7ba"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 500,
+        "width": 700
+      },
+      "name": "blur2rects",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 96.11514285714286,
+      "similarityBefore": 96.11514285714286
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1024,
+            "width": 1024
+          },
+          "path": "../dashboard/images/reference/BlurBigSigma.png",
+          "sha256": "ec46119a04fb581a2fe3783c24534b90bdceffd352a9d3b8f732ba52cc645870"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1024,
+            "width": 1024
+          },
+          "path": "../dashboard/images/generated/BlurBigSigma.png",
+          "sha256": "96da6cd526bfca25dbe2794e32e73a1cb8110b30fd595452fe3300984170c303"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1024,
+        "width": 1024
+      },
+      "name": "BlurBigSigma",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 256,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/BlurSmallSigma.png",
+          "sha256": "a95eb5d13ea1103e1f8c11687d3caa8fffa44d419e7887032fb6cdd0a655a90c"
+        },
+        "render": {
+          "dimensions": {
+            "height": 256,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/BlurSmallSigma.png",
+          "sha256": "8f19248dc254e7118670702539781c8a7987a677590ae5c30772bc4c70279fb4"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 256,
+        "width": 512
+      },
+      "name": "BlurSmallSigma",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 86.71875,
+      "similarityBefore": 86.71875
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 520,
+            "width": 520
+          },
+          "path": "../dashboard/images/reference/crbug_899512.png",
+          "sha256": "8f8f2babaa2245620f6cafbbe38c8b43ee02c556345faeb1f5894579e55f1389"
+        },
+        "render": {
+          "dimensions": {
+            "height": 520,
+            "width": 520
+          },
+          "path": "../dashboard/images/generated/crbug_899512.png",
+          "sha256": "af9c167779deaf348a4492373e2c0bc7e4cdfddff8c6a74de9e457198bf6be99"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 520,
+        "width": 520
+      },
+      "name": "crbug_899512",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 92.14571005917159,
+      "similarityBefore": 92.14571005917159
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 500,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/imageblur2.png",
+          "sha256": "cd0a5309ba740183d859f5bd3f95e6f741a24e209684024cf952c50ad3aa7e6d"
+        },
+        "render": {
+          "dimensions": {
+            "height": 500,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/imageblur2.png",
+          "sha256": "2f7761733a57b859142f2f91d1495c0894de1cfa57b3fdb0a17f197de37c321b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 500,
+        "width": 500
+      },
+      "name": "imageblur2",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 8.48,
+      "similarityBefore": 8.48
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 500,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/imageblur.png",
+          "sha256": "c6a6c07f7ee66213eee468933c650204077704a0a356c06dd57103c56d937505"
+        },
+        "render": {
+          "dimensions": {
+            "height": 500,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/imageblur.png",
+          "sha256": "2a2dfc5064d3c41f3e9e7324351bc6971be5c03451282dea0682ee2b0d336c25"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 500,
+        "width": 500
+      },
+      "name": "imageblur",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 30.0068,
+      "similarityBefore": 30.0068
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/matrixconvolution.png",
+          "sha256": "fd788e3aa285160e232f5972a1b45b4643e45d2cd18f62e7c8088e8d87e94dc6"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/matrixconvolution.png",
+          "sha256": "ca8af4fd68414f2a80ed75d1a17170d9e529b05ad37da591f0e3ec518d4ac6cc"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 500
+      },
+      "name": "matrixconvolution",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.14933333333333332,
+      "similarityBefore": 0.14933333333333332
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/matrixconvolution_big_color.png",
+          "sha256": "7ff53e23a319ca659f578ea3d03f1b5aacc210f8eeaeea54cbb3b6e68c4961d1"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/matrixconvolution_big_color.png",
+          "sha256": "33f6c685b8ca213465211718590f6f451c4c83046090adefec5e0ace5ff7bb30"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 500
+      },
+      "name": "matrixconvolution_big_color",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/matrixconvolution_big.png",
+          "sha256": "2de3c4c8cff902b027dce1ce17cfd2d04cbb81f98a88209ae77dcd80da20620a"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/matrixconvolution_big.png",
+          "sha256": "c1604ab86aad56f7e880f62b4c9cdc5f5b91f4d908e94641fbb1527c8f6a3887"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 500
+      },
+      "name": "matrixconvolution_big",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 2.0353333333333334,
+      "similarityBefore": 2.0353333333333334
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/matrixconvolution_bigger.png",
+          "sha256": "78332ed6e3154dc97a50b479a148b7d11be33333d89db7d02d9a9cff198553cf"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/matrixconvolution_bigger.png",
+          "sha256": "e2f643a51bda11891e2617d82f3febc31b61deaa4b34ec5a7253c9aee4b00b56"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 500
+      },
+      "name": "matrixconvolution_bigger",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/reference/matrixconvolution_biggest.png",
+          "sha256": "542e1fd0860b4e93fbc0b646ef9e44da78c47900ebaa1712395cdb4edfc39776"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 500
+          },
+          "path": "../dashboard/images/generated/matrixconvolution_biggest.png",
+          "sha256": "a10d900a754d6ed9efd526ecc45422c20ce19d9b532f04f92eaa416141211f0a"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 500
+      },
+      "name": "matrixconvolution_biggest",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 50,
+            "width": 50
+          },
+          "path": "../dashboard/images/reference/smallemboss.png",
+          "sha256": "aae927655944e09aff37a7b0e6530845ac801f9116b31e111912b68c4f11d732"
+        },
+        "render": {
+          "dimensions": {
+            "height": 50,
+            "width": 50
+          },
+          "path": "../dashboard/images/generated/smallemboss.png",
+          "sha256": "b446bde1baaca95c617211cf9a3613ee6c4a500bb1ef12e7cd4f7a5b958c2915"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 50,
+        "width": 50
+      },
+      "name": "smallemboss",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 400,
+            "width": 400
+          },
+          "path": "../dashboard/images/reference/tablemaskfilter.png",
+          "sha256": "d33a41c0888bddb3b0d765698ad453bcbadf7472f048cabef1a9c68da58d8e27"
+        },
+        "render": {
+          "dimensions": {
+            "height": 400,
+            "width": 400
+          },
+          "path": "../dashboard/images/generated/tablemaskfilter.png",
+          "sha256": "a027c122c0fd7027c34f7961c628cfb9dbef11bca4e7124192ad4cf2bc0a9681"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 400,
+        "width": 400
+      },
+      "name": "tablemaskfilter",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 83.47375,
+      "similarityBefore": 83.47375
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/clipdrawdraw.png",
+          "sha256": "ce4d7e8eab5b0d1c81e64e389998a99d267f1b0d174ccdc800c9cba441e92f53"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/clipdrawdraw.png",
+          "sha256": "4162cbb2f066fbb1642d6acecd31faeca8dadeaf33c1b87b4d7202e4da7e2b7f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "clipdrawdraw",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 99.65286254882812,
+      "similarityBefore": 99.65286254882812
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/clip_shader_difference.png",
+          "sha256": "f29ec4c4650061353293d534a1bfa5f8d38ad8d19257e40014180be56889d1fc"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/clip_shader_difference.png",
+          "sha256": "376e09f8bbc02b92c476a49364c18135f561b6cef06f7be19ec977f92aa6812e"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "clip_shader_difference",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 320,
+            "width": 430
+          },
+          "path": "../dashboard/images/reference/clip_shader_layer.png",
+          "sha256": "83ca32c16e81200d9d4a318b45408025cc23a559e243415b602156d1e7fb5dbb"
+        },
+        "render": {
+          "dimensions": {
+            "height": 320,
+            "width": 430
+          },
+          "path": "../dashboard/images/generated/clip_shader_layer.png",
+          "sha256": "6c1235feeaa181e0902cf87d6f929fec537c5284864d52ce2b45d54ec5172cb5"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 320,
+        "width": 430
+      },
+      "name": "clip_shader_layer",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 58.080668604651166,
+      "similarityBefore": 58.080668604651166
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1030,
+            "width": 1370
+          },
+          "path": "../dashboard/images/reference/clip_shader_persp.png",
+          "sha256": "67cd910f1f4c09c866cbd06483dafa991f383af6de7749ab8279a962eba06d46"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1030,
+            "width": 1370
+          },
+          "path": "../dashboard/images/generated/clip_shader_persp.png",
+          "sha256": "f3ea097bb819129770f5e90c82c13d40efabf8c1745df15a6aafbb5ee130532d"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1030,
+        "width": 1370
+      },
+      "name": "clip_shader_persp",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 76.54000425200198,
+      "similarityBefore": 76.54000425200198
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 650,
+            "width": 840
+          },
+          "path": "../dashboard/images/reference/clip_shader.png",
+          "sha256": "f3398f4273ec3df37dd025afe8eb4cf89d3558699c90a9bdb9dc89ae0420187a"
+        },
+        "render": {
+          "dimensions": {
+            "height": 650,
+            "width": 840
+          },
+          "path": "../dashboard/images/generated/clip_shader.png",
+          "sha256": "699f2a85f5ef1669561e7e1ea2f8fcf58e2c68e50e2a19b76bc303eb9e419bfe"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 650,
+        "width": 840
+      },
+      "name": "clip_shader",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 61.901282051282045,
+      "similarityBefore": 61.901282051282045
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 480,
+            "width": 360
+          },
+          "path": "../dashboard/images/reference/color4blendcf.png",
+          "sha256": "a6f500c726ae02f555690efbf62c6e04a5c6ccee2e4f06e1980baa5e606b3261"
+        },
+        "render": {
+          "dimensions": {
+            "height": 480,
+            "width": 360
+          },
+          "path": "../dashboard/images/generated/color4blendcf.png",
+          "sha256": "c6ca2d587c9522ea350567e97a5a6cab320c9d2583fcaaa3305eb43998647b1b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 480,
+        "width": 360
+      },
+      "name": "color4blendcf",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 82.63888888888889,
+      "similarityBefore": 82.63888888888889
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 480,
+            "width": 360
+          },
+          "path": "../dashboard/images/reference/color4shader.png",
+          "sha256": "a6f500c726ae02f555690efbf62c6e04a5c6ccee2e4f06e1980baa5e606b3261"
+        },
+        "render": {
+          "dimensions": {
+            "height": 480,
+            "width": 360
+          },
+          "path": "../dashboard/images/generated/color4shader.png",
+          "sha256": "c6ca2d587c9522ea350567e97a5a6cab320c9d2583fcaaa3305eb43998647b1b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 480,
+        "width": 360
+      },
+      "name": "color4shader",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 82.63888888888889,
+      "similarityBefore": 82.63888888888889
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 320,
+            "width": 230
+          },
+          "path": "../dashboard/images/reference/crbug_1167277.png",
+          "sha256": "f273ed6e9fbb2f6fed886944625cddc6461ef47fdf0b92801c96a4df220c72f7"
+        },
+        "render": {
+          "dimensions": {
+            "height": 320,
+            "width": 230
+          },
+          "path": "../dashboard/images/generated/crbug_1167277.png",
+          "sha256": "4bf35d6a5432d5835d27934ec3c2d81145678b32996997586994ed87217e2321"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 320,
+        "width": 230
+      },
+      "name": "crbug_1167277",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 93.13994565217392,
+      "similarityBefore": 93.13994565217392
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1200,
+            "width": 1200
+          },
+          "path": "../dashboard/images/reference/crbug_1174186.png",
+          "sha256": "b4a0e384fec8250d85368582bf9fc319b3a780af8b2b7dda720ae11faf4bb1db"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1200,
+            "width": 1200
+          },
+          "path": "../dashboard/images/generated/crbug_1174186.png",
+          "sha256": "33edef5f86bbc91901547b4df53d44011a5d49c6dfeb95c87c35aa0fb38ab300"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1200,
+        "width": 1200
+      },
+      "name": "crbug_1174186",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 99.9988888888889,
+      "similarityBefore": 99.9988888888889
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1130,
+            "width": 560
+          },
+          "path": "../dashboard/images/reference/ducky_yuv_blend.png",
+          "sha256": "ba0463e5216dd0aea17d9cf6284bead38b6e26684c219cb65d9464cd6c659fe4"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1130,
+            "width": 560
+          },
+          "path": "../dashboard/images/generated/ducky_yuv_blend.png",
+          "sha256": "9df0b5ef3bd8b61488bf021e3922e253de572aaf89baf67dd618d7eff7e98b2f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1130,
+        "width": 560
+      },
+      "name": "ducky_yuv_blend",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 6.619469026548673,
+      "similarityBefore": 6.619469026548673
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 256,
+            "width": 256
+          },
+          "path": "../dashboard/images/reference/fadefilter.png",
+          "sha256": "60a2293f11e965c2f51a0911a419eb5ab25af0bcfff1fd0ba82e511083e9eeeb"
+        },
+        "render": {
+          "dimensions": {
+            "height": 256,
+            "width": 256
+          },
+          "path": "../dashboard/images/generated/fadefilter.png",
+          "sha256": "a30924e582e82713114b4cc02a1c6adabd7d5d384594c63874a6173c1388418c"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 256,
+        "width": 256
+      },
+      "name": "fadefilter",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 100.0,
+      "similarityBefore": 100.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 620,
+            "width": 1110
+          },
+          "path": "../dashboard/images/reference/HSL_duck.png",
+          "sha256": "1e3865a4dfd45b5420dde153ca4d698ec066094ea3a96742166e3672ceaefa50"
+        },
+        "render": {
+          "dimensions": {
+            "height": 620,
+            "width": 1110
+          },
+          "path": "../dashboard/images/generated/HSL_duck.png",
+          "sha256": "b40dfd80d947c56a8dc1c50d2db04fcf26c83d6bcf4dc0573bb0a20c5607d9c9"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 620,
+        "width": 1110
+      },
+      "name": "HSL_duck",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 23.26474861958733,
+      "similarityBefore": 23.26474861958733
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/imagefilter_composed_transform.png",
+          "sha256": "3f4464f22b3036a1e6948dd3753a537f32d9c06999e5a412f49acaac01191a98"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/imagefilter_composed_transform.png",
+          "sha256": "376e09f8bbc02b92c476a49364c18135f561b6cef06f7be19ec977f92aa6812e"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "imagefilter_composed_transform",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 74.57275390625,
+      "similarityBefore": 74.57275390625
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 180,
+            "width": 160
+          },
+          "path": "../dashboard/images/reference/imagefilter_convolve_subset.png",
+          "sha256": "4e73da34fa417715d6a64702de779850ca71434454b540559934b302f5671f5b"
+        },
+        "render": {
+          "dimensions": {
+            "height": 180,
+            "width": 160
+          },
+          "path": "../dashboard/images/generated/imagefilter_convolve_subset.png",
+          "sha256": "5e42f1a863119aa27ae2fd95bce4e0515936c40d3fda8cfae91a7adfe5b3680b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 180,
+        "width": 160
+      },
+      "name": "imagefilter_convolve_subset",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 32.177083333333336,
+      "similarityBefore": 32.177083333333336
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/imagefilters_effect_order.png",
+          "sha256": "257be5efd0558c7ee7b43a8a5850ff46e8abd2093d63e4ae610c081d8ce7d205"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/imagefilters_effect_order.png",
+          "sha256": "376e09f8bbc02b92c476a49364c18135f561b6cef06f7be19ec977f92aa6812e"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "imagefilters_effect_order",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 1.019287109375,
+      "similarityBefore": 1.019287109375
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/imagefilter_matrix_localmatrix.png",
+          "sha256": "e6a614eae1e49199dcd562bf23d92805dbb20f1b4bfcfaeddfa1e6ad15069576"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/imagefilter_matrix_localmatrix.png",
+          "sha256": "376e09f8bbc02b92c476a49364c18135f561b6cef06f7be19ec977f92aa6812e"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "imagefilter_matrix_localmatrix",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 74.76692199707031,
+      "similarityBefore": 74.76692199707031
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 100,
+            "width": 420
+          },
+          "path": "../dashboard/images/reference/matriximagefilter.png",
+          "sha256": "45f9aea0d67264c08363153861c069730ddbce4595ea8e5ddc1d8c871befe4ea"
+        },
+        "render": {
+          "dimensions": {
+            "height": 100,
+            "width": 420
+          },
+          "path": "../dashboard/images/generated/matriximagefilter.png",
+          "sha256": "9c5a08dad209a480ede856d99f5425ec2e724d190f306df9e5f6b9b56b6f8c1d"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 100,
+        "width": 420
+      },
+      "name": "matriximagefilter",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 7.85,
+      "similarityBefore": 7.85
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1024,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/modecolorfilters.png",
+          "sha256": "8333189b6d0daf53e71dcc7c1909e85f833fb2ee01085ad6d978233e1d10e38f"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1024,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/modecolorfilters.png",
+          "sha256": "91287cc6e4763e7a88cdf16ecccfaa8f7f9f8c77d8890cdafe82d3db07c47720"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1024,
+        "width": 512
+      },
+      "name": "modecolorfilters",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 27.06298828125,
+      "similarityBefore": 27.06298828125
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 480,
+            "width": 640
+          },
+          "path": "../dashboard/images/reference/perlinnoise_localmatrix.png",
+          "sha256": "fb5f1cfa573b39498c37dad3822c258877658aa3c95ade28c3dafb2e0488d7f5"
+        },
+        "render": {
+          "dimensions": {
+            "height": 480,
+            "width": 640
+          },
+          "path": "../dashboard/images/generated/perlinnoise_localmatrix.png",
+          "sha256": "b6a9aab86f0beab96ed51382b7a057131ddde39900fa0c09013879a6c07e4732"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 480,
+        "width": 640
+      },
+      "name": "perlinnoise_localmatrix",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 62.5,
+      "similarityBefore": 62.5
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 670,
+            "width": 830
+          },
+          "path": "../dashboard/images/reference/save_behind.png",
+          "sha256": "3a4ccdbd5bb5a88c4e77e03bb14f180ab959c82e673ca31b0382f15c6304289d"
+        },
+        "render": {
+          "dimensions": {
+            "height": 670,
+            "width": 830
+          },
+          "path": "../dashboard/images/generated/save_behind.png",
+          "sha256": "77198f610549cb1f63ec8176258b97c7f9a25c1aa2e06f700949251364ea3d44"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 670,
+        "width": 830
+      },
+      "name": "save_behind",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 7.930228376191333,
+      "similarityBefore": 7.930228376191333
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 256,
+            "width": 256
+          },
+          "path": "../dashboard/images/reference/savelayer_initfromprev.png",
+          "sha256": "e730754a588cd6c64194bf4ea9cfa28f574546b8d087c77321b83e1c4fe2480a"
+        },
+        "render": {
+          "dimensions": {
+            "height": 256,
+            "width": 256
+          },
+          "path": "../dashboard/images/generated/savelayer_initfromprev.png",
+          "sha256": "a9737998040643cd09a8d185cafb0d0e386b19b27ca005694c4d65dbc22f3453"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 256,
+        "width": 256
+      },
+      "name": "savelayer_initfromprev",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 12.26654052734375,
+      "similarityBefore": 12.26654052734375
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 630,
+            "width": 310
+          },
+          "path": "../dashboard/images/reference/skbug_14554.png",
+          "sha256": "3f8ca3b7360a402e2a78e77bb2cf667277e60d0e06ea020eb8d2a1d2af9d6ac0"
+        },
+        "render": {
+          "dimensions": {
+            "height": 630,
+            "width": 310
+          },
+          "path": "../dashboard/images/generated/skbug_14554.png",
+          "sha256": "154247babf2ddb918ca115e44121c1ce3828b9d2e017146132674f3546bf0eb1"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 630,
+        "width": 310
+      },
+      "name": "skbug_14554",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 41.75627240143369,
+      "similarityBefore": 41.75627240143369
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 958,
+            "width": 2560
+          },
+          "path": "../dashboard/images/reference/animatedGif.png",
+          "sha256": "2076d518bba6b23b2c999aa2631037b1a67b578f6ab5f26c7facdf0f7ad93962"
+        },
+        "render": {
+          "dimensions": {
+            "height": 958,
+            "width": 2560
+          },
+          "path": "../dashboard/images/generated/animatedGif.png",
+          "sha256": "4c25141334dbca17cbd7e01b3a96ea445ab0cde2e65fc762f076fd3f562613bc"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 958,
+        "width": 2560
+      },
+      "name": "animatedGif",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 37.50159022703549,
+      "similarityBefore": 37.50159022703549
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/async_rescale_and_read_alpha_type.png",
+          "sha256": "87b8c103cc1da81e5b0a14b2c0da667b67c092ae56ea2182129d43f9030af584"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/async_rescale_and_read_alpha_type.png",
+          "sha256": "1e0c380353665da57720edd6c3539e7b85901519df15f3c1228509f28be6297f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "async_rescale_and_read_alpha_type",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 820,
+            "width": 1230
+          },
+          "path": "../dashboard/images/reference/async_rescale_and_read_rose.png",
+          "sha256": "1a7dbbf690150a139e27474965d809fe422dbc5b39793cdb8902e0ca718cfe96"
+        },
+        "render": {
+          "dimensions": {
+            "height": 820,
+            "width": 1230
+          },
+          "path": "../dashboard/images/generated/async_rescale_and_read_rose.png",
+          "sha256": "2d5c0ad67c37d2e77855fc0bc26b37ffc32f730961dfda959e0eac97f1f00244"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 820,
+        "width": 1230
+      },
+      "name": "async_rescale_and_read_rose",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 60,
+            "width": 60
+          },
+          "path": "../dashboard/images/reference/async_rescale_and_read_no_bleed.png",
+          "sha256": "b0b8927e6913c80fe11b8a42412d5eacdaf13f622a7d44343eb1f4faff0819f0"
+        },
+        "render": {
+          "dimensions": {
+            "height": 60,
+            "width": 60
+          },
+          "path": "../dashboard/images/generated/async_rescale_and_read_no_bleed.png",
+          "sha256": "748cd3ad636b72bf786a43e91a53f698675914ddda53b2128992246b391c0f7f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 60,
+        "width": 60
+      },
+      "name": "async_rescale_and_read_no_bleed",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 20.166666666666664,
+      "similarityBefore": 20.166666666666664
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 400
+          },
+          "path": "../dashboard/images/reference/async_yuv_no_scale.png",
+          "sha256": "a4dc4da3707c037f6fca7341bd781843b04c31ff2d7ddcc2f315af46026295a7"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 400
+          },
+          "path": "../dashboard/images/generated/async_yuv_no_scale.png",
+          "sha256": "408d826064134e32d9bcb6d8bf3db44091493b0b7fd2e2096d6c74b889adeb0f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 400
+      },
+      "name": "async_yuv_no_scale",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 56.666666666666664,
+      "similarityBefore": 56.666666666666664
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 240,
+            "width": 360
+          },
+          "path": "../dashboard/images/reference/bleed_downscale.png",
+          "sha256": "9e200001ac739d66baa4a7404af4523a0393a7c61c8f5c7face1c40b28891563"
+        },
+        "render": {
+          "dimensions": {
+            "height": 240,
+            "width": 360
+          },
+          "path": "../dashboard/images/generated/bleed_downscale.png",
+          "sha256": "b86d6650ff708c7cf5ea91cfb8933e335fa7ea70900b67f1c4747b8176eafb73"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 240,
+        "width": 360
+      },
+      "name": "bleed_downscale",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 30.561342592592595,
+      "similarityBefore": 30.561342592592595
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 250,
+            "width": 800
+          },
+          "path": "../dashboard/images/reference/cgimage.png",
+          "sha256": "ee9c91538459c94c84412980b494196146bfd5e0e71488f0dcc2c5de607ad673"
+        },
+        "render": {
+          "dimensions": {
+            "height": 250,
+            "width": 800
+          },
+          "path": "../dashboard/images/generated/cgimage.png",
+          "sha256": "ecb30cfd1ab84fee4d5991c46fb3d4b66daabef8e1a0b074cf90dfbbd7ee6383"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 250,
+        "width": 800
+      },
+      "name": "cgimage",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 18.3615,
+      "similarityBefore": 18.3615
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/color_cube_cf_rt.png",
+          "sha256": "ce611c20822940e43a78a855c059b3e553baf9558b6fe72412a96eeb6661cb28"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/color_cube_cf_rt.png",
+          "sha256": "c1d8e3d76e78c499d98d9e131a41ba9b7c6fdf743a45771ce55cf66f82300fbe"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "color_cube_cf_rt",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0003814697265625,
+      "similarityBefore": 0.0003814697265625
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 699,
+            "width": 955
+          },
+          "path": "../dashboard/images/reference/compositor_quads_image.png",
+          "sha256": "3576d9bb2b10e80e250ac487428569902e2f6658903fd5aa7d7beb29a0562732"
+        },
+        "render": {
+          "dimensions": {
+            "height": 699,
+            "width": 955
+          },
+          "path": "../dashboard/images/generated/compositor_quads_image.png",
+          "sha256": "607e0923d5b1502ba974aceeca4fa2cb769bfb55ce6e1aa94e2a29fe99f199c2"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 699,
+        "width": 955
+      },
+      "name": "compositor_quads_image",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 70.00516819090848,
+      "similarityBefore": 70.00516819090848
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 795,
+            "width": 1074
+          },
+          "path": "../dashboard/images/reference/coordclampshader.png",
+          "sha256": "bdb3d4672b712718345d080725997bd96fdff80c2ad9fa1e0f69685011a71a3e"
+        },
+        "render": {
+          "dimensions": {
+            "height": 795,
+            "width": 1074
+          },
+          "path": "../dashboard/images/generated/coordclampshader.png",
+          "sha256": "45ae1c8768c1752fb1e0b2b2cdc9e6f3f8f9063d10c4619451cb160f888395d0"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 795,
+        "width": 1074
+      },
+      "name": "coordclampshader",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 38.83559959242472,
+      "similarityBefore": 38.83559959242472
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 200,
+            "width": 400
+          },
+          "path": "../dashboard/images/reference/encode-alpha-jpeg.png",
+          "sha256": "14912df60c1fe368684a463a3006f1b81ae9eb1275e427051be72874ef356296"
+        },
+        "render": {
+          "dimensions": {
+            "height": 200,
+            "width": 400
+          },
+          "path": "../dashboard/images/generated/encode-alpha-jpeg.png",
+          "sha256": "d18f99505f90d32bea0a6eb1e83ba1f179fc68883e1bbec903dcdf4bf45af563"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 200,
+        "width": 400
+      },
+      "name": "encode-alpha-jpeg",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 768,
+            "width": 1280
+          },
+          "path": "../dashboard/images/reference/encode-platform.png",
+          "sha256": "53101933fb04dc73f7b1f52ff5e835ab3762d27ee4e32df6225cbc6788c39771"
+        },
+        "render": {
+          "dimensions": {
+            "height": 768,
+            "width": 1280
+          },
+          "path": "../dashboard/images/generated/encode-platform.png",
+          "sha256": "1df6dc8eee7b60de8489e7a49f443670da6d4b727cce375cc8fc81b445b9cebd"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 768,
+        "width": 1280
+      },
+      "name": "encode-platform",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 14.018351236979168,
+      "similarityBefore": 14.018351236979168
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 130,
+            "width": 680
+          },
+          "path": "../dashboard/images/reference/filterindiabox.png",
+          "sha256": "a321770cc4cca7cf4d60634bac95702a58a6b1ccccddf03a3bda661e8fc0f680"
+        },
+        "render": {
+          "dimensions": {
+            "height": 130,
+            "width": 680
+          },
+          "path": "../dashboard/images/generated/filterindiabox.png",
+          "sha256": "585b87fc42834459eab214cac83d8a95891c65ac8efdc40224d282b174b221f1"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 130,
+        "width": 680
+      },
+      "name": "filterindiabox",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 96.47285067873304,
+      "similarityBefore": 96.47285067873304
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 128,
+            "width": 128
+          },
+          "path": "../dashboard/images/reference/grayscalejpg.png",
+          "sha256": "abe8b51aa55ed819d239258440035923d7b01ebf72fb883d63547c9d14434f17"
+        },
+        "render": {
+          "dimensions": {
+            "height": 128,
+            "width": 128
+          },
+          "path": "../dashboard/images/generated/grayscalejpg.png",
+          "sha256": "3b43a7aa9fd7dff81cf1ad51f5528f54abacc290dd94dba2dda4126350d2c3fc"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 128,
+        "width": 128
+      },
+      "name": "grayscalejpg",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1000,
+            "width": 1000
+          },
+          "path": "../dashboard/images/reference/imageshader_tinyscale.png",
+          "sha256": "0faf9b4847340bff0dac3af4bfcb70dcd2ea49de59a37e56187d8d144b85ff21"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1000,
+            "width": 1000
+          },
+          "path": "../dashboard/images/generated/imageshader_tinyscale.png",
+          "sha256": "62c188c06b50568135fcd904f8112e7da9e2071f3762ae3c1985706209e91a30"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1000,
+        "width": 1000
+      },
+      "name": "imageshader_tinyscale",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 384
+          },
+          "path": "../dashboard/images/reference/makecolortypeandspace.png",
+          "sha256": "5a6a3bd188f46e40b6096ed80129fa12d762d850a337e4804ae0249f481eda9e"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 384
+          },
+          "path": "../dashboard/images/generated/makecolortypeandspace.png",
+          "sha256": "24602f9c3e5737746761b3b8acd8f1e2c0f779e071a5cfb54df87fce15cdce5f"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 384
+      },
+      "name": "makecolortypeandspace",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 115,
+            "width": 280
+          },
+          "path": "../dashboard/images/reference/new_texture_image.png",
+          "sha256": "26aae436d5fce37fc33257e06e1ac01151f63bf36a9158a9c9c08e6df4e432ca"
+        },
+        "render": {
+          "dimensions": {
+            "height": 115,
+            "width": 280
+          },
+          "path": "../dashboard/images/generated/new_texture_image.png",
+          "sha256": "49a2132662a9dd4f1748ba3a4a5207f31730ced7ff7e6d10ff4d9dd74e926a43"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 115,
+        "width": 280
+      },
+      "name": "new_texture_image",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 22.36024844720497,
+      "similarityBefore": 22.36024844720497
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 450,
+            "width": 600
+          },
+          "path": "../dashboard/images/reference/poster_circle.png",
+          "sha256": "4ad2cc2bc1f3d9bd13b0726fbd0906fc17af85b069462c81ed900a90ed9573f9"
+        },
+        "render": {
+          "dimensions": {
+            "height": 450,
+            "width": 600
+          },
+          "path": "../dashboard/images/generated/poster_circle.png",
+          "sha256": "77f2906509596e51c23131f2a3cf326b7629cacd0aa3a63a4276db1f495ed79d"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 450,
+        "width": 600
+      },
+      "name": "poster_circle",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 36.965185185185184,
+      "similarityBefore": 36.965185185185184
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 768
+          },
+          "path": "../dashboard/images/reference/raw_image_shader_normals_rt.png",
+          "sha256": "b074e56b22e3af29ec06bb41948837fc6290c714fbd25d2da7bd89da5a3ce9e6"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 768
+          },
+          "path": "../dashboard/images/generated/raw_image_shader_normals_rt.png",
+          "sha256": "0dd1b3e7fc235aff9332f6c2a971c7b00861af681c8b6cd2da4d21e0a0bb715b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 768
+      },
+      "name": "raw_image_shader_normals_rt",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 20.397186279296875,
+      "similarityBefore": 20.397186279296875
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 880,
+            "width": 880
+          },
+          "path": "../dashboard/images/reference/scaled_tilemodes.png",
+          "sha256": "8426abe5275e274285f0b1d34a026fba9472e5154078514b09d7038188798332"
+        },
+        "render": {
+          "dimensions": {
+            "height": 880,
+            "width": 880
+          },
+          "path": "../dashboard/images/generated/scaled_tilemodes.png",
+          "sha256": "189c46122cb7866812e2aa1ec4396bd7d6a1d5ba153cb8bb98dc0cad9d185f3c"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 880,
+        "width": 880
+      },
+      "name": "scaled_tilemodes",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 51.74457644628099,
+      "similarityBefore": 51.74457644628099
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 880,
+            "width": 880
+          },
+          "path": "../dashboard/images/reference/scaled_tilemodes_npot.png",
+          "sha256": "30c830a13c21864a08f257c28c05befad2b13072365052ccc52aa349025ef03c"
+        },
+        "render": {
+          "dimensions": {
+            "height": 880,
+            "width": 880
+          },
+          "path": "../dashboard/images/generated/scaled_tilemodes_npot.png",
+          "sha256": "189c46122cb7866812e2aa1ec4396bd7d6a1d5ba153cb8bb98dc0cad9d185f3c"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 880,
+        "width": 880
+      },
+      "name": "scaled_tilemodes_npot",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 72.57102272727273,
+      "similarityBefore": 72.57102272727273
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 970,
+            "width": 1130
+          },
+          "path": "../dashboard/images/reference/showmiplevels_explicit.png",
+          "sha256": "a1b7a4a5bc0bd6f8443bb3665d1be8d10318b9f6ddead21b553eef6006d79e76"
+        },
+        "render": {
+          "dimensions": {
+            "height": 970,
+            "width": 1130
+          },
+          "path": "../dashboard/images/generated/showmiplevels_explicit.png",
+          "sha256": "805dbadf5873a5ce8fa78b45bb4f813f92ec63d427b77b2dd92e413519597820"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 970,
+        "width": 1130
+      },
+      "name": "showmiplevels_explicit",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 13.8788431712435,
+      "similarityBefore": 13.8788431712435
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 50,
+            "width": 50
+          },
+          "path": "../dashboard/images/reference/yuv420_odd_dim.png",
+          "sha256": "e1dd1019eada2b3e9d069a67f6b30ef1f2eb8010952a911fe1ebdafcbc570e32"
+        },
+        "render": {
+          "dimensions": {
+            "height": 50,
+            "width": 50
+          },
+          "path": "../dashboard/images/generated/yuv420_odd_dim.png",
+          "sha256": "96317138376e7addf0d27424005c2c4fcf0ec4cd0a192f6de648c04de60411bf"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 50,
+        "width": 50
+      },
+      "name": "yuv420_odd_dim",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 500,
+            "width": 1000
+          },
+          "path": "../dashboard/images/reference/yuv420_odd_dim_repeat.png",
+          "sha256": "9de64f713866abd7575d7ed552eb1ad3b2d8e721b128a41611bce3c71f9795b5"
+        },
+        "render": {
+          "dimensions": {
+            "height": 500,
+            "width": 1000
+          },
+          "path": "../dashboard/images/generated/yuv420_odd_dim_repeat.png",
+          "sha256": "8ee4563058884b8a6604dde99f33436791f129e819638ed141554790b3a73f06"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 500,
+        "width": 1000
+      },
+      "name": "yuv420_odd_dim_repeat",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 320,
+            "width": 320
+          },
+          "path": "../dashboard/images/reference/mesh_with_paint_color.png",
+          "sha256": "3ce49f813f63e582544b5db0e980686301726b06b60f6af90ae050df9682c34e"
+        },
+        "render": {
+          "dimensions": {
+            "height": 320,
+            "width": 320
+          },
+          "path": "../dashboard/images/generated/mesh_with_paint_color.png",
+          "sha256": "3ce49f813f63e582544b5db0e980686301726b06b60f6af90ae050df9682c34e"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 320,
+        "width": 320
+      },
+      "name": "mesh_with_paint_color",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 100.0,
+      "similarityBefore": 100.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 250,
+            "width": 250
+          },
+          "path": "../dashboard/images/reference/crbug_640176.png",
+          "sha256": "67c42780afdf03e1c57bf811fe4ba24b51f151803200d92c783cc801297db315"
+        },
+        "render": {
+          "dimensions": {
+            "height": 250,
+            "width": 250
+          },
+          "path": "../dashboard/images/generated/crbug_640176.png",
+          "sha256": "f0e9d9049f9388c9d3103860d81c4b39556a64b4a4f2276f1d8649521036edc0"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 250,
+        "width": 250
+      },
+      "name": "crbug_640176",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 99.6832,
+      "similarityBefore": 99.6832
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 384,
+            "width": 256
+          },
+          "path": "../dashboard/images/reference/shadow_utils_directional.png",
+          "sha256": "e5f91cf399820662f47f916c61524e716af63afb66285bcdac27fb9732825a73"
+        },
+        "render": {
+          "dimensions": {
+            "height": 384,
+            "width": 256
+          },
+          "path": "../dashboard/images/generated/shadow_utils_directional.png",
+          "sha256": "4eff94114636be1f829e4df7033bf1cc33d3d705e26e1afef2e6c4ce59abaf2a"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 384,
+        "width": 256
+      },
+      "name": "shadow_utils_directional",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 77.2918701171875,
+      "similarityBefore": 77.2918701171875
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 400,
+            "width": 550
+          },
+          "path": "../dashboard/images/reference/thinconcavepaths.png",
+          "sha256": "eab72e6db89bab380bac6fca4cf3e8a2e712444de421cd790e7ff5e066c035a5"
+        },
+        "render": {
+          "dimensions": {
+            "height": 400,
+            "width": 550
+          },
+          "path": "../dashboard/images/generated/thinconcavepaths.png",
+          "sha256": "90ed12fb83a867ee2a32d0168fdc8a54f032f791ce6ae1f69f917515b2d40322"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 400,
+        "width": 550
+      },
+      "name": "thinconcavepaths",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 97.99727272727272,
+      "similarityBefore": 97.99727272727272
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 350,
+            "width": 200
+          },
+          "path": "../dashboard/images/reference/workingspace.png",
+          "sha256": "66643fc4a12f2fe259997dec7c8a5790d543ff588eb6dcdffad9e45d7dfcbea5"
+        },
+        "render": {
+          "dimensions": {
+            "height": 350,
+            "width": 200
+          },
+          "path": "../dashboard/images/generated/workingspace.png",
+          "sha256": "e10376459eccb33325f94872b87c1e540cbb74bb35a21b61c2aad2ef0b531fc2"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 350,
+        "width": 200
+      },
+      "name": "workingspace",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 54.64285714285714,
+      "similarityBefore": 54.64285714285714
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1280,
+            "width": 1280
+          },
+          "path": "../dashboard/images/reference/fontcache.png",
+          "sha256": "8a36872d552c8b971e266c54c9228dbdc2650c6e632e6b9c855da68d883810bb"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1280,
+            "width": 1280
+          },
+          "path": "../dashboard/images/generated/fontcache.png",
+          "sha256": "b73856c53f8e4f1416d036b1aad31caa93df63222f9e5628196b4354fabab178"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1280,
+        "width": 1280
+      },
+      "name": "fontcache",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 1.446533203125,
+      "similarityBefore": 1.446533203125
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 768,
+            "width": 1536
+          },
+          "path": "../dashboard/images/reference/fontmgr_iter.png",
+          "sha256": "d70a372002a822a8fb3bea5b4a2634cb3fb3d78cfca73e1dd492457469c36a72"
+        },
+        "render": {
+          "dimensions": {
+            "height": 768,
+            "width": 1536
+          },
+          "path": "../dashboard/images/generated/fontmgr_iter.png",
+          "sha256": "4858088d2304499340402d1df2e993fce9a377ac9844afe6aba21043c9fa1c74"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 768,
+        "width": 1536
+      },
+      "name": "fontmgr_iter",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 87.62596978081596,
+      "similarityBefore": 87.62596978081596
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 1024,
+            "width": 640
+          },
+          "path": "../dashboard/images/reference/fontmgr_match.png",
+          "sha256": "5ac0a56b1b5393bd7adea486723ab61f1035575d005065591f262e8dcbd6219a"
+        },
+        "render": {
+          "dimensions": {
+            "height": 1024,
+            "width": 640
+          },
+          "path": "../dashboard/images/generated/fontmgr_match.png",
+          "sha256": "80ee0b767f54e552ca6f05113886897251223bfecbe054c23ad1c7701e083ff4"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 1024,
+        "width": 640
+      },
+      "name": "fontmgr_match",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 94.65835571289062,
+      "similarityBefore": 94.65835571289062
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/fontregen.png",
+          "sha256": "dbaa6d9fbc0bcf64d0ecac99b9bfcb234afaad1a696a0db50bd175750404f9fc"
+        },
+        "render": {
+          "dimensions": {
+            "height": 512,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/fontregen.png",
+          "sha256": "3d72b546a3fc1462e7158f6c400ebcf72f732d678281602ad523fdd327efebae"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 512,
+        "width": 512
+      },
+      "name": "fontregen",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 1.8390655517578125,
+      "similarityBefore": 1.8390655517578125
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 300,
+            "width": 300
+          },
+          "path": "../dashboard/images/reference/gammagradienttext.png",
+          "sha256": "149dc039629a83dc8e7fc835a7dbd553da05e818728ced6616e09c005c16e04c"
+        },
+        "render": {
+          "dimensions": {
+            "height": 300,
+            "width": 300
+          },
+          "path": "../dashboard/images/generated/gammagradienttext.png",
+          "sha256": "69d7d357ddbd4b4213b5cb0fadbffad27f201080c948adc1c4da0f56e6f5f464"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 300,
+        "width": 300
+      },
+      "name": "gammagradienttext",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 75.79,
+      "similarityBefore": 75.79
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 256,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/palette.png",
+          "sha256": "d6414ae172d23cdfdc2d8556c0080b4bb1468c6ef0d5063c533d43cba96f6ec6"
+        },
+        "render": {
+          "dimensions": {
+            "height": 256,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/palette.png",
+          "sha256": "760c0bfa40d1e9618ff228c00a6101f95f31ed746682029d8557888063f82ad5"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 256,
+        "width": 512
+      },
+      "name": "palette",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 97.9888916015625,
+      "similarityBefore": 97.9888916015625
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 128,
+            "width": 512
+          },
+          "path": "../dashboard/images/reference/pdf_table_based_subset.png",
+          "sha256": "86a203a229cdd7a428fcb11906773d276758b9520cb837c15da4ce69e6b21272"
+        },
+        "render": {
+          "dimensions": {
+            "height": 128,
+            "width": 512
+          },
+          "path": "../dashboard/images/generated/pdf_table_based_subset.png",
+          "sha256": "4dddc66b7ed0f4af204d0b3aca6e889fa4695c0edfa8d0491b968fef2d316dcc"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 128,
+        "width": 512
+      },
+      "name": "pdf_table_based_subset",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 88.8580322265625,
+      "similarityBefore": 88.8580322265625
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 881,
+            "width": 881
+          },
+          "path": "../dashboard/images/reference/rsx_blob_shader.png",
+          "sha256": "0ba2231d9956cc19590ae39e77aa801dac3c22314d1bd5430a1cac71b1fcf481"
+        },
+        "render": {
+          "dimensions": {
+            "height": 881,
+            "width": 881
+          },
+          "path": "../dashboard/images/generated/rsx_blob_shader.png",
+          "sha256": "cd66086f9aa75fae1507fe8044e20d7c83242cc18faad352dbd6585e6a036b7b"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 881,
+        "width": 881
+      },
+      "name": "rsx_blob_shader",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 9.307347315827515,
+      "similarityBefore": 9.307347315827515
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 400,
+            "width": 400
+          },
+          "path": "../dashboard/images/reference/skbug_12212.png",
+          "sha256": "ddc62e77f132a9178f2ef80a9d592f3bc99c7b8d1928874725784ddef6ac5a15"
+        },
+        "render": {
+          "dimensions": {
+            "height": 400,
+            "width": 400
+          },
+          "path": "../dashboard/images/generated/skbug_12212.png",
+          "sha256": "64ea0fe357afa5b1820143c4ebff20b599017a6c0252eef99b4b6fbddd3d2756"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 400,
+        "width": 400
+      },
+      "name": "skbug_12212",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 0.0,
+      "similarityBefore": 0.0
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 128,
+            "width": 128
+          },
+          "path": "../dashboard/images/reference/skbug_5321.png",
+          "sha256": "e165c003b91da55fb567ac8c8ffac5387a138e5a8bcbc4e317d5c3c53e3cfd76"
+        },
+        "render": {
+          "dimensions": {
+            "height": 128,
+            "width": 128
+          },
+          "path": "../dashboard/images/generated/skbug_5321.png",
+          "sha256": "ea59783c7dd86b114ba232422733848798e2087faa632515e0adf84acb5170af"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 128,
+        "width": 128
+      },
+      "name": "skbug_5321",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 93.829345703125,
+      "similarityBefore": 93.829345703125
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 480,
+            "width": 640
+          },
+          "path": "../dashboard/images/reference/textblobshader.png",
+          "sha256": "82fa7ff3a91ae4ca4efa0af10deceaa1d39bce2e61814fbe6e150ab88448b8af"
+        },
+        "render": {
+          "dimensions": {
+            "height": 480,
+            "width": 640
+          },
+          "path": "../dashboard/images/generated/textblobshader.png",
+          "sha256": "5d770c255c17b978eaf83e32220c5d4645d786128af1d56117202f1b2cad9c74"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 480,
+        "width": 640
+      },
+      "name": "textblobshader",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 86.09342447916667,
+      "similarityBefore": 86.09342447916667
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 128,
+            "width": 256
+          },
+          "path": "../dashboard/images/reference/text_scale_skew.png",
+          "sha256": "453f66d7690c6f3b69858b34530b662db232e49751a074e89bd64d56981492ae"
+        },
+        "render": {
+          "dimensions": {
+            "height": 128,
+            "width": 256
+          },
+          "path": "../dashboard/images/generated/text_scale_skew.png",
+          "sha256": "2f64c7d6ba21e3bf299a9772cbe2bc981b22512e4945cb99747af5c0dd86be76"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 128,
+        "width": 256
+      },
+      "name": "text_scale_skew",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 77.752685546875,
+      "similarityBefore": 77.752685546875
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 840,
+            "width": 640
+          },
+          "path": "../dashboard/images/reference/typefacerendering_pfa.png",
+          "sha256": "2a939f26efa8a901a6c26af636070783be0deec1bfb9fd077c4e11137603e8a2"
+        },
+        "render": {
+          "dimensions": {
+            "height": 840,
+            "width": 640
+          },
+          "path": "../dashboard/images/generated/typefacerendering_pfa.png",
+          "sha256": "c34094267bf81d86b2be37d2efd8a0edf68086c07bd98dc3497617e7cd2027e5"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 840,
+        "width": 640
+      },
+      "name": "typefacerendering_pfa",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 84.59877232142857,
+      "similarityBefore": 84.59877232142857
+    },
+    {
+      "artifacts": {
+        "reference": {
+          "dimensions": {
+            "height": 840,
+            "width": 640
+          },
+          "path": "../dashboard/images/reference/typefacerendering_pfb.png",
+          "sha256": "2a939f26efa8a901a6c26af636070783be0deec1bfb9fd077c4e11137603e8a2"
+        },
+        "render": {
+          "dimensions": {
+            "height": 840,
+            "width": 640
+          },
+          "path": "../dashboard/images/generated/typefacerendering_pfb.png",
+          "sha256": "c34094267bf81d86b2be37d2efd8a0edf68086c07bd98dc3497617e7cd2027e5"
+        }
+      },
+      "candidateUnlocked": false,
+      "comparable": true,
+      "dimensions": {
+        "height": 840,
+        "width": 640
+      },
+      "name": "typefacerendering_pfb",
+      "pixelImproved": false,
+      "referenceKind": "skia-upstream",
+      "similarityAfter": 84.59877232142857,
+      "similarityBefore": 84.59877232142857
+    }
+  ],
+  "provenanceArtifacts": {
+    "runnerFixDrawimageSampling": {
+      "path": "../runner-fix-drawimage-sampling.log",
+      "sha256": "8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210"
+    },
+    "runnerFixLocalMatrixShaderPersp": {
+      "path": "../runner-fix-localmatrixshader-persp.log",
+      "sha256": "44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12"
+    }
+  },
+  "policy": {
+    "assertionsWeakened": false,
+    "globalThresholdWeakened": false,
+    "memoryBudgetChanged": false,
+    "readinessDelta": 0.0,
+    "referencesModified": false
+  }
+}

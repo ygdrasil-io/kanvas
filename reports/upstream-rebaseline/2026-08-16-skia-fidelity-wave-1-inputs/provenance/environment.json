@@ -1,0 +1,9 @@
+{
+  "DISPLAY": "unset",
+  "java": "Temurin 25",
+  "os": "macOS",
+  "platform": "darwin",
+  "repository": "https://github.com/ygdrasil-io/kanvas.git",
+  "runnerSideEffectObserved": true,
+  "worktree": "/Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor"
+}
