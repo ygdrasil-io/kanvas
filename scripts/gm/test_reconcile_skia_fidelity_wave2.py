@@ -1633,6 +1633,143 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 self.assertEqual(status, 2, stdout)
                 self.assertIn(reason, stdout.lower())
 
+    def test_raw_evidence_validates_entries_and_rows_containers(self):
+        variants = (
+            (
+                [
+                    {
+                        "name": "evidence-only-orphan",
+                        "referenceKind": "skia-upstream",
+                        "failureCode": FOLLOW_UP_FAILURE_CODE,
+                    }
+                ],
+                "unknown identity",
+            ),
+            (["not-an-object"], "non-dict"),
+            ("not-an-array", "array"),
+        )
+        for rows, reason in variants:
+            with self.subTest(rows=rows):
+                fixtures = self.write_cli_fixtures()
+                evidence = json.loads(
+                    fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                )
+                evidence["rows"] = copy.deepcopy(rows)
+                fixtures["evidenceIndex"].write_text(
+                    json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIn(reason, stdout.lower())
+
+    def test_check_rejects_evidence_artifact_aliasing_generated_dashboard_output(self):
+        fixtures = self.write_cli_fixtures()
+        self.configure_supported_fixture(fixtures)
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        route = evidence["entries"][0]["artifacts"]["route"]
+        route["path"] = str(fixtures["dashboardOutput"])
+        route["sha256"] = self.sha256(fixtures["dashboardOutput"])
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(
+            fixtures, check=True, status="blocked"
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIsNotNone(manifest)
+        self.assertIn("aliases input dashboardoutput", stdout.lower())
+
+    def test_raw_evidence_rejects_contradictory_entries_and_rows(self):
+        fixtures = self.write_cli_fixtures()
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["rows"] = copy.deepcopy(evidence["entries"])
+        evidence["rows"][0]["failureCode"] = FAILURE_CODE
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, _, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 2, stdout)
+        self.assertIn("contradictory", stdout.lower())
+
+    def test_check_rejects_empty_or_partial_authoritative_population_policy(self):
+        variants = (
+            ("cohort", {}),
+            ("cohort", {"includeBlocking": True}),
+            ("fresh", {}),
+            ("fresh", {"includeBlocking": True}),
+        )
+        for source, policy in variants:
+            with self.subTest(source=source, policy=policy):
+                fixtures = self.write_cli_fixtures()
+                path = (
+                    fixtures["cohortManifest"]
+                    if source == "cohort"
+                    else fixtures["evidenceIndex"]
+                )
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["populationPolicy"] = copy.deepcopy(policy)
+                path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, _, _, _ = self.run_main(
+                    fixtures, check=True, status="blocked"
+                )
+
+                self.assertEqual(status, 1, stdout)
+                self.assertIn("population policy", stdout.lower())
+
+    def test_output_json_and_markdown_hardlink_alias_is_rejected_before_writing(self):
+        fixtures = self.write_cli_fixtures()
+        output_json = self.root / "reports/wave2.json"
+        output_markdown = self.root / "reports/wave2.md"
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text("sentinel\n", encoding="utf-8")
+        output_markdown.hardlink_to(output_json)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = reconcile.main(
+                self.cli_args(
+                    fixtures,
+                    output_json=output_json,
+                    output_markdown=output_markdown,
+                )
+            )
+
+        self.assertEqual(status, 2, output.getvalue())
+        self.assertEqual(output_json.read_text(encoding="utf-8"), "sentinel\n")
+        self.assertEqual(output_markdown.read_text(encoding="utf-8"), "sentinel\n")
+
+    def test_cohort_selection_deep_freezes_rows_and_family_counts(self):
+        selection = reconcile.load_cohort_manifest(WAVE1_MANIFEST, FAILURE_CODE)
+
+        with self.assertRaises(TypeError):
+            selection.rows[0]["name"] = "mutated"
+        nested = next(
+            value
+            for value in selection.rows[0].values()
+            if isinstance(value, dict)
+        )
+        nested_key = next(iter(nested))
+        with self.assertRaises(TypeError):
+            nested[nested_key] = "mutated"
+        with self.assertRaises(TypeError):
+            selection.family_counts["IMAGE"] = 0
+
+        self.assertEqual(selection.rows[0]["name"], self.selected_rows[0]["name"])
+        self.assertEqual(selection.family_counts, FAMILY_COUNTS)
+
 
 if __name__ == "__main__":
     unittest.main()
