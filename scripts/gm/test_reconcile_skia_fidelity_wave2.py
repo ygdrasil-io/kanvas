@@ -63,11 +63,12 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
     def sha256(path):
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    def write_runner(self, rows, extra_rows=()):
+    def write_runner(self, rows, extra_rows=(), passed_names=()):
+        passed_names = set(passed_names)
         testcases = []
         for index, row in enumerate([*rows, *extra_rows]):
             name = row["name"]
-            failure = (
+            failure = "" if name in passed_names else (
                 '<failure type="GPUPreparedSurfaceTerminalException" '
                 'message="GPUPreparedSurfaceTerminalException: %s: terminal refusal"/>'
                 % html.escape(row.get("failureCode", FAILURE_CODE), quote=True)
@@ -85,7 +86,11 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         return self.write_text(
             "skia-runner.xml",
             '<testsuite tests="%s" failures="%s" errors="0" skipped="0">%s</testsuite>'
-            % (len(testcases), len(testcases), "".join(testcases)),
+            % (
+                len(testcases),
+                sum(row["name"] not in passed_names for row in [*rows, *extra_rows]),
+                "".join(testcases),
+            ),
         )
 
     def write_residual_evidence(self, rows):
@@ -118,20 +123,116 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             },
         )
 
+    def supported_evidence(self, row, index=0, route_only=False, after_score=98.0):
+        dimensions = {
+            "render": {"width": 32, "height": 32},
+            "reference": {"width": 32, "height": 32},
+        }
+        entry = {
+            "name": row["name"],
+            "family": row["family"],
+            "referenceKind": "skia-upstream",
+            "failureCode": FAILURE_CODE,
+            "supportedAfter": True,
+            "pixelImproved": True,
+            "similarityBefore": 90.0,
+            "similarityAfter": after_score,
+            "minSimilarity": 95.0,
+            "candidateUnlocked": True,
+            "causalBucket": "image-alpha",
+            "routeSignature": "prepared-image-unpremul",
+            "minimalOperationTrace": "draw-image",
+            "ownershipBoundary": "kanvas-image",
+            "routeOnly": route_only,
+            "dimensions": copy.deepcopy(dimensions),
+        }
+        artifacts = {}
+        for label in ("render", "reference", "cpu", "gpu", "diff", "stat", "route"):
+            artifact = self.write_text(
+                "artifacts/supported-%s-%s.dat" % (index, label),
+                "%s-%s\n" % (row["name"], label),
+            )
+            record = {"path": str(artifact), "sha256": self.sha256(artifact)}
+            if label in {"render", "reference"}:
+                record["dimensions"] = {"width": 32, "height": 32}
+            artifacts[label] = record
+        entry["artifacts"] = artifacts
+        return entry
+
+    def configure_supported_fixture(
+        self,
+        fixtures,
+        *,
+        route_only=False,
+        after_score=98.0,
+        comparable=True,
+        junit_pass=True,
+    ):
+        dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
+        row = dashboard["gms"][0]
+        row.update(
+            {
+                "renderFailed": False,
+                "isPassing": True,
+                "score": after_score,
+                "minSimilarity": 95.0,
+                "routeOnly": route_only,
+            }
+        )
+        if comparable:
+            row["dimensions"] = {
+                "render": {"width": 32, "height": 32},
+                "reference": {"width": 32, "height": 32},
+            }
+        else:
+            row["dimensions"] = {
+                "render": {"width": 32, "height": 32},
+                "reference": {"width": 31, "height": 32},
+            }
+        dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        dashboard_output = fixtures["dashboardDir"] / "data/gms.json"
+        dashboard_output.write_text(dashboard_text, encoding="utf-8")
+
+        fixtures["skiaRunner"] = self.write_runner(
+            self.selected_rows,
+            passed_names={self.selected_rows[0]["name"]} if junit_pass else (),
+        )
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["entries"][0] = self.supported_evidence(
+            self.selected_rows[0],
+            route_only=route_only,
+            after_score=after_score,
+        )
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return row
+
     def write_cli_fixtures(self):
         dashboard_rows = []
         for row in self.selected_rows:
-            dashboard_rows.append(
-                {
-                    "name": row["name"],
-                    "family": row["family"],
-                    "referenceKind": "skia-upstream",
-                    "failureCode": FAILURE_CODE,
-                    "isPassing": None,
-                    "renderFailed": True,
-                    "dimensions": copy.deepcopy(row.get("dimensions")),
-                }
-            )
+            dashboard_row = {
+                "name": row["name"],
+                "family": row["family"],
+                "referenceKind": "skia-upstream",
+                "failureCode": FAILURE_CODE,
+                "isPassing": None,
+                "renderFailed": True,
+                "dimensions": copy.deepcopy(row.get("dimensions")),
+            }
+            for field in (
+                "class",
+                "className",
+                "sourceClass",
+                "sourceRegistration",
+                "gmIdentity",
+                "evidenceLane",
+            ):
+                if field in row:
+                    dashboard_row[field] = copy.deepcopy(row[field])
+            dashboard_rows.append(dashboard_row)
         dashboard = {"gms": dashboard_rows}
         dashboard_json = self.write_json("skia-dashboard-gms.json", dashboard)
         dashboard_dir = self.root / "dashboard"
@@ -207,7 +308,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         cohort_manifest = self.root / "cohort.json"
         cohort_manifest.write_bytes(WAVE1_MANIFEST.read_bytes())
         generated_renders = self.root / "generated-renders"
-        generated_renders.mkdir()
+        generated_renders.mkdir(exist_ok=True)
         return {
             "skiaRunner": skia_runner,
             "dashboardJson": dashboard_json,
@@ -365,7 +466,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIsNotNone(manifest)
         self.assertEqual(before, self.snapshot_fixtures(fixtures))
 
-    def test_fresh_rows_are_filtered_by_strict_cohort_identity(self):
+    def test_fresh_rows_reject_unknown_cohort_identity(self):
         fixtures = self.write_cli_fixtures()
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
         unrelated = {
@@ -402,17 +503,9 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
         status, stdout, manifest, _, _ = self.run_main(fixtures)
 
-        self.assertEqual(status, 0, stdout)
-        self.assertEqual(
-            {row["name"] for row in manifest["rows"]["skia"]},
-            {row["name"] for row in self.selected_rows},
-        )
-        self.assertEqual(len(manifest["rows"]["skiaJunit"]), 58)
-        self.assertNotIn("not-in-wave2", {row["name"] for row in manifest["rows"]["skia"]})
-        self.assertNotIn(
-            "not-in-wave2",
-            {row["name"] for row in manifest["rows"]["evidence"]},
-        )
+        self.assertEqual(status, 2, stdout)
+        self.assertIsNone(manifest)
+        self.assertIn("unknown identity", stdout)
 
     def test_check_validates_current_head_source_commit_and_policy_non_weakening(self):
         fixtures = self.write_cli_fixtures()
@@ -517,6 +610,128 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIn("hash", stdout.lower())
         self.assertIn("orphan", stdout.lower())
         self.assertIn("aliases input", stdout.lower())
+
+    def test_approved_check_rejects_unsupported_after_claims(self):
+        variants = (
+            {"after_score": 94.0},
+            {"route_only": True},
+            {"comparable": False},
+            {"junit_pass": False},
+        )
+        for variant in variants:
+            with self.subTest(variant=variant):
+                fixtures = self.write_cli_fixtures()
+                self.configure_supported_fixture(fixtures, **variant)
+
+                status, stdout, _, _, _ = self.run_main(
+                    fixtures, check=True, status="approved"
+                )
+
+                self.assertEqual(status, 1, stdout)
+
+    def test_fresh_dashboard_metadata_must_match_frozen_cohort(self):
+        variants = (
+            "missing-family",
+            "wrong-family",
+            "missing-reference-kind",
+            "wrong-lane",
+            "duplicate",
+            "unknown",
+        )
+        for variant in variants:
+            with self.subTest(variant=variant):
+                fixtures = self.write_cli_fixtures()
+                dashboard = json.loads(
+                    fixtures["dashboardJson"].read_text(encoding="utf-8")
+                )
+                first = dashboard["gms"][0]
+                if variant == "missing-family":
+                    del first["family"]
+                elif variant == "wrong-family":
+                    first["family"] = "WRONG_FAMILY"
+                elif variant == "missing-reference-kind":
+                    del first["referenceKind"]
+                elif variant == "wrong-lane":
+                    first["referenceKind"] = "cpu-oracle"
+                elif variant == "duplicate":
+                    dashboard["gms"].append(copy.deepcopy(first))
+                elif variant == "unknown":
+                    dashboard["gms"].append(
+                        {
+                            "name": "not-in-wave2",
+                            "family": "IMAGE",
+                            "referenceKind": "skia-upstream",
+                        }
+                    )
+                dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+                fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+                (
+                    fixtures["dashboardDir"] / "data/gms.json"
+                ).write_text(dashboard_text, encoding="utf-8")
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+
+        fixtures = self.write_cli_fixtures()
+        dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
+        dashboard["gms"][0]["freshMetadataMarker"] = "preserve-me"
+        dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        (fixtures["dashboardDir"] / "data/gms.json").write_text(
+            dashboard_text, encoding="utf-8"
+        )
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(
+            manifest["rows"]["skia"][0]["freshMetadataMarker"], "preserve-me"
+        )
+
+    def test_check_rejects_weak_population_context(self):
+        variants = (
+            ("cohort", "includeBlocking", False),
+            ("cohort", "dashboardProperty", "-Pgm.includeBlocking=false"),
+            ("cohort", "runnerProperty", "-Dkanvas.gm.includeBlocking=false"),
+            ("cohort", "wave0DirectlyComparable", True),
+            ("cohort", "wave0Population", 614),
+            ("cohort", "comparisonNote", "not-population-shifted"),
+            ("fresh", "includeBlocking", False),
+        )
+        for source, key, value in variants:
+            with self.subTest(source=source, key=key):
+                fixtures = self.write_cli_fixtures()
+                path = (
+                    fixtures["cohortManifest"]
+                    if source == "cohort"
+                    else fixtures["evidenceIndex"]
+                )
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                container = payload.setdefault("populationPolicy", {})
+                container[key] = value
+                path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures, check=True, status="blocked")
+
+                self.assertEqual(status, 1, stdout)
+
+    def test_evidence_without_name_gm_or_id_is_rejected(self):
+        fixtures = self.write_cli_fixtures()
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["entries"].append(
+            {"referenceKind": "skia-upstream", "failureCode": FAILURE_CODE}
+        )
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, _, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 2, stdout)
+        self.assertIn("identity", stdout.lower())
 
 
 if __name__ == "__main__":

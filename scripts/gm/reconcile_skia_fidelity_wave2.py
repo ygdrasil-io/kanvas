@@ -26,6 +26,14 @@ EXPECTED_FAMILY_COUNTS = {
     "GRADIENT": 2,
     "RUNTIME_EFFECT": 1,
 }
+EXPECTED_POPULATION_POLICY = {
+    "includeBlocking": True,
+    "runnerProperty": "-Dkanvas.gm.includeBlocking=true",
+    "dashboardProperty": "-Pgm.includeBlocking=true",
+    "wave0Population": 615,
+    "wave0DirectlyComparable": False,
+    "comparisonNote": "population-shifted",
+}
 _COHORT_NAMES = (
     "3x3bitmaprect",
     "all_bitmap_configs",
@@ -107,6 +115,7 @@ _dashboard_entries = _wave1._dashboard_entries
 load_scores = _wave1.load_scores
 _merge_junit_fields = _wave1._merge_junit_fields
 _junit_identity = _wave1._junit_identity
+_identity_metadata = _wave1._identity_metadata
 _junit_dashboard_matches = _wave1._junit_dashboard_matches
 _lane_key = _wave1._lane_key
 _identity_matches = _wave1._identity_matches
@@ -250,6 +259,70 @@ def _select_dashboard_rows(dashboard, identities):
     return filtered
 
 
+def _raw_dashboard_entries(dashboard):
+    if isinstance(dashboard, list):
+        entries = dashboard
+    elif isinstance(dashboard, dict) and isinstance(dashboard.get("gms"), dict):
+        entries = [
+            dict(entry, name=name) if isinstance(entry, dict) else {"name": name}
+            for name, entry in dashboard["gms"].items()
+        ]
+    elif isinstance(dashboard, dict):
+        entries = []
+        for key in ("gms", "rows", "results"):
+            if isinstance(dashboard.get(key), list):
+                entries = dashboard[key]
+                break
+    else:
+        entries = []
+    return [copy.deepcopy(entry) if isinstance(entry, dict) else {"name": entry} for entry in entries]
+
+
+def _validate_fresh_dashboard_metadata(dashboard, selection):
+    expected = {_lane_key(row): row for row in selection.rows}
+    actual = {}
+    violations = []
+    for row in _raw_dashboard_entries(dashboard):
+        name = _row_name(row)
+        if not str(name).strip():
+            violations.append("fresh dashboard row has no usable identity in name/gm/id")
+            continue
+        reference_kind = row.get("referenceKind")
+        key = (str(name), str(reference_kind or ""))
+        if key not in expected:
+            violations.append("fresh dashboard has unknown identity: %s/%s" % key)
+            continue
+        if key in actual:
+            violations.append("fresh dashboard has duplicate identity: %s/%s" % key)
+            continue
+        expected_row = expected[key]
+        actual[key] = row
+        if reference_kind != expected_row.get("referenceKind"):
+            violations.append("fresh dashboard has wrong referenceKind: %s" % name)
+        if "family" not in row:
+            violations.append("fresh dashboard is missing family: %s" % name)
+        elif row.get("family") != expected_row.get("family"):
+            violations.append("fresh dashboard has wrong family: %s" % name)
+        expected_lane = expected_row.get("evidenceLane")
+        if expected_lane is not None:
+            if "evidenceLane" not in row:
+                violations.append("fresh dashboard is missing evidenceLane: %s" % name)
+            elif row.get("evidenceLane") != expected_lane:
+                violations.append("fresh dashboard has wrong evidenceLane: %s" % name)
+        expected_identity = dict(_identity_metadata(expected_row))
+        actual_identity = dict(_identity_metadata(row))
+        for field, value in expected_identity.items():
+            if field not in actual_identity:
+                violations.append("fresh dashboard is missing %s: %s" % (field, name))
+            elif actual_identity[field] != value:
+                violations.append("fresh dashboard has wrong %s: %s" % (field, name))
+    missing = sorted(set(expected) - set(actual))
+    if missing:
+        violations.append("fresh dashboard is missing identities: %s" % missing)
+    if violations:
+        raise ValueError("fresh dashboard metadata validation failed: %s" % "; ".join(violations))
+
+
 def _select_runner_rows(runner_rows, dashboard_rows, identities):
     claims = {}
     selected = []
@@ -298,6 +371,8 @@ def _filter_evidence_with_families(entries, selection):
             continue
         key = _lane_key(entry)
         name = str(_row_name(entry))
+        if not name.strip():
+            raise ValueError("evidence entry has no usable identity in name/gm/id")
         if name in _expected_name_set() and key not in selection.identities:
             unknown.append("%s/%s" % key)
             continue
@@ -367,9 +442,21 @@ def _validate_supported_after(row, evidence):
         violations.append("supported-after evidence is missing after similarity")
     if _first_number(sources, ("minSimilarity", "threshold", "minimumSimilarity")) is None:
         violations.append("supported-after evidence is missing threshold/minSimilarity")
+    after = _first_number(
+        sources, ("similarityAfter", "scoreAfter", "afterSimilarity", "afterScore")
+    )
+    threshold = _first_number(sources, ("minSimilarity", "threshold", "minimumSimilarity"))
+    if after is not None and threshold is not None and after < threshold:
+        violations.append("supported-after score is below threshold/minSimilarity")
     if not _similarity_improved(row, evidence):
         violations.append("supported-after evidence does not show similarity improvement")
-    if not _has_causal_evidence({}, evidence):
+    if not _valid_comparable(row, evidence):
+        violations.append("supported-after row is not comparable and passing")
+    if not _junit_is_pass(row):
+        violations.append("supported-after row is missing a passing JUnit result")
+    if _is_route_only(row) or _is_route_only(evidence):
+        violations.append("route-only row cannot be supported after")
+    if not _has_causal_evidence(row, evidence):
         violations.append("supported-after evidence is missing causal evidence")
     if not _has_value(sources, ("routeDiagnostic", "routeDiagnostics", "routeSignature", "route")):
         violations.append("supported-after evidence is missing route diagnostics")
@@ -379,6 +466,81 @@ def _validate_supported_after(row, evidence):
     if not _has_complete_pixel_evidence(row, evidence):
         violations.append("supported-after evidence is missing complete pixel evidence")
     return violations
+
+
+def _population_policy_sources(inputs):
+    evidence = inputs.get("evidenceValue", {})
+    environment = inputs.get("environment", {})
+    cohort_manifest = inputs.get("cohortManifest", {})
+    sources = [
+        (
+            "cohort manifest",
+            cohort_manifest.get("populationPolicy")
+            if isinstance(cohort_manifest, dict)
+            else None,
+        )
+    ]
+    if isinstance(evidence, dict):
+        sources.append(("fresh evidence", evidence.get("populationPolicy")))
+        sources.append(("fresh evidence", evidence.get("population")))
+        provenance = evidence.get("provenance")
+        sources.append(
+            (
+                "fresh evidence provenance",
+                provenance.get("populationPolicy")
+                if isinstance(provenance, dict)
+                else None,
+            )
+        )
+        sources.append(
+            (
+                "fresh evidence provenance",
+                provenance.get("population")
+                if isinstance(provenance, dict)
+                else None,
+            )
+        )
+        if any(key in evidence for key in EXPECTED_POPULATION_POLICY):
+            sources.append(("fresh evidence root", evidence))
+        if isinstance(provenance, dict) and any(
+            key in provenance for key in EXPECTED_POPULATION_POLICY
+        ):
+            sources.append(("fresh evidence provenance root", provenance))
+    if isinstance(environment, dict):
+        sources.append(("fresh environment", environment.get("populationPolicy")))
+        if any(key in environment for key in EXPECTED_POPULATION_POLICY):
+            sources.append(("fresh environment root", environment))
+    return sources
+
+
+def _population_value_matches(actual, expected):
+    return type(actual) is type(expected) and actual == expected
+
+
+def _validate_population_policy(inputs, manifest):
+    violations = []
+    effective = manifest.get("populationPolicy", {})
+    for key, expected in EXPECTED_POPULATION_POLICY.items():
+        if not isinstance(effective, dict) or not _population_value_matches(effective.get(key), expected):
+            violations.append(
+                "population policy %s must be %r, got %r"
+                % (key, expected, effective.get(key))
+            )
+    for label, source in _population_policy_sources(inputs):
+        if source is None:
+            if label == "cohort manifest":
+                violations.append("cohort manifest population policy is missing")
+            continue
+        if not isinstance(source, dict):
+            violations.append("%s population policy must be an object" % label)
+            continue
+        for key, expected in EXPECTED_POPULATION_POLICY.items():
+            if key in source and not _population_value_matches(source[key], expected):
+                violations.append(
+                    "%s population policy %s must be %r, got %r"
+                    % (label, key, expected, source[key])
+                )
+    return list(dict.fromkeys(violations))
 
 
 def _validate_residual_refusal(row, evidence, failure_code):
@@ -540,7 +702,7 @@ def build_manifest(inputs, selection, source_commit, status):
     residual_rows = []
     for row in rows:
         evidence = evidence_by_key.get(_lane_key(row), {})
-        if _is_supported_after(row, evidence):
+        if _is_supported_after(row, evidence) and not _validate_supported_after(row, evidence):
             supported_rows.append(row)
         elif _is_residual_refusal(row, evidence):
             residual_rows.append(row)
@@ -587,14 +749,7 @@ def build_manifest(inputs, selection, source_commit, status):
             if _first_value(_evidence_sources(row, evidence_by_key.get(_lane_key(row), {})), ("failureCode",))
         }
     )
-    population = {
-        "includeBlocking": True,
-        "runnerProperty": "-Dkanvas.gm.includeBlocking=true",
-        "dashboardProperty": "-Pgm.includeBlocking=true",
-        "wave0Population": 615,
-        "wave0DirectlyComparable": False,
-        "comparisonNote": "population-shifted",
-    }
+    population = copy.deepcopy(EXPECTED_POPULATION_POLICY)
     population.update(copy.deepcopy(inputs["cohortManifest"].get("populationPolicy", {})))
     population.update(
         {
@@ -628,7 +783,7 @@ def build_manifest(inputs, selection, source_commit, status):
         },
         "observedComparableRows": len(comparable_rows),
         "candidateUnlockedRows": sum(
-            _has_causal_evidence({}, evidence_by_key.get(_lane_key(row), {}))
+            _has_causal_evidence(row, evidence_by_key.get(_lane_key(row), {}))
             for row in supported_rows
         ),
         "supportedRowsAfter": len(supported_rows) if status != "classification" else 0,
@@ -695,7 +850,10 @@ def build_manifest(inputs, selection, source_commit, status):
         "residualCodes": residual_codes,
         "residualRefusalRows": len(residual_rows),
         "supportedAfterRows": [row.get("name") for row in supported_rows],
-        "routeOnlyRows": 0,
+        "routeOnlyRows": sum(
+            _is_route_only(row) or _is_route_only(evidence_by_key.get(_lane_key(row), {}))
+            for row in rows
+        ),
         "routeOnlyRowsPromoted": False,
         "escalation": {
             "maxFailedHypotheses": 3,
@@ -857,6 +1015,7 @@ def _prepare_inputs(args, dashboard_output, selection):
         key: value for key, value in hashes.items() if key == "dashboardOutput"
     }
     dashboard = parse_dashboard(args.dashboard_json)
+    _validate_fresh_dashboard_metadata(dashboard, selection)
     commands = _json_file(args.commands_json)
     environment = _json_file(args.environment_json)
     skia_runner = parse_junit(args.skia_runner, "skia", set())
@@ -1084,6 +1243,7 @@ def main(argv=None):
             check_violations.append("score before/after content diverges")
         check_violations.extend(_wave1._check_scores(inputs["scoresBefore"], inputs["scoresAfter"]))
         check_violations.extend(_check_execution_contract(inputs["commands"], inputs["environment"]))
+        check_violations.extend(_validate_population_policy(inputs, manifest))
         if not manifest.get("policyEvidencePresent", False):
             check_violations.append("policy evidence is missing")
         check_violations.extend(_check_policy(manifest["policy"]))
