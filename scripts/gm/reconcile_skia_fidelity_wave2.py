@@ -168,6 +168,67 @@ class CohortSelection:
     failure_code: str
 
 
+class _FrozenDict(dict):
+    """A dict-shaped value whose nested contents are immutable."""
+
+    def _immutable(self, *args, **kwargs):
+        raise TypeError("cohort selection values are immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+    __ior__ = _immutable
+
+    def __deepcopy__(self, memo):
+        memo[id(self)] = self
+        return self
+
+
+class _FrozenList(list):
+    def _immutable(self, *args, **kwargs):
+        raise TypeError("cohort selection values are immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    __iadd__ = _immutable
+    __imul__ = _immutable
+    append = _immutable
+    clear = _immutable
+    extend = _immutable
+    insert = _immutable
+    pop = _immutable
+    remove = _immutable
+    reverse = _immutable
+    sort = _immutable
+
+    def __deepcopy__(self, memo):
+        memo[id(self)] = self
+        return self
+
+
+def _deep_freeze(value):
+    if isinstance(value, dict):
+        frozen = _FrozenDict()
+        dict.__init__(
+            frozen,
+            ((key, _deep_freeze(item)) for key, item in value.items()),
+        )
+        return frozen
+    if isinstance(value, list):
+        frozen = _FrozenList()
+        list.__init__(frozen, (_deep_freeze(item) for item in value))
+        return frozen
+    if isinstance(value, tuple):
+        return tuple(_deep_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(item) for item in value)
+    return value
+
+
 def _json_file(path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
@@ -244,7 +305,7 @@ def select_cohort_rows(manifest, failure_code):
                 "cohort identity %s has the wrong failureCode" % _row_name(row)
             )
     return CohortSelection(
-        rows=tuple(selected),
+        rows=tuple(_deep_freeze(row) for row in selected),
         identities=identities,
         family_counts=MappingProxyType(dict(family_counts)),
         failure_code=failure_code,
@@ -551,23 +612,69 @@ def _filter_evidence_with_families(entries, selection):
 
 
 def _raw_evidence_entries(value):
-    if isinstance(value, dict):
-        entries = value.get("entries", value.get("rows", []))
-    else:
-        entries = value
-    if not isinstance(entries, list):
-        raise ValueError("raw evidence entries must be an array")
-    return entries
+    _validate_raw_evidence_entries(value)
+    return _raw_evidence_containers(value)[0][1]
+
+
+def _raw_evidence_containers(value):
+    if not isinstance(value, dict):
+        if not isinstance(value, list):
+            raise ValueError("raw evidence entries must be an array")
+        return [("entries", value)]
+
+    containers = []
+    for label in ("entries", "rows"):
+        if label not in value:
+            continue
+        entries = value[label]
+        if not isinstance(entries, list):
+            raise ValueError("raw evidence %s must be an array" % label)
+        containers.append((label, entries))
+    return containers or [("entries", [])]
 
 
 def _validate_raw_evidence_entries(value):
-    for index, entry in enumerate(_raw_evidence_entries(value)):
-        if not isinstance(entry, dict):
-            raise ValueError("raw evidence entry %s is non-dict" % index)
-        if not str(_row_name(entry)).strip():
-            raise ValueError(
-                "raw evidence entry %s has no usable identity in name/gm/id" % index
-            )
+    for label, entries in _raw_evidence_containers(value):
+        prefix = "raw evidence" if label == "entries" else "raw evidence %s" % label
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                raise ValueError("%s entry %s is non-dict" % (prefix, index))
+            if not str(_row_name(entry)).strip():
+                raise ValueError(
+                    "%s entry %s has no usable identity in name/gm/id"
+                    % (prefix, index)
+                )
+
+
+def _canonical_evidence_entries(entries):
+    return tuple(
+        sorted(
+            json.dumps(entry, sort_keys=True, separators=(",", ":"))
+            for entry in entries
+        )
+    )
+
+
+def _evidence_file_paths(index_value, index_path):
+    paths = _wave1._evidence_file_paths(index_value, index_path)
+    containers = _raw_evidence_containers(index_value)
+    for label, entries in containers[1:]:
+        secondary = _wave1._evidence_file_paths(
+            {"entries": entries}, index_path
+        )
+        for name, path in secondary.items():
+            paths.setdefault("%s.%s" % (label, name), path)
+    return paths
+
+
+def _declared_evidence_paths(index_value, index_path):
+    paths = list(_wave1._declared_evidence_paths(index_value, index_path))
+    containers = _raw_evidence_containers(index_value)
+    for _, entries in containers[1:]:
+        paths.extend(
+            _wave1._declared_evidence_paths({"entries": entries}, index_path)
+        )
+    return paths
 
 
 def _first_number(sources, keys):
@@ -785,13 +892,21 @@ def _population_value_matches(actual, expected):
 
 def _validate_population_policy(inputs, manifest):
     violations = []
-    effective = manifest.get("populationPolicy", {})
-    for key, expected in EXPECTED_POPULATION_POLICY.items():
-        if not isinstance(effective, dict) or not _population_value_matches(effective.get(key), expected):
-            violations.append(
-                "population policy %s must be %r, got %r"
-                % (key, expected, effective.get(key))
-            )
+    effective = (
+        manifest.get("populationPolicy", {})
+        if isinstance(manifest, dict)
+        else None
+    )
+    if not isinstance(effective, dict):
+        violations.append("cohort manifest population policy must be an object")
+    else:
+        for key, expected in EXPECTED_POPULATION_POLICY.items():
+            actual = effective.get(key)
+            if not _population_value_matches(actual, expected):
+                violations.append(
+                    "population policy %s must be %r, got %r"
+                    % (key, expected, actual)
+                )
     for label, source in _population_policy_sources(inputs):
         if source is None:
             if label == "cohort manifest":
@@ -800,6 +915,14 @@ def _validate_population_policy(inputs, manifest):
         if not isinstance(source, dict):
             violations.append("%s population policy must be an object" % label)
             continue
+        missing = [
+            key for key in EXPECTED_POPULATION_POLICY if key not in source
+        ]
+        if missing:
+            violations.append(
+                "%s population policy is missing keys: %s"
+                % (label, ", ".join(missing))
+            )
         for key, expected in EXPECTED_POPULATION_POLICY.items():
             if key in source and not _population_value_matches(source[key], expected):
                 violations.append(
@@ -1568,10 +1691,18 @@ def _input_paths(args):
     }
 
 
+def _alias_input_paths(args, dashboard_output=None):
+    paths = _input_paths(args)
+    if dashboard_output is not None:
+        paths["dashboardOutput"] = dashboard_output
+    return paths
+
+
 def _prepare_inputs(args, dashboard_output, selection):
     input_paths = _input_paths(args)
     evidence_value = _json_file(args.evidence_index)
     _validate_raw_evidence_entries(evidence_value)
+    raw_evidence_containers = _raw_evidence_containers(evidence_value)
     evidence_paths = _evidence_file_paths(evidence_value, args.evidence_index)
     hashes = hash_files(input_paths)
     if dashboard_output is not None:
@@ -1607,9 +1738,25 @@ def _prepare_inputs(args, dashboard_output, selection):
     }
     merged_dashboard_rows = copy.deepcopy(dashboard_rows)
     _merge_junit_fields(merged_dashboard_rows, copy.deepcopy(runner_rows))
+    primary_label, primary_entries = raw_evidence_containers[0]
     evidence_rows, unknown_evidence = _filter_evidence_with_families(
-        _evidence_entries(copy.deepcopy(evidence_value)), selection
+        copy.deepcopy(primary_entries), selection
     )
+    for label, entries in raw_evidence_containers[1:]:
+        _, secondary_unknown = _filter_evidence_with_families(
+            copy.deepcopy(entries), selection
+        )
+        unknown_evidence.extend(
+            "%s: %s" % (label, value) for value in secondary_unknown
+        )
+        if not secondary_unknown and not unknown_evidence:
+            if _canonical_evidence_entries(entries) != _canonical_evidence_entries(
+                primary_entries
+            ):
+                raise ValueError(
+                    "raw evidence %s and %s containers are contradictory"
+                    % (primary_label, label)
+                )
     missing_evidence = sorted(
         selection.identities - {_lane_key(entry) for entry in evidence_rows}
     )
@@ -1701,7 +1848,7 @@ def _validate_selected_evidence(inputs, args, manifest):
     violations.extend(
         _failure_code_violations(rows, entries, args.cohort_failure_code)
     )
-    input_paths = _input_paths(args)
+    input_paths = _alias_input_paths(args, inputs.get("dashboardOutput"))
     allowed_roots = (
         args.evidence_index.parent,
         args.evidence_index.parent.parent,
@@ -1756,6 +1903,19 @@ def _validate_selected_evidence(inputs, args, manifest):
                 allowed_roots=allowed_roots,
             )
         )
+    for _, raw_entries in _raw_evidence_containers(inputs["evidenceValue"])[1:]:
+        secondary_entries = [
+            copy.deepcopy(entry) for entry in raw_entries if isinstance(entry, dict)
+        ]
+        violations.extend(
+            _validate_artifacts(
+                secondary_entries,
+                args.evidence_index,
+                input_paths,
+                allowed_roots,
+                inputs["evidenceValue"],
+            )
+        )
     for unknown in inputs.get("unknownEvidence", []):
         violations.append("evidence contains unknown identity: %s" % unknown)
     return list(dict.fromkeys(violations))
@@ -1791,12 +1951,18 @@ def _argument_parser():
 
 
 def _write_outputs(manifest, output_json, output_markdown):
+    if _same_file(output_json, output_markdown):
+        raise ValueError("JSON and Markdown outputs must differ")
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_markdown.parent.mkdir(parents=True, exist_ok=True)
+    if _same_file(output_json, output_markdown):
+        raise ValueError("JSON and Markdown outputs must differ")
     output_json.write_text(
         json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    if _same_file(output_json, output_markdown):
+        raise ValueError("JSON and Markdown outputs must differ")
     output_markdown.write_text(render_markdown(manifest), encoding="utf-8")
 
 
@@ -1807,18 +1973,20 @@ def main(argv=None):
         print("reconciliation rejected: --status approved requires --check")
         return 2
     input_paths = _input_paths(args)
+    dashboard_output = _wave1._dashboard_output(args.dashboard_dir, args.dashboard_json)
+    alias_input_paths = _alias_input_paths(args, dashboard_output)
     violations = []
     missing = [
         "%s: %s" % (name, path)
         for name, path in input_paths.items()
         if not path.exists()
     ]
-    if args.output_json.resolve() == args.output_markdown.resolve():
+    if _same_file(args.output_json, args.output_markdown):
         violations.append("JSON and Markdown outputs must differ")
     if _same_file(args.scores_before, args.scores_after):
         violations.append("score before and after paths must differ")
     for output in (args.output_json, args.output_markdown):
-        for name, input_path in input_paths.items():
+        for name, input_path in alias_input_paths.items():
             if _path_alias(output, input_path):
                 violations.append("output path aliases input %s: %s" % (name, input_path))
     if not missing:
@@ -1827,8 +1995,14 @@ def main(argv=None):
         except (OSError, ValueError, json.JSONDecodeError):
             evidence_value = None
         if evidence_value is not None:
+            try:
+                declared_evidence_paths = _declared_evidence_paths(
+                    evidence_value, args.evidence_index
+                )
+            except ValueError:
+                declared_evidence_paths = ()
             for output in (args.output_json, args.output_markdown):
-                for artifact_path in _declared_evidence_paths(evidence_value, args.evidence_index):
+                for artifact_path in declared_evidence_paths:
                     if _path_alias(output, artifact_path):
                         violations.append("output path aliases evidence artifact: %s" % artifact_path)
     if missing or violations:
@@ -1836,11 +2010,18 @@ def main(argv=None):
         return 2
     try:
         selection = load_cohort_manifest(args.cohort_manifest, args.cohort_failure_code)
-        dashboard_output = _wave1._dashboard_output(args.dashboard_dir, args.dashboard_json)
         if args.check and dashboard_output is None:
             print("reconciliation check failed: dashboard output is missing")
             return 2
         inputs = _prepare_inputs(args, dashboard_output, selection)
+        if not args.check:
+            population_policy_violations = _validate_population_policy(
+                inputs, inputs["cohortManifest"]
+            )
+            if population_policy_violations:
+                raise ValueError(
+                    "classification rejected: %s" % population_policy_violations
+                )
         if not args.check and inputs["missingEvidence"]:
             raise ValueError(
                 "classification cannot omit evidence for selected identities: %s"
