@@ -68,18 +68,26 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         testcases = []
         for index, row in enumerate([*rows, *extra_rows]):
             name = row["name"]
+            identity = row.get("gmIdentity", {})
+            display_name = identity.get("displayName", name) if isinstance(identity, dict) else name
+            source_registration = row.get("sourceRegistration", name)
+            source_class = row.get("sourceClass")
             failure = "" if name in passed_names else (
                 '<failure type="GPUPreparedSurfaceTerminalException" '
                 'message="GPUPreparedSurfaceTerminalException: %s: terminal refusal"/>'
                 % html.escape(row.get("failureCode", FAILURE_CODE), quote=True)
             )
             testcases.append(
-                '<testcase name="[%s] %s" classname="org.graphiks.kanvas.skia.SkiaGmRunner" '
-                'sourceRegistration="%s">%s</testcase>'
+                '<testcase name="%s" classname="org.graphiks.kanvas.skia.SkiaGmRunner" '
+                'sourceRegistration="%s"%s>%s</testcase>'
                 % (
-                    index,
-                    html.escape(name, quote=True),
-                    html.escape(name, quote=True),
+                    html.escape(display_name, quote=True),
+                    html.escape(source_registration, quote=True),
+                    (
+                        ' sourceClass="%s"' % html.escape(source_class, quote=True)
+                        if source_class
+                        else ""
+                    ),
                     failure,
                 )
             )
@@ -123,7 +131,14 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             },
         )
 
-    def supported_evidence(self, row, index=0, route_only=False, after_score=98.0):
+    def supported_evidence(
+        self,
+        row,
+        index=0,
+        route_only=False,
+        after_score=98.0,
+        route_signature="prepared-image-unpremul",
+    ):
         dimensions = {
             "render": {"width": 32, "height": 32},
             "reference": {"width": 32, "height": 32},
@@ -140,7 +155,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             "minSimilarity": 95.0,
             "candidateUnlocked": True,
             "causalBucket": "image-alpha",
-            "routeSignature": "prepared-image-unpremul",
+            "routeSignature": route_signature,
             "minimalOperationTrace": "draw-image",
             "ownershipBoundary": "kanvas-image",
             "routeOnly": route_only,
@@ -167,13 +182,15 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         after_score=98.0,
         comparable=True,
         junit_pass=True,
+        is_passing=True,
+        route_signature="prepared-image-unpremul",
     ):
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
         row = dashboard["gms"][0]
         row.update(
             {
                 "renderFailed": False,
-                "isPassing": True,
+                "isPassing": is_passing,
                 "score": after_score,
                 "minSimilarity": 95.0,
                 "routeOnly": route_only,
@@ -203,6 +220,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             self.selected_rows[0],
             route_only=route_only,
             after_score=after_score,
+            route_signature=route_signature,
         )
         fixtures["evidenceIndex"].write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n",
@@ -611,14 +629,25 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIn("orphan", stdout.lower())
         self.assertIn("aliases input", stdout.lower())
 
-    def test_approved_check_rejects_unsupported_after_claims(self):
-        variants = (
-            {"after_score": 94.0},
-            {"route_only": True},
-            {"comparable": False},
-            {"junit_pass": False},
+    def test_approved_control_is_valid_and_bad_variants_report_policy_reasons(self):
+        fixtures = self.write_cli_fixtures()
+        self.configure_supported_fixture(fixtures)
+        status, stdout, manifest, _, _ = self.run_main(
+            fixtures, check=True, status="approved"
         )
-        for variant in variants:
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["supportedRowsAfter"], 1)
+        self.assertEqual(manifest["routeOnlyRows"], 0)
+
+        variants = (
+            ({"after_score": 94.0}, "below threshold/minSimilarity"),
+            ({"is_passing": False}, "dashboard row is not passing"),
+            ({"route_only": True}, "route-only row cannot be supported after"),
+            ({"comparable": False}, "not comparable"),
+            ({"junit_pass": False}, "passing JUnit"),
+            ({"route_signature": "cpu-fallback"}, "cpu fallback"),
+        )
+        for variant, reason in variants:
             with self.subTest(variant=variant):
                 fixtures = self.write_cli_fixtures()
                 self.configure_supported_fixture(fixtures, **variant)
@@ -628,13 +657,14 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 )
 
                 self.assertEqual(status, 1, stdout)
+                self.assertIn(reason.lower(), stdout.lower())
 
     def test_fresh_dashboard_metadata_must_match_frozen_cohort(self):
         variants = (
             "missing-family",
             "wrong-family",
-            "missing-reference-kind",
-            "wrong-lane",
+            "missing-evidence-lane",
+            "wrong-evidence-lane",
             "duplicate",
             "unknown",
         )
@@ -649,10 +679,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                     del first["family"]
                 elif variant == "wrong-family":
                     first["family"] = "WRONG_FAMILY"
-                elif variant == "missing-reference-kind":
-                    del first["referenceKind"]
-                elif variant == "wrong-lane":
-                    first["referenceKind"] = "cpu-oracle"
+                elif variant == "missing-evidence-lane":
+                    del first["evidenceLane"]
+                elif variant == "wrong-evidence-lane":
+                    first["evidenceLane"] = "cpu-oracle"
                 elif variant == "duplicate":
                     dashboard["gms"].append(copy.deepcopy(first))
                 elif variant == "unknown":
@@ -687,6 +717,29 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             manifest["rows"]["skia"][0]["freshMetadataMarker"], "preserve-me"
         )
 
+    def test_fresh_dashboard_reference_kind_must_match_frozen_cohort(self):
+        for missing in (True, False):
+            with self.subTest(missing=missing):
+                fixtures = self.write_cli_fixtures()
+                dashboard = json.loads(
+                    fixtures["dashboardJson"].read_text(encoding="utf-8")
+                )
+                first = dashboard["gms"][0]
+                if missing:
+                    del first["referenceKind"]
+                else:
+                    first["referenceKind"] = "cpu-oracle"
+                dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+                fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+                (fixtures["dashboardDir"] / "data/gms.json").write_text(
+                    dashboard_text, encoding="utf-8"
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIn("unknown identity", stdout.lower())
+
     def test_check_rejects_weak_population_context(self):
         variants = (
             ("cohort", "includeBlocking", False),
@@ -717,21 +770,27 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 self.assertEqual(status, 1, stdout)
 
-    def test_evidence_without_name_gm_or_id_is_rejected(self):
-        fixtures = self.write_cli_fixtures()
-        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
-        evidence["entries"].append(
-            {"referenceKind": "skia-upstream", "failureCode": FAILURE_CODE}
+    def test_raw_malformed_evidence_is_rejected_before_wave1_parsing(self):
+        variants = (
+            ("not-an-evidence-object", "non-dict"),
+            ({"referenceKind": "skia-upstream", "failureCode": FAILURE_CODE}, "identity"),
         )
-        fixtures["evidenceIndex"].write_text(
-            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        for entry, reason in variants:
+            with self.subTest(reason=reason):
+                fixtures = self.write_cli_fixtures()
+                evidence = json.loads(
+                    fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                )
+                evidence["entries"].append(entry)
+                fixtures["evidenceIndex"].write_text(
+                    json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
 
-        status, stdout, _, _, _ = self.run_main(fixtures)
+                status, stdout, _, _, _ = self.run_main(fixtures)
 
-        self.assertEqual(status, 2, stdout)
-        self.assertIn("identity", stdout.lower())
+                self.assertEqual(status, 2, stdout)
+                self.assertIn(reason, stdout.lower())
 
 
 if __name__ == "__main__":

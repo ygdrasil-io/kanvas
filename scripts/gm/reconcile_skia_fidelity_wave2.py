@@ -34,6 +34,7 @@ EXPECTED_POPULATION_POLICY = {
     "wave0DirectlyComparable": False,
     "comparisonNote": "population-shifted",
 }
+EXPECTED_GPU_ROUTE_SIGNATURE = "prepared-image-unpremul"
 _COHORT_NAMES = (
     "3x3bitmaprect",
     "all_bitmap_configs",
@@ -389,6 +390,26 @@ def _filter_evidence_with_families(entries, selection):
     return filtered, unknown
 
 
+def _raw_evidence_entries(value):
+    if isinstance(value, dict):
+        entries = value.get("entries", value.get("rows", []))
+    else:
+        entries = value
+    if not isinstance(entries, list):
+        raise ValueError("raw evidence entries must be an array")
+    return entries
+
+
+def _validate_raw_evidence_entries(value):
+    for index, entry in enumerate(_raw_evidence_entries(value)):
+        if not isinstance(entry, dict):
+            raise ValueError("raw evidence entry %s is non-dict" % index)
+        if not str(_row_name(entry)).strip():
+            raise ValueError(
+                "raw evidence entry %s has no usable identity in name/gm/id" % index
+            )
+
+
 def _first_number(sources, keys):
     for source in sources:
         if not isinstance(source, dict):
@@ -429,6 +450,22 @@ def _is_residual_refusal(row, evidence):
     )
 
 
+def _route_values(sources):
+    values = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for key in ("routeSignature", "routeDiagnostic", "routeDiagnostics", "route"):
+            value = source.get(key)
+            if _nonempty(value):
+                values.append(value)
+    return values
+
+
+def _normalized_route(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+
+
 def _validate_supported_after(row, evidence):
     sources = _evidence_sources(row, evidence)
     violations = []
@@ -450,6 +487,8 @@ def _validate_supported_after(row, evidence):
         violations.append("supported-after score is below threshold/minSimilarity")
     if not _similarity_improved(row, evidence):
         violations.append("supported-after evidence does not show similarity improvement")
+    if row.get("isPassing") is False or row.get("classification") != "pass":
+        violations.append("dashboard row is not passing")
     if not _valid_comparable(row, evidence):
         violations.append("supported-after row is not comparable and passing")
     if not _junit_is_pass(row):
@@ -460,6 +499,16 @@ def _validate_supported_after(row, evidence):
         violations.append("supported-after evidence is missing causal evidence")
     if not _has_value(sources, ("routeDiagnostic", "routeDiagnostics", "routeSignature", "route")):
         violations.append("supported-after evidence is missing route diagnostics")
+    route_values = _route_values(sources)
+    normalized_routes = {_normalized_route(value) for value in route_values}
+    if any(
+        "cpufallback" in route or ("cpu" in route and "fallback" in route)
+        for route in normalized_routes
+    ):
+        violations.append("supported-after evidence uses a CPU fallback route")
+    expected_route = _first_value(sources, ("expectedRoute",)) or EXPECTED_GPU_ROUTE_SIGNATURE
+    if _normalized_route(expected_route) not in normalized_routes:
+        violations.append("supported-after evidence is missing the expected GPU-prepared route")
     render_dimensions, reference_dimensions = _entry_dimensions(evidence)
     if render_dimensions is None or reference_dimensions is None or render_dimensions != reference_dimensions:
         violations.append("supported-after evidence is missing matching render/reference dimensions")
@@ -1002,6 +1051,7 @@ def _input_paths(args):
 def _prepare_inputs(args, dashboard_output, selection):
     input_paths = _input_paths(args)
     evidence_value = _json_file(args.evidence_index)
+    _validate_raw_evidence_entries(evidence_value)
     evidence_paths = _evidence_file_paths(evidence_value, args.evidence_index)
     hashes = hash_files(input_paths)
     if dashboard_output is not None:
