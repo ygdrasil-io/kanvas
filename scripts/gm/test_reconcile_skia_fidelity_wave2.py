@@ -110,7 +110,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                     "name": row["name"],
                     "family": row["family"],
                     "referenceKind": "skia-upstream",
-                    "failureCode": FAILURE_CODE,
+                    "failureCode": FOLLOW_UP_FAILURE_CODE,
                     "fallbackReason": "prepared-surface-alpha-route-refused",
                     "expectedRoute": "prepared-image-unpremul",
                     "rootCause": "image-alpha-interpretation",
@@ -189,6 +189,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
     ):
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
         row = dashboard["gms"][0]
+        for field in ("classification", "terminal", "terminalRefusal"):
+            row.pop(field, None)
         row.update(
             {
                 "renderFailed": False,
@@ -196,6 +198,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "score": after_score,
                 "minSimilarity": 95.0,
                 "routeOnly": route_only,
+                "failureCode": FAILURE_CODE,
             }
         )
         if remove_is_passing:
@@ -215,8 +218,12 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         dashboard_output = fixtures["dashboardDir"] / "data/gms.json"
         dashboard_output.write_text(dashboard_text, encoding="utf-8")
 
+        runner_rows = copy.deepcopy(self.selected_rows)
+        for runner_row in runner_rows:
+            runner_row["failureCode"] = FOLLOW_UP_FAILURE_CODE
+        runner_rows[0]["failureCode"] = FAILURE_CODE
         fixtures["skiaRunner"] = self.write_runner(
-            self.selected_rows,
+            runner_rows,
             passed_names={self.selected_rows[0]["name"]} if junit_pass else (),
         )
         evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
@@ -251,6 +258,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         )
 
         runner_rows = copy.deepcopy(self.selected_rows)
+        for runner_row in runner_rows:
+            runner_row["failureCode"] = FOLLOW_UP_FAILURE_CODE
         runner_rows[0]["failureCode"] = failure_code
         fixtures["skiaRunner"] = self.write_runner(runner_rows)
 
@@ -273,7 +282,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "name": row["name"],
                 "family": row["family"],
                 "referenceKind": "skia-upstream",
-                "failureCode": FAILURE_CODE,
+                "failureCode": FOLLOW_UP_FAILURE_CODE,
+                "classification": "terminal-refusal",
+                "terminal": True,
+                "terminalRefusal": True,
                 "isPassing": None,
                 "renderFailed": True,
                 "dimensions": copy.deepcopy(row.get("dimensions")),
@@ -359,7 +371,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         )
         score_before = self.write_text("scores/before.properties", "modecolorfilters=98.75\n")
         score_after = self.write_text("scores/after.properties", "modecolorfilters=98.75\n")
-        skia_runner = self.write_runner(self.selected_rows)
+        runner_rows = copy.deepcopy(self.selected_rows)
+        for runner_row in runner_rows:
+            runner_row["failureCode"] = FOLLOW_UP_FAILURE_CODE
+        skia_runner = self.write_runner(runner_rows)
         evidence_index = self.write_residual_evidence(self.selected_rows)
         cohort_manifest = self.root / "cohort.json"
         cohort_manifest.write_bytes(WAVE1_MANIFEST.read_bytes())
@@ -576,6 +591,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                         fixtures["dashboardJson"].read_text(encoding="utf-8")
                     )
                     first = dashboard["gms"][0]
+                    for field in ("classification", "terminal", "terminalRefusal"):
+                        first.pop(field, None)
                     if failure_code is None:
                         del first["failureCode"]
                     else:
@@ -632,7 +649,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 self.assertEqual(manifest["supportedRowsAfter"], 0)
                 self.assertEqual(
                     manifest["residualCodes"],
-                    sorted((FAILURE_CODE, FOLLOW_UP_FAILURE_CODE)),
+                    [FOLLOW_UP_FAILURE_CODE],
                 )
                 self.assertEqual(manifest["rows"]["skia"][0]["failureCode"], FOLLOW_UP_FAILURE_CODE)
                 self.assertEqual(
@@ -647,11 +664,24 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 self.assertEqual(manifest["current"]["runner"]["rows"], 58)
 
     def test_residual_followup_failure_code_must_be_present_and_consistent(self):
-        variants = ("missing-evidence", "empty-dashboard", "mismatched-evidence", "mismatched-junit")
+        variants = (
+            "missing-evidence",
+            "empty-dashboard",
+            "mismatched-evidence",
+            "mismatched-junit",
+            "original-cohort-code",
+        )
         for variant in variants:
             with self.subTest(variant=variant):
                 fixtures = self.write_cli_fixtures()
-                self.configure_residual_fixture(fixtures)
+                self.configure_residual_fixture(
+                    fixtures,
+                    failure_code=(
+                        FAILURE_CODE
+                        if variant == "original-cohort-code"
+                        else FOLLOW_UP_FAILURE_CODE
+                    ),
+                )
                 if variant == "missing-evidence":
                     evidence = json.loads(
                         fixtures["evidenceIndex"].read_text(encoding="utf-8")
@@ -684,7 +714,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                         json.dumps(evidence, indent=2, sort_keys=True) + "\n",
                         encoding="utf-8",
                     )
-                else:
+                elif variant == "mismatched-junit":
                     runner_rows = copy.deepcopy(self.selected_rows)
                     runner_rows[0]["failureCode"] = "unsupported.image.other"
                     fixtures["skiaRunner"] = self.write_runner(runner_rows)
@@ -694,7 +724,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 )
 
                 self.assertEqual(status, 2 if variant == "empty-dashboard" else 1, stdout)
-                self.assertIn("failurecode", stdout.lower())
+                self.assertIn(
+                    "distinct" if variant == "original-cohort-code" else "failurecode",
+                    stdout.lower(),
+                )
 
     def test_incomplete_supported_after_evidence_is_rejected(self):
         fixtures = self.write_cli_fixtures()

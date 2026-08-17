@@ -602,6 +602,8 @@ def _validate_residual_refusal(row, evidence, failure_code):
     actual_code = _first_value(sources, ("failureCode",))
     if _failure_code_value({"failureCode": actual_code}) is None:
         violations.append("residual refusal is missing failureCode")
+    elif actual_code == failure_code:
+        violations.append("residual refusal failureCode must be distinct from cohort")
     for field in ("fallbackReason", "expectedRoute", "rootCause", "followUpFamily"):
         if not _has_value(sources, (field,)):
             violations.append("residual refusal is missing %s" % field)
@@ -700,6 +702,11 @@ def _failure_code_violations(dashboard_rows, entries, failure_code):
             if len(codes) != 1:
                 violations.append(
                     "residual refusal failureCode mismatch: %s" % name
+                )
+            elif next(iter(codes)) == failure_code:
+                violations.append(
+                    "residual refusal failureCode must be distinct from cohort: %s"
+                    % name
                 )
             continue
 
