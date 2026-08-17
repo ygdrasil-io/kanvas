@@ -260,15 +260,29 @@ def _select_dashboard_rows(dashboard, identities):
         _require_exact_rows(filtered, identities, "fresh dashboard rows")
     except ValueError as error:
         raise ValueError("fresh dashboard has unknown identity: %s" % error) from error
-    raw_by_name = {
-        _row_name(row): row
-        for row in _raw_dashboard_entries(dashboard)
-        if str(_row_name(row)).strip()
-    }
+    raw_rows = _raw_dashboard_entries(dashboard)
+    raw_by_identity = _raw_dashboard_identity_map(dashboard)
+    raw_by_name = {}
+    for raw in raw_rows:
+        if str(_row_name(raw)).strip():
+            raw_by_name.setdefault(_row_name(raw), []).append(raw)
     for row in filtered:
-        raw = raw_by_name.get(_row_name(row))
-        if isinstance(raw, dict) and "evidenceLane" in raw:
-            row["evidenceLane"] = raw["evidenceLane"]
+        key = _lane_key(row)
+        raw = raw_by_identity.get(key)
+        if raw is None:
+            if any(
+                _is_enriched_dashboard_row(candidate)
+                for candidate in raw_by_name.get(_row_name(row), ())
+            ):
+                raise ValueError("fresh dashboard is missing referenceKind: %s" % _row_name(row))
+            raise ValueError("fresh dashboard has unknown identity: %s/%s" % key)
+        if _is_enriched_dashboard_row(raw):
+            if "referenceKind" not in raw or not _nonempty(raw.get("referenceKind")):
+                row.pop("referenceKind", None)
+            if "evidenceLane" in raw:
+                row["evidenceLane"] = raw["evidenceLane"]
+            else:
+                row.pop("evidenceLane", None)
     return filtered
 
 
@@ -291,7 +305,45 @@ def _raw_dashboard_entries(dashboard):
     return [copy.deepcopy(entry) if isinstance(entry, dict) else {"name": entry} for entry in entries]
 
 
-def _validate_fresh_dashboard_metadata(selected_rows, selection):
+_ENRICHED_DASHBOARD_FIELDS = frozenset(
+    {
+        "referenceKind",
+        "failureCode",
+        "evidenceLane",
+        "class",
+        "className",
+        "sourceClass",
+        "sourceRegistration",
+        "gmIdentity",
+    }
+)
+
+
+def _is_enriched_dashboard_row(row):
+    return isinstance(row, dict) and any(
+        field in row for field in _ENRICHED_DASHBOARD_FIELDS
+    )
+
+
+def _raw_dashboard_identity(row):
+    name = str(_row_name(row))
+    reference_kind = (
+        row.get("referenceKind")
+        if _is_enriched_dashboard_row(row)
+        else "skia-upstream"
+    )
+    return name, str(reference_kind or "")
+
+
+def _raw_dashboard_identity_map(dashboard):
+    return {
+        _raw_dashboard_identity(row): row
+        for row in _raw_dashboard_entries(dashboard)
+        if str(_row_name(row)).strip()
+    }
+
+
+def _validate_fresh_dashboard_metadata(selected_rows, selection, raw_by_identity):
     expected = {_lane_key(row): row for row in selection.rows}
     actual = {}
     violations = []
@@ -312,6 +364,8 @@ def _validate_fresh_dashboard_metadata(selected_rows, selection):
     for key, row in actual.items():
         name = _row_name(row)
         expected_row = expected[key]
+        raw = raw_by_identity.get(key)
+        enriched = _is_enriched_dashboard_row(raw)
         if not _nonempty(row.get("referenceKind")):
             violations.append("fresh dashboard is missing referenceKind: %s" % name)
         elif row.get("referenceKind") != expected_row.get("referenceKind"):
@@ -320,7 +374,7 @@ def _validate_fresh_dashboard_metadata(selected_rows, selection):
             violations.append("fresh dashboard is missing family: %s" % name)
         elif row.get("family") != expected_row.get("family"):
             violations.append("fresh dashboard has wrong family: %s" % name)
-        if "failureCode" in row:
+        if enriched or "failureCode" in row:
             failure_code = _failure_code_value(row)
             if failure_code is None:
                 violations.append("fresh dashboard is missing failureCode: %s" % name)
@@ -1161,8 +1215,11 @@ def _prepare_inputs(args, dashboard_output, selection):
         key: value for key, value in hashes.items() if key == "dashboardOutput"
     }
     dashboard = parse_dashboard(args.dashboard_json)
+    raw_dashboard_by_identity = _raw_dashboard_identity_map(dashboard)
     dashboard_rows = _select_dashboard_rows(dashboard, selection.identities)
-    _validate_fresh_dashboard_metadata(dashboard_rows, selection)
+    _validate_fresh_dashboard_metadata(
+        dashboard_rows, selection, raw_dashboard_by_identity
+    )
     commands = _json_file(args.commands_json)
     environment = _json_file(args.environment_json)
     skia_runner = parse_junit(args.skia_runner, "skia", set())

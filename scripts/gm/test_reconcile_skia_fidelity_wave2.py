@@ -650,10 +650,9 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                     status, stdout, _, _, _ = self.run_main(fixtures, check=check)
 
-                    expected_status = 0 if failure_code is None else 2
+                    expected_status = 2
                     self.assertEqual(status, expected_status, stdout)
-                    if expected_status == 2:
-                        self.assertIn("failurecode", stdout.lower())
+                    self.assertIn("failurecode", stdout.lower())
 
     def test_check_validates_current_head_source_commit_and_policy_non_weakening(self):
         fixtures = self.write_cli_fixtures()
@@ -948,6 +947,59 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertEqual(selected["referenceKind"], "skia-upstream")
         self.assertEqual(selected["evidenceLane"], "skia-dashboard")
 
+    def test_enriched_dashboard_none_metadata_does_not_use_raw_defaults(self):
+        for field in ("referenceKind", "evidenceLane", "failureCode"):
+            with self.subTest(field=field):
+                fixtures = self.write_cli_fixtures()
+                dashboard = json.loads(
+                    fixtures["dashboardJson"].read_text(encoding="utf-8")
+                )
+                dashboard["gms"][0][field] = None
+                dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+                fixtures["dashboardJson"].write_text(
+                    dashboard_text, encoding="utf-8"
+                )
+                (fixtures["dashboardDir"] / "data/gms.json").write_text(
+                    dashboard_text, encoding="utf-8"
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+
+    def test_same_name_unselected_identity_cannot_contaminate_selected_lane(self):
+        fixtures = self.write_cli_fixtures()
+        dashboard = json.loads(
+            fixtures["dashboardJson"].read_text(encoding="utf-8")
+        )
+        selected = dashboard["gms"][0]
+        dashboard["gms"].append(
+            {
+                "name": selected["name"],
+                "family": selected["family"],
+                "referenceKind": "cpu-oracle",
+                "evidenceLane": "cpu-oracle",
+                "isPassing": selected["isPassing"],
+                "similarity": selected.get("similarity"),
+                "routeOnly": selected.get("routeOnly", False),
+            }
+        )
+        dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        (fixtures["dashboardDir"] / "data/gms.json").write_text(
+            dashboard_text, encoding="utf-8"
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        selected_output = next(
+            row
+            for row in manifest["rows"]["skia"]
+            if row["name"] == selected["name"]
+        )
+        self.assertEqual(selected_output["evidenceLane"], "skia-dashboard")
+
     def test_supported_after_requires_fixed_route_signature_and_expected_route(self):
         fixtures = self.write_cli_fixtures()
         self.configure_supported_fixture(
@@ -1049,7 +1101,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 status, stdout, _, _, _ = self.run_main(fixtures)
 
-                expected_status = 0 if variant == "missing-evidence-lane" else 2
+                expected_status = 2
                 self.assertEqual(status, expected_status, stdout)
 
         fixtures = self.write_cli_fixtures()
@@ -1086,10 +1138,12 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 status, stdout, _, _, _ = self.run_main(fixtures)
 
-                expected_status = 0 if missing else 2
+                expected_status = 2
                 self.assertEqual(status, expected_status, stdout)
-                if expected_status == 2:
-                    self.assertIn("unknown identity", stdout.lower())
+                self.assertIn(
+                    "referencekind" if missing else "unknown identity",
+                    stdout.lower(),
+                )
 
     def test_check_rejects_weak_population_context(self):
         variants = (
