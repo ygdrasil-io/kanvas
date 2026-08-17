@@ -139,6 +139,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         route_only=False,
         after_score=98.0,
         route_signature="prepared-image-unpremul",
+        expected_route="prepared-image-unpremul",
     ):
         dimensions = {
             "render": {"width": 32, "height": 32},
@@ -157,6 +158,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             "candidateUnlocked": True,
             "causalBucket": "image-alpha",
             "routeSignature": route_signature,
+            "expectedRoute": expected_route,
             "minimalOperationTrace": "draw-image",
             "ownershipBoundary": "kanvas-image",
             "routeOnly": route_only,
@@ -186,6 +188,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         is_passing=True,
         remove_is_passing=False,
         route_signature="prepared-image-unpremul",
+        expected_route="prepared-image-unpremul",
     ):
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
         row = dashboard["gms"][0]
@@ -232,6 +235,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             route_only=route_only,
             after_score=after_score,
             route_signature=route_signature,
+            expected_route=expected_route,
         )
         fixtures["evidenceIndex"].write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n",
@@ -397,6 +401,49 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             "evidenceIndex": evidence_index,
             "cohortManifest": cohort_manifest,
         }
+
+    def write_raw_dashboard_fixtures(self):
+        fixtures = self.write_cli_fixtures()
+        raw_rows = [
+            {
+                "name": row["name"],
+                "referenceKind": "skia-upstream",
+                "isPassing": False,
+                "similarity": 98.0,
+                "routeOnly": False,
+            }
+            for row in self.selected_rows
+        ]
+        raw_rows.extend(
+            {
+                "name": "unselected-gm-%03d" % index,
+                "referenceKind": "skia-upstream",
+                "isPassing": False,
+                "similarity": 0.0,
+                "routeOnly": False,
+            }
+            for index in range(552)
+        )
+        dashboard_text = json.dumps({"gms": raw_rows}, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        (fixtures["dashboardDir"] / "data/gms.json").write_text(
+            dashboard_text, encoding="utf-8"
+        )
+
+        fixtures["skiaRunner"] = self.write_runner(
+            self.selected_rows,
+            passed_names={row["name"] for row in self.selected_rows},
+        )
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["entries"] = [
+            self.supported_evidence(row, index=index)
+            for index, row in enumerate(self.selected_rows)
+        ]
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return fixtures
 
     def cli_args(self, fixtures, output_json=None, output_markdown=None, status="classification", check=False, source_commit=None):
         output_json = output_json or self.root / "reports/wave2.json"
@@ -877,6 +924,51 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 self.assertEqual(status, 1, stdout)
                 self.assertIn(reason.lower(), stdout.lower())
+
+    def test_raw_dashboard_rows_filter_unselected_rows_before_metadata_validation(self):
+        fixtures = self.write_raw_dashboard_fixtures()
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
+        self.assertEqual(len(manifest["rows"]["skia"]), 58)
+        self.assertEqual(manifest["rows"]["skia"][0]["evidenceLane"], "skia-dashboard")
+
+    def test_supported_after_requires_fixed_route_signature_and_expected_route(self):
+        fixtures = self.write_cli_fixtures()
+        self.configure_supported_fixture(
+            fixtures,
+            route_signature="caller-controlled-route",
+            expected_route="caller-controlled-route",
+        )
+
+        status, stdout, _, _, _ = self.run_main(
+            fixtures, check=True, status="approved"
+        )
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("expected gpu-prepared route", stdout.lower())
+
+    def test_malformed_cohort_population_policy_returns_cli_error(self):
+        for value in (None, [], "not-a-policy"):
+            with self.subTest(value=value):
+                fixtures = self.write_cli_fixtures()
+                manifest = json.loads(
+                    fixtures["cohortManifest"].read_text(encoding="utf-8")
+                )
+                manifest["populationPolicy"] = value
+                fixtures["cohortManifest"].write_text(
+                    json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, result, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIsNone(result)
+                self.assertIn("population policy", stdout.lower())
+                self.assertIn("object", stdout.lower())
 
     def test_classification_and_check_reject_evidence_only_unknown_identity(self):
         orphan = {

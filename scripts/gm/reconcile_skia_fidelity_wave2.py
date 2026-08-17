@@ -256,7 +256,10 @@ def _require_exact_rows(rows, identities, label):
 def _select_dashboard_rows(dashboard, identities):
     rows = _dashboard_entries(copy.deepcopy(dashboard))
     filtered = _filter_strict(rows, identities)
-    _require_exact_rows(filtered, identities, "fresh dashboard rows")
+    try:
+        _require_exact_rows(filtered, identities, "fresh dashboard rows")
+    except ValueError as error:
+        raise ValueError("fresh dashboard has unknown identity: %s" % error) from error
     return filtered
 
 
@@ -279,49 +282,78 @@ def _raw_dashboard_entries(dashboard):
     return [copy.deepcopy(entry) if isinstance(entry, dict) else {"name": entry} for entry in entries]
 
 
-def _validate_fresh_dashboard_metadata(dashboard, selection):
+def _validate_fresh_dashboard_metadata(dashboard, selection, selected_rows=None):
     expected = {_lane_key(row): row for row in selection.rows}
-    actual = {}
+    selected_rows = (
+        _select_dashboard_rows(dashboard, selection.identities)
+        if selected_rows is None
+        else selected_rows
+    )
+    enriched_fields = {
+        "failureCode",
+        "family",
+        "evidenceLane",
+        "class",
+        "className",
+        "sourceClass",
+        "sourceRegistration",
+        "gmIdentity",
+    }
+    raw_rows = _raw_dashboard_entries(dashboard)
+    raw_by_key = {}
     violations = []
-    for row in _raw_dashboard_entries(dashboard):
+    expected_names = {name for name, _ in expected}
+    for row in raw_rows:
         name = _row_name(row)
         if not str(name).strip():
             violations.append("fresh dashboard row has no usable identity in name/gm/id")
             continue
         reference_kind = row.get("referenceKind")
         key = (str(name), str(reference_kind or ""))
-        if key not in expected:
+        if key in expected:
+            if key in raw_by_key:
+                violations.append("fresh dashboard has duplicate identity: %s/%s" % key)
+            else:
+                raw_by_key[key] = row
+            continue
+        if str(name) in expected_names or any(field in row for field in enriched_fields):
+            violations.append("fresh dashboard has unknown identity: %s/%s" % key)
+    for row in selected_rows:
+        key = _lane_key(row)
+        name = _row_name(row)
+        expected_row = expected[key]
+        actual = raw_by_key.get(key)
+        if actual is None:
             violations.append("fresh dashboard has unknown identity: %s/%s" % key)
             continue
-        if key in actual:
-            violations.append("fresh dashboard has duplicate identity: %s/%s" % key)
-            continue
-        expected_row = expected[key]
-        actual[key] = row
-        if reference_kind != expected_row.get("referenceKind"):
+        enriched = any(field in actual for field in enriched_fields)
+        if "referenceKind" not in actual:
+            violations.append("fresh dashboard has unknown identity: %s/%s" % key)
+        elif actual.get("referenceKind") != expected_row.get("referenceKind"):
             violations.append("fresh dashboard has wrong referenceKind: %s" % name)
-        if _failure_code_value(row) is None:
+        if enriched and _failure_code_value(actual) is None:
             violations.append("fresh dashboard is missing failureCode: %s" % name)
-        elif row.get("failureCode") != selection.failure_code and not _is_residual_refusal(row, {}):
+        elif _failure_code_value(actual) is not None and actual.get("failureCode") != selection.failure_code and not _is_residual_refusal(actual, {}):
             violations.append("fresh dashboard has wrong failureCode: %s" % name)
-        if "family" not in row:
+        if enriched and "family" not in actual:
             violations.append("fresh dashboard is missing family: %s" % name)
-        elif row.get("family") != expected_row.get("family"):
+        elif "family" in actual and actual.get("family") != expected_row.get("family"):
             violations.append("fresh dashboard has wrong family: %s" % name)
         expected_lane = expected_row.get("evidenceLane")
         if expected_lane is not None:
-            if "evidenceLane" not in row:
+            if enriched and "evidenceLane" not in actual:
                 violations.append("fresh dashboard is missing evidenceLane: %s" % name)
-            elif row.get("evidenceLane") != expected_lane:
+            elif "evidenceLane" in actual and actual.get("evidenceLane") != expected_lane:
                 violations.append("fresh dashboard has wrong evidenceLane: %s" % name)
         expected_identity = dict(_identity_metadata(expected_row))
-        actual_identity = dict(_identity_metadata(row))
+        actual_identity = dict(_identity_metadata(actual))
         for field, value in expected_identity.items():
             if field not in actual_identity:
-                violations.append("fresh dashboard is missing %s: %s" % (field, name))
+                if enriched:
+                    violations.append("fresh dashboard is missing %s: %s" % (field, name))
             elif actual_identity[field] != value:
                 violations.append("fresh dashboard has wrong %s: %s" % (field, name))
-    missing = sorted(set(expected) - set(actual))
+    missing = sorted(set(expected) - set(raw_by_key))
     if missing:
         violations.append("fresh dashboard is missing identities: %s" % missing)
     if violations:
@@ -510,9 +542,30 @@ def _validate_supported_after(row, evidence):
         for route in normalized_routes
     ):
         violations.append("supported-after evidence uses a CPU fallback route")
-    expected_route = _first_value(sources, ("expectedRoute",)) or EXPECTED_GPU_ROUTE_SIGNATURE
-    if _normalized_route(expected_route) not in normalized_routes:
-        violations.append("supported-after evidence is missing the expected GPU-prepared route")
+    route_signatures = [
+        source.get("routeSignature")
+        for source in sources
+        if isinstance(source, dict) and _nonempty(source.get("routeSignature"))
+    ]
+    expected_routes = [
+        source.get("expectedRoute")
+        for source in sources
+        if isinstance(source, dict) and _nonempty(source.get("expectedRoute"))
+    ]
+    if not route_signatures or any(
+        _normalized_route(value) != EXPECTED_GPU_ROUTE_SIGNATURE
+        for value in route_signatures
+    ):
+        violations.append(
+            "supported-after routeSignature must equal the expected GPU-prepared route"
+        )
+    if not expected_routes or any(
+        _normalized_route(value) != EXPECTED_GPU_ROUTE_SIGNATURE
+        for value in expected_routes
+    ):
+        violations.append(
+            "supported-after expectedRoute must equal the expected GPU-prepared route"
+        )
     render_dimensions, reference_dimensions = _entry_dimensions(evidence)
     if render_dimensions is None or reference_dimensions is None or render_dimensions != reference_dimensions:
         violations.append("supported-after evidence is missing matching render/reference dimensions")
@@ -859,8 +912,11 @@ def build_manifest(inputs, selection, source_commit, status):
             if _first_value(_evidence_sources(row, evidence_by_key.get(_lane_key(row), {})), ("failureCode",))
         }
     )
+    cohort_population = inputs["cohortManifest"].get("populationPolicy", {})
+    if not isinstance(cohort_population, dict):
+        raise ValueError("cohort manifest population policy must be an object")
     population = copy.deepcopy(EXPECTED_POPULATION_POLICY)
-    population.update(copy.deepcopy(inputs["cohortManifest"].get("populationPolicy", {})))
+    population.update(copy.deepcopy(cohort_population))
     population.update(
         {
             "cohortSize": EXPECTED_COHORT_SIZE,
@@ -1126,21 +1182,29 @@ def _prepare_inputs(args, dashboard_output, selection):
         key: value for key, value in hashes.items() if key == "dashboardOutput"
     }
     dashboard = parse_dashboard(args.dashboard_json)
-    _validate_fresh_dashboard_metadata(dashboard, selection)
+    dashboard_rows = _select_dashboard_rows(dashboard, selection.identities)
+    _validate_fresh_dashboard_metadata(dashboard, selection, dashboard_rows)
     commands = _json_file(args.commands_json)
     environment = _json_file(args.environment_json)
     skia_runner = parse_junit(args.skia_runner, "skia", set())
     runner_rows = _select_runner_rows(
         skia_runner.get("rows", []),
-        _select_dashboard_rows(dashboard, selection.identities),
+        dashboard_rows,
         selection.identities,
     )
-    dashboard_rows = _select_dashboard_rows(dashboard, selection.identities)
     merged_dashboard_rows = copy.deepcopy(dashboard_rows)
     _merge_junit_fields(merged_dashboard_rows, copy.deepcopy(runner_rows))
     evidence_rows, unknown_evidence = _filter_evidence_with_families(
         _evidence_entries(copy.deepcopy(evidence_value)), selection
     )
+    evidence_by_key = {_lane_key(entry): entry for entry in evidence_rows}
+    for row in merged_dashboard_rows:
+        evidence = evidence_by_key.get(_lane_key(row))
+        if evidence is None:
+            continue
+        for key, value in evidence.items():
+            if key not in row or row[key] is None:
+                row[key] = _copy_value(value)
     svg = parse_junit(args.svg_xml, "svg", _wave1.EXPECTED_UNSUPPORTED_CODES)
     svg_rows = _filter_strict(
         [dict(row, referenceKind=row.get("referenceKind", "svg")) for row in svg.get("rows", [])],
