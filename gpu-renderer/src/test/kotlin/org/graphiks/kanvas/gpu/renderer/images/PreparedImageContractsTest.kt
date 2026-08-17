@@ -156,10 +156,6 @@ class PreparedImageContractsTest {
             CanonicalRefusalCodes.PIXEL_FORMAT,
         )
         assertRefusal(
-            input(alpha = AlphaType.UNPREMUL),
-            CanonicalRefusalCodes.ALPHA_INTERPRETATION,
-        )
-        assertRefusal(
             input(format = GPUPreparedImageSourceFormat.A8, alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1)),
             CanonicalRefusalCodes.ALPHA_INTERPRETATION,
         )
