@@ -487,7 +487,7 @@ def _validate_supported_after(row, evidence):
         violations.append("supported-after score is below threshold/minSimilarity")
     if not _similarity_improved(row, evidence):
         violations.append("supported-after evidence does not show similarity improvement")
-    if row.get("isPassing") is False or row.get("classification") != "pass":
+    if row.get("isPassing") is not True or row.get("classification") != "pass":
         violations.append("dashboard row is not passing")
     if not _valid_comparable(row, evidence):
         violations.append("supported-after row is not comparable and passing")
@@ -1267,6 +1267,11 @@ def main(argv=None):
             print("reconciliation check failed: dashboard output is missing")
             return 2
         inputs = _prepare_inputs(args, dashboard_output, selection)
+        if not args.check and inputs["unknownEvidence"]:
+            raise ValueError(
+                "classification cannot omit evidence with unknown identity: %s"
+                % inputs["unknownEvidence"]
+            )
         manifest = build_manifest(inputs, selection, args.source_commit, args.status)
     except (OSError, ValueError, ET.ParseError, json.JSONDecodeError) as error:
         print("reconciliation failed: %s" % error)

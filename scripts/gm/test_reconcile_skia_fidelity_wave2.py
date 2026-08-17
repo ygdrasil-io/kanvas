@@ -183,6 +183,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         comparable=True,
         junit_pass=True,
         is_passing=True,
+        remove_is_passing=False,
         route_signature="prepared-image-unpremul",
     ):
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
@@ -196,6 +197,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 "routeOnly": route_only,
             }
         )
+        if remove_is_passing:
+            del row["isPassing"]
         if comparable:
             row["dimensions"] = {
                 "render": {"width": 32, "height": 32},
@@ -642,6 +645,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         variants = (
             ({"after_score": 94.0}, "below threshold/minSimilarity"),
             ({"is_passing": False}, "dashboard row is not passing"),
+            ({"is_passing": None}, "dashboard row is not passing"),
+            ({"remove_is_passing": True}, "dashboard row is not passing"),
             ({"route_only": True}, "route-only row cannot be supported after"),
             ({"comparable": False}, "not comparable"),
             ({"junit_pass": False}, "passing JUnit"),
@@ -658,6 +663,36 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 self.assertEqual(status, 1, stdout)
                 self.assertIn(reason.lower(), stdout.lower())
+
+    def test_classification_and_check_reject_evidence_only_unknown_identity(self):
+        orphan = {
+            "name": "evidence-only-orphan",
+            "family": "IMAGE",
+            "referenceKind": "skia-upstream",
+            "failureCode": FAILURE_CODE,
+            "fallbackReason": "unrelated",
+            "expectedRoute": "unrelated",
+            "rootCause": "unrelated",
+            "followUpFamily": "IMAGE",
+        }
+        for check, expected_status in ((False, 2), (True, 1)):
+            with self.subTest(check=check):
+                fixtures = self.write_cli_fixtures()
+                evidence = json.loads(
+                    fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                )
+                evidence["entries"].append(copy.deepcopy(orphan))
+                fixtures["evidenceIndex"].write_text(
+                    json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, manifest, _, _ = self.run_main(fixtures, check=check)
+
+                self.assertEqual(status, expected_status, stdout)
+                self.assertIn("unknown identity", stdout.lower())
+                if not check:
+                    self.assertIsNone(manifest)
 
     def test_fresh_dashboard_metadata_must_match_frozen_cohort(self):
         variants = (
