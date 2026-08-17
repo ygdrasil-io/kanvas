@@ -300,7 +300,9 @@ def _validate_fresh_dashboard_metadata(dashboard, selection):
         actual[key] = row
         if reference_kind != expected_row.get("referenceKind"):
             violations.append("fresh dashboard has wrong referenceKind: %s" % name)
-        if row.get("failureCode") != selection.failure_code:
+        if _failure_code_value(row) is None:
+            violations.append("fresh dashboard is missing failureCode: %s" % name)
+        elif row.get("failureCode") != selection.failure_code and not _is_residual_refusal(row, {}):
             violations.append("fresh dashboard has wrong failureCode: %s" % name)
         if "family" not in row:
             violations.append("fresh dashboard is missing family: %s" % name)
@@ -598,8 +600,8 @@ def _validate_residual_refusal(row, evidence, failure_code):
     sources = _evidence_sources(row, evidence)
     violations = []
     actual_code = _first_value(sources, ("failureCode",))
-    if actual_code != failure_code:
-        violations.append("residual refusal has wrong failureCode: %s" % actual_code)
+    if _failure_code_value({"failureCode": actual_code}) is None:
+        violations.append("residual refusal is missing failureCode")
     for field in ("fallbackReason", "expectedRoute", "rootCause", "followUpFamily"):
         if not _has_value(sources, (field,)):
             violations.append("residual refusal is missing %s" % field)
@@ -669,12 +671,46 @@ def _validate_artifacts(entries, index_path, input_paths, allowed_roots, evidenc
     return violations
 
 
-def _failure_code_violations(entries, failure_code, label):
-    return [
-        "%s has wrong failureCode: %s" % (label, _row_name(entry) or index)
-        for index, entry in enumerate(entries)
-        if isinstance(entry, dict) and entry.get("failureCode") != failure_code
-    ]
+def _failure_code_value(source):
+    value = source.get("failureCode") if isinstance(source, dict) else None
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _failure_code_violations(dashboard_rows, entries, failure_code):
+    evidence_by_key = {_lane_key(entry): entry for entry in entries}
+    violations = []
+    for row in dashboard_rows:
+        name = _row_name(row)
+        evidence = evidence_by_key.get(_lane_key(row), {})
+        junit = row.get("junit", {}) if isinstance(row, dict) else {}
+        if _is_residual_refusal(row, evidence):
+            sources = (
+                ("dashboard", row),
+                ("evidence", evidence),
+                ("junit", junit),
+            )
+            missing = [label for label, source in sources if _failure_code_value(source) is None]
+            if missing:
+                violations.append(
+                    "residual refusal is missing failureCode for %s: %s"
+                    % (", ".join(missing), name)
+                )
+                continue
+            codes = {source["failureCode"] for _, source in sources}
+            if len(codes) != 1:
+                violations.append(
+                    "residual refusal failureCode mismatch: %s" % name
+                )
+            continue
+
+        if row.get("failureCode") != failure_code:
+            violations.append("fresh dashboard has wrong failureCode: %s" % name)
+        if evidence and evidence.get("failureCode") != failure_code:
+            violations.append("evidence entry has wrong failureCode: %s" % name)
+        junit_code = _failure_code_value(junit)
+        if junit_code is not None and junit_code != failure_code:
+            violations.append("JUnit row has wrong failureCode: %s" % name)
+    return violations
 
 
 def _filtered_junit_result(parsed, rows):
@@ -1150,7 +1186,7 @@ def _validate_selected_evidence(inputs, args, manifest):
     rows = manifest["rows"]["skia"]
     entries = inputs["evidenceRows"]
     violations.extend(
-        _failure_code_violations(entries, args.cohort_failure_code, "evidence entry")
+        _failure_code_violations(rows, entries, args.cohort_failure_code)
     )
     input_paths = _input_paths(args)
     allowed_roots = (
@@ -1289,7 +1325,9 @@ def main(argv=None):
             return 2
         inputs = _prepare_inputs(args, dashboard_output, selection)
         evidence_failure_code_violations = _failure_code_violations(
-            inputs["evidenceRows"], args.cohort_failure_code, "evidence entry"
+            inputs["dashboardRows"],
+            inputs["evidenceRows"],
+            args.cohort_failure_code,
         )
         if not args.check and evidence_failure_code_violations:
             raise ValueError(

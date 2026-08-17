@@ -22,6 +22,7 @@ WAVE1_MANIFEST = (
     / "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/wave1-classification.json"
 )
 FAILURE_CODE = "unsupported.image.alpha_interpretation"
+FOLLOW_UP_FAILURE_CODE = "unsupported.image.native_binding"
 FAMILY_COUNTS = {
     "IMAGE": 38,
     "COMPOSITE": 8,
@@ -230,6 +231,40 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             encoding="utf-8",
         )
         return row
+
+    def configure_residual_fixture(
+        self, fixtures, failure_code=FOLLOW_UP_FAILURE_CODE
+    ):
+        dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
+        dashboard["gms"][0].update(
+            {
+                "classification": "terminal-refusal",
+                "terminal": True,
+                "terminalRefusal": True,
+                "failureCode": failure_code,
+            }
+        )
+        dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        (fixtures["dashboardDir"] / "data/gms.json").write_text(
+            dashboard_text, encoding="utf-8"
+        )
+
+        runner_rows = copy.deepcopy(self.selected_rows)
+        runner_rows[0]["failureCode"] = failure_code
+        fixtures["skiaRunner"] = self.write_runner(runner_rows)
+
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["entries"][0].update(
+            {
+                "classification": "terminal-refusal",
+                "failureCode": failure_code,
+            }
+        )
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def write_cli_fixtures(self):
         dashboard_rows = []
@@ -584,17 +619,82 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIn("sourceCommit", stdout)
 
     def test_terminal_refusal_accepts_residual_evidence_without_render(self):
-        fixtures = self.write_cli_fixtures()
+        for check, status_name in ((False, "classification"), (True, "blocked")):
+            with self.subTest(check=check):
+                fixtures = self.write_cli_fixtures()
+                self.configure_residual_fixture(fixtures)
 
-        status, stdout, manifest, _, _ = self.run_main(
-            fixtures, check=True, status="blocked"
-        )
+                status, stdout, manifest, _, _ = self.run_main(
+                    fixtures, check=check, status=status_name
+                )
 
-        self.assertEqual(status, 0, stdout)
-        self.assertEqual(manifest["supportedRowsAfter"], 0)
-        self.assertEqual(manifest["residualCodes"], [FAILURE_CODE])
-        self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
-        self.assertEqual(manifest["current"]["runner"]["rows"], 58)
+                self.assertEqual(status, 0, stdout)
+                self.assertEqual(manifest["supportedRowsAfter"], 0)
+                self.assertEqual(
+                    manifest["residualCodes"],
+                    sorted((FAILURE_CODE, FOLLOW_UP_FAILURE_CODE)),
+                )
+                self.assertEqual(manifest["rows"]["skia"][0]["failureCode"], FOLLOW_UP_FAILURE_CODE)
+                self.assertEqual(
+                    manifest["rows"]["evidence"][0]["failureCode"],
+                    FOLLOW_UP_FAILURE_CODE,
+                )
+                self.assertEqual(
+                    manifest["rows"]["skiaJunit"][0]["failureCode"],
+                    FOLLOW_UP_FAILURE_CODE,
+                )
+                self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
+                self.assertEqual(manifest["current"]["runner"]["rows"], 58)
+
+    def test_residual_followup_failure_code_must_be_present_and_consistent(self):
+        variants = ("missing-evidence", "empty-dashboard", "mismatched-evidence", "mismatched-junit")
+        for variant in variants:
+            with self.subTest(variant=variant):
+                fixtures = self.write_cli_fixtures()
+                self.configure_residual_fixture(fixtures)
+                if variant == "missing-evidence":
+                    evidence = json.loads(
+                        fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                    )
+                    del evidence["entries"][0]["failureCode"]
+                    fixtures["evidenceIndex"].write_text(
+                        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                elif variant == "empty-dashboard":
+                    dashboard = json.loads(
+                        fixtures["dashboardJson"].read_text(encoding="utf-8")
+                    )
+                    dashboard["gms"][0]["failureCode"] = ""
+                    dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+                    fixtures["dashboardJson"].write_text(
+                        dashboard_text, encoding="utf-8"
+                    )
+                    (fixtures["dashboardDir"] / "data/gms.json").write_text(
+                        dashboard_text, encoding="utf-8"
+                    )
+                elif variant == "mismatched-evidence":
+                    evidence = json.loads(
+                        fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                    )
+                    evidence["entries"][0]["failureCode"] = (
+                        "unsupported.image.other"
+                    )
+                    fixtures["evidenceIndex"].write_text(
+                        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    runner_rows = copy.deepcopy(self.selected_rows)
+                    runner_rows[0]["failureCode"] = "unsupported.image.other"
+                    fixtures["skiaRunner"] = self.write_runner(runner_rows)
+
+                status, stdout, _, _, _ = self.run_main(
+                    fixtures, check=True, status="blocked"
+                )
+
+                self.assertEqual(status, 2 if variant == "empty-dashboard" else 1, stdout)
+                self.assertIn("failurecode", stdout.lower())
 
     def test_incomplete_supported_after_evidence_is_rejected(self):
         fixtures = self.write_cli_fixtures()
