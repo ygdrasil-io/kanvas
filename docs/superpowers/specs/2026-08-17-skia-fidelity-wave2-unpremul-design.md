@@ -2,7 +2,7 @@
 
 ## Status
 
-Design approved in discussion; written specification pending user review.
+Design approved by the user on 2026-08-17.
 
 ## Scope
 

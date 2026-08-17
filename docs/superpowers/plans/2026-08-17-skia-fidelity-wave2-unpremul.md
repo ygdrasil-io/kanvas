@@ -50,7 +50,7 @@ git status --short --branch
 ./gradlew -F off :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.images.PreparedImageContractsTest --no-daemon --no-parallel --console=plain
 ```
 
-Expected: the branch resolves to `0e98d3198` before implementation, the worktree is clean, and the existing focused test class passes.
+Expected: the worktree is clean, `0e98d3198` is an ancestor of `HEAD`, the production tree still matches the Wave 1 implementation, and the existing focused test class passes. The approved spec and plan commits may already be present on `HEAD`.
 
 - [ ] **Step 2: Add the red test before production changes.**
 
@@ -251,7 +251,7 @@ Run:
 ./gradlew -F off :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageRefusalMatrixTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceRefusalMatrixTest --no-daemon --no-parallel --console=plain
 ```
 
-Expected: PASS; the refusal matrix has one fewer row, and every remaining refusal still reports its original code and boundary.
+Expected: PASS; the refusal matrix has one fewer row, and every remaining refusal still reports its original code and boundary. The obsolete `UNPREMUL` refusal assertion in `PreparedImageContractsTest` was removed during Task 1 and must not be reintroduced.
 
 - [ ] **Step 6: Commit the test-contract update.**
 
@@ -306,7 +306,7 @@ Also assert that a fixture with a missing row, a duplicate identity, or a differ
 
 - [ ] **Step 3: Reuse Wave 1 parsing and path helpers.**
 
-Load `reconcile_skia_fidelity_wave1.py` with `importlib.util`. Reuse its `parse_junit`, `parse_dashboard`, `load_scores`, `_merge_junit_fields`, `_junit_identity`, `_junit_dashboard_matches`, `_artifact_records`, `_entry_dimensions`, `_has_complete_pixel_evidence`, `_check_execution_contract`, `_check_policy`, `_check_source_commit`, `_check_pixel_score_range`, and hashing/path helpers. Do not copy the 3,535-line scanner and do not change the Wave 1 module.
+Load `reconcile_skia_fidelity_wave1.py` with `importlib.util`. Reuse its `parse_junit`, `parse_dashboard`, `_dashboard_entries`, `load_scores`, `_merge_junit_fields`, `_junit_identity`, `_junit_dashboard_matches`, `_lane_key`, `_identity_matches`, `_artifact_records`, `_entry_dimensions`, `_has_complete_pixel_evidence`, `_check_execution_contract`, `_check_policy`, `_check_source_commit`, `_check_pixel_score_range`, and hashing/path helpers. Deep-copy dashboard rows before calling `_merge_junit_fields`, because that helper mutates its input list. Use strict `(name, referenceKind)` identity matching for cohort filtering rather than the helper's fuzzy fallback. Do not copy the 3,535-line scanner and do not change the Wave 1 module.
 
 - [ ] **Step 4: Implement fresh-input filtering in memory.**
 
@@ -324,7 +324,7 @@ similarityBefore, similarityAfter, threshold or minSimilarity,
 pixelImproved=true, causal evidence, route diagnostics
 ```
 
-For `status == "residual-refusal"`, require `failureCode`, `fallbackReason`, `expectedRoute`, `rootCause`, `followUpFamily`, and whatever reference/CPU/route/stat artifacts exist. Do not require or fabricate a render artifact for a terminal refusal. Reject missing hashes, duplicate artifact paths, orphan entries, input aliasing, and unknown cohort identities.
+For `status == "residual-refusal"`, require `failureCode`, `fallbackReason`, `expectedRoute`, `rootCause`, `followUpFamily`, and whatever reference/CPU/route/stat artifacts exist. Do not require or fabricate a render artifact for a terminal refusal. Apply this residual-refusal branch before Wave 1's generic `_check_evidence_index`, whose `skia-upstream` rule requires render/reference artifacts. Reject missing hashes, duplicate artifact paths, orphan entries, input aliasing, and unknown cohort identities.
 
 - [ ] **Step 6: Build the Wave 2 manifest and Markdown output.**
 
@@ -347,6 +347,10 @@ manifest["cohort"] = {
 }
 manifest["policy"]["assertionsWeakened"] = False
 manifest["policy"]["globalThresholdWeakened"] = False
+manifest["policy"]["memoryBudgetChanged"] = False
+manifest["policy"]["readinessDelta"] = 0.0
+manifest["policy"]["referencesModified"] = False
+manifest["policy"]["scoresDirectlyEdited"] = False
 ```
 
 The Markdown title must be `# Skia Fidelity Wave 2 UNPREMUL Reconciliation`. It must include before/after counts, residual failure codes, provenance hashes, non-claims, and the generated artifact paths.
@@ -396,7 +400,8 @@ git commit -m "feat: add Wave 2 alpha cohort reconciliation"
 Create the directory before writing artifacts:
 
 ```bash
-mkdir -p reports/upstream-rebaseline/2026-08-17-skia-fidelity-wave-2-unpremul-inputs/provenance
+EVIDENCE=reports/upstream-rebaseline/2026-08-17-skia-fidelity-wave-2-unpremul-inputs
+mkdir -p "$EVIDENCE/provenance" "$EVIDENCE/runner-chunks"
 ```
 
 Then record `git rev-parse HEAD`, OS/JDK, GPU adapter/driver, `env -u DISPLAY`, repeat count, Gradle version, and every command in `provenance/environment.json` and `provenance/commands.json`. The source commit must be the actual current branch commit, never the historical `dd045a...` value in Wave 1.
@@ -416,9 +421,11 @@ Do not alter the generated source file. The after snapshot will be captured only
 Run:
 
 ```bash
-env -u DISPLAY ./gradlew -F off :kanvas:test --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :gpu-renderer:test --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:svg:test --no-daemon --no-parallel --console=plain
+EVIDENCE=reports/upstream-rebaseline/2026-08-17-skia-fidelity-wave-2-unpremul-inputs
+set -o pipefail
+env -u DISPLAY ./gradlew -F off :kanvas:test --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/cpu-test.log"
+env -u DISPLAY ./gradlew -F off :gpu-renderer:test --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/gpu-test.log"
+env -u DISPLAY ./gradlew -F off :integration-tests:svg:test --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/svg-test.log"
 ```
 
 Store the resulting CPU/GPU/SVG test outputs under the Wave 2 evidence directory with hashes.
@@ -428,25 +435,32 @@ Store the resulting CPU/GPU/SVG test outputs under the Wave 2 evidence directory
 Run each command with `-Dkanvas.gm.includeBlocking=true`, `-F off`, no daemon, no parallelism, and plain console:
 
 ```bash
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=0 -Dkanvas.gm.to=350 --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=351 -Dkanvas.gm.to=451 --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=452 -Dkanvas.gm.to=610 --no-daemon --no-parallel --console=plain
+EVIDENCE=reports/upstream-rebaseline/2026-08-17-skia-fidelity-wave-2-unpremul-inputs
+set -o pipefail
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=0 -Dkanvas.gm.to=350 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/runner-0-350.log"
+cp integration-tests/skia/build/test-results/test/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-0-350.xml"
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=351 -Dkanvas.gm.to=451 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/runner-351-451.log"
+cp integration-tests/skia/build/test-results/test/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-351-451.xml"
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=452 -Dkanvas.gm.to=610 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain 2>&1 | tee "$EVIDENCE/runner-452-610.log"
+cp integration-tests/skia/build/test-results/test/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-452-610.xml"
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/gm/merge_skia_junit.py --output "$EVIDENCE/skia-gm-runner.xml" "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-0-350.xml" "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-351-451.xml" "$EVIDENCE/runner-chunks/TEST-SkiaGmRunner-452-610.xml"
 ```
 
 Merge the JUnit chunks with `python3 scripts/gm/merge_skia_junit.py`. Preserve all 58 selected alpha rows and their current terminal diagnostics as before evidence.
 
 - [ ] **Step 5: Generate baseline dashboard, renders, scan, and evidence index.**
 
-Run the dashboard, render, and scan tasks with the same three ranges. Use `-Pgm.includeBlocking=true` for the dashboard, the exact selected GM-name list for `-Pkanvas.scan.names`, and `-Dkanvas.render.debugLevel=TRACE` for trace capture:
+Run the dashboard, render, and scan tasks with the same three ranges. `generateSkiaRenders` consumes `-Pgm.includeBlocking`, `-Pgm.from`, `-Pgm.to`, and `-Pgm.outputDir`; `generateSkiaDashboard` consumes `-Pgm.includeBlocking`, `-Pgm.outputDir`, and `-Pgm.dashboardOutputDir`. Use the exact selected GM-name list for `-Pkanvas.scan.names`. Capture render-route trace through the runner test's `-Dkanvas.render.debugLevel=TRACE`; the JavaExec render task does not forward that system property.
 
 ```bash
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaDashboard -Pgm.includeBlocking=true --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=0 -Dkanvas.gm.to=350 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=351 -Dkanvas.gm.to=451 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Dkanvas.gm.includeBlocking=true -Dkanvas.gm.from=452 -Dkanvas.gm.to=610 -Dkanvas.render.debugLevel=TRACE --no-daemon --no-parallel --console=plain
+EVIDENCE=reports/upstream-rebaseline/2026-08-17-skia-fidelity-wave-2-unpremul-inputs
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Pgm.includeBlocking=true -Pgm.from=0 -Pgm.to=350 -Pgm.outputDir="$EVIDENCE/generated-renders" --no-daemon --no-parallel --console=plain
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Pgm.includeBlocking=true -Pgm.from=351 -Pgm.to=451 -Pgm.outputDir="$EVIDENCE/generated-renders" --no-daemon --no-parallel --console=plain
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaRenders -Pgm.includeBlocking=true -Pgm.from=452 -Pgm.to=610 -Pgm.outputDir="$EVIDENCE/generated-renders" --no-daemon --no-parallel --console=plain
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaDashboard -Pgm.includeBlocking=true -Pgm.outputDir="$EVIDENCE/generated-renders" -Pgm.dashboardOutputDir="$EVIDENCE/dashboard" -Pgm.scores=integration-tests/skia/test-similarity-scores.properties -x :integration-tests:skia:generateSkiaRenders --no-daemon --no-parallel --console=plain
 COHORT_NAMES="$(python3 -c 'import json; print(",".join(row["name"] for row in json.load(open("reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/wave1-classification.json", encoding="utf-8"))["rows"]["skia"] if row.get("failureCode") == "unsupported.image.alpha_interpretation"))')"
-env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaScan -Pkanvas.scan.names="$COHORT_NAMES" -Pkanvas.scan.timeout=30 --no-daemon --no-parallel --console=plain
-python3 scripts/gm/scan_results_to_junit.py
+env -u DISPLAY ./gradlew -F off :integration-tests:skia:generateSkiaScan -Pkanvas.scan.names="$COHORT_NAMES" -Pkanvas.scan.timeout=30 -Pkanvas.scan.output="$EVIDENCE/skia-scan-results.txt" --no-daemon --no-parallel --console=plain
+python3 scripts/gm/scan_results_to_junit.py --scan "$EVIDENCE/skia-scan-results.txt" --output "$EVIDENCE/fp13-runner.xml"
 ```
 
 The selector command supplies all exact cohort names; never shorten the list manually. Store fresh reference/generated/diff/stat/route paths in `provenance/evidence-index.json` and hash every file.
