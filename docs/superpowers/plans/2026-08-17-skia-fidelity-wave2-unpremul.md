@@ -19,6 +19,9 @@ Production and focused tests:
 - Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceTest.kt`: assert the public prepared-image source accepts decoded `UNPREMUL` pixels.
 - Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalCases.kt`: remove only the now-valid decoded CPU `UNPREMUL` refusal row.
 - Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalMatrixTest.kt`: remove the constructible `UNPREMUL` refusal expectation and add an explicit acceptance assertion while preserving all refusal-route assertions.
+- Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilderTest.kt`: replace the stale surface-builder `UNPREMUL` refusal with acceptance coverage.
+- Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntryTest.kt`: cover public-product BGRA `UNPREMUL` normalization and route evidence.
+- Modify `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouterTest.kt`: capture prepared request/task evidence needed by the route acceptance assertions.
 - Verify without modification `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceRefusalMatrixTest.kt`: its generated refusal loop must continue to cover every remaining matrix row.
 
 Wave 2 reconciliation:
@@ -160,6 +163,9 @@ git commit -m "fix: preserve unpremultiplied image pixels"
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalCases.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalMatrixTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilderTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntryTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouterTest.kt`
 - Verify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceRefusalMatrixTest.kt`
 
 - [ ] **Step 1: Add an UNPREMUL BGRA and transparent-pixel invariant.**
@@ -224,21 +230,7 @@ Delete the `ImageRefusalCase` named `UNPREMUL alpha` from `GPUPreparedImageRefus
 
 - [ ] **Step 4: Update the constructible route matrix.**
 
-Delete the `ConstructibleCase` named `unpremultiplied-alpha` from the refusal list in `GPUPreparedImageRefusalMatrixTest`. Add a separate assertion before the refusal loop:
-
-```kotlin
-val acceptedUnpremul = GPUPreparedSurfaceImageSource.prepare(
-    Image(
-        width = 1,
-        height = 1,
-        colorType = ColorType.RGBA_8888,
-        sourceId = "unpremultiplied-accepted",
-        pixels = byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
-        alphaType = AlphaType.UNPREMUL,
-    ),
-)
-assertIs<GPUPreparedImageArtifactResult.Ready>(acceptedUnpremul)
-```
+Delete the `ConstructibleCase` named `unpremultiplied-alpha` from the refusal list in `GPUPreparedImageRefusalMatrixTest`. Add a separate acceptance path before the refusal loop that verifies the valid RGBA image through source preparation, inventory/preflight, surface building, and executor/backend submission, including normalized artifact bytes, upload/render task structure, route marker, and backend evidence. Add equivalent public-product BGRA coverage with exact normalized RGBA bytes. Replace the stale surface-builder `UNPREMUL` refusal row with acceptance coverage in `GPUPreparedSurfaceFrameBuilderTest`.
 
 Leave all route propagation assertions for remaining refusals unchanged.
 
@@ -248,7 +240,7 @@ Run:
 
 ```bash
 ./gradlew -F off :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.images.PreparedImageContractsTest --no-daemon --no-parallel --console=plain
-./gradlew -F off :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageRefusalMatrixTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceRefusalMatrixTest --no-daemon --no-parallel --console=plain
+./gradlew -F off :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageRefusalMatrixTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedImageSourceRefusalMatrixTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceFrameBuilderTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductEntryTest --tests org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceProductRouterTest --no-daemon --no-parallel --console=plain
 ```
 
 Expected: PASS; the refusal matrix has one fewer row, and every remaining refusal still reports its original code and boundary. The obsolete `UNPREMUL` refusal assertion in `PreparedImageContractsTest` was removed during Task 1 and must not be reintroduced.
@@ -256,7 +248,7 @@ Expected: PASS; the refusal matrix has one fewer row, and every remaining refusa
 - [ ] **Step 6: Commit the test-contract update.**
 
 ```bash
-git add gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalCases.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalMatrixTest.kt
+git add gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageSourceTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalCases.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedImageRefusalMatrixTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilderTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntryTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouterTest.kt
 git commit -m "test: update prepared image alpha refusal matrix"
 ```
 
