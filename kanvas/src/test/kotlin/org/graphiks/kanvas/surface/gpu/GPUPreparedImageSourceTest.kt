@@ -1,12 +1,10 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
-import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class GPUPreparedImageSourceTest {
@@ -20,14 +18,11 @@ class GPUPreparedImageSourceTest {
     }
 
     @Test
-    fun `prepared surface source refuses unpremultiplied caller pixels`() {
+    fun `prepared surface source accepts unpremultiplied caller pixels`() {
         val result = GPUPreparedSurfaceImageSource.prepare(
             Image(1, 1, ColorType.RGBA_8888, "caller", byteArrayOf(1, 2, 3, 4), alphaType = AlphaType.UNPREMUL),
         )
 
-        assertEquals(
-            GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
-            assertIs<GPUPreparedImageArtifactResult.Refused>(result).code,
-        )
+        assertIs<GPUPreparedImageArtifactResult.Ready>(result)
     }
 }

@@ -87,18 +87,6 @@ class GPUPreparedImageRefusalMatrixTest {
                 GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
             ),
             ConstructibleCase(
-                "unpremultiplied-alpha",
-                Image(
-                    width = 1,
-                    height = 1,
-                    colorType = ColorType.RGBA_8888,
-                    sourceId = "unpremultiplied-alpha",
-                    pixels = byteArrayOf(1, 2, 3, 4),
-                    alphaType = AlphaType.UNPREMUL,
-                ),
-                GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
-            ),
-            ConstructibleCase(
                 "unknown-alpha",
                 Image(
                     width = 1,
@@ -147,6 +135,20 @@ class GPUPreparedImageRefusalMatrixTest {
                 ),
                 GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
             ),
+        )
+
+        assertIs<GPUPreparedImageArtifactResult.Ready>(
+            GPUPreparedSurfaceImageSource.prepare(
+                Image(
+                    width = 1,
+                    height = 1,
+                    colorType = ColorType.RGBA_8888,
+                    sourceId = "unpremultiplied-alpha",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    alphaType = AlphaType.UNPREMUL,
+                ),
+            ),
+            "unpremultiplied-alpha",
         )
 
         cases.forEach { row ->

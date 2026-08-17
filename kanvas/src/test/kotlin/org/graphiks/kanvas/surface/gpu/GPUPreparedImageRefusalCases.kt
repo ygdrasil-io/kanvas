@@ -116,12 +116,6 @@ object GPUPreparedImageRefusalMatrix {
         ),
 
         ImageRefusalCase(
-            name = "UNPREMUL alpha",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice, drawAtlas",
-            input = defaultInput(alphaType = AlphaType.UNPREMUL),
-            expectedCode = GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
-        ),
-        ImageRefusalCase(
             name = "UNKNOWN alpha",
             apiFamily = "drawImage, drawImageNine, drawImageLattice, drawAtlas",
             input = defaultInput(alphaType = AlphaType.UNKNOWN),
