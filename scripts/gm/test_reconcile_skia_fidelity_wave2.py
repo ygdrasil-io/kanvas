@@ -528,6 +528,36 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIsNone(manifest)
         self.assertIn("unknown identity", stdout)
 
+    def test_fresh_selected_dashboard_requires_exact_failure_code(self):
+        variants = (
+            ("wrong", "unsupported.image.native_binding"),
+            ("missing", None),
+        )
+        for variant, failure_code in variants:
+            for check in (False, True):
+                with self.subTest(variant=variant, check=check):
+                    fixtures = self.write_cli_fixtures()
+                    dashboard = json.loads(
+                        fixtures["dashboardJson"].read_text(encoding="utf-8")
+                    )
+                    first = dashboard["gms"][0]
+                    if failure_code is None:
+                        del first["failureCode"]
+                    else:
+                        first["failureCode"] = failure_code
+                    dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+                    fixtures["dashboardJson"].write_text(
+                        dashboard_text, encoding="utf-8"
+                    )
+                    (fixtures["dashboardDir"] / "data/gms.json").write_text(
+                        dashboard_text, encoding="utf-8"
+                    )
+
+                    status, stdout, _, _, _ = self.run_main(fixtures, check=check)
+
+                    self.assertEqual(status, 2, stdout)
+                    self.assertIn("failurecode", stdout.lower())
+
     def test_check_validates_current_head_source_commit_and_policy_non_weakening(self):
         fixtures = self.write_cli_fixtures()
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
@@ -631,6 +661,57 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIn("hash", stdout.lower())
         self.assertIn("orphan", stdout.lower())
         self.assertIn("aliases input", stdout.lower())
+
+    def test_selected_evidence_requires_exact_failure_code(self):
+        variants = (
+            ("wrong", "unsupported.image.native_binding"),
+            ("missing", None),
+        )
+        for variant, failure_code in variants:
+            for check in (False, True):
+                with self.subTest(variant=variant, check=check):
+                    fixtures = self.write_cli_fixtures()
+                    self.configure_supported_fixture(fixtures)
+                    evidence = json.loads(
+                        fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                    )
+                    if failure_code is None:
+                        del evidence["entries"][0]["failureCode"]
+                    else:
+                        evidence["entries"][0]["failureCode"] = failure_code
+                    fixtures["evidenceIndex"].write_text(
+                        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+
+                    status, stdout, _, _, _ = self.run_main(
+                        fixtures,
+                        check=check,
+                        status="approved" if check else "classification",
+                    )
+
+                    self.assertEqual(status, 1 if check else 2, stdout)
+                    self.assertIn("failurecode", stdout.lower())
+
+    def test_check_rejects_duplicate_provenance_artifact_paths(self):
+        fixtures = self.write_cli_fixtures()
+        artifact = self.write_text("provenance/shared-provenance.dat", "shared\n")
+        record = {"path": artifact.name, "sha256": self.sha256(artifact)}
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["provenanceArtifacts"] = {
+            "commands": copy.deepcopy(record),
+            "environment": copy.deepcopy(record),
+        }
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIsNotNone(manifest)
+        self.assertIn("duplicate", stdout.lower())
 
     def test_approved_control_is_valid_and_bad_variants_report_policy_reasons(self):
         fixtures = self.write_cli_fixtures()

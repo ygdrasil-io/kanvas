@@ -300,6 +300,8 @@ def _validate_fresh_dashboard_metadata(dashboard, selection):
         actual[key] = row
         if reference_kind != expected_row.get("referenceKind"):
             violations.append("fresh dashboard has wrong referenceKind: %s" % name)
+        if row.get("failureCode") != selection.failure_code:
+            violations.append("fresh dashboard has wrong failureCode: %s" % name)
         if "family" not in row:
             violations.append("fresh dashboard is missing family: %s" % name)
         elif row.get("family") != expected_row.get("family"):
@@ -632,7 +634,14 @@ def _validate_artifacts(entries, index_path, input_paths, allowed_roots, evidenc
                 continue
             artifact_path = _resolve_evidence_path(record.get("path"), index_path)
             if artifact_path is not None:
-                seen_paths[str(artifact_path.resolve())] = "provenance.%s" % name
+                resolved = str(artifact_path.resolve())
+                if resolved in seen_paths:
+                    violations.append(
+                        "evidence artifact path has duplicate roles/entries: %s"
+                        % artifact_path
+                    )
+                else:
+                    seen_paths[resolved] = "provenance.%s" % name
     for index, entry in enumerate(entries):
         for record_index, record in enumerate(_artifact_records(entry)):
             label = "%s.%s" % (_row_name(entry) or index, record["label"])
@@ -648,7 +657,8 @@ def _validate_artifacts(entries, index_path, input_paths, allowed_roots, evidenc
             resolved = str(artifact_path.resolve())
             if resolved in seen_paths:
                 violations.append("evidence artifact path has duplicate roles/entries: %s" % artifact_path)
-            seen_paths[resolved] = label
+            else:
+                seen_paths[resolved] = label
             if _sha256_file(artifact_path).lower() != digest.lower():
                 violations.append("evidence artifact hash mismatch: %s" % label)
             if allowed_roots and not any(_path_within(artifact_path, root) for root in allowed_roots):
@@ -657,6 +667,14 @@ def _validate_artifacts(entries, index_path, input_paths, allowed_roots, evidenc
                 if input_path is not None and _same_file(artifact_path, input_path):
                     violations.append("evidence artifact aliases input %s: %s" % (input_name, artifact_path))
     return violations
+
+
+def _failure_code_violations(entries, failure_code, label):
+    return [
+        "%s has wrong failureCode: %s" % (label, _row_name(entry) or index)
+        for index, entry in enumerate(entries)
+        if isinstance(entry, dict) and entry.get("failureCode") != failure_code
+    ]
 
 
 def _filtered_junit_result(parsed, rows):
@@ -1131,6 +1149,9 @@ def _validate_selected_evidence(inputs, args, manifest):
     violations = []
     rows = manifest["rows"]["skia"]
     entries = inputs["evidenceRows"]
+    violations.extend(
+        _failure_code_violations(entries, args.cohort_failure_code, "evidence entry")
+    )
     input_paths = _input_paths(args)
     allowed_roots = (
         args.evidence_index.parent,
@@ -1267,6 +1288,13 @@ def main(argv=None):
             print("reconciliation check failed: dashboard output is missing")
             return 2
         inputs = _prepare_inputs(args, dashboard_output, selection)
+        evidence_failure_code_violations = _failure_code_violations(
+            inputs["evidenceRows"], args.cohort_failure_code, "evidence entry"
+        )
+        if not args.check and evidence_failure_code_violations:
+            raise ValueError(
+                "classification rejected: %s" % evidence_failure_code_violations
+            )
         if not args.check and inputs["unknownEvidence"]:
             raise ValueError(
                 "classification cannot omit evidence with unknown identity: %s"
