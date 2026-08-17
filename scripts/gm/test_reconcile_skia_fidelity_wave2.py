@@ -630,6 +630,20 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertIsNotNone(manifest)
         self.assertEqual(before, self.snapshot_fixtures(fixtures))
 
+    def test_environment_provenance_must_be_a_json_object(self):
+        for value in ([], None):
+            with self.subTest(value=value):
+                fixtures = self.write_cli_fixtures()
+                fixtures["environmentJson"].write_text(
+                    json.dumps(value), encoding="utf-8"
+                )
+
+                status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIsNone(manifest)
+                self.assertIn("environment", stdout.lower())
+
     def test_fresh_rows_reject_unknown_cohort_identity(self):
         fixtures = self.write_cli_fixtures()
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))

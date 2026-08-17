@@ -1577,6 +1577,8 @@ def _prepare_inputs(args, dashboard_output, selection):
     )
     commands = _json_file(args.commands_json)
     environment = _json_file(args.environment_json)
+    if not isinstance(environment, dict):
+        raise ValueError("environment provenance must be a JSON object")
     skia_runner = parse_junit(args.skia_runner, "skia", set())
     runner_rows = _select_runner_rows(
         skia_runner.get("rows", []),
