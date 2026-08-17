@@ -3,8 +3,9 @@
 - schemaVersion: `1`
 - kind: `skia-fidelity-wave-1`
 - generatedBy: `reconcile_skia_fidelity_wave1.py`
-- generatedAt: `2026-08-16T21:19:00.031384Z`
-- sourceCommit: `ec61f49da68c6e7e00ee8369364d0f35566a6821`
+- generatorSha256: `eef3f8343aada2766817e9c3fe2a5bd8f955aa279eec8b665c29204f3a7df962`
+- generatedAt: `2026-08-17T01:11:12.195520Z`
+- sourceCommit: `dd045a400d58f975017c0532a695e0555cdb1c4f`
 - status: `classification`
 
 ## Policy
@@ -32,14 +33,15 @@
 - supportedRowsAfter: `0`
 - routeOnlyRows: `0`
 - routeOnlyRowsPromoted: `False`
+- classifiedFailures counts failure/error rows with an explicit classification; unclassifiedFailures is the gate.
 
-| Lane | Rows | Failures | Errors | Skips |
-| --- | ---: | ---: | ---: | ---: |
-| `skia-runner` | 610 | 532 | 0 | 1 |
-| `dashboard` | 610 | 0 | 0 | 0 |
-| `svg` | 17 | 1 | 0 | 12 |
-| `testOracle` | 0 | 0 | 0 | 0 |
-| `cpuOracle` | 0 | 0 | 0 | 0 |
+| Lane | Rows | Failures | Errors | Skipped | Timeouts | Classified failures | Unclassified failures |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `skia-runner` | 610 | 532 | 0 | 1 | 2 | 532 | 0 |
+| `dashboard` | 610 | 1 | 0 | 0 | 0 | 1 | 0 |
+| `svg` | 17 | 1 | 0 | 12 | 0 | 1 | 0 |
+| `testOracle` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `cpuOracle` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## Row Classifications
 
@@ -1263,8 +1265,8 @@
 | `skia` | `[156] typefacestyles_kerning` | failure | terminal-refusal | skia-upstream |
 | `skia` | `[157] typeface_styling` | failure | terminal-refusal | skia-upstream |
 | `skia` | `[158] user_typeface` | failure | terminal-refusal | skia-upstream |
-| `skia` | `jpg-color-cube` | failure | terminal-refusal | skia-upstream |
-| `skia` | `drawregion` | failure | terminal-refusal | skia-upstream |
+| `skia` | `jpg-color-cube` | failure | timeout | skia-upstream |
+| `skia` | `drawregion` | failure | timeout | skia-upstream |
 | `svg` | `test complex-paths-2()` | skipped | skip | svg |
 | `svg` | `test complex-paths-3()` | skipped | skip | svg |
 | `svg` | `test geometric-1()` | passed | pass | svg |
@@ -1289,6 +1291,7 @@
 - Skia, SVG, test-oracle, and CPU-oracle rows remain separate evidence lanes.
 - Route-only success is not promoted to pixel support.
 - This report does not weaken global thresholds, assertions, reference policy, or memory budgets.
+- runner-fix-drawimage-sampling.log and runner-fix-localmatrixshader-persp.log terminate with expected headless GPU refusal and do not change outcomes.
 
 ## SHA-256 Provenance
 
@@ -1299,7 +1302,7 @@
 | `inputs.dashboardDir` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/dashboard` | `f17c39bd4dd3e382be1e6d302f591c6e6891b25ef800e146d11425a7a30f4824` |
 | `inputs.dashboardJson` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/skia-dashboard-gms.json` | `001629cf7866ccd00927ae14b1b43a60223e87f4ce77e7467c542a1d13f6eb99` |
 | `inputs.environmentJson` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/environment.json` | `08437f141ac18455cba1804c5ae2849e60908a978be3c18ae4fecba850f7c187` |
-| `inputs.evidenceIndex` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json` | `39978e9e7dd7621cc05f8c9f8765b2f42d7993ce24aaf57d5f27cef8a0faee08` |
+| `inputs.evidenceIndex` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json` | `a3cbcc71aa923a07e8e24e4137df3fa400bb60ddd034755290c491fe1944acf6` |
 | `inputs.fp13Runner` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/fp13-runner.xml` | `b1c4e5059661828f523e761b58bfb56f3daec383095620328741fb4eb2245e28` |
 | `inputs.generatedRenders` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/generated-renders` | `9633fd953668c7190428628841aaa71ba06ae3e5d321757413621e25827d71f5` |
 | `inputs.gpuResults` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/gpu-results.json` | `fb2989323b717f2e869a06272d8ee4b35b4e516d6a555f4ce3d19f9ee3606ff0` |
@@ -1422,6 +1425,8 @@
 | `evidence.perlinnoise_localmatrix.render.1` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/generated/perlinnoise_localmatrix.png` | `b6a9aab86f0beab96ed51382b7a057131ddde39900fa0c09013879a6c07e4732` |
 | `evidence.poster_circle.reference.0` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/reference/poster_circle.png` | `4ad2cc2bc1f3d9bd13b0726fbd0906fc17af85b069462c81ed900a90ed9573f9` |
 | `evidence.poster_circle.render.1` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/generated/poster_circle.png` | `77f2906509596e51c23131f2a3cf326b7629cacd0aa3a63a4276db1f495ed79d` |
+| `evidence.provenance.runnerFixDrawimageSampling` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../runner-fix-drawimage-sampling.log` | `8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210` |
+| `evidence.provenance.runnerFixLocalMatrixShaderPersp` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../runner-fix-localmatrixshader-persp.log` | `44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12` |
 | `evidence.raw_image_shader_normals_rt.reference.0` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/reference/raw_image_shader_normals_rt.png` | `b074e56b22e3af29ec06bb41948837fc6290c714fbd25d2da7bd89da5a3ce9e6` |
 | `evidence.raw_image_shader_normals_rt.render.1` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/generated/raw_image_shader_normals_rt.png` | `0dd1b3e7fc235aff9332f6c2a971c7b00861af681c8b6cd2da4d21e0a0bb715b` |
 | `evidence.rsx_blob_shader.reference.0` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/reference/rsx_blob_shader.png` | `0ba2231d9956cc19590ae39e77aa801dac3c22314d1bd5430a1cac71b1fcf481` |
@@ -1466,4 +1471,4 @@
 | `evidence.yuv420_odd_dim_repeat.render.1` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/generated/yuv420_odd_dim_repeat.png` | `8ee4563058884b8a6604dde99f33436791f129e819638ed141554790b3a73f06` |
 | `commands` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/commands.json` | `f025512019734438079a0bfc9f6e996c32e788e0d9c5ee494cdf0947490cca87` |
 | `environment` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/environment.json` | `08437f141ac18455cba1804c5ae2849e60908a978be3c18ae4fecba850f7c187` |
-| `evidenceIndex` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json` | `39978e9e7dd7621cc05f8c9f8765b2f42d7993ce24aaf57d5f27cef8a0faee08` |
+| `evidenceIndex` | `reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json` | `a3cbcc71aa923a07e8e24e4137df3fa400bb60ddd034755290c491fe1944acf6` |

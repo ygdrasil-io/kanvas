@@ -361,6 +361,29 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
     def rows_by_name(rows):
         return {row["name"]: row for row in rows}
 
+    def test_junit_counts_use_normalized_skip_and_classified_failure_keys(self):
+        runner = self.write_runner(
+            "normalized-counts.xml",
+            [
+                self._testcase(
+                    "terminal",
+                    '<failure message="terminal refusal"/>',
+                ),
+                self._testcase(
+                    "blocked",
+                    '<skipped message="blocked"/>',
+                ),
+            ],
+        )
+
+        result = reconcile.parse_junit(runner, "skia", set())
+
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["classifiedFailures"], 1)
+        self.assertEqual(result["unclassifiedFailures"], 0)
+        self.assertNotIn("skips", result)
+        self.assertNotIn("unexpectedFailures", result)
+
     @staticmethod
     def snapshot_path(path):
         if path.is_dir():
@@ -393,6 +416,14 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertEqual(population["dashboardProperty"], "-Pgm.includeBlocking=true")
         self.assertEqual(population["wave0Population"], 615)
         self.assertFalse(population["wave0DirectlyComparable"])
+        self.assertEqual(
+            manifest["generator"]["path"],
+            "scripts/gm/reconcile_skia_fidelity_wave1.py",
+        )
+        self.assertEqual(
+            manifest["generator"]["sha256"],
+            self.sha256(pathlib.Path(reconcile.__file__).resolve()),
+        )
 
         policy = manifest["policy"]
         self.assertFalse(policy["scoresDirectlyEdited"])
@@ -440,6 +471,110 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertEqual(
             [row["name"] for row in manifest["rows"]["skiaJunit"]],
             ["pass", "route-only"],
+        )
+
+    def test_provenance_artifacts_are_hashed_and_checked(self):
+        fixtures = self.write_cli_fixtures()
+        artifact = self.write_text("provenance/runner-fix.log", "expected refusal\n")
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["provenanceArtifacts"] = {
+            "runnerFix": {
+                "path": artifact.name,
+                "sha256": self.sha256(artifact),
+            }
+        }
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(
+            manifest["provenance"]["evidence"]["provenance.runnerFix"]["sha256"],
+            self.sha256(artifact),
+        )
+
+        artifact.write_text("changed\n", encoding="utf-8")
+        status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("provenance artifact hash mismatch: runnerFix", stdout)
+
+    def test_check_rejects_missing_provenance_artifact(self):
+        fixtures = self.write_cli_fixtures()
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["provenanceArtifacts"] = {
+            "missing": {"path": "missing.log", "sha256": "0" * 64}
+        }
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+        )
+
+        status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("provenance artifact path is absent: missing", stdout)
+
+    def test_check_rejects_provenance_artifact_outside_allowed_roots(self):
+        fixtures = self.write_cli_fixtures()
+        with tempfile.TemporaryDirectory() as outside_dir:
+            artifact = pathlib.Path(outside_dir) / "runner-fix.log"
+            artifact.write_text("expected refusal\n", encoding="utf-8")
+            evidence = json.loads(
+                fixtures["evidenceIndex"].read_text(encoding="utf-8")
+            )
+            evidence["provenanceArtifacts"] = {
+                "outside": {
+                    "path": str(artifact),
+                    "sha256": self.sha256(artifact),
+                }
+            }
+            fixtures["evidenceIndex"].write_text(
+                json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+            )
+
+            status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("provenance artifact path is outside allowed roots", stdout)
+
+    def test_check_rejects_provenance_artifact_aliasing_input(self):
+        fixtures = self.write_cli_fixtures()
+        evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
+        evidence["provenanceArtifacts"] = {
+            "alias": {
+                "path": str(fixtures["scoreBefore"]),
+                "sha256": self.sha256(fixtures["scoreBefore"]),
+            }
+        }
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+        )
+
+        status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertEqual(status, 1, stdout)
+        self.assertIn("provenance artifact aliases input scoresBefore", stdout)
+
+    def test_markdown_uses_nested_dashboard_summary_counters(self):
+        fixtures = self.write_cli_fixtures(
+            dashboard_output={
+                "summary": {"total": 2, "failing": 1, "passing": 1, "noScore": 0},
+                "gms": [
+                    {"name": "pass", "isPassing": True, "similarity": 98.0},
+                    {"name": "failure", "isPassing": False, "similarity": 90.0},
+                ],
+            }
+        )
+
+        status, stdout, _, _, output_markdown = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        markdown = output_markdown.read_text(encoding="utf-8")
+        self.assertIn(
+            "| `dashboard` | 2 | 1 | 0 | 0 | 0 | 1 | 0 |",
+            markdown,
         )
 
     def test_score_before_after_integrity_and_runner_side_effect_restore_are_reported(self):
@@ -536,6 +671,63 @@ class ReconcileSkiaFidelityWave1Test(unittest.TestCase):
         self.assertEqual(rows["unclassified-error"]["classification"], "unclassified")
         self.assertEqual(rows["aborted-blocking"]["failureCode"], "TestAbortedException")
         self.assertEqual(rows["aborted-blocking"]["classification"], "skip")
+
+    def test_runner_classifies_timeouts_separately_and_check_rejects_them(self):
+        runner = self.write_runner(
+            "timeout-runner.xml",
+            [
+                self._testcase(
+                    "timeout",
+                    '<failure type="terminal-timeout" message="terminal timeout while scanning"/>',
+                )
+            ],
+        )
+        fixtures = self.write_cli_fixtures(
+            skia_runner=runner,
+            dashboard_output={"gms": []},
+            dashboard_data={"rows": []},
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        row = self.rows_by_name(manifest["rows"]["skiaJunit"])["timeout"]
+        self.assertEqual(row["classification"], "timeout")
+        self.assertTrue(row["timeout"])
+        self.assertFalse(row["terminalRefusal"])
+        self.assertEqual(manifest["current"]["runner"]["timeoutFailures"], 1)
+
+        status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertNotEqual(status, 0)
+        self.assertIn("terminal/lifecycle/timeout", stdout)
+
+    def test_check_rejects_skipped_timeouts(self):
+        runner = self.write_runner(
+            "skipped-timeout-runner.xml",
+            [
+                self._testcase(
+                    "skipped-timeout",
+                    '<skipped type="terminal-timeout" message="terminal timeout while scanning"/>',
+                )
+            ],
+        )
+        fixtures = self.write_cli_fixtures(
+            skia_runner=runner,
+            dashboard_output={"gms": []},
+            dashboard_data={"rows": []},
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        row = self.rows_by_name(manifest["rows"]["skiaJunit"])["skipped-timeout"]
+        self.assertEqual(row["classification"], "timeout")
+
+        status, stdout, _, _, _ = self.run_main(fixtures, check=True)
+
+        self.assertNotEqual(status, 0)
+        self.assertIn("terminal/lifecycle/timeout", stdout)
 
     def test_comparable_row_counters_require_causal_and_pixel_evidence(self):
         fixtures = self.write_cli_fixtures()

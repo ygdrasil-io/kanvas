@@ -61,6 +61,11 @@ class SkiaGmRunnerFilterTest {
         assertThrows(IllegalArgumentException::class.java) {
             selectSkiaGmsForRunner(gms, null, from = 0, to = 3)
         }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRunner(gms, null, from = 0, to = 615)
+        }
+        assertEquals("GM range end is outside registry: 615 > 2", error.message)
     }
 
     @Test

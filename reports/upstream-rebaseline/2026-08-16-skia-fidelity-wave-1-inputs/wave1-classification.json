@@ -33,6 +33,7 @@
     "observedComparableRows": 78,
     "runner": {
       "aborted": 1,
+      "classifiedFailures": 532,
       "errors": 0,
       "expectedUnsupported": 0,
       "failures": 532,
@@ -44,11 +45,11 @@
       "sideEffect": true,
       "similarityFailures": 1,
       "sizeMismatches": 1,
-      "skips": 1,
-      "terminalFailures": 517,
+      "skipped": 1,
+      "terminalFailures": 515,
       "tests": 610,
-      "unclassifiedFailures": 0,
-      "unexpectedFailures": 532
+      "timeoutFailures": 2,
+      "unclassifiedFailures": 0
     },
     "scores": {
       "modecolorfilters": 27.06298828125,
@@ -57,6 +58,7 @@
     "supportedRowsAfter": 0,
     "svg": {
       "aborted": 0,
+      "classifiedFailures": 1,
       "errors": 0,
       "expectedUnsupported": 12,
       "failures": 1,
@@ -66,11 +68,11 @@
       "rows": 17,
       "similarityFailures": 1,
       "sizeMismatches": 0,
-      "skips": 12,
+      "skipped": 12,
       "terminalFailures": 0,
       "tests": 17,
-      "unclassifiedFailures": 0,
-      "unexpectedFailures": 1
+      "timeoutFailures": 0,
+      "unclassifiedFailures": 0
     },
     "testOracle": {
       "rows": 0
@@ -38738,7 +38740,7 @@
         "junit": {
           "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
           "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-          "classification": "terminal-refusal",
+          "classification": "timeout",
           "evidenceLane": "skia",
           "expectedRefusal": false,
           "expectedUnsupported": false,
@@ -38767,8 +38769,9 @@
           "sourceClass": "jpg-color-cube",
           "sourceRegistration": "jpg-color-cube",
           "suite": "skia",
-          "terminal": true,
-          "terminalRefusal": true
+          "terminal": false,
+          "terminalRefusal": false,
+          "timeout": true
         },
         "junitMissing": false,
         "lifecycleFailure": false,
@@ -38804,8 +38807,8 @@
         "sourceClass": "jpg-color-cube",
         "sourceRegistration": "jpg-color-cube",
         "ssim": null,
-        "terminal": true,
-        "terminalRefusal": true,
+        "terminal": false,
+        "terminalRefusal": false,
         "totalPixels": null,
         "width": 512
       },
@@ -49882,7 +49885,7 @@
         "junit": {
           "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
           "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-          "classification": "terminal-refusal",
+          "classification": "timeout",
           "evidenceLane": "skia",
           "expectedRefusal": false,
           "expectedUnsupported": false,
@@ -49910,8 +49913,9 @@
           "sourceClass": "drawregion",
           "sourceRegistration": "drawregion",
           "suite": "skia",
-          "terminal": true,
-          "terminalRefusal": true
+          "terminal": false,
+          "terminalRefusal": false,
+          "timeout": true
         },
         "junitMissing": false,
         "lifecycleFailure": false,
@@ -49947,8 +49951,8 @@
         "sourceClass": "drawregion",
         "sourceRegistration": "drawregion",
         "ssim": null,
-        "terminal": true,
-        "terminalRefusal": true,
+        "terminal": false,
+        "terminalRefusal": false,
         "totalPixels": null,
         "width": 500
       },
@@ -67371,8 +67375,12 @@
     ],
     "maxFailedHypotheses": 3
   },
-  "generatedAt": "2026-08-16T21:19:00.031384Z",
+  "generatedAt": "2026-08-17T01:11:12.195520Z",
   "generatedBy": "reconcile_skia_fidelity_wave1.py",
+  "generator": {
+    "path": "scripts/gm/reconcile_skia_fidelity_wave1.py",
+    "sha256": "eef3f8343aada2766817e9c3fe2a5bd8f955aa279eec8b665c29204f3a7df962"
+  },
   "inputs": {
     "commands": {
       "cpu": "env -u DISPLAY ./gradlew -F off :kanvas:test --no-daemon --no-parallel --console=plain",
@@ -69825,10 +69833,21 @@
         "memoryBudgetChanged": false,
         "readinessDelta": 0.0,
         "referencesModified": false
+      },
+      "provenanceArtifacts": {
+        "runnerFixDrawimageSampling": {
+          "path": "../runner-fix-drawimage-sampling.log",
+          "sha256": "8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210"
+        },
+        "runnerFixLocalMatrixShaderPersp": {
+          "path": "../runner-fix-localmatrixshader-persp.log",
+          "sha256": "44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12"
+        }
       }
     },
     "fp13": {
       "aborted": 0,
+      "classifiedFailures": 0,
       "errors": 0,
       "expectedUnsupported": 0,
       "failures": 0,
@@ -69838,11 +69857,11 @@
       "rows": 0,
       "similarityFailures": 0,
       "sizeMismatches": 0,
-      "skips": 0,
+      "skipped": 0,
       "terminalFailures": 0,
       "tests": 0,
-      "unclassifiedFailures": 0,
-      "unexpectedFailures": 0
+      "timeoutFailures": 0,
+      "unclassifiedFailures": 0
     },
     "policy": {
       "assertionsWeakened": false,
@@ -71245,7 +71264,8 @@
     "Wave 0 population is historical context only; Wave 1 includes blocking rows and is population-shifted.",
     "Skia, SVG, test-oracle, and CPU-oracle rows remain separate evidence lanes.",
     "Route-only success is not promoted to pixel support.",
-    "This report does not weaken global thresholds, assertions, reference policy, or memory budgets."
+    "This report does not weaken global thresholds, assertions, reference policy, or memory budgets.",
+    "runner-fix-drawimage-sampling.log and runner-fix-localmatrixshader-persp.log terminate with expected headless GPU refusal and do not change outcomes."
   ],
   "observedComparableRows": 78,
   "policy": {
@@ -71755,6 +71775,14 @@
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/generated/poster_circle.png",
         "sha256": "77f2906509596e51c23131f2a3cf326b7629cacd0aa3a63a4276db1f495ed79d"
       },
+      "provenance.runnerFixDrawimageSampling": {
+        "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../runner-fix-drawimage-sampling.log",
+        "sha256": "8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210"
+      },
+      "provenance.runnerFixLocalMatrixShaderPersp": {
+        "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../runner-fix-localmatrixshader-persp.log",
+        "sha256": "44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12"
+      },
       "raw_image_shader_normals_rt.reference.0": {
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/../dashboard/images/reference/raw_image_shader_normals_rt.png",
         "sha256": "b074e56b22e3af29ec06bb41948837fc6290c714fbd25d2da7bd89da5a3ce9e6"
@@ -71926,7 +71954,7 @@
     },
     "evidenceIndex": {
       "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json",
-      "sha256": "39978e9e7dd7621cc05f8c9f8765b2f42d7993ce24aaf57d5f27cef8a0faee08",
+      "sha256": "a3cbcc71aa923a07e8e24e4137df3fa400bb60ddd034755290c491fe1944acf6",
       "value": {
         "entries": [
           {
@@ -74354,6 +74382,16 @@
           "memoryBudgetChanged": false,
           "readinessDelta": 0.0,
           "referencesModified": false
+        },
+        "provenanceArtifacts": {
+          "runnerFixDrawimageSampling": {
+            "path": "../runner-fix-drawimage-sampling.log",
+            "sha256": "8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210"
+          },
+          "runnerFixLocalMatrixShaderPersp": {
+            "path": "../runner-fix-localmatrixshader-persp.log",
+            "sha256": "44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12"
+          }
         }
       }
     },
@@ -74384,7 +74422,7 @@
       },
       "evidenceIndex": {
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json",
-        "sha256": "39978e9e7dd7621cc05f8c9f8765b2f42d7993ce24aaf57d5f27cef8a0faee08"
+        "sha256": "a3cbcc71aa923a07e8e24e4137df3fa400bb60ddd034755290c491fe1944acf6"
       },
       "fp13Runner": {
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/fp13-runner.xml",
@@ -74438,7 +74476,7 @@
       },
       "evidenceIndex": {
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/provenance/evidence-index.json",
-        "sha256": "39978e9e7dd7621cc05f8c9f8765b2f42d7993ce24aaf57d5f27cef8a0faee08"
+        "sha256": "a3cbcc71aa923a07e8e24e4137df3fa400bb60ddd034755290c491fe1944acf6"
       },
       "fp13Runner": {
         "path": "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/fp13-runner.xml",
@@ -117390,7 +117428,7 @@
         "junit": {
           "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
           "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-          "classification": "terminal-refusal",
+          "classification": "timeout",
           "evidenceLane": "skia",
           "expectedRefusal": false,
           "expectedUnsupported": false,
@@ -117419,8 +117457,9 @@
           "sourceClass": "jpg-color-cube",
           "sourceRegistration": "jpg-color-cube",
           "suite": "skia",
-          "terminal": true,
-          "terminalRefusal": true
+          "terminal": false,
+          "terminalRefusal": false,
+          "timeout": true
         },
         "junitMissing": false,
         "lifecycleFailure": false,
@@ -117456,8 +117495,8 @@
         "sourceClass": "jpg-color-cube",
         "sourceRegistration": "jpg-color-cube",
         "ssim": null,
-        "terminal": true,
-        "terminalRefusal": true,
+        "terminal": false,
+        "terminalRefusal": false,
         "totalPixels": null,
         "width": 512
       },
@@ -129469,7 +129508,7 @@
         "junit": {
           "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
           "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-          "classification": "terminal-refusal",
+          "classification": "timeout",
           "evidenceLane": "skia",
           "expectedRefusal": false,
           "expectedUnsupported": false,
@@ -129497,8 +129536,9 @@
           "sourceClass": "drawregion",
           "sourceRegistration": "drawregion",
           "suite": "skia",
-          "terminal": true,
-          "terminalRefusal": true
+          "terminal": false,
+          "terminalRefusal": false,
+          "timeout": true
         },
         "junitMissing": false,
         "lifecycleFailure": false,
@@ -129534,8 +129574,8 @@
         "sourceClass": "drawregion",
         "sourceRegistration": "drawregion",
         "ssim": null,
-        "terminal": true,
-        "terminalRefusal": true,
+        "terminal": false,
+        "terminalRefusal": false,
         "totalPixels": null,
         "width": 500
       },
@@ -170046,7 +170086,7 @@
       {
         "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
         "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-        "classification": "terminal-refusal",
+        "classification": "timeout",
         "evidenceLane": "skia",
         "expectedRefusal": false,
         "expectedUnsupported": false,
@@ -170075,13 +170115,14 @@
         "sourceClass": "jpg-color-cube",
         "sourceRegistration": "jpg-color-cube",
         "suite": "skia",
-        "terminal": true,
-        "terminalRefusal": true
+        "terminal": false,
+        "terminalRefusal": false,
+        "timeout": true
       },
       {
         "class": "org.graphiks.kanvas.skia.SkiaGmRunner",
         "className": "org.graphiks.kanvas.skia.SkiaGmRunner",
-        "classification": "terminal-refusal",
+        "classification": "timeout",
         "evidenceLane": "skia",
         "expectedRefusal": false,
         "expectedUnsupported": false,
@@ -170109,8 +170150,9 @@
         "sourceClass": "drawregion",
         "sourceRegistration": "drawregion",
         "suite": "skia",
-        "terminal": true,
-        "terminalRefusal": true
+        "terminal": false,
+        "terminalRefusal": false,
+        "timeout": true
       }
     ],
     "svg": [
@@ -172113,7 +172155,7 @@
     "restored": true,
     "runnerSideEffectObserved": true
   },
-  "sourceCommit": "ec61f49da68c6e7e00ee8369364d0f35566a6821",
+  "sourceCommit": "dd045a400d58f975017c0532a695e0555cdb1c4f",
   "status": "classification",
   "supportedRowsAfter": 0,
   "worktree": "/Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor"

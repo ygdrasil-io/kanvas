@@ -109,7 +109,20 @@ def _is_lifecycle_failure(message, failure_code, failure_type=""):
     )
 
 
+def _is_timeout_failure(message, failure_type, failure_code):
+    lowered_message = message.lower()
+    lowered_type = str(failure_type or "").lower()
+    lowered_code = str(failure_code or "").lower()
+    return bool(
+        "timeout" in lowered_type
+        or "timeout" in lowered_message
+        or "timeout" in lowered_code
+    )
+
+
 def _is_terminal_failure(message, failure_type, failure_code):
+    if _is_timeout_failure(message, failure_type, failure_code):
+        return False
     lowered_message = message.lower()
     lowered_type = failure_type.lower()
     return bool(
@@ -201,10 +214,13 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
     size_mismatch = _is_size_mismatch(message)
     similarity_failure = _is_similarity_failure(message)
     lifecycle_failure = _is_lifecycle_failure(message, failure_code, failure_type)
+    timeout_failure = _is_timeout_failure(message, failure_type, failure_code)
     terminal_refusal = _is_terminal_failure(message, failure_type, failure_code)
 
     if outcome == "skipped" and lifecycle_failure:
         classification = "lifecycle-failure"
+    elif timeout_failure:
+        classification = "timeout"
     elif outcome == "skipped" and terminal_refusal:
         classification = "terminal-refusal"
     elif outcome == "skipped":
@@ -228,7 +244,7 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
     else:
         classification = "pass"
 
-    return {
+    result = {
         "classification": classification,
         "terminal": terminal_refusal,
         "terminalRefusal": terminal_refusal,
@@ -240,6 +256,9 @@ def _classify_row(outcome, message, failure_code, failure_type, expected_codes):
         "lifecycleFailure": lifecycle_failure,
         "implementationFailure": implementation_failure,
     }
+    if timeout_failure:
+        result["timeout"] = True
+    return result
 
 
 def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dict:
@@ -399,17 +418,16 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
             if declared["errors"] is not None
             else sum(row["outcome"] == "error" for row in rows)
         ),
-        "skips": (
+        "skipped": (
             declared["skipped"]
             if declared["skipped"] is not None
             else sum(row["outcome"] == "skipped" for row in rows)
         ),
     }
     counts["passed"] = sum(row["outcome"] == "passed" for row in rows)
-    counts["unexpectedFailures"] = sum(
+    counts["classifiedFailures"] = sum(
         row["outcome"] in {"failure", "error"}
-        and not row["expectedUnsupported"]
-        and row["classification"] != "skip"
+        and row["classification"] not in {"unclassified", "skip"}
         for row in rows
     )
     counts["unclassifiedFailures"] = sum(
@@ -419,6 +437,7 @@ def parse_junit(path: pathlib.Path, suite: str, expected_codes: set[str]) -> dic
         row["failureCode"] == "TestAbortedException" for row in rows
     )
     counts["terminalFailures"] = sum(row["terminalRefusal"] for row in rows)
+    counts["timeoutFailures"] = sum(row.get("timeout", False) for row in rows)
     counts["expectedUnsupported"] = sum(row["expectedUnsupported"] for row in rows)
     counts["missingReferences"] = sum(row["missingReference"] for row in rows)
     counts["sizeMismatches"] = sum(row["sizeMismatch"] for row in rows)
@@ -877,6 +896,7 @@ def _junit_candidate_for_approval(row):
         "route-only",
         "failure",
         "terminal-refusal",
+        "timeout",
         "lifecycle-failure",
         "unclassified",
     }:
@@ -923,7 +943,7 @@ def _junit_approval_violations(rows):
                 )
             continue
         classification = junit.get("classification", "non-pass")
-        if classification in {"terminal-refusal", "lifecycle-failure"}:
+        if classification in {"terminal-refusal", "timeout", "lifecycle-failure"}:
             violations.append(
                 "terminal/lifecycle JUnit result blocks approval for %s"
                 % row.get("name", "")
@@ -1020,10 +1040,10 @@ def _summary(value, row_key="rows"):
         "tests",
         "failures",
         "errors",
-        "skips",
+        "skipped",
         "aborted",
         "passed",
-        "unexpectedFailures",
+        "classifiedFailures",
         "unclassifiedFailures",
         "terminalFailures",
         "expectedUnsupported",
@@ -1031,6 +1051,7 @@ def _summary(value, row_key="rows"):
         "sizeMismatches",
         "similarityFailures",
         "lifecycleFailures",
+        "timeoutFailures",
     ):
         if key in value:
             result[key] = value[key]
@@ -1815,6 +1836,7 @@ def _valid_comparable(row, evidence):
         "no-score",
         "skip",
         "terminal-refusal",
+        "timeout",
         "lifecycle-failure",
         "unclassified",
         "failure",
@@ -1850,6 +1872,7 @@ def _requires_current_evidence(row):
         "no-score",
         "skip",
         "terminal-refusal",
+        "timeout",
         "lifecycle-failure",
         "unclassified",
         "failure",
@@ -2165,6 +2188,7 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         "Skia, SVG, test-oracle, and CPU-oracle rows remain separate evidence lanes.",
         "Route-only success is not promoted to pixel support.",
         "This report does not weaken global thresholds, assertions, reference policy, or memory budgets.",
+        "runner-fix-drawimage-sampling.log and runner-fix-localmatrixshader-persp.log terminate with expected headless GPU refusal and do not change outcomes.",
     ]
     failed_hypotheses = _failed_hypotheses(
         evidence_value, [runner_rows, svg_rows, skia_rows]
@@ -2173,6 +2197,10 @@ def build_manifest(inputs: dict, source_commit: str, status: str) -> dict:
         "schemaVersion": SCHEMA_VERSION,
         "kind": KIND,
         "generatedBy": GENERATED_BY,
+        "generator": {
+            "path": "scripts/gm/reconcile_skia_fidelity_wave1.py",
+            "sha256": _sha256_file(pathlib.Path(__file__).resolve()),
+        },
         "generatedAt": _generated_at(inputs),
         "sourceCommit": source_commit,
         "status": status,
@@ -2242,6 +2270,8 @@ def render_markdown(manifest: dict) -> str:
         "- schemaVersion: `%s`" % _markdown_value(manifest.get("schemaVersion")),
         "- kind: `%s`" % _markdown_value(manifest.get("kind")),
         "- generatedBy: `%s`" % _markdown_value(manifest.get("generatedBy")),
+        "- generatorSha256: `%s`"
+        % _markdown_value(manifest.get("generator", {}).get("sha256", "")),
         "- generatedAt: `%s`" % _markdown_value(manifest.get("generatedAt")),
         "- sourceCommit: `%s`" % _markdown_value(manifest.get("sourceCommit")),
         "- status: `%s`" % _markdown_value(manifest.get("status")),
@@ -2274,24 +2304,40 @@ def render_markdown(manifest: dict) -> str:
         "- supportedRowsAfter: `%s`" % manifest.get("supportedRowsAfter", 0),
         "- routeOnlyRows: `%s`" % manifest.get("routeOnlyRows", 0),
         "- routeOnlyRowsPromoted: `%s`" % manifest.get("routeOnlyRowsPromoted", False),
+        "- classifiedFailures counts failure/error rows with an explicit classification; unclassifiedFailures is the gate.",
         "",
-        "| Lane | Rows | Failures | Errors | Skips |",
-        "| --- | ---: | ---: | ---: | ---: |",
+        "| Lane | Rows | Failures | Errors | Skipped | Timeouts | Classified failures | Unclassified failures |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for lane in ("runner", "dashboard", "svg", "testOracle", "cpuOracle"):
         summary = current.get(lane, {})
+        if lane == "dashboard" and isinstance(summary, dict):
+            dashboard_summary = summary.get("summary", {})
+            if isinstance(dashboard_summary, dict):
+                summary = {
+                    **dashboard_summary,
+                    "rows": summary.get("rows", dashboard_summary.get("total", 0)),
+                    "failures": dashboard_summary.get("failing", 0),
+                    "classifiedFailures": dashboard_summary.get("failing", 0),
+                    "unclassifiedFailures": dashboard_summary.get(
+                        "unclassifiedFailures", 0
+                    ),
+                }
         if lane == "runner":
             label = "skia-runner"
         else:
             label = lane
         lines.append(
-            "| `%s` | %s | %s | %s | %s |"
+            "| `%s` | %s | %s | %s | %s | %s | %s | %s |"
             % (
                 label,
                 summary.get("rows", summary.get("tests", 0)),
                 summary.get("failures", 0),
                 summary.get("errors", 0),
-                summary.get("skips", 0),
+                summary.get("skipped", 0),
+                summary.get("timeoutFailures", 0),
+                summary.get("classifiedFailures", 0),
+                summary.get("unclassifiedFailures", 0),
             )
         )
     lines.extend(
@@ -2461,6 +2507,18 @@ def _evidence_file_paths(index_value, index_path):
             path = _resolve_evidence_path(record["path"], index_path)
             if path is not None and path.is_file():
                 paths["%s.%s.%s" % (name, record["label"], artifact_index)] = path
+    provenance_artifacts = (
+        index_value.get("provenanceArtifacts", {})
+        if isinstance(index_value, dict)
+        else {}
+    )
+    if isinstance(provenance_artifacts, dict):
+        for name, record in provenance_artifacts.items():
+            if not isinstance(record, dict):
+                continue
+            path = _resolve_evidence_path(record.get("path"), index_path)
+            if path is not None and path.is_file():
+                paths["provenance.%s" % name] = path
     return paths
 
 
@@ -2471,7 +2529,56 @@ def _declared_evidence_paths(index_value, index_path):
             path = _resolve_evidence_path(record["path"], index_path)
             if path is not None:
                 paths.append(path)
+    provenance_artifacts = (
+        index_value.get("provenanceArtifacts", {})
+        if isinstance(index_value, dict)
+        else {}
+    )
+    if isinstance(provenance_artifacts, dict):
+        for record in provenance_artifacts.values():
+            if isinstance(record, dict):
+                path = _resolve_evidence_path(record.get("path"), index_path)
+                if path is not None:
+                    paths.append(path)
     return paths
+
+
+def _check_provenance_artifacts(value, index_path, input_paths=None, allowed_roots=None):
+    if not isinstance(value, dict) or "provenanceArtifacts" not in value:
+        return []
+    artifacts = value["provenanceArtifacts"]
+    if not isinstance(artifacts, dict):
+        return ["evidence-index provenanceArtifacts must be an object"]
+    violations = []
+    for name, record in artifacts.items():
+        label = str(name)
+        if not isinstance(record, dict):
+            violations.append("evidence-index provenance artifact is not an object: %s" % label)
+            continue
+        artifact_path = _resolve_evidence_path(record.get("path"), index_path)
+        if artifact_path is None or not artifact_path.is_file():
+            violations.append("evidence-index provenance artifact path is absent: %s" % label)
+            continue
+        declared_hash = record.get("sha256")
+        if not _has_hash(declared_hash):
+            violations.append(
+                "evidence-index provenance artifact hash is missing or invalid: %s" % label
+            )
+        elif _sha256_file(artifact_path).lower() != declared_hash.lower():
+            violations.append("evidence-index provenance artifact hash mismatch: %s" % label)
+        provenance_roots = tuple(allowed_roots or ()) + (index_path.parent.parent,)
+        if not any(_path_within(artifact_path, root) for root in provenance_roots):
+            violations.append(
+                "evidence-index provenance artifact path is outside allowed roots: %s"
+                % artifact_path
+            )
+        for input_name, input_path in (input_paths or {}).items():
+            if input_path is not None and _same_file(artifact_path, input_path):
+                violations.append(
+                    "evidence-index provenance artifact aliases input %s: %s"
+                    % (input_name, artifact_path)
+                )
+    return violations
 
 
 def _has_hash(value):
@@ -2545,6 +2652,14 @@ def _check_evidence_index(
     allowed_roots=None,
 ):
     violations = []
+    violations.extend(
+        _check_provenance_artifacts(
+            value,
+            index_path,
+            input_paths=input_paths,
+            allowed_roots=allowed_roots,
+        )
+    )
     raw_entries = (
         value.get("entries", value.get("rows", []))
         if isinstance(value, dict)
@@ -2740,19 +2855,21 @@ def _check_current_failures(lanes):
                 row.get("outcome") in {"failure", "error"}
                 or (
                     row.get("outcome") == "skipped"
-                    and row.get("classification") == "lifecycle-failure"
+                    and row.get("classification") in {"lifecycle-failure", "timeout"}
                 )
             )
             and row.get("classification") not in {"terminal-refusal", "expected-unsupported"}
             and (
                 row.get("lifecycleFailure")
                 or row.get("terminalRefusal")
-                or row.get("classification") in {"lifecycle-failure", "terminal-failure"}
+                or row.get("timeout")
+                or row.get("classification")
+                in {"lifecycle-failure", "terminal-failure", "timeout"}
             )
         ]
         if terminal:
             violations.append(
-                "%s has %s terminal/lifecycle failure/error testcase(s)"
+                "%s has %s terminal/lifecycle/timeout failure/error testcase(s)"
                 % (lane, len(terminal))
             )
     return violations
@@ -2779,7 +2896,7 @@ def _check_junit_population(dashboard_rows, runner_rows):
             or junit.get("suiteLevel")
             or _is_route_only(junit)
             or junit.get("classification")
-            in {"terminal-refusal", "expected-unsupported", "lifecycle-failure"}
+            in {"terminal-refusal", "timeout", "expected-unsupported", "lifecycle-failure"}
         ):
             continue
         junit_identity = dict(junit)

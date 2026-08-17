@@ -25,6 +25,18 @@ data class SkiaGmScanSelection(
         get() = "[SKIP] --from=$effectiveFrom >= total=$total"
 }
 
+internal fun parseSkiaGmInteger(optionName: String, rawValue: String): Int =
+    rawValue.toIntOrNull()
+        ?: throw IllegalArgumentException("Invalid integer for $optionName: $rawValue")
+
+internal fun parseSkiaGmTimeout(rawValue: String): Long {
+    val timeoutSeconds = parseSkiaGmInteger("--timeout", rawValue)
+    require(timeoutSeconds > 0) {
+        "Invalid value for --timeout: $rawValue (must be greater than zero)"
+    }
+    return timeoutSeconds.toLong()
+}
+
 fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
     var from = 0
     var to = Int.MAX_VALUE
@@ -35,19 +47,55 @@ fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
     var indices = emptySet<Int>()
 
     var i = 0
+    fun nextValue(optionName: String): String {
+        val nextIndex = i + 1
+        val value = args.getOrNull(nextIndex)
+        if (value == null || value.startsWith("--")) {
+            throw IllegalArgumentException("Missing value for $optionName")
+        }
+        i = nextIndex
+        return value
+    }
+
+    fun inlineValue(argument: String, optionName: String): String {
+        val value = argument.removePrefix("$optionName=")
+        if (value.isEmpty()) {
+            throw IllegalArgumentException("Missing value for $optionName")
+        }
+        return value
+    }
+
+    fun parseNames(value: String): Set<String> =
+        value.split(',').map(String::trim).filter(String::isNotEmpty).toSet()
+
+    fun parseIndices(value: String): Set<Int> =
+        value.split(',').map(String::trim).filter(String::isNotEmpty).map {
+            parseSkiaGmInteger("--indices", it)
+        }.toSet()
+
     while (i < args.size) {
         when (val argument = args[i]) {
-            "--from" -> from = args[++i].toInt()
-            "--to" -> to = args[++i].toInt()
-            "--timeout" -> timeoutSeconds = args[++i].toLong()
-            "--output" -> outputPath = java.io.File(args[++i]).absolutePath
-            "--names" -> names = args[++i].split(',').map(String::trim).filter(String::isNotEmpty).toSet()
+            "--from" -> from = parseSkiaGmInteger("--from", nextValue("--from"))
+            "--to" -> to = parseSkiaGmInteger("--to", nextValue("--to"))
+            "--timeout" -> timeoutSeconds = parseSkiaGmTimeout(nextValue("--timeout"))
+            "--output" -> outputPath = java.io.File(nextValue("--output")).absolutePath
+            "--names" -> names = parseNames(nextValue("--names"))
             "--list-blocking" -> listBlocking = true
-            "--indices" -> indices = args[++i].split(',').filter(String::isNotEmpty).map(String::toInt).toSet()
-            else -> if (argument.startsWith("--names=")) {
-                names = argument.removePrefix("--names=").split(',').map(String::trim).filter(String::isNotEmpty).toSet()
-            } else if (argument.startsWith("--indices=")) {
-                indices = argument.removePrefix("--indices=").split(',').map(String::trim).filter(String::isNotEmpty).map(String::toInt).toSet()
+            "--indices" -> indices = parseIndices(nextValue("--indices"))
+            else -> when {
+                argument.startsWith("--from=") ->
+                    from = parseSkiaGmInteger("--from", inlineValue(argument, "--from"))
+                argument.startsWith("--to=") ->
+                    to = parseSkiaGmInteger("--to", inlineValue(argument, "--to"))
+                argument.startsWith("--timeout=") ->
+                    timeoutSeconds = parseSkiaGmTimeout(inlineValue(argument, "--timeout"))
+                argument.startsWith("--output=") ->
+                    outputPath = java.io.File(inlineValue(argument, "--output")).absolutePath
+                argument.startsWith("--names=") ->
+                    names = parseNames(inlineValue(argument, "--names"))
+                argument.startsWith("--indices=") ->
+                    indices = parseIndices(inlineValue(argument, "--indices"))
+                else -> throw IllegalArgumentException("Unknown option: $argument")
             }
         }
         i++
@@ -105,10 +153,20 @@ fun listBlockingSkiaGmEntries(gms: List<SkiaGm>): List<IndexedValue<SkiaGm>> =
  *   PASS|FAIL|TIMEOUT  <index>  <name>  <elapsedMs>
  */
 fun main(args: Array<String>) {
-    val options = parseSkiaGmScanOptions(args)
+    val options = try {
+        parseSkiaGmScanOptions(args)
+    } catch (error: IllegalArgumentException) {
+        System.err.println("[ERROR] ${error.message}")
+        exitProcess(2)
+    }
     RuntimeEffectWgsl4kWiring.install()
     val config = RenderConfig.fromEnvironment()
-    val selection = resolveSkiaGmScanSelection(SkiaGmRegistry.all(), options)
+    val selection = try {
+        resolveSkiaGmScanSelection(SkiaGmRegistry.all(), options)
+    } catch (error: IllegalArgumentException) {
+        System.err.println("[ERROR] ${error.message}")
+        exitProcess(2)
+    }
     if (options.listBlocking) {
         listBlockingSkiaGmEntries(SkiaGmRegistry.all())
             .forEach { println("GM_ENTRY|${it.index}|${it.value.name}") }

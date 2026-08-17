@@ -2419,6 +2419,16 @@
       "similarityBefore": 84.59877232142857
     }
   ],
+  "provenanceArtifacts": {
+    "runnerFixDrawimageSampling": {
+      "path": "../runner-fix-drawimage-sampling.log",
+      "sha256": "8c1d9667f662b0a5b64449e52c9f42e948197246643d4d11c1f2895516e13210"
+    },
+    "runnerFixLocalMatrixShaderPersp": {
+      "path": "../runner-fix-localmatrixshader-persp.log",
+      "sha256": "44b2191b0cdfc83f9c1d6b3364ed10485e30219b3472c027efcfe5e30549bd12"
+    }
+  },
   "policy": {
     "assertionsWeakened": false,
     "globalThresholdWeakened": false,

@@ -35,8 +35,12 @@ class SkiaGmRunner {
             selectSkiaGmsForRunner(
                 SkiaGmRegistry.all(),
                 System.getProperty("kanvas.gm.name"),
-                System.getProperty("kanvas.gm.from")?.toInt(),
-                System.getProperty("kanvas.gm.to")?.toInt(),
+                System.getProperty("kanvas.gm.from")?.let {
+                    parseSkiaGmInteger("kanvas.gm.from", it)
+                },
+                System.getProperty("kanvas.gm.to")?.let {
+                    parseSkiaGmInteger("kanvas.gm.to", it)
+                },
             ),
         )
 
