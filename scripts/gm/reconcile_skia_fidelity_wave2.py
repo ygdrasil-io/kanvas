@@ -496,6 +496,14 @@ def _select_runner_rows(runner_rows, dashboard_rows, identities):
     return selected
 
 
+def _select_runner_cohort_rows(runner_rows, dashboard_rows):
+    return [
+        copy.deepcopy(row)
+        for row in runner_rows
+        if len(_junit_dashboard_matches(row, dashboard_rows)) == 1
+    ]
+
+
 def _filter_evidence_with_families(entries, selection):
     expected_families = {
         _lane_key(row): row.get("family") for row in selection.rows
@@ -566,6 +574,30 @@ def _has_value(sources, keys):
     )
 
 
+_THRESHOLD_FIELDS = ("minSimilarity", "threshold", "minimumSimilarity")
+
+
+def _threshold_values(sources):
+    values = []
+    violations = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for field in _THRESHOLD_FIELDS:
+            if field not in source:
+                continue
+            value = _finite_number(source[field])
+            if value is None:
+                violations.append("threshold/minSimilarity %s must be finite" % field)
+            elif not 0 <= value <= 100:
+                violations.append(
+                    "threshold/minSimilarity %s must be within [0, 100]" % field
+                )
+            else:
+                values.append(value)
+    return values, violations
+
+
 def _is_supported_after(row, evidence):
     return any(
         isinstance(source, dict)
@@ -603,7 +635,7 @@ def _normalized_route(value):
     return re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
 
 
-def _validate_supported_after(row, evidence):
+def _validate_supported_after(row, evidence, frozen_baseline=None):
     sources = _evidence_sources(row, evidence)
     violations = []
     if not any(source.get("supportedAfter") is True for source in sources if isinstance(source, dict)):
@@ -614,14 +646,26 @@ def _validate_supported_after(row, evidence):
         violations.append("supported-after evidence is missing before similarity")
     if _first_number(sources, ("similarityAfter", "scoreAfter", "afterSimilarity", "afterScore")) is None:
         violations.append("supported-after evidence is missing after similarity")
-    if _first_number(sources, ("minSimilarity", "threshold", "minimumSimilarity")) is None:
+    threshold_values, threshold_violations = _threshold_values(sources)
+    violations.extend(threshold_violations)
+    if not threshold_values:
         violations.append("supported-after evidence is missing threshold/minSimilarity")
     after = _first_number(
         sources, ("similarityAfter", "scoreAfter", "afterSimilarity", "afterScore")
     )
-    threshold = _first_number(sources, ("minSimilarity", "threshold", "minimumSimilarity"))
+    threshold = max(threshold_values, default=None)
     if after is not None and threshold is not None and after < threshold:
         violations.append("supported-after score is below threshold/minSimilarity")
+    baseline_values = _threshold_values((row,))[0]
+    if frozen_baseline is not None:
+        baseline_values.append(frozen_baseline)
+    expected_baseline = max(baseline_values, default=None)
+    if expected_baseline is not None and any(
+        value < expected_baseline for value in threshold_values
+    ):
+        violations.append(
+            "supported-after threshold/minSimilarity is weaker than the expected baseline"
+        )
     if not _similarity_improved(row, evidence):
         violations.append("supported-after evidence does not show similarity improvement")
     if row.get("isPassing") is not True or row.get("classification") != "pass":
@@ -880,8 +924,89 @@ def _filtered_junit_result(parsed, rows):
     return result
 
 
-def _junit_summary(parsed):
-    summary = _summary(parsed)
+def _junit_rows_summary(rows):
+    rows = rows if isinstance(rows, list) else []
+    return {
+        "tests": len(rows),
+        "failures": sum(
+            row.get("outcome") == "failure"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "errors": sum(
+            row.get("outcome") == "error"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "skipped": sum(
+            row.get("outcome") == "skipped"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "aborted": sum(
+            row.get("failureCode") == "TestAbortedException"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "passed": sum(
+            row.get("outcome") == "passed"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "classifiedFailures": sum(
+            row.get("outcome") in {"failure", "error"}
+            and row.get("classification") not in {"unclassified", "skip"}
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "unclassifiedFailures": sum(
+            row.get("classification") == "unclassified"
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "terminalFailures": sum(
+            row.get("terminalRefusal") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "expectedUnsupported": sum(
+            row.get("expectedUnsupported") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "missingReferences": sum(
+            row.get("missingReference") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "sizeMismatches": sum(
+            row.get("sizeMismatch") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "similarityFailures": sum(
+            row.get("similarityFailure") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "lifecycleFailures": sum(
+            row.get("lifecycleFailure") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "timeoutFailures": sum(
+            row.get("timeout") is True
+            for row in rows
+            if isinstance(row, dict)
+        ),
+        "rows": len(rows),
+    }
+
+
+def _junit_summary(parsed, rows=None):
+    summary = _junit_rows_summary(
+        parsed.get("rows", []) if rows is None else rows
+    )
     for key in ("parsedCounts", "declaredCounts", "countMismatches"):
         if key in parsed:
             summary[key] = _copy_value(parsed[key])
@@ -894,6 +1019,37 @@ def _junit_summary(parsed):
     if isinstance(selected_rows, list):
         summary["selectedRows"] = len(selected_rows)
     return summary
+
+
+def _combined_evidence_row(row, evidence):
+    combined = copy.deepcopy(row)
+    if isinstance(evidence, dict):
+        combined.setdefault("evidence", _copy_value(evidence))
+        for key, value in evidence.items():
+            combined.setdefault(key, _copy_value(value))
+    return combined
+
+
+def _causal_cohort_key_for_row(row, evidence):
+    return _causal_cohort_key(_combined_evidence_row(row, evidence))
+
+
+def _causal_cohort_keys_for_rows(rows):
+    cohorts = set()
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        evidence = row.get("evidenceIndexEntry", row.get("evidence", {}))
+        if (
+            _valid_comparable(row, evidence)
+            and row.get("classification") == "pass"
+            and _junit_is_pass(row)
+            and _has_causal_evidence(row, evidence)
+        ):
+            cohort = _causal_cohort_key_for_row(row, evidence)
+            if cohort is not None:
+                cohorts.add(cohort)
+    return cohorts
 
 
 def _dashboard_summary(rows):
@@ -944,6 +1100,7 @@ def _load_oracle_rows(path, label, reference_kind, evidence_lane, identities):
     if len(normalized) != len(raw_rows):
         raise ValueError("%s oracle input contains malformed rows" % label)
     expected_names = {name for name, _ in identities}
+    seen_identities = set()
     filtered = []
     for index, (raw, row) in enumerate(zip(raw_rows, normalized)):
         if not isinstance(raw, dict):
@@ -964,12 +1121,26 @@ def _load_oracle_rows(path, label, reference_kind, evidence_lane, identities):
                     "%s oracle row %s has invalid %s" % (label, index, field)
                 )
         for field in _ORACLE_NUMERIC_FIELDS:
-            if field in raw and raw[field] is not None and _finite_number(raw[field]) is None:
+            if field not in raw or raw[field] is None:
+                continue
+            number = _finite_number(raw[field])
+            if number is None:
                 raise ValueError(
                     "%s oracle row %s has invalid %s" % (label, index, field)
                 )
+            if not 0 <= number <= 100:
+                raise ValueError(
+                    "%s oracle row %s has out-of-range %s" % (label, index, field)
+                )
         if name not in expected_names and not _is_route_only(row):
             raise ValueError("%s oracle row has unknown identity: %s" % (label, name))
+        identity = _lane_key(row)
+        if identity in seen_identities:
+            raise ValueError(
+                "%s oracle input contains duplicate identity: %s/%s"
+                % (label, identity[0], identity[1])
+            )
+        seen_identities.add(identity)
         filtered.append(row)
     return filtered
 
@@ -1001,6 +1172,11 @@ def _provenance(hashes, inputs, evidence_value, dashboard_output):
         ("environment", "environmentJson", inputs["environment"]),
         ("cpuResults", "cpuResults", inputs["cpuResults"]),
         ("gpuResults", "gpuResults", inputs["gpuResults"]),
+        (
+            "skiaRunnerFullPopulation",
+            "skiaRunner",
+            _junit_summary(inputs["skiaRunner"]),
+        ),
         ("fp13Runner", "fp13Runner", _junit_summary(inputs["fp13Runner"])),
         ("evidenceIndex", "evidenceIndex", evidence_value),
     ):
@@ -1032,7 +1208,10 @@ def build_manifest(inputs, selection, source_commit, status):
     residual_rows = []
     for row in rows:
         evidence = evidence_by_key.get(_lane_key(row), {})
-        if _is_supported_after(row, evidence) and not _validate_supported_after(row, evidence):
+        frozen_baseline = inputs.get("thresholdBaselines", {}).get(_lane_key(row))
+        if _is_supported_after(row, evidence) and not _validate_supported_after(
+            row, evidence, frozen_baseline
+        ):
             supported_rows.append(row)
         elif _is_residual_refusal(row, evidence):
             residual_rows.append(row)
@@ -1046,7 +1225,7 @@ def build_manifest(inputs, selection, source_commit, status):
             and _junit_is_pass(row)
             and _has_causal_evidence(row, evidence)
         ):
-            cohort = _causal_cohort_key(evidence)
+            cohort = _causal_cohort_key_for_row(row, evidence)
             if cohort is not None:
                 candidate_cohorts[cohort] = candidate_cohorts.get(cohort, 0) + 1
     generic_rows = [
@@ -1084,7 +1263,24 @@ def build_manifest(inputs, selection, source_commit, status):
         policy.update(_copy_value(policy_input))
     policy["scoresDirectlyEdited"] = direct_edit
     dashboard_summary = _dashboard_summary(dashboard_rows)
-    runner_result = _filtered_junit_result(inputs["skiaRunner"], runner_rows)
+    runner_cohort_rows = inputs["runnerCohortRows"]
+    runner_result = _filtered_junit_result(
+        inputs["skiaRunner"], runner_cohort_rows
+    )
+    runner_summary = _junit_summary(runner_result, runner_cohort_rows)
+    runner_summary.update(
+        {
+            "population": "cohort",
+            "source": _metadata("skiaRunner", inputs["hashes"]),
+        }
+    )
+    runner_full_population = _junit_summary(inputs["skiaRunner"])
+    runner_full_population.update(
+        {
+            "population": "full",
+            "source": _metadata("skiaRunner", inputs["hashes"]),
+        }
+    )
     fp13_result = inputs["fp13Runner"]
     residual_codes = sorted(
         {
@@ -1118,7 +1314,8 @@ def build_manifest(inputs, selection, source_commit, status):
     if dashboard_output is not None:
         dashboard_manifest["outputSha256"] = _metadata("dashboardOutput", inputs["hashes"]).get("sha256")
     current = {
-        "runner": _junit_summary(runner_result),
+        "runner": runner_summary,
+        "runnerFullPopulation": runner_full_population,
         "dashboard": {"rows": len(dashboard_rows), "summary": dashboard_summary},
         "svg": {"rows": len(inputs["svgRows"])},
         "testOracle": {
@@ -1187,7 +1384,7 @@ def build_manifest(inputs, selection, source_commit, status):
         "current": _copy_value(current),
         "rows": {
             "skia": _copy_value(rows),
-            "skiaJunit": _copy_value(runner_rows),
+            "skiaJunit": _copy_value(runner_cohort_rows),
             "svg": _copy_value(inputs["svgRows"]),
             "testOracle": _copy_value(inputs["testOracleRows"]),
             "cpuOracle": _copy_value(inputs["cpuOracleRows"]),
@@ -1261,6 +1458,9 @@ def render_markdown(manifest):
         "- supportedRowsAfter: `%s`" % manifest.get("supportedRowsAfter", 0),
         "- residualRefusalRows: `%s`" % manifest.get("residualRefusalRows", 0),
         "- residualCodes: `%s`" % _markdown_value(manifest.get("residualCodes", [])),
+        "- runnerCohortRows: `%s`" % current.get("runner", {}).get("rows", 0),
+        "- runnerFullPopulationRows: `%s`"
+        % current.get("runnerFullPopulation", {}).get("rows", 0),
         "",
         "| Lane | Rows | Failures | Errors | Skipped | Terminal |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -1383,6 +1583,11 @@ def _prepare_inputs(args, dashboard_output, selection):
         dashboard_rows,
         selection.identities,
     )
+    runner_cohort_rows = _select_runner_cohort_rows(runner_rows, dashboard_rows)
+    threshold_baselines = {
+        _lane_key(row): _first_number((row,), _THRESHOLD_FIELDS)
+        for row in selection.rows
+    }
     merged_dashboard_rows = copy.deepcopy(dashboard_rows)
     _merge_junit_fields(merged_dashboard_rows, copy.deepcopy(runner_rows))
     evidence_rows, unknown_evidence = _filter_evidence_with_families(
@@ -1449,6 +1654,8 @@ def _prepare_inputs(args, dashboard_output, selection):
         "dashboardRows": merged_dashboard_rows,
         "skiaRunner": skia_runner,
         "runnerRows": runner_rows,
+        "runnerCohortRows": runner_cohort_rows,
+        "thresholdBaselines": threshold_baselines,
         "svgRows": svg_rows,
         "scoresBefore": scores_before,
         "scoresAfter": scores_after,
@@ -1503,7 +1710,13 @@ def _validate_selected_evidence(inputs, args, manifest):
         row = matching[0]
         matched_keys.add(_lane_key(row))
         if _is_supported_after(row, entry):
-            violations.extend(_validate_supported_after(row, entry))
+            violations.extend(
+                _validate_supported_after(
+                    row,
+                    entry,
+                    inputs.get("thresholdBaselines", {}).get(_lane_key(row)),
+                )
+            )
         elif _is_residual_refusal(row, entry):
             violations.extend(_validate_residual_refusal(row, entry, args.cohort_failure_code))
         else:
@@ -1677,7 +1890,9 @@ def main(argv=None):
             check_violations.append(
                 "approved status requires at least one supported row with actual similarity improvement"
             )
-        if args.status == "approved" and len(_causal_cohort_keys(manifest["rows"]["skia"])) > 1:
+        if args.status == "approved" and len(
+            _causal_cohort_keys_for_rows(manifest["rows"]["skia"])
+        ) > 1:
             check_violations.append("approved status requires at most one causal evidence cohort")
 
     try:

@@ -452,6 +452,17 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         )
         return fixtures
 
+    def write_full_population_raw_fixtures(self):
+        fixtures = self.write_raw_dashboard_fixtures()
+        raw_rows = json.loads(
+            fixtures["dashboardJson"].read_text(encoding="utf-8")
+        )["gms"]
+        fixtures["skiaRunner"] = self.write_runner(
+            raw_rows,
+            passed_names={row["name"] for row in raw_rows},
+        )
+        return fixtures
+
     @staticmethod
     def small_selection():
         row = {
@@ -816,7 +827,16 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                     self.assertTrue(manifest["current"]["runner"]["countMismatches"])
                 else:
                     self.assertIn("unclassified", stdout.lower())
-                    self.assertEqual(manifest["current"]["runner"]["rows"], 59)
+                self.assertEqual(manifest["current"]["runner"]["rows"], 58)
+                expected_full_rows = {
+                    "suite-error": 59,
+                    "malformed-counts": 58,
+                    "unclassified-error": 59,
+                }
+                self.assertEqual(
+                    manifest["current"]["runnerFullPopulation"]["rows"],
+                    expected_full_rows[variant],
+                )
 
     def test_enriched_dashboard_requires_complete_normalized_metadata(self):
         selection = self.small_selection()
@@ -962,6 +982,120 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         self.assertEqual(status, 0, stdout)
         self.assertEqual(manifest["supportedRowsAfter"], 0)
         self.assertEqual(manifest["candidateUnlockedRows"], 1)
+
+    def test_candidate_count_uses_combined_dashboard_and_evidence_causality(self):
+        fixtures = self.write_cli_fixtures()
+        self.configure_supported_fixture(fixtures)
+        dashboard = json.loads(
+            fixtures["dashboardJson"].read_text(encoding="utf-8")
+        )
+        dashboard["gms"][0].update(
+            {
+                "candidateUnlocked": True,
+                "causalBucket": "dashboard-cause",
+                "routeSignature": "prepared-image-unpremul",
+                "expectedRoute": "prepared-image-unpremul",
+                "minimalOperationTrace": "dashboard-trace",
+                "ownershipBoundary": "dashboard-owner",
+            }
+        )
+        dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+        fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
+        (fixtures["dashboardDir"] / "data/gms.json").write_text(
+            dashboard_text, encoding="utf-8"
+        )
+        evidence = json.loads(
+            fixtures["evidenceIndex"].read_text(encoding="utf-8")
+        )
+        for field in (
+            "supportedAfter",
+            "pixelImproved",
+            "candidateUnlocked",
+            "causalBucket",
+            "routeSignature",
+            "expectedRoute",
+            "minimalOperationTrace",
+            "ownershipBoundary",
+        ):
+            evidence["entries"][0].pop(field, None)
+        fixtures["evidenceIndex"].write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        status, stdout, manifest, _, _ = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["supportedRowsAfter"], 0)
+        self.assertEqual(manifest["candidateUnlockedRows"], 1)
+
+    def test_supported_after_rejects_unsafe_or_weakened_thresholds(self):
+        values = (-1.0, 101.0, float("nan"), 90.0)
+        for value in values:
+            with self.subTest(value=value):
+                fixtures = self.write_cli_fixtures()
+                self.configure_supported_fixture(fixtures)
+                evidence = json.loads(
+                    fixtures["evidenceIndex"].read_text(encoding="utf-8")
+                )
+                evidence["entries"][0]["minSimilarity"] = value
+                fixtures["evidenceIndex"].write_text(
+                    json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                status, stdout, _, _, _ = self.run_main(
+                    fixtures, check=True, status="approved"
+                )
+
+                self.assertEqual(status, 1, stdout)
+                self.assertIn("threshold", stdout.lower())
+
+    def test_oracle_inputs_reject_duplicates_and_out_of_range_scores(self):
+        variants = (
+            [
+                {"name": "blurrect_compare", "score": 10.0},
+                {"name": "blurrect_compare", "score": 11.0},
+            ],
+            [{"name": "blurrect_compare", "score": -0.1}],
+            [{"name": "blurrect_compare", "score": 100.1}],
+        )
+        for rows in variants:
+            with self.subTest(rows=rows):
+                fixtures = self.write_cli_fixtures()
+                fixtures["cpuResults"].write_text(
+                    json.dumps({"rows": rows}), encoding="utf-8"
+                )
+
+                status, stdout, _, _, _ = self.run_main(fixtures)
+
+                self.assertEqual(status, 2, stdout)
+                self.assertIn("oracle", stdout.lower())
+
+    def test_raw_dashboard_and_full_junit_population_filter_to_cohort(self):
+        fixtures = self.write_full_population_raw_fixtures()
+        raw_rows = json.loads(
+            fixtures["dashboardJson"].read_text(encoding="utf-8")
+        )["gms"]
+        self.assertEqual(len(raw_rows), 610)
+
+        status, stdout, manifest, _, markdown_path = self.run_main(fixtures)
+
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
+        self.assertEqual(manifest["current"]["runner"]["rows"], 58)
+        self.assertEqual(manifest["current"]["runner"]["selectedRows"], 58)
+        self.assertEqual(
+            manifest["current"]["runnerFullPopulation"]["rows"], 610
+        )
+        self.assertEqual(
+            manifest["provenance"]["skiaRunnerFullPopulation"]["value"]["rows"],
+            610,
+        )
+        self.assertEqual(len(manifest["rows"]["skiaJunit"]), 58)
+        markdown = markdown_path.read_text(encoding="utf-8")
+        self.assertIn("| `runner` | 58 |", markdown)
+        self.assertIn("runnerFullPopulationRows: `610`", markdown)
 
     def test_residual_followup_failure_code_must_be_present_and_consistent(self):
         variants = (
