@@ -21,6 +21,7 @@ WAVE1_MANIFEST = (
     ROOT
     / "reports/upstream-rebaseline/2026-08-16-skia-fidelity-wave-1-inputs/wave1-classification.json"
 )
+WAVE1_DASHBOARD = WAVE1_MANIFEST.with_name("skia-dashboard-gms.json")
 FAILURE_CODE = "unsupported.image.alpha_interpretation"
 FOLLOW_UP_FAILURE_CODE = "unsupported.image.native_binding"
 FAMILY_COUNTS = {
@@ -404,26 +405,17 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
     def write_raw_dashboard_fixtures(self):
         fixtures = self.write_cli_fixtures()
+        dashboard = json.loads(WAVE1_DASHBOARD.read_text(encoding="utf-8"))
         raw_rows = [
             {
                 "name": row["name"],
-                "referenceKind": "skia-upstream",
-                "isPassing": False,
-                "similarity": 98.0,
+                "family": row["family"],
+                "isPassing": row.get("isPassing"),
+                "similarity": row.get("similarity"),
                 "routeOnly": False,
             }
-            for row in self.selected_rows
+            for row in dashboard["gms"]
         ]
-        raw_rows.extend(
-            {
-                "name": "unselected-gm-%03d" % index,
-                "referenceKind": "skia-upstream",
-                "isPassing": False,
-                "similarity": 0.0,
-                "routeOnly": False,
-            }
-            for index in range(552)
-        )
         dashboard_text = json.dumps({"gms": raw_rows}, indent=2, sort_keys=True) + "\n"
         fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
         (fixtures["dashboardDir"] / "data/gms.json").write_text(
@@ -602,7 +594,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
         dashboard_output.write_text(
             json.dumps(dashboard, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        fixtures["skiaRunner"] = self.write_runner(self.selected_rows, [unrelated])
+        runner_rows = copy.deepcopy(self.selected_rows)
+        for runner_row in runner_rows:
+            runner_row["failureCode"] = FOLLOW_UP_FAILURE_CODE
+        fixtures["skiaRunner"] = self.write_runner(runner_rows, [unrelated])
         evidence = json.loads(fixtures["evidenceIndex"].read_text(encoding="utf-8"))
         evidence["entries"].append(
             {
@@ -634,6 +629,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
             for check in (False, True):
                 with self.subTest(variant=variant, check=check):
                     fixtures = self.write_cli_fixtures()
+                    self.configure_supported_fixture(fixtures)
                     dashboard = json.loads(
                         fixtures["dashboardJson"].read_text(encoding="utf-8")
                     )
@@ -654,8 +650,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                     status, stdout, _, _, _ = self.run_main(fixtures, check=check)
 
-                    self.assertEqual(status, 2, stdout)
-                    self.assertIn("failurecode", stdout.lower())
+                    expected_status = 0 if failure_code is None else 2
+                    self.assertEqual(status, expected_status, stdout)
+                    if expected_status == 2:
+                        self.assertIn("failurecode", stdout.lower())
 
     def test_check_validates_current_head_source_commit_and_policy_non_weakening(self):
         fixtures = self.write_cli_fixtures()
@@ -925,15 +923,30 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 self.assertEqual(status, 1, stdout)
                 self.assertIn(reason.lower(), stdout.lower())
 
-    def test_raw_dashboard_rows_filter_unselected_rows_before_metadata_validation(self):
+    def test_raw_dashboard_rows_normalize_and_filter_before_metadata_validation(self):
         fixtures = self.write_raw_dashboard_fixtures()
+        raw_rows = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))["gms"]
+        self.assertEqual(len(raw_rows), 610)
+        self.assertTrue(
+            all(
+                set(row) == {"name", "family", "isPassing", "similarity", "routeOnly"}
+                for row in raw_rows
+            )
+        )
 
         status, stdout, manifest, _, _ = self.run_main(fixtures)
 
         self.assertEqual(status, 0, stdout)
         self.assertEqual(manifest["current"]["dashboard"]["rows"], 58)
         self.assertEqual(len(manifest["rows"]["skia"]), 58)
-        self.assertEqual(manifest["rows"]["skia"][0]["evidenceLane"], "skia-dashboard")
+        selected = next(
+            row
+            for row in manifest["rows"]["skia"]
+            if row["name"] == self.selected_rows[0]["name"]
+        )
+        self.assertEqual(selected["family"], self.selected_rows[0]["family"])
+        self.assertEqual(selected["referenceKind"], "skia-upstream")
+        self.assertEqual(selected["evidenceLane"], "skia-dashboard")
 
     def test_supported_after_requires_fixed_route_signature_and_expected_route(self):
         fixtures = self.write_cli_fixtures()
@@ -1027,13 +1040,7 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
                 elif variant == "duplicate":
                     dashboard["gms"].append(copy.deepcopy(first))
                 elif variant == "unknown":
-                    dashboard["gms"].append(
-                        {
-                            "name": "not-in-wave2",
-                            "family": "IMAGE",
-                            "referenceKind": "skia-upstream",
-                        }
-                    )
+                    first["name"] = "not-in-wave2"
                 dashboard_text = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
                 fixtures["dashboardJson"].write_text(dashboard_text, encoding="utf-8")
                 (
@@ -1042,7 +1049,8 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 status, stdout, _, _, _ = self.run_main(fixtures)
 
-                self.assertEqual(status, 2, stdout)
+                expected_status = 0 if variant == "missing-evidence-lane" else 2
+                self.assertEqual(status, expected_status, stdout)
 
         fixtures = self.write_cli_fixtures()
         dashboard = json.loads(fixtures["dashboardJson"].read_text(encoding="utf-8"))
@@ -1078,8 +1086,10 @@ class ReconcileSkiaFidelityWave2Test(unittest.TestCase):
 
                 status, stdout, _, _, _ = self.run_main(fixtures)
 
-                self.assertEqual(status, 2, stdout)
-                self.assertIn("unknown identity", stdout.lower())
+                expected_status = 0 if missing else 2
+                self.assertEqual(status, expected_status, stdout)
+                if expected_status == 2:
+                    self.assertIn("unknown identity", stdout.lower())
 
     def test_check_rejects_weak_population_context(self):
         variants = (
