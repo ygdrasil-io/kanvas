@@ -2568,6 +2568,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     scopeLabel = entry.scope.scopeLabel,
                     sourceTaskIds = entry.scope.sourceTaskIds,
                     sourcePacketIds = entry.scope.sourcePacketIds,
+                    mixedCorePrimitiveAndImage = entry.scope.mixedCorePrimitiveAndImage,
                     facadeOperationClasses = entry.scope.facadeOperationClasses,
                     targetGeneration = entry.scope.targetGeneration,
                     resourceGenerationLabels = entry.scope.resourceGenerationLabels,

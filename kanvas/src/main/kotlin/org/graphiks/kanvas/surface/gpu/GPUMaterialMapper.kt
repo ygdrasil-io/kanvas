@@ -998,7 +998,12 @@ private fun Shader.Image.toPreparedImageMaterial(
             GPUMaterialKind.ImageDraw,
         )
     }
-    if (image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN) {
+    val alphaTypeUnsupported = if (image.colorType == ColorType.ALPHA_8) {
+        image.alphaType != AlphaType.PREMUL
+    } else {
+        image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN
+    }
+    if (alphaTypeUnsupported) {
         return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_ALPHA_TYPE,
             GPUMaterialKind.ImageDraw,

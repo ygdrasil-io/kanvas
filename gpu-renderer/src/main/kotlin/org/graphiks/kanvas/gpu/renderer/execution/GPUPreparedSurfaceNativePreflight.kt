@@ -76,6 +76,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
@@ -594,7 +595,7 @@ internal class GPUPreparedColorGlyphDestinationReadPlan(
                         clip.producerSourceScopeIndex < copySourceStepIndex &&
                             clip.preparation.resource == clip.resource &&
                             coverageMaskEvidence?.logicalResource == clip.resource &&
-                            coverageMaskEvidence?.role == GPUFrameResourceRole.ClipMask
+                            coverageMaskEvidence.role == GPUFrameResourceRole.ClipMask
                 } &&
                 semantic.payloadRef.commandIdValue == packet.commandIdValue &&
                 binding.packetId == packet.packetId,
@@ -687,10 +688,29 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             readback?.let { add(it.exactScopeKey) }
             surfaceChain?.let { add(it.exactBlitScopeKey) }
         }
+        val mixedSourceStepIndices = this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns
+            .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>()
+            .map { run -> run.plan.exactScopeKey.sourceStepIndex }
+            .toSet()
+            .intersect(
+                this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns
+                    .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
+                    .map { run -> run.plan.exactScopeKey.sourceStepIndex }
+                    .toSet(),
+            )
         require(expectedScopeKeysWithSharedUploads
             .groupBy(GPUPreparedNativeScopeKey::sourceStepIndex)
-            .values
-            .all { sameStep -> sameStep.distinct().size == 1 }
+            .all { (sourceStepIndex, sameStep) ->
+                val distinct = sameStep.distinct()
+                if (sourceStepIndex in mixedSourceStepIndices) {
+                    distinct.size == 2 && distinct.any { candidate ->
+                        candidate == this@GPUPreparedSurfaceNativePreflightPlan.exactScopeKeys
+                            .single { exact -> exact.sourceStepIndex == sourceStepIndex }
+                    }
+                } else {
+                    distinct.size == 1
+                }
+            }
         ) {
             "Shared prepared-text uploads must retain one identical global scope seal"
         }
@@ -717,13 +737,9 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>()
             .map { run -> run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes }
         if (coreRoutes.isNotEmpty()) {
-            require(coreRoutes.all { route ->
-                route.hasSameUniformAuthority(coreRoutes.first())
-            } &&
-                coreRoutes.flatMap { route -> route.commandIds } ==
-                coreRoutes.first().uniformCommandIds
-            ) {
-                "Prepared CorePrimitive runs must exactly partition one frame-global uniform slab"
+            val commandIds = coreRoutes.flatMap { route -> route.commandIds }
+            require(commandIds.distinct().size == commandIds.size) {
+                "Prepared CorePrimitive runs must retain unique sealed command authorities"
             }
         }
     }
@@ -808,6 +824,7 @@ internal class GPUPreparedSurfaceNativePreflight(
         val semanticTypes = semantics.filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
+        val supportedMixedSemanticTypes = setOf("CorePrimitive", "SampledImage")
         if (semanticTypes.any {
                 it != "CorePrimitive" &&
                     it != "SampledImage" &&
@@ -816,16 +833,18 @@ internal class GPUPreparedSurfaceNativePreflight(
                     it != "Vertices"
             } ||
             renders.any { render ->
-                render.drawPackets
+                val renderSemanticTypes = render.drawPackets
                     .mapNotNull(GPUDrawPacket::semanticPayload)
                     .map(GPUDrawSemanticPayload::canonicalType)
-                    .toSet().size != 1
+                    .toSet()
+                renderSemanticTypes.size != 1 &&
+                    renderSemanticTypes != supportedMixedSemanticTypes
             }
         ) {
             return refused(
                 "unsupported.prepared-surface.semantic-shape",
-                "The prepared surface route accepts only homogeneous ordered CorePrimitive, " +
-                    "SampledImage, TextA8, ColorGlyph, and Vertices runs.",
+                "The prepared surface route accepts homogeneous typed runs or one " +
+                    "CorePrimitive/SampledImage mixed run.",
             )
         }
         if (framePlan.steps.any { step ->
@@ -3189,6 +3208,10 @@ internal class GPUPreparedSurfaceNativePreflight(
         val evidenceByResource = resources.ordinaryResources.associateBy(
             GPUPreparedResourceEvidence::logicalResource,
         )
+        val imageResourceRefs = imageUploads
+            .flatMap { (_, _, plan) -> plan.preparationRequests }
+            .map(GPUResourcePreparationRequest::resource)
+            .toSet()
         val imageFrames = imageUploads.map { (uploadIndex, _, resourcePlan) ->
             val packetIds = resourcePlan.bindingRequests
                 .map { binding -> binding.packetId }
@@ -3218,8 +3241,96 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "invalid.prepared-surface.encoder-plan",
                     "A mixed render run is absent from the full encoder plan.",
                 )
+            val renderScopeKey = exactScopeKeys.single { scope ->
+                scope.sourceStepIndex == sourceStepIndex
+            }
             val corePackets = render.drawPackets.filter {
                 it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+            }
+                val imagePackets = render.drawPackets.filter {
+                    it.semanticPayload is GPUDrawSemanticPayload.SampledImage
+                }
+                val isMixedCoreImageRender = corePackets.isNotEmpty() && imagePackets.isNotEmpty()
+                if (isMixedCoreImageRender && corePackets.any {
+                        it.role == GPUDrawPacketRole.PathStencilProducer
+                    }
+                ) {
+                    return refused(
+                        "unsupported.prepared-surface.core-route",
+                        "Mixed CorePrimitive/Image runs do not support PathStencilProducer packets.",
+                    )
+                }
+                val coreResourceUses = if (isMixedCoreImageRender) {
+                render.resourceUses.filter { use -> use.resource !in imageResourceRefs }
+            } else {
+                render.resourceUses
+            }
+            fun renderStepFor(
+                packets: List<GPUDrawPacket>,
+                resourceUses: List<GPUFrameResourceUse> = render.resourceUses,
+                preparedImageBindingsByPacketId:
+                    Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
+            ) = GPUFrameStep.RenderPassStep(
+                target = render.target,
+                loadStore = render.loadStore,
+                samplePlan = render.samplePlan,
+                resourceUses = resourceUses,
+                drawPackets = packets,
+                sourceTaskIds = render.sourceTaskIds,
+                sampleContinuation = render.sampleContinuation,
+                depthStencilLoadStore = render.depthStencilLoadStore,
+                preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
+                preparedTextBindingsByPacketId = render.preparedTextBindingsByPacketId,
+            )
+            fun imageScopeKeyFor(
+                packets: List<GPUDrawPacket>,
+            ): GPUPreparedNativeScopeKey {
+                val pipelineKeys = renderScopeKey.operandKeys.filter {
+                    it.role == GPUPreparedNativeOperandRole.RenderPipeline
+                }
+                val pipelineKeyByPacketIndex = if (pipelineKeys.size == render.drawPackets.size) {
+                    pipelineKeys
+                } else {
+                    val distinctRenderPipelines = render.drawPackets
+                        .map(GPUDrawPacket::renderPipelineKey)
+                        .distinct()
+                    require(pipelineKeys.size == distinctRenderPipelines.size) {
+                        "Prepared mixed-image pipeline keys must retain packet or identity order"
+                    }
+                    val pipelineKeyByIdentity = distinctRenderPipelines.zip(pipelineKeys).toMap()
+                    render.drawPackets.map { packet ->
+                        pipelineKeyByIdentity.getValue(packet.renderPipelineKey)
+                    }
+                }
+                val bindGroupKeys = renderScopeKey.operandKeys.filter {
+                    it.role == GPUPreparedNativeOperandRole.RenderBindGroup
+                }
+                val imagePacketIds = packets.map(GPUDrawPacket::packetId).toSet()
+                val imagePacketIndexes = render.drawPackets.mapIndexedNotNull { index, packet ->
+                    index.takeIf { packet.packetId in imagePacketIds }
+                }
+                val bindGroupPacketIndexes = render.drawPackets.indices.toList()
+                require(bindGroupKeys.size == bindGroupPacketIndexes.size) {
+                    "Prepared mixed-image bind-group keys must retain bind-bearing packet order"
+                }
+                val bindGroupKeyByPacketIndex = bindGroupPacketIndexes.zip(bindGroupKeys).toMap()
+                return GPUPreparedNativeScopeKey(
+                    sourceStepIndex = renderScopeKey.sourceStepIndex,
+                    operationKind = renderScopeKey.operationKind,
+                    resourceGenerationLabels = renderScopeKey.resourceGenerationLabels,
+                    operandKeys = listOf(
+                        renderScopeKey.operandKeys.first {
+                            it.role == GPUPreparedNativeOperandRole.RenderColorTarget
+                        },
+                    ) + packets.map { packet ->
+                        val packetIndex = render.drawPackets.indexOfFirst { candidate ->
+                            candidate.packetId == packet.packetId
+                        }
+                        pipelineKeyByPacketIndex[packetIndex]
+                    } + imagePacketIndexes.map { index ->
+                        bindGroupKeyByPacketIndex.getValue(index)
+                    },
+                )
             }
             if (corePackets.isNotEmpty()) {
                 val routes = renderScope.corePrimitiveNativeScopeRouteSeal as?
@@ -3238,11 +3349,15 @@ internal class GPUPreparedSurfaceNativePreflight(
                     GPUCorePrimitiveRenderRunPlan(
                         sourceScopeIndices = listOf(sourceStepIndex),
                         packetIds = corePackets.map(GPUDrawPacket::packetId),
-                        renderStep = render,
-                        preparationRequests = render.resourceUses.map { use ->
+                        renderStep = if (isMixedCoreImageRender) {
+                            renderStepFor(corePackets, coreResourceUses)
+                        } else {
+                            render
+                        },
+                        preparationRequests = coreResourceUses.map { use ->
                             preparationByResource.getValue(use.resource)
                         },
-                        resourceEvidences = render.resourceUses.map { use ->
+                        resourceEvidences = coreResourceUses.map { use ->
                             evidenceByResource.getValue(use.resource)
                         },
                         routeSeal = routes,
@@ -3251,14 +3366,12 @@ internal class GPUPreparedSurfaceNativePreflight(
                         },
                     ),
                 )
-            } else if (render.drawPackets.all {
-                    it.semanticPayload is GPUDrawSemanticPayload.SampledImage
-                }
-            ) {
-                val runPackets = render.drawPackets.map { packet ->
+            }
+            if (imagePackets.isNotEmpty()) {
+                val runPackets = imagePackets.map { packet ->
                     packet.semanticPayload as GPUDrawSemanticPayload.SampledImage
                 }
-                val packetIds = render.drawPackets.map { packet -> packet.packetId.value }.toSet()
+                val packetIds = imagePackets.map { packet -> packet.packetId.value }.toSet()
                 val runResources = imageUploads.filter { (_, _, plan) ->
                     plan.bindingRequests.any { binding -> binding.packetId in packetIds }
                 }
@@ -3271,7 +3384,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 val bindingByPacketId = runResources
                     .flatMap { (_, _, plan) -> plan.bindingRequests }
                     .associateBy { binding -> binding.packetId }
-                val orderedBindings = render.drawPackets.map { packet ->
+                val orderedBindings = imagePackets.map { packet ->
                     bindingByPacketId[packet.packetId.value]
                         ?: return refused(
                             "unsupported.prepared_image.native-binding",
@@ -3284,13 +3397,26 @@ internal class GPUPreparedSurfaceNativePreflight(
                 orderedRuns += GPUPreparedSurfaceNativeRunPlan.Image(
                     GPUPreparedSurfaceImageRenderRunPlan(
                         sourceScopeIndex = sourceStepIndex,
-                        renderStep = render,
+                        renderStep = if (isMixedCoreImageRender) {
+                            renderStepFor(
+                                packets = imagePackets,
+                                preparedImageBindingsByPacketId =
+                                    render.preparedImageBindingsByPacketId
+                                        .filterKeys { packetId -> packetId.value in packetIds },
+                            )
+                        } else {
+                            render
+                        },
                         packets = runPackets,
                         resourcePlans = runResources.map { (_, _, plan) -> plan },
                         orderedBindings = orderedBindings,
                         uniformAllocations = allocations,
-                        exactScopeKey = exactScopeKeys.single { scope ->
-                            scope.sourceStepIndex == sourceStepIndex
+                        exactScopeKey = if (isMixedCoreImageRender) {
+                            imageScopeKeyFor(imagePackets)
+                        } else {
+                            exactScopeKeys.single { scope ->
+                                scope.sourceStepIndex == sourceStepIndex
+                            }
                         },
                     ),
                 )

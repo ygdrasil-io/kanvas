@@ -547,7 +547,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 GPUPreparedSurfaceImageRenderRunPlan::sourceScopeIndex,
             )
             val visibleImageHandles = mutableListOf<AutoCloseable>()
-            val finalImageOperands = imageReady?.scopeOperands.orEmpty().map { operand ->
+            val targetBoundImageOperands = imageReady?.scopeOperands.orEmpty().map { operand ->
                 when (operand) {
                     is GPUPreparedNativeScopeOperand.TextureUpload -> {
                         visibleImageHandles += operand.destination.texture
@@ -581,6 +581,34 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                         "invalid.prepared-surface.image-operand",
                         "The frame-global image lot returned an unsupported operand.",
                     )
+                }
+            }
+            val coreRenderByStep = layerChildrenOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .associateBy(GPUPreparedNativeScopeOperand.Render::sourceStepIndex)
+            val mixedImageStepIndices = targetBoundImageOperands.mapNotNull { operand ->
+                operand as? GPUPreparedNativeScopeOperand.Render
+            }.filter { imageRender ->
+                imageRender.sourceStepIndex in coreRenderByStep
+            }.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex).toSet()
+            val finalCoreOperands = layerChildrenOperands.filterNot { operand ->
+                operand.sourceStepIndex in mixedImageStepIndices
+            }
+            val finalImageOperands = targetBoundImageOperands.map { operand ->
+                if (operand is GPUPreparedNativeScopeOperand.Render) {
+                    val coreRender = coreRenderByStep[operand.sourceStepIndex]
+                    if (coreRender != null) {
+                        mergePreparedSurfaceMixedRender(
+                            framePlan = framePlan,
+                            sourceStepIndex = operand.sourceStepIndex,
+                            coreRender = coreRender,
+                            imageRender = operand,
+                        )
+                    } else {
+                        operand
+                    }
+                } else {
+                    operand
                 }
             }
             val distinctVisibleImageHandles = visibleImageHandles.distinctByNativeIdentity()
@@ -919,7 +947,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             }
 
             val operandsByStep = (
-                layerChildrenOperands +
+                finalCoreOperands +
                     coverageMaskOperands +
                     compositeOperands +
                     finalImageOperands +
@@ -1218,6 +1246,91 @@ private fun preparedSurfaceLayerClipScissor(
         right - left,
         bottom - top,
     )
+}
+
+private fun mergePreparedSurfaceMixedRender(
+    framePlan: GPUFramePlan,
+    sourceStepIndex: Int,
+    coreRender: GPUPreparedNativeScopeOperand.Render,
+    imageRender: GPUPreparedNativeScopeOperand.Render,
+): GPUPreparedNativeScopeOperand.Render {
+    require(coreRender.sourceStepIndex == sourceStepIndex &&
+        imageRender.sourceStepIndex == sourceStepIndex
+    )
+    val renderStep = framePlan.steps.getOrNull(sourceStepIndex) as?
+        GPUFrameStep.RenderPassStep
+        ?: error("A mixed prepared-surface render must retain its source render step")
+    val coreGroups = coreRender.commands.preparedSurfaceDrawGroups()
+    val imageGroups = imageRender.commands.preparedSurfaceDrawGroups()
+    val corePacketCount = renderStep.drawPackets.count { packet ->
+        packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+    }
+    val imagePacketCount = renderStep.drawPackets.count { packet ->
+        packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+    }
+    require(coreGroups.size == corePacketCount && imageGroups.size == imagePacketCount) {
+        "Mixed prepared-surface draw groups must retain one closed group per packet"
+    }
+
+    var lastCorePipeline: GPUPreparedNativeRenderCommand.SetPipeline? = null
+    val normalizedCoreGroups = coreGroups.map { group ->
+        group.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+            .lastOrNull()
+            ?.let { pipeline -> lastCorePipeline = pipeline }
+        if (group.any { command -> command is GPUPreparedNativeRenderCommand.SetPipeline }) {
+            group
+        } else {
+            listOf(requireNotNull(lastCorePipeline) {
+                "A mixed CorePrimitive draw group must retain its active pipeline"
+            }) + group
+        }
+    }
+    var coreIndex = 0
+    var imageIndex = 0
+    val commands = buildList {
+        renderStep.drawPackets.forEach { packet ->
+            when (packet.semanticPayload) {
+                is GPUDrawSemanticPayload.CorePrimitive ->
+                    addAll(normalizedCoreGroups[coreIndex++])
+                is GPUDrawSemanticPayload.SampledImage ->
+                    addAll(imageGroups[imageIndex++])
+                else -> error("Mixed CorePrimitive/Image render retained an unsupported packet")
+            }
+        }
+    }
+    require(coreIndex == corePacketCount && imageIndex == imagePacketCount)
+    return GPUPreparedNativeScopeOperand.Render(
+        sourceStepIndex = sourceStepIndex,
+        pass = coreRender.pass,
+        commands = commands,
+        semanticPayloads = renderStep.drawPackets.map { packet ->
+            requireNotNull(packet.semanticPayload) {
+                "Mixed CorePrimitive/Image render lost a semantic payload"
+            }
+        },
+        operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+        operationKindOverride = coreRender.operationKind,
+    )
+}
+
+private fun List<GPUPreparedNativeRenderCommand>.preparedSurfaceDrawGroups(): List<
+    List<GPUPreparedNativeRenderCommand>
+    > {
+    val groups = mutableListOf<List<GPUPreparedNativeRenderCommand>>()
+    var current = mutableListOf<GPUPreparedNativeRenderCommand>()
+    forEach { command ->
+        current += command
+        if (command is GPUPreparedNativeRenderCommand.Draw ||
+            command is GPUPreparedNativeRenderCommand.DrawIndexed
+        ) {
+            groups += current.toList()
+            current = mutableListOf()
+        }
+    }
+    require(current.isEmpty()) {
+        "A prepared-surface Render operand must end with a closed draw group"
+    }
+    return groups
 }
 
 private fun GPUPreparedNativeScopeOperand.PreparedImageRenderRun.toTargetBoundRender(

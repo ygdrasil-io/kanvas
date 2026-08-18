@@ -17,11 +17,27 @@ import kotlin.test.assertSame
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.images.AlphaType
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
@@ -166,6 +182,132 @@ class GPUPreparedNativeFramePayloadTest {
             listOf(target, pipeline, bindGroup, vertex, index),
             render.operands,
         )
+    }
+
+    @Test
+    fun `mixed CorePrimitive and Image layout requires exact color attachment topology`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            assertFailsWith<IllegalArgumentException> {
+                mixedRender(
+                    fixture = fixture,
+                    pass = GPUPreparedNativeRenderPassConfig(
+                        colorTarget = fixture.target,
+                        resolveTarget = textureViewOperand("resolve", generation),
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `mixed CorePrimitive and Image layout requires semantic cardinality and draw correspondence`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            val image = mixedImageSemantic()
+            val core = fullTargetSemantic(0)
+            val imageCommands = mixedImageCommands(
+                pipeline = pipelineOperand("image", generation),
+                bindGroup = bindGroupOperand("image", generation),
+            )
+            val coreCommands = mixedCoreCommands(fixture)
+
+            listOf(
+                "reversed semantic order" to listOf(image, core),
+                "extra semantic" to listOf(core, image, image),
+            ).forEach { (label, semantics) ->
+                assertFailsWith<IllegalArgumentException>(label) {
+                    GPUPreparedNativeScopeOperand.Render(
+                        sourceStepIndex = 2,
+                        pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                        commands = coreCommands + imageCommands,
+                        semanticPayloads = semantics,
+                        operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `mixed CorePrimitive and Image layout refuses commands outside the closed grammar`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            val imagePipeline = pipelineOperand("image", generation)
+            val imageBindGroup = bindGroupOperand("image", generation)
+            val imageCommands = mixedImageCommands(
+                pipeline = imagePipeline,
+                bindGroup = imageBindGroup,
+            )
+            val pollutedImageCommands = imageCommands.toMutableList().apply {
+                add(size - 1, GPUPreparedNativeRenderCommand.SetStencilReference(0u))
+            }
+            assertFailsWith<IllegalArgumentException> {
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = 2,
+                    pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                    commands = mixedCoreCommands(fixture) + pollutedImageCommands,
+                    semanticPayloads = listOf(fullTargetSemantic(0), mixedImageSemantic()),
+                    operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `mixed CorePrimitive and Image layout refuses an unbound indexed Core pipeline`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            noBindingsPipelineFixture(generation).use { noBindings ->
+                val unboundCoreCommands = mixedCoreCommands(fixture)
+                    .filterNot { command ->
+                        command is GPUPreparedNativeRenderCommand.SetBindGroup
+                    }
+                    .map { command ->
+                        if (command is GPUPreparedNativeRenderCommand.SetPipeline) {
+                            GPUPreparedNativeRenderCommand.SetPipeline(noBindings.operand)
+                        } else {
+                            command
+                        }
+                    }
+                assertFailsWith<IllegalArgumentException> {
+                    GPUPreparedNativeScopeOperand.Render(
+                        sourceStepIndex = 2,
+                        pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                        commands = unboundCoreCommands + mixedImageCommands(
+                            pipeline = pipelineOperand("image", generation),
+                            bindGroup = bindGroupOperand("image", generation),
+                        ),
+                        semanticPayloads = listOf(fullTargetSemantic(0), mixedImageSemantic()),
+                        operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `mixed CorePrimitive and Image layout requires borrowed render operands`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            val ownedImageBindGroup = GPUPreparedNativeBindGroupOperand(
+                fakeNative<GPUBindGroup>("owned-image"),
+                generation,
+                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+            )
+            assertFailsWith<IllegalArgumentException> {
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = 2,
+                    pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                    commands = mixedCoreCommands(fixture) + mixedImageCommands(
+                        pipeline = pipelineOperand("image", generation),
+                        bindGroup = ownedImageBindGroup,
+                    ),
+                    semanticPayloads = listOf(fullTargetSemantic(0), mixedImageSemantic()),
+                    operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+                )
+            }
+        }
     }
 
     @Test
@@ -1172,6 +1314,86 @@ class GPUPreparedNativeFramePayloadTest {
         indexCommand(index),
         drawCommand(),
     )
+
+    private fun mixedCoreCommands(
+        fixture: FullTargetFixture,
+    ): List<GPUPreparedNativeRenderCommand> = listOf(
+        GPUPreparedNativeRenderCommand.SetPipeline(fixture.pipeline),
+        vertexCommand(fixture.vertex),
+        indexCommand(fixture.index),
+        GPUPreparedNativeRenderCommand.SetBindGroup(0, fixture.bindGroup, listOf(256L)),
+        GPUPreparedNativeRenderCommand.SetScissor(0, 0, 8, 8),
+        drawCommand(),
+    )
+
+    private fun mixedRender(
+        fixture: FullTargetFixture,
+        pass: GPUPreparedNativeRenderPassConfig,
+    ) = GPUPreparedNativeScopeOperand.Render(
+        sourceStepIndex = 2,
+        pass = pass,
+        commands = mixedCoreCommands(fixture) + mixedImageCommands(
+            pipeline = pipelineOperand("image", fixture.target.deviceGeneration),
+            bindGroup = bindGroupOperand("image", fixture.target.deviceGeneration),
+        ),
+        semanticPayloads = listOf(fullTargetSemantic(0), mixedImageSemantic()),
+        operandLayout = GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+    )
+
+    private fun mixedImageCommands(
+        pipeline: GPUPreparedNativeRenderPipelineOperand,
+        bindGroup: GPUPreparedNativeBindGroupOperand,
+    ): List<GPUPreparedNativeRenderCommand> = listOf(
+        GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+        GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup, listOf(0L)),
+        GPUPreparedNativeRenderCommand.SetScissor(0, 0, 8, 8),
+        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(vertexCount = 6)),
+    )
+
+    private fun mixedImageSemantic(): GPUDrawSemanticPayload.SampledImage =
+        GPUPreparedImagePayloadGatherer().gatherSemantic(
+            GPUPreparedImagePayloadInput(
+                payloadRef = GPUDrawPayloadRef(1, "image.draw.texture_upload"),
+                artifact = mixedImageArtifact(),
+                geometry = GPUPreparedImageGeometry(
+                    GPUPreparedImageGeometryClass.Rect,
+                    listOf(
+                        GPUPreparedImageVertex(0f, 0f, 0f, 0f),
+                        GPUPreparedImageVertex(4f, 0f, 1f, 0f),
+                        GPUPreparedImageVertex(4f, 3f, 1f, 1f),
+                        GPUPreparedImageVertex(0f, 3f, 0f, 1f),
+                    ),
+                    listOf(0, 1, 2, 0, 2, 3),
+                ),
+                sampling = GPUPreparedImageSampling.Nearest,
+                tintPremultipliedRgba = listOf(1f, 1f, 1f, 1f),
+                atlasColorPremultipliedRgba = null,
+                atlasSourceBlend = null,
+                targetBounds = GPUPixelBounds(0, 0, 8, 8),
+                scissorBounds = GPUPixelBounds(0, 0, 8, 8),
+                blendPlanIdentity = "payload-test.src-over",
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
+        )
+
+    private fun mixedImageArtifact() = (
+        GPUPreparedImageArtifactFactory.prepare(
+            GPUPreparedImageSourceInput(
+                sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
+                sourceId = "mixed-image",
+                width = 1,
+                height = 1,
+                sourceFormat = GPUPreparedImageSourceFormat.Rgba8,
+                alphaType = AlphaType.PREMUL,
+                sourceRowBytes = 4,
+                profile = GPUPreparedImageProfile.Srgb,
+                orientation = GPUPreparedImageOrientation.AppliedIdentity,
+                provenance = GPUPreparedImageProvenance.CallerPixels,
+                sourceGeneration = 2,
+                pixelBytes = byteArrayOf(1, 2, 3, 4),
+            ),
+        ) as GPUPreparedImageArtifactResult.Ready
+    ).artifact
 
     private class FullTargetFixture(
         val target: GPUPreparedNativeTextureViewOperand,

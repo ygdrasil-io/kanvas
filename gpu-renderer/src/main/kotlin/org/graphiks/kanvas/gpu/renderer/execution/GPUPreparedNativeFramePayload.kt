@@ -923,6 +923,7 @@ internal enum class GPUPreparedNativeIndexFormat { Uint16, Uint32 }
 internal enum class GPUPreparedNativeRenderOperandLayout {
     CommandOrder,
     IndexedCorePrimitive,
+    MixedCorePrimitiveAndImage,
     IndexedCorePrimitiveFullTarget,
 }
 
@@ -1095,6 +1096,190 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                 }
                 return operands
             }
+            if (operandLayout == GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage) {
+                require(pass.resolveTarget == null && pass.depthStencilTarget == null) {
+                    "Mixed CorePrimitive/Image render layout requires the color target as its only attachment"
+                }
+                val drawGroups = buildList {
+                    var current = mutableListOf<GPUPreparedNativeRenderCommand>()
+                    commands.forEach { command ->
+                        current += command
+                        if (command is GPUPreparedNativeRenderCommand.Draw ||
+                            command is GPUPreparedNativeRenderCommand.DrawIndexed
+                        ) {
+                            add(current.toList())
+                            current = mutableListOf()
+                        }
+                    }
+                    require(current.isEmpty()) {
+                        "Mixed CorePrimitive/Image render layout requires closed draw groups"
+                    }
+                }
+                require(semanticPayloads.size == drawGroups.size) {
+                    "Mixed CorePrimitive/Image render layout requires one semantic payload per draw group"
+                }
+                val coreCount = semanticPayloads.count {
+                    it is GPUDrawSemanticPayload.CorePrimitive
+                }
+                val imageCount = semanticPayloads.count {
+                    it is GPUDrawSemanticPayload.SampledImage
+                }
+                require(coreCount > 0 && imageCount > 0 && coreCount + imageCount == semanticPayloads.size) {
+                    "Mixed CorePrimitive/Image render layout requires only both semantic families"
+                }
+                require(drawGroups.count { group ->
+                    group.lastOrNull() is GPUPreparedNativeRenderCommand.DrawIndexed
+                } == coreCount && drawGroups.count { group ->
+                    group.lastOrNull() is GPUPreparedNativeRenderCommand.Draw
+                } == imageCount
+                ) {
+                    "Mixed CorePrimitive/Image render layout requires exact draw-family cardinality"
+                }
+
+                val firstCoreGroupIndex = semanticPayloads.indexOfFirst {
+                    it is GPUDrawSemanticPayload.CorePrimitive
+                }
+                fun bindingCommands(group: List<GPUPreparedNativeRenderCommand>) =
+                    group.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+
+                fun requireBindingShape(
+                    group: List<GPUPreparedNativeRenderCommand>,
+                    pipeline: GPUPreparedNativeRenderPipelineOperand,
+                    requireBinding: Boolean,
+                ) {
+                    val bindings = bindingCommands(group)
+                    require(bindings.size == if (requireBinding) 1 else 0) {
+                        "Mixed CorePrimitive/Image render layout requires one exact binding shape per draw"
+                    }
+                    bindings.singleOrNull()?.let { binding ->
+                        require(binding.index == 0 && binding.dynamicOffsets.size == 1 &&
+                            binding.dynamicOffsets.single() >= 0L
+                        ) {
+                            "Mixed CorePrimitive/Image render layout requires one non-negative bind-group-zero offset"
+                        }
+                    }
+                    if (requireBinding) {
+                        require(pipeline.bindingPolicy ==
+                            GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+                        ) {
+                            "Mixed CorePrimitive/Image render layout requires a binding pipeline"
+                        }
+                    } else {
+                        require(pipeline.bindingPolicy ==
+                            GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+                        ) {
+                            "Mixed CorePrimitive/Image render layout requires a no-bindings pipeline"
+                        }
+                    }
+                }
+
+                fun requireCoreGroup(group: List<GPUPreparedNativeRenderCommand>, first: Boolean) {
+                    require(group.lastOrNull() is GPUPreparedNativeRenderCommand.DrawIndexed) {
+                        "Mixed CorePrimitive/Image render layout requires indexed CorePrimitive draws"
+                    }
+                    val body = group.dropLast(1)
+                    require(body.all { command ->
+                        command is GPUPreparedNativeRenderCommand.SetPipeline ||
+                            command is GPUPreparedNativeRenderCommand.SetBindGroup ||
+                            command is GPUPreparedNativeRenderCommand.SetScissor ||
+                            command is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
+                            command is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
+                            command is GPUPreparedNativeRenderCommand.SetStencilReference
+                    }) {
+                        "Mixed CorePrimitive/Image render layout forbids unsupported CorePrimitive commands"
+                    }
+                    val pipelineCommands = body.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+                    require(pipelineCommands.size == 1) {
+                        "Mixed CorePrimitive/Image render layout requires one CorePrimitive pipeline per draw"
+                    }
+                    val pipeline = pipelineCommands.single().pipeline
+                    require(
+                        pipeline.bindingPolicy ==
+                            GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired,
+                    ) {
+                        "Mixed CorePrimitive/Image render layout requires a binding CorePrimitive pipeline"
+                    }
+                    requireBindingShape(
+                        group,
+                        pipeline,
+                        requireBinding = true,
+                    )
+                    require(body.count { it is GPUPreparedNativeRenderCommand.SetScissor } == 1) {
+                        "Mixed CorePrimitive/Image render layout requires one CorePrimitive scissor per draw"
+                    }
+                    val bindings = bindingCommands(group).size
+                    if (first) {
+                        val direct = body.firstOrNull() is GPUPreparedNativeRenderCommand.SetPipeline
+                        if (direct) {
+                            require(body.size == 4 + bindings &&
+                                body[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                                body[1] is GPUPreparedNativeRenderCommand.SetVertexBuffer &&
+                                body[2] is GPUPreparedNativeRenderCommand.SetIndexBuffer &&
+                                body[3 + bindings] is GPUPreparedNativeRenderCommand.SetScissor
+                            ) {
+                                "Mixed CorePrimitive/Image render layout requires canonical direct CorePrimitive order"
+                            }
+                        } else {
+                            require(body.size == 5 + bindings &&
+                                body[0] is GPUPreparedNativeRenderCommand.SetVertexBuffer &&
+                                body[1] is GPUPreparedNativeRenderCommand.SetIndexBuffer &&
+                                body[2] is GPUPreparedNativeRenderCommand.SetStencilReference &&
+                                body[3] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                                body[4 + bindings] is GPUPreparedNativeRenderCommand.SetScissor
+                            ) {
+                                "Mixed CorePrimitive/Image render layout requires canonical indexed CorePrimitive order"
+                            }
+                        }
+                    } else {
+                        require(body.size == 2 + bindings &&
+                            body[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                            body[1 + bindings] is GPUPreparedNativeRenderCommand.SetScissor
+                        ) {
+                            "Mixed CorePrimitive/Image render layout requires canonical repeated CorePrimitive order"
+                        }
+                    }
+                }
+
+                fun requireImageGroup(group: List<GPUPreparedNativeRenderCommand>) {
+                    require(group.size == 4 &&
+                        group[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                        group[1] is GPUPreparedNativeRenderCommand.SetBindGroup &&
+                        group[2] is GPUPreparedNativeRenderCommand.SetScissor &&
+                        group[3] is GPUPreparedNativeRenderCommand.Draw
+                    ) {
+                        "Mixed CorePrimitive/Image render layout requires canonical SampledImage order"
+                    }
+                    val pipeline =
+                        (group[0] as GPUPreparedNativeRenderCommand.SetPipeline).pipeline
+                    requireBindingShape(group, pipeline, requireBinding = true)
+                }
+
+                require(drawGroups.withIndex().all { (index, group) ->
+                    when (semanticPayloads[index]) {
+                        is GPUDrawSemanticPayload.CorePrimitive ->
+                            requireCoreGroup(group, index == firstCoreGroupIndex).let { true }
+                        is GPUDrawSemanticPayload.SampledImage ->
+                            requireImageGroup(group).let { true }
+                        else -> false
+                    }
+                })
+                require(commands.count { it is GPUPreparedNativeRenderCommand.SetVertexBuffer } == 1 &&
+                    commands.count { it is GPUPreparedNativeRenderCommand.SetIndexBuffer } == 1 &&
+                    drawGroups[firstCoreGroupIndex].count {
+                        it is GPUPreparedNativeRenderCommand.SetVertexBuffer
+                    } == 1 &&
+                    drawGroups[firstCoreGroupIndex].count {
+                        it is GPUPreparedNativeRenderCommand.SetIndexBuffer
+                    } == 1
+                ) {
+                    "Mixed CorePrimitive/Image render layout requires one shared CorePrimitive geometry binding"
+                }
+                require((attachments + commands.flatMap(GPUPreparedNativeRenderCommand::operands))
+                    .all { operand -> operand.ownership == GPUPreparedNativeOperandOwnership.Borrowed }
+                ) {
+                    "Mixed CorePrimitive/Image render operands must all be borrowed"
+                }
+            }
             val pipelinesByNativeIdentity =
                 IdentityHashMap<GPURenderPipeline, GPUPreparedNativeRenderPipelineOperand>()
             val pipelines = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
@@ -1124,8 +1309,14 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             }
             val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
                 .map(GPUPreparedNativeRenderCommand.SetBindGroup::bindGroup)
-            return attachments + pipelines + vertexCommands.single().buffer +
+            val operands = attachments + pipelines + vertexCommands.single().buffer +
                 indexCommands.single().buffer + bindGroups
+            if (operandLayout == GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage) {
+                require(operands.all { it.ownership == GPUPreparedNativeOperandOwnership.Borrowed }) {
+                    "Mixed CorePrimitive/Image render operands must all be borrowed"
+                }
+            }
+            return operands
         }
 
         init {

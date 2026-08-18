@@ -15,6 +15,19 @@ enum class ColorType(val bytesPerPixel: Int) {
     ARGB_4444(2),
 }
 
+private fun defaultAlphaTypeFor(colorType: ColorType): AlphaType = when (colorType) {
+    ColorType.RGBA_8888,
+    ColorType.BGRA_8888,
+        -> AlphaType.UNPREMUL
+    ColorType.RGBA_F16,
+    ColorType.ALPHA_8,
+    ColorType.ARGB_4444,
+        -> AlphaType.PREMUL
+    ColorType.RGB_565,
+    ColorType.GRAY_8,
+        -> AlphaType.OPAQUE
+}
+
 data class Image(
     val width: Int,
     val height: Int,
@@ -22,7 +35,7 @@ data class Image(
     val sourceId: String,
     val pixels: ByteArray? = null,
     val colorSpace: ColorSpace = ColorSpace.SRGB,
-    val alphaType: AlphaType = AlphaType.UNPREMUL,
+    val alphaType: AlphaType = defaultAlphaTypeFor(colorType),
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
@@ -41,7 +54,7 @@ data class Image(
             pixels: ByteArray,
             colorType: ColorType = ColorType.RGBA_8888,
             sourceId: String = "pixels",
-            alphaType: AlphaType = AlphaType.UNPREMUL,
+            alphaType: AlphaType = defaultAlphaTypeFor(colorType),
         ): Image = Image(width, height, colorType, sourceId, pixels, alphaType = alphaType)
 
         fun placeholder(width: Int, height: Int): Image =
