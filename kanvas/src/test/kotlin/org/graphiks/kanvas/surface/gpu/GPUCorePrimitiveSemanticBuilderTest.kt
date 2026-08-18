@@ -157,8 +157,13 @@ class GPUCorePrimitiveSemanticBuilderTest {
         val sweep = sweepDescriptor(
             localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
         )
+        val negativeSweep = sweepDescriptor(
+            startAngle = -450f,
+            endAngle = -90f,
+            localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+        )
 
-        listOf(radial, sweep).forEach { descriptor ->
+        listOf(radial, sweep, negativeSweep).forEach { descriptor ->
             val result = gatherMaterial(descriptor)
             val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(result)
             val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.getValue(0))
@@ -224,6 +229,8 @@ class GPUCorePrimitiveSemanticBuilderTest {
             sweepDescriptor(startAngle = 20f, endAngle = 20f) to
                 "unsupported.core_primitive.material.sweep.range",
             sweepDescriptor(startAngle = 20f, endAngle = 10f) to
+                "unsupported.core_primitive.material.sweep.range",
+            sweepDescriptor(startAngle = -720f, endAngle = 0f) to
                 "unsupported.core_primitive.material.sweep.range",
         )
 

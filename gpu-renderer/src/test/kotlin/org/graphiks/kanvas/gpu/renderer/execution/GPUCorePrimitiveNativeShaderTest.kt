@@ -84,7 +84,7 @@ class GPUCorePrimitiveNativeShaderTest {
     }
 
     @Test
-    fun `sweep gradient shader normalizes arbitrary finite angles before span math`() {
+    fun `sweep gradient shader normalizes negative angles before span math`() {
         val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveGradientNativeShader(
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,

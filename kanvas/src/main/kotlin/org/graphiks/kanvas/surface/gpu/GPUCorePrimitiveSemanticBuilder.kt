@@ -406,7 +406,9 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         ) {
             refuseCoreMaterial("unsupported.core_primitive.material.non_finite", facts)
         }
-        if (endAngle <= startAngle) {
+        val sweepSpan = endAngle - startAngle
+        // atan2 exposes one principal revolution; unwrapped multi-turn sweeps are not representable.
+        if (endAngle <= startAngle || !sweepSpan.isFinite() || sweepSpan > 360f) {
             refuseCoreMaterial("unsupported.core_primitive.material.sweep.range", facts)
         }
         if (!listOf(startR, startG, startB, startA, endR, endG, endB, endA).isNormalizedFinite()) {
