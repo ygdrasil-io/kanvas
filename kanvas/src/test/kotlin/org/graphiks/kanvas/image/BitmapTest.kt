@@ -107,6 +107,13 @@ class BitmapTest {
     }
 
     @Test
+    fun `toImage uses the color type default alpha type for A8`() {
+        val image = Bitmap(1, 1, ColorType.ALPHA_8).toImage()
+
+        assertEquals(AlphaType.PREMUL, image.alphaType)
+    }
+
+    @Test
     fun `fromImage copies image pixels`() {
         val pixels = byteArrayOf(
             0xFF.toByte(), 0x00.toByte(), 0x00.toByte(), 0xFF.toByte(),
