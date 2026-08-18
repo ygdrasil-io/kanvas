@@ -80,6 +80,69 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `gradient normalization keeps radial and sweep getter snapshots single-owned`() {
+        val source = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/" +
+                "GPUPreparedMaterialProgram.kt",
+        ).readText()
+        val normalization = source
+            .substringAfter("private fun normalizeGradientStops")
+            .substringBefore("private fun GPUMaterialDescriptor.gradientStopPositionsOrNull")
+
+        assertTrue("existingPositions?.copyOf()" !in normalization)
+        assertTrue("existingColors?.copyOf()" !in normalization)
+        assertTrue(
+            Regex(
+                "is GPUMaterialDescriptor\\.RadialGradient,\\s+" +
+                    "is GPUMaterialDescriptor\\.SweepGradient\\s*->\\s*stops",
+            ).containsMatchIn(source),
+        )
+        assertTrue("else -> stops.copyOf()" in source)
+    }
+
+    @Test
+    fun `prepared compiler refuses radial and sweep non srgb gradient facts`() {
+        listOf(
+            radialGradientDescriptor().withGradientFacts(
+                GPUMaterialDescriptor.GradientFacts(interpolation = "linear"),
+            ),
+            sweepGradientDescriptor().withGradientFacts(
+                GPUMaterialDescriptor.GradientFacts(interpolation = "oklab"),
+            ),
+        ).forEach { descriptor ->
+            val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+                compiler.compile(descriptor, 1f, context),
+            )
+            assertEquals(
+                "unsupported.material.mapping.gradient_interpolation",
+                refused.code,
+            )
+        }
+    }
+
+    @Test
+    fun `prepared compiler refuses radial and sweep non identity local matrix facts`() {
+        val localMatrix = listOf(
+            1f, 0f, 2f,
+            0f, 1f, 3f,
+            0f, 0f, 1f,
+        )
+        listOf(
+            radialGradientDescriptor().withGradientFacts(
+                GPUMaterialDescriptor.GradientFacts(localMatrix = localMatrix),
+            ),
+            sweepGradientDescriptor().withGradientFacts(
+                GPUMaterialDescriptor.GradientFacts(localMatrix = localMatrix),
+            ),
+        ).forEach { descriptor ->
+            val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+                compiler.compile(descriptor, 1f, context),
+            )
+            assertEquals("unsupported.material.mapping.local_matrix", refused.code)
+        }
+    }
+
+    @Test
     fun `prepared material compiler accepts exactly common proven sources`() {
         val accepted = listOf(
             solidDescriptor(),

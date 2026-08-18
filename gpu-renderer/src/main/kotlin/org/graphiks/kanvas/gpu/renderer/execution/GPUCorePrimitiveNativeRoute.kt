@@ -291,10 +291,12 @@ internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal private constructo
                     GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
             }) { "An analytic-shape multi-key direct CorePrimitive pass requires the uniform80 layout" }
         } else {
-            require(structuralPipelineKeysSnapshot.all { key ->
-                key.uniformLayout ==
-                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
-            }) { "A multi-key direct CorePrimitive pass requires one exact dynamic uniform32 layout" }
+            val layouts = structuralPipelineKeysSnapshot.map { it.uniformLayout }.distinct()
+            require(layouts.size == 1 && layouts.single() in setOf(
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+            )) { "A multi-key direct CorePrimitive pass requires one exact dynamic uniform layout" }
         }
     }
 

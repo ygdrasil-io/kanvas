@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -1187,7 +1188,7 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical DrawImageRect refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.DrawImageRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: deviceScissorRefusalCode() ?: when {
+        coordinateRefusalCode() ?: deviceScissorRefusalCode() ?: material.analysisRefusalCodeOrNull() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
             src.left.isNaN() || src.top.isNaN() || src.right.isNaN() || src.bottom.isNaN() ->
                 "unsupported.image.src_rect_nan"
@@ -1407,7 +1408,7 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical DrawLayer refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.DrawLayer.refusalCode(): String? =
-        coordinateRefusalCode() ?: when {
+        coordinateRefusalCode() ?: material.analysisRefusalCodeOrNull() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
             scopeId.isBlank() -> "unsupported.layer.scope_id_empty"
             bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
@@ -1588,7 +1589,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: when {
+        } ?: material.analysisRefusalCodeOrNull() ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
@@ -1641,7 +1642,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: when {
+        } ?: material.analysisRefusalCodeOrNull() ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type == GPUTransformType.Scale -> "unsupported.transform.rrect_scale_unproven"
@@ -1672,7 +1673,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: when {
+        } ?: material.analysisRefusalCodeOrNull() ?: when {
             stroke -> {
                 val aaMode = if (antiAlias) "coverage-aa" else "none"
                 val shapeDesc = GPUShapeDescriptor(
@@ -1754,6 +1755,11 @@ class GPUFirstRoutePlanner(
         facts.any { fact ->
             fact.name == name && fact.value == "supported" && fact.affectsValidity
         }
+
+    /** Returns typed material refusal evidence before kind and capability admission checks. */
+    private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
+        (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
+            ?: gradientFactsRefusalReasonOrNull()?.diagnosticCode
 
     /** Returns a terminal gradient refusal code, or null when gradient facts are accepted. */
     private fun GPUMaterialDescriptor.LinearGradient.refusalCode(): String? =

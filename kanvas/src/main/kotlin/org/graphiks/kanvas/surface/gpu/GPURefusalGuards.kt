@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 
@@ -85,6 +86,9 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     }
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
+    if (material is GPUMaterialDescriptor.Unsupported) {
+        return material.reason.diagnosticCode
+    }
     if (material !is GPUMaterialDescriptor.SolidColor &&
         material.kind != GPUMaterialKind.RuntimeEffect &&
         (!acceptedByDispatch || 
@@ -106,6 +110,7 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     if (layer.scopeKind != GPULayerScopeKind.Root) {
         return "unsupported_layer:${layer.scopeKind.name}"
     }
+    material.gradientFactsRefusalReasonOrNull()?.let { return it.diagnosticCode }
     return null
 }
 

@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedColorFilterChildDesc
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildRole
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragmentAdmission
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
@@ -236,6 +237,7 @@ object GPUPreparedMaterialProgramCompiler {
                 "Prepared material gradient coordinates and colors must be finite",
             )
         }
+        normalized.gradientFactsRefusalOrNull()?.let { return it }
         if (!GradientWgslShaderProvider.canHandle(normalized)) {
             return refusedSource(
                 "unsupported.material.gradient_stop_count_exceeded",
@@ -1686,8 +1688,8 @@ private fun normalizeGradientStops(descriptor: GPUMaterialDescriptor): GPUMateri
         positions = floatArrayOf(0f, 1f)
         colors = descriptor.gradientEndpointColors()
     } else {
-        positions = existingPositions?.copyOf() ?: return null
-        colors = existingColors?.copyOf() ?: return null
+        positions = existingPositions?.let { descriptor.normalizationStopSnapshot(it) } ?: return null
+        colors = existingColors?.let { descriptor.normalizationStopSnapshot(it) } ?: return null
     }
     if (
         positions.isEmpty() ||
@@ -1717,6 +1719,12 @@ private fun GPUMaterialDescriptor.gradientStopColorsOrNull(): FloatArray? = when
     else -> null
 }
 
+private fun GPUMaterialDescriptor.normalizationStopSnapshot(stops: FloatArray): FloatArray = when (this) {
+    is GPUMaterialDescriptor.RadialGradient,
+    is GPUMaterialDescriptor.SweepGradient -> stops
+    else -> stops.copyOf()
+}
+
 private fun GPUMaterialDescriptor.gradientEndpointColors(): FloatArray = when (this) {
     is GPUMaterialDescriptor.LinearGradient ->
         floatArrayOf(startR, startG, startB, startA, endR, endG, endB, endA)
@@ -1743,6 +1751,15 @@ private fun GPUMaterialDescriptor.copyGradientStops(
         copy(allStopPositions = positions, allStopColors = colors)
     else -> error("Not a gradient descriptor")
 }
+
+private fun GPUMaterialDescriptor.gradientFactsRefusalOrNull(): PreparedSourceResult.Refused? =
+    gradientFactsRefusalReasonOrNull()?.let { reason ->
+        refusedSource(
+            code = reason.diagnosticCode,
+            sourceKind = GPUMaterialSourceKind.Gradient,
+            message = reason.diagnosticMessage,
+        )
+    }
 
 private fun GPUMaterialDescriptor.gradientStopPositions(): FloatArray =
     requireNotNull(gradientStopPositionsOrNull())

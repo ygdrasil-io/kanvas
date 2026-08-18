@@ -24,6 +24,7 @@ import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.BlenderChild
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ColorFilterChild
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
@@ -36,6 +37,7 @@ import org.graphiks.kanvas.pipeline.UniformValue
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.r
 import kotlin.math.pow
 
@@ -567,6 +569,10 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
             tileMode = tileMode,
             allStopPositions = allPos, allStopColors = allCol,
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = this.interpolation.toDescriptorInterpolation(),
+            ),
         )
         if (GradientWgslShaderProvider.canHandle(desc)) {
             val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
@@ -613,7 +619,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         val id = this.effect.id
         GPUMaterialDescriptor.RuntimeEffect(effectId = id, descriptorVersion = 1)
     }
-    is Shader.WithLocalMatrix -> this.shader.toMaterial()
+    is Shader.WithLocalMatrix -> this.shader.toMaterial().withGradientLocalMatrix(this.matrix)
     is Shader.WithColorFilter -> this.shader.toMaterial().let { material ->
         material.withGradientColorFilter(this.filter) ?: material
     }
@@ -638,6 +644,10 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
             tileMode = tileMode,
             allStopPositions = allPos, allStopColors = allCol,
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = this.interpolation.toDescriptorInterpolation(),
+            ),
         )
         if (GradientWgslShaderProvider.canHandle(desc)) {
             val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
@@ -678,8 +688,97 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     }
     is Shader.PerlinNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
     is Shader.FractalNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
-    is Shader.WithWorkingColorSpace -> this.shader.toMaterial()
+    is Shader.WithWorkingColorSpace ->
+        this.shader.toMaterial().withGradientInterpolation(this.interpolation)
     is Shader.CoordClamp -> this.shader.toMaterial()
+}
+
+private fun ColorSpaceInterpolation.toDescriptorInterpolation(): String = when (this) {
+    ColorSpaceInterpolation.SRGB -> "srgb"
+    ColorSpaceInterpolation.LINEAR -> "linear"
+    ColorSpaceInterpolation.OKLAB -> "oklab"
+    ColorSpaceInterpolation.HSL -> "hsl"
+    ColorSpaceInterpolation.OKLCH -> "oklch"
+}
+
+private fun Matrix33.toDescriptorValues(): List<Float> = listOf(
+    scaleX, skewX, transX,
+    skewY, scaleY, transY,
+    persp0, persp1, persp2,
+)
+
+private fun List<Float>.toMatrix33(): Matrix33 {
+    require(size == 9) { "Gradient local matrix must contain nine values" }
+    return Matrix33.makeAll(
+        this[0], this[1], this[2],
+        this[3], this[4], this[5],
+        this[6], this[7], this[8],
+    )
+}
+
+private fun Matrix33.hasFiniteValues(): Boolean = toDescriptorValues().all(Float::isFinite)
+
+private fun List<Float>.composeGradientLocalMatrix(matrix: Matrix33): List<Float>? {
+    if (size != 9 || any { !it.isFinite() } || !matrix.hasFiniteValues()) return null
+    return (toMatrix33() * matrix).toDescriptorValues().takeIf { values ->
+        values.all(Float::isFinite)
+    }
+}
+
+private fun GPUMaterialDescriptor.invalidGradientLocalMatrix(): GPUMaterialDescriptor.Unsupported =
+    GPUMaterialDescriptor.Unsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+        originalKind = kind,
+        source = this,
+    )
+
+private fun GPUMaterialDescriptor.withGradientLocalMatrix(matrix: Matrix33): GPUMaterialDescriptor =
+    when (this) {
+        is GPUMaterialDescriptor.RadialGradient ->
+            localMatrix.composeGradientLocalMatrix(matrix)?.let { composed ->
+                copy().withGradientFacts(
+                    GPUMaterialDescriptor.GradientFacts(
+                        interpolation = interpolation,
+                        localMatrix = composed,
+                    ),
+                )
+            } ?: invalidGradientLocalMatrix()
+        is GPUMaterialDescriptor.SweepGradient ->
+            localMatrix.composeGradientLocalMatrix(matrix)?.let { composed ->
+                copy().withGradientFacts(
+                    GPUMaterialDescriptor.GradientFacts(
+                        interpolation = interpolation,
+                        localMatrix = composed,
+                    ),
+                )
+            } ?: invalidGradientLocalMatrix()
+        else -> this
+    }
+
+private fun GPUMaterialDescriptor.withGradientInterpolation(
+    interpolation: ColorSpaceInterpolation,
+): GPUMaterialDescriptor = when (this) {
+    is GPUMaterialDescriptor.RadialGradient ->
+        copy().withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = interpolation.toDescriptorInterpolation(),
+                localMatrix = localMatrix,
+            ),
+        )
+    is GPUMaterialDescriptor.SweepGradient ->
+        copy().withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = interpolation.toDescriptorInterpolation(),
+                localMatrix = localMatrix,
+            ),
+        )
+    else -> this
+}
+
+private fun GPUMaterialDescriptor.gradientInterpolationOrNull(): String? = when (this) {
+    is GPUMaterialDescriptor.RadialGradient -> interpolation
+    is GPUMaterialDescriptor.SweepGradient -> interpolation
+    else -> null
 }
 
 private fun Shader.toPreparedMaterial(
@@ -724,109 +823,134 @@ private class PreparedShaderMapper(
 
 private fun Shader.toPreparedMaterial(
     mapper: PreparedShaderMapper,
-): GPUMaterialDescriptor = when (this) {
-    is Shader.SolidColor -> toMaterial()
-    is Shader.LinearGradient ->
-        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
-            toMaterial()
-        } else {
-            mapper.descriptorAssembly.preparedUnsupported(
-                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
-                GPUMaterialKind.LinearGradient,
-            )
+): GPUMaterialDescriptor {
+    return when (this) {
+        is Shader.SolidColor -> toMaterial()
+        is Shader.LinearGradient ->
+            if (interpolation == ColorSpaceInterpolation.SRGB) {
+                toMaterial()
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                    GPUMaterialKind.LinearGradient,
+                )
+            }
+        is Shader.RadialGradient ->
+            if (interpolation == ColorSpaceInterpolation.SRGB) {
+                toMaterial()
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                    GPUMaterialKind.RadialGradient,
+                )
+            }
+        is Shader.SweepGradient ->
+            if (interpolation == ColorSpaceInterpolation.SRGB) {
+                toMaterial()
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                    GPUMaterialKind.SweepGradient,
+                )
+            }
+        is Shader.ConicalGradient ->
+            if (interpolation == ColorSpaceInterpolation.SRGB) {
+                toMaterial()
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                    GPUMaterialKind.TwoPointConical,
+                )
+            }
+        is Shader.Image -> toPreparedImageMaterial(mapper.descriptorAssembly)
+        is Shader.Blend -> {
+            val dstDesc = mapper.map(dst)
+            val srcDesc = mapper.map(src)
+            listOf(dstDesc, srcDesc).highestPriorityPreparedGraphTraversalRefusal()
+                ?: mapper.descriptorAssembly.blendShader(
+                    mode = mode.name,
+                    dst = dstDesc,
+                    src = srcDesc,
+                )
         }
-    is Shader.RadialGradient ->
-        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
-            toMaterial()
-        } else {
-            mapper.descriptorAssembly.preparedUnsupported(
-                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
-                GPUMaterialKind.RadialGradient,
-            )
+        is Shader.RuntimeEffect -> {
+            val mappedChildren = children.mapValues { (_, child) -> mapper.map(child) }
+            mappedChildren.values.highestPriorityPreparedGraphTraversalRefusal()
+                ?: mapper.descriptorAssembly.runtimeEffect(
+                    effectId = effect.id,
+                    descriptorVersion = 1,
+                    uniforms = uniforms.toGPUUniformValues(),
+                    children = mappedChildren,
+                )
         }
-    is Shader.SweepGradient ->
-        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
-            toMaterial()
-        } else {
+        is Shader.WithLocalMatrix -> {
+            val source = mapper.map(shader)
+            source.preparedGraphTraversalRefusalOrNull()?.let { return it }
             mapper.descriptorAssembly.preparedUnsupported(
-                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
-                GPUMaterialKind.SweepGradient,
-            )
-        }
-    is Shader.ConicalGradient ->
-        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
-            toMaterial()
-        } else {
-            mapper.descriptorAssembly.preparedUnsupported(
-                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
-                GPUMaterialKind.TwoPointConical,
-            )
-        }
-    is Shader.Image -> toPreparedImageMaterial(mapper.descriptorAssembly)
-    is Shader.Blend -> {
-        val dstDesc = mapper.map(dst)
-        val srcDesc = mapper.map(src)
-        listOf(dstDesc, srcDesc).highestPriorityPreparedGraphTraversalRefusal()
-            ?: mapper.descriptorAssembly.blendShader(
-                mode = mode.name,
-                dst = dstDesc,
-                src = srcDesc,
-            )
-    }
-    is Shader.RuntimeEffect -> {
-        val mappedChildren = children.mapValues { (_, child) -> mapper.map(child) }
-        mappedChildren.values.highestPriorityPreparedGraphTraversalRefusal()
-            ?: mapper.descriptorAssembly.runtimeEffect(
-                effectId = effect.id,
-                descriptorVersion = 1,
-                uniforms = uniforms.toGPUUniformValues(),
-                children = mappedChildren,
-            )
-    }
-    is Shader.WithLocalMatrix -> {
-        val source = mapper.map(shader)
-        source.preparedGraphTraversalRefusalOrNull()
-            ?: mapper.descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
                 originalKind = shader.materialKind(),
                 source = source,
             )
+        }
+        is Shader.WithColorFilter -> {
+            val source = mapper.map(shader)
+            source.preparedGraphTraversalRefusalOrNull()
+                ?: source.withPreparedColorFilter(
+                    filter,
+                    mapper.colorFilterFingerprinter,
+                    mapper.descriptorAssembly,
+                )
+        }
+        is Shader.WithWorkingColorSpace -> {
+            val source = mapper.map(shader)
+            source.preparedGraphTraversalRefusalOrNull()?.let { return it }
+            if (source is GPUMaterialDescriptor.Unsupported) {
+                return mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+                    originalKind = shader.materialKind(),
+                    source = source,
+                )
+            }
+            val gradient = when (source) {
+                is GPUMaterialDescriptor.RadialGradient,
+                is GPUMaterialDescriptor.SweepGradient -> source.withGradientInterpolation(interpolation)
+                else -> null
+            }
+            if (gradient == null) {
+                return mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+                    originalKind = shader.materialKind(),
+                    source = source,
+                )
+            }
+            if (gradient.gradientInterpolationOrNull() == "srgb") {
+                gradient
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+                    originalKind = shader.materialKind(),
+                    source = gradient,
+                )
+            }
+        }
+        is Shader.CoordClamp -> {
+            val source = mapper.map(shader)
+            source.preparedGraphTraversalRefusalOrNull()
+                ?: mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
+                    originalKind = shader.materialKind(),
+                    source = source,
+                )
+        }
+        is Shader.PerlinNoise -> mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
+            GPUMaterialKind.SolidColor,
+        )
+        is Shader.FractalNoise -> mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
+            GPUMaterialKind.SolidColor,
+        )
     }
-    is Shader.WithColorFilter -> {
-        val source = mapper.map(shader)
-        source.preparedGraphTraversalRefusalOrNull()
-            ?: source.withPreparedColorFilter(
-                filter,
-                mapper.colorFilterFingerprinter,
-                mapper.descriptorAssembly,
-            )
-    }
-    is Shader.WithWorkingColorSpace -> {
-        val source = mapper.map(shader)
-        source.preparedGraphTraversalRefusalOrNull()
-            ?: mapper.descriptorAssembly.preparedUnsupported(
-                reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
-                originalKind = shader.materialKind(),
-                source = source,
-            )
-    }
-    is Shader.CoordClamp -> {
-        val source = mapper.map(shader)
-        source.preparedGraphTraversalRefusalOrNull()
-            ?: mapper.descriptorAssembly.preparedUnsupported(
-                reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
-                originalKind = shader.materialKind(),
-                source = source,
-            )
-    }
-    is Shader.PerlinNoise -> mapper.descriptorAssembly.preparedUnsupported(
-        GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
-        GPUMaterialKind.SolidColor,
-    )
-    is Shader.FractalNoise -> mapper.descriptorAssembly.preparedUnsupported(
-        GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
-        GPUMaterialKind.SolidColor,
-    )
 }
 
 private fun Shader.Image.toPreparedImageMaterial(

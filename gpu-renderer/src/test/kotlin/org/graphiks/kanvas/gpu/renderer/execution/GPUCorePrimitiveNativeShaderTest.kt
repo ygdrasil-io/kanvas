@@ -10,9 +10,135 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslValidationSummary
 
 class GPUCorePrimitiveNativeShaderTest {
+    @Test
+    fun `gradient shaders are parser validated with the fixed material ABI`() {
+        val cases = listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient to
+                "CorePrimitiveRadialGradientBlock",
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient to
+                "CorePrimitiveSweepGradientBlock",
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient to
+                "CorePrimitiveAnalyticRadialGradientBlock",
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient to
+                "CorePrimitiveAnalyticSweepGradientBlock",
+        )
+
+        cases.forEach { (variant, blockName) ->
+            val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+                buildCorePrimitiveGradientNativeShader(variant),
+            )
+            val reflection = requireNotNull(ready.plan.wgslReflection).report
+            assertTrue(reflection.validation.success)
+            assertEquals(
+                setOf("vs_main" to "vertex", "fs_main" to "fragment"),
+                reflection.entryPoints.map { it.name to it.stage }.toSet(),
+            )
+            assertEquals(listOf(0 to 0), reflection.bindings.map { it.group to it.binding })
+            assertEquals(
+                if (variant.name.startsWith("Analytic")) {
+                    CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES
+                } else {
+                    CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+                },
+                reflection.layouts.single { it.structName == blockName }.size,
+            )
+
+            val source = ready.plan.wgslSource
+            if (variant == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ||
+                variant == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient
+            ) {
+                assertContains(source, "let distance = length(position - center);")
+            } else {
+                assertContains(source, "let angle = atan2(position.y - center.y, position.x - center.x);")
+                assertContains(source, "normalized_angle = normalized_angle + 1.0")
+            }
+            assertContains(source, "clamp(t_raw, 0.0, 1.0)")
+            assertContains(source, "sample_stops_at")
+            assertContains(source, "let mixed_linear = mix(lower_color.rgb, upper_color.rgb, local_t);")
+            assertContains(source, "return vec4<f32>(mixed_linear, mixed_alpha);")
+            listOf("texture", "sampler", "discard").forEach { forbidden ->
+                assertFalse(forbidden in source, "Gradient shader must not contain $forbidden")
+            }
+        }
+    }
+
+    @Test
+    fun `gradient shader scans only retained stops and interpolates packed linear colors`() {
+        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveGradientNativeShader(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            ),
+        ).plan.wgslSource
+
+        assertContains(source, "index < safe_count")
+        assertFalse(source.contains("index < 16u"))
+        assertContains(source, "let mixed_linear = mix(lower_color.rgb, upper_color.rgb, local_t);")
+        assertContains(source, "return vec4<f32>(mixed_linear, mixed_alpha);")
+        assertFalse(source.contains("srgb_to_linear"))
+        assertFalse(source.contains("linear_to_srgb"))
+    }
+
+    @Test
+    fun `sweep gradient shader converts degree facts to radians before angle math`() {
+        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveGradientNativeShader(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+            ),
+        ).plan.wgslSource
+
+        assertContains(source, "let start_angle = gradient.angle_range.x * 0.0174532925199433;")
+        assertContains(source, "let end_angle = gradient.angle_range.y * 0.0174532925199433;")
+        assertContains(source, "var normalized_angle = (angle - start_angle) / 6.28318530718;")
+        assertContains(source, "let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);")
+    }
+
+    @Test
+    fun `gradient shader rejects invalid parser reflection before native creation`() {
+        val validReflection = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveGradientNativeShader(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            ),
+        ).plan.wgslReflection
+        requireNotNull(validReflection)
+        val report = validReflection.report
+        val invalidReflections = listOf(
+            null,
+            validReflection.copy(validated = false),
+            GPUColorWgslReflection(
+                report.copy(validation = WgslValidationSummary(success = false)),
+                validated = true,
+            ),
+            GPUColorWgslReflection(report.copy(entryPoints = report.entryPoints.dropLast(1))),
+            GPUColorWgslReflection(report.copy(bindings = emptyList())),
+            GPUColorWgslReflection(
+                report.copy(
+                    layouts = report.layouts.map { layout ->
+                        if (layout.structName == "CorePrimitiveRadialGradientBlock") {
+                            layout.copy(size = CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES - 16)
+                        } else {
+                            layout
+                        }
+                    },
+                ),
+            ),
+        )
+
+        invalidReflections.forEach { reflection ->
+            val rejected = assertIs<GPUCorePrimitiveNativeShaderResult.Rejected>(
+                buildCorePrimitiveGradientNativeShader(
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+                ) { _, _ -> GPUColorWgslValidation.Validated(reflection) },
+            )
+            assertEquals(CORE_PRIMITIVE_GRADIENT_REFLECTION_INVALID_REASON, rejected.reason)
+            assertTrue(rejected.message.isNotBlank())
+        }
+    }
+
     @Test
     fun `analytic shape executable shader fails closed on absent or incomplete parser reflection`() {
         val validReflection = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(

@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.stableCoreDump
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 
 class GPUCorePrimitivePayloadContractsTest {
     @Test
@@ -362,6 +365,263 @@ class GPUCorePrimitivePayloadContractsTest {
                 this[byteIndex] = (this[byteIndex] + 1) and 0xff
             }
             assertNotEquals(fingerprint, corePrimitiveUniformFingerprint(mutated))
+        }
+    }
+
+    @Test
+    fun `radial material snapshots facts and uses fixed stop packing`() {
+        val positions = mutableListOf(0f, 0.5f, 1f)
+        val colors = mutableListOf(
+            1f, 0f, 0f, 0.5f,
+            0f, 1f, 0f, 0.75f,
+            0f, 0f, 1f, 1f,
+        )
+        val matrix = mutableListOf(
+            1f, 0f, 2f,
+            0f, 1f, 3f,
+            0f, 0f, 1f,
+        )
+        val material = GPUCorePrimitiveMaterialPayload.RadialGradient(
+            centerX = 4f,
+            centerY = 5f,
+            radius = 8f,
+            localMatrix = matrix,
+            interpolation = "srgb",
+            tileMode = "clamp",
+            positions = positions,
+            colors = colors,
+        )
+        val semantic = gather(material = material)
+
+        positions[0] = 0.25f
+        colors[0] = 0.25f
+        matrix[2] = 9f
+
+        val snapshot = assertIs<GPUCorePrimitiveMaterialPayload.RadialGradient>(semantic.material)
+        assertEquals(listOf(0f, 0.5f, 1f), snapshot.positions)
+        assertEquals(
+            listOf(
+                1f, 0f, 0f, 0.5f,
+                0f, 1f, 0f, 0.75f,
+                0f, 0f, 1f, 1f,
+            ),
+            snapshot.colors,
+        )
+        assertEquals(listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f), snapshot.localMatrix)
+        assertEquals("clamp", snapshot.tileMode)
+        assertEquals("srgb", snapshot.interpolation)
+        assertEquals(material.materialHash, snapshot.materialHash)
+        assertTrue(semantic.hasStructuralIntegrity())
+        assertTrue(semantic.hasCanonicalHashIntegrity())
+
+        val block = requireNotNull(semantic.payloadRef.uniformBlock)
+        assertEquals(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toLong(), block.byteSize)
+        assertEquals(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES, block.bytes.size)
+        assertEquals(
+            listOf(
+                "target.size",
+                "material.kind",
+                "material.stop-count",
+                "material.center",
+                "material.radius",
+                "material.geometry-padding",
+                "material.local-matrix",
+                "material.header-padding",
+                "material.stops",
+                "material.unused-stops",
+            ),
+            block.fields.map(GPUUniformPayloadField::fieldPath),
+        )
+        assertEquals(4f, block.bytes.readFloatAt(16))
+        assertEquals(5f, block.bytes.readFloatAt(20))
+        assertEquals(8f, block.bytes.readFloatAt(24))
+        assertEquals(3f, block.bytes.readFloatAt(32 + 5 * 4))
+        assertEquals(0f, block.bytes.readFloatAt(80))
+        assertEquals(0f, block.bytes.readFloatAt(80 + 3 * 32))
+        assertTrue(block.bytes.drop(80 + 3 * 32).all { byte -> byte == 0 })
+
+        assertEquals(
+            semantic.canonicalHash,
+            gather(material = GPUCorePrimitiveMaterialPayload.RadialGradient(
+                centerX = 4f,
+                centerY = 5f,
+                radius = 8f,
+                localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+                interpolation = "srgb",
+                tileMode = "clamp",
+                positions = listOf(0f, 0.5f, 1f),
+                colors = listOf(
+                    1f, 0f, 0f, 0.5f,
+                    0f, 1f, 0f, 0.75f,
+                    0f, 0f, 1f, 1f,
+                ),
+             )).canonicalHash,
+        )
+    }
+
+    @Test
+    fun `gradient packing uses premultiplied linear sRGB and clip copies retain material`() {
+        val semantic = gather(
+            material = radialMaterial(
+                positions = listOf(0f, 1f),
+                colors = listOf(0.5f, 0.25f, 0f, 0.5f, 1f, 1f, 1f, 1f),
+            ),
+        )
+        val block = requireNotNull(semantic.payloadRef.uniformBlock)
+
+        assertEquals(
+            preparedMaterialSrgbToLinear(0.5f) * 0.5f,
+            block.bytes.readFloatAt(80 + 16),
+        )
+        assertEquals(
+            preparedMaterialSrgbToLinear(0.25f) * 0.5f,
+            block.bytes.readFloatAt(80 + 20),
+        )
+        assertEquals(0f, block.bytes.readFloatAt(80 + 24))
+        assertEquals(0.5f, block.bytes.readFloatAt(80 + 28))
+
+        val copied = semantic.withClipExecutionPlanIdentity("clip.plan.v1")
+        assertEquals(semantic.material, copied.material)
+        assertEquals(semantic.payloadRef.corePrimitiveMaterial, copied.payloadRef.corePrimitiveMaterial)
+        assertTrue(copied.hasStructuralIntegrity())
+        assertTrue(copied.hasCanonicalHashIntegrity())
+    }
+
+    @Test
+    fun `gradient material hash is stable when derived from immutable facts`() {
+        val first = radialMaterial(materialHash = null)
+        val second = radialMaterial(materialHash = null)
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+        assertEquals(first.materialHash, second.materialHash)
+    }
+
+    @Test
+    fun `gradient material hash must match immutable material facts`() {
+        assertFailsWith<IllegalArgumentException> {
+            radialMaterial(materialHash = "sha256:wrong")
+        }
+    }
+
+    @Test
+    fun `legacy payload constructor descriptors remain available`() {
+        assertTrue(
+            GPUDrawPayloadRef::class.java.declaredConstructors.any { constructor ->
+                constructor.parameterTypes.contentEquals(
+                    arrayOf(
+                        Int::class.javaPrimitiveType,
+                        String::class.java,
+                        GPUUniformPayloadSlot::class.java,
+                        GPUResourceBindingSlot::class.java,
+                        GPUGradientPayloadStore::class.java,
+                        GPUUniformPayloadBlock::class.java,
+                        GPUResourceBindingBlock::class.java,
+                    ),
+                )
+            },
+        )
+        assertTrue(
+            GPUCorePrimitivePayloadInput::class.java.declaredConstructors.any { constructor ->
+                constructor.parameterTypes.contentEquals(
+                    arrayOf(
+                        Int::class.javaPrimitiveType,
+                        GPUCorePrimitiveSourceFamily::class.java,
+                        GPUCorePrimitiveGeometryInput::class.java,
+                        List::class.java,
+                        GPUPixelBounds::class.java,
+                        GPUPixelBounds::class.java,
+                        GPUClipCoveragePlan::class.java,
+                        String::class.java,
+                        String::class.java,
+                        GPUFrameProvenance::class.java,
+                        GPUCorePrimitiveCoverageMode::class.java,
+                        String::class.java,
+                        String::class.java,
+                        GPUCorePrimitiveRectRouteAuthority::class.java,
+                        GPUCorePrimitiveRectGeometryAuthority::class.java,
+                        GPUCorePrimitiveRRectGeometryAuthority::class.java,
+                    ),
+                )
+            },
+        )
+    }
+
+    @Test
+    fun `sweep material snapshots facts and changes canonical identity`() {
+        val first = GPUCorePrimitiveMaterialPayload.SweepGradient(
+            centerX = 6f,
+            centerY = 7f,
+            startAngle = -45f,
+            endAngle = 315f,
+            localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+            interpolation = "srgb",
+            tileMode = "clamp",
+            positions = listOf(0f, 1f),
+            colors = listOf(1f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        val second = GPUCorePrimitiveMaterialPayload.SweepGradient(
+            centerX = 6f,
+            centerY = 7f,
+            startAngle = -45f,
+            endAngle = 300f,
+            localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+            interpolation = "srgb",
+            tileMode = "clamp",
+            positions = listOf(0f, 1f),
+            colors = listOf(1f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        val semantic = gather(material = first)
+        val snapshot = assertIs<GPUCorePrimitiveMaterialPayload.SweepGradient>(semantic.material)
+
+        assertEquals(-45f, snapshot.startAngle)
+        assertEquals(315f, snapshot.endAngle)
+        assertEquals(listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f), snapshot.localMatrix)
+        assertEquals(first.materialHash, snapshot.materialHash)
+        assertTrue(semantic.hasStructuralIntegrity())
+        assertTrue(semantic.hasCanonicalHashIntegrity())
+        assertNotEquals(semantic.canonicalHash, gather(material = second).canonicalHash)
+    }
+
+    @Test
+    fun `solid material keeps the existing 32 byte ABI`() {
+        val semantic = gather()
+        val solid = assertIs<GPUCorePrimitiveMaterialPayload.SolidColor>(semantic.material)
+        val block = requireNotNull(semantic.payloadRef.uniformBlock)
+
+        assertEquals(32L, block.byteSize)
+        assertEquals(corePrimitiveUniformBytes(semantic.targetBounds, solid.premultipliedRgba), block.bytes)
+        assertTrue(semantic.hasStructuralIntegrity())
+        assertTrue(semantic.hasCanonicalHashIntegrity())
+    }
+
+    @Test
+    fun `gradient material validation fails closed for unsupported facts`() {
+        val invalidMaterials = buildList<() -> Any> {
+            add({ radialMaterial(tileMode = "repeat") })
+            add({ radialMaterial(tileMode = "mirror") })
+            add({ radialMaterial(tileMode = "decal") })
+            add({ radialMaterial(radius = 0f) })
+            add({ radialMaterial(radius = -1f) })
+            add({ radialMaterial(centerX = Float.NaN) })
+            add({ radialMaterial(radius = Float.POSITIVE_INFINITY) })
+            add({ radialMaterial(positions = listOf(0f, Float.NaN)) })
+            add({ radialMaterial(localMatrix = listOf(1f, 0f, 0f, 0f, Float.NaN, 0f, 0f, 0f, 1f)) })
+            add({ radialMaterial(positions = List(17) { it / 16f }, colors = List(68) { 1f }) })
+            listOf("linear", "oklab", "hsl", "oklch").forEach { interpolation ->
+                add({ radialMaterial(interpolation = interpolation) })
+            }
+            add({ sweepMaterial(startAngle = Float.NaN) })
+            add({ sweepMaterial(endAngle = Float.POSITIVE_INFINITY) })
+            add({ sweepMaterial(startAngle = 10f, endAngle = 10f) })
+            add({ sweepMaterial(startAngle = 20f, endAngle = 10f) })
+            add({ sweepMaterial(colors = listOf(1f, 0f, 0f, 1f)) })
+        }
+
+        invalidMaterials.forEach { createMaterial ->
+            assertFailsWith<IllegalArgumentException> {
+                createMaterial()
+            }
         }
     }
 
@@ -881,6 +1141,7 @@ class GPUCorePrimitivePayloadContractsTest {
         includeRectAnalysisAuthority: Boolean = true,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
         includeRRectAnalysisAuthority: Boolean = true,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
@@ -895,9 +1156,10 @@ class GPUCorePrimitivePayloadContractsTest {
             GPUCorePrimitivePayloadInput(
             commandIdValue = 7,
             sourceFamily = resolvedSourceFamily,
-            geometry = geometry,
-            premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
-            targetBounds = target,
+                geometry = geometry,
+                premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                material = material,
+                targetBounds = target,
             scissorBounds = scissor,
             clipCoveragePlan = clip,
             blendPlanIdentity = blendPlan.canonicalIdentity(),
@@ -940,6 +1202,47 @@ class GPUCorePrimitivePayloadContractsTest {
             ),
         )
     }
+
+    private fun radialMaterial(
+        centerX: Float = 1f,
+        radius: Float = 4f,
+        tileMode: String = "clamp",
+        interpolation: String = "srgb",
+        positions: List<Float> = listOf(0f, 1f),
+        colors: List<Float> = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        localMatrix: List<Float> = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        materialHash: String? = null,
+    ) = GPUCorePrimitiveMaterialPayload.RadialGradient(
+        centerX = centerX,
+        centerY = 2f,
+        radius = radius,
+        localMatrix = localMatrix,
+        interpolation = interpolation,
+        tileMode = tileMode,
+        positions = positions,
+        colors = colors,
+        materialHash = materialHash,
+    )
+
+    private fun sweepMaterial(
+        startAngle: Float = 0f,
+        endAngle: Float = 360f,
+        colors: List<Float> = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    ) = GPUCorePrimitiveMaterialPayload.SweepGradient(
+        centerX = 1f,
+        centerY = 2f,
+        startAngle = startAngle,
+        endAngle = endAngle,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = colors,
+    )
+
+    private fun List<Int>.readFloatAt(offset: Int): Float = ByteBuffer.wrap(
+        ByteArray(size) { index -> this[index].toByte() },
+    ).order(ByteOrder.LITTLE_ENDIAN).getFloat(offset)
 
     private fun rectGeometryAuthorityFixture(
         rect: GPURect = GPURect(1f, 1f, 8f, 8f),

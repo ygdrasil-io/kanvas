@@ -4,21 +4,30 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
 class GPUCorePrimitiveSemanticBuilderTest {
@@ -124,11 +133,181 @@ class GPUCorePrimitiveSemanticBuilderTest {
         assertTrue("strokeDeviceGeometry" in builderSource)
     }
 
-    private fun inventory(): GPUFramePathInventoryPlan = GPUFramePathApiInventory.plan(
+    @Test
+    fun `gradient descriptor admission rejects non finite local matrix facts`() {
+        val invalidMatrix = listOf(
+            1f, 0f, 0f,
+            0f, Float.NaN, 0f,
+            0f, 0f, 1f,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            GPUMaterialDescriptor.GradientFacts(localMatrix = invalidMatrix)
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUMaterialDescriptor.GradientFacts(localMatrix = invalidMatrix.dropLast(1))
+        }
+    }
+
+    @Test
+    fun `core builder admits radial and sweep materials without collapsing them to solid`() {
+        val radial = radialDescriptor(
+            localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+        )
+        val sweep = sweepDescriptor(
+            localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 3f, 0f, 0f, 1f),
+        )
+
+        listOf(radial, sweep).forEach { descriptor ->
+            val result = gatherMaterial(descriptor)
+            val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(result)
+            val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.getValue(0))
+
+            when (descriptor) {
+                is GPUMaterialDescriptor.RadialGradient -> {
+                    val material = assertIs<GPUCorePrimitiveMaterialPayload.RadialGradient>(semantic.material)
+                    assertEquals(descriptor.centerX, material.centerX)
+                    assertEquals(descriptor.centerY, material.centerY)
+                    assertEquals(descriptor.radius, material.radius)
+                }
+                is GPUMaterialDescriptor.SweepGradient -> {
+                    val material = assertIs<GPUCorePrimitiveMaterialPayload.SweepGradient>(semantic.material)
+                    assertEquals(descriptor.startAngle, material.startAngle)
+                    assertEquals(descriptor.endAngle, material.endAngle)
+                }
+                else -> error("Unexpected gradient fixture")
+            }
+            assertEquals("clamp", semantic.material.tileMode)
+            assertEquals("srgb", semantic.material.interpolation)
+            val descriptorMatrix = when (descriptor) {
+                is GPUMaterialDescriptor.RadialGradient -> descriptor.localMatrix
+                is GPUMaterialDescriptor.SweepGradient -> descriptor.localMatrix
+            }
+            val semanticMatrix = when (val material = semantic.material) {
+                is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.localMatrix
+                is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.localMatrix
+                is GPUCorePrimitiveMaterialPayload.SolidColor ->
+                    error("Unexpected solid fixture")
+            }
+            assertEquals(descriptorMatrix, semanticMatrix)
+            assertNotNull(semantic.material.materialHash)
+            assertTrue(semantic.canonicalHash.isNotBlank())
+            assertNotNull(semantic.payloadRef.uniformBlock)
+        }
+    }
+
+    @Test
+    fun `core builder refuses invalid radial and sweep facts before semantic payload creation`() {
+        val cases = listOf(
+            radialDescriptor(tileMode = "repeat") to "unsupported.core_primitive.material.tile_mode",
+            radialDescriptor(tileMode = "mirror") to "unsupported.core_primitive.material.tile_mode",
+            radialDescriptor(tileMode = "decal") to "unsupported.core_primitive.material.tile_mode",
+            radialDescriptor(radius = 0f) to "unsupported.core_primitive.material.radial.radius",
+            radialDescriptor(centerX = Float.NaN) to "unsupported.core_primitive.material.non_finite",
+            radialDescriptor(positions = floatArrayOf(0f, Float.NaN)) to
+                "unsupported.core_primitive.material.stops",
+            radialDescriptor(
+                positions = FloatArray(17) { it / 16f },
+                colors = FloatArray(68) { 1f },
+            ) to "unsupported.core_primitive.material.stops",
+            radialDescriptor(interpolation = "linear") to
+                "unsupported.core_primitive.material.interpolation",
+            radialDescriptor(interpolation = "oklab") to
+                "unsupported.core_primitive.material.interpolation",
+            radialDescriptor(interpolation = "hsl") to
+                "unsupported.core_primitive.material.interpolation",
+            radialDescriptor(interpolation = "oklch") to
+                "unsupported.core_primitive.material.interpolation",
+            sweepDescriptor(startAngle = Float.NaN) to "unsupported.core_primitive.material.non_finite",
+            sweepDescriptor(endAngle = Float.POSITIVE_INFINITY) to
+                "unsupported.core_primitive.material.non_finite",
+            sweepDescriptor(startAngle = 20f, endAngle = 20f) to
+                "unsupported.core_primitive.material.sweep.range",
+            sweepDescriptor(startAngle = 20f, endAngle = 10f) to
+                "unsupported.core_primitive.material.sweep.range",
+        )
+
+        cases.forEach { (material, expectedCode) ->
+            val first = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(gatherMaterial(material))
+            val second = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(gatherMaterial(material))
+
+            assertEquals(expectedCode, first.code)
+            assertEquals(first, second)
+            assertEquals(material.kind.name, first.facts["materialKind"])
+            when (material) {
+                is GPUMaterialDescriptor.RadialGradient -> {
+                    assertEquals(material.tileMode, first.facts["tileMode"])
+                    assertEquals(material.interpolation, first.facts["interpolation"])
+                }
+                is GPUMaterialDescriptor.SweepGradient -> {
+                    assertEquals(material.tileMode, first.facts["tileMode"])
+                    assertEquals(material.interpolation, first.facts["interpolation"])
+                }
+                else -> error("Unexpected gradient fixture")
+            }
+            assertNotNull(first.facts["materialHash"])
+        }
+    }
+
+    @Test
+    fun `core builder keeps the legacy refusal for unsupported material families`() {
+        val materials = listOf<GPUMaterialDescriptor>(
+            GPUMaterialDescriptor.LinearGradient(
+                startX = 0f,
+                startY = 0f,
+                endX = 8f,
+                endY = 8f,
+                startR = 1f,
+                startG = 0f,
+                startB = 0f,
+                startA = 1f,
+                endR = 0f,
+                endG = 0f,
+                endB = 1f,
+                endA = 1f,
+            ),
+            GPUMaterialDescriptor.ConicalGradient(
+                startX = 0f,
+                startY = 0f,
+                endX = 8f,
+                endY = 8f,
+                startRadius = 1f,
+                endRadius = 4f,
+                startR = 1f,
+                startG = 0f,
+                startB = 0f,
+                startA = 1f,
+                endR = 0f,
+                endG = 0f,
+                endB = 1f,
+                endA = 1f,
+            ),
+            GPUMaterialDescriptor.ImageDraw(),
+            GPUMaterialDescriptor.RuntimeEffect(),
+            GPUMaterialDescriptor.BlendShader(
+                mode = "SRC_OVER",
+                dst = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+                src = GPUMaterialDescriptor.SolidColor(0f, 0f, 1f, 1f),
+            ),
+        )
+
+        materials.forEach { material ->
+            val refusal = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(gatherMaterial(material))
+            assertEquals("unsupported.core_primitive.material.non_solid", refusal.code)
+            assertEquals(material.kind.name, refusal.facts["materialKind"])
+            assertEquals("none", refusal.facts["tileMode"])
+            assertEquals("none", refusal.facts["interpolation"])
+            assertNotNull(refusal.facts["materialHash"])
+        }
+    }
+
+    private fun inventory(
+        paint: Paint = Paint.fill(Color.RED).copy(antiAlias = false),
+    ): GPUFramePathInventoryPlan = GPUFramePathApiInventory.plan(
         operations = listOf(
             DisplayOp.DrawRect(
                 Rect.fromLTRB(2f, 3f, 12f, 11f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                paint,
                 Matrix33.identity(),
                 ClipStack.WideOpen,
             ),
@@ -153,4 +332,72 @@ class GPUCorePrimitiveSemanticBuilderTest {
             snapshotId = "${base.snapshotId}:semantic-builder-test",
         )
     }
+
+    private fun gatherMaterial(
+        material: GPUMaterialDescriptor,
+    ): GPUCorePrimitiveSemanticGatherResult {
+        val base = inventory()
+        val visual = base.visualCommands.single()
+        val normalized = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+        return GPUCorePrimitiveSemanticBuilder.gather(
+            visualCommands = listOf(visual.copy(normalized = normalized.copy(material = material))),
+            recording = base.recording,
+            targetBounds = GPUPixelBounds(0, 0, 32, 24),
+            blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+        )
+    }
+
+    private fun radialDescriptor(
+        centerX: Float = 4f,
+        radius: Float = 4f,
+        tileMode: String = "clamp",
+        interpolation: String = "srgb",
+        positions: FloatArray = floatArrayOf(0f, 1f),
+        colors: FloatArray = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        localMatrix: List<Float> = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+    ) = GPUMaterialDescriptor.RadialGradient(
+        centerX = centerX,
+        centerY = 4f,
+        radius = radius,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+        tileMode = tileMode,
+        allStopPositions = positions,
+        allStopColors = colors,
+    ).withGradientFacts(
+        GPUMaterialDescriptor.GradientFacts(
+            interpolation = interpolation,
+            localMatrix = localMatrix,
+        ),
+    )
+
+    private fun sweepDescriptor(
+        startAngle: Float = 0f,
+        endAngle: Float = 360f,
+        localMatrix: List<Float> = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+    ) = GPUMaterialDescriptor.SweepGradient(
+        centerX = 4f,
+        centerY = 4f,
+        startAngle = startAngle,
+        endAngle = endAngle,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+        tileMode = "clamp",
+        allStopPositions = floatArrayOf(0f, 1f),
+        allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    ).withGradientFacts(
+        GPUMaterialDescriptor.GradientFacts(localMatrix = localMatrix),
+    )
 }
