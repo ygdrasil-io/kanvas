@@ -77,6 +77,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
@@ -2278,6 +2279,91 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `radial gradient records on direct geometry but refuses path native planning`() {
+        val directBase = recording(command(36, 0)).taskList.withClipPlans(
+            mapOf(36 to GPUClipExecutionPlan.NoClip),
+        )
+        val directPacket = directBase.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val directResult = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                directBase,
+                mapOf(36 to semantic(directPacket, material = radialMaterial())),
+            ),
+        )
+
+        val pathBase = recording(command(37, 0)).taskList.withClipPlans(
+            mapOf(37 to GPUClipExecutionPlan.NoClip),
+        )
+        val pathPacket = pathBase.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val pathResult = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                pathBase,
+                mapOf(
+                    37 to semantic(
+                        pathPacket,
+                        geometry = stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                        coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+                        material = radialMaterial(),
+                    ),
+                ),
+            ),
+        )
+
+        val directRecorded = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(directResult)
+        val directPreparedPacket = directRecorded.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            directPreparedPacket.corePrimitivePreparedAuthority?.structuralPipelineKey?.shader,
+        )
+        assertEquals(
+            CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH,
+            directPreparedPacket.bindingLayoutHash,
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_material.non_solid",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(pathResult).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `analytic radial gradient records its complete 656 byte uniform slab`() {
+        val base = recording(command(41, 0)).taskList.withClipPlans(
+            mapOf(41 to GPUClipExecutionPlan.NoClip),
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(
+                    41 to semantic(
+                        packet,
+                        coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                        material = radialMaterial(),
+                    ),
+                ),
+            ),
+        )
+
+        val recorded = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
+        val preparedPacket = recorded.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .single()
+            .drawPackets
+            .single()
+        val authority = requireNotNull(preparedPacket.corePrimitivePreparedAuthority)
+        val seal = requireNotNull(authority.uniformSlabSeal)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
+            authority.structuralPipelineKey.shader,
+        )
+        assertEquals(656L, seal.plan.slots.single().payloadBytes)
+        assertTrue(seal.packedBytesForUpload().drop(592).any { byte -> byte != 0.toByte() })
+    }
+
+    @Test
     fun `path stencil scissor intersects normal bounds but inverse target viewport`() {
         val clipBounds = GPUPixelBounds(3, 3, 10, 10)
         val base = recording(command(36, 0), command(37, 1)).taskList.withClipPlans(
@@ -2976,6 +3062,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
         sourceFamily: GPUCorePrimitiveSourceFamily? = null,
         semanticTargetBounds: GPUPixelBounds = targetBounds,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
@@ -2988,6 +3075,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 sourceFamily = resolvedSourceFamily,
                 geometry = geometry,
                 premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                material = material,
                 targetBounds = semanticTargetBounds,
                 scissorBounds = semanticTargetBounds,
                 clipCoveragePlan = requireNotNull(packet.clipCoveragePlan),
@@ -3022,6 +3110,17 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
     }
+
+    private fun radialMaterial() = GPUCorePrimitiveMaterialPayload.RadialGradient(
+        centerX = 4f,
+        centerY = 4f,
+        radius = 4f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
 
     private fun GPUDrawSemanticPayload.CorePrimitive.sameContentClone() =
         GPUDrawSemanticPayload.CorePrimitive(

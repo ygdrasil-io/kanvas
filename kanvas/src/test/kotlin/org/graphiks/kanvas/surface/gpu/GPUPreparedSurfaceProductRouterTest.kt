@@ -629,11 +629,13 @@ internal class PreparedProductBackend(
     override val deviceGeneration = GPUDeviceGenerationID(101)
     override val runtimeTelemetry = GPUBackendRuntimeTelemetry()
     val session = PreparedProductSession(rgba)
+    val preparedRequests = mutableListOf<GPUOffscreenTargetRequest>()
     var prepareCalls = 0
         private set
 
     override fun prepare(request: GPUOffscreenTargetRequest): GPUPreparedSurfaceSessionPort {
         prepareCalls++
+        preparedRequests += request
         return session
     }
 
@@ -644,6 +646,7 @@ internal class PreparedProductSession(
     rgba: ByteArray,
 ) : GPUPreparedSurfaceSessionPort {
     private val ownedRgba = rgba.copyOf()
+    val submittedTaskLists = mutableListOf<GPUTaskList>()
     var submitCalls = 0
         private set
     private var counterReads = 0
@@ -654,6 +657,7 @@ internal class PreparedProductSession(
         readbackId: GPUReadbackRequestID,
     ): GPUPreparedSurfaceSubmission {
         submitCalls++
+        submittedTaskLists += taskList
         val attempt = GPUFrameAttemptID("prepared-product-execution")
         return GPUPreparedSurfaceSubmission(
             attemptId = attempt,

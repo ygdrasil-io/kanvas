@@ -30,6 +30,8 @@ import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUTextureViewDimension
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 
 internal data class GPUCorePrimitiveNativeCacheCounters(
     val invariantCreations: Long = 0L,
@@ -114,6 +116,57 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY =
         bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY,
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
+
+internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform592-gradient-radial-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform592-gradient-sweep-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform656-gradient-analytic-radial-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform656-gradient-analytic-sweep-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal fun corePrimitiveGradientComponentIdentity(
+    shader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+): GPUWgpu4kCorePrimitiveComponentIdentity = when (shader) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+        PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+        PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY
+    else -> error("Not a gradient shader variant: $shader")
+}
+
 
 /**
  * Bind-group component for direct shading keys that read the destination snapshot, parameterized
@@ -211,6 +264,8 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
         pipelineIdentity.blendProgram.isDstRead() && componentIdentity.dstReadModeLabelOrNull() != null
     pipelineIdentity.program.isAnalyticShape() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+    pipelineIdentity.program.isGradient() ->
+        componentIdentity.gradientProgramOrNull() == pipelineIdentity.program
     pipelineIdentity.program.isClipStencilProducer() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticIntersection4() ->
@@ -678,6 +733,13 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 val shader = when (key.componentIdentity) {
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY ->
                         buildCorePrimitiveAnalyticShapeNativeShader()
+                    PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+                    PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+                    -> buildCorePrimitiveGradientNativeShader(
+                        requireNotNull(key.componentIdentity.gradientShaderVariantOrNull()),
+                    )
                     PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
                         buildCorePrimitiveClipStencilProducerNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY ->
@@ -781,6 +843,12 @@ private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): U
     PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
         error("Clip-stencil producer has no uniform binding")
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> 80uL
+    PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+    PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+    -> CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toULong()
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+    -> CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES.toULong()
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> 64uL
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> 160uL
     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,

@@ -29,6 +29,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
@@ -36,6 +37,7 @@ import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -210,6 +212,54 @@ class GPUAlphaImageMaterialTest {
 
         assertEquals(GPUMaterialKind.ImageDraw, material.kind)
         assertEquals(null, command.fillGuardRefusalReasonOrNull())
+    }
+
+    @Test
+    fun `legacy invalid gradient matrix dispatch emits typed local matrix refusal`() {
+        val command = DisplayOp.DrawRect(
+            rect = Rect(0f, 0f, 8f, 8f),
+            paint = Paint(
+                shader = Shader.WithLocalMatrix(
+                    shader = Shader.RadialGradient(
+                        center = Point(4f, 4f),
+                        radius = 4f,
+                        stops = listOf(
+                            GradientStop(0f, Color.RED),
+                            GradientStop(1f, Color.BLUE),
+                        ),
+                    ),
+                    matrix = Matrix33.makeAll(
+                        1f, 0f, 0f,
+                        0f, Float.NaN, 0f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        ).toNormalizedCommand(
+            GPUDrawCommandID(17),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+
+        recorder.dispatchFillRect(
+            cmd = command,
+            dispatched = dispatched,
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.material.mapping.local_matrix",
+            diagnostics.entries.single().reason,
+        )
+        assertEquals(emptyList<String>(), dispatched)
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Opaque payload slot identifier. */
@@ -223,6 +224,295 @@ data class GPUGradientPayloadStore(
     val uploadPlanHash: String,
 )
 
+/** Closed material kinds accepted by the CorePrimitive payload ABI. */
+enum class GPUCorePrimitiveMaterialKind(val wireId: String) {
+    SolidColor("solid"),
+    RadialGradient("radial"),
+    SweepGradient("sweep"),
+}
+
+/**
+ * Immutable, handle-free CorePrimitive material payload.
+ *
+ * Gradient colors retain encoded sRGB RGBA. The fixed-stop packer converts RGB to linear light
+ * and premultiplies it at upload time, matching [GradientWgslShaderProvider] exactly. The local
+ * matrix is retained as raw material authority for the next native route; this task only admits
+ * finite nine-value matrices and does not interpret them.
+ */
+sealed interface GPUCorePrimitiveMaterialPayload {
+    val kind: GPUCorePrimitiveMaterialKind
+    val tileMode: String
+    val interpolation: String
+    val materialHash: String
+
+    /** Existing solid CorePrimitive color, already linear-light and premultiplied. */
+    class SolidColor(premultipliedRgba: List<Float>) : GPUCorePrimitiveMaterialPayload {
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SolidColor
+        override val tileMode: String = "none"
+        override val interpolation: String = "none"
+        override val materialHash: String = "sha256:${sha256Hex(canonicalPreimage())}"
+
+        init {
+            require(premultipliedRgba.isPremultipliedRgba()) {
+                "Core solid material must be finite premultiplied RGBA"
+            }
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is SolidColor &&
+                premultipliedRgba.rawBits() == other.premultipliedRgba.rawBits()
+            )
+
+        override fun hashCode(): Int = premultipliedRgba.rawBits().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+
+    /** Radial gradient facts admitted by the CorePrimitive material ABI. */
+    class RadialGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val radius: Float,
+        localMatrix: List<Float>,
+        override val interpolation: String,
+        override val tileMode: String,
+        positions: List<Float>,
+        colors: List<Float>,
+        materialHash: String? = null,
+    ) : GPUCorePrimitiveMaterialPayload {
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.RadialGradient
+        val localMatrix: List<Float> = immutableList(localMatrix)
+        val positions: List<Float> = immutableList(positions)
+        val colors: List<Float> = immutableList(colors)
+        private val contentMaterialHash: String = "sha256:${sha256Hex(
+            corePrimitiveGradientMaterialPreimage(
+                kind = kind,
+                geometry = listOf(centerX, centerY, radius),
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = null,
+            ),
+        )}"
+        override val materialHash: String = materialHash ?: contentMaterialHash
+
+        init {
+            require(this.materialHash == contentMaterialHash) {
+                "Core radial gradient material hash must match its immutable facts"
+            }
+            validateGradientMaterial(
+                kind = kind,
+                center = listOf(centerX, centerY),
+                angles = emptyList(),
+                radius = radius,
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = this.materialHash,
+            )
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is RadialGradient &&
+                centerX.rawBitsEqual(other.centerX) &&
+                centerY.rawBitsEqual(other.centerY) &&
+                radius.rawBitsEqual(other.radius) &&
+                localMatrix.rawBits() == other.localMatrix.rawBits() &&
+                interpolation == other.interpolation &&
+                tileMode == other.tileMode &&
+                positions.rawBits() == other.positions.rawBits() &&
+                colors.rawBits() == other.colors.rawBits() &&
+                materialHash == other.materialHash
+            )
+
+        override fun hashCode(): Int = canonicalPreimage().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+
+    /** Sweep gradient facts admitted by the CorePrimitive material ABI. */
+    class SweepGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val startAngle: Float,
+        val endAngle: Float,
+        localMatrix: List<Float>,
+        override val interpolation: String,
+        override val tileMode: String,
+        positions: List<Float>,
+        colors: List<Float>,
+        materialHash: String? = null,
+    ) : GPUCorePrimitiveMaterialPayload {
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SweepGradient
+        val localMatrix: List<Float> = immutableList(localMatrix)
+        val positions: List<Float> = immutableList(positions)
+        val colors: List<Float> = immutableList(colors)
+        private val contentMaterialHash: String = "sha256:${sha256Hex(
+            corePrimitiveGradientMaterialPreimage(
+                kind = kind,
+                geometry = listOf(centerX, centerY, startAngle, endAngle),
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = null,
+            ),
+        )}"
+        override val materialHash: String = materialHash ?: contentMaterialHash
+
+        init {
+            require(this.materialHash == contentMaterialHash) {
+                "Core sweep gradient material hash must match its immutable facts"
+            }
+            validateGradientMaterial(
+                kind = kind,
+                center = listOf(centerX, centerY),
+                angles = listOf(startAngle, endAngle),
+                radius = null,
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = this.materialHash,
+            )
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is SweepGradient &&
+                centerX.rawBitsEqual(other.centerX) &&
+                centerY.rawBitsEqual(other.centerY) &&
+                startAngle.rawBitsEqual(other.startAngle) &&
+                endAngle.rawBitsEqual(other.endAngle) &&
+                localMatrix.rawBits() == other.localMatrix.rawBits() &&
+                interpolation == other.interpolation &&
+                tileMode == other.tileMode &&
+                positions.rawBits() == other.positions.rawBits() &&
+                colors.rawBits() == other.colors.rawBits() &&
+                materialHash == other.materialHash
+            )
+
+        override fun hashCode(): Int = canonicalPreimage().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+}
+
+private fun GPUCorePrimitiveMaterialPayload.canonicalPreimage(): String = when (this) {
+    is GPUCorePrimitiveMaterialPayload.SolidColor -> listOf(
+        "kind=${kind.wireId}",
+        "premultipliedRgba=${premultipliedRgba.rawBits().joinToString(",")}",
+    ).joinToString("\n")
+    is GPUCorePrimitiveMaterialPayload.RadialGradient -> corePrimitiveGradientMaterialPreimage(
+        kind = kind,
+        geometry = listOf(centerX, centerY, radius),
+        localMatrix = localMatrix,
+        interpolation = interpolation,
+        tileMode = tileMode,
+        positions = positions,
+        colors = colors,
+        materialHash = materialHash,
+    )
+    is GPUCorePrimitiveMaterialPayload.SweepGradient -> corePrimitiveGradientMaterialPreimage(
+        kind = kind,
+        geometry = listOf(centerX, centerY, startAngle, endAngle),
+        localMatrix = localMatrix,
+        interpolation = interpolation,
+        tileMode = tileMode,
+        positions = positions,
+        colors = colors,
+        materialHash = materialHash,
+    )
+}
+
+private fun corePrimitiveGradientMaterialPreimage(
+    kind: GPUCorePrimitiveMaterialKind,
+    geometry: List<Float>,
+    localMatrix: List<Float>,
+    interpolation: String,
+    tileMode: String,
+    positions: List<Float>,
+    colors: List<Float>,
+    materialHash: String?,
+): String = listOf(
+    "kind=${kind.wireId}",
+    "geometry=${geometry.rawBits().joinToString(",")}",
+    "localMatrix=${localMatrix.rawBits().joinToString(",")}",
+    "interpolation=$interpolation",
+    "tileMode=$tileMode",
+    "positions=${positions.rawBits().joinToString(",")}",
+    "colors=${colors.rawBits().joinToString(",")}",
+    "materialHash=${materialHash ?: "auto"}",
+).joinToString("\n")
+
+private fun validateGradientMaterial(
+    kind: GPUCorePrimitiveMaterialKind,
+    center: List<Float>,
+    angles: List<Float>,
+    radius: Float?,
+    localMatrix: List<Float>,
+    interpolation: String,
+    tileMode: String,
+    positions: List<Float>,
+    colors: List<Float>,
+    materialHash: String,
+) {
+    require(center.size == 2 && center.all(Float::isFinite)) {
+        "Core gradient center must contain two finite scalars"
+    }
+    require(angles.all(Float::isFinite)) {
+        "Core gradient angles must be finite"
+    }
+    require(localMatrix.size == 9 && localMatrix.all(Float::isFinite)) {
+        "Core gradient local matrix must contain nine finite scalars"
+    }
+    require(interpolation == "srgb") {
+        "Core gradient interpolation must be standard sRGB"
+    }
+    require(tileMode == "clamp") {
+        "Core gradient tile mode must be clamp"
+    }
+    require(positions.size in 1..CORE_PRIMITIVE_GRADIENT_MAX_STOPS) {
+        "Core gradient must contain 1..$CORE_PRIMITIVE_GRADIENT_MAX_STOPS stops"
+    }
+    require(colors.size == positions.size * 4) {
+        "Core gradient stop colors must contain exactly four scalars per stop"
+    }
+    require(positions.all { it.isFinite() && it in 0f..1f } &&
+        positions.zipWithNext().all { (left, right) -> left <= right }) {
+        "Core gradient stop positions must be finite, normalized, and ordered"
+    }
+    require(colors.all { it.isFinite() && it in 0f..1f }) {
+        "Core gradient stop colors must be finite normalized RGBA"
+    }
+    require(materialHash.isNotBlank()) {
+        "Core gradient material hash must not be blank"
+    }
+    when (kind) {
+        GPUCorePrimitiveMaterialKind.RadialGradient -> {
+            require(radius != null && radius.isFinite() && radius > 0f) {
+                "Core radial gradient radius must be finite and positive"
+            }
+            require(angles.isEmpty()) {
+                "Core radial gradient cannot contain sweep angles"
+            }
+        }
+        GPUCorePrimitiveMaterialKind.SweepGradient -> {
+            require(radius == null && angles.size == 2 && angles[1] > angles[0]) {
+                "Core sweep gradient angle range must be finite and positive"
+            }
+        }
+        GPUCorePrimitiveMaterialKind.SolidColor ->
+            error("Solid colors do not use gradient validation")
+    }
+}
+
 /** Reference from a draw invocation to pass-local payload. */
 data class GPUDrawPayloadRef(
     val commandIdValue: Int,
@@ -232,7 +522,29 @@ data class GPUDrawPayloadRef(
     val gradientStore: GPUGradientPayloadStore? = null,
     val uniformBlock: GPUUniformPayloadBlock? = null,
     val resourceBlock: GPUResourceBindingBlock? = null,
-)
+    /** Compatibility retention for CorePrimitive copies that predate the material field. */
+    val corePrimitiveMaterial: GPUCorePrimitiveMaterialPayload? = null,
+) {
+    /** Preserves the pre-material JVM constructor descriptor. */
+    constructor(
+        commandIdValue: Int,
+        renderStepIdentity: String,
+        uniformSlot: GPUUniformPayloadSlot?,
+        resourceSlot: GPUResourceBindingSlot?,
+        gradientStore: GPUGradientPayloadStore?,
+        uniformBlock: GPUUniformPayloadBlock?,
+        resourceBlock: GPUResourceBindingBlock?,
+    ) : this(
+        commandIdValue,
+        renderStepIdentity,
+        uniformSlot,
+        resourceSlot,
+        gradientStore,
+        uniformBlock,
+        resourceBlock,
+        null,
+    )
+}
 
 /** Closed native atlas format accepted by the COLRv0 color-glyph payload. */
 enum class GPUColorGlyphAtlasFormat(val gpuLabel: String) {
@@ -838,7 +1150,47 @@ data class GPUCorePrimitivePayloadInput(
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
     val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
-)
+    /** New material authority; null preserves the pre-Task-2 solid constructor surface. */
+    val material: GPUCorePrimitiveMaterialPayload? = null,
+) {
+    /** Preserves the pre-material JVM constructor descriptor. */
+    constructor(
+        commandIdValue: Int,
+        sourceFamily: GPUCorePrimitiveSourceFamily,
+        geometry: GPUCorePrimitiveGeometryInput,
+        premultipliedRgba: List<Float>,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+        clipCoveragePlan: GPUClipCoveragePlan,
+        clipExecutionPlanIdentity: String?,
+        blendPlanIdentity: String,
+        frameProvenance: GPUFrameProvenance,
+        coverageMode: GPUCorePrimitiveCoverageMode,
+        analysisRecordId: String?,
+        analysisCommandFamily: String?,
+        rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+        rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+        rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    ) : this(
+        commandIdValue,
+        sourceFamily,
+        geometry,
+        premultipliedRgba,
+        targetBounds,
+        scissorBounds,
+        clipCoveragePlan,
+        clipExecutionPlanIdentity,
+        blendPlanIdentity,
+        frameProvenance,
+        coverageMode,
+        analysisRecordId,
+        analysisCommandFamily,
+        rectRouteAuthority,
+        rectGeometryAuthority,
+        rrectGeometryAuthority,
+        null,
+    )
+}
 
 /** Closed geometry input; callers cannot smuggle backend handles into frame planning. */
 sealed interface GPUCorePrimitiveGeometryInput {
@@ -1007,10 +1359,14 @@ sealed interface GPUDrawSemanticPayload {
         val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
         val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ) : GPUDrawSemanticPayload {
         override val canonicalType: String = "CorePrimitive"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
         val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        val material: GPUCorePrimitiveMaterialPayload = material
+            ?: payloadRef.corePrimitiveMaterial
+            ?: GPUCorePrimitiveMaterialPayload.SolidColor(this.premultipliedRgba)
         private val suppliedCanonicalHash: String? = canonicalHash
         val canonicalHash: String by lazy {
             suppliedCanonicalHash ?: corePrimitiveCanonicalHash(
@@ -1018,6 +1374,7 @@ sealed interface GPUDrawSemanticPayload {
                 sourceFamily = sourceFamily,
                 geometry = geometry,
                 premultipliedRgba = this.premultipliedRgba,
+                material = this.material,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clipCoveragePlan,
@@ -1036,9 +1393,13 @@ sealed interface GPUDrawSemanticPayload {
         internal fun hasStructuralIntegrity(): Boolean =
             payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
                 payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
-                payloadRef.uniformBlock?.byteSize == CORE_PRIMITIVE_UNIFORM_BYTES.toLong() &&
-                payloadRef.uniformBlock.bytes.size == CORE_PRIMITIVE_UNIFORM_BYTES &&
-                payloadRef.uniformBlock.bytes == corePrimitiveUniformBytes(targetBounds, premultipliedRgba) &&
+                payloadRef.uniformBlock?.byteSize == corePrimitiveUniformByteSize(material).toLong() &&
+                payloadRef.uniformBlock.bytes.size == corePrimitiveUniformByteSize(material) &&
+                payloadRef.uniformBlock.bytes == corePrimitiveUniformBytes(targetBounds, material) &&
+                (payloadRef.corePrimitiveMaterial == null || payloadRef.corePrimitiveMaterial == material) &&
+                (material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    material.premultipliedRgba == premultipliedRgba ||
+                    material !is GPUCorePrimitiveMaterialPayload.SolidColor) &&
                 premultipliedRgba.isPremultipliedRgba() &&
                 targetBounds.containsRegisteredUniformRect(scissorBounds) &&
                 clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
@@ -1063,6 +1424,7 @@ sealed interface GPUDrawSemanticPayload {
                     sourceFamily = sourceFamily,
                     geometry = geometry,
                     premultipliedRgba = premultipliedRgba,
+                    material = material,
                     targetBounds = targetBounds,
                     scissorBounds = scissorBounds,
                     clipCoveragePlan = clipCoveragePlan,
@@ -1085,6 +1447,7 @@ sealed interface GPUDrawSemanticPayload {
                 sourceFamily = sourceFamily,
                 geometry = geometry,
                 premultipliedRgba = premultipliedRgba,
+                material = material,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clipCoveragePlan,
@@ -1593,20 +1956,27 @@ class GPUCorePrimitivePayloadGatherer {
             "Core primitive analysis authority must match source family, identity, and exact geometry"
         }
         val color = input.premultipliedRgba.toList()
-        val uniformBytes = corePrimitiveUniformBytes(input.targetBounds, color)
+        val material = input.material ?: GPUCorePrimitiveMaterialPayload.SolidColor(color)
+        if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
+            require(material.premultipliedRgba == color) {
+                "Core primitive solid material must match premultiplied RGBA"
+            }
+        }
+        val uniformBytes = corePrimitiveUniformBytes(input.targetBounds, material)
         val fingerprint = corePrimitiveUniformFingerprint(uniformBytes)
+        val gradient = material !is GPUCorePrimitiveMaterialPayload.SolidColor
         val block = GPUUniformPayloadBlock(
             fingerprint = fingerprint,
-            packingPlanHash = "core-primitive.uniform32-v1",
-            byteSize = CORE_PRIMITIVE_UNIFORM_BYTES.toLong(),
+            packingPlanHash = if (gradient) {
+                "core-primitive.gradient-uniform592-v1"
+            } else {
+                "core-primitive.uniform32-v1"
+            },
+            byteSize = corePrimitiveUniformByteSize(material).toLong(),
             zeroedPadding = true,
             scope = "pass.core-primitive.prepared",
             bytes = uniformBytes,
-            fields = listOf(
-                GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
-                GPUUniformPayloadField("target.padding", 8L, 8L, "padding", zeroFilled = true),
-                GPUUniformPayloadField("material.premul-rgba", 16L, 16L, "float32x4"),
-            ),
+            fields = corePrimitiveUniformFields(material),
         )
         val ref = GPUDrawPayloadRef(
             commandIdValue = input.commandIdValue,
@@ -1617,12 +1987,14 @@ class GPUCorePrimitivePayloadGatherer {
                 byteOffset = 0L,
             ),
             uniformBlock = block,
+            corePrimitiveMaterial = material,
         )
         return GPUDrawSemanticPayload.CorePrimitive(
             payloadRef = ref,
             sourceFamily = input.sourceFamily,
             geometry = geometry,
             premultipliedRgba = color,
+            material = material,
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
             clipCoveragePlan = input.clipCoveragePlan.snapshot(),
@@ -1640,18 +2012,27 @@ class GPUCorePrimitivePayloadGatherer {
 }
 
 private const val CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX = "core-primitive.uniform32-v1:"
+private const val CORE_PRIMITIVE_GRADIENT_UNIFORM_FINGERPRINT_PREFIX =
+    "core-primitive.gradient-uniform592-v1:"
 private const val LOWERCASE_HEX_DIGITS = "0123456789abcdef"
 
 internal fun corePrimitiveUniformFingerprint(uniformBytes: List<Int>): GPUPayloadFingerprint {
-    require(uniformBytes.size == CORE_PRIMITIVE_UNIFORM_BYTES) {
-        "Core primitive uniform fingerprint requires exactly $CORE_PRIMITIVE_UNIFORM_BYTES bytes"
+    require(uniformBytes.size == CORE_PRIMITIVE_UNIFORM_BYTES ||
+        uniformBytes.size == CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES) {
+        "Core primitive uniform fingerprint requires a supported fixed payload size"
     }
     require(uniformBytes.all { byte -> byte in 0..255 }) {
         "Core primitive uniform fingerprint bytes must be unsigned"
     }
     return GPUPayloadFingerprint(
         buildString(CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX.length + uniformBytes.size * 2) {
-            append(CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX)
+            append(
+                if (uniformBytes.size == CORE_PRIMITIVE_UNIFORM_BYTES) {
+                    CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX
+                } else {
+                    CORE_PRIMITIVE_GRADIENT_UNIFORM_FINGERPRINT_PREFIX
+                },
+            )
             uniformBytes.forEach { byte ->
                 append(LOWERCASE_HEX_DIGITS[byte ushr 4])
                 append(LOWERCASE_HEX_DIGITS[byte and 0x0f])
@@ -1675,6 +2056,7 @@ private fun corePrimitiveCanonicalHash(
     sourceFamily: GPUCorePrimitiveSourceFamily,
     geometry: GPUCorePrimitiveGeometry,
     premultipliedRgba: List<Float>,
+    material: GPUCorePrimitiveMaterialPayload,
     targetBounds: GPUPixelBounds,
     scissorBounds: GPUPixelBounds,
     clipCoveragePlan: GPUClipCoveragePlan,
@@ -1700,6 +2082,7 @@ private fun corePrimitiveCanonicalHash(
         "fingerprint=${requireNotNull(payloadRef.uniformBlock).fingerprint.value}",
         "geometry=${geometry.canonicalPreimage()}",
         "color=${premultipliedRgba.joinToString(",")}",
+        "material=${material.canonicalPreimage()}",
         "target=${targetBounds.canonicalBounds()}",
         "scissor=${scissorBounds.canonicalBounds()}",
         "clip=${clipCoveragePlan.canonicalPreimage()}",
@@ -1829,6 +2212,10 @@ private fun GPUCorePrimitiveTransformedRectCorners.toPixelCoverBounds(
 }
 
 private fun Float.hasSameRawBits(other: Float): Boolean = toRawBits() == other.toRawBits()
+
+private fun Float.rawBitsEqual(other: Float): Boolean = hasSameRawBits(other)
+
+private fun List<Float>.rawBits(): List<Int> = map(Float::toRawBits)
 
 private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     target: GPUPixelBounds,
@@ -2025,6 +2412,10 @@ private fun GPUClipCoveragePlan.canonicalPreimage(): String = when (this) {
 }
 
 private const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
+internal const val CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES = 80 + 16 * 32
+private const val CORE_PRIMITIVE_GRADIENT_HEADER_BYTES = 80
+private const val CORE_PRIMITIVE_GRADIENT_MAX_STOPS = 16
+private const val CORE_PRIMITIVE_GRADIENT_STOP_BYTES = 32
 
 internal fun corePrimitiveUniformBytes(
     targetBounds: GPUPixelBounds,
@@ -2036,6 +2427,151 @@ internal fun corePrimitiveUniformBytes(
     putFloat(0f)
     premultipliedRgba.forEach(::putFloat)
 }.array().map { it.toInt() and 0xff }
+
+internal fun corePrimitiveUniformByteSize(material: GPUCorePrimitiveMaterialPayload): Int =
+    if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
+        CORE_PRIMITIVE_UNIFORM_BYTES
+    } else {
+        CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+    }
+
+private fun corePrimitiveUniformFields(material: GPUCorePrimitiveMaterialPayload): List<GPUUniformPayloadField> =
+    when (material) {
+        is GPUCorePrimitiveMaterialPayload.SolidColor -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("target.padding", 8L, 8L, "padding", zeroFilled = true),
+            GPUUniformPayloadField("material.premul-rgba", 16L, 16L, "float32x4"),
+        )
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.kind", 8L, 4L, "uint32"),
+            GPUUniformPayloadField("material.stop-count", 12L, 4L, "uint32"),
+            GPUUniformPayloadField("material.center", 16L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.radius", 24L, 4L, "float32"),
+            GPUUniformPayloadField("material.geometry-padding", 28L, 4L, "padding", zeroFilled = true),
+            GPUUniformPayloadField("material.local-matrix", 32L, 36L, "float32x9"),
+            GPUUniformPayloadField("material.header-padding", 68L, 12L, "padding", zeroFilled = true),
+            GPUUniformPayloadField(
+                "material.stops",
+                CORE_PRIMITIVE_GRADIENT_HEADER_BYTES.toLong(),
+                (material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "gradient-stop[${material.positions.size}]",
+            ),
+            GPUUniformPayloadField(
+                "material.unused-stops",
+                (CORE_PRIMITIVE_GRADIENT_HEADER_BYTES +
+                    material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                ((CORE_PRIMITIVE_GRADIENT_MAX_STOPS - material.positions.size) *
+                    CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "padding",
+                zeroFilled = true,
+            ),
+        )
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.kind", 8L, 4L, "uint32"),
+            GPUUniformPayloadField("material.stop-count", 12L, 4L, "uint32"),
+            GPUUniformPayloadField("material.center", 16L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.angles", 24L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.local-matrix", 32L, 36L, "float32x9"),
+            GPUUniformPayloadField("material.header-padding", 68L, 12L, "padding", zeroFilled = true),
+            GPUUniformPayloadField(
+                "material.stops",
+                CORE_PRIMITIVE_GRADIENT_HEADER_BYTES.toLong(),
+                (material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "gradient-stop[${material.positions.size}]",
+            ),
+            GPUUniformPayloadField(
+                "material.unused-stops",
+                (CORE_PRIMITIVE_GRADIENT_HEADER_BYTES +
+                    material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                ((CORE_PRIMITIVE_GRADIENT_MAX_STOPS - material.positions.size) *
+                    CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "padding",
+                zeroFilled = true,
+            ),
+        )
+    }
+
+internal fun corePrimitiveUniformBytes(
+    targetBounds: GPUPixelBounds,
+    material: GPUCorePrimitiveMaterialPayload,
+): List<Int> = when (material) {
+    is GPUCorePrimitiveMaterialPayload.SolidColor ->
+        corePrimitiveUniformBytes(targetBounds, material.premultipliedRgba)
+    is GPUCorePrimitiveMaterialPayload.RadialGradient ->
+        gradientCorePrimitiveUniformBytes(targetBounds, material)
+    is GPUCorePrimitiveMaterialPayload.SweepGradient ->
+        gradientCorePrimitiveUniformBytes(targetBounds, material)
+}
+
+private fun gradientCorePrimitiveUniformBytes(
+    targetBounds: GPUPixelBounds,
+    material: GPUCorePrimitiveMaterialPayload,
+): List<Int> {
+    val positions = when (material) {
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.positions
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.positions
+        is GPUCorePrimitiveMaterialPayload.SolidColor ->
+            error("Solid colors use the 32-byte CorePrimitive ABI")
+    }
+    val colors = when (material) {
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.colors
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.colors
+        is GPUCorePrimitiveMaterialPayload.SolidColor ->
+            error("Solid colors use the 32-byte CorePrimitive ABI")
+    }
+    return ByteBuffer.allocate(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES)
+    .order(ByteOrder.LITTLE_ENDIAN)
+    .apply {
+        putFloat(targetBounds.width.toFloat())
+        putFloat(targetBounds.height.toFloat())
+        putInt(material.kind.wireValue())
+        putInt(positions.size)
+        when (material) {
+            is GPUCorePrimitiveMaterialPayload.RadialGradient -> {
+                putFloat(material.centerX)
+                putFloat(material.centerY)
+                putFloat(material.radius)
+                putFloat(0f)
+                material.localMatrix.forEach(::putFloat)
+            }
+            is GPUCorePrimitiveMaterialPayload.SweepGradient -> {
+                putFloat(material.centerX)
+                putFloat(material.centerY)
+                putFloat(material.startAngle)
+                putFloat(material.endAngle)
+                material.localMatrix.forEach(::putFloat)
+            }
+            is GPUCorePrimitiveMaterialPayload.SolidColor ->
+                error("Solid colors use the 32-byte CorePrimitive ABI")
+        }
+        repeat((CORE_PRIMITIVE_GRADIENT_HEADER_BYTES - position()) / Float.SIZE_BYTES) {
+            putFloat(0f)
+        }
+        positions.indices.forEach { index ->
+            val colorOffset = index * 4
+            val alpha = colors[colorOffset + 3]
+            putFloat(positions[index])
+            repeat(3) { putFloat(0f) }
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset]) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset + 1]) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset + 2]) * alpha)
+            putFloat(alpha)
+        }
+        repeat(CORE_PRIMITIVE_GRADIENT_MAX_STOPS - positions.size) {
+            repeat(CORE_PRIMITIVE_GRADIENT_STOP_BYTES / Float.SIZE_BYTES) { putFloat(0f) }
+        }
+    }
+    .array()
+    .map { it.toInt() and 0xff }
+}
+
+private fun GPUCorePrimitiveMaterialKind.wireValue(): Int = when (this) {
+    GPUCorePrimitiveMaterialKind.SolidColor -> 0
+    GPUCorePrimitiveMaterialKind.RadialGradient -> 1
+    GPUCorePrimitiveMaterialKind.SweepGradient -> 2
+}
 
 /** Packs one closed registered shader payload without carrying source code or native handles. */
 class GPURegisteredUniformRectPayloadGatherer {

@@ -1037,7 +1037,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `surface propagates canonical image refusal codes and adds only boundary facts`() {
+    fun `surface propagates remaining canonical image refusal codes and adds only boundary facts`() {
         val cases = listOf(
             Image(
                 1,
@@ -1055,14 +1055,6 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 byteArrayOf(1),
                 alphaType = AlphaType.PREMUL,
             ) to GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
-            Image(
-                1,
-                1,
-                ColorType.RGBA_8888,
-                "unpremultiplied",
-                byteArrayOf(1, 2, 3, 4),
-                alphaType = AlphaType.UNPREMUL,
-            ) to GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
         )
 
         cases.forEach { (image, expectedCode) ->
@@ -1078,6 +1070,26 @@ class GPUPreparedSurfaceFrameBuilderTest {
             assertEquals("0", refused.diagnostic.facts["operationIndex"])
             assertTrue(!refused.diagnostic.code.value.startsWith("unsupported.surface.prepared.image-source."))
         }
+    }
+
+    @Test
+    fun `surface accepts a valid unpremultiplied image`() {
+        val image = Image(
+            width = 1,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "unpremultiplied",
+            pixels = byteArrayOf(1, 2, 3, 4),
+            alphaType = AlphaType.UNPREMUL,
+        )
+
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            imageRequest(listOf(drawImage(image, Rect.fromLTRB(1f, 1f, 5f, 5f)))),
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(result, result.toString())
+
+        assertEquals(1, ready.visualOperationCount)
+        assertTrue(ready.taskList.tasks.any { it is GPUTask.Render })
     }
 
     @Test

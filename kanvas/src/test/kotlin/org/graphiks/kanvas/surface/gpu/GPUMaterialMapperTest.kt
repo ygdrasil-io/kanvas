@@ -13,6 +13,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
@@ -40,6 +41,7 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
+import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
@@ -111,6 +113,368 @@ class GPUMaterialMapperTest {
         assertEquals(0.25f, descriptor.startA, 0.002f)
         assertEquals(0.75f, descriptor.endA, 0.002f)
         assertEquals(0.5f, mapping.paintAlpha, 0.002f)
+    }
+
+    @Test
+    fun `prepared radial mapping retains normalized stops interpolation tile mode and identity facts`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
+            Paint(
+                shader = Shader.RadialGradient(
+                    center = Point(10f, 20f),
+                    radius = 30f,
+                    stops = threeGradientStops(),
+                    tileMode = TileMode.CLAMP,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals("clamp", descriptor.tileMode)
+        assertEquals("srgb", descriptor.interpolation)
+        assertEquals(listOf(0f, 0.35f, 1f), descriptor.allStopPositions?.toList())
+        assertContentEquals(
+            threeGradientColors(),
+            descriptor.allStopColors!!,
+        )
+        assertEquals(
+            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `prepared sweep mapping retains normalized stops interpolation tile mode and identity facts`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.SweepGradient>(
+            Paint(
+                shader = Shader.SweepGradient(
+                    center = Point(10f, 20f),
+                    startAngle = 15f,
+                    endAngle = 300f,
+                    stops = threeGradientStops(),
+                    tileMode = TileMode.CLAMP,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals("clamp", descriptor.tileMode)
+        assertEquals("srgb", descriptor.interpolation)
+        assertEquals(listOf(0f, 0.35f, 1f), descriptor.allStopPositions?.toList())
+        assertContentEquals(
+            threeGradientColors(),
+            descriptor.allStopColors!!,
+        )
+        assertEquals(
+            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `prepared empty gradient stops return a typed refusal without throwing`() {
+        val cases = listOf(
+            Shader.LinearGradient(
+                start = Point(0f, 0f),
+                end = Point(10f, 0f),
+                stops = emptyList(),
+            ) to GPUMaterialKind.LinearGradient,
+            Shader.RadialGradient(
+                center = Point(0f, 0f),
+                radius = 10f,
+                stops = emptyList(),
+            ) to GPUMaterialKind.RadialGradient,
+            Shader.SweepGradient(
+                center = Point(0f, 0f),
+                stops = emptyList(),
+            ) to GPUMaterialKind.SweepGradient,
+            Shader.ConicalGradient(
+                start = Point(0f, 0f),
+                startRadius = 0f,
+                end = Point(10f, 10f),
+                endRadius = 10f,
+                stops = emptyList(),
+            ) to GPUMaterialKind.TwoPointConical,
+        )
+
+        cases.forEach { (shader, kind) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = shader).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals("unsupported.material.mapping.gradient_stop_count", descriptor.reason.diagnosticCode)
+            assertEquals(kind, descriptor.originalKind)
+        }
+    }
+
+    @Test
+    fun `prepared gradient local matrix wrappers refuse until the route consumes matrix facts`() {
+        val matrix = Matrix33.makeAll(
+            1.5f, 0.25f, 3f,
+            -0.5f, 0.75f, 4f,
+            0.01f, 0.02f, 1f,
+        )
+        listOf(
+            Shader.RadialGradient(
+                center = Point(10f, 20f),
+                radius = 30f,
+                stops = threeGradientStops(),
+            ) to GPUMaterialKind.RadialGradient,
+            Shader.SweepGradient(
+                center = Point(10f, 20f),
+                stops = threeGradientStops(),
+            ) to GPUMaterialKind.SweepGradient,
+        ).forEach { (shader, kind) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = Shader.WithLocalMatrix(shader, matrix))
+                    .toPreparedMaterialMapping()
+                    .descriptor,
+            )
+            assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, descriptor.reason)
+            assertEquals(kind, descriptor.originalKind)
+        }
+    }
+
+    @Test
+    fun `prepared nested non commutative gradient matrices remain a stable local matrix refusal`() {
+        val inner = Matrix33.makeAll(
+            2f, 1f, 3f,
+            0f, 1f, 4f,
+            0f, 0f, 1f,
+        )
+        val outer = Matrix33.makeAll(
+            1f, 0f, 5f,
+            1f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.WithLocalMatrix(
+                        Shader.RadialGradient(
+                            center = Point(10f, 20f),
+                            radius = 30f,
+                            stops = threeGradientStops(),
+                        ),
+                        inner,
+                    ),
+                    outer,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, descriptor.reason)
+        assertEquals(GPUMaterialKind.RadialGradient, descriptor.originalKind)
+    }
+
+    @Test
+    fun `gradient matrix facts snapshot caller input immutably`() {
+        val matrix = mutableListOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+        val descriptor = GPUMaterialDescriptor.RadialGradient(
+            centerX = 0f,
+            centerY = 0f,
+            radius = 1f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(localMatrix = matrix),
+        )
+        matrix[0] = 9f
+
+        assertEquals(1f, descriptor.localMatrix.first())
+    }
+
+    @Test
+    fun `legacy nested gradient matrices preserve non commutative multiplication order`() {
+        val inner = Matrix33.makeAll(
+            2f, 1f, 3f,
+            0f, 1f, 4f,
+            0f, 0f, 1f,
+        )
+        val outer = Matrix33.makeAll(
+            1f, 0f, 5f,
+            1f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+        val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.WithLocalMatrix(
+                        Shader.RadialGradient(
+                            center = Point(10f, 20f),
+                            radius = 30f,
+                            stops = threeGradientStops(),
+                        ),
+                        inner,
+                    ),
+                    outer,
+                ),
+            ).toMaterial(),
+        )
+
+        assertEquals(
+            listOf(3f, 1f, 13f, 1f, 1f, 4f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `legacy gradient color filters preserve descriptor facts`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
+            Paint(
+                shader = Shader.WithColorFilter(
+                    shader = Shader.WithWorkingColorSpace(
+                        Shader.RadialGradient(
+                            center = Point(10f, 20f),
+                            radius = 30f,
+                            stops = threeGradientStops(),
+                        ),
+                        ColorSpaceInterpolation.OKLAB,
+                    ),
+                    filter = ColorFilter.Matrix(
+                        floatArrayOf(
+                            0f, 0f, 1f, 0f, 0f,
+                            0f, 1f, 0f, 0f, 0f,
+                            1f, 0f, 0f, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f,
+                        ),
+                    ),
+                ),
+            ).toMaterial(),
+        )
+
+        assertEquals("oklab", descriptor.interpolation)
+    }
+
+    @Test
+    fun `prepared invalid gradient matrix input returns a typed refusal without throwing`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.RadialGradient(
+                        center = Point(10f, 20f),
+                        radius = 30f,
+                        stops = threeGradientStops(),
+                    ),
+                    Matrix33.makeAll(
+                        1f, 0f, 0f,
+                        0f, Float.NaN, 0f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, descriptor.reason)
+        assertEquals(GPUMaterialKind.RadialGradient, descriptor.originalKind)
+    }
+
+    @Test
+    fun `legacy invalid radial and sweep matrices return typed refusals without throwing`() {
+        val invalidMatrix = Matrix33.makeAll(
+            1f, 0f, 0f,
+            0f, Float.NaN, 0f,
+            0f, 0f, 1f,
+        )
+        listOf(
+            Shader.RadialGradient(
+                center = Point(10f, 20f),
+                radius = 30f,
+                stops = threeGradientStops(),
+            ) to GPUMaterialKind.RadialGradient,
+            Shader.SweepGradient(
+                center = Point(10f, 20f),
+                stops = threeGradientStops(),
+            ) to GPUMaterialKind.SweepGradient,
+        ).forEach { (shader, kind) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = Shader.WithLocalMatrix(shader, invalidMatrix)).toMaterial(),
+            )
+            assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, descriptor.reason)
+            assertEquals(kind, descriptor.originalKind)
+        }
+    }
+
+    @Test
+    fun `prepared gradient wrappers preserve outer refusal precedence for unsupported sources`() {
+        val nonSrgb = Shader.RadialGradient(
+            center = Point(10f, 20f),
+            radius = 30f,
+            stops = threeGradientStops(),
+            interpolation = ColorSpaceInterpolation.LINEAR,
+        )
+
+        val localMatrixDescriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(shader = Shader.WithLocalMatrix(nonSrgb, Matrix33.identity()))
+                .toPreparedMaterialMapping()
+                .descriptor,
+        )
+        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, localMatrixDescriptor.reason)
+
+        val workingColorDescriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithWorkingColorSpace(nonSrgb, ColorSpaceInterpolation.OKLAB),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE, workingColorDescriptor.reason)
+    }
+
+    @Test
+    fun `prepared working color space preserves non-srgb interpolation facts before refusing`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithWorkingColorSpace(
+                    Shader.RadialGradient(
+                        center = Point(10f, 20f),
+                        radius = 30f,
+                        stops = threeGradientStops(),
+                    ),
+                    ColorSpaceInterpolation.OKLAB,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+            descriptor.reason,
+        )
+        assertEquals(
+            "oklab",
+            assertIs<GPUMaterialDescriptor.RadialGradient>(descriptor.source).interpolation,
+        )
+    }
+
+    @Test
+    fun `prepared color filter preserves local matrix refusal diagnostics`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithColorFilter(
+                    shader = Shader.WithLocalMatrix(
+                        Shader.SweepGradient(
+                            center = Point(10f, 20f),
+                            stops = threeGradientStops(),
+                        ),
+                        Matrix33.translate(3f, 4f),
+                    ),
+                    filter = ColorFilter.Matrix(
+                        floatArrayOf(
+                            1f, 0f, 0f, 0f, 0f,
+                            0f, 1f, 0f, 0f, 0f,
+                            0f, 0f, 1f, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f,
+                        ),
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, descriptor.reason)
     }
 
     @Test
@@ -1225,6 +1589,17 @@ class GPUMaterialMapperTest {
             tileModeY = tileModeY,
             sampling = sampling,
         )
+
+    private fun threeGradientStops(): List<GradientStop> = listOf(
+        GradientStop(0f, Color.fromRGBA(1f, 0.1f, 0.2f, 0.9f)),
+        GradientStop(0.35f, Color.fromRGBA(0.3f, 0.4f, 0.5f, 0.6f)),
+        GradientStop(1f, Color.fromRGBA(0.7f, 0.8f, 0.9f, 1f)),
+    )
+
+    private fun threeGradientColors(): FloatArray =
+        threeGradientStops().flatMap { stop ->
+            listOf(stop.color.r, stop.color.g, stop.color.b, stop.color.a)
+        }.toFloatArray()
 
     private fun testRuntimeEffect(id: String): RuntimeEffect =
         RuntimeEffect(

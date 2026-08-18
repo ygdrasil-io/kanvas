@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
@@ -32,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
@@ -185,6 +187,91 @@ class GPUCorePrimitiveNativeRouteTest {
     }
 
     @Test
+    fun `gradient material selects radial and sweep structural shader and uniform axes`() {
+        val radial = semantic(
+            GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+            material = radialMaterial(),
+        )
+        val sweep = semantic(
+            GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+            material = sweepMaterial(),
+        )
+        val radialKey = corePrimitiveRenderPipelineStructuralKey(radial, GPUClipExecutionPlan.NoClip, srcOver())
+        val sweepKey = corePrimitiveRenderPipelineStructuralKey(sweep, GPUClipExecutionPlan.NoClip, srcOver())
+
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient, radialKey.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient, sweepKey.shader)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            radialKey.uniformLayout,
+        )
+        assertEquals(radialKey.uniformLayout, sweepKey.uniformLayout)
+        assertNotEquals(radialKey, sweepKey)
+    }
+
+    @Test
+    fun `analytic gradient keeps geometry lane while selecting material shader variant`() {
+        val radialKey = corePrimitiveRenderPipelineStructuralKey(
+            semantic(
+                GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+                coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                material = radialMaterial(),
+            ),
+            GPUClipExecutionPlan.NoClip,
+            srcOver(),
+        )
+        val sweepKey = corePrimitiveRenderPipelineStructuralKey(
+            semantic(
+                GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+                coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                material = sweepMaterial(),
+            ),
+            GPUClipExecutionPlan.NoClip,
+            srcOver(),
+        )
+
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient, radialKey.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient, sweepKey.shader)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+            radialKey.uniformLayout,
+        )
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList, radialKey.topology)
+    }
+
+    @Test
+    fun `bounded gradients use the direct native geometry route`() {
+        val hard = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(
+                    GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+                    material = radialMaterial(),
+                ),
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+        val analytic = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(
+                    GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                    material = sweepMaterial(),
+                ),
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry, hard.lane)
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape, analytic.lane)
+    }
+
+    @Test
     fun `direct triangles preserve exact device vertices and indices`() {
         val vertices = listOf(1f, 2f, 15f, 4f, 7f, 14f)
         val indices = listOf(2, 0, 1)
@@ -332,6 +419,22 @@ class GPUCorePrimitiveNativeRouteTest {
     }
 
     @Test
+    fun `bounded gradient material accepts before native geometry route`() {
+        val result = validateCorePrimitiveDirectNativeRoute(
+            semantic(
+                GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
+                material = radialMaterial(),
+            ),
+            GPUClipExecutionPlan.NoClip,
+            srcOver(),
+            GPUSamplePlan.SingleSampleFrame,
+            "rgba8unorm",
+        )
+
+        assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(result)
+    }
+
+    @Test
     fun `analytic rect clip retains direct geometry with its conservative scissor authority`() {
         val analyticClip = GPUClipExecutionPlan.AnalyticCoverage(
             GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
@@ -356,6 +459,7 @@ class GPUCorePrimitiveNativeRouteTest {
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
         blend: GPUBlendPlan = srcOver(),
         scissor: GPUPixelBounds = TARGET,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUCorePrimitivePayloadGatherer().gatherSemantic(
         GPUCorePrimitivePayloadInput(
             commandIdValue = 7,
@@ -394,7 +498,31 @@ class GPUCorePrimitiveNativeRouteTest {
             } else {
                 null
             },
+            material = material,
         ),
+    )
+
+    private fun radialMaterial() = GPUCorePrimitiveMaterialPayload.RadialGradient(
+        centerX = 4f,
+        centerY = 4f,
+        radius = 4f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun sweepMaterial() = GPUCorePrimitiveMaterialPayload.SweepGradient(
+        centerX = 4f,
+        centerY = 4f,
+        startAngle = 0f,
+        endAngle = 360f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )
 
     private fun GPUCorePrimitiveDirectNativeRoute.Accepted.vertexSnapshot(): FloatArray =

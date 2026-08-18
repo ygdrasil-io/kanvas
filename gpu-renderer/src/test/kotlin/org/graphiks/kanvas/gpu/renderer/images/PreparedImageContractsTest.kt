@@ -61,8 +61,41 @@ class PreparedImageContractsTest {
     }
 
     @Test
-    fun `factory zeroes transparent color and keeps opaque straight bytes bounded`() {
+    fun `factory accepts unpremultiplied straight encoded RGBA for color upload`() {
+        val artifact = ready(
+            input(
+                alpha = AlphaType.UNPREMUL,
+                bytes = byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
+            ),
+        )
+
+        assertContentEquals(
+            byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
+            artifact.tightRgba8BytesForUpload(),
+        )
+        assertEquals(
+            ArtifactColorUploadEncoding.StraightEncodedSrgb,
+            artifact.colorUploadEncoding,
+        )
+        assertEquals(
+            GPUColorInterpretation.StraightEncodedSrgb.value,
+            artifact.colorUploadInterpretation,
+        )
+        assertTrue(
+            artifact.key.value.contains(ArtifactColorUploadEncoding.StraightEncodedSrgb.name),
+        )
+        assertTrue(artifact.key.value.contains(artifact.contentHash))
+    }
+
+    @Test
+    fun `factory zeroes transparent premultiplied color but preserves transparent unpremultiplied RGB`() {
         val transparent = ready(input(bytes = byteArrayOf(12, 34, 56, 0)))
+        val transparentUnpremul = ready(
+            input(
+                alpha = AlphaType.UNPREMUL,
+                bytes = byteArrayOf(12, 34, 56, 0),
+            ),
+        )
         val opaque = ready(
             input(
                 alpha = AlphaType.OPAQUE,
@@ -71,6 +104,10 @@ class PreparedImageContractsTest {
         )
 
         assertContentEquals(byteArrayOf(0, 0, 0, 0), transparent.tightRgba8BytesForUpload())
+        assertContentEquals(
+            byteArrayOf(12, 34, 56, 0),
+            transparentUnpremul.tightRgba8BytesForUpload(),
+        )
         assertContentEquals(
             byteArrayOf(40, 120, 210.toByte(), 255.toByte()),
             opaque.tightRgba8BytesForUpload(),
@@ -104,7 +141,7 @@ class PreparedImageContractsTest {
     }
 
     @Test
-    fun `factory converts BGRA and accepts only authoritative opaque RGBA`() {
+    fun `factory accepts BGRA and opaque RGBA while retaining opaque alpha refusals`() {
         assertContentEquals(
             byteArrayOf(64, 128.toByte(), 191.toByte(), 4),
             ready(input()).tightRgba8BytesForUpload(),
@@ -113,6 +150,17 @@ class PreparedImageContractsTest {
         assertContentEquals(
             byteArrayOf(64, 128.toByte(), 191.toByte(), 4),
             bgra.tightRgba8BytesForUpload(),
+        )
+        val unpremulBgra = ready(
+            input(
+                format = GPUPreparedImageSourceFormat.Bgra8,
+                alpha = AlphaType.UNPREMUL,
+                bytes = byteArrayOf(3, 2, 1, 4),
+            ),
+        )
+        assertContentEquals(
+            byteArrayOf(1, 2, 3, 4),
+            unpremulBgra.tightRgba8BytesForUpload(),
         )
         assertIs<GPUPreparedImageArtifactResult.Ready>(GPUPreparedImageArtifactFactory.prepare(input(alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1, 2, 3, -1))))
         assertRefusal(
@@ -127,10 +175,6 @@ class PreparedImageContractsTest {
         assertRefusal(
             input(format = GPUPreparedImageSourceFormat.Unsupported),
             CanonicalRefusalCodes.PIXEL_FORMAT,
-        )
-        assertRefusal(
-            input(alpha = AlphaType.UNPREMUL),
-            CanonicalRefusalCodes.ALPHA_INTERPRETATION,
         )
         assertRefusal(
             input(format = GPUPreparedImageSourceFormat.A8, alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1)),

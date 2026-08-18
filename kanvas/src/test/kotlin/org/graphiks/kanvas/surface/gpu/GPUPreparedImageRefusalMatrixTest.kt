@@ -1,14 +1,17 @@
 package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -16,11 +19,14 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
@@ -31,6 +37,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.ColorSpace
@@ -38,6 +45,7 @@ import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedImageRefusalMatrixTest {
     @Test
     fun `artifact authority emits the stable code and boundary for every source row`() {
@@ -60,7 +68,7 @@ class GPUPreparedImageRefusalMatrixTest {
     }
 
     @Test
-    fun `constructible source refusals preserve one code through source surface recording and preflight`() {
+    fun `constructible source acceptance reaches success and remaining refusals preserve one code through the route`() {
         val cases = listOf(
             ConstructibleCase(
                 "missing-pixels",
@@ -85,18 +93,6 @@ class GPUPreparedImageRefusalMatrixTest {
                     alphaType = AlphaType.PREMUL,
                 ),
                 GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
-            ),
-            ConstructibleCase(
-                "unpremultiplied-alpha",
-                Image(
-                    width = 1,
-                    height = 1,
-                    colorType = ColorType.RGBA_8888,
-                    sourceId = "unpremultiplied-alpha",
-                    pixels = byteArrayOf(1, 2, 3, 4),
-                    alphaType = AlphaType.UNPREMUL,
-                ),
-                GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
             ),
             ConstructibleCase(
                 "unknown-alpha",
@@ -148,6 +144,146 @@ class GPUPreparedImageRefusalMatrixTest {
                 GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
             ),
         )
+
+        val acceptedPixels = byteArrayOf(1, 2, 3, 4)
+        val acceptedImage = Image(
+            width = 1,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "unpremultiplied-alpha",
+            pixels = acceptedPixels,
+            alphaType = AlphaType.UNPREMUL,
+        )
+        val acceptedOperation = drawImage(acceptedImage)
+        val acceptedCapabilities = capabilities()
+        assertIs<GPUPreparedImageArtifactResult.Ready>(
+            GPUPreparedSurfaceImageSource.prepare(acceptedImage),
+            "unpremultiplied-alpha:source",
+        )
+
+        val acceptedInventory = GPUFramePathApiInventory.plan(
+            operations = listOf(acceptedOperation),
+            target = TARGET,
+            config = RenderConfig.DEFAULT,
+            capabilities = acceptedCapabilities,
+        )
+        assertEquals(null, acceptedInventory.preparedRefusal, "unpremultiplied-alpha:inventory")
+        assertTrue(acceptedInventory.visualCommands.isNotEmpty(), "unpremultiplied-alpha:inventory")
+
+        val acceptedRecording = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUFramePathApiInventory.preparePreparedNativeTaskList(
+                inventory = acceptedInventory,
+                capabilities = acceptedCapabilities,
+                targetBounds = BOUNDS,
+            ),
+            "unpremultiplied-alpha:preflight",
+        )
+        assertTrue(acceptedRecording.taskList.tasks.isNotEmpty(), "unpremultiplied-alpha:preflight")
+
+        val acceptedUploads = acceptedRecording.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+        val acceptedRenders = acceptedRecording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(1, acceptedUploads.size, "unpremultiplied-alpha:upload task")
+        assertEquals(1, acceptedRenders.size, "unpremultiplied-alpha:render task")
+        val acceptedUpload = acceptedUploads.single()
+        val acceptedPlan = assertNotNull(
+            acceptedUpload.imageResourcePlan,
+            "unpremultiplied-alpha:image upload plan",
+        )
+        val acceptedSemantic = assertIs<GPUDrawSemanticPayload.SampledImage>(
+            acceptedRenders.single().drawPackets.single().semanticPayload,
+            "unpremultiplied-alpha:image semantic",
+        )
+        assertEquals(acceptedSemantic.artifact.key, acceptedPlan.artifactKey)
+        assertEquals(acceptedSemantic.artifact.contentHash, acceptedPlan.artifactContentHash)
+        assertContentEquals(acceptedPixels, acceptedSemantic.artifact.tightRgba8BytesForUpload())
+        assertContentEquals(
+            acceptedPixels,
+            acceptedPlan.uploadLayout.bytesForUpload().copyOfRange(0, acceptedPixels.size),
+        )
+        assertTrue(
+            acceptedPlan.uploadLayout.bytesForUpload().drop(acceptedPixels.size).all { it == 0.toByte() },
+            "unpremultiplied-alpha:zero row padding",
+        )
+        assertEquals(4L, acceptedPlan.uploadLayout.logicalBytesPerRow)
+        assertEquals(256L, acceptedPlan.uploadLayout.bytesPerRow)
+        assertEquals(1, acceptedPlan.uploadLayout.rowsPerImage)
+        assertEquals(GPUUploadDestinationKind.Texture, acceptedUpload.destinationKind)
+        assertEquals(acceptedPlan.uploadTaskLayout, acceptedUpload.layout)
+        assertEquals("RGBA8UnormSrgb", acceptedSemantic.artifactUploadFormat)
+        assertEquals("StraightEncodedSrgb", acceptedSemantic.artifactUploadEncoding)
+        assertEquals(GPUColorInterpretation.LinearPremul.value, acceptedSemantic.shaderInterpretation)
+        assertTrue(acceptedSemantic.hasCanonicalHashIntegrity())
+
+        val acceptedSurface = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                buildRequest(listOf(acceptedOperation), acceptedCapabilities),
+            ),
+            "unpremultiplied-alpha:surface",
+        )
+        assertEquals(1, acceptedSurface.visualOperationCount)
+
+        val acceptedHarness = PreparedProductExecutionHarness(width = 16, height = 16)
+        val acceptedExecution = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            acceptedHarness.port.execute(executionRequest(listOf(acceptedOperation))),
+            "unpremultiplied-alpha:executor",
+        )
+        assertEquals(1, acceptedExecution.visualOperationCount)
+        assertEquals(1, acceptedHarness.backend.prepareCalls)
+        assertEquals(1, acceptedHarness.backend.session.submitCalls)
+        assertEquals(16, acceptedHarness.backend.preparedRequests.single().width)
+        assertEquals(16, acceptedHarness.backend.preparedRequests.single().height)
+        assertEquals(1, acceptedHarness.backend.session.submittedTaskLists.size)
+        val submittedTaskList = acceptedHarness.backend.session.submittedTaskLists.single()
+        val submittedUpload = submittedTaskList.tasks.filterIsInstance<GPUTask.Upload>().single()
+        val submittedPlan = assertNotNull(submittedUpload.imageResourcePlan)
+        val submittedSemantic = assertIs<GPUDrawSemanticPayload.SampledImage>(
+            submittedTaskList.tasks.filterIsInstance<GPUTask.Render>().single()
+                .drawPackets.single().semanticPayload,
+            "unpremultiplied-alpha:submitted image semantic",
+        )
+        assertContentEquals(acceptedPixels, submittedSemantic.artifact.tightRgba8BytesForUpload())
+        assertContentEquals(
+            acceptedPixels,
+            submittedPlan.uploadLayout.bytesForUpload().copyOfRange(0, acceptedPixels.size),
+        )
+        assertEquals(submittedSemantic.artifact.key, submittedPlan.artifactKey)
+        assertEquals(1L, acceptedExecution.evidence.targetCreations)
+        assertEquals(1L, acceptedExecution.evidence.encoders)
+        assertEquals(1L, acceptedExecution.evidence.commandBuffers)
+        assertEquals(1L, acceptedExecution.evidence.submits)
+        assertEquals(1L, acceptedExecution.evidence.readbackCopies)
+        assertEquals(1L, acceptedExecution.evidence.renderPasses)
+        assertEquals(1L, acceptedExecution.evidence.draws)
+        assertEquals(1L, acceptedExecution.evidence.pipelineBinds)
+        assertEquals(1L, acceptedExecution.evidence.retentionRegistrations)
+        assertEquals(1L, acceptedExecution.evidence.retentionCompletions)
+        assertEquals(
+            GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
+            acceptedExecution.evidence.routeMarker,
+        )
+
+        val publicHarness = PreparedProductExecutionHarness(width = 16, height = 16)
+        val publicDecisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val publicResult = GPUPreparedSurfaceProductEntry.render(
+            operations = listOf(acceptedOperation),
+            width = 16,
+            height = 16,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            executionPort = publicHarness.port,
+            trace = GPUPreparedSurfaceRouteTrace { publicDecisions += it },
+        )
+        val publicDecision = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            publicDecisions.single(),
+            "unpremultiplied-alpha:public route decision",
+        )
+        assertEquals(
+            GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
+            publicDecision.evidence.routeMarker,
+        )
+        assertContentEquals(publicHarness.expectedRgba.toUByteArray(), publicResult.pixels)
+        assertEquals(1, publicHarness.backend.prepareCalls)
+        assertEquals(1, publicHarness.backend.session.submitCalls)
 
         cases.forEach { row ->
             val operation = drawImage(row.image)

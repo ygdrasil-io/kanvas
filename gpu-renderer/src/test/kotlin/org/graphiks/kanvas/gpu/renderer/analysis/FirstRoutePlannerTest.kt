@@ -609,6 +609,105 @@ class FirstRoutePlannerTest {
         )
     }
 
+    @Test
+    fun `typed unsupported material refusal outranks material kind and capability checks`() {
+        val command = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(10),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.Unsupported(
+                reason = org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                originalKind = org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.ImageDraw,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = emptyCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Refuse>(plan.analysisDecision)
+
+        assertEquals(
+            "unsupported.material.mapping.local_matrix",
+            routeDecision.diagnostic.code,
+        )
+        assertEquals(routeDecision.diagnostic.code, analysisDecision.diagnostic.code)
+        assertEquals(listOf(routeDecision.diagnostic.code), plan.pass.diagnostics.map { it.code })
+    }
+
+    @Test
+    fun `radial and sweep gradient fact refusals precede material kind and capability checks`() {
+        val radial = GPUMaterialDescriptor.RadialGradient(
+            centerX = 8f,
+            centerY = 8f,
+            radius = 8f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+        )
+        val sweep = GPUMaterialDescriptor.SweepGradient(
+            centerX = 8f,
+            centerY = 8f,
+            startAngle = 0f,
+            endAngle = 360f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+        )
+        val nonIdentityMatrix = listOf(
+            1f, 0f, 2f,
+            0f, 1f, 3f,
+            0f, 0f, 1f,
+        )
+        val cases = listOf(
+            "unsupported.material.mapping.gradient_interpolation" to radial.withGradientFacts(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.GradientFacts(
+                    interpolation = "linear",
+                ),
+            ),
+            "unsupported.material.mapping.local_matrix" to radial.withGradientFacts(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.GradientFacts(
+                    localMatrix = nonIdentityMatrix,
+                ),
+            ),
+            "unsupported.material.mapping.gradient_interpolation" to sweep.withGradientFacts(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.GradientFacts(
+                    interpolation = "linear",
+                ),
+            ),
+            "unsupported.material.mapping.local_matrix" to sweep.withGradientFacts(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.GradientFacts(
+                    localMatrix = nonIdentityMatrix,
+                ),
+            ),
+        )
+
+        cases.forEachIndexed { index, (expectedCode, material) ->
+            val command = GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(11 + index),
+                rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                material = material,
+            )
+
+            val plan = GPUFirstRoutePlanner(capabilities = emptyCapabilities()).plan(command)
+            val routeDecision = assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+            val analysisDecision = assertIs<GPUDrawAnalysisDecision.Refuse>(plan.analysisDecision)
+
+            assertEquals(expectedCode, routeDecision.diagnostic.code)
+            assertEquals(expectedCode, analysisDecision.diagnostic.code)
+            assertEquals(listOf(expectedCode), plan.pass.diagnostics.map { it.code })
+        }
+    }
+
     /** FillRect blur metadata identifies an executable mask-blur route. */
     @Test
     fun `fill rect with blur mask filter builds executable mask blur route`() {

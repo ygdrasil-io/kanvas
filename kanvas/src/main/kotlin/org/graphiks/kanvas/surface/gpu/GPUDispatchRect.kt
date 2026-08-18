@@ -115,9 +115,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     ),
                 )
             } else {
-                val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
-                if (multiStop) {
-                    val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val stopPositions = material.allStopPositions
+                val stopColors = material.allStopColors
+                if (stopPositions != null && stopPositions.size > 2) {
+                    val n = stopPositions.size.coerceAtMost(8)
                     val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.startX); bb.putFloat(material.startY)
                     bb.putFloat(material.endX); bb.putFloat(material.endY)
@@ -125,13 +126,13 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     for (i in 0 until 256) {
                         if (i < n) {
-                            val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                            val pos = stopPositions.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
                             bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                            if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(material.allStopColors!![i * 4 + 3])
+                            if (stopColors != null && i * 4 + 3 < stopColors.size) {
+                                bb.putFloat(srgbToLinear(stopColors[i * 4]) * stopColors[i * 4 + 3])
+                                bb.putFloat(srgbToLinear(stopColors[i * 4 + 1]) * stopColors[i * 4 + 3])
+                                bb.putFloat(srgbToLinear(stopColors[i * 4 + 2]) * stopColors[i * 4 + 3])
+                                bb.putFloat(stopColors[i * 4 + 3])
                             } else {
                                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                             }
@@ -196,9 +197,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     ),
                 )
             } else {
-                val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
-                if (multiStop) {
-                    val n = material.allStopPositions!!.size.coerceAtMost(256)
+                val stopPositions = material.allStopPositions
+                val stopColors = material.allStopColors
+                if (stopPositions != null && stopPositions.size > 2) {
+                    val n = stopPositions.size.coerceAtMost(256)
                     val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.radius)
@@ -206,15 +208,15 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     for (i in 0 until 512) {
                         if (i < n * 2) {
                             if (i % 2 == 0) {
-                                val pos = material.allStopPositions!!.getOrElse(i / 2) { (i / 2).toFloat() / (n - 1).coerceAtLeast(1) }
+                                val pos = stopPositions.getOrElse(i / 2) { (i / 2).toFloat() / (n - 1).coerceAtLeast(1) }
                                 bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                             } else {
                                 val ci = i / 2
-                                if (material.allStopColors != null && ci * 4 + 3 < material.allStopColors!!.size) {
-                                    bb.putFloat(srgbToLinear(material.allStopColors!![ci * 4]) * material.allStopColors!![ci * 4 + 3])
-                                    bb.putFloat(srgbToLinear(material.allStopColors!![ci * 4 + 1]) * material.allStopColors!![ci * 4 + 3])
-                                    bb.putFloat(srgbToLinear(material.allStopColors!![ci * 4 + 2]) * material.allStopColors!![ci * 4 + 3])
-                                    bb.putFloat(material.allStopColors!![ci * 4 + 3])
+                                if (stopColors != null && ci * 4 + 3 < stopColors.size) {
+                                    bb.putFloat(srgbToLinear(stopColors[ci * 4]) * stopColors[ci * 4 + 3])
+                                    bb.putFloat(srgbToLinear(stopColors[ci * 4 + 1]) * stopColors[ci * 4 + 3])
+                                    bb.putFloat(srgbToLinear(stopColors[ci * 4 + 2]) * stopColors[ci * 4 + 3])
+                                    bb.putFloat(stopColors[ci * 4 + 3])
                                 } else {
                                     bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                                 }
@@ -279,9 +281,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     ),
                 )
             } else {
-                val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
-                if (multiStop) {
-                    val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val stopPositions = material.allStopPositions
+                val stopColors = material.allStopColors
+                if (stopPositions != null && stopPositions.size > 2) {
+                    val n = stopPositions.size.coerceAtMost(8)
                     val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
@@ -289,13 +292,13 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     for (i in 0 until 256) {
                         if (i < n) {
-                            val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                            val pos = stopPositions.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
                             bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                            if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
-                                bb.putFloat(material.allStopColors!![i * 4 + 3])
+                            if (stopColors != null && i * 4 + 3 < stopColors.size) {
+                                bb.putFloat(srgbToLinear(stopColors[i * 4]) * stopColors[i * 4 + 3])
+                                bb.putFloat(srgbToLinear(stopColors[i * 4 + 1]) * stopColors[i * 4 + 3])
+                                bb.putFloat(srgbToLinear(stopColors[i * 4 + 2]) * stopColors[i * 4 + 3])
+                                bb.putFloat(stopColors[i * 4 + 3])
                             } else {
                                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                             }

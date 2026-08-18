@@ -14,6 +14,339 @@ import kotlin.test.assertTrue
 
 class GPUMaterialDescriptorValueTest {
     @Test
+    fun `radial and sweep descriptor equality and hash include gradient facts`() {
+        val radial = GPUMaterialDescriptor.RadialGradient(
+            centerX = 1f,
+            centerY = 2f,
+            radius = 3f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        val sweep = GPUMaterialDescriptor.SweepGradient(
+            centerX = 1f,
+            centerY = 2f,
+            startAngle = 0f,
+            endAngle = 360f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+
+        val radialWithFacts = radial.withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(interpolation = "linear"),
+        )
+        val sweepWithFacts = sweep.withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                localMatrix = listOf(
+                    1f, 0f, 2f,
+                    0f, 1f, 3f,
+                    0f, 0f, 1f,
+                ),
+            ),
+        )
+
+        assertNotEquals(radial, radialWithFacts)
+        assertNotEquals(sweep, sweepWithFacts)
+    }
+
+    @Test
+    fun `nested blend and unsupported descriptors distinguish NaN payloads`() {
+        val firstNaN = Float.fromBits(0x7fc00001)
+        val secondNaN = Float.fromBits(0x7fc00002)
+        fun blend(gradient: GPUMaterialDescriptor.RadialGradient) = GPUMaterialDescriptor.BlendShader(
+            mode = "SRC_OVER",
+            dst = gradient,
+            src = GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 1f),
+            wgslCombined = "blend",
+            uniformBytes = byteArrayOf(1, 2, 3, 4),
+        )
+        fun unsupported(blend: GPUMaterialDescriptor.BlendShader) = GPUMaterialDescriptor.Unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+            originalKind = GPUMaterialKind.ShaderBlend,
+            source = blend,
+        )
+
+        val firstBlend = blend(
+            radialWithStops(
+                positions = floatArrayOf(0f, 1f),
+                colors = floatArrayOf(firstNaN, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+            ),
+        )
+        val secondBlend = blend(
+            radialWithStops(
+                positions = floatArrayOf(0f, 1f),
+                colors = floatArrayOf(secondNaN, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+            ),
+        )
+        val firstUnsupported = unsupported(firstBlend)
+        val secondUnsupported = unsupported(secondBlend)
+
+        assertNotEquals(firstBlend, secondBlend)
+        assertNotEquals(firstBlend.hashCode(), secondBlend.hashCode())
+        assertNotEquals(firstUnsupported, secondUnsupported)
+        assertNotEquals(firstUnsupported.hashCode(), secondUnsupported.hashCode())
+    }
+
+    @Test
+    fun `radial gradient stops remain immutable snapshots across copies and facts`() {
+        val positions = floatArrayOf(0f, 1f)
+        val colors = floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        )
+        val descriptor = radialWithStops(positions, colors)
+        val copy = descriptor.copy()
+        val factsCopy = descriptor.withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = descriptor.interpolation,
+                localMatrix = descriptor.localMatrix,
+            ),
+        )
+        val expectedHash = descriptor.hashCode()
+        val expectedText = descriptor.toString()
+
+        positions[0] = 0.25f
+        colors[0] = 0.25f
+        descriptor.allStopPositions!!.also { it[0] = 0.5f }
+        copy.allStopColors!!.also { it[0] = 0.5f }
+        factsCopy.allStopPositions!!.also { it[0] = 0.5f }
+
+        assertContentEquals(floatArrayOf(0f, 1f), descriptor.allStopPositions)
+        assertContentEquals(
+            floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+            descriptor.allStopColors,
+        )
+        assertEquals(descriptor, copy)
+        assertEquals(descriptor, factsCopy)
+        assertEquals(expectedHash, descriptor.hashCode())
+        assertEquals(expectedText, descriptor.toString())
+        assertEquals(expectedText, copy.toString())
+        assertEquals(expectedText, factsCopy.toString())
+    }
+
+    @Test
+    fun `sweep gradient stops remain immutable snapshots across copies and facts`() {
+        val positions = floatArrayOf(0f, 1f)
+        val colors = floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        )
+        val descriptor = sweepWithStops(positions, colors)
+        val copy = descriptor.copy()
+        val factsCopy = descriptor.withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = descriptor.interpolation,
+                localMatrix = descriptor.localMatrix,
+            ),
+        )
+        val expectedHash = descriptor.hashCode()
+        val expectedText = descriptor.toString()
+
+        positions[1] = 0.25f
+        colors[4] = 0.25f
+        descriptor.allStopColors!!.also { it[0] = 0.5f }
+        copy.allStopPositions!!.also { it[0] = 0.5f }
+        factsCopy.allStopColors!!.also { it[0] = 0.5f }
+
+        assertContentEquals(floatArrayOf(0f, 1f), descriptor.allStopPositions)
+        assertContentEquals(
+            floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+            descriptor.allStopColors,
+        )
+        assertEquals(descriptor, copy)
+        assertEquals(descriptor, factsCopy)
+        assertEquals(expectedHash, descriptor.hashCode())
+        assertEquals(expectedText, descriptor.toString())
+        assertEquals(expectedText, copy.toString())
+        assertEquals(expectedText, factsCopy.toString())
+    }
+
+    @Test
+    fun `radial and sweep descriptors have deterministic canonical toString values`() {
+        val radial = radialWithStops(floatArrayOf(0f, 1f), floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val radialCopy = radialWithStops(floatArrayOf(0f, 1f), floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val sweep = sweepWithStops(floatArrayOf(0f, 1f), floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val sweepCopy = sweepWithStops(floatArrayOf(0f, 1f), floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+
+        assertEquals(radial, radialCopy)
+        assertEquals(radial.toString(), radialCopy.toString())
+        assertTrue(radial.toString().startsWith("RadialGradient("))
+        assertTrue(radial.toString().contains("positions=["))
+        assertTrue(radial.toString().contains("colors=["))
+        assertFalse(radial.toString().contains("@"))
+
+        assertEquals(sweep, sweepCopy)
+        assertEquals(sweep.toString(), sweepCopy.toString())
+        assertTrue(sweep.toString().startsWith("SweepGradient("))
+        assertTrue(sweep.toString().contains("positions=["))
+        assertTrue(sweep.toString().contains("colors=["))
+        assertFalse(sweep.toString().contains("@"))
+    }
+
+    @Test
+    fun `radial and sweep public copies preserve facts arrays and component access`() {
+        val radial = GPUMaterialDescriptor.RadialGradient(
+            centerX = 1f,
+            centerY = 2f,
+            radius = 3f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = "linear",
+                localMatrix = listOf(
+                    1f, 0f, 2f,
+                    0f, 1f, 3f,
+                    0f, 0f, 1f,
+                ),
+            ),
+        )
+        val radialCopy = radial.copy(centerX = 9f)
+
+        assertEquals(9f, radialCopy.component1())
+        assertEquals(radial.interpolation, radialCopy.interpolation)
+        assertEquals(radial.localMatrix, radialCopy.localMatrix)
+        assertContentEquals(radial.allStopPositions, radialCopy.allStopPositions)
+        assertContentEquals(radial.allStopColors, radialCopy.allStopColors)
+
+        val sweep = GPUMaterialDescriptor.SweepGradient(
+            centerX = 1f,
+            centerY = 2f,
+            startAngle = 0f,
+            endAngle = 360f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(interpolation = "linear"),
+        )
+        val sweepCopy = sweep.copy(endAngle = 180f)
+
+        assertEquals(180f, sweepCopy.component4())
+        assertEquals(sweep.interpolation, sweepCopy.interpolation)
+        assertEquals(sweep.localMatrix, sweepCopy.localMatrix)
+        assertContentEquals(sweep.allStopPositions, sweepCopy.allStopPositions)
+        assertContentEquals(sweep.allStopColors, sweepCopy.allStopColors)
+    }
+
+    @Test
+    fun `radial descriptor signed zero semantics agree across every scalar and array element`() {
+        val base = radialSignedZeroBase()
+        val scalarVariants: List<Pair<String, (Float) -> GPUMaterialDescriptor.RadialGradient>> = listOf(
+            "centerX" to { value -> base.copy(centerX = value) },
+            "centerY" to { value -> base.copy(centerY = value) },
+            "radius" to { value -> base.copy(radius = value) },
+            "startR" to { value -> base.copy(startR = value) },
+            "startG" to { value -> base.copy(startG = value) },
+            "startB" to { value -> base.copy(startB = value) },
+            "startA" to { value -> base.copy(startA = value) },
+            "endR" to { value -> base.copy(endR = value) },
+            "endG" to { value -> base.copy(endG = value) },
+            "endB" to { value -> base.copy(endB = value) },
+            "endA" to { value -> base.copy(endA = value) },
+        )
+
+        scalarVariants.forEach { (name, variant) ->
+            assertSignedZeroHashContract(name, variant(0f), variant(-0f))
+        }
+
+        assertSignedZeroHashContract(
+            "stop positions",
+            base.copy(
+                allStopPositions = floatArrayOf(0f),
+            ),
+            base.copy(
+                allStopPositions = floatArrayOf(-0f),
+            ),
+        )
+        assertSignedZeroHashContract(
+            "stop colors",
+            base.copy(allStopColors = floatArrayOf(0f)),
+            base.copy(allStopColors = floatArrayOf(-0f)),
+        )
+    }
+
+    @Test
+    fun `sweep descriptor signed zero semantics agree across every scalar and array element`() {
+        val base = sweepSignedZeroBase()
+        val scalarVariants: List<Pair<String, (Float) -> GPUMaterialDescriptor.SweepGradient>> = listOf(
+            "centerX" to { value -> base.copy(centerX = value) },
+            "centerY" to { value -> base.copy(centerY = value) },
+            "startAngle" to { value -> base.copy(startAngle = value) },
+            "endAngle" to { value -> base.copy(endAngle = value) },
+            "startR" to { value -> base.copy(startR = value) },
+            "startG" to { value -> base.copy(startG = value) },
+            "startB" to { value -> base.copy(startB = value) },
+            "startA" to { value -> base.copy(startA = value) },
+            "endR" to { value -> base.copy(endR = value) },
+            "endG" to { value -> base.copy(endG = value) },
+            "endB" to { value -> base.copy(endB = value) },
+            "endA" to { value -> base.copy(endA = value) },
+        )
+
+        scalarVariants.forEach { (name, variant) ->
+            assertSignedZeroHashContract(name, variant(0f), variant(-0f))
+        }
+
+        assertSignedZeroHashContract(
+            "stop positions",
+            base.copy(
+                allStopPositions = floatArrayOf(0f),
+            ),
+            base.copy(
+                allStopPositions = floatArrayOf(-0f),
+            ),
+        )
+        assertSignedZeroHashContract(
+            "stop colors",
+            base.copy(allStopColors = floatArrayOf(0f)),
+            base.copy(allStopColors = floatArrayOf(-0f)),
+        )
+    }
+
+    @Test
     fun `runtime effect has deterministic value semantics and recursive child snapshots`() {
         val positions = floatArrayOf(0f, 1f)
         val colors = floatArrayOf(
@@ -804,4 +1137,84 @@ class GPUMaterialDescriptorValueTest {
             wgslCombined = "nested-wgsl",
             uniformBytes = blendBytes,
         )
+
+    private fun radialWithStops(
+        positions: FloatArray,
+        colors: FloatArray,
+    ): GPUMaterialDescriptor.RadialGradient =
+        GPUMaterialDescriptor.RadialGradient(
+            centerX = 1f,
+            centerY = 2f,
+            radius = 3f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = positions,
+            allStopColors = colors,
+        )
+
+    private fun sweepWithStops(
+        positions: FloatArray,
+        colors: FloatArray,
+    ): GPUMaterialDescriptor.SweepGradient =
+        GPUMaterialDescriptor.SweepGradient(
+            centerX = 1f,
+            centerY = 2f,
+            startAngle = 0f,
+            endAngle = 360f,
+            startR = 1f,
+            startG = 0f,
+            startB = 0f,
+            startA = 1f,
+            endR = 0f,
+            endG = 0f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = positions,
+            allStopColors = colors,
+        )
+
+    private fun radialSignedZeroBase(): GPUMaterialDescriptor.RadialGradient =
+        GPUMaterialDescriptor.RadialGradient(
+            centerX = 1f,
+            centerY = 1f,
+            radius = 1f,
+            startR = 1f,
+            startG = 1f,
+            startB = 1f,
+            startA = 1f,
+            endR = 1f,
+            endG = 1f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(1f, 1f),
+            allStopColors = floatArrayOf(1f, 1f),
+        )
+
+    private fun sweepSignedZeroBase(): GPUMaterialDescriptor.SweepGradient =
+        GPUMaterialDescriptor.SweepGradient(
+            centerX = 1f,
+            centerY = 1f,
+            startAngle = 1f,
+            endAngle = 1f,
+            startR = 1f,
+            startG = 1f,
+            startB = 1f,
+            startA = 1f,
+            endR = 1f,
+            endG = 1f,
+            endB = 1f,
+            endA = 1f,
+            allStopPositions = floatArrayOf(1f, 1f),
+            allStopColors = floatArrayOf(1f, 1f),
+        )
+
+    private fun assertSignedZeroHashContract(label: String, positive: Any, negative: Any) {
+        assertNotEquals(positive, negative, "$label equality")
+    }
 }

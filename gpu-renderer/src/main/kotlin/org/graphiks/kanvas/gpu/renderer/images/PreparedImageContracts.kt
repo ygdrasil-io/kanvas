@@ -88,7 +88,7 @@ object GPUPreparedImageArtifactFactory {
                 "orientation" to input.orientation,
             )
         }
-        if (input.alphaType == AlphaType.UNPREMUL || input.alphaType == AlphaType.UNKNOWN) {
+        if (input.alphaType == AlphaType.UNKNOWN) {
             return refuse(
                 CanonicalRefusalCodes.ALPHA_INTERPRETATION,
                 "alphaType" to input.alphaType,
@@ -198,7 +198,7 @@ object GPUPreparedImageArtifactFactory {
             }
         }
         val alphaOnly = input.sourceFormat == GPUPreparedImageSourceFormat.A8
-        if (!alphaOnly) {
+        if (input.alphaType == AlphaType.PREMUL && !alphaOnly) {
             for (pixelOffset in normalized.indices step 4) {
                 val alpha = normalized[pixelOffset + 3].toInt() and 0xFF
                 for (channel in 0..2) {
