@@ -117,11 +117,37 @@ class GPUMaterialMapperTest {
     fun `prepared alpha image keeps tint RGB and moves caller alpha to paint modulation`() {
         val mapping = Paint(
             color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f),
-            shader = imageShader("mask", byteArrayOf(0x80.toByte()), ColorType.ALPHA_8),
+            shader = imageShader(
+                sourceId = "mask",
+                pixels = byteArrayOf(0x80.toByte()),
+                colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
+            ),
         ).toPreparedMaterialMapping()
         val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(mapping.descriptor)
 
         assertEquals(true, descriptor.alphaOnly)
+        assertEquals(0.25f, descriptor.tintR, 0.002f)
+        assertEquals(0.5f, descriptor.tintG, 0.002f)
+        assertEquals(0.75f, descriptor.tintB, 0.002f)
+        assertEquals(1f, descriptor.tintA)
+        assertEquals(0.5f, mapping.paintAlpha, 0.002f)
+    }
+
+    @Test
+    fun `prepared A8 image accepts its canonical premultiplied alpha type`() {
+        val mapping = Paint(
+            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f),
+            shader = imageShader(
+                sourceId = "canonical-a8",
+                pixels = byteArrayOf(0x80.toByte()),
+                colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
+            ),
+        ).toPreparedMaterialMapping()
+
+        val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(mapping.descriptor)
+        assertTrue(descriptor.alphaOnly)
         assertEquals(0.25f, descriptor.tintR, 0.002f)
         assertEquals(0.5f, descriptor.tintG, 0.002f)
         assertEquals(0.75f, descriptor.tintB, 0.002f)
@@ -166,7 +192,12 @@ class GPUMaterialMapperTest {
     fun `prepared A8 product tint converts sRGB and keeps caller alpha separate`() {
         val mapping = Paint(
             color = Color.fromArgb(a = 128, r = 128, g = 128, b = 128),
-            shader = imageShader("midtone-mask", byteArrayOf(0xff.toByte()), ColorType.ALPHA_8),
+            shader = imageShader(
+                sourceId = "midtone-mask",
+                pixels = byteArrayOf(0xff.toByte()),
+                colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
+            ),
         ).toPreparedMaterialMapping()
         val program = compilePrepared(mapping)
         val uniform = program.uniformFloats()
@@ -1023,6 +1054,7 @@ class GPUMaterialMapperTest {
                     sourceId = "a8",
                     pixels = byteArrayOf(0x80.toByte()),
                     colorType = ColorType.ALPHA_8,
+                    alphaType = AlphaType.PREMUL,
                 ),
             ).toPreparedMaterialMapping().descriptor,
         )
@@ -1121,6 +1153,7 @@ class GPUMaterialMapperTest {
                 width = 2,
                 height = 1,
                 colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
                 sourceId = "a8-short",
                 pixels = byteArrayOf(1),
             ),
@@ -1128,6 +1161,7 @@ class GPUMaterialMapperTest {
                 width = 1,
                 height = 1,
                 colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
                 sourceId = "a8-long",
                 pixels = byteArrayOf(1, 2),
             ),
@@ -1135,6 +1169,7 @@ class GPUMaterialMapperTest {
                 width = Int.MAX_VALUE,
                 height = Int.MAX_VALUE,
                 colorType = ColorType.ALPHA_8,
+                alphaType = AlphaType.PREMUL,
                 sourceId = "overflow",
                 pixels = byteArrayOf(1),
             ),
