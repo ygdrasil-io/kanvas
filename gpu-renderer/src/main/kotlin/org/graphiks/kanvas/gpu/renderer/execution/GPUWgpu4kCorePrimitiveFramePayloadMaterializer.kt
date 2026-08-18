@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPrepa
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -48,15 +49,18 @@ import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveCoverageMaskP
 import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.passes.validateGPUCorePrimitiveCoverageMaskPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
+import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveGradientBindingLayoutHash
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -390,6 +394,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 singleKeySeal.uniformSlabSeal == null &&
                     analyticShapeUniformSeals.size == semanticPackets.size &&
                     analyticClipUniformSeals.isEmpty() && analyticIntersectionUniformSeals.isEmpty()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+            -> singleKeySeal.uniformSlabSeal != null && analyticShapeUniformSeals.isEmpty() &&
+                analyticClipUniformSeals.isEmpty() && analyticIntersectionUniformSeals.isEmpty()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform authority validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -416,6 +424,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 analyticIntersectionUniformSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                 analyticShapeUniformSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            -> requireNotNull(singleKeySeal.uniformSlabSeal).plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1 ->
+                requireNotNull(singleKeySeal.uniformSlabSeal).plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform plan selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -431,6 +443,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1 ->
+                requireNotNull(corePrimitiveGradientBindingLayoutHash(singleKeySeal.structuralPipelineKey.shader))
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct binding layout selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -487,8 +502,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packetAuthority.analyticClipUniformSeal !== expectedAnalyticSeal ||
                 packetAuthority.analyticIntersectionUniformSeal !== expectedAnalyticIntersectionSeal ||
                 semantic.targetBounds != targetBounds || semantic.payloadRef.uniformBlock?.byteSize !=
-                CORE_PRIMITIVE_UNIFORM_BYTES.toLong() || semantic.payloadRef.uniformBlock.bytes !=
-                corePrimitiveUniformBytes(semantic.targetBounds, semantic.premultipliedRgba)
+                corePrimitiveUniformByteSize(semantic.material).toLong() || semantic.payloadRef.uniformBlock.bytes !=
+                corePrimitiveUniformBytes(semantic.targetBounds, semantic.material)
             ) {
                 return refused(
                     "invalid.native-core-primitive.packet-authority",
@@ -584,6 +599,82 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             }
         }
+        if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ||
+            uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+        ) {
+            val uniformSeal = requireNotNull(singleKeySeal.uniformSlabSeal)
+            if (sealedUniformPlan.totalBytes > Int.MAX_VALUE.toLong() ||
+                sealedUniformPlan.sourceLabel != "core-primitive-uniform-pass" ||
+                sealedUniformPlan.slots.size != semanticPackets.size ||
+                uniformSeal.commandIds != semanticPackets.map { (_, packet, _) -> packet.commandIdValue }
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.gradient-uniform-seal",
+                    "Gradient packets must share one exact ordered gradient uniform slab plan.",
+                )
+            }
+            val expectedPayloads = semanticPackets.map { (_, packet, semantic) ->
+                when (uniformLayout) {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ->
+                        requireNotNull(semantic.payloadRef.uniformBlock).bytes
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1 ->
+                        when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
+                            semantic,
+                            GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+                        )) {
+                            is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted ->
+                                built.bytes.map { byte -> byte.toInt() and 0xff }
+                            is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
+                                return refused(built.code, built.message)
+                        }
+                    else -> error("Not a gradient uniform layout")
+                }
+            }
+            var verifiedPackedEnd = 0L
+            semanticPackets.indices.forEach { packetIndex ->
+                val (_, packet, semantic) = semanticPackets[packetIndex]
+                val slot = sealedUniformPlan.slots[packetIndex]
+                val expectedPayload = expectedPayloads[packetIndex]
+                val payloadEnd = try {
+                    Math.addExact(slot.alignedOffset, expectedPayload.size.toLong())
+                } catch (_: ArithmeticException) {
+                    -1L
+                }
+                val allocatedEnd = try {
+                    Math.addExact(slot.alignedOffset, slot.allocatedBytes)
+                } catch (_: ArithmeticException) {
+                    -1L
+                }
+                if (slot.slotLabel != "draw-${packet.commandIdValue}" ||
+                    slot.payloadBytes != expectedPayload.size.toLong() ||
+                    !uniformSeal.hasExactPayload(packetIndex, packet.commandIdValue, expectedPayload) ||
+                    slot.alignedOffset < verifiedPackedEnd ||
+                    payloadEnd < slot.alignedOffset ||
+                    allocatedEnd < payloadEnd ||
+                    allocatedEnd > sealedUniformPlan.totalBytes ||
+                    packet.corePrimitivePreparedAuthority?.structuralPipelineKey !=
+                    singleKeySeal.structuralPipelineKey ||
+                    (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1 &&
+                        acceptedGeometries[packetIndex].lane != GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape) ||
+                    (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 &&
+                        acceptedGeometries[packetIndex].lane != GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry)
+                ) {
+                    return refused(
+                        "invalid.native-core-primitive.gradient-uniform-seal",
+                        "Gradient uniform slab payload contradicts packet, route, layout, or offset authority.",
+                    )
+                }
+                verifiedPackedEnd = allocatedEnd
+            }
+            if (uniformUploadBytes.size.toLong() != sealedUniformPlan.totalBytes ||
+                !packedRangeIsZero(verifiedPackedEnd, sealedUniformPlan.totalBytes)
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.gradient-uniform-seal",
+                    "Gradient uniform slab upload bytes contradict the exact sealed plan.",
+                )
+            }
+        }
         if (uniformLayout ==
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1
         ) {
@@ -666,7 +757,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
         }
         val renderScissors = acceptedGeometries.mapIndexed { index, route ->
-            if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1) {
+            if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+            ) {
                 route.renderScissor ?: return refuseAnalyticShape(
                     "Analytic shape route is missing its exact non-empty render scissor.",
                 )
@@ -987,6 +1080,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+                -> corePrimitiveGradientComponentIdentity(singleKeySeal.structuralPipelineKey.shader)
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                     error("NoBindingsV1 was refused before direct component selection")
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -1005,6 +1101,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 pipelineMapping.identity.program.isAnalyticIntersection4()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                 pipelineMapping.identity.program.isAnalyticShapeProgram()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+            -> pipelineMapping.identity.program.isGradient()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct program validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -4265,6 +4364,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     .GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
                 org.graphiks.kanvas.gpu.renderer.passes
                     .GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+                org.graphiks.kanvas.gpu.renderer.passes
+                    .GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+                org.graphiks.kanvas.gpu.renderer.passes
+                    .GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
                 -> false
             }
         }

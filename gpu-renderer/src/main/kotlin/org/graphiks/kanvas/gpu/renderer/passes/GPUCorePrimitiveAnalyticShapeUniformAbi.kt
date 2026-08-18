@@ -4,14 +4,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES = 80
+internal const val CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES = 656
 
 /** Pure, handle-free result of sealing one prepared Rect/RRect into uniform80 bytes. */
 internal sealed interface GPUCorePrimitiveAnalyticShapeUniformBuildResult {
@@ -148,6 +151,53 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
         )
     }
     return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(block)
+}
+
+internal sealed interface GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult {
+    data class Accepted(val bytes: ByteArray) : GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
+
+    data class Refused(
+        val code: String,
+        val message: String,
+    ) : GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
+}
+
+internal fun buildCorePrimitiveGradientAnalyticShapeUniform(
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+    semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
+): GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult {
+    if (semantic.material !is GPUCorePrimitiveMaterialPayload.RadialGradient &&
+        semantic.material !is GPUCorePrimitiveMaterialPayload.SweepGradient
+    ) {
+        return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused(
+            "invalid.native-core-primitive.gradient-analytic-shape.material",
+            "Gradient analytic-shape uniform construction requires a radial or sweep material.",
+        )
+    }
+    val analyticShape = when (val result = buildCorePrimitiveAnalyticShapeUniform(semantic, semanticAuthority)) {
+        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> result.block.packedBytes()
+        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused ->
+            return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused(
+                result.code,
+                result.message,
+            )
+    }
+    val gradient = try {
+        corePrimitiveUniformBytes(semantic.targetBounds, semantic.material)
+            .map(Int::toByte)
+            .toByteArray()
+    } catch (failure: IllegalArgumentException) {
+        return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused(
+            "invalid.native-core-primitive.gradient-analytic-shape.material",
+            failure.message ?: "Gradient material does not satisfy the gradient uniform ABI.",
+        )
+    }
+    require(gradient.size == 592) { "Gradient uniform ABI must be 592 bytes before shape data" }
+    val bytes = ByteArray(CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES)
+    gradient.copyInto(bytes)
+    analyticShape.copyInto(bytes, destinationOffset = 592, startIndex = 32, endIndex = 80)
+    analyticShape.copyInto(bytes, destinationOffset = 640, startIndex = 8, endIndex = 12)
+    return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted(bytes)
 }
 
 /**

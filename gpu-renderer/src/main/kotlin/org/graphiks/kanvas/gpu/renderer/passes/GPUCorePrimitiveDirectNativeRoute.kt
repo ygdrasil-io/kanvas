@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 
 /** Pure, handle-free geometry route shared by recording and execution validation. */
@@ -99,6 +100,15 @@ internal fun validateCorePrimitiveDirectNativeRoute(
     targetFormat: String,
 ): GPUCorePrimitiveDirectNativeRoute {
     fun refused(code: String, message: String) = GPUCorePrimitiveDirectNativeRoute.Refused(code, message)
+    if (semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor &&
+        semantic.material !is GPUCorePrimitiveMaterialPayload.RadialGradient &&
+        semantic.material !is GPUCorePrimitiveMaterialPayload.SweepGradient
+    ) {
+        return refused(
+            "unsupported.native-core-primitive.material.non_solid",
+            "Direct CorePrimitive native geometry accepts only the bounded radial and sweep gradient material ABI.",
+        )
+    }
     if (targetFormat !in setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm")) {
         return refused(
             "unsupported.native-core-primitive.target-format",

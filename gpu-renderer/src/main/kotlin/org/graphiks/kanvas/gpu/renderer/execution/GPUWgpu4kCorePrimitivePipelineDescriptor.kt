@@ -159,8 +159,12 @@ internal fun GPUWgpu4kCorePrimitiveBlendProgram.isDstRead(): Boolean =
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     DirectSrcOver,
     DirectSrcOverWithPathDepthStencil,
+    DirectRadialGradient,
+    DirectSweepGradient,
     AnalyticShapeSrcOver,
     AnalyticShapeDstRead,
+    AnalyticRadialGradient,
+    AnalyticSweepGradient,
     AnalyticClipRectHard,
     AnalyticClipRectAA,
     AnalyticClipRRectHard,
@@ -251,6 +255,8 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
                     (structuralKey.blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
                         .mode.gpuLabel,
                 )
+            structuralKey.shader.isGradient() ->
+                corePrimitiveGradientComponentIdentity(structuralKey.shader)
             program.isAnalyticShape() ->
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
             program.isClipStencilProducer() ->
@@ -265,6 +271,32 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             else -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
         },
     )
+}
+
+internal fun GPUWgpu4kCorePrimitiveComponentIdentity.gradientShaderVariantOrNull():
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader? = when (this) {
+    PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient
+    PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient
+    else -> null
+}
+
+internal fun GPUWgpu4kCorePrimitiveComponentIdentity.gradientProgramOrNull():
+    GPUWgpu4kCorePrimitivePipelineProgram? = when (gradientShaderVariantOrNull()) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient
+    else -> null
 }
 
 /**
@@ -305,6 +337,8 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
         val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(this)
     ) {
         is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> when {
+            this.shader.isGradient() ->
+                corePrimitiveGradientComponentIdentity(this.shader)
             mapped.identity.program.isAnalyticShape() ->
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
             mapped.identity.program.isClipStencilProducer() ->
@@ -355,6 +389,14 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                 blend.nativeShadingBlendProgramOrNull() == null -> null
                 else -> GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
             }
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+                gradientProgramOrNull(GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient)
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+                gradientProgramOrNull(GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient)
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+                gradientProgramOrNull(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient)
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+                gradientProgramOrNull(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient)
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                     blend.nativeShadingBlendProgramOrNull() == null -> null
@@ -484,6 +526,17 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             else -> null
         }
     }
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.gradientProgramOrNull(
+    program: GPUWgpu4kCorePrimitivePipelineProgram,
+): GPUWgpu4kCorePrimitivePipelineProgram? = when {
+    role != GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ||
+        topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
+        clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
+        depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ||
+        blend.nativeShadingBlendProgramOrNull() == null -> null
+    else -> program
 }
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull(
@@ -681,6 +734,24 @@ internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShapeDstRead(): Boo
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShapeProgram(): Boolean =
     isAnalyticShape() || isAnalyticShapeDstRead()
 
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.isGradient(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient,
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient,
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient,
+    -> true
+    else -> false
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Shader.isGradient(): Boolean = when (this) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
+    -> true
+    else -> false
+}
+
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticIntersection4(): Boolean =
     this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4
 
@@ -748,6 +819,8 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT
             } else if (identity.program.isAnalyticShapeProgram()) {
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT
+            } else if (identity.program.isGradient()) {
+                CORE_PRIMITIVE_GRADIENT_NATIVE_VERTEX_ENTRY_POINT
             } else if (identity.program.isAnalyticClip()) {
                 CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_VERTEX_ENTRY_POINT
             } else if (coverageMaskProducer) {
@@ -783,6 +856,8 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (identity.program.isAnalyticShapeProgram()) {
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT
+            } else if (identity.program.isGradient()) {
+                CORE_PRIMITIVE_GRADIENT_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (identity.program.isAnalyticClip()) {
                 CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (identity.program.isCoverageMaskProducer()) {
@@ -849,6 +924,10 @@ private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgr
         else -> when (program) {
             GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
             GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient,
             GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver,
             GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead,
@@ -874,8 +953,8 @@ internal fun GPUWgpu4kCorePrimitivePipelineProgram.defaultBlendProgram():
 }
 
 private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean = when (this) {
-    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
-    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
@@ -892,7 +971,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
-    -> true
+        -> true
     else -> false
 }
 
@@ -1001,6 +1080,10 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
             error("DirectSrcOver has no depth/stencil state")
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead,
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient,
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,

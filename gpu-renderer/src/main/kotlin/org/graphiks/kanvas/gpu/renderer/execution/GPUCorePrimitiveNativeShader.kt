@@ -4,6 +4,8 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 
 internal data class GPUCorePrimitiveNativeShaderPlan(
@@ -109,6 +111,336 @@ private fun analyticShapeReflectionInvalidMessage(reflection: GPUColorWgslReflec
         return "Analytic-shape executable WGSL uniform block members do not match the sealed ABI80 offsets."
     }
     return null
+}
+
+internal const val CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES = 656
+internal const val CORE_PRIMITIVE_GRADIENT_REFLECTION_INVALID_REASON =
+    "wgsl_gradient_reflection_invalid"
+internal const val CORE_PRIMITIVE_GRADIENT_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
+internal const val CORE_PRIMITIVE_GRADIENT_NATIVE_FRAGMENT_ENTRY_POINT = "fs_main"
+
+internal fun buildCorePrimitiveGradientNativeShader(
+    variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+    validator: (sourceId: String, wgslSource: String) -> GPUColorWgslValidation = ::validateColorWgsl,
+): GPUCorePrimitiveNativeShaderResult {
+    val source = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
+        -> corePrimitiveGradientNativeWgsl(variant)
+        else -> return GPUCorePrimitiveNativeShaderResult.Rejected(
+            "unsupported_core-primitive.gradient.shader",
+            "The gradient shader builder only accepts radial and sweep gradient variants.",
+        )
+    }
+    val sourceId = corePrimitiveGradientNativeShaderIdentity(variant)
+    return when (val validation = validator(sourceId, source)) {
+        is GPUColorWgslValidation.Validated -> {
+            val invalidMessage = gradientReflectionInvalidMessage(variant, validation.reflection)
+            if (invalidMessage == null) {
+                GPUCorePrimitiveNativeShaderResult.Ready(
+                    GPUCorePrimitiveNativeShaderPlan(source, requireNotNull(validation.reflection)),
+                )
+            } else {
+                GPUCorePrimitiveNativeShaderResult.Rejected(
+                    CORE_PRIMITIVE_GRADIENT_REFLECTION_INVALID_REASON,
+                    invalidMessage,
+                )
+            }
+        }
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+}
+
+internal fun corePrimitiveGradientNativeShaderIdentity(
+    variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+): String = when (variant) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+        "core-primitive-gradient-radial-direct-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+        "core-primitive-gradient-sweep-direct-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+        "core-primitive-gradient-radial-analytic-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+        "core-primitive-gradient-sweep-analytic-wgsl-v1"
+    else -> error("Not a gradient shader variant: $variant")
+}
+
+private fun gradientReflectionInvalidMessage(
+    variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+    reflection: GPUColorWgslReflection?,
+): String? {
+    if (reflection == null) return "Gradient executable WGSL requires parser reflection."
+    if (!reflection.validated) return "Gradient executable WGSL reflection is not parser validated."
+    val report = reflection.report
+    if (!report.validation.success) return "Gradient executable WGSL parser validation did not succeed."
+    val expectedEntryPoints = setOf(
+        CORE_PRIMITIVE_GRADIENT_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+        CORE_PRIMITIVE_GRADIENT_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+    )
+    if (report.entryPoints.map { it.name to it.stage }.toSet() != expectedEntryPoints) {
+        return "Gradient executable WGSL must expose exactly its vertex and fragment entry points."
+    }
+    val expectedBytes = if (variant.name.startsWith("Analytic")) {
+        CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES
+    } else {
+        CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+    }
+    val binding = report.bindings.singleOrNull()
+    if (binding == null || binding.group != 0 || binding.binding != 0 ||
+        binding.resourceKind != "uniformBuffer" || binding.minBindingSize != expectedBytes
+    ) {
+        return "Gradient executable WGSL must expose exactly one uniform binding at group 0 binding 0."
+    }
+    val expectedStructName = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+            "CorePrimitiveRadialGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+            "CorePrimitiveSweepGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+            "CorePrimitiveAnalyticRadialGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+            "CorePrimitiveAnalyticSweepGradientBlock"
+        else -> error("Not a gradient shader variant: $variant")
+    }
+    val layout = report.layouts.singleOrNull {
+        it.structName == expectedStructName && it.addressSpace == "uniform"
+    } ?: return "Gradient executable WGSL must reflect its uniform block."
+    if (layout.size != expectedBytes) {
+        return "Gradient executable WGSL uniform block has an unexpected size."
+    }
+    val expectedMembers = gradientExpectedMembers(variant)
+    if (layout.members.map { it.name to (it.offset to it.size) } != expectedMembers) {
+        return "Gradient executable WGSL uniform block members do not match the sealed ABI."
+    }
+    return null
+}
+
+private fun gradientExpectedMembers(
+    variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+): List<Pair<String, Pair<Int, Int>>> {
+    val geometryMember = if (variant.name.contains("Radial")) {
+        "radius" to (24 to 4)
+    } else {
+        "angle_range" to (24 to 8)
+    }
+    val members = mutableListOf(
+        "target_size" to (0 to 8),
+        "material_kind" to (8 to 4),
+        "stop_count" to (12 to 4),
+        "center" to (16 to 8),
+        geometryMember,
+        "local_matrix0" to (32 to 16),
+        "local_matrix1" to (48 to 16),
+        "local_matrix2" to (64 to 16),
+        "stop_data" to (80 to 512),
+    )
+    if (variant.name.startsWith("Analytic")) {
+        members += "shape_bounds" to (592 to 16)
+        members += "radii0" to (608 to 16)
+        members += "radii1" to (624 to 16)
+        members += "anti_alias" to (640 to 4)
+        members += "padding1" to (644 to 4)
+        members += "padding2" to (648 to 4)
+        members += "padding3" to (652 to 4)
+    }
+    if (variant.name.contains("Radial")) {
+        members.add(5, "padding0" to (28 to 4))
+    }
+    return members
+}
+
+private fun corePrimitiveGradientNativeWgsl(
+    variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+): String {
+    val radial = variant.name.contains("Radial")
+    val analytic = variant.name.startsWith("Analytic")
+    val geometryField = if (radial) {
+        "radius: f32,\n        padding0: u32,"
+    } else {
+        "angle_range: vec2<f32>,"
+    }
+    val gradientBody = if (radial) {
+        """
+        let distance = length(position - center);
+        var t_raw = 0.0;
+        if (gradient.radius > 0.0) {
+            t_raw = distance / gradient.radius;
+        }
+        """.trimIndent()
+    } else {
+        """
+        let start_angle = gradient.angle_range.x * 0.0174532925199433;
+        let end_angle = gradient.angle_range.y * 0.0174532925199433;
+        let angle = atan2(position.y - center.y, position.x - center.x);
+        let normalized_angle = fract((angle - start_angle) / 6.28318530718);
+        let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);
+        let t_raw = normalized_angle / span;
+        """.trimIndent()
+    }
+    val shapeFields = if (analytic) {
+        """
+        shape_bounds: vec4<f32>,
+        radii0: vec4<f32>,
+        radii1: vec4<f32>,
+        anti_alias: u32,
+        padding1: u32,
+        padding2: u32,
+        padding3: u32,
+        """.trimIndent()
+    } else {
+        "".trimIndent()
+    }
+    val coverageFunctions = if (analytic) {
+        """
+        fn corner_distance(
+            current_distance: f32,
+            corner_edge_distance: vec2<f32>,
+            radii: vec2<f32>,
+        ) -> f32 {
+            var distance = current_distance;
+            let uv = radii - corner_edge_distance;
+            if (uv.x > 0.0 && uv.y > 0.0 && radii.x > 0.0 && radii.y > 0.0) {
+                let normalized_uv = uv / (radii * radii);
+                let normalized_length = length(normalized_uv);
+                if (normalized_length > 0.0) {
+                    let ellipse_inside = 0.5 * (1.0 - dot(uv, normalized_uv)) / normalized_length;
+                    distance = min(distance, ellipse_inside);
+                }
+            }
+            return distance;
+        }
+
+        fn analytic_shape_distance(position: vec2<f32>) -> f32 {
+            let edge_distances = vec4<f32>(
+                position.x - gradient.shape_bounds.x,
+                position.y - gradient.shape_bounds.y,
+                gradient.shape_bounds.z - position.x,
+                gradient.shape_bounds.w - position.y,
+            );
+            var distance = min(min(edge_distances.x, edge_distances.y), min(edge_distances.z, edge_distances.w));
+            distance = corner_distance(distance, edge_distances.xy, gradient.radii0.xy);
+            distance = corner_distance(distance, edge_distances.zy, gradient.radii0.zw);
+            distance = corner_distance(distance, edge_distances.zw, gradient.radii1.xy);
+            distance = corner_distance(distance, edge_distances.xw, gradient.radii1.zw);
+            return distance;
+        }
+
+        fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
+            let distance = analytic_shape_distance(position);
+            let hard = select(0.0, 1.0, distance >= 0.0);
+            let shape_size = max(gradient.shape_bounds.zw - gradient.shape_bounds.xy, vec2<f32>(0.0));
+            let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
+            let bias = 1.0 - 0.5 * scale;
+            let aa = clamp(scale * (distance + bias), 0.0, 1.0);
+            return select(hard, aa, gradient.anti_alias != 0u);
+        }
+        """.trimIndent()
+    } else {
+        "".trimIndent()
+    }
+    val output = if (analytic) {
+        """
+        let color = sample_stops_at(t, gradient.stop_count);
+        let coverage = analytic_shape_coverage(fragment_position.xy);
+        return color * coverage;
+        """.trimIndent()
+    } else {
+        """
+        return sample_stops_at(t, gradient.stop_count);
+        """.trimIndent()
+    }
+    val structName = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+            "CorePrimitiveRadialGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+            "CorePrimitiveSweepGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+            "CorePrimitiveAnalyticRadialGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+            "CorePrimitiveAnalyticSweepGradientBlock"
+        else -> error("Not a gradient shader variant: $variant")
+    }
+    val position = """
+        let position = gradient_position(fragment_position.xy);
+        let center = gradient.center;
+    """.trimIndent()
+    return """
+        struct $structName {
+            target_size: vec2<f32>,
+            material_kind: u32,
+            stop_count: u32,
+            center: vec2<f32>,
+            $geometryField
+            local_matrix0: vec4<f32>,
+            local_matrix1: vec4<f32>,
+            local_matrix2: vec4<f32>,
+            stop_data: array<vec4<f32>, 32>,
+            $shapeFields
+        }
+
+        @group(0) @binding(0) var<uniform> gradient: $structName;
+
+        @vertex
+        fn vs_main(@location(0) device_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+            let ndc_x = device_position.x / gradient.target_size.x * 2.0 - 1.0;
+            let ndc_y = 1.0 - device_position.y / gradient.target_size.y * 2.0;
+            return vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
+        }
+
+        fn gradient_position(device_position: vec2<f32>) -> vec2<f32> {
+            let homogeneous = vec3<f32>(device_position, 1.0);
+            let x = dot(vec3<f32>(gradient.local_matrix0.xyz), homogeneous);
+            let y = dot(
+                vec3<f32>(gradient.local_matrix0.w, gradient.local_matrix1.x, gradient.local_matrix1.y),
+                homogeneous,
+            );
+            let w = dot(vec3<f32>(gradient.local_matrix1.zw, gradient.local_matrix2.x), homogeneous);
+            return vec2<f32>(x, y) / max(abs(w), 0.000001);
+        }
+
+        fn sample_stops_at(t: f32, count: u32) -> vec4<f32> {
+            let safe_count = max(count, 1u);
+            if (safe_count == 1u) {
+                let only = gradient.stop_data[1];
+                return vec4<f32>(only.rgb, only.a);
+            }
+            var lower_index = 0u;
+            var upper_index = safe_count - 1u;
+            for (var index = 0u; index < safe_count; index = index + 1u) {
+                let stop = gradient.stop_data[index * 2u];
+                if (stop.x <= t) {
+                    lower_index = index;
+                }
+                if (stop.x >= t && upper_index == safe_count - 1u) {
+                    upper_index = index;
+                }
+            }
+            let lower = gradient.stop_data[lower_index * 2u];
+            let upper = gradient.stop_data[upper_index * 2u];
+            let lower_color = gradient.stop_data[lower_index * 2u + 1u];
+            let upper_color = gradient.stop_data[upper_index * 2u + 1u];
+            let denominator = max(upper.x - lower.x, 0.000001);
+            let local_t = clamp((t - lower.x) / denominator, 0.0, 1.0);
+            let mixed_linear = mix(lower_color.rgb, upper_color.rgb, local_t);
+            let mixed_alpha = mix(lower_color.a, upper_color.a, local_t);
+            return vec4<f32>(mixed_linear, mixed_alpha);
+        }
+
+        $coverageFunctions
+
+        @fragment
+        fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+            $position
+            $gradientBody
+            let t = clamp(t_raw, 0.0, 1.0);
+            $output
+        }
+    """.trimIndent()
 }
 
 internal fun buildCorePrimitiveClipStencilProducerNativeShader(): GPUCorePrimitiveNativeShaderResult =

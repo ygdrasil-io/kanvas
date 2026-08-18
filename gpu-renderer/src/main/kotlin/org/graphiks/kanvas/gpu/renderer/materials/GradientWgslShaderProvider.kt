@@ -308,18 +308,20 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     }
 
     private fun conicalUniformBytes(desc: GPUMaterialDescriptor.ConicalGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.startX); bb.putFloat(desc.startY)
                 bb.putFloat(desc.endX); bb.putFloat(desc.endY)
                 bb.putFloat(desc.startRadius); bb.putFloat(desc.endRadius)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0)
                 bb.putInt(0); bb.putInt(0) // pad to 48
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
             headerSize = 48,
         )
     }
@@ -419,44 +421,50 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     // ---- Uniform packing ----
 
     private fun linearUniformBytes(desc: GPUMaterialDescriptor.LinearGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.startX); bb.putFloat(desc.startY)
                 bb.putFloat(desc.endX); bb.putFloat(desc.endY)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
         )
     }
 
     private fun radialUniformBytes(desc: GPUMaterialDescriptor.RadialGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.centerX); bb.putFloat(desc.centerY)
                 bb.putFloat(desc.radius)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
             headerSize = 16,
         )
     }
 
     private fun sweepUniformBytes(desc: GPUMaterialDescriptor.SweepGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.centerX); bb.putFloat(desc.centerY)
                 bb.putFloat(desc.startAngle); bb.putFloat(desc.endAngle)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
         )
     }
 

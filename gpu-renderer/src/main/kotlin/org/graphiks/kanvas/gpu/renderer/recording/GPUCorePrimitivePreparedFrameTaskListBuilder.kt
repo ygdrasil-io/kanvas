@@ -30,8 +30,10 @@ import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupi
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
@@ -100,6 +102,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -137,6 +140,14 @@ const val CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform64-analytic-clip-v1"
 const val CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform160-analytic-clip-intersection4-v1"
+const val CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform592-gradient-radial-v1"
+const val CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform592-gradient-sweep-v1"
+const val CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform656-gradient-analytic-radial-v1"
+const val CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform656-gradient-analytic-sweep-v1"
 const val CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH =
     CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_LAYOUT_KEY
 const val CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH =
@@ -164,6 +175,20 @@ internal fun corePrimitiveTargetStateHash(
         4 -> "target.${targetFormat.value}.multisample-4x-resolve"
         else -> "target.${targetFormat.value}.unsupported-${sampleCount}x"
     }
+}
+
+internal fun corePrimitiveGradientBindingLayoutHash(
+    shader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+): String? = when (shader) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+        CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+        CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_BINDING_LAYOUT_HASH
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
+        CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_BINDING_LAYOUT_HASH
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
+        CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_BINDING_LAYOUT_HASH
+    else -> null
 }
 const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
 const val CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL = "opaque-white"
@@ -633,7 +658,7 @@ private data class GPUCorePrimitivePreparedAnalyticShape(
 )
 
 private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): Boolean =
-    when (geometry) {
+    material is GPUCorePrimitiveMaterialPayload.SolidColor && when (geometry) {
         is GPUCorePrimitiveGeometry.Rect -> coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
         is GPUCorePrimitiveGeometry.RRect ->
             coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
@@ -707,8 +732,10 @@ private fun directCorePrimitiveGeometryBytes(
     acceptedClipStencilPlan: GPUClipExecutionPlan.StencilCoverage? = null,
     acceptedCoverageMaskPlan: GPUClipExecutionPlan.CoverageMask? = null,
 ): GPUCorePrimitiveDirectGeometryBytes? {
+    val gradientMaterial = semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient ||
+        semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
     if (packet.role != GPUDrawPacketRole.Shading ||
-        semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
+        (semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor && !gradientMaterial) ||
         packet.blendPlan?.isCorePrimitiveDirectLaneBlend() != true ||
         packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
@@ -730,7 +757,7 @@ private fun directCorePrimitiveGeometryBytes(
     }
     val (vertexCount, indexCount) = when (val geometry = semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> 8 to 6
-        is GPUCorePrimitiveGeometry.RRect -> return null
+        is GPUCorePrimitiveGeometry.RRect -> if (gradientMaterial) 8 to 6 else return null
         is GPUCorePrimitiveGeometry.TriangulatedPath -> {
             if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
                 geometry.inverseFill || geometry.strokeStyle != null
@@ -1469,6 +1496,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         basePackets.firstOrNull { packet ->
+            val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+            semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath
+        }?.let {
+            return refused(
+                "unsupported.recording.core_primitive_material.non_solid",
+                "The legacy native CorePrimitive task builder accepts only the solid color material ABI.",
+            )
+        }
+        basePackets.firstOrNull { packet ->
             !packet.hasCorePrimitiveSemanticAuthority(
                 requireNotNull(request.coreSemantics()[packet.commandIdValue]),
                 request.capabilities,
@@ -2163,6 +2200,34 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val uniformSlabPlan = if (legacyUniformPackets.isEmpty()) {
             null
         } else {
+            val legacyUniformBytesByCommandId = legacyUniformPackets.associate { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                val structuralKey = corePrimitiveRenderPipelineStructuralKey(
+                    semantic,
+                    requireNotNull(packet.clipExecutionPlan),
+                    requireNotNull(packet.blendPlan),
+                    preparedSamplePlan.sampleCount,
+                    request.targetFormat.corePrimitiveStructuralColorFormat(),
+                )
+                val bytes = if (
+                    structuralKey.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+                ) {
+                    when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
+                        semantic,
+                        GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+                    )) {
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted -> built.bytes
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
+                            return refused(built.code, built.message)
+                    }
+                } else {
+                    requireNotNull(semantic.payloadRef.uniformBlock).bytes
+                        .map(Int::toByte)
+                        .toByteArray()
+                }
+                packet.commandIdValue to bytes
+            }
             when (val planned = GPUUniformSlabPlanner.plan(
                 sourceLabel = "core-primitive-uniform-pass",
                 deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration.value,
@@ -2171,12 +2236,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 maxBufferSize = requireNotNull(maxBufferSize),
                 maxDynamicUniformBuffersPerPipelineLayout = requireNotNull(maxDynamicUniformBuffers),
                 payloads = legacyUniformPackets.map { packet ->
-                    val bytes = requireNotNull(
-                        request.coreSemantics().getValue(packet.commandIdValue).payloadRef.uniformBlock,
-                    ).bytes
                     GPUUniformSlabPayload(
                         slotLabel = "draw-${packet.commandIdValue}",
-                        bytes = ByteArray(bytes.size) { index -> bytes[index].toByte() },
+                        bytes = legacyUniformBytesByCommandId.getValue(packet.commandIdValue),
                     )
                 },
             )) {
@@ -2196,9 +2258,31 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val uniformSlabSeal = uniformSlabPlan?.let { plan ->
             val packedBytes = ByteArray(plan.totalBytes.toInt())
             legacyUniformPackets.zip(plan.slots).forEach { (packet, slot) ->
-                val bytes = requireNotNull(
-                    request.coreSemantics().getValue(packet.commandIdValue).payloadRef.uniformBlock,
-                ).bytes
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                val structuralKey = corePrimitiveRenderPipelineStructuralKey(
+                    semantic,
+                    requireNotNull(packet.clipExecutionPlan),
+                    requireNotNull(packet.blendPlan),
+                    preparedSamplePlan.sampleCount,
+                    request.targetFormat.corePrimitiveStructuralColorFormat(),
+                )
+                val bytes = if (
+                    structuralKey.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+                ) {
+                    when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
+                        semantic,
+                        GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+                    )) {
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted -> built.bytes
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
+                            error(built.message)
+                    }
+                } else {
+                    requireNotNull(semantic.payloadRef.uniformBlock).bytes
+                        .map(Int::toByte)
+                        .toByteArray()
+                }
                 bytes.indices.forEach { byteIndex ->
                     packedBytes[slot.alignedOffset.toInt() + byteIndex] = bytes[byteIndex].toByte()
                 }
@@ -2980,6 +3064,14 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 }
             }
             val clip = requireNotNull(packet.clipExecutionPlan)
+            val structuralKey = corePrimitiveRenderPipelineStructuralKey(
+                request.coreSemantics().getValue(packet.commandIdValue),
+                clip,
+                requireNotNull(packet.blendPlan),
+                preparedSamplePlan.sampleCount,
+                request.targetFormat.corePrimitiveStructuralColorFormat(),
+            )
+            corePrimitiveGradientBindingLayoutHash(structuralKey.shader)?.let { return it }
             val analyticShape = request.coreSemantics().getValue(packet.commandIdValue)
                 .usesAnalyticShapeUniform80()
             return when {
@@ -4223,6 +4315,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val bindingLayoutHash = when {
             coverageMaskConsumerSlot != null -> coverageMaskConsumerSlot.bindingLayoutHash
+            corePrimitiveGradientBindingLayoutHash(structuralPipelineKey.shader) != null ->
+                requireNotNull(corePrimitiveGradientBindingLayoutHash(structuralPipelineKey.shader))
             analyticShape != null -> CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
             analyticClipAuthority != null -> CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             analyticIntersectionAuthority != null -> CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH

@@ -27,6 +27,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
@@ -334,6 +335,144 @@ private fun GPUFramePathVisualCommand.gatherMaskBlurSemantic(
 
 private const val MAX_MASK_BLUR_TEXTURE_DIMENSION = 4096
 
+private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
+    colorTransform: GPUCorePrimitiveColorTransform,
+): Pair<GPUCorePrimitiveMaterialPayload, List<Float>> = when (this) {
+    is GPUMaterialDescriptor.SolidColor -> {
+        val alpha = a
+        val premultipliedRgba = listOf(
+            colorTransform.apply(r) * alpha,
+            colorTransform.apply(g) * alpha,
+            colorTransform.apply(b) * alpha,
+            alpha,
+        )
+        GPUCorePrimitiveMaterialPayload.SolidColor(premultipliedRgba) to premultipliedRgba
+    }
+    is GPUMaterialDescriptor.RadialGradient -> {
+        val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
+        if (tileMode != "clamp") {
+            refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
+        }
+        if (interpolation != "srgb") {
+            refuseCoreMaterial("unsupported.core_primitive.material.interpolation", facts)
+        }
+        if (!centerX.isFinite() || !centerY.isFinite() || !radius.isFinite()) {
+            refuseCoreMaterial("unsupported.core_primitive.material.non_finite", facts)
+        }
+        if (radius <= 0f) {
+            refuseCoreMaterial("unsupported.core_primitive.material.radial.radius", facts)
+        }
+        if (!listOf(startR, startG, startB, startA, endR, endG, endB, endA).isNormalizedFinite()) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        if (localMatrix.size != 9 || localMatrix.any { !it.isFinite() }) {
+            refuseCoreMaterial("unsupported.core_primitive.material.matrix", facts)
+        }
+        val positions = allStopPositions?.toList() ?: listOf(0f, 1f)
+        val colors = allStopColors?.toList() ?: listOf(
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+        )
+        if (!positions.isValidCoreGradientPositions() ||
+            colors.size != positions.size * 4 ||
+            !colors.isNormalizedFinite()
+        ) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        val payload = GPUCorePrimitiveMaterialPayload.RadialGradient(
+            centerX = centerX,
+            centerY = centerY,
+            radius = radius,
+            localMatrix = localMatrix,
+            interpolation = interpolation,
+            tileMode = tileMode,
+            positions = positions,
+            colors = colors,
+        )
+        // Gradients carry their own stop colors; the legacy solid color field is only a
+        // validated compatibility slot and must not become a representative gradient color.
+        payload to listOf(0f, 0f, 0f, 0f)
+    }
+    is GPUMaterialDescriptor.SweepGradient -> {
+        val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
+        if (tileMode != "clamp") {
+            refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
+        }
+        if (interpolation != "srgb") {
+            refuseCoreMaterial("unsupported.core_primitive.material.interpolation", facts)
+        }
+        if (!centerX.isFinite() || !centerY.isFinite() ||
+            !startAngle.isFinite() || !endAngle.isFinite()
+        ) {
+            refuseCoreMaterial("unsupported.core_primitive.material.non_finite", facts)
+        }
+        val sweepSpan = endAngle - startAngle
+        // atan2 exposes one principal revolution; unwrapped multi-turn sweeps are not representable.
+        if (endAngle <= startAngle || !sweepSpan.isFinite() || sweepSpan > 360f) {
+            refuseCoreMaterial("unsupported.core_primitive.material.sweep.range", facts)
+        }
+        if (!listOf(startR, startG, startB, startA, endR, endG, endB, endA).isNormalizedFinite()) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        if (localMatrix.size != 9 || localMatrix.any { !it.isFinite() }) {
+            refuseCoreMaterial("unsupported.core_primitive.material.matrix", facts)
+        }
+        val positions = allStopPositions?.toList() ?: listOf(0f, 1f)
+        val colors = allStopColors?.toList() ?: listOf(
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+        )
+        if (!positions.isValidCoreGradientPositions() ||
+            colors.size != positions.size * 4 ||
+            !colors.isNormalizedFinite()
+        ) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        val payload = GPUCorePrimitiveMaterialPayload.SweepGradient(
+            centerX = centerX,
+            centerY = centerY,
+            startAngle = startAngle,
+            endAngle = endAngle,
+            localMatrix = localMatrix,
+            interpolation = interpolation,
+            tileMode = tileMode,
+            positions = positions,
+            colors = colors,
+        )
+        payload to listOf(0f, 0f, 0f, 0f)
+    }
+    else -> refuseCoreMaterial(
+        "unsupported.core_primitive.material.non_solid",
+        corePrimitiveMaterialFacts(),
+    )
+}
+
+private fun GPUMaterialDescriptor?.corePrimitiveMaterialFacts(): Map<String, String> = mapOf(
+    "materialKind" to (this?.kind?.name.orEmpty()),
+    "tileMode" to when (this) {
+        is GPUMaterialDescriptor.RadialGradient -> tileMode
+        is GPUMaterialDescriptor.SweepGradient -> tileMode
+        else -> "none"
+    },
+    "interpolation" to when (this) {
+        is GPUMaterialDescriptor.RadialGradient -> interpolation
+        is GPUMaterialDescriptor.SweepGradient -> interpolation
+        else -> "none"
+    },
+    "materialHash" to "descriptor:${this?.let { Integer.toUnsignedString(it.hashCode(), 16) } ?: "none"}",
+)
+
+private fun refuseCoreMaterial(code: String, facts: Map<String, String>): Nothing =
+    refuseGeometry(code, facts)
+
+private fun List<Float>.isNormalizedFinite(): Boolean =
+    all { value -> value.isFinite() && value in 0f..1f }
+
+private fun List<Float>.isValidCoreGradientPositions(): Boolean =
+    size in 1..16 &&
+        all { value -> value.isFinite() && value in 0f..1f } &&
+        zipWithNext().all { (left, right) -> left <= right }
+
 private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     targetBounds: GPUPixelBounds,
     analysisRecord: GPUDrawAnalysisRecord,
@@ -341,15 +480,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
     val normalizedMaterial = normalized.material
-    val material = normalizedMaterial as? GPUMaterialDescriptor.SolidColor
-        ?: refuseGeometry(
-            "unsupported.core_primitive.material.non_solid",
-            mapOf("materialKind" to normalizedMaterial?.let { it::class.simpleName }.orEmpty()),
-        )
-    val alpha = material.a
-    val linearR = colorTransform.apply(material.r)
-    val linearG = colorTransform.apply(material.g)
-    val linearB = colorTransform.apply(material.b)
+    val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(colorTransform)
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
@@ -461,7 +592,8 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         commandIdValue = normalized.commandId.value,
         sourceFamily = sourceFamily,
         geometry = geometry,
-        premultipliedRgba = listOf(linearR * alpha, linearG * alpha, linearB * alpha, alpha),
+        premultipliedRgba = premultipliedRgba,
+        material = material,
         targetBounds = targetBounds,
         scissorBounds = scissor,
         clipCoveragePlan = clipCoverage,

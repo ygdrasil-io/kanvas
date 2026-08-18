@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttach
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
@@ -31,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityVali
 import org.graphiks.kanvas.gpu.renderer.passes.validateGPUCorePrimitiveCoverageMaskPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -58,6 +60,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformByteSize
+import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY
@@ -76,6 +80,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_B
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveGradientBindingLayoutHash
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority
@@ -3906,6 +3911,29 @@ internal class GPUFramePreflighter(
                     "unsupported.native-core-primitive.coverage-mask-direct-route",
                     "Coverage-mask programs require their dedicated prepared multi-pass route.",
                 )
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+                -> {
+                    if (stepAuthorities.any { authority ->
+                            authority.analyticShapeUniformSeal != null ||
+                                authority.analyticClipUniformSeal != null ||
+                                authority.analyticIntersectionUniformSeal != null
+                        }
+                    ) return refuse("Gradient packets cannot retain a conflicting analytic uniform seal.")
+                    val stepSeal = stepAuthorities.first().uniformSlabSeal
+                        ?: return refuse("Gradient packet is missing its builder uniform slab seal.")
+                    if (stepAuthorities.any { authority -> authority.uniformSlabSeal !== stepSeal }) {
+                        return refuse("Gradient packets must share one exact builder uniform slab seal.")
+                    }
+                    stepUniformAuthorities[stepIndex] = StepUniformAuthority(
+                        stepLayout,
+                        stepSeal,
+                        emptyList(),
+                        emptyList(),
+                        emptyList(),
+                        stepSeal.plan,
+                    )
+                }
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                     return diagnostic(
                         "unsupported.native-core-primitive.no-bindings-direct-route",
@@ -4043,6 +4071,73 @@ internal class GPUFramePreflighter(
                 }
             ) {
                 return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
+            }
+        }
+        val gradientSteps = stepUniformAuthorities.filterValues { authority ->
+            authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ||
+                authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+        }
+        gradientSteps.forEach { (stepIndex, authority) ->
+            val seal = authority.uniformSlabSeal ?: return diagnostic(
+                "invalid.preflight.core_primitive_gradient_uniform_seal",
+                "Gradient packets must retain one exact uniform slab seal.",
+            )
+            val stepAcceptedIndices = stepAcceptedIndicesByIndex.getValue(stepIndex)
+            if (authority.uniformPlan.sourceLabel != "core-primitive-uniform-pass" ||
+                authority.uniformPlan.deviceGeneration != context.deviceGeneration.value ||
+                authority.uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                authority.uniformPlan.totalBytes > maxBufferSize ||
+                authority.uniformPlan.slots.size != stepAcceptedIndices.size ||
+                seal.commandIds != stepAcceptedIndices.map { acceptedIndex -> accepted[acceptedIndex].packet.commandIdValue }
+            ) {
+                return diagnostic(
+                    "invalid.preflight.core_primitive_gradient_uniform_seal",
+                    "Gradient uniform slab plan contradicts the current packet or limit authority.",
+                )
+            }
+            stepAcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
+                val entry = accepted[acceptedIndex]
+                val expectedBytes = if (
+                    authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+                ) {
+                    when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
+                        entry.semantic,
+                        GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
+                    )) {
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted ->
+                            built.bytes.map { byte -> byte.toInt() and 0xff }
+                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
+                            return diagnostic(built.code, built.message)
+                    }
+                } else {
+                    requireNotNull(entry.semantic.payloadRef.uniformBlock).bytes
+                }
+                val expectedHash = corePrimitiveGradientBindingLayoutHash(
+                    packetAuthorities[acceptedIndex].structuralPipelineKey.shader,
+                ) ?: return diagnostic(
+                    "invalid.preflight.core_primitive_gradient_uniform_seal",
+                    "Gradient structural authority has no exact binding-layout identity.",
+                )
+                val routeLane = if (
+                    authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+                ) {
+                    GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape
+                } else {
+                    GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry
+                }
+                if (entry.packet.bindingLayoutHash != expectedHash ||
+                    entry.route.lane != routeLane ||
+                    entry.semantic.payloadRef.uniformBlock?.byteSize !=
+                    corePrimitiveUniformByteSize(entry.semantic.material).toLong() ||
+                    entry.semantic.payloadRef.uniformBlock.bytes !=
+                    corePrimitiveUniformBytes(entry.semantic.targetBounds, entry.semantic.material) ||
+                    !seal.hasExactPayload(indexAt, entry.packet.commandIdValue, expectedBytes)
+                ) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_gradient_uniform_seal",
+                        "Gradient uniform slab payload contradicts the current packet or material ABI.",
+                    )
+                }
             }
         }
         val analyticShapeSteps = stepUniformAuthorities.values.filter {
@@ -4375,7 +4470,11 @@ internal class GPUFramePreflighter(
             acceptedStepIndexes.associateWith { stepIndex ->
                 val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
                 if (stepAuthority.layout ==
-                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ||
+                    stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ||
+                    stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
                 ) {
                     if (singleStepFrame || exactPreparedSurfaceMixedBoundary) {
                         stepAuthority.uniformSlabSeal
@@ -5191,7 +5290,9 @@ internal class GPUFramePreflighter(
                 "Core primitive executable packet role is not a sealed native route role.",
             )
         }
-        val expectedBindingLayoutHash = when (expectedStructuralPipelineKey.uniformLayout) {
+        val expectedBindingLayoutHash = corePrimitiveGradientBindingLayoutHash(
+            expectedStructuralPipelineKey.shader,
+        ) ?: when (expectedStructuralPipelineKey.uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
@@ -5200,6 +5301,9 @@ internal class GPUFramePreflighter(
                 CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1,
+            -> error("Gradient bindings must be selected by their structural shader variant")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1 ->
                 coverageMaskConsumerSlot?.bindingLayoutHash ?: return diagnostic(
                     "unsupported.native-core-primitive.coverage-mask-direct-route",
