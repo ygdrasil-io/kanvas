@@ -169,6 +169,41 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared empty gradient stops return a typed refusal without throwing`() {
+        val cases = listOf(
+            Shader.LinearGradient(
+                start = Point(0f, 0f),
+                end = Point(10f, 0f),
+                stops = emptyList(),
+            ) to GPUMaterialKind.LinearGradient,
+            Shader.RadialGradient(
+                center = Point(0f, 0f),
+                radius = 10f,
+                stops = emptyList(),
+            ) to GPUMaterialKind.RadialGradient,
+            Shader.SweepGradient(
+                center = Point(0f, 0f),
+                stops = emptyList(),
+            ) to GPUMaterialKind.SweepGradient,
+            Shader.ConicalGradient(
+                start = Point(0f, 0f),
+                startRadius = 0f,
+                end = Point(10f, 10f),
+                endRadius = 10f,
+                stops = emptyList(),
+            ) to GPUMaterialKind.TwoPointConical,
+        )
+
+        cases.forEach { (shader, kind) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = shader).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals("unsupported.material.mapping.gradient_stop_count", descriptor.reason.diagnosticCode)
+            assertEquals(kind, descriptor.originalKind)
+        }
+    }
+
+    @Test
     fun `prepared gradient local matrix wrappers refuse until the route consumes matrix facts`() {
         val matrix = Matrix33.makeAll(
             1.5f, 0.25f, 3f,

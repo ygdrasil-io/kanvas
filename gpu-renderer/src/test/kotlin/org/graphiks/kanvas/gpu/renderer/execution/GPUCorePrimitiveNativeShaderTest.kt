@@ -55,7 +55,7 @@ class GPUCorePrimitiveNativeShaderTest {
                 assertContains(source, "let distance = length(position - center);")
             } else {
                 assertContains(source, "let angle = atan2(position.y - center.y, position.x - center.x);")
-                assertContains(source, "normalized_angle = normalized_angle + 1.0")
+                assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
             }
             assertContains(source, "clamp(t_raw, 0.0, 1.0)")
             assertContains(source, "sample_stops_at")
@@ -84,7 +84,7 @@ class GPUCorePrimitiveNativeShaderTest {
     }
 
     @Test
-    fun `sweep gradient shader converts degree facts to radians before angle math`() {
+    fun `sweep gradient shader normalizes arbitrary finite angles before span math`() {
         val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveGradientNativeShader(
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
@@ -93,8 +93,21 @@ class GPUCorePrimitiveNativeShaderTest {
 
         assertContains(source, "let start_angle = gradient.angle_range.x * 0.0174532925199433;")
         assertContains(source, "let end_angle = gradient.angle_range.y * 0.0174532925199433;")
-        assertContains(source, "var normalized_angle = (angle - start_angle) / 6.28318530718;")
+        assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
+        assertFalse(source.contains("normalized_angle = normalized_angle + 1.0"))
         assertContains(source, "let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);")
+    }
+
+    @Test
+    fun `gradient shader reads the color payload for a single retained stop`() {
+        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveGradientNativeShader(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            ),
+        ).plan.wgslSource
+
+        assertContains(source, "let only = gradient.stop_data[1];")
+        assertFalse(source.contains("let only = gradient.stop_data[0];"))
     }
 
     @Test

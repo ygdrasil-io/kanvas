@@ -277,10 +277,7 @@ private fun corePrimitiveGradientNativeWgsl(
         let start_angle = gradient.angle_range.x * 0.0174532925199433;
         let end_angle = gradient.angle_range.y * 0.0174532925199433;
         let angle = atan2(position.y - center.y, position.x - center.x);
-        var normalized_angle = (angle - start_angle) / 6.28318530718;
-        if (normalized_angle < 0.0) {
-            normalized_angle = normalized_angle + 1.0;
-        }
+        let normalized_angle = fract((angle - start_angle) / 6.28318530718);
         let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);
         let t_raw = normalized_angle / span;
         """.trimIndent()
@@ -409,7 +406,7 @@ private fun corePrimitiveGradientNativeWgsl(
         fn sample_stops_at(t: f32, count: u32) -> vec4<f32> {
             let safe_count = max(count, 1u);
             if (safe_count == 1u) {
-                let only = gradient.stop_data[0];
+                let only = gradient.stop_data[1];
                 return vec4<f32>(only.rgb, only.a);
             }
             var lower_index = 0u;

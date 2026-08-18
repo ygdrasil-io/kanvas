@@ -824,6 +824,20 @@ private class PreparedShaderMapper(
 private fun Shader.toPreparedMaterial(
     mapper: PreparedShaderMapper,
 ): GPUMaterialDescriptor {
+    val hasEmptyGradientStops = when (this) {
+        is Shader.LinearGradient -> stops.isEmpty()
+        is Shader.RadialGradient -> stops.isEmpty()
+        is Shader.SweepGradient -> stops.isEmpty()
+        is Shader.ConicalGradient -> stops.isEmpty()
+        else -> false
+    }
+    if (hasEmptyGradientStops) {
+        return mapper.descriptorAssembly.preparedUnsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.GRADIENT_STOP_COUNT,
+            originalKind = materialKind(),
+        )
+    }
+
     return when (this) {
         is Shader.SolidColor -> toMaterial()
         is Shader.LinearGradient ->

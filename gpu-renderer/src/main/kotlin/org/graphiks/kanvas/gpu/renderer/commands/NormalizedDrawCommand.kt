@@ -188,6 +188,10 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.gradient_interpolation",
         "Prepared gradient mapping only implements sRGB interpolation",
     ),
+    GRADIENT_STOP_COUNT(
+        "unsupported.material.mapping.gradient_stop_count",
+        "Prepared gradient mapping requires at least one stop",
+    ),
     RUNTIME_COLOR_FILTER_PLACEMENT(
         "unsupported.material.mapping.runtime_color_filter_placement",
         "Prepared mapping does not implement runtime-effect color-filter placement",
