@@ -563,6 +563,16 @@ class GPUPreparedSurfaceNativePreflightTest {
                 input.generationSeal,
             ),
         )
+        val reducedDirectSeal = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                linkedMapOf(firstPacket.packetId to classifiedRoute(firstPacket)),
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            mutatedScope.rebuilt(
+                corePrimitiveDirectNativeRouteSeal = reducedDirectSeal,
+            )
+        }
     }
 
     @Test
@@ -734,6 +744,204 @@ class GPUPreparedSurfaceNativePreflightTest {
                     it is GPUFrameStep.CopyAsDrawMaterializationStep
             },
         )
+    }
+
+    @Test
+    fun `mixed Core and Image packets in one render step seal into ordered native runs`() {
+        val input = capturedPreparedSurfaceInputs(
+            PreparedSurfaceFixtureShape.MixedCoreAndImageInOneRenderPass,
+        )
+        val result = GPUPreparedSurfaceNativePreflight().validate(
+            input.framePlan,
+            input.encoderPlan,
+            input.resources,
+            input.shaderContract,
+            input.generationSeal,
+        )
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            result,
+            result.toString(),
+        )
+        assertEquals(
+            listOf(
+                GPUPreparedSurfaceNativeRunPlan.Core::class,
+                GPUPreparedSurfaceNativeRunPlan.Image::class,
+            ),
+            accepted.plan.orderedRuns.map { run -> run::class },
+        )
+
+        val mixedRenders = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filter { render ->
+                render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                } && render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+                }
+            }
+        assertEquals(1, mixedRenders.size, input.framePlan.dumpLines().joinToString("\n"))
+        val mixedRender = mixedRenders.single()
+        val mixedRenderIndex = input.framePlan.steps.indexOf(mixedRender)
+        val coreRun = assertIs<GPUPreparedSurfaceNativeRunPlan.Core>(
+            accepted.plan.orderedRuns.first(),
+        ).plan
+        val imageRun = assertIs<GPUPreparedSurfaceNativeRunPlan.Image>(
+            accepted.plan.orderedRuns.last(),
+        ).plan
+        assertEquals(
+            mixedRender.drawPackets.filter {
+                it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+            },
+            coreRun.renderStep.drawPackets,
+        )
+        assertEquals(
+            mixedRender.drawPackets.filter {
+                it.semanticPayload is GPUDrawSemanticPayload.SampledImage
+            }.map { packet -> packet.semanticPayload },
+            imageRun.packets,
+        )
+        assertEquals(listOf(mixedRenderIndex), coreRun.sourceScopeIndices)
+        assertEquals(listOf(mixedRenderIndex), imageRun.sourceScopeIndices)
+        assertEquals(
+            listOf(mixedRenderIndex),
+            accepted.plan.imageFrames.single().consumerRenderScopeIndices,
+        )
+    }
+
+    @Test
+    fun `reverse mixed Image and Core packets retain occurrence-safe image mapping`() {
+        val input = capturedPreparedSurfaceInputs(
+            PreparedSurfaceFixtureShape.MixedImageAndCoreInOneRenderPass,
+        )
+        val result = GPUPreparedSurfaceNativePreflight().validate(
+            input.framePlan,
+            input.encoderPlan,
+            input.resources,
+            input.shaderContract,
+            input.generationSeal,
+        )
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            result,
+            result.toString(),
+        )
+        val mixedRender = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single { render ->
+                render.drawPackets.any {
+                    it.semanticPayload is GPUDrawSemanticPayload.SampledImage
+                } && render.drawPackets.any {
+                    it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                }
+            }
+        assertEquals(
+            listOf(
+                GPUDrawSemanticPayload.SampledImage::class,
+                GPUDrawSemanticPayload.CorePrimitive::class,
+            ),
+            mixedRender.drawPackets.map { packet -> packet.semanticPayload!!::class },
+        )
+        val scope = input.encoderPlan.scopes.single { candidate ->
+            candidate.sourceStepIndex == input.framePlan.steps.indexOf(mixedRender)
+        }
+        val imageIndex = mixedRender.drawPackets.indexOfFirst { packet ->
+            packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+        }
+        val pipelineKeys = scope.nativeOperandKeys.filter {
+            it.role == GPUPreparedNativeOperandRole.RenderPipeline
+        }
+        val bindGroupKeys = scope.nativeOperandKeys.filter {
+            it.role == GPUPreparedNativeOperandRole.RenderBindGroup
+        }
+        val imageRun = accepted.plan.orderedRuns
+            .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
+            .single()
+            .plan
+        assertEquals(
+            listOf(
+                scope.nativeOperandKeys.first {
+                    it.role == GPUPreparedNativeOperandRole.RenderColorTarget
+                },
+                pipelineKeys[imageIndex],
+                bindGroupKeys[imageIndex],
+            ),
+            imageRun.exactScopeKey.operandKeys,
+        )
+    }
+
+    @Test
+    fun `mixed image scope keys retain packet occurrence order after repeated Core pipelines`() {
+        val input = capturedPreparedSurfaceInputs(
+            PreparedSurfaceFixtureShape.MixedCoreCoreImageInOneRenderPass,
+        )
+        val result = GPUPreparedSurfaceNativePreflight().validate(
+            input.framePlan,
+            input.encoderPlan,
+            input.resources,
+            input.shaderContract,
+            input.generationSeal,
+        )
+        assertTrue(result is GPUPreparedSurfaceNativePreflightResult.Accepted, result.toString())
+        val accepted = result as GPUPreparedSurfaceNativePreflightResult.Accepted
+        val mixedRender = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single { render ->
+                render.drawPackets.any {
+                    it.semanticPayload is GPUDrawSemanticPayload.SampledImage
+                } && render.drawPackets.count {
+                    it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                } == 2
+            }
+        assertEquals(
+            listOf(
+                GPUDrawSemanticPayload.CorePrimitive::class,
+                GPUDrawSemanticPayload.CorePrimitive::class,
+                GPUDrawSemanticPayload.SampledImage::class,
+            ),
+            mixedRender.drawPackets.map { packet -> packet.semanticPayload!!::class },
+        )
+        val scope = input.encoderPlan.scopes.single { candidate ->
+            candidate.sourceStepIndex == input.framePlan.steps.indexOf(mixedRender)
+        }
+        val imageIndex = mixedRender.drawPackets.indexOfFirst { packet ->
+            packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+        }
+        val pipelineKeys = scope.nativeOperandKeys.filter {
+            it.role == GPUPreparedNativeOperandRole.RenderPipeline
+        }
+        val bindGroupKeys = scope.nativeOperandKeys.filter {
+            it.role == GPUPreparedNativeOperandRole.RenderBindGroup
+        }
+        val imageRun = accepted.plan.orderedRuns
+            .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
+            .single()
+            .plan
+        assertEquals(
+            listOf(
+                scope.nativeOperandKeys.first {
+                    it.role == GPUPreparedNativeOperandRole.RenderColorTarget
+                },
+                pipelineKeys[1],
+                bindGroupKeys[imageIndex],
+            ),
+            imageRun.exactScopeKey.operandKeys,
+        )
+    }
+
+    @Test
+    fun `mixed image scope refuses a no-bind Core occurrence before the image packet`() {
+        val input = capturedPreparedSurfaceInputs(
+            PreparedSurfaceFixtureShape.MixedNoBindCoreAndImageInOneRenderPass,
+        )
+        val refused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+            GPUPreparedSurfaceNativePreflight().validate(
+                input.framePlan,
+                input.encoderPlan,
+                input.resources,
+                input.shaderContract,
+                input.generationSeal,
+            ),
+        )
+        assertEquals("unsupported.prepared-surface.core-route", refused.code)
     }
 
     @Test
@@ -1203,6 +1411,46 @@ class GPUPreparedSurfaceNativePreflightTest {
                 }
             assertSame(input.resources, accepted.plan.resources)
         }
+    }
+
+    @Test
+    fun `mixed surface accepts separate direct Core uniform authorities per render run`() {
+        val input = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.CoreImageCore)
+        val alternate = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.CoreImageCore)
+        val coreScope = input.encoderPlan.scopes
+            .filter { scope ->
+                scope.corePrimitiveNativeScopeRouteSeal is GPUCorePrimitiveNativeScopeRouteSeal.Routes
+            }
+            .last()
+        val alternateCoreScope = alternate.encoderPlan.scopes
+            .filter { scope ->
+                scope.corePrimitiveNativeScopeRouteSeal is GPUCorePrimitiveNativeScopeRouteSeal.Routes
+            }
+            .last()
+        val coreRoute = coreScope.corePrimitiveNativeScopeRouteSeal as
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes
+        val alternateCoreRoute = alternateCoreScope.corePrimitiveNativeScopeRouteSeal as
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes
+        assertTrue(!coreRoute.hasSameUniformAuthority(alternateCoreRoute))
+        val encoderPlan = input.encoderPlan.replacingScope(
+            source = coreScope,
+            replacement = coreScope.rebuilt(
+                corePrimitiveDirectNativeRouteSeal =
+                    alternateCoreScope.corePrimitiveDirectNativeRouteSeal,
+                corePrimitiveNativeScopeRouteSeal = alternateCoreRoute,
+            ),
+        )
+
+        val result = GPUPreparedSurfaceNativePreflight().validate(
+            input.framePlan,
+            encoderPlan,
+            input.resources,
+            input.shaderContract,
+            input.generationSeal,
+        )
+        assertTrue(result is GPUPreparedSurfaceNativePreflightResult.Accepted, result.toString())
+        val accepted = result as GPUPreparedSurfaceNativePreflightResult.Accepted
+        assertEquals(3, accepted.plan.orderedRuns.size)
     }
 
     @Test
@@ -1724,10 +1972,12 @@ private fun GPUFramePlan.withFirstImagePacket(
 }
 
 private fun GPUDrawPacket.rebuiltForPreflight(
+    passId: String = this.passId,
     semanticPayload: GPUDrawSemanticPayload? = this.semanticPayload,
     scissorBoundsHash: String? = this.scissorBoundsHash,
     clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,
     clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
+    targetStateHash: String = this.targetStateHash,
 ) = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,
@@ -1762,6 +2012,10 @@ private fun GPUDrawPacket.rebuiltForPreflight(
 
 internal enum class PreparedSurfaceFixtureShape {
     Mixed,
+    MixedCoreAndImageInOneRenderPass,
+    MixedImageAndCoreInOneRenderPass,
+    MixedCoreCoreImageInOneRenderPass,
+    MixedNoBindCoreAndImageInOneRenderPass,
     CoreImageCore,
     ImageCoreImage,
     CoreImageText,
@@ -1788,6 +2042,23 @@ internal fun preparedSurfacePreflightFixture(
     val capabilities = preparedSurfaceCapabilities()
     val commands = when (shape) {
         PreparedSurfaceFixtureShape.Mixed -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceImageCommand(1, 1),
+        )
+        PreparedSurfaceFixtureShape.MixedCoreAndImageInOneRenderPass -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceImageCommand(1, 1),
+        )
+        PreparedSurfaceFixtureShape.MixedImageAndCoreInOneRenderPass -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceImageCommand(1, 1),
+        )
+        PreparedSurfaceFixtureShape.MixedCoreCoreImageInOneRenderPass -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceCoreCommand(2, 1),
+            preparedSurfaceImageCommand(1, 2),
+        )
+        PreparedSurfaceFixtureShape.MixedNoBindCoreAndImageInOneRenderPass -> listOf(
             preparedSurfaceCoreCommand(0, 0),
             preparedSurfaceImageCommand(1, 1),
         )
@@ -1848,57 +2119,61 @@ internal fun preparedSurfacePreflightFixture(
         commands.forEach(::record)
     }.close()
     val clippedBase = recording.taskList.withPreparedSurfaceClipAuthority()
-    val base = if (shape != PreparedSurfaceFixtureShape.CoreImageText &&
-        shape != PreparedSurfaceFixtureShape.MixedMaskedText
-    ) {
-        clippedBase
-    } else {
-        val precedingRender = clippedBase.tasks.filterIsInstance<GPUTask.Render>().last()
-        val maskedText = shape == PreparedSurfaceFixtureShape.MixedMaskedText
-        val textPacket = preparedTextPreflightPacket(
-            commandId = 2,
-            resourceGeneration = precedingRender.drawPackets.single().resourceGeneration,
-            clipCoveragePlan = if (maskedText) {
-                preparedSurfaceMaskedTextCoveragePlan()
-            } else {
-                GPUClipCoveragePlan.NoClip
-            },
-            clipExecutionPlan = if (maskedText) {
-                preparedSurfaceMaskedTextClipPlan()
-            } else {
-                GPUClipExecutionPlan.NoClip
-            },
-        )
-        GPUTaskList(
-            frameId = clippedBase.frameId,
-            capabilitySeal = clippedBase.capabilitySeal,
-            recordingSeals = clippedBase.recordingSeals,
-            expectedReplayKeyHash = clippedBase.expectedReplayKeyHash,
-            tasks = clippedBase.tasks + GPUTask.Render(
-                taskId = GPUTaskID("task.prepared-surface.text"),
-                recordingId = precedingRender.recordingId,
-                phase = GPUTaskPhase.Render,
-                target = precedingRender.target,
-                loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
-                samplePlan = GPUSamplePlan.SingleSampleFrame,
-                provisionalSegmentKey =
-                    GPUProvisionalRenderSegmentKey("segment.prepared-surface.text"),
-                drawPackets = listOf(textPacket),
-                batchEligibilityByPacketId = mapOf(
-                    textPacket.packetId to GPUPassBatchEligibility(
-                        kind = GPUPassBatchKind.Isolated,
-                        queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+    val base = when (shape) {
+        PreparedSurfaceFixtureShape.MixedCoreCoreImageInOneRenderPass ->
+            clippedBase.withMixedCoreAndImageRenderTask(trailingCoreBeforeImage = true)
+        PreparedSurfaceFixtureShape.CoreImageText,
+        PreparedSurfaceFixtureShape.MixedMaskedText,
+        -> {
+            val precedingRender = clippedBase.tasks.filterIsInstance<GPUTask.Render>().last()
+            val maskedText = shape == PreparedSurfaceFixtureShape.MixedMaskedText
+            val textPacket = preparedTextPreflightPacket(
+                commandId = 2,
+                resourceGeneration = precedingRender.drawPackets.single().resourceGeneration,
+                clipCoveragePlan = if (maskedText) {
+                    preparedSurfaceMaskedTextCoveragePlan()
+                } else {
+                    GPUClipCoveragePlan.NoClip
+                },
+                clipExecutionPlan = if (maskedText) {
+                    preparedSurfaceMaskedTextClipPlan()
+                } else {
+                    GPUClipExecutionPlan.NoClip
+                },
+            )
+            GPUTaskList(
+                frameId = clippedBase.frameId,
+                capabilitySeal = clippedBase.capabilitySeal,
+                recordingSeals = clippedBase.recordingSeals,
+                expectedReplayKeyHash = clippedBase.expectedReplayKeyHash,
+                tasks = clippedBase.tasks + GPUTask.Render(
+                    taskId = GPUTaskID("task.prepared-surface.text"),
+                    recordingId = precedingRender.recordingId,
+                    phase = GPUTaskPhase.Render,
+                    target = precedingRender.target,
+                    loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+                    samplePlan = GPUSamplePlan.SingleSampleFrame,
+                    provisionalSegmentKey =
+                        GPUProvisionalRenderSegmentKey("segment.prepared-surface.text"),
+                    drawPackets = listOf(textPacket),
+                    batchEligibilityByPacketId = mapOf(
+                        textPacket.packetId to GPUPassBatchEligibility(
+                            kind = GPUPassBatchKind.Isolated,
+                            queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                        ),
                     ),
                 ),
-            ),
-            dependencies = clippedBase.dependencies,
-            phaseOrder = clippedBase.phaseOrder,
-            memoryBudget = clippedBase.memoryBudget,
-            diagnostics = clippedBase.diagnostics,
-        )
+                dependencies = clippedBase.dependencies,
+                phaseOrder = clippedBase.phaseOrder,
+                memoryBudget = clippedBase.memoryBudget,
+                diagnostics = clippedBase.diagnostics,
+            )
+        }
+        else -> clippedBase
     }
     val pathCommandIds = when (shape) {
-        PreparedSurfaceFixtureShape.PathImage -> setOf(0)
+        PreparedSurfaceFixtureShape.PathImage,
+        PreparedSurfaceFixtureShape.MixedNoBindCoreAndImageInOneRenderPass -> setOf(0)
         PreparedSurfaceFixtureShape.ImagePath -> setOf(1)
         PreparedSurfaceFixtureShape.PathImagePath -> setOf(0, 2)
         PreparedSurfaceFixtureShape.DirectImagePath -> setOf(2)
@@ -1962,10 +2237,20 @@ internal fun preparedSurfacePreflightFixture(
                 targetFormat = GPUColorFormat.RGBA8UnormSrgb,
             ),
         )
-    val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+    val recordedTaskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
         build,
         build.toString(),
     ).taskList
+    val taskList = when (shape) {
+        PreparedSurfaceFixtureShape.MixedCoreAndImageInOneRenderPass,
+        PreparedSurfaceFixtureShape.MixedImageAndCoreInOneRenderPass,
+        PreparedSurfaceFixtureShape.MixedCoreCoreImageInOneRenderPass,
+        PreparedSurfaceFixtureShape.MixedNoBindCoreAndImageInOneRenderPass ->
+            recordedTaskList.withMixedCoreAndImageRenderTask(
+                imageBeforeCore = shape == PreparedSurfaceFixtureShape.MixedImageAndCoreInOneRenderPass,
+            )
+        else -> recordedTaskList
+    }
     val framePlan = GPUFramePlanner.plan(taskList)
     val targetGeneration = taskList.tasks.filterIsInstance<GPUTask.Render>()
         .flatMap(GPUTask.Render::drawPackets)
@@ -2070,10 +2355,13 @@ internal fun capturedPreparedSurfaceInputs(
     } else {
         fixture.framePlan
     }
-    val adapter = GPURuntimeResourceAdapter()
-    val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
-    val capture = CapturingPreparedNativeMaterializer()
-    return try {
+    check(!framePlan.atomicallyRefused) {
+        framePlan.dumpLines().joinToString("\n")
+    }
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val capture = CapturingPreparedNativeMaterializer()
+        return try {
         val result = GPUFramePreflighter(
             context = fixture.context,
             capabilities = fixture.capabilities,
@@ -2100,6 +2388,99 @@ internal fun capturedPreparedSurfaceInputs(
     } finally {
         adapter.close()
     }
+}
+
+private fun GPUTaskList.withMixedCoreAndImageRenderTask(
+    trailingCoreBeforeImage: Boolean = false,
+    imageBeforeCore: Boolean = false,
+): GPUTaskList {
+    val coreRender = tasks
+        .filterIsInstance<GPUTask.Render>()
+        .single { render ->
+            render.drawPackets.any { packet -> packet.commandIdValue == 0 }
+        }
+    val imageRender = tasks
+        .filterIsInstance<GPUTask.Render>()
+        .single { render ->
+            render.drawPackets.any { packet -> packet.commandIdValue == 1 }
+        }
+    val trailingCoreRender = if (trailingCoreBeforeImage) {
+        tasks.filterIsInstance<GPUTask.Render>().single { render ->
+            render.drawPackets.any { packet -> packet.commandIdValue == 2 }
+        }
+    } else {
+        null
+    }
+    require(trailingCoreRender == null ||
+        (trailingCoreRender.taskId != coreRender.taskId &&
+            trailingCoreRender.taskId != imageRender.taskId))
+    require(coreRender.taskId != imageRender.taskId)
+    val imagePackets = imageRender.drawPackets.map { packet ->
+        packet.rebuiltForPreflight(
+            passId = coreRender.drawPackets.first().passId,
+            targetStateHash = coreRender.drawPackets.first().targetStateHash,
+        )
+    }
+    val mixedPackets = if (trailingCoreRender == null) {
+        if (imageBeforeCore) imagePackets + coreRender.drawPackets
+        else coreRender.drawPackets + imagePackets
+    } else {
+        coreRender.drawPackets + trailingCoreRender.drawPackets + imagePackets
+    }
+    val mixedRender = GPUTask.Render(
+        taskId = coreRender.taskId,
+        recordingId = coreRender.recordingId,
+        phase = coreRender.phase,
+        target = coreRender.target,
+        loadStore = coreRender.loadStore,
+        samplePlan = coreRender.samplePlan,
+        resourceUses = buildList {
+            addAll(coreRender.resourceUses)
+            trailingCoreRender?.let { addAll(it.resourceUses) }
+            addAll(imageRender.resourceUses)
+        }.distinct(),
+        provisionalSegmentKey = coreRender.provisionalSegmentKey,
+        drawPackets = mixedPackets,
+        batchEligibilityByPacketId =
+            coreRender.batchEligibilityByPacketId +
+                (trailingCoreRender?.batchEligibilityByPacketId ?: emptyMap()) +
+                imageRender.batchEligibilityByPacketId,
+        sampleContinuationKey = coreRender.sampleContinuationKey,
+        compositeMembership = coreRender.compositeMembership,
+        depthStencilLoadStore = coreRender.depthStencilLoadStore,
+        preparedImageBindingsByPacketId = imageRender.preparedImageBindingsByPacketId,
+        preparedTextBindingsByPacketId = coreRender.preparedTextBindingsByPacketId,
+    )
+    fun remap(taskId: GPUTaskID): GPUTaskID =
+        when {
+            taskId == imageRender.taskId -> coreRender.taskId
+            taskId == trailingCoreRender?.taskId -> coreRender.taskId
+            else -> taskId
+        }
+    return GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks.mapNotNull { task ->
+            when (task.taskId) {
+                coreRender.taskId -> mixedRender
+                imageRender.taskId -> null
+                trailingCoreRender?.taskId -> null
+                else -> task
+            }
+        },
+        dependencies = dependencies.map { dependency ->
+            dependency.copy(
+                fromTaskId = remap(dependency.fromTaskId),
+                toTaskId = remap(dependency.toTaskId),
+            )
+        }.filter { dependency -> dependency.fromTaskId != dependency.toTaskId }.distinct(),
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+        compositeCommands = compositeCommands,
+    )
 }
 
 private object PreparedSurfaceCompletionProvider : GPUQueueCompletionProvider {
@@ -2455,6 +2836,17 @@ private fun GPUCommandEncoderScopePlan.rebuilt(
         this.passCommandStream,
     targetResource: GPUFrameTargetRef? = this.targetResource,
     nativeOperandKeys: List<GPUPreparedNativeOperandKey> = this.nativeOperandKeys,
+    mixedCorePrimitiveAndImage: Boolean = this.mixedCorePrimitiveAndImage,
+    corePrimitiveDirectNativeRouteSeal: GPUCorePrimitiveDirectNativeRouteSeal =
+        this.corePrimitiveDirectNativeRouteSeal,
+    corePrimitivePathStencilNativeRouteSeal: GPUCorePrimitivePathStencilNativeRouteSeal =
+        this.corePrimitivePathStencilNativeRouteSeal,
+    corePrimitiveNativeScopeRouteSeal: GPUCorePrimitiveNativeScopeRouteSeal =
+        this.corePrimitiveNativeScopeRouteSeal,
+    corePrimitiveClipStencilPreparedRouteSeal: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal =
+        this.corePrimitiveClipStencilPreparedRouteSeal,
+    corePrimitiveCoverageMaskPreparedRouteSeal: GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal =
+        this.corePrimitiveCoverageMaskPreparedRouteSeal,
 ): GPUCommandEncoderScopePlan = GPUCommandEncoderScopePlan(
     sourceStepIndex = sourceStepIndex,
     operationKind = operationKind,
@@ -2462,6 +2854,7 @@ private fun GPUCommandEncoderScopePlan.rebuilt(
     sourceTaskIds = sourceTaskIds,
     sourcePacketIds = sourcePacketIds,
     facadeOperationClasses = facadeOperationClasses,
+    mixedCorePrimitiveAndImage = mixedCorePrimitiveAndImage,
     targetGeneration = targetGeneration,
     resourceGenerationLabels = resourceGenerationLabels,
     passCommandStream = passCommandStream,
@@ -2845,7 +3238,7 @@ private fun preparedSurfaceCoreSemantic(
             targetBounds = PREPARED_SURFACE_BOUNDS,
             scissorBounds = PREPARED_SURFACE_BOUNDS,
             clipCoveragePlan = GPUClipCoveragePlan.NoClip,
-            clipExecutionPlanIdentity = GPUClipExecutionPlan.NoClip.canonicalIdentity(),
+             clipExecutionPlanIdentity = GPUClipExecutionPlan.NoClip.canonicalIdentity(),
             blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
             frameProvenance = packet.frameProvenance,
             coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,

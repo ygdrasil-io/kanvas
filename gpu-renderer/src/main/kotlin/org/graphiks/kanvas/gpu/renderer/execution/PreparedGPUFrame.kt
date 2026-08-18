@@ -109,6 +109,7 @@ class GPUCommandEncoderScopePlan internal constructor(
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing
         },
     internal val targetResource: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef? = null,
+    mixedCorePrimitiveAndImage: Boolean = false,
 ) {
     constructor(
         sourceStepIndex: Int,
@@ -139,6 +140,7 @@ class GPUCommandEncoderScopePlan internal constructor(
 
     val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
     val sourcePacketIds: List<GPUDrawPacketID> = immutableList(sourcePacketIds)
+    val mixedCorePrimitiveAndImage: Boolean = mixedCorePrimitiveAndImage
     val facadeOperationClasses: List<String> = immutableList(facadeOperationClasses)
     val resourceGenerationLabels: List<String> = immutableList(resourceGenerationLabels)
     internal var nativeOperandKeys: List<GPUPreparedNativeOperandKey> = emptyList()
@@ -792,21 +794,42 @@ class GPUCommandEncoderScopePlan internal constructor(
         require(pathSealed == unifiedContainsPath) {
             "Path and unified CorePrimitive seals must agree on path-pair ownership"
         }
-        if (corePrimitiveNativeScopeRouteSeal is GPUCorePrimitiveNativeScopeRouteSeal.Routes) {
-            require(corePrimitiveNativeScopeRouteSeal.flattenedPacketIds == this.sourcePacketIds) {
-                "Unified CorePrimitive route identities must exactly match render packet identities"
+        val unifiedRoute = corePrimitiveNativeScopeRouteSeal as?
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes
+        val directPacketIds = when (corePrimitiveDirectNativeRouteSeal) {
+            is GPUCorePrimitiveDirectNativeRouteSeal.Routes ->
+                corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList()
+            GPUCorePrimitiveDirectNativeRouteSeal.Empty,
+            GPUCorePrimitiveDirectNativeRouteSeal.Missing,
+            -> emptyList()
+        }
+        val hasDerivedCoreRoute = unifiedRoute != null ||
+            corePrimitiveDirectNativeRouteSeal is GPUCorePrimitiveDirectNativeRouteSeal.Routes
+        if (mixedCorePrimitiveAndImage) {
+            require(unifiedRoute != null) {
+                "Mixed CorePrimitive/Image scopes must retain their unified CorePrimitive route"
             }
-            val directPacketIds = when (corePrimitiveDirectNativeRouteSeal) {
-                is GPUCorePrimitiveDirectNativeRouteSeal.Routes ->
-                    corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList()
-                GPUCorePrimitiveDirectNativeRouteSeal.Empty,
-                GPUCorePrimitiveDirectNativeRouteSeal.Missing,
-                -> emptyList()
+        }
+        if (hasDerivedCoreRoute) {
+            val unifiedPacketIds = unifiedRoute?.flattenedPacketIds
+            if (unifiedPacketIds != null) {
+                if (mixedCorePrimitiveAndImage) {
+                    require(this.sourcePacketIds.containsOrderedSubsequence(unifiedPacketIds)) {
+                        "Unified mixed CorePrimitive route identities must be an ordered render-packet subset"
+                    }
+                } else {
+                    require(unifiedPacketIds == this.sourcePacketIds) {
+                        "Homogeneous CorePrimitive route identities must exactly match render packets"
+                    }
+                }
             }
+            val acceptedCorePacketIds = unifiedPacketIds ?: this.sourcePacketIds
             require(
-                (directPacketIds + pathPacketIds).toSet() == this.sourcePacketIds.toSet() &&
+                (directPacketIds + pathPacketIds).toSet() == acceptedCorePacketIds.toSet() &&
                     directPacketIds.toSet().intersect(pathPacketIds.toSet()).isEmpty(),
-            ) { "Derived CorePrimitive route seals must exactly partition the unified seal" }
+            ) {
+                "Derived CorePrimitive route seals must exactly partition the accepted Core packet IDs"
+            }
         }
     }
 }

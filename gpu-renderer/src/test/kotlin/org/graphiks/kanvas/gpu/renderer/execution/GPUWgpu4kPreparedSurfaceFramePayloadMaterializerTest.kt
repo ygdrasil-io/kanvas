@@ -1315,9 +1315,77 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `real dispatcher materializes and encodes core image core without compatibility detour`() {
+    fun `same render step mixed materializer retains both native run operands`() {
+        val fixture = fixture(PreparedSurfaceFixtureShape.MixedCoreAndImageInOneRenderPass)
+        try {
+            val result = fixture.materialize()
+            val materialized = assertIs<
+                GPUPreparedNativeFramePayloadMaterialization.Materialized
+                >(result, result.toString())
+            val payload = materialized.draft.payload
+
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.sourceStepIndex },
+                payload.scopeOperands.map { it.sourceStepIndex },
+            )
+            assertEquals(
+                listOf(
+                    GPUPreparedNativeScopeOperand.TextureUpload::class,
+                    GPUPreparedNativeScopeOperand.Render::class,
+                    GPUPreparedNativeScopeOperand.Readback::class,
+                ),
+                payload.scopeOperands.map { it::class },
+            )
+            val render = assertIs<GPUPreparedNativeScopeOperand.Render>(
+                payload.scopeOperands[1],
+            )
+            assertEquals(
+                GPUPreparedNativeRenderOperandLayout.MixedCorePrimitiveAndImage,
+                render.operandLayout,
+            )
+            assertEquals(2, render.semanticPayloads.size)
+            assertEquals(
+                listOf(
+                    GPUDrawSemanticPayload.CorePrimitive::class,
+                    GPUDrawSemanticPayload.SampledImage::class,
+                ),
+                render.semanticPayloads.map { it::class },
+            )
+            assertEquals(
+                listOf("core", "image"),
+                render.commands.mapNotNull { command ->
+                    when (command) {
+                        is GPUPreparedNativeRenderCommand.DrawIndexed -> "core"
+                        is GPUPreparedNativeRenderCommand.Draw -> "image"
+                        else -> null
+                    }
+                },
+            )
+            assertEquals(
+                listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline::class,
+                    GPUPreparedNativeRenderCommand.SetVertexBuffer::class,
+                    GPUPreparedNativeRenderCommand.SetIndexBuffer::class,
+                    GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                    GPUPreparedNativeRenderCommand.SetScissor::class,
+                    GPUPreparedNativeRenderCommand.DrawIndexed::class,
+                    GPUPreparedNativeRenderCommand.SetPipeline::class,
+                    GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                    GPUPreparedNativeRenderCommand.SetScissor::class,
+                    GPUPreparedNativeRenderCommand.Draw::class,
+                ),
+                render.commands.map { command -> command::class },
+            )
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `real dispatcher materializes and encodes same-step core image without compatibility detour`() {
         val input = capturedPreparedSurfaceInputs(
-            shape = PreparedSurfaceFixtureShape.CoreImageCore,
+            shape = PreparedSurfaceFixtureShape.MixedCoreAndImageInOneRenderPass,
             includeReadback = true,
         )
         val native = GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy()
@@ -1482,7 +1550,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             }
             assertEquals(writeBufferCountAfterMaterialization, native.writeBufferCalls.size)
             assertEquals(1, native.writeTextureCalls)
-            assertEquals(listOf("core", "image", "core"), native.renderPipelineKinds)
+            assertEquals(listOf("core", "image"), native.renderPipelineKinds)
             assertEquals(1, native.readbackCopyCalls)
 
             val commandBuffer = encoder.finish()
