@@ -135,24 +135,22 @@ class GPUMaterialMapperTest {
     }
 
     @Test
-    fun `prepared A8 image accepts its canonical premultiplied alpha type`() {
-        val mapping = Paint(
-            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f),
-            shader = imageShader(
-                sourceId = "canonical-a8",
-                pixels = byteArrayOf(0x80.toByte()),
-                colorType = ColorType.ALPHA_8,
-                alphaType = AlphaType.PREMUL,
-            ),
-        ).toPreparedMaterialMapping()
+    fun `prepared A8 image refuses non-premultiplied alpha types`() {
+        listOf(AlphaType.UNPREMUL, AlphaType.UNKNOWN, AlphaType.OPAQUE).forEach { alphaType ->
+            val unsupported = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(
+                    shader = imageShader(
+                        sourceId = "a8-$alphaType",
+                        pixels = byteArrayOf(0x80.toByte()),
+                        colorType = ColorType.ALPHA_8,
+                        alphaType = alphaType,
+                    ),
+                ).toPreparedMaterialMapping().descriptor,
+                alphaType.name,
+            )
 
-        val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(mapping.descriptor)
-        assertTrue(descriptor.alphaOnly)
-        assertEquals(0.25f, descriptor.tintR, 0.002f)
-        assertEquals(0.5f, descriptor.tintG, 0.002f)
-        assertEquals(0.75f, descriptor.tintB, 0.002f)
-        assertEquals(1f, descriptor.tintA)
-        assertEquals(0.5f, mapping.paintAlpha, 0.002f)
+            assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_ALPHA_TYPE, unsupported.reason)
+        }
     }
 
     @Test
