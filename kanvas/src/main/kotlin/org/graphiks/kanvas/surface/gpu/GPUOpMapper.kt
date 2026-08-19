@@ -1,6 +1,20 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
+import kotlin.math.ceil
+import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.forCorePrimitiveAnalyticShapeCoverage
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -17,9 +31,10 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
@@ -31,6 +46,36 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticRectElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
@@ -48,6 +93,1559 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
+import org.graphiks.kanvas.surface.RenderConfig
+
+internal data class GPUOpMapping(
+    val visualCommands: List<GPUFramePathVisualCommand>,
+    val stateEvents: List<GPUFramePathStateEvent>,
+    val preparedRefusal: GPUPreparedOperationRefusal? = null,
+    val culledTextOperationIndices: Set<Int> = emptySet(),
+    val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
+    val allocatedCommandIds: Set<Int> = emptySet(),
+    val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
+)
+
+data class GPUPreparedOperationRefusal(
+    val commandId: Int,
+    val operationIndex: Int,
+    val code: String,
+    val facts: Map<String, String>,
+)
+
+private sealed interface GPUPreparedCommandSlotAuthentication {
+    data class Ready(val commandIds: Set<Int>) : GPUPreparedCommandSlotAuthentication
+    data class Refused(val refusal: GPUPreparedOperationRefusal) :
+        GPUPreparedCommandSlotAuthentication
+}
+
+/** Sole Canvas-state translator for the Slice 12A frame route. */
+internal object GPUOpMapper {
+    fun mapOperations(
+        operations: List<DisplayOp>,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        capabilities: GPUCapabilities,
+        preparedTextInventory: PreparedTextFrameInventory? = null,
+        preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
+        elidedOperationIndices: Set<Int> = emptySet(),
+    ): GPUOpMapping {
+        val visual = mutableListOf<GPUFramePathVisualCommand>()
+        val stateEvents = mutableListOf<GPUFramePathStateEvent>()
+        val culledTextOperationIndices = linkedSetOf<Int>()
+        val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
+        val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
+        val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
+        var provenance = GPUFrameProvenance.None
+
+        fun nextCommandId(): Int = Math.addExact(visual.size, preparedVerticesCommandIds.size)
+
+        fun recordCommandIds(operationIndex: Int, commandIds: Set<Int>) {
+            if (commandIds.isNotEmpty()) {
+                commandIdsByOperationIndex.getOrPut(operationIndex) { linkedSetOf() }
+                    .addAll(commandIds)
+            }
+        }
+
+        preparedVerticesInventory?.let { inventory ->
+            val sourceIndices = operations.mapIndexedNotNull { index, operation ->
+                index.takeIf { operation is DisplayOp.DrawVertices || operation is DisplayOp.DrawMesh }
+            }
+            val owned = inventory.commandsByOperationIndex.keys +
+                inventory.elidedVerticesOperationIndices
+            if (owned != sourceIndices.toSet() || owned.size != sourceIndices.size ||
+                inventory.mappedCommands.isNotEmpty()
+            ) {
+                return GPUOpMapping(
+                    visualCommands = emptyList(), stateEvents = emptyList(),
+                    preparedRefusal = GPUPreparedOperationRefusal(
+                        commandId = 0, operationIndex = sourceIndices.firstOrNull() ?: 0,
+                        code = "invalid.surface.prepared.vertices-operation-ownership",
+                        facts = mapOf("authority" to "GPUOpMapper"),
+                    ),
+                )
+            }
+        }
+
+        operations.forEachIndexed { operationIndex, operation ->
+            if (operationIndex in elidedOperationIndices) {
+                return@forEachIndexed
+            }
+            when (operation) {
+                is DisplayOp.Annotation -> {
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Annotation)
+                    if (operation.key == GPU_FRAME_PROVENANCE_ANNOTATION_KEY) {
+                        GPUFrameProvenance.fromAnnotationValue(operation.value)?.let { provenance = it }
+                    }
+                }
+                is DisplayOp.SetTransform ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Transform)
+                is DisplayOp.SetClip ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Clip)
+                is DisplayOp.FlushAndSnapshot ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
+                is DisplayOp.DrawText -> {
+                    if (preparedTextInventory == null) {
+                        return@forEachIndexed
+                    }
+                    if (operationIndex !in preparedTextInventory.acceptedTextOperationIndices) {
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = nextCommandId(),
+                                operationIndex = operationIndex,
+                                code = "invalid.surface.prepared.text-operation-ownership",
+                                facts = emptyMap(),
+                            ),
+                        )
+                    }
+                    if (operation.hasConservativeTargetEmptyTextProof(
+                            target.width,
+                            target.height,
+                        )
+                    ) {
+                        culledTextOperationIndices += operationIndex
+                        return@forEachIndexed
+                    }
+                    preparedTextInventory.strokePathsByOperationIndex[operationIndex]?.let {
+                        strokePaths ->
+                        val strokeVisuals = ArrayList<GPUFramePathVisualCommand>(strokePaths.size)
+                        strokePaths.forEach { strokePath ->
+                            val commandId = nextCommandId() + strokeVisuals.size
+                            val strokeOperation = DisplayOp.DrawPath(
+                                path = strokePath.path,
+                                paint = strokePath.draw.paint,
+                                transform = strokePath.draw.transform,
+                                clip = strokePath.draw.clip,
+                            )
+                            val lowered = lowerPreparedCoreVisual(
+                                operation = strokeOperation,
+                                commandId = GPUDrawCommandID(commandId),
+                                paintOrder = commandId,
+                                context = GPUPreparedImageLoweringContext(
+                                    provenance = provenance,
+                                    target = target,
+                                    config = config,
+                                    capabilities = capabilities,
+                                ),
+                            )
+                            val basePath = lowered?.normalized as? NormalizedDrawCommand.FillPath
+                            val geometryRefusal = lowered?.geometryRefusal
+                            if (basePath == null || geometryRefusal != null) {
+                                return GPUOpMapping(
+                                    visualCommands = emptyList(),
+                                    stateEvents = stateEvents.toList(),
+                                    preparedRefusal = GPUPreparedOperationRefusal(
+                                        commandId = commandId,
+                                        operationIndex = operationIndex,
+                                        code = geometryRefusal?.code
+                                            ?: "unsupported.core_primitive.stroke.path_lowering",
+                                        facts = geometryRefusal?.refusalFacts.orEmpty(),
+                                    ),
+                                )
+                            }
+                            val fillPath = basePath.toPreparedStrokeFillPath()
+                                ?: return GPUOpMapping(
+                                    visualCommands = emptyList(),
+                                    stateEvents = stateEvents.toList(),
+                                    preparedRefusal = GPUPreparedOperationRefusal(
+                                        commandId = commandId,
+                                        operationIndex = operationIndex,
+                                        code = "unsupported.core_primitive.stroke.expansion_empty",
+                                        facts = mapOf(
+                                            "glyphIndex" to strokePath.glyphIndex.toString(),
+                                        ),
+                                    ),
+                                )
+                            strokeVisuals += lowered.copy(
+                                normalized = fillPath,
+                                targetSpaceBounds = fillPath.bounds,
+                                geometryRefusal = null,
+                            )
+                        }
+                        visual += strokeVisuals
+                        recordCommandIds(
+                            operationIndex,
+                            strokeVisuals.mapTo(linkedSetOf()) { stroke ->
+                                stroke.normalized.commandId.value
+                            },
+                        )
+                        return@forEachIndexed
+                    }
+                    val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
+                    for (subRun in subRuns) {
+                        val commandId = nextCommandId()
+                        when (
+                            val lowered = subRun.toPreparedTextVisual(
+                                commandId = commandId,
+                                provenance = provenance,
+                                target = target,
+                                config = config,
+                                capabilities = capabilities,
+                                inventory = preparedTextInventory,
+                            )
+                        ) {
+                            GPUPreparedTextVisualLowering.Culled ->
+                                culledTextOperationIndices += operationIndex
+                            GPUPreparedTextVisualLowering.Invalid -> return GPUOpMapping(
+                                visualCommands = emptyList(),
+                                stateEvents = stateEvents.toList(),
+                                preparedRefusal = GPUPreparedOperationRefusal(
+                                    commandId = commandId,
+                                    operationIndex = operationIndex,
+                                    code = "invalid.surface.prepared.text-command",
+                                    facts = mapOf(
+                                        "subRunIndex" to subRun.subRunIndex.toString(),
+                                    ),
+                                ),
+                            )
+                            is GPUPreparedTextVisualLowering.Ready -> {
+                                visual += lowered.command
+                                recordCommandIds(
+                                    operationIndex,
+                                    setOf(lowered.command.normalized.commandId.value),
+                                )
+                            }
+                        }
+                    }
+                }
+                is DisplayOp.DrawImage -> {
+                    val commandId = nextCommandId()
+                    when (
+                        val lowered = GPUPreparedDrawImageLowerer.lower(
+                            operation = operation,
+                            commandId = GPUDrawCommandID(commandId),
+                            paintOrder = commandId,
+                            provenance = provenance,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                        )
+                    ) {
+                        is GPUPreparedDrawImageLowering.Ready -> {
+                            visual += lowered.command
+                            recordCommandIds(
+                                operationIndex,
+                                setOf(lowered.command.normalized.commandId.value),
+                            )
+                        }
+                        is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts,
+                            ),
+                        )
+                    }
+                }
+                is DisplayOp.DrawImageNine -> {
+                    val commandId = nextCommandId()
+                    val context = GPUPreparedImageLoweringContext(
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                    when (
+                        val lowered = GPUPreparedImageGridLowerer.lowerNine(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedImageGridLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
+                        is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts +
+                                    ("cellOperationIndex" to lowered.operationIndex.toString()),
+                            ),
+                        )
+                    }
+                }
+                is DisplayOp.DrawImageLattice -> {
+                    val commandId = nextCommandId()
+                    val context = GPUPreparedImageLoweringContext(
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                    when (
+                        val lowered = GPUPreparedImageGridLowerer.lowerLattice(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedImageGridLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
+                        is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts +
+                                    ("cellOperationIndex" to lowered.operationIndex.toString()),
+                            ),
+                        )
+                    }
+                }
+                is DisplayOp.DrawAtlas -> {
+                    val commandId = nextCommandId()
+                    val context = GPUPreparedImageLoweringContext(
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                    when (
+                        val lowered = GPUPreparedAtlasLowerer.lower(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedAtlasLowering.Ready -> {
+                            visual += lowered.commands
+                            recordCommandIds(
+                                operationIndex,
+                                lowered.commands.mapTo(linkedSetOf()) { command ->
+                                    command.normalized.commandId.value
+                                },
+                            )
+                        }
+                        is GPUPreparedAtlasLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts + listOfNotNull(
+                                    lowered.spriteIndex?.let { "spriteIndex" to it.toString() },
+                                ),
+                            ),
+                        )
+                    }
+                }
+                is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {
+                    if (preparedVerticesInventory == null) {
+                        return@forEachIndexed
+                    }
+                    if (operationIndex in preparedVerticesInventory.elidedVerticesOperationIndices) {
+                        return@forEachIndexed
+                    }
+                    val command = preparedVerticesInventory.commandsByOperationIndex[operationIndex]
+                        ?: return GPUOpMapping(
+                            visualCommands = emptyList(), stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = nextCommandId(), operationIndex = operationIndex,
+                                code = "invalid.surface.prepared.vertices-operation-ownership",
+                                facts = mapOf("authority" to "GPUOpMapper"),
+                            ),
+                        )
+                    val commandId = nextCommandId()
+                    preparedVerticesCommandIds[command.operationIndex] = commandId
+                    preparedVerticesProvenance[commandId] = provenance
+                }
+                else -> {
+                    if (operation is DisplayOp.DrawPicture) {
+                        // The flat mapper has no picture replay: DrawPicture content is
+                        // nested in the Picture and can only be lowered through the
+                        // composite (saveLayer) route. Refuse instead of silently
+                        // dropping the picture from the flat frame.
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = nextCommandId(),
+                                operationIndex = operationIndex,
+                                code = "unsupported.surface.prepared.draw-picture",
+                                facts = mapOf("authority" to "GPUOpMapper"),
+                            ),
+                        )
+                    }
+                    val paintOrder = nextCommandId()
+                    val lowered = lowerPreparedCoreVisual(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(paintOrder),
+                        paintOrder = paintOrder,
+                        context = GPUPreparedImageLoweringContext(
+                            provenance = provenance,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                        ),
+                    )
+                    if (lowered == null) {
+                        return@forEachIndexed
+                    }
+                    visual += lowered
+                    recordCommandIds(
+                        operationIndex,
+                        setOf(lowered.normalized.commandId.value),
+                    )
+                }
+            }
+        }
+        val mappedVerticesInventory = when (
+            val binding = preparedVerticesInventory?.bindCommandIds(
+                preparedVerticesCommandIds,
+                preparedVerticesProvenance,
+            )
+        ) {
+            null -> null
+            is PreparedVerticesCommandBindingResult.Ready -> binding.inventory
+            is PreparedVerticesCommandBindingResult.Refused -> return GPUOpMapping(
+                visualCommands = emptyList(),
+                stateEvents = stateEvents.toList(),
+                preparedRefusal = GPUPreparedOperationRefusal(
+                    commandId = preparedVerticesCommandIds[binding.operationIndex]
+                        ?.coerceAtLeast(0) ?: nextCommandId(),
+                    operationIndex = binding.operationIndex,
+                    code = binding.code,
+                    facts = binding.facts,
+                ),
+                culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            )
+        }
+        val allocatedCommandIds = when (
+            val authenticated = authenticateCommandSlots(
+                visualCommands = visual,
+                mappedVerticesCommands = mappedVerticesInventory?.mappedCommands.orEmpty(),
+                allocatedSlotCount = nextCommandId(),
+            )
+        ) {
+            is GPUPreparedCommandSlotAuthentication.Ready -> authenticated.commandIds
+            is GPUPreparedCommandSlotAuthentication.Refused -> return GPUOpMapping(
+                visualCommands = emptyList(),
+                stateEvents = stateEvents.toList(),
+                preparedRefusal = authenticated.refusal,
+                culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            )
+        }
+        return GPUOpMapping(
+            visualCommands = visual.toList(),
+            stateEvents = stateEvents.toList(),
+            culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            preparedVerticesInventory = mappedVerticesInventory,
+            allocatedCommandIds = allocatedCommandIds,
+            commandIdsByOperationIndex = commandIdsByOperationIndex
+                .mapValues { (_, commandIds) -> commandIds.toSet() },
+        )
+    }
+
+    private fun authenticateCommandSlots(
+        visualCommands: List<GPUFramePathVisualCommand>,
+        mappedVerticesCommands: List<PreparedVerticesMappedCommand>,
+        allocatedSlotCount: Int,
+    ): GPUPreparedCommandSlotAuthentication {
+        val observed = linkedSetOf<Int>()
+        visualCommands.forEach { visualCommand ->
+            val commandId = visualCommand.normalized.commandId.value
+            if (commandId < 0 || !observed.add(commandId)) {
+                return commandSlotRefusal(
+                    operationIndex = 0,
+                    reason = if (commandId < 0) "negative_visual_command_id" else
+                        "duplicate_visual_command_id",
+                    commandId = commandId,
+                    allocatedSlotCount = allocatedSlotCount,
+                )
+            }
+        }
+        mappedVerticesCommands.forEach { verticesCommand ->
+            if (!observed.add(verticesCommand.commandId)) {
+                return commandSlotRefusal(
+                    operationIndex = verticesCommand.operationIndex,
+                    reason = "overlapping_vertices_command_id",
+                    commandId = verticesCommand.commandId,
+                    allocatedSlotCount = allocatedSlotCount,
+                )
+            }
+        }
+        val expected = (0 until allocatedSlotCount).toSet()
+        if (observed != expected) {
+            val firstUnexpected = observed.firstOrNull { it !in expected }
+            val firstMissing = expected.firstOrNull { it !in observed }
+            val operationIndex = firstUnexpected?.let { unexpected ->
+                mappedVerticesCommands.firstOrNull { it.commandId == unexpected }?.operationIndex
+            } ?: 0
+            return commandSlotRefusal(
+                operationIndex = operationIndex,
+                reason = "non_contiguous_command_slots",
+                commandId = firstUnexpected ?: firstMissing ?: allocatedSlotCount,
+                allocatedSlotCount = allocatedSlotCount,
+                extraFacts = listOfNotNull(
+                    firstUnexpected?.let { "firstUnexpectedCommandId" to it.toString() },
+                    firstMissing?.let { "firstMissingCommandId" to it.toString() },
+                ).toMap(),
+            )
+        }
+        return GPUPreparedCommandSlotAuthentication.Ready(
+            Collections.unmodifiableSet(LinkedHashSet(observed)),
+        )
+    }
+
+    private fun commandSlotRefusal(
+        operationIndex: Int,
+        reason: String,
+        commandId: Int,
+        allocatedSlotCount: Int,
+        extraFacts: Map<String, String> = emptyMap(),
+    ) = GPUPreparedCommandSlotAuthentication.Refused(
+        GPUPreparedOperationRefusal(
+            commandId = commandId.coerceAtLeast(0),
+            operationIndex = operationIndex,
+            code = "invalid.surface.prepared.command-slot-authentication",
+            facts = linkedMapOf(
+                "authority" to "GPUOpMapper",
+                "reason" to reason,
+                "allocatedSlotCount" to allocatedSlotCount.toString(),
+            ).apply { putAll(extraFacts) },
+        ),
+    )
+
+    internal fun lowerPreparedCoreVisual(
+        operation: DisplayOp,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        context: GPUPreparedImageLoweringContext,
+    ): GPUFramePathVisualCommand? {
+        var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
+        val rawNormalized = mapCoreOperation(
+            operation = operation,
+            commandId = commandId,
+            paintOrder = paintOrder,
+            provenance = context.provenance,
+            target = context.target,
+            config = context.config,
+            onGeometryRefusal = { refusal -> loweringRefusal = refusal },
+        ) ?: return null
+        val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
+        val coverage = rawNormalized.geometryCoverage()
+        val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
+            GPUClipCoveragePlanner.planForFrameRoute(
+                request,
+                context.config,
+                maxOf(context.target.width, context.target.height),
+            )
+        } ?: GPUClipCoveragePlan.NoClip
+        // The rect-decomposable → AnalyticMultiRect lowering is only safe for
+        // the mask-blur composite consumer (whose shader folds per-rect coverage). Non-blur
+        // core draws keep their prior CoverageMask route.
+        val admitAnalyticMultiRect = rawNormalized.hasBlurMaskFilter()
+        val clipExecutionPlan = clipPlan.toExecutionPlan(
+            context.capabilities,
+            context.target,
+            admitAnalyticMultiRect,
+        )
+        val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
+        return GPUFramePathVisualCommand(
+            normalized = normalized,
+            targetSpaceBounds = normalized.bounds,
+            geometryCoverage = coverage,
+            clipCoverage = clipPlan,
+            clipExecutionPlan = clipExecutionPlan,
+            blendPlan = normalized.blend.canonicalBlendPlan(coverage),
+            provenance = context.provenance,
+            geometryRefusal = geometryRefusal,
+        )
+    }
+
+    private fun mapCoreOperation(
+        operation: DisplayOp,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        provenance: GPUFrameProvenance,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        onGeometryRefusal: (GPUCorePrimitiveGeometryRefusal) -> Unit,
+    ): NormalizedDrawCommand? {
+        var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
+        val command = try {
+            when (operation) {
+            is DisplayOp.DrawColor -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.Clear -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawPoint -> DisplayOp.DrawPoints(
+                PointMode.POINTS,
+                listOf(Point(operation.x, operation.y)),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).let { points ->
+                DisplayOp.DrawPath(
+                    points.toPath(),
+                    points.paint,
+                    points.transform,
+                    points.clip,
+                ).toPathCommand(commandId, target, config).copy(stroke = false)
+            }
+            is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
+                operation.toStrokePathCommand(commandId, target)
+            } else {
+                operation.toNormalizedCommand(commandId, target)
+            }
+            is DisplayOp.DrawRRect -> if (operation.paint.isStroke()) {
+                DisplayOp.DrawPath(
+                    Path().addRRect(operation.rrect),
+                    operation.paint,
+                    operation.transform,
+                    operation.clip,
+                ).toPathCommand(commandId, target, config)
+            } else {
+                operation.toNormalizedCommand(commandId, target)
+            }
+            is DisplayOp.DrawPath -> operation.toPathCommand(commandId, target, config)
+            is DisplayOp.DrawPoints -> DisplayOp.DrawPath(
+                operation.toPath(),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).toPathCommand(commandId, target, config).copy(
+                stroke = operation.mode != PointMode.POINTS,
+            )
+            is DisplayOp.DrawDRRect -> {
+                DisplayOp.DrawPath(
+                    operation.toPath(),
+                    operation.paint,
+                    operation.transform,
+                    operation.clip,
+                ).toPathCommand(commandId, target, config)
+            }
+                else -> null
+            }
+        } catch (failure: IllegalStateException) {
+            if (!failure.isPathVertexBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            loweringRefusal = GPUCorePrimitiveGeometryRefusal(
+                code = "unsupported.core_primitive.path_vertex_budget",
+                refusalFacts = mapOf(
+                    "maxPathVertices" to config.maxPathVertices.toString(),
+                    "reason" to (failure.message ?: "path_vertex_budget"),
+                ),
+            ).also(onGeometryRefusal)
+            operation.toPathBudgetPlaceholder(commandId, target)
+        } ?: return null
+
+        val targetBounds = when {
+            loweringRefusal != null -> command.clip.bounds.clampedTo(target)
+            operation is DisplayOp.DrawPath && operation.path.fillType.isInverse ->
+                command.clip.bounds.clampedTo(target)
+            operation.coreGeometryRefusalOrNull() != null -> command.clip.bounds.clampedTo(target)
+            else -> operation.localGeometryBounds(command)
+                .outset(operation.conservativeStrokeOutset())
+                .mappedBy(operation.transformOrIdentity())
+                .outset(operation.deviceAntiAliasOutset())
+                .clampedTo(target)
+        }
+        val coverage = command.geometryCoverage()
+        val scalarCoverage = coverage == GPUCoverageConsumption.ScalarCoverage
+        val blendPlan = command.blend.canonicalBlendPlan(
+            if (scalarCoverage) GPUCoverageConsumption.FullOrScissor else coverage,
+        ).let { plan -> if (scalarCoverage) plan.forCorePrimitiveAnalyticShapeCoverage() else plan }
+        val ordering = GPUOrderingFacts(
+            paintOrder = paintOrder,
+            dependsOnDestination = blendPlan.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            requiresBarrier = false,
+        )
+        val source = GPUCommandSource(
+            adapter = "kanvas-surface",
+            operation = operation.coreSourceOperation(),
+            frameProvenance = provenance,
+        )
+        return when (command) {
+            is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillPath -> command.copy(
+                bounds = targetBounds,
+                ordering = ordering,
+                source = source,
+                pathDescriptor = command.pathDescriptor.copy(
+                    verbCount = operation.pathVerbCount(),
+                    transformClass = command.transform.type.name.lowercase(),
+                ),
+            )
+            else -> error("Slice 12A mapper produced a non-core command")
+        }
+    }
+}
+
+private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
+    NormalizedDrawCommand.FillPath? {
+    if (!stroke) return null
+    val cap = when (strokeCap) {
+        "round" -> org.graphiks.kanvas.paint.StrokeCap.ROUND
+        "square" -> org.graphiks.kanvas.paint.StrokeCap.SQUARE
+        else -> org.graphiks.kanvas.paint.StrokeCap.BUTT
+    }
+    val join = when (strokeJoin) {
+        "round" -> org.graphiks.kanvas.paint.StrokeJoin.ROUND
+        "bevel" -> org.graphiks.kanvas.paint.StrokeJoin.BEVEL
+        else -> org.graphiks.kanvas.paint.StrokeJoin.MITER
+    }
+    val fill = strokeToFillGeometry(
+        contourVertices = tessellatedVertices,
+        contourStarts = contourStarts,
+        strokeWidth = strokeWidth,
+        dashArray = dashIntervals,
+        dashPhase = dashPhase,
+        capStyle = cap,
+        joinStyle = join,
+        miterLimit = strokeMiterLimit,
+        transform = transform,
+    )
+    check(fill.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
+    if (fill.vertices.isEmpty() || fill.vertices.any { vertex -> !vertex.isFinite() }) {
+        return null
+    }
+    val vertexCount = fill.vertices.size / 2
+    val exactContourStarts = fill.contourStarts
+        .filter { start -> start in 0 until vertexCount }
+        .distinct()
+        .ifEmpty { listOf(0) }
+    val preparedPathKey = preparedStrokeGeometryPathKey(
+        vertices = fill.vertices,
+        contourStarts = exactContourStarts,
+    )
+    return copy(
+        pathKey = preparedPathKey,
+        pathDescriptor = pathDescriptor.copy(
+            pathKey = preparedPathKey,
+            verbCount = vertexCount + exactContourStarts.size,
+            pointCount = vertexCount,
+            fillRule = "winding",
+            inverseFill = false,
+            finiteProof = "all_finite",
+            transformClass = "identity",
+            edgeCount = vertexCount,
+        ),
+        tessellatedVertices = fill.vertices,
+        contourStarts = exactContourStarts,
+        totalVertexCount = vertexCount,
+        edgeCount = vertexCount,
+        transform = GPUTransformFacts.identity(),
+        bounds = computeBounds(fill.vertices),
+        source = source.copy(operation = "drawText.stroke-path"),
+        stroke = false,
+    )
+}
+
+private sealed interface GPUPreparedTextVisualLowering {
+    data class Ready(val command: GPUFramePathVisualCommand) : GPUPreparedTextVisualLowering
+    data object Culled : GPUPreparedTextVisualLowering
+    data object Invalid : GPUPreparedTextVisualLowering
+}
+
+private fun GPUPreparedTextSubRun.toPreparedTextVisual(
+    commandId: Int,
+    provenance: GPUFrameProvenance,
+    target: GPUTargetFacts,
+    config: RenderConfig,
+    capabilities: GPUCapabilities,
+    inventory: PreparedTextFrameInventory,
+): GPUPreparedTextVisualLowering {
+    if (draw.operationIndex != operationIndex ||
+        draw.material.materialKey != materialKey ||
+        draw.blendPlan.canonicalIdentity() != blendPlanIdentity ||
+        draw.clipContentKey != clipIdentity ||
+        draw.capabilitySnapshotHash != capabilities.canonicalSnapshotHash() ||
+        instances.isEmpty() ||
+        representation == GPUPreparedTextRepresentation.A8_MASK && colorGlyphLayerPlan != null ||
+        representation == GPUPreparedTextRepresentation.COLRV0 && colorGlyphLayerPlan == null
+    ) {
+        return GPUPreparedTextVisualLowering.Invalid
+    }
+    val page = pageIndex?.let { index ->
+        inventory.pages.singleOrNull { candidate -> candidate.pageIndex == index }
+    } ?: return GPUPreparedTextVisualLowering.Invalid
+    if (page.artifactKey.generation != inventory.generation ||
+        instances.any { instance -> instance.pageIndex != page.pageIndex }
+    ) {
+        return GPUPreparedTextVisualLowering.Invalid
+    }
+    val bounds = instances.preparedTextBounds(target) ?: return GPUPreparedTextVisualLowering.Invalid
+    val clipFacts = draw.clip.toGPUClipFacts(target)
+    val maxTextureDimension = capabilities.limits?.maxTextureDimension2D
+        ?.coerceAtMost(Int.MAX_VALUE.toLong())
+        ?.toInt()
+        ?: maxOf(target.width, target.height)
+    val clipCoverage = clipFacts.coverageRequest?.let { request ->
+        if (request.contentKey != draw.clipContentKey) return GPUPreparedTextVisualLowering.Invalid
+        GPUClipCoveragePlanner.planForFrameRoute(request, config, maxTextureDimension)
+    } ?: if (draw.clipContentKey == "prepared-text-clip:wide-open") {
+        GPUClipCoveragePlan.NoClip
+    } else {
+        return GPUPreparedTextVisualLowering.Invalid
+    }
+    if (clipCoverage is GPUClipCoveragePlan.Refused) return GPUPreparedTextVisualLowering.Invalid
+    if (clipCoverage is GPUClipCoveragePlan.Scissor && clipCoverage.isTargetEmpty(target)) {
+        return GPUPreparedTextVisualLowering.Culled
+    }
+    val clipExecution = clipCoverage.toExecutionPlan(capabilities, target)
+    val artifactRef = GPUTextArtifactRef(
+        artifactType = "PreparedTextA8AtlasPage",
+        artifactId = page.artifactKey.artifactID.value.toString(),
+        artifactKeyHash = page.artifactKey.contentFingerprint,
+        generation = page.artifactKey.generation,
+        routeHint = "AtlasMaskSample",
+    )
+    val stableRunIdentity =
+        "prepared-text:${inventory.contentSha256}:operation=$operationIndex:subrun=$subRunIndex"
+    val normalized = NormalizedDrawCommand.DrawTextRun(
+        commandId = GPUDrawCommandID(commandId),
+        textLayoutResultId = "prepared-text:${inventory.contentSha256}",
+        glyphRunId = stableRunIdentity,
+        glyphRunDescriptorRefs = listOf(stableRunIdentity),
+        glyphRunDescriptor = null,
+        colorGlyphPlans = listOfNotNull(colorGlyphLayerPlan),
+        artifactRefs = listOf(artifactRef),
+        artifactKeyHashes = listOf(artifactRef.artifactKeyHash),
+        atlasGenerations = listOf(GPUTextArtifactGeneration(inventory.generation.value)),
+        uploadDependencyFacts = listOf("upload-before-sample:${page.artifactKey.contentFingerprint}"),
+        routeDiagnostics = emptyList(),
+        transform = draw.transform.toGPUTransformFacts(),
+        clip = clipFacts.copy(
+            coveragePlan = clipCoverage,
+            executionPlan = clipExecution,
+        ),
+        layer = GPULayerFacts.root(target),
+        preparedMaterial = draw.material,
+        blend = draw.blendPlan.mode.toPaintBlendMode().toGpuBlendFacts(),
+        preparedBlendPlan = draw.blendPlan,
+        bounds = bounds,
+        ordering = GPUOrderingFacts(
+            paintOrder = commandId,
+            dependsOnDestination = draw.blendPlan.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            requiresBarrier = false,
+        ),
+        source = GPUCommandSource(
+            adapter = "kanvas-surface",
+            operation = "drawText.prepared:$operationIndex:$subRunIndex",
+            frameProvenance = provenance,
+        ),
+    )
+    return GPUPreparedTextVisualLowering.Ready(GPUFramePathVisualCommand(
+        normalized = normalized,
+        targetSpaceBounds = bounds,
+        geometryCoverage = GPUCoverageConsumption.ScalarCoverage,
+        clipCoverage = clipCoverage,
+        clipExecutionPlan = clipExecution,
+        blendPlan = draw.blendPlan,
+        provenance = provenance,
+        preparedText = this,
+    ))
+}
+
+private fun GPUClipCoveragePlan.Scissor.isTargetEmpty(target: GPUTargetFacts): Boolean {
+    val scalars = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    if (scalars.any { value -> !value.isFinite() || value != value.toInt().toFloat() }) {
+        return false
+    }
+    val left = bounds.left.toInt().coerceIn(0, target.width)
+    val top = bounds.top.toInt().coerceIn(0, target.height)
+    val right = bounds.right.toInt().coerceIn(0, target.width)
+    val bottom = bounds.bottom.toInt().coerceIn(0, target.height)
+    return right <= left || bottom <= top
+}
+
+private fun GPUBlendMode.toPaintBlendMode(): BlendMode = when (this) {
+    GPUBlendMode.CLEAR -> BlendMode.CLEAR
+    GPUBlendMode.SRC_OVER -> BlendMode.SRC_OVER
+    GPUBlendMode.SRC -> BlendMode.SRC
+    GPUBlendMode.DST -> BlendMode.DST
+    GPUBlendMode.DST_OVER -> BlendMode.DST_OVER
+    GPUBlendMode.SRC_IN -> BlendMode.SRC_IN
+    GPUBlendMode.DST_IN -> BlendMode.DST_IN
+    GPUBlendMode.SRC_OUT -> BlendMode.SRC_OUT
+    GPUBlendMode.DST_OUT -> BlendMode.DST_OUT
+    GPUBlendMode.SRC_ATOP -> BlendMode.SRC_ATOP
+    GPUBlendMode.DST_ATOP -> BlendMode.DST_ATOP
+    GPUBlendMode.XOR -> BlendMode.XOR
+    GPUBlendMode.PLUS -> BlendMode.PLUS
+    GPUBlendMode.MODULATE -> BlendMode.MODULATE
+    GPUBlendMode.MULTIPLY -> BlendMode.MULTIPLY
+    GPUBlendMode.SCREEN -> BlendMode.SCREEN
+    GPUBlendMode.OVERLAY -> BlendMode.OVERLAY
+    GPUBlendMode.DARKEN -> BlendMode.DARKEN
+    GPUBlendMode.LIGHTEN -> BlendMode.LIGHTEN
+    GPUBlendMode.COLOR_DODGE -> BlendMode.COLOR_DODGE
+    GPUBlendMode.COLOR_BURN -> BlendMode.COLOR_BURN
+    GPUBlendMode.HARD_LIGHT -> BlendMode.HARD_LIGHT
+    GPUBlendMode.SOFT_LIGHT -> BlendMode.SOFT_LIGHT
+    GPUBlendMode.DIFFERENCE -> BlendMode.DIFFERENCE
+    GPUBlendMode.EXCLUSION -> BlendMode.EXCLUSION
+    GPUBlendMode.HUE -> BlendMode.HUE
+    GPUBlendMode.SATURATION -> BlendMode.SATURATION
+    GPUBlendMode.COLOR -> BlendMode.COLOR
+    GPUBlendMode.LUMINOSITY -> BlendMode.LUMINOSITY
+}
+
+private fun Throwable.isPathVertexBudgetFailure(): Boolean =
+    message?.let { it.startsWith("Path flattened to ") || it.startsWith("Path has ") } == true
+
+private fun DisplayOp.isCorePathOperation(): Boolean = when (this) {
+    is DisplayOp.DrawPoint,
+    is DisplayOp.DrawPoints,
+    is DisplayOp.DrawPath,
+    is DisplayOp.DrawDRRect,
+    is DisplayOp.DrawRRect,
+    is DisplayOp.DrawRect,
+    -> true
+    else -> false
+}
+
+private fun DisplayOp.toPathBudgetPlaceholder(
+    commandId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillPath {
+    val (paint, clip) = when (this) {
+        is DisplayOp.DrawPoint -> paint to clip
+        is DisplayOp.DrawPoints -> paint to clip
+        is DisplayOp.DrawRect -> paint to clip
+        is DisplayOp.DrawRRect -> paint to clip
+        is DisplayOp.DrawDRRect -> paint to clip
+        is DisplayOp.DrawPath -> paint to clip
+        else -> error("Path budget placeholder requires a core path operation")
+    }
+    return DisplayOp.DrawPath(Path(), paint, transformOrIdentity(), clip).toNormalizedCommand(
+        commandId,
+        target,
+        tessellatedVertices = emptyList(),
+        contourStarts = listOf(0),
+        edgeCount = 0,
+    )
+}
+
+private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val transform = transformOrIdentity()
+    val transformValues = listOf(
+        transform.scaleX, transform.skewX, transform.transX,
+        transform.skewY, transform.scaleY, transform.transY,
+        transform.persp0, transform.persp1, transform.persp2,
+    )
+    if (!transformValues.all(Float::isFinite)) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.geometry.non_finite_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    if (!transform.isAffine()) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.geometry.non_affine_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    if (this is DisplayOp.DrawRRect && (transform.skewX != 0f || transform.skewY != 0f)) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.rrect.non_axis_aligned_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    return (this as? DisplayOp.DrawDRRect)?.exactLoweringRefusalOrNull()
+}
+
+private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val outerRect = outer.rect
+    val innerRect = inner.rect
+    if (!listOf(
+        outerRect.left, outerRect.top, outerRect.right, outerRect.bottom,
+        innerRect.left, innerRect.top, innerRect.right, innerRect.bottom,
+        outer.topLeft.x, outer.topLeft.y, outer.topRight.x, outer.topRight.y,
+        outer.bottomRight.x, outer.bottomRight.y, outer.bottomLeft.x, outer.bottomLeft.y,
+        inner.topLeft.x, inner.topLeft.y, inner.topRight.x, inner.topRight.y,
+        inner.bottomRight.x, inner.bottomRight.y, inner.bottomLeft.x, inner.bottomLeft.y,
+    ).all(Float::isFinite)) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.non_finite", emptyMap())
+    }
+    if (!listOf(
+        outer.topLeft.x, outer.topLeft.y, outer.topRight.x, outer.topRight.y,
+        outer.bottomRight.x, outer.bottomRight.y, outer.bottomLeft.x, outer.bottomLeft.y,
+        inner.topLeft.x, inner.topLeft.y, inner.topRight.x, inner.topRight.y,
+        inner.bottomRight.x, inner.bottomRight.y, inner.bottomLeft.x, inner.bottomLeft.y,
+    ).all { it >= 0f }) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.negative_radius", emptyMap())
+    }
+    if (!(outerRect.left < outerRect.right && outerRect.top < outerRect.bottom &&
+        innerRect.left < innerRect.right && innerRect.top < innerRect.bottom
+    )) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.empty", emptyMap())
+    }
+    if (!(innerRect.left >= outerRect.left && innerRect.top >= outerRect.top &&
+        innerRect.right <= outerRect.right && innerRect.bottom <= outerRect.bottom
+    )) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.inner_outside_outer", emptyMap())
+    }
+    return null
+}
+
+private fun DisplayOp.coreSourceOperation(): String = when (this) {
+    is DisplayOp.DrawColor -> "drawColor"
+    is DisplayOp.Clear -> "clear"
+    is DisplayOp.DrawPoint -> "drawPoint"
+    is DisplayOp.DrawPoints -> "drawPoints.${mode.name.lowercase()}"
+    is DisplayOp.DrawRect -> if (paint.isStroke()) "drawRect.stroke" else "drawRect"
+    is DisplayOp.DrawRRect -> if (paint.isStroke()) "drawRRect.stroke" else "drawRRect"
+    is DisplayOp.DrawDRRect -> "drawDRRect"
+    is DisplayOp.DrawPath -> sourceOperation
+    else -> error("Non-core operation has no Slice 12A source identity")
+}
+
+private fun DisplayOp.DrawPath.toPathCommand(
+    commandId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+    config: RenderConfig,
+): NormalizedDrawCommand.FillPath {
+    val flattened = PathTessellator(
+        tolerance = config.curveTolerance,
+        maxVertices = config.maxPathVertices.toInt(),
+    ).flattenWithContours(path.toPathTessellatorData())
+    return toNormalizedCommand(
+        commandId,
+        target,
+        flattened.points.flatMap { point -> listOf(point.x, point.y) },
+        flattened.contourStarts.ifEmpty { listOf(0) },
+        flattened.points.size,
+    )
+}
+
+private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
+    is NormalizedDrawCommand.FillPath -> GPUCoverageConsumption.StencilCoverage1x
+    is NormalizedDrawCommand.FillRRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    is NormalizedDrawCommand.FillRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    else -> error("Geometry coverage requested for a non-Slice-12A command")
+}
+
+private fun NormalizedDrawCommand.withClipPlans(
+    coveragePlan: GPUClipCoveragePlan,
+    executionPlan: GPUClipExecutionPlan,
+): NormalizedDrawCommand = when (this) {
+    is NormalizedDrawCommand.FillRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillRRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillPath -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    else -> error("Clip coverage attached to a non-Slice-12A command")
+}
+
+private fun GPUClipCoveragePlan.toExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean = false,
+): GPUClipExecutionPlan = when (this) {
+    GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
+    is GPUClipCoveragePlan.Scissor -> toScissorExecutionPlan(capabilities, target)
+    is GPUClipCoveragePlan.AnalyticIntersection -> toAnalyticIntersectionExecutionPlan(capabilities)
+    is GPUClipCoveragePlan.Refused -> GPUClipExecutionPlan.Refused(
+        code = code,
+        message = "Clip coverage planning refused before execution classification.",
+    )
+    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target, admitAnalyticMultiRect)
+}
+
+/** True when the normalized command carries a mask blur filter (the mask-blur composite lane). */
+private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
+    is NormalizedDrawCommand.FillRect -> maskFilter != null
+    is NormalizedDrawCommand.FillRRect -> maskFilter != null
+    is NormalizedDrawCommand.FillPath -> maskFilter != null
+    else -> false
+}
+
+private fun GPUClipCoveragePlan.AnalyticIntersection.toAnalyticIntersectionExecutionPlan(
+    capabilities: GPUCapabilities,
+): GPUClipExecutionPlan {
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.analytic_unavailable",
+            message = "Analytic rect/rrect clip execution requires bounded clip support.",
+        )
+    }
+    val analyticElements = elements.map { element ->
+        GPUClipAnalyticElement(
+            geometry = element.executionGeometryOrRefusal()
+                ?: return invalidClipGeometryRefusal(element),
+            antiAlias = element.antiAlias,
+        )
+    }
+    return GPUClipExecutionPlan.AnalyticIntersection(analyticElements)
+}
+
+private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+): GPUClipExecutionPlan {
+    if (!capabilities.supportsClipCapability(SCISSOR_NATIVE)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.scissor_unavailable",
+            message = "Integral device clip execution requires native scissor support.",
+        )
+    }
+    val scalars = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    if (scalars.any { value -> !value.isFinite() || value != value.toInt().toFloat() }) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.scissor_invalid",
+            message = "Native scissor bounds must be finite integral device pixels.",
+        )
+    }
+    val left = bounds.left.toInt().coerceIn(0, target.width)
+    val top = bounds.top.toInt().coerceIn(0, target.height)
+    val right = bounds.right.toInt().coerceIn(0, target.width)
+    val bottom = bounds.bottom.toInt().coerceIn(0, target.height)
+    return if (right <= left || bottom <= top) {
+        clipExecutionRefusal(
+            code = "unsupported.clip.scissor_empty",
+            message = "Native scissor classification produced empty target bounds.",
+        )
+    } else {
+        GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(left, top, right, bottom))
+    }
+}
+
+private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+    admitAnalyticMultiRect: Boolean,
+): GPUClipExecutionPlan {
+    val single = elements.singleOrNull()
+    if (
+        single != null &&
+        single.operation == GPUClipCoverageOperation.Intersect &&
+        !single.inverseFill &&
+        single.kind != GPUClipCoverageElementKind.Path
+    ) {
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.analytic_unavailable",
+                message = "Analytic rect/rrect clip execution requires bounded clip support.",
+            )
+        }
+        return single.executionGeometryOrRefusal()?.let { geometry ->
+            GPUClipExecutionPlan.AnalyticCoverage(
+                geometry = geometry,
+                scissor = null,
+                antiAlias = single.antiAlias,
+            )
+        } ?: invalidClipGeometryRefusal(single)
+    }
+
+    if (
+        single != null &&
+        single.operation == GPUClipCoverageOperation.Intersect &&
+        single.kind == GPUClipCoverageElementKind.Path &&
+        !single.antiAlias
+    ) {
+        if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.stencil_unavailable",
+                message = "Path clip execution requires stencil-cover support.",
+            )
+        }
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.mask_unavailable",
+                message = "Path clip execution requires bounded clip support.",
+            )
+        }
+        val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
+            ?: return invalidClipGeometryRefusal(single)
+        val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
+        val (frontPassOperation, backPassOperation) = when (geometry.fillRule) {
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.Winding ->
+                GPUClipStencilOperation.IncrementWrap to GPUClipStencilOperation.DecrementWrap
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.EvenOdd ->
+                GPUClipStencilOperation.Invert to GPUClipStencilOperation.Invert
+        }
+        return GPUClipExecutionPlan.StencilCoverage(
+            contentKey = contentKey,
+            bounds = targetBounds,
+            sampleCount = sampleCount,
+            atomicGroup = GPUClipAtomicGroupID("clip-atomic:$contentKey"),
+            orderingToken = GPUClipOrderingToken("clip-order:$contentKey"),
+            producer = GPUClipStencilProducerPlan(
+                geometry = geometry,
+                scissor = null,
+                fillRule = geometry.fillRule,
+                reference = 0u,
+                compare = GPUClipStencilCompare.Always,
+                frontPassOperation = frontPassOperation,
+                backPassOperation = backPassOperation,
+                loadOperation = GPUClipStencilLoadOperation.Clear,
+                storeOperation = GPUClipStencilStoreOperation.Store,
+                clearValue = 0u,
+            ),
+            consumer = GPUClipStencilConsumerPlan(
+                scissor = null,
+                reference = 0u,
+                compare = if (geometry.inverseFill) {
+                    GPUClipStencilCompare.Equal
+                } else {
+                    GPUClipStencilCompare.NotEqual
+                },
+            ),
+        )
+    }
+
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.mask_unavailable",
+            message = "Ordered clip-mask execution requires bounded clip support.",
+        )
+    }
+    // A rect-decomposable complex clip lowers to bounded analytic
+    // multi-rect coverage instead of a coverage mask, scoped to the mask-blur
+    // composite lane (the only consumer whose composite shader folds the per-rect
+    // coverage). Non-blur consumers keep their prior CoverageMask route, so a
+    // rect INTERSECT + orthogonal-polygon DIFFERENCE clip keeps rendering through
+    // the coverage-mask producer/consumer topology. Admission is also scoped to the
+    // rect-decomposable case only: every element must be a rect/rrect or a
+    // non-inverse axis-aligned orthogonal polygon DIFFERENCE path (the blur
+    // fixture's notch), at least one element must be such a path, and the decomposed
+    // rect count must fit the fixed analytic block. Coverage-mask and stacked clips
+    // (including a plain rect-vs-rect difference and inverse fills) stay terminal.
+    if (admitAnalyticMultiRect) {
+        val analyticMultiRect = toAnalyticMultiRectOrNull()
+        if (analyticMultiRect != null) {
+            return GPUClipExecutionPlan.AnalyticMultiRect(analyticMultiRect)
+        }
+    }
+    val producers = elements.mapIndexed { index, element ->
+        val geometry = element.executionGeometryOrRefusal()
+            ?: return invalidClipGeometryRefusal(element)
+        GPUClipMaskProducerPlan(
+            sourceOrder = index,
+            geometry = geometry,
+            combine = when (element.operation) {
+                GPUClipCoverageOperation.Intersect -> GPUClipMaskCombine.Intersect
+                GPUClipCoverageOperation.Difference -> GPUClipMaskCombine.Difference
+            },
+            antiAlias = element.antiAlias,
+        )
+    }
+    return GPUClipExecutionPlan.CoverageMask(
+        contentKey = contentKey,
+        bounds = GPUPixelBounds(0, 0, target.width, target.height),
+        sampleCount = sampleCount,
+        depthStencilRequired = elements.any { it.kind == GPUClipCoverageElementKind.Path },
+        orderingToken = GPUClipOrderingToken("clip-order:$contentKey"),
+        producers = producers,
+        consumer = GPUClipMaskConsumerPlan(),
+    )
+}
+
+private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {
+    when (kind) {
+        GPUClipCoverageElementKind.Rect -> GPUClipExecutionGeometry.Rect(
+            GPUClipBounds(values[0], values[1], values[2], values[3]),
+        )
+        GPUClipCoverageElementKind.RRect -> GPUClipExecutionGeometry.RRect(
+            bounds = GPUClipBounds(values[0], values[1], values[2], values[3]),
+            radii = values.subList(4, 12),
+        )
+        GPUClipCoverageElementKind.Path -> {
+            val contourCount = values.first().toInt()
+            GPUClipExecutionGeometry.Path(
+                vertices = values.subList(1 + contourCount, values.size),
+                contourStarts = values.subList(1, 1 + contourCount).map(Float::toInt),
+                fillRule = fillRule,
+                inverseFill = inverseFill,
+            )
+        }
+    }
+} catch (_: IllegalArgumentException) {
+    null
+} catch (_: IndexOutOfBoundsException) {
+    null
+}
+
+private fun invalidClipGeometryRefusal(
+    element: GPUClipCoverageElement,
+): GPUClipExecutionPlan.Refused = clipExecutionRefusal(
+    code = "unsupported.clip.execution_geometry_invalid",
+    message = "${element.kind.name} clip geometry cannot be represented by the execution contract.",
+)
+
+/**
+ * Attempts the analytic multi-rect lowering: a complex clip whose elements are all
+ * rect/rrect or a non-inverse axis-aligned orthogonal polygon **DIFFERENCE** path
+ * (INTERSECT paths are rejected — the composite folds one-minus-coverage per rect,
+ * so only DIFFERENCE unions decompose exactly), with at least one such path,
+ * decomposed into a bounded ordered rect list for analytic multi-rect execution.
+ * Returns null when the clip must stay on the coverage-mask route (rect-vs-rect
+ * differences, inverse fills, curved or multi-contour paths, INTERSECT paths,
+ * self-intersecting Winding polygons, or decomposed counts beyond the fixed
+ * analytic block).
+ */
+private fun GPUClipCoveragePlan.Mask.toAnalyticMultiRectOrNull(): List<GPUClipAnalyticRectElement>? {
+    var sawRectDecomposedPath = false
+    val primitives = mutableListOf<AnalyticRectPrimitive>()
+    for (element in elements) {
+        val elementPrimitives = when (element.kind) {
+            GPUClipCoverageElementKind.Rect -> {
+                if (element.values.size != 4) return null
+                listOf(
+                    AnalyticRectPrimitive(
+                        element.values[0],
+                        element.values[1],
+                        element.values[2],
+                        element.values[3],
+                        element.operation,
+                        element.antiAlias,
+                    ),
+                )
+            }
+            GPUClipCoverageElementKind.RRect -> return null
+            GPUClipCoverageElementKind.Path -> {
+                val decomposed = decomposeOrthogonalPolygon(element) ?: return null
+                sawRectDecomposedPath = true
+                decomposed
+            }
+        }
+        primitives += elementPrimitives
+    }
+    if (!sawRectDecomposedPath) return null
+    if (primitives.size !in 1..GPU_ANALYTIC_MULTI_RECT_MAX_ELEMENTS) return null
+    if (primitives.map { it.antiAlias }.distinct().size != 1) return null
+    return primitives.map { primitive ->
+        GPUClipAnalyticRectElement(
+            geometry = GPUClipExecutionGeometry.Rect(
+                GPUClipBounds(primitive.left, primitive.top, primitive.right, primitive.bottom),
+            ),
+            antiAlias = primitive.antiAlias,
+            operation = when (primitive.operation) {
+                GPUClipCoverageOperation.Intersect -> GPUClipMaskCombine.Intersect
+                GPUClipCoverageOperation.Difference -> GPUClipMaskCombine.Difference
+            },
+        )
+    }
+}
+
+private data class AnalyticRectPrimitive(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val operation: GPUClipCoverageOperation,
+    val antiAlias: Boolean,
+)
+
+/**
+ * Decomposes a single-contour, non-inverse, axis-aligned orthogonal polygon DIFFERENCE
+ * path into its axis-aligned band rects (scanline even-odd). Returns null for anything
+ * outside that closed shape family so the clip stays on the coverage-mask route. Only
+ * DIFFERENCE paths decompose safely: the composite folds one-minus-coverage per rect, so
+ * a disjoint union of difference rects is exact, while an INTERSECT path would multiply
+ * disjoint rect coverages to zero (an empty clip). A Winding-filled polygon must also be
+ * simple — the even-odd scanline is exact for EvenOdd always and for Winding only when
+ * the non-zero winding number stays within {-1, 0, 1} along the sweep.
+ */
+private fun decomposeOrthogonalPolygon(
+    element: GPUClipCoverageElement,
+): List<AnalyticRectPrimitive>? {
+    if (element.inverseFill) return null
+    if (element.operation != GPUClipCoverageOperation.Difference) return null
+    val values = element.values
+    val vertexCount = element.vertexCount
+    val contourCount = values.first().toInt()
+    if (contourCount != 1) return null
+    val coordinateStart = 1 + contourCount
+    if (values.size != coordinateStart + vertexCount * 2) return null
+    if (vertexCount == 0) return null
+    val points = (0 until vertexCount).map { index ->
+        values[coordinateStart + index * 2] to values[coordinateStart + index * 2 + 1]
+    }
+    for (index in 0 until vertexCount) {
+        val (x0, y0) = points[index]
+        val (x1, y1) = points[(index + 1) % vertexCount]
+        if (x0 != x1 && y0 != y1) return null
+    }
+    val ys = points.map { it.second }.distinct().sorted()
+    if (ys.size < 2) return null
+    val requiresSimpleWinding = element.fillRule == GPUClipFillRule.Winding
+    val rects = mutableListOf<AnalyticRectPrimitive>()
+    for (bandIndex in 0 until ys.size - 1) {
+        val top = ys[bandIndex]
+        val bottom = ys[bandIndex + 1]
+        val midY = (top + bottom) * 0.5f
+        val crossings = mutableListOf<Pair<Float, Boolean>>()
+        for (index in 0 until vertexCount) {
+            val (x0, y0) = points[index]
+            val (x1, y1) = points[(index + 1) % vertexCount]
+            if (y0 == y1) continue
+            val lo = minOf(y0, y1)
+            val hi = maxOf(y0, y1)
+            if (midY >= lo && midY < hi) crossings.add(x0 to (y1 < y0))
+        }
+        crossings.sortBy { it.first }
+        if (crossings.size % 2 != 0) return null
+        if (requiresSimpleWinding) {
+            var winding = 0
+            for ((_, upward) in crossings) {
+                winding += if (upward) 1 else -1
+                if (winding < -1 || winding > 1) return null
+            }
+        }
+        for (pairIndex in 0 until crossings.size / 2) {
+            val left = crossings[pairIndex * 2].first
+            val right = crossings[pairIndex * 2 + 1].first
+            if (right <= left) return null
+            rects.add(
+                AnalyticRectPrimitive(left, top, right, bottom, element.operation, element.antiAlias),
+            )
+        }
+    }
+    if (rects.isEmpty()) return null
+    return rects
+}
+
+private fun clipExecutionRefusal(code: String, message: String): GPUClipExecutionPlan.Refused =
+    GPUClipExecutionPlan.Refused(code = code, message = message)
+
+private fun GPUCapabilities.supportsClipCapability(name: String): Boolean =
+    knownUnsupportedFacts.none { fact -> fact.name == name } &&
+        facts.any { fact ->
+            fact.name == name && fact.value == "supported" && fact.affectsValidity
+        }
+
+private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
+    is NormalizedDrawCommand.FillRect -> GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+    is NormalizedDrawCommand.FillRRect -> GPUBounds(
+        rrect.rect.left,
+        rrect.rect.top,
+        rrect.rect.right,
+        rrect.rect.bottom,
+    )
+    is NormalizedDrawCommand.FillPath -> computeBounds(tessellatedVertices)
+    else -> bounds
+}
+
+private fun DisplayOp.localGeometryBounds(command: NormalizedDrawCommand): GPUBounds = when (this) {
+    else -> command.localBounds()
+}
+
+private fun DisplayOp.conservativeStrokeOutset(): Float {
+    val paint = when (this) {
+        is DisplayOp.DrawPoints -> paint.takeIf { mode != PointMode.POINTS }
+        is DisplayOp.DrawRect -> paint.takeIf { it.isStroke() }
+        is DisplayOp.DrawRRect -> paint.takeIf { it.isStroke() }
+        is DisplayOp.DrawPath -> paint.takeIf { it.isStroke() }
+        else -> null
+    } ?: return 0f
+    val halfWidth = if (paint.strokeWidth == 0f) 0f else paint.strokeWidth * 0.5f
+    val hasJoins = when (this) {
+        is DisplayOp.DrawRect,
+        is DisplayOp.DrawRRect,
+        is DisplayOp.DrawPath,
+        -> true
+        else -> false
+    }
+    val joinMultiplier = if (hasJoins && paint.strokeJoin.name == "MITER") {
+        paint.strokeMiter.coerceAtLeast(1f)
+    } else {
+        1f
+    }
+    return halfWidth * joinMultiplier
+}
+
+private fun DisplayOp.deviceAntiAliasOutset(): Float {
+    val antiAlias = when (this) {
+        is DisplayOp.DrawPoint -> paint.antiAlias
+        is DisplayOp.DrawPoints -> paint.antiAlias
+        is DisplayOp.DrawRect -> paint.antiAlias
+        is DisplayOp.DrawRRect -> paint.antiAlias
+        is DisplayOp.DrawPath -> paint.antiAlias
+        else -> false
+    }
+    return if (antiAlias) 0.5f else 0f
+}
+
+private fun GPUBounds.outset(amount: Float): GPUBounds = if (amount == 0f) {
+    this
+} else {
+    GPUBounds(left - amount, top - amount, right + amount, bottom + amount)
+}
+
+private fun GPUBounds.mappedBy(matrix: Matrix33): GPUBounds {
+    val corners = listOf(
+        matrix * Point(left, top),
+        matrix * Point(right, top),
+        matrix * Point(right, bottom),
+        matrix * Point(left, bottom),
+    )
+    return GPUBounds(
+        left = corners.minOf(Point::x),
+        top = corners.minOf(Point::y),
+        right = corners.maxOf(Point::x),
+        bottom = corners.maxOf(Point::y),
+    )
+}
+
+private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
+    left = floor(left).coerceIn(0f, target.width.toFloat()),
+    top = floor(top).coerceIn(0f, target.height.toFloat()),
+    right = ceil(right).coerceIn(0f, target.width.toFloat()),
+    bottom = ceil(bottom).coerceIn(0f, target.height.toFloat()),
+)
+
+private fun DisplayOp.transformOrIdentity(): Matrix33 = when (this) {
+    is DisplayOp.DrawColor -> Matrix33.identity()
+    is DisplayOp.DrawPoint -> transform
+    is DisplayOp.DrawPoints -> transform
+    is DisplayOp.DrawRect -> transform
+    is DisplayOp.DrawRRect -> transform
+    is DisplayOp.DrawDRRect -> transform
+    is DisplayOp.DrawPath -> transform
+    is DisplayOp.Clear -> Matrix33.identity()
+    else -> Matrix33.identity()
+}
+
+private fun DisplayOp.pathVerbCount(): Int = when (this) {
+    is DisplayOp.DrawPath -> path.verbs().size
+    is DisplayOp.DrawPoints -> toPath().verbs().size
+    is DisplayOp.DrawDRRect -> toPath().verbs().size
+    is DisplayOp.DrawRect -> 5
+    is DisplayOp.DrawRRect -> Path().addRRect(rrect).verbs().size
+    else -> 0
+}
 
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
@@ -122,13 +1720,14 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             dependsOnDestination = false,
             requiresBarrier = false,
         ),
-        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = sourceOperation),
         stroke = paint.isStroke(),
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
+        strokeMiterLimit = paint.strokeMiter,
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
         maskFilter = maskFilter,
@@ -189,6 +1788,7 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
+        strokeMiterLimit = paint.strokeMiter,
         antiAlias = paint.antiAlias,
         maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
@@ -200,16 +1800,17 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
 ): NormalizedDrawCommand.FillRRect {
     val paint = this.paint
     val material = paint.toMaterial()
+    val sourceRRect = this.rrect
     val gpRect = GPURect(
-        this.rrect.rect.left, this.rrect.rect.top,
-        this.rrect.rect.right, this.rrect.rect.bottom,
+        sourceRRect.rect.left, sourceRRect.rect.top,
+        sourceRRect.rect.right, sourceRRect.rect.bottom,
     )
     val gpRRect = GPURRect(
         gpRect,
-        topLeft = GPURRectCornerRadii(this.rrect.topLeft.x, this.rrect.topLeft.y),
-        topRight = GPURRectCornerRadii(this.rrect.topRight.x, this.rrect.topRight.y),
-        bottomRight = GPURRectCornerRadii(this.rrect.bottomRight.x, this.rrect.bottomRight.y),
-        bottomLeft = GPURRectCornerRadii(this.rrect.bottomLeft.x, this.rrect.bottomLeft.y),
+        topLeft = GPURRectCornerRadii(sourceRRect.topLeft.x, sourceRRect.topLeft.y),
+        topRight = GPURRectCornerRadii(sourceRRect.topRight.x, sourceRRect.topRight.y),
+        bottomRight = GPURRectCornerRadii(sourceRRect.bottomRight.x, sourceRRect.bottomRight.y),
+        bottomLeft = GPURRectCornerRadii(sourceRRect.bottomLeft.x, sourceRRect.bottomLeft.y),
     )
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
     val clip = this.clip.toGPUClipFacts(target)
@@ -268,12 +1869,49 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
         BlendMode.LUMINOSITY -> GPUBlendMode.LUMINOSITY
     }
     return GPUBlendFacts(
-        kind = GPUBlendKind.Custom,
-        modeLabel = mode.gpuLabel,
-        requiresDestinationRead = mode.requiresDestinationRead,
-        blendMode = mode,
+        mode = mode,
+        sourceAlpha = GPUSourceAlphaClassification.Translucent,
     )
 }
+
+internal fun GPUBlendFacts.canonicalBlendPlan(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+    targetFormatClass: String = "rgba8unorm",
+    samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+): GPUBlendPlan = mode.canonicalBlendPlan(coverage, sourceAlpha, targetFormatClass, samplePlan)
+
+internal fun GPUBlendMode.canonicalBlendPlan(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+    sourceAlpha: GPUSourceAlphaClassification = GPUSourceAlphaClassification.Translucent,
+    targetFormatClass: String = "rgba8unorm",
+    samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+): GPUBlendPlan = GPUBlendPlanner().plan(
+    GPUBlendSpecializationRequest(
+        mode = this,
+        coverage = coverage,
+        sourceAlpha = sourceAlpha,
+        target = GPUTargetBlendFacts(
+            formatClass = targetFormatClass,
+            clampsNormalizedColorWrites = "unorm" in targetFormatClass,
+            premultipliedAlpha = true,
+        ),
+        samplePlan = samplePlan,
+    ),
+)
+
+internal fun GPUBlendFacts.needsDestinationTexture(): Boolean =
+    canonicalBlendPlan().destinationReadRequirement ==
+        GPUBlendDestinationReadRequirement.DestinationTextureRequired
+
+internal fun GPUBlendFacts.canonicalFixedFunctionState(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+): GPUFixedFunctionBlendState? =
+    (canonicalBlendPlan(coverage = coverage) as? GPUBlendPlan.FixedFunctionBlend)?.state
+
+internal fun GPUBlendMode.canonicalFixedFunctionState(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+): GPUFixedFunctionBlendState? =
+    (canonicalBlendPlan(coverage = coverage) as? GPUBlendPlan.FixedFunctionBlend)?.state
 
 internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
     if (!isAffine()) return GPUTransformFacts.perspective()
@@ -330,7 +1968,7 @@ internal fun DisplayOp.DrawColor.toNormalizedCommand(
     val gpRect = GPURect(0f, 0f, w, h)
     val bounds = GPUBounds(0f, 0f, w, h)
     val clip = this.clip.toGPUClipFacts(target)
-    val transform = this.transform.toGPUTransformFacts()
+    val transform = GPUTransformFacts.identity()
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
         rect = gpRect,
@@ -411,8 +2049,14 @@ internal fun DisplayOp.DrawPoint.toNormalizedCommand(
 
 internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
     PointMode.POINTS -> Path().also { path ->
+        val halfWidth = paint.strokeWidth * 0.5f
         for (pt in this.points) {
-            path.addRect(Rect.fromLTRB(pt.x, pt.y, pt.x + 1f, pt.y + 1f))
+            path.addRect(Rect.fromLTRB(
+                pt.x - halfWidth,
+                pt.y - halfWidth,
+                pt.x + halfWidth,
+                pt.y + halfWidth,
+            ))
         }
     }
     PointMode.LINES -> Path().also { path ->
@@ -432,6 +2076,10 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
         path.close()
     }
 }
+
+private val org.graphiks.kanvas.geometry.FillType.isInverse: Boolean
+    get() = this == org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING ||
+        this == org.graphiks.kanvas.geometry.FillType.INVERSE_EVEN_ODD
 
 // ────────────────────────────────────────────────────────────────────────────
 // DrawDRRect — outer RRect contour (CW) + inner RRect contour (CCW) for hole
@@ -498,9 +2146,7 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawImage"),
         blend = (this.paint?.blendMode ?: BlendMode.SRC_OVER).toGpuBlendFacts(),
-        samplingFilterMode = when (val mat = material) {
-            is GPUMaterialDescriptor.ImageDraw -> mat.samplingFilterMode
-        },
+        samplingFilterMode = material.samplingFilterMode,
         pixelsWidth = image.width,
         pixelsHeight = image.height,
         pixelsFormat = "RGBA8Unorm",
@@ -590,6 +2236,7 @@ internal data class ImageCell(
     val src: Rect,
     val dst: Rect,
     val color: Color? = null,
+    val sourceIndex: Int = 0,
 )
 
 internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
@@ -623,7 +2270,7 @@ internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
             val src = Rect.fromLTRB(srcL[col], srcT[row], srcL[col + 1], srcT[row + 1])
             val dst = Rect.fromLTRB(dstL[col], dstT[row], dstL[col + 1], dstT[row + 1])
             if (!src.isEmpty && !dst.isEmpty) {
-                cells.add(ImageCell(src = src, dst = dst))
+                cells.add(ImageCell(src = src, dst = dst, sourceIndex = row * 3 + col))
             }
         }
     }
@@ -688,6 +2335,7 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
                 src = Rect.fromLTRB(srcLeft, srcTop, srcRight, srcBottom),
                 dst = dstRect,
                 color = color,
+                sourceIndex = cellIndex,
             ))
             cellIndex++
         }
@@ -738,13 +2386,13 @@ internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
 
 // ────────────────────────────────────────────────────────────────────────────
 // DisplayOp.withCombinedTransform — concatenate an outer transform into every
-// drawing op that carries a transform field. Used for DrawPicture expansion.
+// drawing op that carries a transform field. Used for picture replay.
 // ────────────────────────────────────────────────────────────────────────────
 
 internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {
     is DisplayOp.DrawRect -> copy(transform = outer * transform)
     is DisplayOp.DrawRRect -> copy(transform = outer * transform)
-    is DisplayOp.DrawPath -> copy(transform = outer * transform)
+    is DisplayOp.DrawPath -> copyPreservingSourceOperation(transform = outer * transform)
     is DisplayOp.DrawImage -> copy(transform = outer * transform)
     is DisplayOp.DrawText -> copy(transform = outer * transform)
     is DisplayOp.DrawColor -> copy(transform = outer * transform)
@@ -782,7 +2430,7 @@ internal fun DisplayOp.withPictureReplayState(
     return when (val transformed = withCombinedTransform(outerTransform)) {
         is DisplayOp.DrawRect -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawRRect -> transformed.copy(clip = replayClip)
-        is DisplayOp.DrawPath -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPath -> transformed.copyPreservingSourceOperation(clip = replayClip)
         is DisplayOp.DrawImage -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawText -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawColor -> transformed.copy(clip = replayClip)
@@ -803,85 +2451,6 @@ internal fun DisplayOp.withPictureReplayState(
         }
         else -> transformed
     }
-}
-
-/** Expands supported Pictures before clip-use accounting so every child gets its own S/G route. */
-internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
-    val expanded = mutableListOf<DisplayOp>()
-    lateinit var expandPicture: (org.graphiks.kanvas.picture.Picture, Matrix33, ClipStack) -> Unit
-
-    fun replayPicture(
-        picture: org.graphiks.kanvas.picture.Picture,
-        outerTransform: Matrix33,
-        enclosingClip: ClipStack,
-        paint: org.graphiks.kanvas.paint.Paint?,
-    ) {
-        // A supported picture paint is group compositing. Reuse the existing saveLayer
-        // compositor so its opacity and standard BlendMode are applied once to the recorded
-        // child result, rather than incorrectly to each child operation.
-        if (paint != null) {
-            expanded += DisplayOp.BeginLayer(
-                SaveLayerRec(paint = paint, compositeClip = enclosingClip),
-                Matrix33.identity(),
-            )
-        }
-        // The outer DrawPicture clip belongs to the atomic group restore. Passing it to children
-        // as well would multiply an AA coverage F twice (once into the temporary layer and again
-        // at restore). Captured child clips continue to be replayed normally.
-        expandPicture(
-            picture,
-            outerTransform,
-            if (paint == null) enclosingClip else ClipStack.WideOpen,
-        )
-        if (paint != null) expanded += DisplayOp.EndLayer
-    }
-
-    expandPicture = { picture, outerTransform, enclosingClip ->
-        var deferredLayerDepth = 0
-        for (nested in picture.ops) {
-            // A public saveLayer captured in the Picture owns the enclosing clip at its final
-            // restore. Its children must not receive that same clip or fractional coverage would
-            // be applied twice and transparent layer pixels could corrupt the parent.
-            val childEnclosingClip = if (deferredLayerDepth == 0) enclosingClip else ClipStack.WideOpen
-            when (nested) {
-                is DisplayOp.BeginLayer -> {
-                    expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-                    deferredLayerDepth++
-                }
-                DisplayOp.EndLayer -> {
-                    expanded += nested
-                    if (deferredLayerDepth > 0) deferredLayerDepth--
-                }
-                is DisplayOp.DrawPicture -> {
-                    // Retain an explicitly unsupported Picture as one operation so its existing
-                    // preflight refusal remains atomic: no preceding picture child is encoded.
-                    if (nested.coreRoutePreflightRefusalReason() != null) {
-                        expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-                    } else {
-                        val nestedClip = childEnclosingClip.intersectWith(
-                            nested.clip.transformForPictureReplay(outerTransform),
-                        )
-                        replayPicture(
-                            nested.picture,
-                            outerTransform * nested.transform,
-                            nestedClip,
-                            nested.paint,
-                        )
-                    }
-                }
-                else -> expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
-            }
-        }
-    }
-
-    for (operation in this) {
-        if (operation is DisplayOp.DrawPicture && operation.coreRoutePreflightRefusalReason() == null) {
-            replayPicture(operation.picture, operation.transform, operation.clip, operation.paint)
-        } else {
-            expanded += operation
-        }
-    }
-    return expanded
 }
 
 private fun clipForPictureReplay(operation: DisplayOp): ClipStack? = when (operation) {
@@ -957,41 +2526,5 @@ private fun ClipStackOp.transformForPictureReplay(matrix: Matrix33): ClipStackOp
     is ClipStackOp.PathOp -> copy(
         path = if (matrix.isAffine()) path.transform(matrix) else path,
         perspectiveCaptureRefusal = perspectiveCaptureRefusal || !matrix.isAffine(),
-    )
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// DrawText → NormalizedDrawCommand.DrawTextRun
-// ────────────────────────────────────────────────────────────────────────────
-
-internal fun DisplayOp.DrawText.toNormalizedCommand(
-    cmdId: GPUDrawCommandID,
-    target: GPUTargetFacts,
-): NormalizedDrawCommand.DrawTextRun {
-    val material = this.paint.toMaterial()
-    val bounds = GPUBounds(this.x, this.y, this.x + this.blob.fontSize * 10f, this.y + this.blob.fontSize)
-    val clip = this.clip.toGPUClipFacts(target)
-    val transform = this.transform.toGPUTransformFacts()
-    val blobId = "textblob-${this.blob.hashCode()}"
-    return NormalizedDrawCommand.DrawTextRun(
-        commandId = cmdId,
-        textLayoutResultId = blobId,
-        glyphRunId = blobId,
-        glyphRunDescriptorRefs = emptyList(),
-        glyphRunDescriptor = null,
-        colorGlyphPlans = emptyList(),
-        artifactRefs = emptyList(),
-        artifactKeyHashes = emptyList(),
-        atlasGenerationTokens = emptyList(),
-        uploadDependencyFacts = emptyList(),
-        routeDiagnostics = emptyList(),
-        transform = transform,
-        clip = clip,
-        layer = GPULayerFacts.root(target),
-        material = material,
-        blend = this.paint.blendMode.toGpuBlendFacts(),
-        bounds = bounds,
-        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
-        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawText"),
     )
 }

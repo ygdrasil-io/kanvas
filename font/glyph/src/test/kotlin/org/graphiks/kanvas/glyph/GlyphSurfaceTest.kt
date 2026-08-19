@@ -665,6 +665,20 @@ class GlyphSurfaceTest {
     }
 
     @Test
+    fun rowPackerPreservesDegenerateMaskPlacements() {
+        val placements = RowGlyphAtlasPacker(atlasWidth = 8, padding = 1).pack(
+            listOf(
+                a8Mask(glyphId = 20, width = 0, height = 0),
+                a8Mask(glyphId = 21, width = 0, height = 2),
+                a8Mask(glyphId = 22, width = 3, height = 0),
+            ),
+        )
+
+        assertEquals(listOf(0, 0, 3), placements.map { it.width })
+        assertEquals(listOf(0, 2, 0), placements.map { it.height })
+    }
+
+    @Test
     fun rowPackerReportsCapacityDiagnosticWithoutPartialPlacements() {
         val packer = RowGlyphAtlasPacker(atlasWidth = 4, padding = 1)
 
@@ -3324,6 +3338,121 @@ class GlyphSurfaceTest {
             ),
             jsonStringArrayField(dump, "nonClaims"),
         )
+    }
+
+    @Test
+    fun `A8 rasterizer emits deterministic intermediate coverage for diagonal edge`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 7,
+            pathCommands = listOf(
+                "M 0 0",
+                "L 4 0",
+                "L 0 4",
+                "Z",
+            ),
+        )
+        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442001")
+        val first = generator.generate(outline, key)
+        val second = generator.generate(outline, key)
+
+        assertEquals(first, second, "Repeated rasterization must produce identical masks")
+        assertEquals(7, first.glyphId)
+        assertEquals(4, first.width)
+        assertEquals(4, first.height)
+        assertEquals(
+            listOf(
+                255, 255, 255, 96,
+                255, 255, 96, 0,
+                255, 96, 0, 0,
+                96, 0, 0, 0,
+            ),
+            first.pixels,
+        )
+    }
+
+    @Test
+    fun `A8 rasterizer returns identical masks for same outline with same strike`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 8,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442002")
+        val mask1 = generator.generate(outline, key)
+        val mask2 = generator.generate(outline, key)
+        assertEquals(mask1, mask2)
+    }
+
+    @Test
+    fun `A8 rasterizer coverage sums are preserved under strike identity`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 9,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val keyA = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442003")
+            .copy(representationRoute = "text.glyph.mask.A8", maskFormat = "A8")
+        val keyB = keyA.copy(glyphId = 9)
+        val maskA = generator.generate(outline, keyA)
+        val maskB = generator.generate(outline, keyB)
+        assertEquals(maskA.pixels, maskB.pixels)
+        assertEquals(maskA.left, maskB.left)
+        assertEquals(maskA.top, maskB.top)
+    }
+
+    @Test
+    fun `A8 glyph mask snapshots mutable pixel source and preserves summary hash`() {
+        val sourcePixels = mutableListOf(
+            0, 64,
+            128, 255,
+        )
+        val mask = A8GlyphMask(
+            glyphId = 10,
+            width = 2,
+            height = 2,
+            pixels = sourcePixels,
+        )
+        val originalSummary = GlyphMaskSummary.fromA8Mask(mask)
+
+        sourcePixels.fill(7)
+
+        assertEquals(listOf(0, 64, 128, 255), mask.pixels)
+        assertEquals(originalSummary, GlyphMaskSummary.fromA8Mask(mask))
+    }
+
+    @Test
+    fun `A8 glyph mask snapshots mutable diagnostic source`() {
+        val diagnostic = GlyphRouteDiagnostic(
+            glyphId = 10,
+            route = "text.glyph.mask.A8",
+            message = "fixture diagnostic",
+            severity = "warning",
+        )
+        val sourceDiagnostics = mutableListOf(diagnostic)
+        val mask = A8GlyphMask(
+            glyphId = 10,
+            width = 1,
+            height = 1,
+            pixels = listOf(255),
+            diagnostics = sourceDiagnostics,
+        )
+
+        sourceDiagnostics.clear()
+
+        assertEquals(listOf(diagnostic), mask.diagnostics)
     }
 
     private fun a8Mask(glyphId: Int, width: Int, height: Int): A8GlyphMask =

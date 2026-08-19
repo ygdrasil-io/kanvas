@@ -1,6 +1,16 @@
 package org.graphiks.kanvas.gpu.renderer.vertices
 
 import java.security.MessageDigest
+import java.util.Collections
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 
 /** Typed DrawVertices topology captured before route selection. */
 sealed interface GPUVertexMode {
@@ -76,6 +86,80 @@ data class GPUVertexLayoutPlan(
     val strideBytes: Int,
     val offsets: Map<String, Int>,
     val shaderLocations: Map<String, Int>,
+) {
+    /** Exact WebGPU format in the same order as [attributes]. */
+    val attributeFormats: List<String> = Collections.unmodifiableList(attributes.map { attribute ->
+        when (attribute) {
+            "position", "texcoord" -> "float32x2"
+            "color" -> "unorm8x4"
+            else -> "unsupported"
+        }
+    })
+}
+
+/** Single structural authority for the four interleaved vertex layouts. */
+internal object GPUPreparedVerticesLayoutAuthority {
+    private val position = GPUVertexLayoutPlan(
+        attributes = listOf("position"),
+        strideBytes = 8,
+        offsets = mapOf("position" to 0),
+        shaderLocations = mapOf("position" to 0),
+    )
+    private val positionColor = GPUVertexLayoutPlan(
+        attributes = listOf("position", "color"),
+        strideBytes = 12,
+        offsets = mapOf("position" to 0, "color" to 8),
+        shaderLocations = mapOf("position" to 0, "color" to 1),
+    )
+    private val positionTexCoord = GPUVertexLayoutPlan(
+        attributes = listOf("position", "texcoord"),
+        strideBytes = 16,
+        offsets = mapOf("position" to 0, "texcoord" to 8),
+        shaderLocations = mapOf("position" to 0, "texcoord" to 2),
+    )
+    private val positionColorTexCoord = GPUVertexLayoutPlan(
+        attributes = listOf("position", "color", "texcoord"),
+        strideBytes = 20,
+        offsets = mapOf("position" to 0, "color" to 8, "texcoord" to 12),
+        shaderLocations = mapOf("position" to 0, "color" to 1, "texcoord" to 2),
+    )
+    private val canonicalLayouts = setOf(
+        position,
+        positionColor,
+        positionTexCoord,
+        positionColorTexCoord,
+    )
+
+    fun layout(hasColors: Boolean, hasTexCoords: Boolean): GPUVertexLayoutPlan =
+        when {
+            hasColors && hasTexCoords -> positionColorTexCoord
+            hasColors -> positionColor
+            hasTexCoords -> positionTexCoord
+            else -> position
+        }.structuralSnapshot()
+
+    fun isCanonical(layout: GPUVertexLayoutPlan): Boolean = layout in canonicalLayouts
+
+    private fun GPUVertexLayoutPlan.structuralSnapshot(): GPUVertexLayoutPlan =
+        GPUVertexLayoutPlan(
+            attributes = attributes.toList(),
+            strideBytes = strideBytes,
+            offsets = offsets.toMap(),
+            shaderLocations = shaderLocations.toMap(),
+        )
+}
+
+/**
+ * Mutable-source input for the vertices packer; it is not a durable identity.
+ * The packer must snapshot its arrays before validation or publication.
+ */
+data class GPUPreparedVerticesArtifactInput(
+    val topology: GPUVertexMode,
+    val positions: FloatArray,
+    val colorsRgba8: ByteArray?,
+    val texCoords: FloatArray?,
+    val indices: IntArray?,
+    val provenance: String,
 )
 
 /** Vertex color plan. */
@@ -93,8 +177,7 @@ data class GPUVertexTexCoordPlan(
 
 /** Primitive blend plan for drawVertices-style input. */
 data class GPUPrimitiveBlendPlan(
-    val blendModeLabel: String,
-    val requiresDestinationRead: Boolean,
+    val plan: GPUBlendPlan,
 )
 
 /** Index buffer plan. */
@@ -471,8 +554,6 @@ data class GPUVerticesRouteDecisionRequest(
     val acceptedPositionFormats: Set<String> = setOf("f32x2"),
     val acceptedColorFormats: Set<String> = setOf("rgba8unorm-premul"),
     val acceptedTexCoordFormats: Set<String> = setOf("f32x2"),
-    val acceptedPrimitiveBlenders: Set<String> = setOf("none", "SrcOver"),
-    val destinationReadPrimitiveBlenders: Set<String> = setOf("Multiply", "Screen"),
 ) {
     init {
         require(commandId.isNotBlank()) { "GPUVerticesRouteDecisionRequest.commandId must not be blank" }
@@ -485,9 +566,6 @@ data class GPUVerticesRouteDecisionRequest(
         }
         require(acceptedPositionFormats.isNotEmpty()) {
             "GPUVerticesRouteDecisionRequest.acceptedPositionFormats must not be empty"
-        }
-        require(acceptedPrimitiveBlenders.isNotEmpty()) {
-            "GPUVerticesRouteDecisionRequest.acceptedPrimitiveBlenders must not be empty"
         }
     }
 }
@@ -1011,7 +1089,7 @@ private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
         descriptor.sourceMutable -> "unsupported.vertices.key_nondeterministic"
         !descriptor.finitePositions -> "unsupported.vertices.positions_nonfinite"
         descriptor.primitiveMode == GPUVertexMode.TriangleFan -> "unsupported.vertices.triangle_fan_unprepared"
-        descriptor.primitiveMode !in acceptedTopologies -> "unsupported.vertices.topology"
+        descriptor.primitiveMode !in acceptedTopologies -> GPUPreparedVerticesRefusalCodes.Topology
         descriptor.vertexCount > maxVertexCount -> "unsupported.vertices.vertex_count_budget"
         (descriptor.indexCount ?: 0) > maxIndexCount -> "unsupported.vertices.index_count_budget"
         descriptor.positionFormat !in acceptedPositionFormats -> "unsupported.vertices.attribute_format"
@@ -1020,10 +1098,11 @@ private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
             "unsupported.vertices.attribute_format"
         descriptor.hasTexCoords && descriptor.materialLocalCoordinatePolicy != "texcoord" ->
             "unsupported.vertices.local_coords_unproven"
-        descriptor.primitiveBlendMode in destinationReadPrimitiveBlenders ->
+        primitiveBlendPlan()?.destinationReadRequirement ==
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
             "unsupported.vertices.primitive_blend_destination_read"
-        descriptor.primitiveBlendMode !in acceptedPrimitiveBlenders ->
-            "unsupported.vertices.primitive_blender_unregistered"
+        descriptor.primitiveBlendMode != "none" && primitiveBlendPlan() == null ->
+            GPUPreparedVerticesRefusalCodes.PrimitiveBlender
         adapterEvidenceLabel.isNullOrBlank() || wgslLayoutEvidenceLabel.isNullOrBlank() ->
             "unsupported.vertices.wgsl_abi_unvalidated"
         else -> null
@@ -1040,13 +1119,39 @@ private fun GPUVerticesRouteDecisionRequest.refusalFacts(reasonCode: String): Ma
         "texCoordFormat" to (descriptor.texCoordFormat ?: "none"),
         "primitiveBlend" to descriptor.primitiveBlendMode,
         "primitiveBlendDestinationRead" to
-            (descriptor.primitiveBlendMode in destinationReadPrimitiveBlenders).toString(),
+            (primitiveBlendPlan()?.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired).toString(),
         "localCoords" to descriptor.materialLocalCoordinatePolicy,
         "sourceMutable" to descriptor.sourceMutable.toString(),
         "finitePositions" to descriptor.finitePositions.toString(),
         "adapterEvidence" to (adapterEvidenceLabel ?: "missing"),
         "wgslEvidence" to (wgslLayoutEvidenceLabel ?: "missing"),
     )
+
+private fun GPUVerticesRouteDecisionRequest.primitiveBlendPlan(): GPUBlendPlan? {
+    if (descriptor.primitiveBlendMode == "none") return null
+    val normalizedLabel = descriptor.primitiveBlendMode
+        .replace('-', '_')
+        .replace(' ', '_')
+        .lowercase()
+    val mode = GPUBlendMode.entries.firstOrNull { candidate ->
+        candidate.gpuLabel == normalizedLabel ||
+            candidate.gpuLabel.replace("_", "") == normalizedLabel.replace("_", "")
+    } ?: return null
+    return GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts(
+                formatClass = targetFormatClass,
+                clampsNormalizedColorWrites = targetFormatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
+}
 
 private fun GPUVerticesBufferPlanRequest.refusalCode(
     vertexBytes: Long,
@@ -1058,11 +1163,11 @@ private fun GPUVerticesBufferPlanRequest.refusalCode(
         routeDecision.routeKind != "GPUNative" || routeDecision.diagnostics.any { diagnostic -> diagnostic.terminal } ->
             "unsupported.vertices.route_decision_required"
         routeDecision.descriptor.indexCount != null && indexElementBytes == null ->
-            "unsupported.vertices.index_format"
+            GPUPreparedVerticesRefusalCodes.IndexFormat
         routeDecision.descriptor.indexCount != null && sourceIndexContentHash.isNullOrBlank() ->
             "unsupported.vertices.index_payload_missing"
         routeDecision.descriptor.indexCount != null && maxIndex >= routeDecision.descriptor.vertexCount ->
-            "unsupported.vertices.index_out_of_range"
+            GPUPreparedVerticesRefusalCodes.IndexOutOfRange
         !uploadBeforeDraw -> "unsupported.vertices.upload_unavailable"
         !availableUsageFlags.containsAll(requiredUsageFlags) -> "unsupported.vertices.upload_unavailable"
         vertexBytes > maxVertexBufferBytes || indexBytes > maxIndexBufferBytes ->
@@ -1231,33 +1336,11 @@ private fun String.indexElementBytes(): Long? =
         else -> null
     }
 
-private fun GPUVerticesDescriptor.layoutPlan(): GPUVertexLayoutPlan {
-    val attributes = mutableListOf("position")
-    val offsets = linkedMapOf("position" to 0)
-    val locations = linkedMapOf("position" to 0)
-    var stride = 8
-
-    if (hasColors) {
-        attributes += "color"
-        offsets["color"] = stride
-        locations["color"] = 1
-        stride += 4
-    }
-
-    if (hasTexCoords) {
-        attributes += "texcoord"
-        offsets["texcoord"] = stride
-        locations["texcoord"] = 2
-        stride += 8
-    }
-
-    return GPUVertexLayoutPlan(
-        attributes = attributes,
-        strideBytes = stride,
-        offsets = offsets,
-        shaderLocations = locations,
+private fun GPUVerticesDescriptor.layoutPlan(): GPUVertexLayoutPlan =
+    GPUPreparedVerticesLayoutAuthority.layout(
+        hasColors = hasColors,
+        hasTexCoords = hasTexCoords,
     )
-}
 
 private fun GPUVerticesDescriptor.variantLabel(): String =
     when {
@@ -1343,3 +1426,52 @@ private fun verticesStableHash(parts: List<String>): String {
         .take(8)
         .joinToString("") { byte -> "%02x".format(byte) }
 }
+
+/**
+ * Closed compatibility axes required before two adjacent prepared-vertices draws may batch.
+ *
+ * Every axis is a deterministic identity derived from immutable artifacts, draw facts, or
+ * shader programs; two adjacent draws batch only when every axis matches and no barrier
+ * kind fires. The execution-side planner reports the exact failing axis as its split reason.
+ */
+val GPU_PREPARED_VERTICES_BATCH_COMPATIBILITY_AXES: List<String> = listOf(
+    "pipeline",
+    "layout",
+    "topology",
+    "material-abi",
+    "target-format",
+    "index-format",
+    "blend",
+    "clip",
+)
+
+/**
+ * Closed barrier kinds that must split an adjacency even when every compatibility axis matches.
+ *
+ * Barriers exist for clip change, destination read, layer boundary, filter/composite
+ * boundary, sampled-resource upload, incompatible blend, and explicit command order. The
+ * prepared-vertices route derives the destination-read, filter/composite, and
+ * sampled-resource scopes as constants because those materializers are separate seams; the
+ * kinds remain normative so the contract cannot silently lose a barrier.
+ */
+val GPU_PREPARED_VERTICES_BATCH_BARRIER_KINDS: List<String> = listOf(
+    "clip-change",
+    "destination-read",
+    "layer-boundary",
+    "filter-composite-boundary",
+    "sampled-resource-upload",
+    "incompatible-blend",
+    "explicit-command-order",
+)
+
+/**
+ * Non-claim line for the prepared-vertices batching pass.
+ *
+ * Batching is materialized for compatible adjacent draws, but cross-layer batching,
+ * destination-read batching, and sampled-material batching remain unclaimed and the route
+ * does not claim performance readiness.
+ */
+const val PREPARED_VERTICES_BATCH_NONCLAIM_LINE: String =
+    "vertices:nonclaim preparedBatching=true crossLayerBatching=false " +
+        "destinationReadBatching=false sampledMaterialBatching=false " +
+        "performanceReady=false productActivation=true"

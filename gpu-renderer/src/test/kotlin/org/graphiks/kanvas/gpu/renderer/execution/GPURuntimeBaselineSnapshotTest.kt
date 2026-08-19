@@ -6,6 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -135,6 +136,7 @@ class GPURuntimeBaselineSnapshotTest {
         )
         val session = object : GPUBackendSession {
             override val adapterInfo: GPUBackendAdapterSummary? = null
+            override val deviceGeneration = GPUDeviceGenerationID(19L)
             override val capabilities: GPUCapabilities = GPUCapabilities(
                 implementation = GPUImplementationIdentity(
                     facadeName = "facade",
@@ -156,7 +158,7 @@ class GPURuntimeBaselineSnapshotTest {
             override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
                 error("not used in test")
 
-            override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
+            override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
                 error("not used in test")
 
             override fun close() = Unit

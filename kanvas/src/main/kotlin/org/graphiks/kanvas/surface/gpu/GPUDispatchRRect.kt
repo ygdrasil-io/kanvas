@@ -26,7 +26,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
     cmd.nonUniformRadiiRefusalReasonOrNull()?.let { refuse(it); return }
 
-    val blendMode = cmd.blend.blendMode
+    val blendMode = cmd.blend.canonicalFixedFunctionState()
     val material = cmd.material as? GPUMaterialDescriptor.SolidColor ?: run {
         refuse("unsupported_material:${cmd.material.kind.name}")
         return

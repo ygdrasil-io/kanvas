@@ -1,19 +1,39 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFillPathCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 
 class GPURefusalGuardsTest {
+
+    @Test
+    fun `direct fill guard delegates gradient facts to renderer authority`() {
+        val source = File(
+            "src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURefusalGuards.kt",
+        ).readText()
+
+        assertTrue("gradientFactsRefusalReasonOrNull()" in source)
+        assertFalse("DIRECT_GRADIENT_IDENTITY_MATRIX" in source)
+        assertFalse("gradientDispatchRefusalReasonOrNull" in source)
+        assertTrue(
+            source.indexOf("if (material is GPUMaterialDescriptor.Unsupported)") <
+                source.indexOf("gradientFactsRefusalReasonOrNull()"),
+        )
+    }
 
     @Test
     fun `nonidentity rect blur refuses before direct dispatch`() {
@@ -48,6 +68,43 @@ class GPURefusalGuardsTest {
         assertNull(rrect(maskFilter = blur(0f)).fillGuardRefusalReasonOrNull())
     }
 
+    @Test
+    fun `direct fill guard refuses radial and sweep non srgb facts before dispatch`() {
+        listOf(radial().withGradientFacts(GPUMaterialDescriptor.GradientFacts("linear")), sweep().withGradientFacts(GPUMaterialDescriptor.GradientFacts("linear")))
+            .forEach { material ->
+                assertEquals(
+                    "unsupported.material.mapping.gradient_interpolation",
+                    rect(material = material).fillGuardRefusalReasonOrNull(),
+                )
+                assertEquals(
+                    "unsupported.material.mapping.gradient_interpolation",
+                    path(material).fillGuardRefusalReasonOrNull(),
+                )
+            }
+    }
+
+    @Test
+    fun `direct fill guard refuses radial and sweep non identity matrix facts before dispatch`() {
+        val facts = GPUMaterialDescriptor.GradientFacts(
+            localMatrix = listOf(
+                1f, 0f, 2f,
+                0f, 1f, 3f,
+                0f, 0f, 1f,
+            ),
+        )
+        listOf(radial().withGradientFacts(facts), sweep().withGradientFacts(facts))
+            .forEach { material ->
+                assertEquals(
+                    "unsupported.material.mapping.local_matrix",
+                    rect(material = material).fillGuardRefusalReasonOrNull(),
+                )
+                assertEquals(
+                    "unsupported.material.mapping.local_matrix",
+                    path(material).fillGuardRefusalReasonOrNull(),
+                )
+            }
+    }
+
     private fun rect(
         material: GPUMaterialDescriptor = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
         maskFilter: NormalizedMaskFilter? = null,
@@ -56,7 +113,57 @@ class GPURefusalGuardsTest {
         rect = GPURect(0f, 0f, 8f, 8f),
         target = target,
         material = material,
-    ).copy(maskFilter = maskFilter)
+        ).copy(maskFilter = maskFilter)
+
+    private fun path(material: GPUMaterialDescriptor) = GPUFillPathCommandBuilder.build(
+        commandId = GPUDrawCommandID(3),
+        pathKey = "path:triangle:v1",
+        pathDescriptor = GPUPathFacts(
+            pathKey = "path:triangle:v1",
+            verbCount = 4,
+            pointCount = 3,
+            fillRule = "NonZero",
+            inverseFill = false,
+            finiteProof = "finite",
+            volatility = "immutable",
+            transformClass = "identity",
+            edgeCount = 3,
+        ),
+        tessellatedVertices = listOf(0f, 0f, 8f, 0f, 4f, 8f),
+        contourStarts = listOf(0),
+        edgeCount = 3,
+        target = target,
+        material = material,
+    )
+
+    private fun radial() = GPUMaterialDescriptor.RadialGradient(
+        centerX = 4f,
+        centerY = 4f,
+        radius = 4f,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+    )
+
+    private fun sweep() = GPUMaterialDescriptor.SweepGradient(
+        centerX = 4f,
+        centerY = 4f,
+        startAngle = 0f,
+        endAngle = 360f,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+    )
 
     private fun rrect(
         maskFilter: NormalizedMaskFilter? = null,

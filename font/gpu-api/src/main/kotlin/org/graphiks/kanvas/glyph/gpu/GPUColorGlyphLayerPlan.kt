@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.glyph.gpu
 
+/** Single numeric authority for the fixed COLRv0 composite shader and payload ABI. */
+const val GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS: Int = 16
+
 /**
  * One GPU-facing layer of a COLRv0 color glyph: a coverage glyph plus a resolved
  * solid color. Renderer-neutral — no parser state, GPU handle, or pixels. The

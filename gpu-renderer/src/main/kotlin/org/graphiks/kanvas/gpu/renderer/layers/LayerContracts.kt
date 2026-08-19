@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.compositeBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
@@ -44,10 +45,16 @@ data class GPULayerSaveRecord(
     val initWithPrevious: Boolean = false,
     val sourceFilterCount: Int = 0,
     val restoreBlendMode: String = "srcOver",
+    val alpha: Float = 1f,
+    val clipLabel: String? = null,
     val cpuFallbackRequested: Boolean = false,
     val preserveLCDText: Boolean = false,
     val f16Requested: Boolean = false,
-)
+) {
+    init {
+        require(alpha in 0f..1f) { "GPULayerSaveRecord.alpha must be in 0f..1f" }
+    }
+}
 
 /** Restore plan for a layer scope. */
 data class GPULayerRestorePlan(
@@ -522,8 +529,13 @@ class GPUSaveLayerIsolatedTargetPlanner {
             return refusedPlan(request, refusalCode)
         }
 
+        val backdropRequired = request.saveRecord.backdropRequired
+        val loadOp = if (backdropRequired) "load" else "clear"
+        val loadPolicy = if (backdropRequired) "load" else "clear"
+        val requiresBackdropCopy = backdropRequired
+
         val usageLabels = request.requiredSaveLayerUsageLabels().canonicalUsageLabels()
-        val descriptorHash = targetDescriptorHash(request, usageLabels)
+        val descriptorHash = targetDescriptorHash(request, usageLabels, loadOp)
         val targetLabel = "layer-target:${request.saveRecord.scopeId.value.removePrefix("layer:")}"
         val targetPlan = GPULayerTargetPlan(
             targetLabel = targetLabel,
@@ -532,7 +544,7 @@ class GPUSaveLayerIsolatedTargetPlanner {
             lifetimeClass = "layer-local",
             targetDescriptorHash = descriptorHash,
             usageLabels = usageLabels,
-            loadOp = "clear",
+            loadOp = loadOp,
             storeOp = "store",
             originLabel = "device:${request.bounds.originX},${request.bounds.originY}",
             byteEstimate = targetBytes,
@@ -541,8 +553,8 @@ class GPUSaveLayerIsolatedTargetPlanner {
         )
         val initialization = GPULayerInitializationPlan(
             clearPolicy = "clear(transparent-black)",
-            loadPolicy = "clear",
-            requiresBackdropCopy = false,
+            loadPolicy = loadPolicy,
+            requiresBackdropCopy = requiresBackdropCopy,
         )
         val composite = GPULayerCompositePlan(
             sourcePlan = GPULayerSourcePlan(
@@ -678,7 +690,6 @@ private fun GPUSaveLayerIsolatedTargetRequest.refusalCode(targetBytes: Long): St
         bounds.width <= 0 || bounds.height <= 0 -> "unsupported.layer.bounds_invalid"
         (requiredSaveLayerUsageLabels() - availableUsageLabels).isNotEmpty() -> "unsupported.layer.target_usage_missing"
         activeAttachmentSampled -> "unsupported.layer.active_attachment_sampled"
-        saveRecord.backdropRequired -> "unsupported.layer.backdrop_filter"
         saveRecord.initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
         saveRecord.sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
         !saveRecord.restoreBlendMode.equals("srcOver", ignoreCase = true) -> "unsupported.layer.restore_blend"
@@ -710,6 +721,7 @@ private fun Set<String>.canonicalUsageLabels(): List<String> =
 private fun targetDescriptorHash(
     request: GPUSaveLayerIsolatedTargetRequest,
     usageLabels: List<String>,
+    loadOp: String = "clear",
 ): String = "sha256:" + stableHash(
     listOf(
         "savelayer-target-v1",
@@ -718,7 +730,7 @@ private fun targetDescriptorHash(
         request.targetFormatClass,
         request.sampleCount.toString(),
         usageLabels.joinToString(","),
-        "load=clear",
+        "load=$loadOp",
         "store=store",
         "lifetime=layer-local",
         "origin=${request.bounds.originX},${request.bounds.originY}",
@@ -965,8 +977,11 @@ private fun GPUSaveLayerMaterializationRequest.layerCommands(): List<GPUPassComm
             sourceLabel = execution.composite.sourcePlan.sourceLabel,
             parentTargetLabel = execution.composite.parentTargetLabel,
             blendModeLabel = execution.composite.blendModeLabel,
+            blendPlan = compositeBlendPlan(execution.composite.blendModeLabel, target.formatClass),
             routeLabel = execution.composite.compositeRoute,
             tokenLabel = token,
+            alpha = gatePlan.layerPlan.saveRecord.alpha,
+            clipLabel = gatePlan.layerPlan.saveRecord.clipLabel,
         ),
         GPUPassCommand.EndRenderPass(passId = parentPassId),
     )

@@ -2,6 +2,9 @@ package org.graphiks.kanvas.font.atlas
 
 import org.graphiks.kanvas.font.glyph.A8Bitmap
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasPackingResult
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectItem
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectPacker
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
@@ -64,6 +67,56 @@ class GlyphAtlasUploadPlanTest {
         val small = GlyphStrikeKey(glyphId = 2, size = 16.0f, subpixelX = 0, subpixelY = 0)
         val placement = packer.place(small, glyphBitmap(10, 1))
         assertNull(placement, "glyph should be refused when atlas is full")
+    }
+
+    @Test
+    fun `legacy incremental packer delegates to shared rectangle placement authority`() {
+        val sizes = listOf(3 to 2, 4 to 5, 6 to 1, 2 to 3)
+        val legacy = GlyphAtlasPacker(atlasWidth = 8, atlasHeight = 8)
+        val legacyRegions = sizes.mapIndexed { index, (width, height) ->
+            val key = GlyphStrikeKey(glyphId = index, size = 16f, subpixelX = 0, subpixelY = 0)
+            val placement = legacy.place(key, glyphBitmap(width, height))
+            assertNotNull(placement)
+            placement!!.region
+        }
+        val shared = GPUTextAtlasRectPacker.pack(
+            items = sizes.mapIndexed { index, (width, height) ->
+                GPUTextAtlasRectItem(index.toString(), width, height, guardPx = 0)
+            },
+            pageWidth = 8,
+            pageHeight = 8,
+            maxPages = 1,
+        ) as GPUTextAtlasPackingResult.Ready
+
+        assertEquals(
+            shared.placements.map { placement ->
+                AtlasRegion(
+                    x = placement.contentRect.left,
+                    y = placement.contentRect.top,
+                    width = placement.contentRect.right - placement.contentRect.left,
+                    height = placement.contentRect.bottom - placement.contentRect.top,
+                )
+            },
+            legacyRegions,
+        )
+    }
+
+    @Test
+    fun `legacy incremental packer preserves all degenerate rectangle placements`() {
+        val packer = GlyphAtlasPacker(atlasWidth = 8, atlasHeight = 8)
+        val dimensions = listOf(0 to 0, 0 to 3, 4 to 0)
+
+        val placements = dimensions.mapIndexed { index, (width, height) ->
+            val placement = packer.place(
+                GlyphStrikeKey(index, 16f, 0, 0),
+                glyphBitmap(width, height),
+            )
+            assertNotNull(placement)
+            placement!!
+        }
+
+        assertEquals(dimensions.map { it.first }, placements.map { it.region.width })
+        assertEquals(dimensions.map { it.second }, placements.map { it.region.height })
     }
 
     @Test

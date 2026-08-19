@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import kotlin.math.atan2
@@ -10,15 +12,26 @@ import kotlin.math.sqrt
 data class StrokeGeometry(
     val vertices: List<Float>,
     val contourStarts: List<Int>,
+    val coordinateSpace: StrokeGeometryCoordinateSpace =
+        StrokeGeometryCoordinateSpace.DEVICE,
 )
 
-internal fun applyDash(
+enum class StrokeGeometryCoordinateSpace {
+    DEVICE,
+}
+
+internal data class DashRun(
+    val points: List<Pair<Float, Float>>,
+    val closed: Boolean,
+)
+
+internal fun applyDashRuns(
     points: List<Pair<Float, Float>>,
     dashArray: FloatArray,
     phase: Float,
-): List<Pair<Float, Float>> {
-    if (dashArray.isEmpty()) return emptyList()
-    val result = mutableListOf<Pair<Float, Float>>()
+    closed: Boolean,
+): List<DashRun> {
+    if (points.isEmpty() || dashArray.isEmpty()) return emptyList()
     val intervals = dashArray.map { it.coerceAtLeast(0.1f) }
     var dashIdx = 0
     val totalDashLen = intervals.sum().coerceAtLeast(1f)
@@ -28,8 +41,47 @@ internal fun applyDash(
         intervalOffset -= intervals[dashIdx % intervals.size]
         dashIdx++
     }
-    for (i in 0 until points.size - 1) {
-        val p0 = points[i]; val p1 = points[i + 1]
+    val startsOn = dashIdx % 2 == 0
+    val traversalPoints = if (
+        closed &&
+        points.size > 1 &&
+        !pointsClose(points.first(), points.last())
+    ) {
+        points + points.first()
+    } else {
+        points
+    }
+    val hasLength = traversalPoints.zipWithNext().any { (start, end) ->
+        !pointsClose(start, end)
+    }
+    if (!hasLength) {
+        return if (startsOn) {
+            listOf(DashRun(points = listOf(points.first()), closed = false))
+        } else {
+            emptyList()
+        }
+    }
+
+    val finishedRuns = mutableListOf<DashRun>()
+    var activePoints: MutableList<Pair<Float, Float>>? = null
+
+    fun appendPoint(runPoints: MutableList<Pair<Float, Float>>, point: Pair<Float, Float>) {
+        if (runPoints.isEmpty() || !pointsClose(runPoints.last(), point)) {
+            runPoints.add(point)
+        }
+    }
+
+    fun finishActiveRun() {
+        val runPoints = activePoints ?: return
+        if (runPoints.size >= 2) {
+            finishedRuns.add(DashRun(points = runPoints.toList(), closed = false))
+        }
+        activePoints = null
+    }
+
+    for (i in 0 until traversalPoints.size - 1) {
+        val p0 = traversalPoints[i]
+        val p1 = traversalPoints[i + 1]
         val dx = p1.first - p0.first; val dy = p1.second - p0.second
         val segLen = sqrt(dx * dx + dy * dy)
         if (segLen < 1e-6f) continue
@@ -43,13 +95,19 @@ internal fun applyDash(
             val endPos = pos + effectiveLen
 
             if (idx % 2 == 0) {
-                result.add(Pair(p0.first + pos * nx, p0.second + pos * ny))
-                result.add(Pair(p0.first + endPos * nx, p0.second + endPos * ny))
+                val runPoints = activePoints ?: mutableListOf<Pair<Float, Float>>().also {
+                    activePoints = it
+                }
+                appendPoint(runPoints, Pair(p0.first + pos * nx, p0.second + pos * ny))
+                appendPoint(runPoints, Pair(p0.first + endPos * nx, p0.second + endPos * ny))
             }
 
             pos = endPos
             intervalOffset += effectiveLen
             if (intervalOffset >= dashLen - 1e-6f) {
+                if (idx % 2 == 0) {
+                    finishActiveRun()
+                }
                 dashIdx++
                 intervalOffset = 0f
             } else if (pos >= segLen - 1e-6f) {
@@ -57,8 +115,40 @@ internal fun applyDash(
             }
         }
     }
-    return result
+
+    if (closed && startsOn && activePoints != null) {
+        if (finishedRuns.isEmpty()) {
+            val closedPoints = activePoints!!.toMutableList()
+            appendPoint(closedPoints, closedPoints.first())
+            return listOf(DashRun(points = closedPoints, closed = true))
+        }
+        val merged = activePoints!!.toMutableList()
+        val firstRun = finishedRuns.removeAt(0)
+        firstRun.points.forEach { point -> appendPoint(merged, point) }
+        finishedRuns.add(0, DashRun(points = merged, closed = false))
+        activePoints = null
+    }
+    finishActiveRun()
+    return finishedRuns
 }
+
+private fun pointsClose(
+    first: Pair<Float, Float>,
+    second: Pair<Float, Float>,
+): Boolean =
+    kotlin.math.abs(first.first - second.first) < 1e-6f &&
+        kotlin.math.abs(first.second - second.second) < 1e-6f
+
+internal fun applyDash(
+    points: List<Pair<Float, Float>>,
+    dashArray: FloatArray,
+    phase: Float,
+): List<Pair<Float, Float>> = applyDashRuns(
+    points = points,
+    dashArray = dashArray,
+    phase = phase,
+    closed = false,
+).flatMap { run -> run.points.zipWithNext().flatMap { (start, end) -> listOf(start, end) } }
 
 internal fun generateRoundCap(
     center: Pair<Float, Float>,
@@ -121,11 +211,94 @@ internal fun strokeToFillGeometry(
     dashPhase: Float = 0f,
     capStyle: StrokeCap = StrokeCap.BUTT,
     joinStyle: StrokeJoin = StrokeJoin.MITER,
+    miterLimit: Float = 4f,
+    transform: GPUTransformFacts = GPUTransformFacts.identity(),
+    closedContours: Set<Int> = emptySet(),
 ): StrokeGeometry {
-    if (contourVertices.size < 2 || strokeWidth < 0f) {
+    val transformValues = listOf(
+        transform.translateX,
+        transform.translateY,
+        transform.scaleX,
+        transform.scaleY,
+        transform.skewX,
+        transform.skewY,
+    )
+    if (
+        contourVertices.size < 2 ||
+        !strokeWidth.isFinite() ||
+        strokeWidth < 0f ||
+        !miterLimit.isFinite() ||
+        miterLimit <= 0f ||
+        transform.type == GPUTransformType.Perspective ||
+        transform.type == GPUTransformType.Singular ||
+        transformValues.any { value -> !value.isFinite() }
+    ) {
         return StrokeGeometry(emptyList(), listOf(0))
     }
 
+    fun mapToDevice(x: Float, y: Float): Pair<Float, Float> = Pair(
+        transform.scaleX * x + transform.skewX * y + transform.translateX,
+        transform.skewY * x + transform.scaleY * y + transform.translateY,
+    )
+
+    if (dashArray != null && dashArray.isNotEmpty()) {
+        val dashedVertices = mutableListOf<Float>()
+        val dashedContourStarts = mutableListOf(0)
+        for (contourIndex in contourStarts.indices) {
+            val start = contourStarts[contourIndex]
+            val end = if (contourIndex + 1 < contourStarts.size) {
+                contourStarts[contourIndex + 1]
+            } else {
+                contourVertices.size / 2
+            }
+            val points = List(end - start) { pointIndex ->
+                val vertexIndex = (start + pointIndex) * 2
+                Pair(contourVertices[vertexIndex], contourVertices[vertexIndex + 1])
+            }
+            if (points.isEmpty()) continue
+            val isExplicitlyClosed =
+                points.size >= 3 && pointsClose(points.first(), points.last())
+            val dashRuns = applyDashRuns(
+                points = points,
+                dashArray = dashArray,
+                phase = dashPhase,
+                closed = isExplicitlyClosed || contourIndex in closedContours,
+            )
+            dashRuns.forEach { run ->
+                val runGeometry = strokeToFillGeometry(
+                    contourVertices = run.points.flatMap { point ->
+                        listOf(point.first, point.second)
+                    },
+                    contourStarts = listOf(0),
+                    strokeWidth = strokeWidth,
+                    capStyle = capStyle,
+                    joinStyle = joinStyle,
+                    miterLimit = miterLimit,
+                    transform = transform,
+                    closedContours = if (run.closed) setOf(0) else emptySet(),
+                )
+                val vertexOffset = dashedVertices.size / 2
+                dashedVertices.addAll(runGeometry.vertices)
+                runGeometry.contourStarts.drop(1).forEach { runContourEnd ->
+                    dashedContourStarts.add(vertexOffset + runContourEnd)
+                }
+            }
+        }
+        return StrokeGeometry(
+            vertices = dashedVertices,
+            contourStarts = dashedContourStarts,
+            coordinateSpace = StrokeGeometryCoordinateSpace.DEVICE,
+        )
+    }
+
+    val geometryInput = if (strokeWidth == 0f) {
+        contourVertices.chunked(2).flatMap { (x, y) ->
+            val mapped = mapToDevice(x, y)
+            listOf(mapped.first, mapped.second)
+        }
+    } else {
+        contourVertices
+    }
     val effectiveWidth = if (strokeWidth == 0f) 1f else strokeWidth
     val halfWidth = effectiveWidth / 2f
     val segments = 6
@@ -162,14 +335,126 @@ internal fun strokeToFillGeometry(
         }
     }
 
+    fun admittedMiterOffset(
+        incomingNormal: Pair<Float, Float>,
+        outgoingNormal: Pair<Float, Float>,
+    ): Pair<Float, Float>? {
+        val summedX = incomingNormal.first + outgoingNormal.first
+        val summedY = incomingNormal.second + outgoingNormal.second
+        val summedLength = sqrt(summedX * summedX + summedY * summedY)
+        if (summedLength < 1e-6f) return null
+
+        val directionX = summedX / summedLength
+        val directionY = summedY / summedLength
+        val denominator =
+            directionX * outgoingNormal.first +
+                directionY * outgoingNormal.second
+        val length = if (kotlin.math.abs(denominator) < 1e-6f) {
+            Float.POSITIVE_INFINITY
+        } else {
+            kotlin.math.abs(halfWidth / denominator)
+        }
+        if (!length.isFinite() || length > halfWidth * miterLimit) return null
+        return Pair(directionX * length, directionY * length)
+    }
+
+    fun addBevelOrMiterJoin(
+        center: Pair<Float, Float>,
+        incomingNormal: Pair<Float, Float>,
+        outgoingNormal: Pair<Float, Float>,
+    ) {
+        val turn =
+            incomingNormal.first * outgoingNormal.second -
+                incomingNormal.second * outgoingNormal.first
+        if (kotlin.math.abs(turn) < 1e-6f) return
+        val side = if (turn > 0f) -1f else 1f
+        val incomingOuter = Pair(
+            center.first + incomingNormal.first * halfWidth * side,
+            center.second + incomingNormal.second * halfWidth * side,
+        )
+        val outgoingOuter = Pair(
+            center.first + outgoingNormal.first * halfWidth * side,
+            center.second + outgoingNormal.second * halfWidth * side,
+        )
+        if (joinStyle == StrokeJoin.BEVEL) {
+            if (turn > 0f) {
+                addTriangle(
+                    center.first,
+                    center.second,
+                    outgoingOuter.first,
+                    outgoingOuter.second,
+                    incomingOuter.first,
+                    incomingOuter.second,
+                )
+            } else {
+                addTriangle(
+                    center.first,
+                    center.second,
+                    incomingOuter.first,
+                    incomingOuter.second,
+                    outgoingOuter.first,
+                    outgoingOuter.second,
+                )
+            }
+            return
+        }
+
+        val miterOffset = admittedMiterOffset(incomingNormal, outgoingNormal)
+        if (miterOffset == null) {
+            if (turn > 0f) {
+                addTriangle(
+                    center.first,
+                    center.second,
+                    outgoingOuter.first,
+                    outgoingOuter.second,
+                    incomingOuter.first,
+                    incomingOuter.second,
+                )
+            } else {
+                addTriangle(
+                    center.first,
+                    center.second,
+                    incomingOuter.first,
+                    incomingOuter.second,
+                    outgoingOuter.first,
+                    outgoingOuter.second,
+                )
+            }
+            return
+        }
+        val miter = Pair(
+            center.first + miterOffset.first * side,
+            center.second + miterOffset.second * side,
+        )
+        if (turn > 0f) {
+            addTriangle(
+                incomingOuter.first,
+                incomingOuter.second,
+                outgoingOuter.first,
+                outgoingOuter.second,
+                miter.first,
+                miter.second,
+            )
+        } else {
+            addTriangle(
+                incomingOuter.first,
+                incomingOuter.second,
+                miter.first,
+                miter.second,
+                outgoingOuter.first,
+                outgoingOuter.second,
+            )
+        }
+    }
+
     for (ci in contourStarts.indices) {
         val start = contourStarts[ci]
-        val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else contourVertices.size / 2
+        val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else geometryInput.size / 2
         val n = end - start
 
         val points = List(n) { idx ->
             val i = (start + idx) * 2
-            Pair(contourVertices[i], contourVertices[i + 1])
+            Pair(geometryInput[i], geometryInput[i + 1])
         }
 
         if (points.isEmpty()) continue
@@ -190,63 +475,10 @@ internal fun strokeToFillGeometry(
             continue
         }
 
-        val isClosed = n >= 3 &&
-            kotlin.math.abs(points[0].first - points[n - 1].first) < 1e-6f &&
-            kotlin.math.abs(points[0].second - points[n - 1].second) < 1e-6f
+        val isExplicitlyClosed = n >= 3 && pointsClose(points.first(), points.last())
+        val isClosed = isExplicitlyClosed || ci in closedContours
 
-        val dashSegments = if (dashArray != null && dashArray.isNotEmpty()) {
-            applyDash(points, dashArray, dashPhase)
-        } else null
-
-        if (dashSegments != null && dashSegments.isNotEmpty()) {
-            for (si in 0 until dashSegments.size step 2) {
-                val p0 = dashSegments[si]
-                val p1 = dashSegments[si + 1]
-                val dx = p1.first - p0.first
-                val dy = p1.second - p0.second
-                val len = sqrt(dx * dx + dy * dy)
-                if (len < 1e-6f) continue
-                val nux = -dy / len
-                val nuy = dx / len
-                val nx = nux * halfWidth
-                val ny = nuy * halfWidth
-                val tangentExtension = if (capStyle == StrokeCap.SQUARE) halfWidth else 0f
-                val tx = dx / len * tangentExtension
-                val ty = dy / len * tangentExtension
-                val startPoint = Pair(p0.first - tx, p0.second - ty)
-                val endPoint = Pair(p1.first + tx, p1.second + ty)
-
-                addTriangle(
-                    startPoint.first - nx, startPoint.second - ny,
-                    startPoint.first + nx, startPoint.second + ny,
-                    endPoint.first + nx, endPoint.second + ny,
-                )
-                addTriangle(
-                    startPoint.first - nx, startPoint.second - ny,
-                    endPoint.first + nx, endPoint.second + ny,
-                    endPoint.first - nx, endPoint.second - ny,
-                )
-
-                if (capStyle == StrokeCap.ROUND) {
-                    val capStart = generateRoundCap(p0, Pair(nux, nuy), halfWidth, segments)
-                    for (vi in 0 until capStart.size - 2 step 2) {
-                        addTriangle(
-                            p0.first, p0.second,
-                            capStart[vi], capStart[vi + 1],
-                            capStart[vi + 2], capStart[vi + 3],
-                        )
-                    }
-                    val capEnd = generateRoundCap(p1, Pair(-nux, -nuy), halfWidth, segments)
-                    for (vi in 0 until capEnd.size - 2 step 2) {
-                        addTriangle(
-                            p1.first, p1.second,
-                            capEnd[vi], capEnd[vi + 1],
-                            capEnd[vi + 2], capEnd[vi + 3],
-                        )
-                    }
-                }
-            }
-        } else if (!isClosed || n == 2) {
+        if (!isClosed || n == 2) {
             for (ei in 0 until n - 1) {
                 val p0 = points[ei]
                 val p1 = points[ei + 1]
@@ -310,8 +542,65 @@ internal fun strokeToFillGeometry(
                     }
                 }
             }
+            if (n > 2) {
+                val edgeNormals = List(n - 1) { index ->
+                    edgeNormal(
+                        points[index].first,
+                        points[index].second,
+                        points[index + 1].first,
+                        points[index + 1].second,
+                    )
+                }
+                for (index in 1 until n - 1) {
+                    val centerPoint = points[index]
+                    val incomingNormal = edgeNormals[index - 1]
+                    val outgoingNormal = edgeNormals[index]
+                    if (joinStyle == StrokeJoin.ROUND) {
+                        val right = generateRoundJoin(
+                            centerPoint,
+                            outgoingNormal,
+                            incomingNormal,
+                            halfWidth,
+                            segments,
+                        )
+                        for (vertexIndex in 0 until right.size - 2 step 2) {
+                            addTriangle(
+                                centerPoint.first,
+                                centerPoint.second,
+                                right[vertexIndex],
+                                right[vertexIndex + 1],
+                                right[vertexIndex + 2],
+                                right[vertexIndex + 3],
+                            )
+                        }
+                        val left = generateRoundJoin(
+                            centerPoint,
+                            Pair(-outgoingNormal.first, -outgoingNormal.second),
+                            Pair(-incomingNormal.first, -incomingNormal.second),
+                            halfWidth,
+                            segments,
+                        )
+                        for (vertexIndex in 0 until left.size - 2 step 2) {
+                            addTriangle(
+                                centerPoint.first,
+                                centerPoint.second,
+                                left[vertexIndex],
+                                left[vertexIndex + 1],
+                                left[vertexIndex + 2],
+                                left[vertexIndex + 3],
+                            )
+                        }
+                    } else {
+                        addBevelOrMiterJoin(
+                            centerPoint,
+                            incomingNormal,
+                            outgoingNormal,
+                        )
+                    }
+                }
+            }
         } else {
-            val effectiveN = if (isClosed) n - 1 else n
+            val effectiveN = if (isExplicitlyClosed) n - 1 else n
             val edgeNormals = List(effectiveN) { i ->
                 edgeNormal(
                     points[i].first, points[i].second,
@@ -364,31 +653,91 @@ internal fun strokeToFillGeometry(
                     }
                 }
             } else {
-                val normals = List(effectiveN) { i ->
-                    val prev = edgeNormals[(i + effectiveN - 1) % effectiveN]
-                    val next = edgeNormals[i]
-                    val nx = prev.first + next.first
-                    val ny = prev.second + next.second
-                    val len = sqrt(nx * nx + ny * ny)
-                    if (len < 1e-6f) Pair(0f, 0f)
-                    else Pair(nx / len * halfWidth, ny / len * halfWidth)
+                val miterCandidates = if (joinStyle == StrokeJoin.MITER) {
+                    List(effectiveN) { index ->
+                        admittedMiterOffset(
+                            incomingNormal = edgeNormals[(index + effectiveN - 1) % effectiveN],
+                            outgoingNormal = edgeNormals[index],
+                        )
+                    }
+                } else {
+                    emptyList()
                 }
+                val admittedMiterOffsets = miterCandidates
+                    .takeIf { candidates ->
+                        candidates.size == effectiveN && candidates.all { it != null }
+                    }
+                    ?.map { offset -> requireNotNull(offset) }
 
-                for (i in 0 until effectiveN) {
-                    val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
-                    val n0 = normals[i]; val n1 = normals[(i + 1) % effectiveN]
+                if (admittedMiterOffsets != null) {
+                    for (i in 0 until effectiveN) {
+                        val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
+                        val n0 = admittedMiterOffsets[i]
+                        val n1 = admittedMiterOffsets[(i + 1) % effectiveN]
 
-                    val l0x = p0.first - n0.first; val l0y = p0.second - n0.second
-                    val l1x = p1.first - n1.first; val l1y = p1.second - n1.second
-                    val r0x = p0.first + n0.first; val r0y = p0.second + n0.second
-                    val r1x = p1.first + n1.first; val r1y = p1.second + n1.second
-
-                    addTriangle(l0x, l0y, r0x, r0y, r1x, r1y)
-                    addTriangle(l0x, l0y, r1x, r1y, l1x, l1y)
+                        addTriangle(
+                            p0.first - n0.first,
+                            p0.second - n0.second,
+                            p0.first + n0.first,
+                            p0.second + n0.second,
+                            p1.first + n1.first,
+                            p1.second + n1.second,
+                        )
+                        addTriangle(
+                            p0.first - n0.first,
+                            p0.second - n0.second,
+                            p1.first + n1.first,
+                            p1.second + n1.second,
+                            p1.first - n1.first,
+                            p1.second - n1.second,
+                        )
+                    }
+                } else {
+                    for (i in 0 until effectiveN) {
+                        val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
+                        val normal = edgeNormals[i]
+                        val nx = normal.first * halfWidth
+                        val ny = normal.second * halfWidth
+                        addTriangle(
+                            p0.first - nx,
+                            p0.second - ny,
+                            p0.first + nx,
+                            p0.second + ny,
+                            p1.first + nx,
+                            p1.second + ny,
+                        )
+                        addTriangle(
+                            p0.first - nx,
+                            p0.second - ny,
+                            p1.first + nx,
+                            p1.second + ny,
+                            p1.first - nx,
+                            p1.second - ny,
+                        )
+                    }
+                    for (index in 0 until effectiveN) {
+                        addBevelOrMiterJoin(
+                            center = points[index],
+                            incomingNormal = edgeNormals[(index + effectiveN - 1) % effectiveN],
+                            outgoingNormal = edgeNormals[index],
+                        )
+                    }
                 }
             }
         }
     }
 
-    return StrokeGeometry(vertices = result, contourStarts = contourResult)
+    val deviceVertices = if (strokeWidth == 0f) {
+        result
+    } else {
+        result.chunked(2).flatMap { (x, y) ->
+            val mapped = mapToDevice(x, y)
+            listOf(mapped.first, mapped.second)
+        }
+    }
+    return StrokeGeometry(
+        vertices = deviceVertices,
+        contourStarts = contourResult,
+        coordinateSpace = StrokeGeometryCoordinateSpace.DEVICE,
+    )
 }

@@ -160,6 +160,63 @@ class GPUUniformSlabPlannerTest {
     }
 
     @Test
+    fun `planner refuses arithmetic overflow max buffer and missing dynamic uniform support`() {
+        assertRefused(
+            GPUUniformSlabPlanner.plan(
+                sourceLabel = "core-primitive-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = Long.MAX_VALUE,
+                uploadBudgetBytes = Long.MAX_VALUE,
+                payloads = listOf(
+                    GPUUniformSlabPayload("draw-0", ByteArray(32)),
+                    GPUUniformSlabPayload("draw-1", ByteArray(32)),
+                ),
+            ),
+            "unsupported.uniform_slab_dynamic_offset_uint_overflow",
+        )
+        assertRefused(
+            GPUUniformSlabPlanner.plan(
+                sourceLabel = "core-primitive-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                maxBufferSize = 255L,
+                payloads = listOf(GPUUniformSlabPayload("draw-0", ByteArray(32))),
+            ),
+            "unsupported.uniform_slab_max_buffer_size_exceeded",
+        )
+        assertRefused(
+            GPUUniformSlabPlanner.plan(
+                sourceLabel = "core-primitive-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                maxDynamicUniformBuffersPerPipelineLayout = 0L,
+                payloads = listOf(GPUUniformSlabPayload("draw-0", ByteArray(32))),
+            ),
+            "unsupported.uniform_slab_dynamic_uniform_unavailable",
+        )
+    }
+
+    @Test
+    fun `planner refuses a dynamic offset that cannot cross the UInt API boundary`() {
+        assertRefused(
+            GPUUniformSlabPlanner.plan(
+                sourceLabel = "core-primitive-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = UInt.MAX_VALUE.toLong() + 1L,
+                uploadBudgetBytes = 16L shl 30,
+                maxBufferSize = 16L shl 30,
+                payloads = listOf(
+                    GPUUniformSlabPayload("draw-0", ByteArray(32)),
+                    GPUUniformSlabPayload("draw-1", ByteArray(32)),
+                ),
+            ),
+            "unsupported.uniform_slab_dynamic_offset_uint_overflow",
+        )
+    }
+
+    @Test
     fun `diagnostic rejects unsafe facts in keys and values`() {
         assertFailsWith<IllegalArgumentException> {
             GPUUniformSlabDiagnostic(

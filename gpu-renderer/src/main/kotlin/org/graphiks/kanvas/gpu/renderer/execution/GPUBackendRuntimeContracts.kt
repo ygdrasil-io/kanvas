@@ -3,20 +3,31 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
     val width: Int,
     val height: Int,
-    val colorFormat: String = "rgba8unorm",
+    val colorFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    val colorInterpretation: GPUColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
 ) {
     init {
         require(width > 0) { "GPUOffscreenTargetRequest.width must be positive" }
         require(height > 0) { "GPUOffscreenTargetRequest.height must be positive" }
-        require(colorFormat.isNotBlank()) { "GPUOffscreenTargetRequest.colorFormat must not be blank" }
     }
+
+    @Deprecated("Use the typed color format and interpretation constructor")
+    constructor(width: Int, height: Int, colorFormat: String) : this(
+        width = width,
+        height = height,
+        colorFormat = GPUColorFormat(colorFormat),
+        colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+    )
 }
 
 /** Enumerates native surface platforms supported by the backend runtime bridge. */
@@ -150,6 +161,9 @@ data class GPUBackendRuntimeTelemetry(
 interface GPUBackendSession : AutoCloseable {
     val adapterInfo: GPUBackendAdapterSummary?
 
+    /** Handle-free identity of the device generation that owns this session and its resources. */
+    val deviceGeneration: GPUDeviceGenerationID
+
     /** Reports the backend implementation and behavior-affecting limits when known. */
     val capabilities: GPUCapabilities?
         get() = null
@@ -185,15 +199,30 @@ interface GPUBackendSession : AutoCloseable {
     /** Allocates an offscreen render target using the requested size and color format. */
     fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget
 
-    /** Binds a native window surface that can encode and present fullscreen passes. */
-    fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface
+    /** Prepares one reusable canonical offscreen target for serialized scene frames. */
+    fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession
+
+    /** Prepares an opaque window output on this session's canonical device. */
+    fun prepareWindowOutput(binding: GPUNativeSurfaceBinding): GPUPreparedWindowOutput =
+        error("unsupported.backend.prepared-window-output")
 }
 
 val GPUBackendSession.phase0EvidenceDumpLines: List<String>
     get() = phase0BaselineDumpLines + queueDumpLines + resourceProviderDumpLines
 
+/** Provides non-owning access to completion operations managed by the backing queue lifecycle. */
+interface GPUBackendQueueCompletionAccess {
+    val queueCompletion: GPUQueueCompletionAccess
+}
+
+private val unavailableGPUQueueCompletionAccess: GPUQueueCompletionAccess =
+    GPUQueueCompletionAdapter.disabled("unsupported.queue-completion.backend-unavailable")
+
 /** Represents an offscreen target that supports rendering then RGBA readback. */
-interface GPUBackendOffscreenTarget : AutoCloseable {
+interface GPUBackendOffscreenTarget : AutoCloseable, GPUBackendQueueCompletionAccess {
+    override val queueCompletion: GPUQueueCompletionAccess
+        get() = unavailableGPUQueueCompletionAccess
+
     val target: GPUSurfaceTarget
 
     /** Largest 2D texture accepted by this target before offscreen allocation. */
@@ -245,8 +274,11 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String)
 }
 
-/** Represents a native surface that can be resized and presented to screen. */
-interface GPUBackendWindowSurface : AutoCloseable {
+/** Legacy implementation detail with no session factory; product callers use GPUPreparedWindowOutput. */
+interface GPUBackendWindowSurface : AutoCloseable, GPUBackendQueueCompletionAccess {
+    override val queueCompletion: GPUQueueCompletionAccess
+        get() = unavailableGPUQueueCompletionAccess
+
     val adapterInfo: GPUBackendAdapterSummary?
 
     val target: GPUSurfaceTarget
@@ -404,7 +436,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
@@ -413,7 +445,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         sourceLabel: String = "fullscreen-uniform-pass",
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
@@ -423,7 +455,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
@@ -436,7 +468,7 @@ interface GPUBackendRenderRecorder {
         textureHeight: Int,
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         stencilMode: GPUBackendStencilMode? = null,
         stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
             fillRule = GPUBackendStencilFillRule.NonZero,
@@ -451,7 +483,7 @@ interface GPUBackendRenderRecorder {
         stencilMode: GPUBackendStencilMode,
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
             fillRule = GPUBackendStencilFillRule.NonZero,
             inverse = false,
@@ -466,7 +498,7 @@ interface GPUBackendRenderRecorder {
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Creates a GPU vertex buffer from interleaved position + uv float data. Returns a stable label. */
@@ -481,7 +513,7 @@ interface GPUBackendRenderRecorder {
         textureWidth: Int,
         textureHeight: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws an indexed mesh with dual UV channels and two bound textures. */
@@ -494,7 +526,7 @@ interface GPUBackendRenderRecorder {
         texture2Rgba: ByteArray,
         texture2Width: Int, texture2Height: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Creates a secondary offscreen texture that can be bound as a texture source. */
@@ -513,7 +545,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws a fullscreen pass with two previously-created texture and sampler pairs. */
@@ -523,7 +555,7 @@ interface GPUBackendRenderRecorder {
         firstTextureLabel: String,
         secondTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws a fullscreen pass with three previously-created texture and sampler pairs. */
@@ -534,7 +566,7 @@ interface GPUBackendRenderRecorder {
         secondTextureLabel: String,
         thirdTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Dual-texture blend pass: composites source over destination using a shader-based blend formula. */
@@ -555,7 +587,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws indexed glyph quads for COLRv0 composite color glyphs. Same vertex/index/atlas structure as drawTextAtlasPass with a per-layer composite WGSL shader. */
@@ -567,7 +599,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 }
 

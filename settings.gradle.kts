@@ -7,7 +7,11 @@ rootProject.name = "kanvas-root"
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        mavenLocal()
+        mavenLocal {
+            content {
+                excludeGroup("io.ygdrasil")
+            }
+        }
         google()
         mavenCentral()
         maven("https://central.sonatype.com/repository/maven-snapshots/")
@@ -33,6 +37,45 @@ dependencyResolutionManagement {
             }
             content {
                 includeModule("com.yarnpkg", "yarn")
+            }
+        }
+    }
+}
+
+val wgpu4kPublishedVersion = "0.2.0-20260716.235022-2"
+val webgpuKtypesPublishedVersion = "0.0.10-20260716.185724-3"
+val wgpu4kNativePublishedVersion = "v29.0.0-20260716.085936-2"
+
+gradle.beforeProject {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "io.ygdrasil" && requested.version.orEmpty().endsWith("-SNAPSHOT")) {
+                val publishedVersion =
+                    when (requested.name) {
+                        "wgpu4k",
+                        "wgpu4k-jvm",
+                        "wgpu4k-toolkit",
+                        "wgpu4k-toolkit-jvm",
+                        -> wgpu4kPublishedVersion
+
+                        "webgpu-ktypes",
+                        "webgpu-ktypes-jvm",
+                        "webgpu-ktypes-descriptors",
+                        "webgpu-ktypes-descriptors-jvm",
+                        -> webgpuKtypesPublishedVersion
+
+                        "wgpu4k-native",
+                        "wgpu4k-native-jvm",
+                        "kffi",
+                        "kffi-jvm",
+                        -> wgpu4kNativePublishedVersion
+
+                        else -> null
+                    }
+                if (publishedVersion != null) {
+                    useVersion(publishedVersion)
+                    because("Task 9 requires one immutable remote WebGPU runtime graph")
+                }
             }
         }
     }

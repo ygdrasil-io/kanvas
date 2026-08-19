@@ -90,7 +90,11 @@ internal sealed interface TextRunDispatchPlan {
  */
 internal object TextRunDispatchPlanner {
     fun plan(cmd: NormalizedDrawCommand.DrawTextRun, surfaceWidth: Int, surfaceHeight: Int): TextRunDispatchPlan {
+        if (cmd.preparedMaterial != null) {
+            return TextRunDispatchPlan.Refused("prepared_material_requires_gpu_route")
+        }
         val material = cmd.material
+            ?: return TextRunDispatchPlan.Refused("missing_legacy_material")
         if (material !is GPUMaterialDescriptor.SolidColor) {
             return TextRunDispatchPlan.Refused("unsupported_material:${material.kind.name}")
         }

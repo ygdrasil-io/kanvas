@@ -67,6 +67,21 @@ class GmCanvasTest {
     }
 
     @Test
+    fun `clip rect defaults to a hard device clip`() {
+        val surface = Surface(width = 32, height = 32)
+        val canvas = GmCanvas(surface.canvas(), width = 32, height = 32)
+
+        canvas.clipRect(Rect.fromLTRB(2f, 4f, 12f, 20f))
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 24f, 24f), Paint())
+
+        val draw = surface.snapshotOps().filterIsInstance<DisplayOp.DrawRect>().single()
+        assertEquals(
+            ClipStack.DeviceRect(Rect.fromLTRB(2f, 4f, 12f, 20f), antiAlias = false),
+            draw.clip,
+        )
+    }
+
+    @Test
     fun `rotated clip rect is captured as a device path`() {
         val surface = Surface(width = 32, height = 32)
 

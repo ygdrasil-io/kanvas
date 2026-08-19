@@ -1,0 +1,37 @@
+# FP-09 before-snapshot: legacy renderer reachability map
+# branch: codex/graphite-dawn-frame-fp09
+# head: accaea61631734f67171043926bb195888f831d8
+# date: 2026-08-08T20:32:02Z
+
+## Step 1: production Legacy sites (rg -n ... kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu)
+
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt:28:            is GPUPreparedSurfaceColorMapping.Refused -> return GPUPreparedSurfaceEligibility.Legacy(
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt:60:                is DisplayOp.FlushAndSnapshot -> return GPUPreparedSurfaceEligibility.Legacy(
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt:61:                    code = "legacy.surface.prepared.flush-snapshot",
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt:67:            return GPUPreparedSurfaceEligibility.Legacy(
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameGate.kt:68:                code = "legacy.surface.prepared.empty-frame",
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt:36:            is GPUPreparedSurfaceEligibility.Legacy -> return GPUPreparedSurfaceProductRoute.Legacy(eligibility.code)
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt:61:                if (targetCandidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt:64:                    GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt:152:private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt:21:internal fun interface GPUPreparedSurfaceLegacyPort {
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt:56:        legacyPort: GPUPreparedSurfaceLegacyPort,
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt:70:            is GPUPreparedSurfaceProductRoute.Legacy -> {
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt:71:                trace.recordWithoutAffectingRoute(GPUPreparedSurfaceRouteDecision.Legacy(route.code))
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductEntry.kt:72:                legacyPort.render(operations, width, height, format, config, legacyRouteTrace)
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt:714:        legacyPort = preparedSurfaceLegacyPort,
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt:724:    GPUPreparedSurfaceLegacyPort { operations, width, height, format, config, routeTrace ->
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt:725:        renderViaGpuLegacy(operations, width, height, format, config, routeTrace)
+kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt:729:private fun renderViaGpuLegacy(
+
+## Step 2: green baseline (2026-08-08, this worktree)
+
+./gradlew -F off :kanvas:test --tests "*GPUPreparedSurfaceFrameGateTest" --tests "*GPUPreparedSurfaceProductRouterTest" --tests "*GPUPreparedSurfaceProductEntryTest" --no-parallel --console=plain
+-> BUILD SUCCESSFUL in 2s (FROM-CACHE: tasks up-to-date vs FP-08 plan-time run)
+
+./gradlew -F off :gpu-renderer:test --tests "*GPURendererPackageBoundaryTest" --no-parallel --console=plain
+-> BUILD FAILED in 9s; 22 tests completed, 1 failed.
+   FAILED ONLY: "gpu renderer production source satisfies package boundary rules"
+   (GPURendererPackageBoundaryTest.kt:54) — documented pre-existing failure,
+   exactly 20 package cycle violations, 0 rule violations. All 21 other cases PASSED.
+   Not modified (FP-09 constraint).

@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandClass
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandEncoderPlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandScope
-import org.graphiks.kanvas.gpu.renderer.execution.GPUDeviceGeneration
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -206,7 +206,7 @@ class GPUDrawPacketCommandStreamTest {
         val plan = GPUCommandEncoderPlan.fromPassCommandStream(
             planId = "encoder-plan-frame-1",
             contextIdentity = "wgpu-context-main",
-            deviceGeneration = GPUDeviceGeneration(4L),
+            deviceGeneration = GPUDeviceGenerationID(4L),
             targetGeneration = 11L,
             scope = GPUCommandScope.Render(
                 label = "main-pass",

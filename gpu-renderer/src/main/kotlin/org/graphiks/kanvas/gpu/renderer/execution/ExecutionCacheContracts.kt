@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheEventResult
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetryEvent
 
@@ -27,8 +28,8 @@ data class GPUExecutionCacheRequest(
     val domain: GPUExecutionCacheDomain,
     val keyHash: String,
     val subjectHash: String,
-    val deviceGeneration: GPUDeviceGeneration,
-    val expectedDeviceGeneration: GPUDeviceGeneration,
+    val deviceGeneration: GPUDeviceGenerationID,
+    val expectedDeviceGeneration: GPUDeviceGenerationID,
     val ownerScope: String,
     val releaseBlocking: Boolean = false,
     val productRouteActivated: Boolean = false,
@@ -107,12 +108,14 @@ class GPUExecutionObjectCache<T : Any>(
     private val dispose: (T) -> Unit = {},
 ) : AutoCloseable {
     private val entries = linkedMapOf<CacheEntryKey, T>()
+    private var closeRequested = false
 
     /** Gets or creates one cache entry with deterministic telemetry. */
     fun getOrCreate(
         request: GPUExecutionCacheRequest,
         create: () -> T,
     ): GPUExecutionCacheDecision<T> {
+        check(!closeRequested) { "GPU execution cache ${domain.telemetryDomain} is closing" }
         require(request.domain == domain) {
             "GPUExecutionObjectCache domain ${domain.telemetryDomain} cannot serve ${request.domain.telemetryDomain}"
         }
@@ -163,7 +166,11 @@ class GPUExecutionObjectCache<T : Any>(
         require(request.domain == domain) {
             "GPUExecutionObjectCache domain ${domain.telemetryDomain} cannot evict ${request.domain.telemetryDomain}"
         }
-        entries.remove(request.entryKey())?.let(::disposeEntry)
+        val entryKey = request.entryKey()
+        entries[entryKey]?.let { handle ->
+            disposeEntry(handle)
+            if (entries[entryKey] === handle) entries.remove(entryKey)
+        }
         return GPUExecutionCacheDecision.Evicted(
             request = request,
             cacheEvents = listOf(request.cacheEvent(GPUCacheEventResult.Evict)),
@@ -171,20 +178,24 @@ class GPUExecutionObjectCache<T : Any>(
     }
 
     override fun close() {
-        var firstFailure: Throwable? = null
-        entries.values.toList().asReversed().forEach { handle ->
+        closeRequested = true
+        if (entries.isEmpty()) return
+        val failures = mutableListOf<Throwable>()
+        entries.entries.toList().asReversed().forEach { (key, handle) ->
             try {
                 disposeEntry(handle)
+                if (entries[key] === handle) entries.remove(key)
             } catch (failure: Throwable) {
-                if (firstFailure == null) {
-                    firstFailure = failure
-                } else {
-                    firstFailure.addSuppressed(failure)
-                }
+                failures += failure
             }
         }
-        entries.clear()
-        firstFailure?.let { throw it }
+        if (entries.isNotEmpty()) {
+            throw GPUOwnedNativeCloseIncompleteException(
+                ownerLabel = "execution-cache-${domain.telemetryDomain}",
+                remainingOwnerCount = entries.size,
+                failures = failures,
+            )
+        }
     }
 
     private fun disposeEntry(handle: T) {
@@ -194,7 +205,7 @@ class GPUExecutionObjectCache<T : Any>(
     private data class CacheEntryKey(
         val keyHash: String,
         val subjectHash: String,
-        val deviceGeneration: GPUDeviceGeneration,
+        val deviceGeneration: GPUDeviceGenerationID,
     )
 
     private fun GPUExecutionCacheRequest.entryKey(): CacheEntryKey =

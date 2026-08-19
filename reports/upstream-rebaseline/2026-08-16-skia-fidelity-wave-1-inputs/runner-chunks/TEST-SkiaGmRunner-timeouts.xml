@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="org.graphiks.kanvas.skia.SkiaGmScannerTimeouts" tests="2" skipped="0" failures="2" errors="0">
+  <testcase name="jpg-color-cube" classname="org.graphiks.kanvas.skia.SkiaGmRunner" time="30.000" sourceRegistration="jpg-color-cube" registryIndex="350">
+    <failure message="terminal timeout while scanning GM 'jpg-color-cube' after 30000ms" type="terminal-timeout">Scanner TIMEOUT|350|jpg-color-cube|30000</failure>
+  </testcase>
+  <testcase name="drawregion" classname="org.graphiks.kanvas.skia.SkiaGmRunner" time="30.000" sourceRegistration="drawregion" registryIndex="451">
+    <failure message="terminal timeout while scanning GM 'drawregion' after 30000ms" type="terminal-timeout">Scanner TIMEOUT|451|drawregion|30000</failure>
+  </testcase>
+</testsuite>

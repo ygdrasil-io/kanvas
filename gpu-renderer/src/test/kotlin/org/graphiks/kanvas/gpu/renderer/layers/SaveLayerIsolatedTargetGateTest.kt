@@ -2,11 +2,19 @@ package org.graphiks.kanvas.gpu.renderer.layers
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class SaveLayerIsolatedTargetGateTest {
+    @Test
+    fun saveRecordRejectsOutOfRangeAlpha() {
+        assertFailsWith<IllegalArgumentException> {
+            saveRecord(alpha = 1.5f)
+        }
+    }
+
     @Test
     fun boundedTransparentLayerProducesIsolatedTargetEvidenceDump() {
         val plan = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
@@ -97,11 +105,6 @@ class SaveLayerIsolatedTargetGateTest {
                 reason = "unsupported.layer.init_previous_unaccepted",
             ),
             refusalCase(
-                "backdrop",
-                saveRecord = saveRecord(backdropRequired = true),
-                reason = "unsupported.layer.backdrop_filter",
-            ),
-            refusalCase(
                 "filter-chain",
                 saveRecord = saveRecord(sourceFilterCount = 1),
                 reason = "unsupported.layer.filter_chain",
@@ -146,6 +149,22 @@ class SaveLayerIsolatedTargetGateTest {
                 plan.dumpLines(),
             )
         }
+    }
+
+    @Test
+    fun backdropLayerProducesLoadOpLoadAndBackdropCopy() {
+        val request = saveLayerRequest(
+            saveRecord = saveRecord(backdropRequired = true),
+        )
+        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(request)
+
+        assertEquals(emptyList(), plan.diagnostics)
+        val execution = assertIs<GPULayerExecutionPlan.IsolatedTarget>(plan.layerPlan.execution)
+
+        assertEquals("load", execution.target.loadOp)
+        assertEquals("load", execution.initialization.loadPolicy)
+        assertEquals(true, execution.initialization.requiresBackdropCopy)
+        assertEquals("clear(transparent-black)", execution.initialization.clearPolicy)
     }
 }
 
@@ -201,6 +220,7 @@ private fun saveRecord(
     backdropRequired: Boolean = false,
     sourceFilterCount: Int = 0,
     restoreBlendMode: String = "srcOver",
+    alpha: Float = 1f,
     cpuFallbackRequested: Boolean = false,
     preserveLCDText: Boolean = false,
     f16Requested: Boolean = false,
@@ -214,6 +234,7 @@ private fun saveRecord(
     backdropRequired = backdropRequired,
     sourceFilterCount = sourceFilterCount,
     restoreBlendMode = restoreBlendMode,
+    alpha = alpha,
     cpuFallbackRequested = cpuFallbackRequested,
     preserveLCDText = preserveLCDText,
     f16Requested = f16Requested,

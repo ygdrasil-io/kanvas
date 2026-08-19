@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import java.security.MessageDigest
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -10,35 +13,42 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadField
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTDescriptorVersion
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEffectId
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTModuleHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTReflectionHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformSchemaHash
 
 /** Registered descriptor for the simple_rt runtime effect (solid color). */
 object SimpleRTDescriptor {
-    val effectId: GPURuntimeEffectID = GPURuntimeEffectID("runtime.simple_rt")
-    val descriptorVersion: GPURuntimeEffectDescriptorVersion = GPURuntimeEffectDescriptorVersion(1)
+    val effectId: GPURuntimeEffectID = GPURuntimeEffectID(SimpleRTEffectId)
+    val descriptorVersion: GPURuntimeEffectDescriptorVersion =
+        GPURuntimeEffectDescriptorVersion(SimpleRTDescriptorVersion)
 
     val uniformSchema: GPURuntimeEffectUniformSchema = GPURuntimeEffectUniformSchema(
-        schemaHash = "schema:simple_rt:v1",
+        schemaHash = SimpleRTUniformSchemaHash,
         fields = listOf("gColor:vec4<f32>@0:16"),
         packingPolicy = "std140",
     )
 
     val uniformBlockPlan: GPURuntimeEffectUniformBlockPlan = GPURuntimeEffectUniformBlockPlan(
         schema = uniformSchema,
-        blockSizeBytes = 16L,
+        blockSizeBytes = SimpleRTUniformBlockSizeBytes.toLong(),
         dynamicOffsets = false,
     )
 
     val resources: GPURuntimeEffectResourcePlan = GPURuntimeEffectResourcePlan(
         resourceLabels = listOf("group1.binding0.uniformBuffer"),
-        bindingPlanHash = "binding:simple_rt:v1",
+        bindingPlanHash = SimpleRTBindingPlanHash,
     )
 
     val wgslPlan: GPURuntimeEffectWGSLPlan = GPURuntimeEffectWGSLPlan(
-        moduleHash = "module:simple_rt:v1",
+        moduleHash = SimpleRTModuleHash,
         entryPoint = SimpleRTEntryPoint,
-        reflectionHash = "reflection:simple_rt:v1",
+        reflectionHash = SimpleRTReflectionHash,
     )
 
     val routeContract: GPURuntimeEffectRouteContract = GPURuntimeEffectRouteContract(
@@ -66,6 +76,7 @@ object SimpleRTDescriptor {
         wgslPlan = wgslPlan,
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
+        sourceColorContract = GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
     )
     /** Builds a minimal [GPURuntimeEffectExecutionRequest] for testing dispatch paths. */
     fun createExecutionRequest(): GPURuntimeEffectExecutionRequest {
@@ -201,14 +212,60 @@ object SimpleRTCPUOracle : GPURuntimeEffectCPUOracle {
             effectId = SimpleRTDescriptor.effectId,
             evidenceHash = runtimeEffectOracleEvidenceHash(SimpleRTDescriptor.effectId, SimpleRTDescriptor.descriptorVersion),
         )
+
+    override fun evaluateMaterial(
+        input: GPURuntimeEffectMaterialEvaluationInput,
+    ): GPURuntimeEffectMaterialEvaluationResult {
+        val uniformBytes = input.uniformBytes
+        if (uniformBytes.size != SimpleRTUniformBlockSizeBytes) {
+            return GPURuntimeEffectMaterialEvaluationResult.Unsupported(
+                GPURuntimeEffectMaterialEvaluationRefusal.PAYLOAD_SIZE,
+            )
+        }
+        val values = ByteBuffer.wrap(uniformBytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .let { buffer -> List(4) { buffer.float } }
+        if (
+            values.any { value -> !value.isFinite() } ||
+            !input.localPositionX.isFinite() ||
+            !input.localPositionY.isFinite()
+        ) {
+            return GPURuntimeEffectMaterialEvaluationResult.Unsupported(
+                GPURuntimeEffectMaterialEvaluationRefusal.NON_FINITE_INPUT,
+            )
+        }
+        return GPURuntimeEffectMaterialEvaluationResult.Color(
+            r = values[0],
+            g = values[1],
+            b = values[2],
+            a = values[3],
+            evidenceHash = materialEvaluationEvidenceHash(input, values),
+        )
+    }
+}
+
+private fun materialEvaluationEvidenceHash(
+    input: GPURuntimeEffectMaterialEvaluationInput,
+    output: List<Float>,
+): String {
+    val bytes = ByteBuffer.allocate(8 + input.uniformBytes.size + output.size * Float.SIZE_BYTES)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .putFloat(input.localPositionX)
+        .putFloat(input.localPositionY)
+        .put(input.uniformBytes)
+        .apply { output.forEach(::putFloat) }
+        .array()
+    return CanonicalIdentityEncoder("runtime-effect-material-evaluation-v2")
+        .bytes("inputAndOutput", bytes)
+        .digestIdentity()
 }
 
 private fun runtimeEffectOracleEvidenceHash(
     id: GPURuntimeEffectID,
     version: GPURuntimeEffectDescriptorVersion,
 ): String {
-    val input = "runtime-effect-cpu-oracle-v1:${id.value}:${version.value}"
-    val digest = MessageDigest.getInstance("SHA-256")
-    val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-    return "sha256:" + hash.joinToString("") { "%02x".format(it) }
+    return CanonicalIdentityEncoder("runtime-effect-cpu-oracle-v2")
+        .text("effectId", id.value)
+        .int("descriptorVersion", version.value)
+        .digestIdentity()
 }

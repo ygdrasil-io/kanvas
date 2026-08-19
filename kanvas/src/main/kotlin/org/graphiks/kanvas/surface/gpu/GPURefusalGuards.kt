@@ -2,7 +2,6 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
@@ -10,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 
@@ -68,7 +68,9 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     clip.perspectiveCaptureRefusalReasonOrNull()?.let { return it }
     strokeRefusalReasonOrNull()?.let { return it }
     if (this is NormalizedDrawCommand.DrawTextRun) return null
-    val material = this.material
+    val material = requireNotNull(this.material) {
+        "Non-text normalized commands require a legacy material descriptor"
+    }
     val maskBlur = when (this) {
         is NormalizedDrawCommand.FillRect -> maskFilter as? NormalizedMaskFilter.Blur
         is NormalizedDrawCommand.FillRRect -> maskFilter as? NormalizedMaskFilter.Blur
@@ -84,6 +86,9 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     }
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
+    if (material is GPUMaterialDescriptor.Unsupported) {
+        return material.reason.diagnosticCode
+    }
     if (material !is GPUMaterialDescriptor.SolidColor &&
         material.kind != GPUMaterialKind.RuntimeEffect &&
         (!acceptedByDispatch || 
@@ -105,9 +110,7 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     if (layer.scopeKind != GPULayerScopeKind.Root) {
         return "unsupported_layer:${layer.scopeKind.name}"
     }
-    if (blend.kind == GPUBlendKind.Unsupported) {
-        return "unsupported_blend:${blend.modeLabel}"
-    }
+    material.gradientFactsRefusalReasonOrNull()?.let { return it.diagnosticCode }
     return null
 }
 

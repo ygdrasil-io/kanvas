@@ -237,7 +237,7 @@ private fun clipLayerBudgetSplitScenario(): GPUTextSubRunScenario =
                 destinationReadRequired = true,
                 splitReasons = listOf("instance-budget"),
                 handoffDiagnostic = "text.gpu.artifact-budget-exceeded",
-                rendererDiagnostic = "unsupported.text.instance_buffer_budget_exceeded",
+                rendererDiagnostic = GPUTextRefusalCodes.INSTANCE_BUFFER_BUDGET_EXCEEDED,
             ),
         ),
     )
@@ -260,7 +260,7 @@ private fun representationRefusalSplitScenario(): GPUTextSubRunScenario =
                 renderStep = "SDFTextMaskStep",
                 splitReasons = listOf("representation"),
                 handoffDiagnostic = "text.gpu.capability-missing",
-                rendererDiagnostic = "unsupported.text.sdf_route_unavailable",
+                rendererDiagnostic = GPUTextRefusalCodes.SDF_ROUTE_UNAVAILABLE,
             ),
             refusedSubRun(
                 subRunId = "representation-refusal-split.2",
@@ -270,7 +270,7 @@ private fun representationRefusalSplitScenario(): GPUTextSubRunScenario =
                 renderStep = "ColorGlyphCompositeStep",
                 splitReasons = listOf("representation"),
                 handoffDiagnostic = "text.gpu.color-plan-unsupported",
-                rendererDiagnostic = "unsupported.text.color_plan_unsupported",
+                rendererDiagnostic = GPUTextRefusalCodes.COLOR_PLAN_UNSUPPORTED,
             ),
             refusedSubRun(
                 subRunId = "representation-refusal-split.3",
@@ -280,7 +280,7 @@ private fun representationRefusalSplitScenario(): GPUTextSubRunScenario =
                 renderStep = "BitmapGlyphTextureStep",
                 splitReasons = listOf("representation"),
                 handoffDiagnostic = "text.gpu.capability-missing",
-                rendererDiagnostic = "unsupported.text.bitmap_route_unsupported",
+                rendererDiagnostic = GPUTextRefusalCodes.BITMAP_ROUTE_UNSUPPORTED,
             ),
         ),
     )

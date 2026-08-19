@@ -25,7 +25,7 @@ class GPUTextTelemetrySurfaceTest {
             misses = 1,
             evictions = 0,
             residentBytes = 1024,
-            generationToken = "gen-001",
+            generation = GPUTextArtifactGeneration(1),
         )
         val sdfCache = GPUTextCacheTelemetryRecord(
             cacheName = "sdf-atlas",
@@ -34,7 +34,7 @@ class GPUTextTelemetrySurfaceTest {
             misses = 2,
             evictions = 1,
             residentBytes = 2048,
-            generationToken = "gen-002",
+            generation = GPUTextArtifactGeneration(2),
         )
         val uploadBudget = GPUTextAdvisoryBudgetRecord(
             metricName = "upload.bytes",
@@ -97,6 +97,8 @@ class GPUTextTelemetrySurfaceTest {
 
         val dump = snapshot.toCanonicalJson()
         assertTrue(dump.contains("\"keyPreimage\": \"strike=Latn:size=16:route=A8\""), dump)
+        assertTrue(dump.contains("\"generation\": 1"), dump)
+        assertFalse(dump.contains("\"generation\": \"1\""), dump)
         assertTrue(dump.contains("\"cpuUploadPlans\""), dump)
         assertTrue(dump.contains("\"gpuUploadFacts\": []"), dump)
         assertTrue(dump.contains("\"blockingGate\": false"), dump)
@@ -141,7 +143,7 @@ class GPUTextTelemetrySurfaceTest {
             misses = 2,
             evictions = 0,
             residentBytes = 512,
-            generationToken = "gen",
+            generation = GPUTextArtifactGeneration(1),
         )
         val cacheHigh = GPUTextCacheTelemetryRecord(
             cacheName = "atlas",
@@ -150,7 +152,7 @@ class GPUTextTelemetrySurfaceTest {
             misses = 0,
             evictions = 1,
             residentBytes = 2048,
-            generationToken = "gen",
+            generation = GPUTextArtifactGeneration(1),
         )
         val budgetLow = GPUTextAdvisoryBudgetRecord(
             metricName = "upload.bytes",
@@ -322,7 +324,7 @@ class GPUTextTelemetrySurfaceTest {
                 misses = 0,
                 evictions = 0,
                 residentBytes = 0,
-                generationToken = "gen",
+                generation = GPUTextArtifactGeneration(1),
             )
         }
         assertFailsWith<IllegalArgumentException> {
@@ -333,7 +335,7 @@ class GPUTextTelemetrySurfaceTest {
                 misses = 0,
                 evictions = 0,
                 residentBytes = 0,
-                generationToken = "gen",
+                generation = GPUTextArtifactGeneration(1),
             )
         }
         assertFailsWith<IllegalArgumentException> {

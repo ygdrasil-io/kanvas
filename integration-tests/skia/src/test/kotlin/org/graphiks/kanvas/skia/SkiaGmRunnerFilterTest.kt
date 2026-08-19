@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.skia
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Named
 import org.junit.jupiter.api.Test
 
 class SkiaGmRunnerFilterTest {
@@ -28,6 +30,52 @@ class SkiaGmRunnerFilterTest {
         )
 
         assertEquals(listOf("text_scale_skew_rotate"), selected.map { it.name })
+    }
+
+    @Test
+    fun `runner selection applies a half open registry index range`() {
+        val selected = selectSkiaGmsForRunner(
+            listOf(
+                StubRunnerGm("first"),
+                StubRunnerGm("second"),
+                StubRunnerGm("third"),
+            ),
+            null,
+            from = 1,
+            to = 3,
+        )
+
+        assertEquals(listOf("second", "third"), selected.map { it.name })
+    }
+
+    @Test
+    fun `runner selection rejects invalid registry index ranges`() {
+        val gms = listOf(StubRunnerGm("first"), StubRunnerGm("second"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRunner(gms, null, from = -1, to = 1)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRunner(gms, null, from = 1, to = 0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRunner(gms, null, from = 0, to = 3)
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForRunner(gms, null, from = 0, to = 615)
+        }
+        assertEquals("GM range end is outside registry: 615 > 2", error.message)
+    }
+
+    @Test
+    fun `runner parameters expose logical GM names to JUnit`() {
+        val named = namedSkiaGmsForRunner(
+            listOf(StubRunnerGm("first"), StubRunnerGm("second")),
+        )
+
+        assertEquals(listOf("first", "second"), named.map { it.name })
+        assertEquals("second", named[1].payload.name)
     }
 
     @Test

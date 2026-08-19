@@ -2,9 +2,13 @@ package org.graphiks.kanvas.gpu.renderer.intermediates
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 
 class GPUIntermediatePlannerTest {
     @Test
@@ -16,7 +20,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 1,
                     bounds = bounds("cmd-1"),
-                    blendMode = GPUBlendMode.SrcOver,
+                    blendMode = GPUBlendMode.SRC_OVER,
                     materialKeyHash = "material:solid",
                     renderStepIdentity = "rect-fill",
                 ),
@@ -28,11 +32,11 @@ class GPUIntermediatePlannerTest {
             plan.steps.map { it::class.simpleName },
         )
         assertEquals(0L, plan.telemetry.destinationReadCopies)
-        assertTrue(plan.dumpLines().any { it.contains("route=fixed-function:SrcOver") })
+        assertTrue(plan.dumpLines().any { it.contains("route=fixed-function:src_over:one_isa") })
     }
 
     @Test
-    fun `screen blend creates destination copy before shader blend render`() {
+    fun `screen blend uses the canonical fixed function route without a destination copy`() {
         val plan = GPUIntermediatePlanner().plan(
             request(
                 GPUIntermediateDrawRequest(
@@ -40,7 +44,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 9,
                     bounds = bounds("cmd-screen"),
-                    blendMode = GPUBlendMode.Screen,
+                    blendMode = GPUBlendMode.SCREEN,
                     materialKeyHash = "material:screen",
                     renderStepIdentity = "rect-fill",
                 ),
@@ -48,17 +52,12 @@ class GPUIntermediatePlannerTest {
         )
 
         assertEquals(
-            listOf(
-                "CreateIntermediate",
-                "CopyDestination",
-                "BindIntermediate",
-                "RenderToTarget",
-            ),
+            listOf("RenderToTarget"),
             plan.steps.map { it::class.simpleName },
         )
-        assertEquals(1L, plan.telemetry.destinationReadCopies)
-        assertEquals(1L, plan.telemetry.passSplits)
-        assertTrue(plan.dumpLines().any { it.contains("shader-blend:Screen") })
+        assertEquals(0L, plan.telemetry.destinationReadCopies)
+        assertEquals(0L, plan.telemetry.passSplits)
+        assertTrue(plan.dumpLines().any { it.contains("fixed-function:screen:one_isc") })
         assertTrue(plan.dumpLines().none { it.contains("unsupported.blend.shader_route_unvalidated") })
     }
 
@@ -71,7 +70,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 2,
                     bounds = bounds("cmd-bad"),
-                    blendMode = GPUBlendMode.Multiply,
+                    blendMode = GPUBlendMode.MULTIPLY,
                     materialKeyHash = "material:multiply",
                     renderStepIdentity = "rect-fill",
                     activeAttachmentSampled = true,
@@ -84,6 +83,116 @@ class GPUIntermediatePlannerTest {
             "intermediate.refused scope=cmd-bad reason=unsupported.destination_read.active_attachment_sampled",
             plan.dumpLines()[1],
         )
+    }
+
+    @Test
+    fun `destination read emits eligibility facts without selecting reuse or bind strategy`() {
+        val eligible = GPUIntermediateTextureDescriptor(
+            label = "intermediate:exact",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:exact",
+            sourceTargetLabel = "surface:main",
+            boundsLabel = "copy:cmd-multiply",
+            width = 32,
+            height = 16,
+            formatClass = "rgba8unorm",
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 1,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:exact",
+            byteEstimate = 2048,
+        )
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-multiply",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-multiply"),
+                    blendMode = GPUBlendMode.MULTIPLY,
+                    materialKeyHash = "material:multiply",
+                    renderStepIdentity = "rect-fill",
+                    eligibleIntermediate = eligible,
+                ),
+            ),
+        )
+
+        assertEquals(listOf("RenderToTarget"), plan.steps.map { it::class.simpleName })
+        assertEquals(0L, plan.telemetry.intermediatesReused)
+        assertEquals(0L, plan.telemetry.destinationReadIntermediateBinds)
+        assertEquals(
+            listOf(
+                GPUIntermediateDestinationReadEligibility(
+                    commandId = "cmd-multiply",
+                    requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                    eligibleIntermediate = eligible,
+                ),
+            ),
+            plan.destinationReadEligibilities,
+        )
+        assertTrue(plan.dumpLines().any { it.contains("route=destination-read-required:multiply:multiply@v1") })
+    }
+
+    @Test
+    fun `saveLayer alpha and clip label are threaded into the composite intermediate step`() {
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-layer",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-layer"),
+                    blendMode = GPUBlendMode.SRC_OVER,
+                    materialKeyHash = "material:layer",
+                    renderStepIdentity = "rect-fill",
+                    saveLayer = GPULayerSaveRecord(
+                        scopeId = GPULayerScopeID("layer:intermediate"),
+                        boundsLabel = "layer-local",
+                        childCommandIds = listOf("draw:0"),
+                        backdropRequired = false,
+                        restoreBlendMode = "srcOver",
+                        alpha = 128f / 255f,
+                        clipLabel = "device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true",
+                    ),
+                ),
+            ),
+        )
+
+        val composite = assertIs<GPUIntermediatePlanStep.CompositeIntermediate>(
+            plan.steps.single { it is GPUIntermediatePlanStep.CompositeIntermediate },
+        )
+        assertEquals(128f / 255f, composite.alpha)
+        assertEquals("device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true", composite.clipLabel)
+    }
+
+    @Test
+    fun `saveLayer without alpha or clip threads opaque defaults into the composite step`() {
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-layer-default",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-layer-default"),
+                    blendMode = GPUBlendMode.SRC_OVER,
+                    materialKeyHash = "material:layer-default",
+                    renderStepIdentity = "rect-fill",
+                    saveLayer = GPULayerSaveRecord(
+                        scopeId = GPULayerScopeID("layer:default"),
+                        boundsLabel = "layer-local",
+                        childCommandIds = listOf("draw:0"),
+                        backdropRequired = false,
+                    ),
+                ),
+            ),
+        )
+
+        val composite = assertIs<GPUIntermediatePlanStep.CompositeIntermediate>(
+            plan.steps.single { it is GPUIntermediatePlanStep.CompositeIntermediate },
+        )
+        assertEquals(1f, composite.alpha)
+        assertEquals(null, composite.clipLabel)
     }
 
     private fun request(draw: GPUIntermediateDrawRequest): GPUIntermediatePlannerRequest =

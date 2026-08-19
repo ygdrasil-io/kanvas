@@ -129,8 +129,8 @@ internal class SceneIntermediatePlanExecutor(
 
                 val destinationTextureLabel = materializeAndCreateTexture(
                     target = target,
-                    descriptor = copyStep.destination.toReadbackSnapshotDescriptor(),
-                    requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+                    descriptor = copyStep.destination,
+                    requiredUsageLabels = setOf("render_attachment", "texture_binding", "copy_dst"),
                     diagnostics = diagnostics,
                     stage = "destination-read-preparation",
                 )
@@ -160,7 +160,7 @@ internal class SceneIntermediatePlanExecutor(
                     drawLabels = linkedSetOf(sourceFill.label) + destinationFills.map { fill -> fill.label },
                 )
                 diagnostics +=
-                    "intermediate.scene.destination-read-readback-snapshot-deferred command=${renderStep.commandId} " +
+                    "intermediate.scene.destination-read-target-copy-deferred command=${renderStep.commandId} " +
                         "route=${renderStep.routeLabel} sourceTexture=$sourceTextureLabel " +
                         "destinationTexture=$destinationTextureLabel binding=${bindStep.bindingLabel} " +
                         "token=${copyStep.tokenLabel}"
@@ -270,12 +270,6 @@ internal class SceneIntermediatePlanExecutor(
         }
     }
 
-    private fun GPUIntermediateTextureDescriptor.toReadbackSnapshotDescriptor(): GPUIntermediateTextureDescriptor =
-        copy(
-            purpose = GPUIntermediatePurpose.ReadbackSnapshot,
-            usageLabels = listOf("render_attachment", "texture_binding"),
-        )
-
     private fun GPUIntermediateTextureDescriptor.toBlendSourceDescriptor(commandId: String): GPUIntermediateTextureDescriptor =
         copy(
             label = "blend-src:$commandId",
@@ -290,18 +284,10 @@ internal class SceneIntermediatePlanExecutor(
     private fun GPUIntermediatePlan.sceneRuntimeDumpLines(): List<String> =
         dumpLines().map { line ->
             when {
-                line.startsWith("intermediate.copy ") ->
-                    line.replaceFirst("intermediate.copy", "intermediate.readback-snapshot") +
-                        " nonclaim=not-gpu-copyTexture"
-                line.startsWith("intermediate.create ") && line.contains("purpose=DestinationCopy") ->
-                    line.replace("purpose=DestinationCopy", "purpose=ReadbackSnapshot")
-                        .replace(Regex("usage=[^ ]+"), "usage=render_attachment,texture_binding") +
-                        " nonclaim=not-gpu-copyTexture"
                 line.startsWith("intermediate.telemetry ") -> {
                     val destinationReadRuntime =
-                        if (line.contains("destinationReadCopies=0 ")) "none" else "readback-snapshot"
-                    line.replace("destinationReadCopies=", "plannedDestinationReadCopies=") +
-                        " runtimeDestinationRead=$destinationReadRuntime"
+                        if (line.contains("destinationReadCopies=0 ")) "none" else "target-copy"
+                    "$line runtimeDestinationRead=$destinationReadRuntime"
                 }
                 else -> line
             }
@@ -366,6 +352,7 @@ internal class SceneIntermediatePlanExecutor(
                         scissorHeight = viewportHeight,
                     ),
                 ),
+                blendMode = SCENE_SRC_OVER_BLEND_STATE,
             )
         }
 

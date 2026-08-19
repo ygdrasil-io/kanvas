@@ -3039,36 +3039,36 @@ class FontScalerSurfaceTest {
     fun cffCharStringTraceGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-charstring-trace.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, cffCharStringTraceDump())
+        assertCanonicalGoldenEquals(expected, cffCharStringTraceDump())
     }
 
     @Test
     fun cffSubroutineTraceGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-subroutine-trace.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, cffSubroutineTraceDump())
+        assertCanonicalGoldenEquals(expected, cffSubroutineTraceDump())
     }
 
     @Test
     fun cffScalerPathOutputGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-scaler-path-output.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, cffScalerPathOutputDump())
+        assertCanonicalGoldenEquals(expected, cffScalerPathOutputDump())
     }
 
     @Test
     fun cff2VariationTraceGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff2-variation-trace.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, cff2VariationTraceDump())
+        assertCanonicalGoldenEquals(expected, cff2VariationTraceDump())
     }
 
     @Test
@@ -3770,9 +3770,9 @@ class FontScalerSurfaceTest {
     fun cffIndexDictGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/cff-index-dict.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, cffIndexDictDump())
+        assertCanonicalGoldenEquals(expected, cffIndexDictDump())
     }
 
     @Test
@@ -3932,9 +3932,9 @@ class FontScalerSurfaceTest {
     fun truetypeCompositeGlyphReadinessGoldenMatchesGeneratedEvidence() {
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-composite-glyphs.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, truetypeCompositeGlyphReadinessDump())
+        assertCanonicalGoldenEquals(expected, truetypeCompositeGlyphReadinessDump())
     }
 
     @Test
@@ -3942,9 +3942,9 @@ class FontScalerSurfaceTest {
         val actual = truetypeGvarIupDump()
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-gvar-iup.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, actual)
+        assertCanonicalGoldenEquals(expected, actual)
     }
 
     @Test
@@ -3952,9 +3952,9 @@ class FontScalerSurfaceTest {
         val actual = truetypeMalformedGlyfIsolationDump()
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-malformed-glyf-isolation.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, actual)
+        assertCanonicalGoldenEquals(expected, actual)
     }
 
     @Test
@@ -3962,9 +3962,9 @@ class FontScalerSurfaceTest {
         val actual = truetypeVerticalMetricsDump()
         val expected = Files.readString(
             kanvasProjectRoot().resolve("reports/font/fixtures/expected/scaler/truetype-vertical-metrics.json"),
-        ).trimEnd()
+        )
 
-        assertEquals(expected, actual)
+        assertCanonicalGoldenEquals(expected, actual)
     }
 
     @Test
@@ -5007,6 +5007,13 @@ class FontScalerSurfaceTest {
             prefix = "[",
             postfix = "]",
         ) { value -> testJsonString(value) }
+
+    private fun assertCanonicalGoldenEquals(expected: String, actual: String) {
+        assertEquals(expected.canonicalLf().trimEnd(), actual.canonicalLf().trimEnd())
+    }
+
+    private fun String.canonicalLf(): String =
+        replace("\r\n", "\n").replace('\r', '\n')
 
     private fun kanvasProjectRoot(): Path {
         var current = Path.of("").toAbsolutePath()

@@ -143,7 +143,7 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
                     scissorHeight = sceneHeight,
                 ),
             ),
-            blendMode = GPUBlendMode.SRC_OVER,
+            blendMode = GPUBlendMode.SRC_OVER.canonicalFixedFunctionState(),
         )
     }
     if (diagnostics.fatalCount != fatalBeforeSource) return GPUImageFilterDispatchResult(rendered = false)

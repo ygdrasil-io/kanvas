@@ -2,30 +2,114 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class GPUBackendRuntimeContractsTest {
     @Test
-    fun `offscreen request requires positive dimensions and nonblank format`() {
-        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "rgba8unorm")
+    fun `queue completion access exposes only the non-owning consumer view`() {
+        val runtime = GPUQueueCompletionAdapter.disabled("unsupported.queue-completion.test")
+        val access = object : GPUBackendQueueCompletionAccess {
+            override val queueCompletion: GPUQueueCompletionAccess = runtime
+        }
+        val provider: GPUQueueCompletionProvider = access.queueCompletion
+
+        assertTrue(provider === runtime)
+        assertFalse(
+            GPUQueueCompletionAccess::class.java.methods.any {
+                it.name == "close" || it.name == "deviceLost"
+            },
+        )
+    }
+
+    @Test
+    fun `offscreen request defaults to the canonical prepared color pair and validates dimensions`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180)
 
         assertEquals(320, request.width)
         assertEquals(180, request.height)
-        assertEquals("rgba8unorm", request.colorFormat)
+        assertEquals(GPUColorFormat.RGBA8Unorm, request.colorFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request.colorInterpretation)
         assertFailsWith<IllegalArgumentException> {
-            GPUOffscreenTargetRequest(width = 0, height = 180, colorFormat = "rgba8unorm")
+            GPUOffscreenTargetRequest(width = 0, height = 180)
         }
         assertFailsWith<IllegalArgumentException> {
-            GPUOffscreenTargetRequest(width = 320, height = -1, colorFormat = "rgba8unorm")
+            GPUOffscreenTargetRequest(width = 320, height = -1)
         }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `legacy offscreen request wraps the string format without normalization`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "RGBA8Unorm")
+
+        assertEquals(GPUColorFormat("RGBA8Unorm"), request.colorFormat)
+        assertEquals("RGBA8Unorm", request.colorFormat.value)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request.colorInterpretation)
         assertFailsWith<IllegalArgumentException> {
             GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "")
         }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `prepared validation refuses a mixed case legacy physical format`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "RGBA8Unorm")
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "unit",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "legacy-string-no-normalization",
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            validatePreparedSceneTargetRequest(request, capabilities)
+        }
+
+        assertTrue(
+            failure.message.orEmpty().startsWith("unsupported.prepared-scene-session.target-format"),
+            failure.message,
+        )
+    }
+
+    @Test
+    fun `prepared executor target retains the exact request color contract`() {
+        val request = GPUOffscreenTargetRequest(
+            width = 320,
+            height = 180,
+            colorFormat = GPUColorFormat.RGBA8Unorm,
+            colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+        )
+        val generation = GPUDeviceGenerationID(41L)
+
+        val target = preparedSceneExecutorTarget(
+            request = request,
+            target = GPUFrameTargetRef("prepared-target"),
+            deviceGeneration = generation,
+            targetGeneration = 7L,
+        )
+
+        assertEquals(request.width, target.width)
+        assertEquals(request.height, target.height)
+        assertEquals(request.colorFormat, target.format)
+        assertEquals(request.colorInterpretation, target.colorInterpretation)
+        assertEquals(generation, target.deviceGeneration)
+        assertEquals(7L, target.targetGeneration)
     }
 
     @Test
@@ -230,6 +314,15 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
+    fun `backend session exposes typed generation independently from opaque snapshot label`() {
+        val expectedGeneration = GPUDeviceGenerationID(73L)
+        val session = OpaqueSnapshotBackendSession(expectedGeneration)
+
+        assertEquals("opaque-runtime-label", session.capabilities.snapshotId)
+        assertEquals(expectedGeneration, session.deviceGeneration)
+    }
+
+    @Test
     fun `uniform payload draw requires provider materialized uniform and bind group bridge`() {
         val accepted = GPUBackendUniformPayloadDraw(
             uniformBytes = byteArrayOf(1, 2, 3, 4),
@@ -305,12 +398,37 @@ class GPUBackendRuntimeContractsTest {
 
     private class NoopBackendSession : GPUBackendSession {
         override val adapterInfo: GPUBackendAdapterSummary? = null
+        override val deviceGeneration = GPUDeviceGenerationID(11L)
 
         override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
             error("NoopBackendSession cannot create offscreen targets")
 
-        override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
-            error("NoopBackendSession cannot create window surfaces")
+        override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
+            error("NoopBackendSession cannot prepare scene frame sessions")
+
+        override fun close() = Unit
+    }
+
+    private class OpaqueSnapshotBackendSession(
+        override val deviceGeneration: GPUDeviceGenerationID,
+    ) : GPUBackendSession {
+        override val adapterInfo: GPUBackendAdapterSummary? = null
+        override val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "unit",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "opaque-runtime-label",
+        )
+
+        override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
+            error("OpaqueSnapshotBackendSession cannot create offscreen targets")
+
+        override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
+            error("OpaqueSnapshotBackendSession cannot prepare scene frame sessions")
 
         override fun close() = Unit
     }

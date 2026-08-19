@@ -1,0 +1,1351 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/Users/chaos/.gradle/wrapper/dists/gradle-9.2.0-bin/11i5gvueggl8a5cioxuftxrik/gradle-9.2.0/lib/native-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders UP-TO-DATE
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins UP-TO-DATE
+> Task :buildSrc:compilePluginsBlocks UP-TO-DATE
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors UP-TO-DATE
+> Task :buildSrc:generateScriptPluginAdapters UP-TO-DATE
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :codec:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :color-management:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:kmpPartiallyResolvedDependenciesChecker
+> Task :math:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:compileKotlinJvm UP-TO-DATE
+> Task :math:compileJvmMainJava NO-SOURCE
+> Task :math:jvmProcessResources NO-SOURCE
+> Task :math:processJvmMainResources SKIPPED
+> Task :math:jvmMainClasses UP-TO-DATE
+> Task :math:jvmJar UP-TO-DATE
+> Task :color-management:compileKotlin UP-TO-DATE
+> Task :color-management:compileJava NO-SOURCE
+> Task :font:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:compileKotlin UP-TO-DATE
+> Task :font:core:compileJava NO-SOURCE
+> Task :font:colr:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:compileKotlin UP-TO-DATE
+> Task :font:sfnt:compileJava NO-SOURCE
+> Task :font:colr:compileKotlin UP-TO-DATE
+> Task :font:colr:compileJava NO-SOURCE
+> Task :font:colr:processResources NO-SOURCE
+> Task :font:colr:classes UP-TO-DATE
+> Task :font:colr:jar UP-TO-DATE
+> Task :font:glyph:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:compileKotlin UP-TO-DATE
+> Task :font:gpu-api:compileJava NO-SOURCE
+> Task :font:scaler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:scaler:compileKotlin UP-TO-DATE
+> Task :font:scaler:compileJava NO-SOURCE
+> Task :font:text:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:text:compileKotlin UP-TO-DATE
+> Task :font:text:compileJava NO-SOURCE
+> Task :font:glyph:compileKotlin UP-TO-DATE
+> Task :font:glyph:compileJava NO-SOURCE
+> Task :font:compileKotlin UP-TO-DATE
+> Task :font:compileJava NO-SOURCE
+> Task :gpu-renderer:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gpu-renderer:compileKotlin UP-TO-DATE
+> Task :gpu-renderer:compileJava NO-SOURCE
+> Task :kanvas:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kanvas:compileKotlin UP-TO-DATE
+> Task :kanvas:compileJava NO-SOURCE
+> Task :codec:api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:api:compileKotlin UP-TO-DATE
+> Task :codec:api:compileJava NO-SOURCE
+> Task :codec:bmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:compileKotlin UP-TO-DATE
+> Task :codec:common:compileJava NO-SOURCE
+> Task :codec:common:processResources NO-SOURCE
+> Task :codec:common:classes UP-TO-DATE
+> Task :codec:common:jar UP-TO-DATE
+> Task :codec:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:core:compileKotlin NO-SOURCE
+> Task :codec:core:compileJava NO-SOURCE
+> Task :codec:bmp:compileKotlin UP-TO-DATE
+> Task :codec:bmp:compileJava NO-SOURCE
+> Task :codec:bmp:processResources UP-TO-DATE
+> Task :codec:bmp:classes UP-TO-DATE
+> Task :codec:bmp:jar UP-TO-DATE
+> Task :codec:extended:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:extended:compileKotlin UP-TO-DATE
+> Task :codec:extended:compileJava NO-SOURCE
+> Task :codec:extended:processResources UP-TO-DATE
+> Task :codec:extended:classes UP-TO-DATE
+> Task :codec:extended:jar UP-TO-DATE
+> Task :codec:gif:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:gif:compileKotlin UP-TO-DATE
+> Task :codec:gif:compileJava NO-SOURCE
+> Task :codec:gif:processResources UP-TO-DATE
+> Task :codec:gif:classes UP-TO-DATE
+> Task :codec:gif:jar UP-TO-DATE
+> Task :codec:ico:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:compileKotlin UP-TO-DATE
+> Task :codec:png:compileJava NO-SOURCE
+> Task :codec:png:processResources UP-TO-DATE
+> Task :codec:png:classes UP-TO-DATE
+> Task :codec:png:jar UP-TO-DATE
+> Task :codec:ico:compileKotlin UP-TO-DATE
+> Task :codec:ico:compileJava NO-SOURCE
+> Task :codec:ico:processResources UP-TO-DATE
+> Task :codec:ico:classes UP-TO-DATE
+> Task :codec:ico:jar UP-TO-DATE
+> Task :codec:jpeg:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg:compileKotlin UP-TO-DATE
+> Task :codec:jpeg:compileJava NO-SOURCE
+> Task :codec:jpeg:processResources UP-TO-DATE
+> Task :codec:jpeg:classes UP-TO-DATE
+> Task :codec:jpeg:jar UP-TO-DATE
+> Task :codec:jpeg-ls:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg-ls:compileKotlin UP-TO-DATE
+> Task :codec:jpeg-ls:compileJava NO-SOURCE
+> Task :codec:jpeg-ls:processResources UP-TO-DATE
+> Task :codec:jpeg-ls:classes UP-TO-DATE
+> Task :codec:jpeg-ls:jar UP-TO-DATE
+> Task :codec:jpeg2000:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg2000:compileKotlin UP-TO-DATE
+> Task :codec:jpeg2000:compileJava NO-SOURCE
+> Task :codec:jpeg2000:processResources UP-TO-DATE
+> Task :codec:jpeg2000:classes UP-TO-DATE
+> Task :codec:jpeg2000:jar UP-TO-DATE
+> Task :codec:jpegxl:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpegxl:compileKotlin UP-TO-DATE
+> Task :codec:jpegxl:compileJava NO-SOURCE
+> Task :codec:jpegxl:processResources UP-TO-DATE
+> Task :codec:jpegxl:classes UP-TO-DATE
+> Task :codec:jpegxl:jar UP-TO-DATE
+> Task :codec:wbmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:wbmp:compileKotlin UP-TO-DATE
+> Task :codec:wbmp:compileJava NO-SOURCE
+> Task :codec:wbmp:processResources UP-TO-DATE
+> Task :codec:wbmp:classes UP-TO-DATE
+> Task :codec:wbmp:jar UP-TO-DATE
+> Task :codec:webp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:webp:compileKotlin UP-TO-DATE
+> Task :codec:webp:compileJava NO-SOURCE
+> Task :codec:webp:processResources UP-TO-DATE
+> Task :codec:webp:classes UP-TO-DATE
+> Task :codec:webp:jar UP-TO-DATE
+> Task :codec:compileKotlin NO-SOURCE
+> Task :codec:compileJava NO-SOURCE
+> Task :codec:processResources NO-SOURCE
+> Task :codec:classes UP-TO-DATE
+> Task :codec:jar UP-TO-DATE
+> Task :color-management:processResources NO-SOURCE
+> Task :color-management:classes UP-TO-DATE
+> Task :color-management:jar UP-TO-DATE
+> Task :font:processResources NO-SOURCE
+> Task :font:classes UP-TO-DATE
+> Task :font:jar UP-TO-DATE
+> Task :gpu-renderer:processResources UP-TO-DATE
+> Task :gpu-renderer:classes UP-TO-DATE
+> Task :gpu-renderer:jar UP-TO-DATE
+> Task :kanvas:processResources NO-SOURCE
+> Task :kanvas:classes UP-TO-DATE
+> Task :kanvas:jar UP-TO-DATE
+> Task :codec:api:processResources UP-TO-DATE
+> Task :codec:api:classes UP-TO-DATE
+> Task :codec:api:jar UP-TO-DATE
+> Task :codec:core:processResources NO-SOURCE
+> Task :codec:core:classes UP-TO-DATE
+> Task :codec:core:jar UP-TO-DATE
+> Task :font:core:processResources NO-SOURCE
+> Task :font:core:classes UP-TO-DATE
+> Task :font:core:jar UP-TO-DATE
+> Task :font:glyph:processResources NO-SOURCE
+> Task :font:glyph:classes UP-TO-DATE
+> Task :font:glyph:jar UP-TO-DATE
+> Task :font:gpu-api:processResources NO-SOURCE
+> Task :font:gpu-api:classes UP-TO-DATE
+> Task :font:gpu-api:jar UP-TO-DATE
+> Task :font:scaler:processResources NO-SOURCE
+> Task :font:scaler:classes UP-TO-DATE
+> Task :font:scaler:jar UP-TO-DATE
+> Task :font:sfnt:processResources NO-SOURCE
+> Task :font:sfnt:classes UP-TO-DATE
+> Task :font:sfnt:jar UP-TO-DATE
+> Task :font:text:processResources UP-TO-DATE
+> Task :font:text:classes UP-TO-DATE
+> Task :font:text:jar UP-TO-DATE
+> Task :integration-tests:diagnostic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:compileKotlin UP-TO-DATE
+> Task :integration-tests:test-utils:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:compileKotlin UP-TO-DATE
+> Task :integration-tests:diagnostic:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:processResources NO-SOURCE
+> Task :integration-tests:diagnostic:classes UP-TO-DATE
+> Task :integration-tests:diagnostic:jar UP-TO-DATE
+> Task :integration-tests:skia:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:skia:compileKotlin NO-SOURCE
+> Task :integration-tests:skia:compileJava NO-SOURCE
+> Task :integration-tests:skia:processResources NO-SOURCE
+> Task :integration-tests:skia:classes UP-TO-DATE
+> Task :integration-tests:skia:jar UP-TO-DATE
+> Task :integration-tests:skia:compileTestKotlin UP-TO-DATE
+> Task :integration-tests:skia:compileTestJava NO-SOURCE
+> Task :integration-tests:skia:processTestResources UP-TO-DATE
+> Task :integration-tests:skia:testClasses UP-TO-DATE
+> Task :integration-tests:test-utils:processResources NO-SOURCE
+> Task :integration-tests:test-utils:classes UP-TO-DATE
+> Task :integration-tests:test-utils:jar UP-TO-DATE
+
+> Task :integration-tests:skia:generateSkiaScan
+[SKIP] org.graphiks.kanvas.skia.gm.blur.MatrixConvolutionGm
+[SKIP] org.graphiks.kanvas.skia.gm.clip.ComplexClip2Gm
+[SKIP] org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm
+[SKIP] org.graphiks.kanvas.skia.gm.image.DrawBitmapRectGm
+[SKIP] org.graphiks.kanvas.skia.gm.path.InnerShapesGm
+[SKIP] org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesGm
+[SKIP] org.graphiks.kanvas.skia.gm.text.GlyphPosGm
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.lwjgl.system.MemoryUtil (file:/Users/chaos/.gradle/caches/modules-2/files-2.1/org.lwjgl/lwjgl/3.3.3/29589b5f87ed335a6c7e7ee6a5775f81f97ecb84/lwjgl-3.3.3.jar)
+WARNING: Please consider reporting this to the maintainers of class org.lwjgl.system.MemoryUtil
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+Exception in thread "Thread-0" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 452 drawregionmodes (878ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-4" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+[FAIL] 453 fancy_gradients (0ms) An operation is not implemented: STUB.FANCY_GRADIENTS — requires picture shader + sweep/radial shader composition
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 454 fatpathfill (16ms) unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+Exception in thread "Thread-5" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-6" java.lang.InterruptedException: sleep interrupted
+[FAIL] 455 filltypespersp (36ms) unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 456 inner_join_geometry (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-7" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-8" java.lang.InterruptedException: sleep interrupted
+[FAIL] 457 lattice2 (253ms) unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 458 lineclosepath (2961ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-9" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 459 linepath (3ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-10" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-11" [FAIL] 460 macaatest (0ms) An operation is not implemented: STUB.MACAATEST — requires macOS CoreText APIs (platform-specific)
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-12" [FAIL] 461 mandoline (52ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 462 manycircles (672ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-13" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-14" [FAIL] 463 manypathatlases (3ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-15" [FAIL] 464 nested (42ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 465 nonclosedpaths (4ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-16" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 466 OverStroke (6ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-17" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-18" java.lang.InterruptedException: sleep interrupted
+[FAIL] 467 parsedpaths (22ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 468 path_huge_aa (96ms) unsupported.core_primitive.coverage_sample.color_capability: RGBA8Unorm render-and-resolve capability is unavailable: unsupported.capability.texture_size requires 102400 but observed 8192.
+Exception in thread "Thread-19" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 469 path_huge_aa_manual (18ms) unsupported.core_primitive.coverage_sample.color_capability: RGBA8Unorm render-and-resolve capability is unavailable: unsupported.capability.texture_size requires 102400 but observed 8192.
+Exception in thread "Thread-20" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 470 path_mask_cache (4ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-21" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+[FAIL] 471 pathops_blend (0ms) An operation is not implemented: STUB.PATHOPS_BLEND — requires SkPathOps::Op or equivalent blend-mode compositing
+[FAIL] 472 pathopsinverse (0ms) An operation is not implemented: STUB.PATHOPS_INVERSE — requires SkPathOps::Op with inverse fill types
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-22" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-23" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 473 pathops_skbug_10155 (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-24" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 474 path-reverse (1ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-25" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+[FAIL] 475 path_stroke_clip_crbug1070835 (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-26" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 476 points (1ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-27" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 477 poly2poly (147ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-28" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 478 polygons (3ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-29" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 479 preservefillrule_big (1ms) unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+Exception in thread "Thread-30" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 480 preservefillrule_little (1ms) unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+Exception in thread "Thread-31" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 481 quadclosepath (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-32" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 482 quadpath (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-33" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 483 roundrects (3ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-34" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-35" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 484 shadow_utils_directional (26ms)
+Exception in thread "Thread-36" java.lang.InterruptedException: sleep interrupted
+[FAIL] 485 sharedcorners (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-37" [FAIL] 486 simpleshapes_bw (12ms) invalid.preflight.core_primitive_path_stencil: Path stencil CorePrimitive requires exactly one prepared render pass.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-38" [FAIL] 487 simpleshapes (2ms) unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 488 stlouisarch (1ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-39" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 489 stroke_rect_shader (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-40" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 490 strokedline_caps (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-41" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 491 strokes3 (8ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-42" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 492 strokes_round (10ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-43" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 493 teenyStrokes (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-44" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 494 thin_aa_dash_lines (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-45" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-46" [DONE] 495 thinconcavepaths (73ms)
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 496 thinrects (7ms) unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-47" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 497 thinroundrects (6ms) unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-48" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 498 thinstrokedrects (1ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-49" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 499 tinyanglearcs (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-50" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 500 trickycubicstrokes_largeradius (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-51" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 501 trimpatheffect (3ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-52" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-53" java.lang.InterruptedException: sleep interrupted
+[FAIL] 502 widebuttcaps (1ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 503 zero_control_stroke (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-54" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 504 zeroPath (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-55" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-56" java.lang.InterruptedException: sleep interrupted
+[FAIL] 505 zero_length_paths_aa (2ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 506 zero_length_paths_bw (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-57" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 507 zero_length_paths_dbl_aa (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-58" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 508 zero_length_paths_dbl_bw (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-59" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-60" java.lang.InterruptedException: sleep interrupted
+[FAIL] 509 zerolinedash (31ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 510 zerolinestroke (0ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-61" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 511 AlternateLuma (3ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-62" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 512 arithmode (4ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-63" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 513 color_cube_rt (5ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-64" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 514 composeCF (1ms) unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+Exception in thread "Thread-65" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 515 runtime_intrinsics_common (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-66" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 516 runtime_intrinsics_exponential (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-67" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 517 runtime_intrinsics_geometric (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-68" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 518 runtime_intrinsics_matrix (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-69" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 519 runtime_intrinsics_relational (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-70" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 520 runtime_intrinsics_trig (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-71" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 521 kawase_blur_rt (10ms) unsupported.composite.paint: Prepared Surface composite could not be lowered.
+Exception in thread "Thread-72" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-73" java.lang.InterruptedException: sleep interrupted
+[DONE] 522 lineargradientrt (20ms)
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 523 lumafilter (1ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-74" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 524 rippleshader (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-75" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 525 rtif_distort (25ms) unsupported.composite.paint: Prepared Surface composite could not be lowered.
+Exception in thread "Thread-76" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 526 rtif_unsharp (4ms) unsupported.composite.operation: Prepared Surface composite could not be lowered.
+Exception in thread "Thread-77" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 527 runtimecolorfilter (3ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-78" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-79" java.lang.InterruptedException: sleep interrupted
+[FAIL] 528 runtimefunctions (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 529 runtime_shader (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-80" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 530 spiral_rt (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-81" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-82" java.lang.InterruptedException: sleep interrupted
+[FAIL] 531 threshold_rt (0ms) unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 532 unsharp_rt (4ms) unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-83" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 533 workingspace (19ms)
+Exception in thread "Thread-84" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 534 annotated_text (115ms) invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+Exception in thread "Thread-85" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 535 bigtext_crbug_1370488 (4428ms) unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-86" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 536 bigtext (308ms) unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-87" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 537 blob_rsxform_distortable (103ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-88" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 538 blob_rsxform (68ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-89" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-90" [FAIL] 539 chrome_gradtext2 (164ms) unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 540 cliperror (817ms) unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+Exception in thread "Thread-91" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 541 coloremoji_colrv0 (111ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-92" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 542 coloremoji (2ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-93" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 543 colorwheelnative (440ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-94" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-95" java.lang.InterruptedException: sleep interrupted
+[FAIL] 544 coloremoji_blendmodes_colrv0 (46ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 545 coloremoji_blendmodes (2ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-96" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 546 colrv1_gradient_stops_repeat (45ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-97" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 547 crbug_1073670 (812ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-98" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 548 dftext_blob_persp (627ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-99" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 549 dftext (1177ms) unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-100" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-101" [FAIL] 550 drawTextRSXform (2458ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-102" [DONE] 551 fontcache (4731ms)
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 552 fontmgr_bounds (52ms) unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+Exception in thread "Thread-103" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 553 fontmgr_iter (124ms)
+Exception in thread "Thread-104" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 554 fontmgr_match (70ms)
+Exception in thread "Thread-105" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-106" java.lang.InterruptedException: sleep interrupted
+[FAIL] 555 font_palette_default (194ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 556 fontregen (571ms)
+Exception in thread "Thread-107" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-108" [FAIL] 557 fontscalerdistortable (3334ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-109" java.lang.InterruptedException: sleep interrupted
+[FAIL] 558 fontscaler (3705ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-110" [DONE] 559 gammagradienttext (424ms)
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 560 gammatext_color_shader (796ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-111" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 561 gammatext (2102ms) unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+Exception in thread "Thread-112" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 562 getpostextpath (76ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-113" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 563 gradtext (333ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-114" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-115" [FAIL] 564 largeglyphblur (1052ms) unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 565 lcdoverlap (759ms) invalid.preflight.text.blend: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-116" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 566 macaa_colors (777ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-117" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 567 mixedtextblobs (1272ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-118" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 568 overdraw_text_xform (818ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-119" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 569 palette (9ms)
+Exception in thread "Thread-120" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-121" java.lang.InterruptedException: sleep interrupted
+[FAIL] 570 pdf_never_embed (231ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-122" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 571 pdf_table_based_subset (6ms)
+Exception in thread "Thread-123" java.lang.InterruptedException: sleep interrupted
+[FAIL] 572 persptext (35ms) unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 573 persptext_minimal (35ms) unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-124" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-125" java.lang.InterruptedException: sleep interrupted
+[DONE] 574 rsx_blob_shader (17ms)
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-126" java.lang.InterruptedException: sleep interrupted
+[FAIL] 575 scaledemojiperspective_colrv0 (49ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 576 scaledemojipos_colrv0 (49ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-127" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-128" java.lang.InterruptedException: sleep interrupted
+[FAIL] 577 scaledemoji_colrv0 (97ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 578 scaledemoji_rendering (50ms) unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-129" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 579 shadertext3 (22ms) unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-130" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 580 skbug_12212 (10ms)
+Exception in thread "Thread-131" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-132" [FAIL] 581 skbug_257 (328ms) unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-133" java.lang.InterruptedException: sleep interrupted
+[DONE] 582 skbug_5321 (76ms)
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-134" java.lang.InterruptedException: sleep interrupted
+[FAIL] 583 skbug_8955 (18ms) unsupported.text.transform_singular: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-135" java.lang.InterruptedException: sleep interrupted
+[FAIL] 584 slug (450ms) invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-136" java.lang.InterruptedException: sleep interrupted
+[FAIL] 585 stroketext (104ms) unsupported.text.path_effect_unsupported: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 586 stroketext_native (61ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-137" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-138" java.lang.InterruptedException: sleep interrupted
+[FAIL] 587 surfaceprops (80ms) unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-139" [FAIL] 588 textblobblockreordering (80ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 589 textblobcolortrans (333ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-140" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-141" java.lang.InterruptedException: sleep interrupted
+[FAIL] 590 textblobgeometrychange (106ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 591 textblob (233ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-142" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 592 textblob_intercepts (131ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-143" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-144" java.lang.InterruptedException: sleep interrupted
+[FAIL] 593 textblobmixedsizes (735ms) unsupported.text.mask_generation_failed: Prepared Surface operation could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 594 textblobrandomfont (1755ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-145" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-146" java.lang.InterruptedException: sleep interrupted
+[DONE] 595 textblobshader (404ms)
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-147" java.lang.InterruptedException: sleep interrupted
+[FAIL] 596 textblobtransforms (650ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 597 textblobuseaftergpufree (74ms) invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+Exception in thread "Thread-148" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 598 fancyblobunderline (298ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-149" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 599 textfilter_color (6ms) unsupported.composite.operation: Prepared Surface composite could not be lowered.
+Exception in thread "Thread-150" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 600 textfilter_image (5ms) unsupported.composite.operation: Prepared Surface composite could not be lowered.
+Exception in thread "Thread-151" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-152" java.lang.InterruptedException: sleep interrupted
+[DONE] 601 text_scale_skew (331ms)
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 602 text_scale_skew_rotate (301ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-153" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-154" java.lang.InterruptedException: sleep interrupted
+[FAIL] 603 typefacerendering (294ms) unsupported.layer.bounds_unbounded: Prepared Surface composite could not be lowered.
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 604 typefacerendering_pfa (15ms)
+Exception in thread "Thread-155" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[DONE] 605 typefacerendering_pfb (13ms)
+Exception in thread "Thread-156" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Exception in thread "Thread-157" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 606 typefacestyles (118ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+[FAIL] 607 typefacestyles_kerning (188ms) invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-158" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 608 typeface_styling (187ms) unsupported.text.paint_style_unsupported: Prepared Surface operation could not be lowered.
+Exception in thread "Thread-159" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[FAIL] 609 user_typeface (22ms) unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+Exception in thread "Thread-160" java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleepNanos0(Native Method)
+	at java.base/java.lang.Thread.sleepNanos(Thread.java:509)
+	at java.base/java.lang.Thread.sleep(Thread.java:540)
+	at org.graphiks.kanvas.skia.SkiaGmScannerKt.main$lambda$2(SkiaGmScanner.kt:134)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+=== Scan [452, 610) done: PASS=18 FAIL=140 TIMEOUT=0 ===
+
+> Task :integration-tests:skia:generateSkiaScan FAILED
+
+[Incubating] Problems report is available at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':integration-tests:skia:generateSkiaScan'.
+> Process 'command '/Users/chaos/.sdkman/candidates/java/25.0.1-tem/bin/java'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 53s
+84 actionable tasks: 2 executed, 82 up-to-date

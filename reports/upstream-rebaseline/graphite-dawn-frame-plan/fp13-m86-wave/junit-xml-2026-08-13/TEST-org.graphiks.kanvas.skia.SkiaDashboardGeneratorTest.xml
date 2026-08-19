@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:41:08.896Z" hostname="b3-16-2026-08-13-16-13" time="0.064">
+  <properties/>
+  <testcase name="marks untrustable references as no score even when images exist()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.036"/>
+  <testcase name="scores dashboard entry using reference name while preserving logical name()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.007"/>
+  <testcase name="writes secondary quality metrics for scored rows()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.004"/>
+  <testcase name="uses readable contrast for metrics below images()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.002"/>
+  <testcase name="writes measured similarity instead of previous score()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.005"/>
+  <testcase name="omits blocking rows from dashboard data()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.004"/>
+  <testcase name="creates dashboard data directory()" classname="org.graphiks.kanvas.skia.SkiaDashboardGeneratorTest" time="0.001"/>
+  <system-out><![CDATA[[SKIP] dashboard_score_probe: reference untrustable (fixture is a white placeholder)
+
+Dashboard generated: /tmp/junit4504563372146000343/dashboard
+Total: 1, Pass: 0, Fail: 0, No score: 1, Avg sim: 0.0%
+[PASS] logical-gm: similarity=100.00% (threshold: 0.0%)
+
+Dashboard generated: /tmp/junit18267459543948842524/dashboard
+Total: 1, Pass: 1, Fail: 0, No score: 0, Avg sim: 100.0%
+[PASS] dashboard_score_probe: similarity=50.00% (threshold: 0.0%)
+
+Dashboard generated: /tmp/junit13154686078205078937/dashboard
+Total: 1, Pass: 1, Fail: 0, No score: 0, Avg sim: 50.0%
+
+Dashboard generated: /tmp/junit16574119302023380654/dashboard
+Total: 0, Pass: 0, Fail: 0, No score: 0, Avg sim: 0.0%
+[PASS] dashboard_score_probe: similarity=50.00% (threshold: 0.0%)
+
+Dashboard generated: /tmp/junit14582437050185522565/dashboard
+Total: 1, Pass: 1, Fail: 0, No score: 0, Avg sim: 50.0%
+[PASS] dashboard_score_probe: similarity=100.00% (threshold: 0.0%)
+
+Dashboard generated: /tmp/junit13803949122352573805/dashboard
+Total: 2, Pass: 1, Fail: 0, No score: 0, Avg sim: 100.0%
+
+Dashboard generated: /tmp/junit13056907092691950540/dashboard
+Total: 0, Pass: 0, Fail: 0, No score: 0, Avg sim: 0.0%
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -83,4 +83,15 @@ class ImageTest {
 
         results.forEach { it.join() }
     }
+
+    @Test
+    fun `alpha authority participates in image value semantics and survives reinterpretation`() {
+        val premul = Image(1, 1, ColorType.RGBA_8888, "same", byteArrayOf(1, 2, 3, 4), ColorSpace.SRGB, AlphaType.PREMUL)
+        val unpremul = premul.copy(alphaType = AlphaType.UNPREMUL)
+
+        assertNotEquals(premul, unpremul)
+        assertNotEquals(premul.hashCode(), unpremul.hashCode())
+        assertEquals(AlphaType.PREMUL, premul.reinterpretColorSpace(ColorSpace.SRGB).alphaType)
+        assertEquals(AlphaType.OPAQUE, Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, -1), alphaType = AlphaType.OPAQUE).alphaType)
+    }
 }

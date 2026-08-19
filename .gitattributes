@@ -1,1 +1,3 @@
 reports/font/fixtures/licenses/liberation-OFL-1.1.txt whitespace=trailing-space,space-before-tab,-blank-at-eof
+codec/jpeg2000/src/test/resources/jpeg2000-openjpeg/*.pgm -text
+codec/jpegxl/src/test/resources/jpegxl-modular/*.pgm -text

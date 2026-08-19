@@ -7,19 +7,28 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
@@ -93,16 +102,17 @@ class GPUAllApiBlendSurfaceTest {
         assumeTrue(session != null, "GPU backend unavailable in current environment")
 
         val api = drawPictureCase()
-        val gpu = renderGpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
-        val cpu = renderCpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
-
-        assertPixelsNear(cpu.pixels, gpu.pixels, tolerance = 2)
-        assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
-        assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+        // The painted picture is a documented prepared-route refusal
+        // (unsupported.surface.prepared.mixed-composite-topology): the composite route cannot
+        // materialize a painted picture topology.
+        val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderGpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
+        }
+        assertEquals(PREPARED_PICTURE_TOPOLOGY_REFUSAL, terminal.diagnostic.code.value)
     }
 
     @TestFactory
-    fun everyVisualApiSupportsEveryBlendModeInEveryRoute(): Stream<DynamicTest> =
+    fun everyVisualApiSupportsPixelsOrItsExactPreparedRefusal(): Stream<DynamicTest> =
         apiCases().flatMap { api ->
             BlendMode.entries.flatMap { mode ->
                 BlendContext.entries.map { context ->
@@ -110,78 +120,150 @@ class GPUAllApiBlendSurfaceTest {
                         val session = GPUBackendRuntimeFactory.createOrNull()
                         assumeTrue(session != null, "GPU backend unavailable in current environment")
                         val readbacksBefore = session!!.runtimeTelemetry.destinationReadbackSnapshots
+                        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+                        val expectedRoute = expectedPreparedProductRoute(api, mode, context)
 
-                        val gpu = renderGpu(api, mode, context)
-                        val cpu = renderCpu(api, mode, context)
-
-                        assertPixelsNear(cpu.pixels, gpu.pixels, tolerance = 2)
-                        assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
-                        assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
-                        assertFalse(
-                            gpu.result.diagnostics.entries.any { entry ->
-                                entry.reason.contains("blend", ignoreCase = true) &&
-                                    entry.reason.startsWith("unsupported")
-                            },
-                            gpu.result.diagnostics.entries.toString(),
-                        )
-                        // Clear has no public BlendMode argument. Its repeated rows document that
-                        // inventory exception, but they do not request the selected matrix mode.
-                        if (api.composition != Composition.CLEAR && mode.requiresDestinationRead()) {
+                        if (expectedRoute is ProductRouteExpectation.Terminal) {
+                            val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+                                renderGpu(api, mode, context, decisions)
+                            }
+                            assertEquals(expectedRoute.code, terminal.diagnostic.code.value)
+                            assertEquals(
+                                listOf(GPUPreparedSurfaceRouteDecision.Terminal(expectedRoute.code)),
+                                decisions,
+                            )
                             assertEquals(
                                 readbacksBefore,
                                 session.runtimeTelemetry.destinationReadbackSnapshots,
-                                "${api.name}/${mode.name}/${context.name} performed a GPU-to-CPU destination readback",
+                                "${api.name}/${mode.name}/${context.name} allocated a destination readback before refusal",
                             )
-                            assertTrue(
+                        } else {
+                            val gpu = renderGpu(api, mode, context, decisions)
+                            val cpu = renderCpu(api, mode, context)
+
+                            assertPixelsNear(cpu.pixels, gpu.pixels, tolerance = 2)
+                            assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
+                            assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+                            assertFalse(
                                 gpu.result.diagnostics.entries.any { entry ->
-                                    api.destinationReadRouteOperations.any { routeOperation ->
-                                        entry.code.startsWith("route:destination-read:$routeOperation:")
-                                    } &&
-                                        entry.reason == "gpu-copy-then-formula"
+                                    entry.reason.contains("blend", ignoreCase = true) &&
+                                        entry.reason.startsWith("unsupported")
                                 },
-                                "${api.name}/${mode.name}/${context.name} did not emit the GPU destination-read formula route " +
-                                    "${api.destinationReadRouteOperations.joinToString()}: " +
-                                    gpu.result.diagnostics.entries,
+                                gpu.result.diagnostics.entries.toString(),
                             )
+                            when (expectedRoute) {
+                                ProductRouteExpectation.Prepared ->
+                                    assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+                                null -> Unit
+                                is ProductRouteExpectation.Terminal ->
+                                    error("terminal route returned pixels")
+                            }
+                            // Clear has no public BlendMode argument. Its repeated rows document that
+                            // inventory exception, but they do not request the selected matrix mode.
+                            if (api.composition != Composition.CLEAR && mode.requiresDestinationRead()) {
+                                assertEquals(
+                                    readbacksBefore,
+                                    session.runtimeTelemetry.destinationReadbackSnapshots,
+                                    "${api.name}/${mode.name}/${context.name} performed a GPU-to-CPU destination readback",
+                                )
+                                assertTrue(
+                                    gpu.result.diagnostics.entries.any { entry ->
+                                        api.destinationReadRouteOperations.any { routeOperation ->
+                                            entry.code.startsWith("route:destination-read:$routeOperation:")
+                                        } &&
+                                            entry.reason == "gpu-copy-then-formula"
+                                    },
+                                    "${api.name}/${mode.name}/${context.name} did not emit the GPU destination-read formula route " +
+                                        "${api.destinationReadRouteOperations.joinToString()}: " +
+                                        gpu.result.diagnostics.entries,
+                                )
+                            }
                         }
                     }
                 }
             }
         }.stream()
 
-    private fun renderGpu(api: BlendCase, mode: BlendMode, context: BlendContext): GpuPixel =
-        Surface(SURFACE_SIZE, SURFACE_SIZE).run {
-            canvas {
+    @TestFactory
+    fun preparedTextPartialPaintAlphaCompanionMatrix(): Stream<DynamicTest> {
+        val api = partialAlphaPreparedTextCase()
+        return listOf(BlendMode.CLEAR, BlendMode.DST_IN, BlendMode.MODULATE).flatMap { mode ->
+            listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR).map { context ->
+                DynamicTest.dynamicTest("DrawText/partial-alpha/${mode.name}/${context.name}") {
+                    val session = GPUBackendRuntimeFactory.createOrNull()
+                    assumeTrue(session != null, "GPU backend unavailable in current environment")
+                    val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+                    val gpu = renderGpu(api, mode, context, decisions)
+                    val expected = blendWithCoverage(
+                        source = PARTIAL_ALPHA_EFFECTIVE_SOURCE,
+                        destination = DESTINATION,
+                        mode = mode,
+                        coverage = 1f,
+                    ).toRgbaBytes()
+
+                    assertPixelsNear(expected, gpu.pixels, tolerance = 1)
+                    assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
+                    assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+                    assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+                }
+            }
+        }.stream()
+    }
+
+    private fun renderGpu(
+        api: BlendCase,
+        mode: BlendMode,
+        context: BlendContext,
+        decisions: MutableList<GPUPreparedSurfaceRouteDecision> = mutableListOf(),
+    ): GpuPixel {
+        val surface = Surface(SURFACE_SIZE, SURFACE_SIZE)
+        surface.canvas {
                 drawRect(SURFACE_RECT, Paint.fill(DESTINATION).copy(antiAlias = false))
                 when (context) {
-                    BlendContext.UNCLIPPED -> api.draw(this, mode)
+                    BlendContext.UNCLIPPED -> api.drawForContext(this, mode, context)
                     BlendContext.SCISSOR -> {
                         save()
                         clipRect(CLIP_RECT, ClipOp.INTERSECT, antiAlias = false)
-                        api.draw(this, mode)
+                        api.drawForContext(this, mode, context)
                         restore()
                     }
                     BlendContext.ALPHA_MASK -> {
                         save()
                         // Fractional AA bounds select the alpha-mask S/G route rather than a scissor.
                         clipRect(ALPHA_MASK_RECT, ClipOp.INTERSECT, antiAlias = true)
-                        api.draw(this, mode)
+                        api.drawForContext(this, mode, context)
                         restore()
                     }
                     BlendContext.SAVE_LAYER -> {
                         saveLayer()
-                        api.draw(this, mode)
+                        api.drawForContext(this, mode, context)
                         restore()
                     }
                 }
             }
-            val result = render()
-            GpuPixel(readPixels(result, api, context), result)
-        }
+        val result = renderViaGpu(
+            buffer = SnapshotDisplayListBuffer(surface.snapshotOps()),
+            width = SURFACE_SIZE,
+            height = SURFACE_SIZE,
+            format = surface.format,
+            config = surface.config,
+            preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+        return GpuPixel(readPixels(result, api, context), result)
+    }
 
     private fun renderCpu(api: BlendCase, mode: BlendMode, context: BlendContext): CpuPixel {
         val sourceOnTransparent = blendPremultiplied(SOURCE, Color.TRANSPARENT, BlendMode.SRC)
-        val direct = if (api.composition == Composition.CLEAR) sourceOnTransparent.toColor() else blend(SOURCE, DESTINATION, mode)
+        val effectiveMode =
+            if (api.name == "DrawAtlas" && context != BlendContext.SAVE_LAYER) {
+                BlendMode.SRC_OVER
+            } else {
+                mode
+            }
+        val direct =
+            if (api.composition == Composition.CLEAR) sourceOnTransparent.toColor()
+            else blend(SOURCE, DESTINATION, effectiveMode)
         val color = when (context) {
             BlendContext.SAVE_LAYER -> when (api.composition) {
                 Composition.BLEND -> sourceOver(
@@ -221,6 +303,7 @@ class GPUAllApiBlendSurfaceTest {
 
     private fun apiCases(): List<BlendCase> {
         val image = sourceImage()
+        val legacyImage = legacySourceImage()
         val shapePaint: (BlendMode) -> Paint = { mode ->
             Paint.fill(SOURCE).copy(antiAlias = false, blendMode = mode)
         }
@@ -232,6 +315,9 @@ class GPUAllApiBlendSurfaceTest {
         val textPaint: (BlendMode) -> Paint = { mode ->
             Paint.fill(sourceLinearColor()).copy(antiAlias = false, blendMode = mode)
         }
+        val preparedTextPaint: (BlendMode) -> Paint = { mode ->
+            Paint.fill(SOURCE).copy(antiAlias = false, blendMode = mode)
+        }
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
             positions = listOf(Point(6f, 6f), Point(26f, 6f), Point(16f, 26f)),
@@ -242,7 +328,8 @@ class GPUAllApiBlendSurfaceTest {
                 .readBytes(),
             fontName = "LiberationSans-Regular",
         )
-        val textBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
+        val preparedTextBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 8f)
+        val legacyTextBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
 
         return listOf(
             BlendCase("DrawRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
@@ -257,12 +344,20 @@ class GPUAllApiBlendSurfaceTest {
                     shapePaint(mode),
                 )
             },
-            BlendCase("DrawImage", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
-                drawImage(image, SOURCE_RECT, imagePaint(mode))
-            },
-            BlendCase("DrawText", Point(17f, 14f), Point(17f, 10f), Point(17f, 12f)) { mode ->
-                drawText(textBlob, 0f, 0f, textPaint(mode))
-            },
+            BlendCase(
+                "DrawImage",
+                Point(16f, 16f),
+                Point(7f, 16f),
+                Point(12f, 16f),
+                legacySaveLayerDraw = { mode -> drawImage(legacyImage, SOURCE_RECT, imagePaint(mode)) },
+            ) { mode -> drawImage(image, SOURCE_RECT, imagePaint(mode)) },
+            BlendCase(
+                "DrawText",
+                Point(17f, 14f),
+                Point(17f, 10f),
+                Point(17f, 12f),
+                legacySaveLayerDraw = { mode -> drawText(legacyTextBlob, 0f, 0f, textPaint(mode)) },
+            ) { mode -> drawText(preparedTextBlob, 0f, 0f, preparedTextPaint(mode)) },
             BlendCase("DrawColor", Point(16f, 16f), Point(4f, 16f), Point(12f, 16f)) { mode ->
                 drawColor(SOURCE, mode)
             },
@@ -290,10 +385,29 @@ class GPUAllApiBlendSurfaceTest {
                     shapePaint(mode),
                 )
             },
-            BlendCase("DrawImageNine", Point(16f, 16f), Point(7f, 16f), Point(16f, 12f)) { mode ->
-                drawImageNine(image, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
-            },
-            BlendCase("DrawImageLattice", Point(16f, 16f), Point(7f, 16f), Point(16f, 12f)) { mode ->
+            BlendCase(
+                "DrawImageNine",
+                Point(16f, 16f),
+                Point(7f, 16f),
+                Point(16f, 12f),
+                legacySaveLayerDraw = { mode ->
+                    drawImageNine(legacyImage, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
+                },
+            ) { mode -> drawImageNine(image, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode)) },
+            BlendCase(
+                "DrawImageLattice",
+                Point(16f, 16f),
+                Point(7f, 16f),
+                Point(16f, 12f),
+                legacySaveLayerDraw = { mode ->
+                    drawImageLattice(
+                        legacyImage,
+                        Lattice(xDivs = listOf(1, 3), yDivs = listOf(1, 3)),
+                        SOURCE_RECT,
+                        imagePaint(mode),
+                    )
+                },
+            ) { mode ->
                 drawImageLattice(
                     image,
                     Lattice(xDivs = listOf(1, 3), yDivs = listOf(1, 3)),
@@ -319,22 +433,71 @@ class GPUAllApiBlendSurfaceTest {
                     blendMode = mode,
                 )
             },
-            BlendCase("DrawAtlas", Point(17f, 17f), Point(9f, 17f), Point(17f, 12f)) { mode ->
-                drawAtlas(
-                    atlas = image,
-                    transforms = listOf(
-                        Matrix33.translate(14f, 14f),
-                        Matrix33.translate(8f, 14f),
-                        Matrix33.translate(14f, 12f),
-                    ),
-                    texRects = listOf(
-                        Rect(0f, 0f, 4f, 4f),
-                        Rect(0f, 0f, 4f, 4f),
-                        Rect(0f, 0f, 4f, 4f),
-                    ),
+            BlendCase(
+                "DrawAtlas",
+                Point(17f, 17f),
+                Point(9f, 17f),
+                Point(17f, 12f),
+                legacySaveLayerDraw = { mode -> drawAtlasFixture(legacyImage, mode) },
+            ) { mode -> drawAtlasFixture(image, mode) },
+        )
+    }
+
+    private fun partialAlphaPreparedTextCase(): BlendCase {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            fontName = "Task 14 partial-alpha companion",
+        )
+        val blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(
+                    glyphs = listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()),
+                    positions = listOf(Point(0f, 0f)),
+                    fontSize = 48f,
+                ),
+            ),
+            typeface = typeface,
+            fontSize = 48f,
+        )
+        val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+        val shader = Shader.LinearGradient(
+            start = Point(0f, 0f),
+            end = Point(SURFACE_SIZE.toFloat(), 0f),
+            stops = listOf(
+                GradientStop(0f, shaderColor),
+                GradientStop(1f, shaderColor),
+            ),
+        )
+        return BlendCase(
+            name = "DrawTextPartialAlpha",
+            sample = Point(16f, 14f),
+        ) { mode ->
+            drawText(
+                blob = blob,
+                x = 4.5f,
+                y = 26f,
+                paint = Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
+                    shader = shader,
                     blendMode = mode,
-                )
-            },
+                ),
+            )
+        }
+    }
+
+    private fun Canvas.drawAtlasFixture(image: Image, mode: BlendMode) {
+        drawAtlas(
+            atlas = image,
+            transforms = listOf(
+                Matrix33.translate(14f, 14f),
+                Matrix33.translate(8f, 14f),
+                Matrix33.translate(14f, 12f),
+            ),
+            texRects = listOf(
+                Rect(0f, 0f, 4f, 4f),
+                Rect(0f, 0f, 4f, 4f),
+                Rect(0f, 0f, 4f, 4f),
+            ),
+            blendMode = mode,
         )
     }
 
@@ -359,7 +522,192 @@ class GPUAllApiBlendSurfaceTest {
             )
         }
 
+    private fun expectedPreparedProductRoute(
+        api: BlendCase,
+        mode: BlendMode,
+        context: BlendContext,
+    ): ProductRouteExpectation? {
+        if (context == BlendContext.SAVE_LAYER) {
+            // Composite frames are handled by the prepared saveLayer route: the composite
+            // capture admits only core geometry (rect/rrect/path) children with explicit
+            // device bounds. The fixture saveLayer has no bounds, so the unbounded-layer
+            // refusal wins for the admitted core children; every other operation inside a
+            // layer scope is a documented terminal refusal.
+            return when {
+                api.name in setOf("DrawRect", "DrawRRect", "DrawPath", "DrawPicture") ->
+                    ProductRouteExpectation.Terminal(PREPARED_LAYER_UNBOUNDED_REFUSAL)
+                else -> ProductRouteExpectation.Terminal(PREPARED_LAYER_OPERATION_REFUSAL)
+            }
+        }
+        if (api.name == "DrawPicture") {
+            // The painted DrawPicture is a documented prepared-route refusal: the composite
+            // route cannot materialize a painted picture topology, and the flat mapper cannot
+            // replay a picture.
+            return ProductRouteExpectation.Terminal(PREPARED_PICTURE_TOPOLOGY_REFUSAL)
+        }
+        if (api.name == "DrawText") {
+            return when {
+                mode == BlendMode.DST -> ProductRouteExpectation.Prepared
+                mode in PREPARED_TEXT_FIXED_FUNCTION_BLENDS -> ProductRouteExpectation.Prepared
+                else -> ProductRouteExpectation.Terminal(PREPARED_TEXT_BLEND_REFUSAL)
+            }
+        }
+        if (api.name in VERTICES_API_NAMES) {
+            return when {
+                // The prepared vertices route refuses AA-mask clips at lowering
+                // (unsupported.vertices.clip_coverage), before any blend or
+                // destination-read decision, so the clip refusal wins for every
+                // ALPHA_MASK case.
+                context == BlendContext.ALPHA_MASK ->
+                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_ALPHA_MASK_REFUSAL)
+                mode == BlendMode.DST -> ProductRouteExpectation.Prepared
+                mode.requiresDestinationRead() ->
+                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_DST_READ_REFUSAL)
+                else -> ProductRouteExpectation.Prepared
+            }
+        }
+        if (api.name !in IMAGE_API_NAMES) {
+            // Core primitives after the route collapse, the layout
+            // split, and the analytic-clip uniform64/160 split. The rrect
+            // analytic-shape (uniform80) pass splits from the uniform32 destination pass for the
+            // fixed blends (renders Prepared). The analytic-clip (uniform64/160) split is wired:
+            // SRC_OVER rows render Prepared (per-step continuation/ownership), while the
+            // non-SRC_OVER fixed-function and artistic modes stay refused on the analytic-clip
+            // lane's exact pipeline-identity code (the analytic-clip blend programs are a
+            // separate feature, not the split), the analytic-shape-under-clip rows re-point to
+            // the analytic-shape clip refusal, and the path-stencil cover rows stay on the
+            // path-stencil / path-destination-read codes.
+            return when (api.name) {
+                "Clear" -> null
+                "DrawPoint", "DrawPoints" -> when {
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
+                        // The analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
+                        // The analytic-clip uniform64 pass splits from the uniform32
+                        // destination pass and renders Prepared (per-pixel oracle exact).
+                        null
+                    context == BlendContext.ALPHA_MASK &&
+                        mode in MULTI_RENDER_DST_COPY_MODES &&
+                        api.name == "DrawPoint" ->
+                        // The DrawPoint fixture draws three separate point commands, so its
+                        // dst-read frame is a four-render shape whose direct-resource seal fails.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    context == BlendContext.ALPHA_MASK ->
+                        // Non-SRC_OVER analytic-clip blends stay refused on the
+                        // lane's exact pipeline-identity code (blend programs are a separate
+                        // feature).
+                        ProductRouteExpectation.Terminal(PREPARED_SESSION_CACHE_PIPELINE_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES -> if (api.name == "DrawPoint") {
+                        // The DrawPoint fixture draws three separate point commands, so its
+                        // dst-read frame is a four-render shape whose direct-resource seal
+                        // fails before the two-render dst-copy admission.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    } else {
+                        // The single DrawPoints command splits into the admitted
+                        // two-render dst-copy shape (destination pass, ordered snapshot copy,
+                        // consuming pass) on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
+                    }
+                    else -> null
+                }
+                "DrawRRect" -> when {
+                    context == BlendContext.ALPHA_MASK ->
+                        // An analytic-shape (uniform80) rrect cannot combine with
+                        // the analytic-clip uniform64/160 authority in one draw; it re-points to
+                        // the analytic-shape clip refusal (NoClip or ScissorOnly execution).
+                        ProductRouteExpectation.Terminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL)
+                    mode == BlendMode.DST ->
+                        // The DST rrect pass cannot exact its shared geometry slab authority.
+                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                    mode.recordsDestinationRead() ->
+                        // The analytic-shape dst-read formula pipeline closes
+                        // these rows (renders Prepared, pixel-oracle proven).
+                        null
+                    else ->
+                        // The rrect analytic-shape pass splits from the
+                        // uniform32 destination pass, so the fixed-blend rrect rows render
+                        // Prepared.
+                        null
+                }
+                "DrawRect", "DrawColor" -> when {
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.DST ->
+                        // The analytic-clip authority is admitted for non-direct
+                        // shading geometry — a NoOp (DST) draw shades nothing, so its analytic
+                        // clip is vacuous and the packet elides (oracle: destination unchanged).
+                        null
+                    context == BlendContext.ALPHA_MASK && mode == BlendMode.SRC_OVER ->
+                        // The analytic-clip uniform64 pass splits from the uniform32
+                        // destination pass and renders Prepared (per-pixel oracle exact).
+                        null
+                    context == BlendContext.ALPHA_MASK ->
+                        // Non-SRC_OVER analytic-clip blends stay refused on the
+                        // lane's exact pipeline-identity code (blend programs are a separate
+                        // feature).
+                        ProductRouteExpectation.Terminal(PREPARED_SESSION_CACHE_PIPELINE_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES ->
+                        // The two-render dst-copy shape (destination pass, ordered
+                        // snapshot copy, consuming pass) is admitted on the prepared direct lane.
+                        ProductRouteExpectation.Prepared
+                    else -> null
+                }
+                "DrawPath", "DrawDRRect" -> when {
+                    context == BlendContext.ALPHA_MASK && mode in MULTI_RENDER_DST_COPY_MODES ->
+                        // The analytic-clip continued dst-read cover stays on the
+                        // path-stencil preflight authority (analytic-clip x stencil-cover is a
+                        // separate feature).
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
+                    context == BlendContext.ALPHA_MASK ->
+                        // The non-dst-copy path-stencil cover under an analytic clip
+                        // cannot split from the uniform32 destination pass (exactly-one-path-pass
+                        // authority), so it re-points to the path-stencil preflight refusal.
+                        ProductRouteExpectation.Terminal(PREPARED_PATH_STENCIL_REFUSAL)
+                    mode in MULTI_RENDER_DST_COPY_MODES ->
+                        null
+                    else -> null
+                }
+                else -> error("Unclassified core primitive API ${api.name}")
+            }
+        }
+        val refusal = when (api.name) {
+            "DrawImage",
+            "DrawImageNine",
+            "DrawImageLattice",
+            -> when {
+                mode != BlendMode.SRC_OVER -> GPUPreparedImageRefusalCodes.NATIVE_BINDING
+                context == BlendContext.ALPHA_MASK -> PREPARED_IMAGE_CLIP_REFUSAL
+                else -> null
+            }
+            "DrawAtlas" -> when {
+                mode !in PREPARED_ATLAS_SOURCE_BLENDS ->
+                    GPUPreparedImageRefusalCodes.ATLAS_SOURCE_BLEND
+                context == BlendContext.ALPHA_MASK -> PREPARED_IMAGE_CLIP_REFUSAL
+                else -> null
+            }
+            else -> error("Unclassified prepared image API ${api.name}")
+        }
+        return refusal?.let(ProductRouteExpectation::Terminal) ?: ProductRouteExpectation.Prepared
+    }
+
     private fun sourceImage(): Image = Image.fromPixels(
+        width = 4,
+        height = 4,
+        pixels = ByteArray(4 * 4 * 4) { index ->
+            when (index % 4) {
+                0 -> premultipliedSrgbByte(SOURCE.redByte)
+                1 -> premultipliedSrgbByte(SOURCE.greenByte)
+                2 -> premultipliedSrgbByte(SOURCE.blueByte)
+                else -> SOURCE.alphaByte.toByte()
+            }
+        },
+        colorType = ColorType.RGBA_8888,
+        sourceId = "all-api-blend-source",
+        alphaType = AlphaType.PREMUL,
+    )
+
+    private fun legacySourceImage(): Image = Image.fromPixels(
         width = 4,
         height = 4,
         pixels = ByteArray(4 * 4 * 4) { index ->
@@ -371,7 +719,8 @@ class GPUAllApiBlendSurfaceTest {
             }
         },
         colorType = ColorType.RGBA_8888,
-        sourceId = "all-api-blend-source",
+        sourceId = "all-api-blend-legacy-source",
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun readPixels(result: RenderResult, api: BlendCase, context: BlendContext): UByteArray = buildList {
@@ -409,6 +758,12 @@ class GPUAllApiBlendSurfaceTest {
 
     private fun linearByte(srgbByte: Int): Byte =
         (srgbToLinear(srgbByte / 255f) * SOURCE.alphaByte / 255f * 255f + .5f)
+            .toInt()
+            .coerceIn(0, 255)
+            .toByte()
+
+    private fun premultipliedSrgbByte(srgbByte: Int): Byte =
+        (srgbByte * SOURCE.alphaByte / 255f + .5f)
             .toInt()
             .coerceIn(0, 255)
             .toByte()
@@ -601,7 +956,12 @@ class GPUAllApiBlendSurfaceTest {
         return if (clamped <= .0031308f) clamped * 12.92f else 1.055f * clamped.pow(1f / 2.4f) - .055f
     }
 
-    private fun BlendMode.requiresDestinationRead(): Boolean = this in ARTISTIC_MODES
+    private fun BlendMode.requiresDestinationRead(): Boolean =
+        toGpuBlendFacts().needsDestinationTexture()
+
+    /** The recorded core lane treats PLUS as a destination-read formula, matching the evidence. */
+    private fun BlendMode.recordsDestinationRead(): Boolean =
+        requiresDestinationRead() || this == BlendMode.PLUS
 
     private data class BlendCase(
         val name: String,
@@ -611,8 +971,15 @@ class GPUAllApiBlendSurfaceTest {
         val composition: Composition = Composition.BLEND,
         /** Exact route operations allowed to emit this API's advanced-blend formula diagnostic. */
         val destinationReadRouteOperations: Set<String> = setOf(name),
+        val legacySaveLayerDraw: (Canvas.(BlendMode) -> Unit)? = null,
         val draw: Canvas.(BlendMode) -> Unit,
-    )
+    ) {
+        fun drawForContext(canvas: Canvas, mode: BlendMode, context: BlendContext) {
+            val selectedDraw =
+                if (context == BlendContext.SAVE_LAYER) legacySaveLayerDraw ?: draw else draw
+            selectedDraw(canvas, mode)
+        }
+    }
 
     private data class PremultipliedLinear(
         val red: Float,
@@ -633,6 +1000,20 @@ class GPUAllApiBlendSurfaceTest {
 
     private data class GpuPixel(val pixels: UByteArray, val result: RenderResult)
 
+    private sealed interface ProductRouteExpectation {
+        data object Prepared : ProductRouteExpectation
+        data class Terminal(val code: String) : ProductRouteExpectation
+    }
+
+    private class SnapshotDisplayListBuffer(
+        private val operations: List<org.graphiks.kanvas.canvas.DisplayOp>,
+    ) : DisplayListBuffer {
+        override fun append(op: org.graphiks.kanvas.canvas.DisplayOp) =
+            error("Snapshot display list is immutable.")
+
+        override fun ops(): List<org.graphiks.kanvas.canvas.DisplayOp> = operations
+    }
+
     private enum class Composition { BLEND, CLEAR }
 
     private enum class BlendContext { UNCLIPPED, SCISSOR, ALPHA_MASK, SAVE_LAYER }
@@ -646,7 +1027,55 @@ class GPUAllApiBlendSurfaceTest {
         val ALPHA_MASK_EDGE = Point(12f, 16f)
         val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)
+        val PARTIAL_ALPHA_EFFECTIVE_SOURCE = Color.fromRGBA(1f, 0f, 0f, 0.3f)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
+        val IMAGE_API_NAMES = setOf("DrawImage", "DrawImageNine", "DrawImageLattice", "DrawAtlas")
+        val VERTICES_API_NAMES = setOf("DrawVertices", "DrawMesh(program=null)")
+        const val PREPARED_VERTICES_ALPHA_MASK_REFUSAL =
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.ClipCoverage
+        const val PREPARED_VERTICES_DST_READ_REFUSAL = "invalid.frame_plan.destination_read_unbound"
+        const val PREPARED_LAYER_UNBOUNDED_REFUSAL = "unsupported.layer.bounds_unbounded"
+        const val PREPARED_LAYER_OPERATION_REFUSAL = "unsupported.composite.operation"
+        const val PREPARED_PICTURE_TOPOLOGY_REFUSAL =
+            "unsupported.surface.prepared.mixed-composite-topology"
+        val PREPARED_ATLAS_SOURCE_BLENDS =
+            setOf(BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MODULATE)
+        val PREPARED_TEXT_FIXED_FUNCTION_BLENDS = setOf(
+            BlendMode.CLEAR,
+            BlendMode.SRC_OVER,
+            BlendMode.DST_OVER,
+            BlendMode.DST_IN,
+            BlendMode.DST_OUT,
+            BlendMode.SRC_ATOP,
+            BlendMode.XOR,
+            BlendMode.MODULATE,
+            BlendMode.SCREEN,
+        )
+        const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
+        const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
+        const val PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL =
+            "invalid.preflight.core_primitive_direct_geometry_resources"
+        // The analytic-shape uniform80 pass can no longer combine with the
+        // analytic-clip uniform64/160 authority in one draw, so the analytic-shape-under-clip
+        // rows re-point to the analytic-shape clip refusal (the stable code for "analytic shapes
+        // require NoClip or ScissorOnly execution").
+        const val PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL =
+            "unsupported.recording.core_primitive_analytic_shape_clip"
+        // The analytic-clip uniform64 lane only exposes the canonical premul
+        // SRC_OVER blend program today, so every non-SRC_OVER fixed-function and artistic mode
+        // on the analytic-clip lane re-points to the session-cache's exact pipeline-identity
+        // refusal (the analytic-clip blend programs are a separate feature, not the split).
+        const val PREPARED_SESSION_CACHE_PIPELINE_REFUSAL =
+            "unsupported.native-core-primitive.session-cache-pipeline"
+        // The path-stencil cover under an analytic clip still cannot split from the
+        // uniform32 destination pass (the preflighter's exactly-one-path-pass authority), so the
+        // non-dst-copy path rows re-point to the path-stencil preflight refusal.
+        const val PREPARED_PATH_STENCIL_REFUSAL =
+            "invalid.preflight.core_primitive_path_stencil"
+        // The 15 dst-read modes whose two-draw frames route through the multi-render
+        // dst-copy admission: every artistic mode except SCREEN (whose formula
+        // program is implemented) plus PLUS.
+        val MULTI_RENDER_DST_COPY_MODES = (ARTISTIC_MODES - BlendMode.SCREEN) + BlendMode.PLUS
 
         @AfterAll
         @JvmStatic

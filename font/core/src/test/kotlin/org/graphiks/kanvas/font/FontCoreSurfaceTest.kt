@@ -12,6 +12,18 @@ import java.nio.file.Path
 
 class FontCoreSurfaceTest {
     @Test
+    fun fontTaxonomyUsesNeutralTextRefusalAuthority() {
+        assertEquals(
+            "unsupported.text.artifact_unregistered",
+            FontTextRefusalCodes.ARTIFACT_UNREGISTERED,
+        )
+        assertTrue(
+            defaultFontDiagnosticTaxonomy().codes
+                .any { entry -> entry.code == FontTextRefusalCodes.ARTIFACT_UNREGISTERED },
+        )
+    }
+
+    @Test
     fun exposesCoreFontValueObjectsAndContracts() {
         val sourceUuid = Uuid.parse("550e8400-e29b-41d4-a716-446655440000")
         val typefaceUuid = Uuid.parse("550e8400-e29b-41d4-a716-446655440001")

@@ -1,5 +1,160 @@
 package org.graphiks.kanvas.gpu.renderer.telemetry
 
+import java.util.Collections
+import org.graphiks.kanvas.gpu.renderer.vertices.PREPARED_VERTICES_BATCH_NONCLAIM_LINE
+
+/** Stable identity shared by every fact emitted for one frame submission attempt. */
+@JvmInline
+value class GPUFrameAttemptID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUFrameAttemptID.value must not be blank" }
+    }
+}
+
+/** Closed monotonic phases observed by structural frame telemetry. */
+enum class GPUFrameStructuralPhase {
+    Recording,
+    Planning,
+    Preflight,
+    Encoding,
+    Submitted,
+    Completed,
+}
+
+/** Closed final outcomes for one frame attempt. */
+enum class GPUFrameStructuralOutcome {
+    Refused,
+    Succeeded,
+    Failed,
+}
+
+/** Closed structural counters. Counter names are data, never caller-provided strings. */
+enum class GPUFrameStructuralCounter(val label: String) {
+    EncoderCreate("encoder.create"),
+    EncoderScope("encoder.scope"),
+    EncoderFinish("encoder.finish"),
+    QueueSubmit("queue.submit"),
+    CompletionArm("completion.arm"),
+}
+
+/** Closed event kinds. They report decisions made elsewhere and never select a route. */
+enum class GPUFrameStructuralEventKind {
+    AttemptStarted,
+    PlanningAccepted,
+    PlanningRefused,
+    PreflightAccepted,
+    PreflightRefused,
+    EncoderCreated,
+    ScopeEncoded,
+    EncoderFinished,
+    QueueSubmitted,
+    QueueSubmitFailed,
+    CompletionArmed,
+    CompletionArmFailed,
+    CompletionSucceeded,
+    CompletionFailed,
+}
+
+/** One immutable, attempt-scoped structural observation. */
+data class GPUFrameStructuralTelemetryEvent(
+    val kind: GPUFrameStructuralEventKind,
+    val phase: GPUFrameStructuralPhase,
+    val label: String? = null,
+)
+
+/** The only final structural telemetry value exposed for one frame attempt. */
+class GPUFrameStructuralTelemetrySnapshot(
+    val attemptId: GPUFrameAttemptID,
+    val furthestPhase: GPUFrameStructuralPhase,
+    val outcome: GPUFrameStructuralOutcome,
+    val diagnosticCode: String?,
+    events: List<GPUFrameStructuralTelemetryEvent>,
+    counters: Map<GPUFrameStructuralCounter, Long>,
+) {
+    val events: List<GPUFrameStructuralTelemetryEvent> =
+        Collections.unmodifiableList(ArrayList(events))
+    val counters: Map<GPUFrameStructuralCounter, Long> =
+        Collections.unmodifiableMap(LinkedHashMap(counters))
+}
+
+/**
+ * Mutable only inside one attempt, then one-shot sealed into an immutable snapshot.
+ *
+ * This sink deliberately has no imports from execution, resources, or recording.
+ */
+class GPUFrameAttemptTelemetrySink(val attemptId: GPUFrameAttemptID) {
+    private val events = mutableListOf<GPUFrameStructuralTelemetryEvent>()
+    private val counters = linkedMapOf<GPUFrameStructuralCounter, Long>()
+    private var sealed = false
+    private var furthestRecordedPhase = -1
+
+    @Synchronized
+    fun record(
+        phase: GPUFrameStructuralPhase,
+        kind: GPUFrameStructuralEventKind,
+        counter: GPUFrameStructuralCounter? = null,
+        label: String? = null,
+    ) {
+        check(!sealed) { "GPU frame telemetry attempt is already sealed" }
+        require(phase in kind.allowedPhases) {
+            "GPU frame telemetry event $kind is not valid in phase $phase"
+        }
+        require(phase.ordinal >= furthestRecordedPhase) {
+            "GPU frame telemetry phases must be monotonic"
+        }
+        furthestRecordedPhase = phase.ordinal
+        events += GPUFrameStructuralTelemetryEvent(kind, phase, label)
+        counter?.let { name -> counters[name] = counters.getOrDefault(name, 0L) + 1L }
+    }
+
+    @Synchronized
+    fun seal(
+        furthestPhase: GPUFrameStructuralPhase,
+        outcome: GPUFrameStructuralOutcome,
+        diagnosticCode: String?,
+    ): GPUFrameStructuralTelemetrySnapshot {
+        check(!sealed) { "GPU frame telemetry attempt may be sealed exactly once" }
+        require(furthestPhase.ordinal >= furthestRecordedPhase) {
+            "GPU frame telemetry final phase cannot precede an observed event"
+        }
+        sealed = true
+        return GPUFrameStructuralTelemetrySnapshot(
+            attemptId = attemptId,
+            furthestPhase = furthestPhase,
+            outcome = outcome,
+            diagnosticCode = diagnosticCode,
+            events = events,
+            counters = counters,
+        )
+    }
+}
+
+private val GPUFrameStructuralEventKind.allowedPhases: Set<GPUFrameStructuralPhase>
+    get() = when (this) {
+        GPUFrameStructuralEventKind.AttemptStarted -> setOf(
+            GPUFrameStructuralPhase.Recording,
+            GPUFrameStructuralPhase.Preflight,
+        )
+        GPUFrameStructuralEventKind.PlanningAccepted,
+        GPUFrameStructuralEventKind.PlanningRefused,
+        -> setOf(GPUFrameStructuralPhase.Planning)
+        GPUFrameStructuralEventKind.PreflightAccepted,
+        GPUFrameStructuralEventKind.PreflightRefused,
+        -> setOf(GPUFrameStructuralPhase.Preflight)
+        GPUFrameStructuralEventKind.EncoderCreated,
+        GPUFrameStructuralEventKind.ScopeEncoded,
+        GPUFrameStructuralEventKind.EncoderFinished,
+        -> setOf(GPUFrameStructuralPhase.Encoding)
+        GPUFrameStructuralEventKind.QueueSubmitted,
+        GPUFrameStructuralEventKind.QueueSubmitFailed,
+        GPUFrameStructuralEventKind.CompletionArmed,
+        GPUFrameStructuralEventKind.CompletionArmFailed,
+        -> setOf(GPUFrameStructuralPhase.Submitted)
+        GPUFrameStructuralEventKind.CompletionSucceeded,
+        GPUFrameStructuralEventKind.CompletionFailed,
+        -> setOf(GPUFrameStructuralPhase.Completed)
+    }
+
 /** Counter observed by GPU renderer telemetry. */
 data class GPUTelemetryCounter(
     val name: String,
@@ -763,3 +918,66 @@ private fun Set<String>.stableFieldList(): String =
     } else {
         sorted().joinToString(",")
     }
+
+/**
+ * Closed deterministic counters for one prepared-vertices batching pass.
+ *
+ * Counter names are data, never caller-provided strings; byte counters use the "bytes" unit
+ * and all other counters use "count". The materializer observes its own materialization and
+ * folds the observed facts into this closed set.
+ */
+enum class GPUPreparedVerticesBatchingCounter(val label: String, val unit: String) {
+    DrawCount("prepared-vertices.draw.count", "count"),
+    UniqueArtifacts("prepared-vertices.unique-artifacts", "count"),
+    VertexBytes("prepared-vertices.vertex-bytes", "bytes"),
+    IndexBytes("prepared-vertices.index-bytes", "bytes"),
+    FanExpansion("prepared-vertices.fan-expansion", "count"),
+    BufferCreations("prepared-vertices.buffer-creations", "count"),
+    UploadCount("prepared-vertices.upload.count", "count"),
+    UploadBytes("prepared-vertices.upload-bytes", "bytes"),
+    PackedSubranges("prepared-vertices.packed-subranges", "count"),
+    PipelineCreations("prepared-vertices.pipeline-creations", "count"),
+    PipelineReuses("prepared-vertices.pipeline-reuses", "count"),
+    LayoutCreations("prepared-vertices.layout-creations", "count"),
+    LayoutReuses("prepared-vertices.layout-reuses", "count"),
+    CompatibleBatches("prepared-vertices.compatible-batches", "count"),
+    DrawCalls("prepared-vertices.draw-calls", "count"),
+    DrawIndexedCalls("prepared-vertices.draw-indexed-calls", "count"),
+    EncoderScopes("prepared-vertices.encoder-scopes", "count"),
+    QueueSubmits("prepared-vertices.queue-submits", "count"),
+    Readbacks("prepared-vertices.readbacks", "count"),
+}
+
+/**
+ * Immutable deterministic counter snapshot for one prepared-vertices batching pass.
+ *
+ * The snapshot carries no object identity: counter lookups are enum-keyed longs and dump
+ * lines are byte-stable for equal passes. Absent counters read as zero so every pass emits
+ * the full closed counter set.
+ */
+class GPUPreparedVerticesBatchingCounters private constructor(
+    values: Map<GPUPreparedVerticesBatchingCounter, Long>,
+) {
+    private val values: Map<GPUPreparedVerticesBatchingCounter, Long> =
+        Collections.unmodifiableMap(LinkedHashMap(values))
+
+    /** Returns the folded value for one closed counter, zero when the pass never observed it. */
+    fun counter(counter: GPUPreparedVerticesBatchingCounter): Long = values[counter] ?: 0L
+
+    /** Emits stable `counter:label:scope:value:unit` lines plus the vertices non-claim line. */
+    fun dumpLines(): List<String> =
+        GPUPreparedVerticesBatchingCounter.entries.map { counter ->
+            "counter:${counter.label}:prepared-vertices.batching:${counter(counter)}:${counter.unit}"
+        } + PREPARED_VERTICES_BATCH_NONCLAIM_LINE
+
+    /** Factory helpers for prepared-vertices batching counter snapshots. */
+    companion object {
+        /** Creates one immutable snapshot; every folded value must be non-negative. */
+        fun of(entries: Map<GPUPreparedVerticesBatchingCounter, Long>): GPUPreparedVerticesBatchingCounters {
+            require(entries.values.all { value -> value >= 0L }) {
+                "Prepared-vertices batching counters must never fold negative values"
+            }
+            return GPUPreparedVerticesBatchingCounters(entries)
+        }
+    }
+}

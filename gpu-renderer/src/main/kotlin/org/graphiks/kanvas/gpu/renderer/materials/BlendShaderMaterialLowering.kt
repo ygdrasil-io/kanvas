@@ -13,8 +13,10 @@ object GPUBlendShaderLowering {
     }
 
     fun canHandle(descriptor: GPUMaterialDescriptor.BlendShader): Boolean {
-        if (descriptor.dst is GPUMaterialDescriptor.ImageDraw &&
-            descriptor.src is GPUMaterialDescriptor.ImageDraw) return false
-        return isSupported(descriptor.dst) && isSupported(descriptor.src)
+        val destination = descriptor.storedDst
+        val source = descriptor.storedSrc
+        if (destination is GPUMaterialDescriptor.ImageDraw &&
+            source is GPUMaterialDescriptor.ImageDraw) return false
+        return isSupported(destination) && isSupported(source)
     }
 }

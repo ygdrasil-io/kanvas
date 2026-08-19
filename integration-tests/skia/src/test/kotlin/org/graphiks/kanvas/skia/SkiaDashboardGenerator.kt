@@ -46,7 +46,8 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
 
     val entries = mutableListOf<GmEntry>()
     var passed = 0; var failed = 0; var noScore = 0; var sumSim = 0.0; var simCount = 0
-    val dashboardGms = gms.filter { gm -> gm.renderCost != RenderCost.BLOCKING }
+    val includeBlocking = args.contains("--include-blocking")
+    val dashboardGms = gms.filter { gm -> includeBlocking || gm.renderCost != RenderCost.BLOCKING }
 
     outputDir.resolve("images/reference").mkdirs()
     outputDir.resolve("images/generated").mkdirs()

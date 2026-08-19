@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+import java.security.MessageDigest
 import kotlinx.serialization.Serializable
 import org.graphiks.wgsl.proc.Alignment
 import org.graphiks.wgsl.proc.Layouter
@@ -47,6 +48,32 @@ data class WgslEntryPointReflection(
     val workgroupSize: List<Int>? = null,
 )
 
+/** Shader stages represented by the legacy binding-visibility list. */
+@Serializable
+enum class WgslShaderVisibility(val wireName: String) {
+    Vertex("vertex"),
+    Fragment("fragment"),
+    Compute("compute"),
+    ;
+
+    companion object {
+        fun fromWireName(wireName: String): WgslShaderVisibility =
+            requireNotNull(entries.singleOrNull { it.wireName == wireName }) {
+                "Unsupported WGSL binding visibility stage: $wireName"
+            }
+    }
+}
+
+/** Explicit availability of per-entry-point resource-visibility reflection. */
+@Serializable
+sealed interface WgslBindingVisibility {
+    @Serializable
+    data object Unavailable : WgslBindingVisibility
+
+    @Serializable
+    data class Available(val stages: Set<WgslShaderVisibility>) : WgslBindingVisibility
+}
+
 @Serializable
 data class WgslBindingReflection(
     val group: Int,
@@ -59,7 +86,18 @@ data class WgslBindingReflection(
     val viewDimension: String? = null,
     val storageFormat: String? = null,
     val minBindingSize: Int? = null,
-)
+) {
+    /**
+     * Typed interpretation of [visibility]. An empty legacy list means that wgsl4k did not expose
+     * resource-use visibility; it never implies a fabricated empty or all-stage visibility set.
+     */
+    val visibilityState: WgslBindingVisibility
+        get() = if (visibility.isEmpty()) {
+            WgslBindingVisibility.Unavailable
+        } else {
+            WgslBindingVisibility.Available(visibility.mapTo(linkedSetOf(), WgslShaderVisibility::fromWireName))
+        }
+}
 
 @Serializable
 data class WgslLayoutReflection(
@@ -79,6 +117,124 @@ data class WgslLayoutMemberReflection(
     val alignment: Int,
     val stride: Int? = null,
 )
+
+/** Content-derived identity of a WGSL source payload. */
+internal fun wgslSourceContentHash(source: String): String =
+    sha256Identity(source.encodeToByteArray())
+
+/** Content-derived identity of a WGSL module and its selected source function. */
+internal fun wgslModuleContentHash(
+    source: String,
+    sourceFunction: String,
+): String =
+    CanonicalWgslIdentity("wgsl-module-v1")
+        .text(source)
+        .text(sourceFunction)
+        .finish()
+
+/** Content-derived identity of parser/reflection facts used by a prepared ABI. */
+internal fun WgslReflectionReport.reflectionFactsHash(): String {
+    val identity = CanonicalWgslIdentity("wgsl-reflection-v1")
+        .text(validation.success.toString())
+        .int(validation.diagnostics.size)
+    validation.diagnostics.forEach { diagnostic ->
+        identity.text(diagnostic.reason).text(diagnostic.message)
+    }
+    identity.int(entryPoints.size)
+    entryPoints.forEach { entryPoint ->
+        identity.text(entryPoint.name)
+            .text(entryPoint.stage)
+            .nullableInts(entryPoint.workgroupSize)
+    }
+    identity.int(bindings.size)
+    bindings.forEach { binding ->
+        identity.int(binding.group)
+            .int(binding.binding)
+            .text(binding.name)
+            .text(binding.resourceKind)
+            .texts(binding.visibility)
+            .nullableText(binding.access)
+            .nullableText(binding.sampleType)
+            .nullableText(binding.viewDimension)
+            .nullableText(binding.storageFormat)
+            .nullableInt(binding.minBindingSize)
+    }
+    identity.int(layouts.size)
+    layouts.forEach { layout ->
+        identity.text(layout.structName)
+            .text(layout.addressSpace)
+            .int(layout.size)
+            .int(layout.alignment)
+            .int(layout.members.size)
+        layout.members.forEach { member ->
+            identity.text(member.name)
+                .text(member.type)
+                .int(member.offset)
+                .int(member.size)
+                .int(member.alignment)
+                .nullableInt(member.stride)
+        }
+    }
+    identity.texts(unsupportedFeatures)
+    return identity.finish()
+}
+
+private class CanonicalWgslIdentity(domain: String) {
+    private val digest = MessageDigest.getInstance("SHA-256")
+
+    init {
+        text(domain)
+    }
+
+    fun text(value: String): CanonicalWgslIdentity {
+        val bytes = value.encodeToByteArray()
+        int(bytes.size)
+        digest.update(bytes)
+        return this
+    }
+
+    fun nullableText(value: String?): CanonicalWgslIdentity {
+        digest.update(if (value == null) 0 else 1)
+        if (value != null) text(value)
+        return this
+    }
+
+    fun int(value: Int): CanonicalWgslIdentity {
+        digest.update((value ushr 24).toByte())
+        digest.update((value ushr 16).toByte())
+        digest.update((value ushr 8).toByte())
+        digest.update(value.toByte())
+        return this
+    }
+
+    fun nullableInt(value: Int?): CanonicalWgslIdentity {
+        digest.update(if (value == null) 0 else 1)
+        if (value != null) int(value)
+        return this
+    }
+
+    fun texts(values: List<String>): CanonicalWgslIdentity {
+        int(values.size)
+        values.forEach(::text)
+        return this
+    }
+
+    fun nullableInts(values: List<Int>?): CanonicalWgslIdentity {
+        digest.update(if (values == null) 0 else 1)
+        if (values != null) {
+            int(values.size)
+            values.forEach(::int)
+        }
+        return this
+    }
+
+    fun finish(): String = "sha256:" + digest.digest().toHex()
+}
+
+private fun sha256Identity(bytes: ByteArray): String =
+    "sha256:" + MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+
+private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
 
 fun Module.reflectWgslModule(
     sourceId: String,
@@ -265,7 +421,7 @@ private fun Module.reflectStructLayout(
     }
     val layout = layouter[handle]
     return WgslLayoutReflection(
-        structName = "struct_${handle.index}",
+        structName = type.name ?: "struct_${handle.index}",
         addressSpace = addressSpace,
         size = layout.size,
         alignment = layout.alignment.value,

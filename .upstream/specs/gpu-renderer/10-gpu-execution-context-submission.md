@@ -19,8 +19,8 @@ This execution spec records and validates the target facts needed to encode
 commands; it does not invent color conversion behavior.
 Draw packet and pass command stream materialization is defined in
 `37-draw-packet-command-stream.md`. This execution spec consumes the resulting
-`GPUCommandEncoderPlan` and owns facade encoding, queue submission, completion,
-and readback status.
+`PreparedGPUFrame` and owns facade encoding, queue submission, presentation,
+real queue completion, and readback status.
 
 ## Ownership Boundary
 
@@ -43,11 +43,39 @@ The core does not own:
 
 Windowing, presentation, and platform setup stay outside `:gpu-renderer`. They
 provide a configured `GPUExecutionContext` and target descriptors to the core.
+They do not call the executor directly: `GPUFrameCoordinator` is the sole
+product entry across planning finalization, preflight, and execution. It makes
+no route decision and preserves planning/preflight refusals as terminal frame
+outcomes.
+
+## Frame Execution Boundary
+
+The required product sequence is:
+
+```text
+GPUTaskList
+  -> GPUFramePlanner -> GPUFramePlan
+  -> GPUFramePreflighter -> PreparedGPUFrame
+  -> GPUFrameExecutor
+       -> one command encoder
+       -> one command buffer
+       -> one queue submission
+  -> optional post-submit present
+  -> GPUQueueCompletionTicket terminal callback
+```
+
+Analysis, recording, and `GPUFramePlan` are handle-free. Only
+`GPUFramePreflighter`, after final frame order is known, may materialize
+resources, pass command streams, surface leases, and concrete handles. A
+preflight failure rolls back every new lease and submits nothing. The executor
+accepts only `PreparedGPUFrame`; it cannot allocate an unplanned intermediate,
+change a route, widen bounds, or choose a fallback.
 
 ## `GPUExecutionContext`
 
-`GPUExecutionContext` is the renderer-facing execution handle for one selected
-`GPU` facade implementation and device generation.
+`GPUExecutionContext` is the executor-facing handle for one selected `GPU`
+facade implementation and device generation. Product scene and surface code
+reaches it only through `GPUFrameCoordinator` and a prepared frame.
 
 It records:
 
@@ -94,6 +122,20 @@ does not inherit Graphite classes or backend ownership.
 
 ## Target And Surface Facts
 
+`GPUSceneTarget` is the canonical Kanvas-owned resolved destination for both
+offscreen and window rendering. Its single-sample texture has render-attachment,
+texture-binding, copy-source, and copy-destination usage. It owns dimensions,
+device/target generation, sample plan, and references to `color`-owned format
+and interpretation. It may retain an optional persistent or generation-matched
+MSAA color/depth-stencil continuation. Pass breaks reuse that authoritative
+MSAA attachment with load semantics; a fresh transient attachment never
+qualifies as continuation.
+
+Window rendering appends a blit from `GPUSceneTarget` to the late-acquired
+surface output. GM/readback rendering appends a preflighted texture-to-buffer
+copy. Neither output path changes blend, clip, layer, filter, destination-read,
+or frame planning.
+
 `GPUSurfaceTarget` describes the current render target without exposing
 platform surface objects to planning code.
 
@@ -117,16 +159,19 @@ Swapchain, browser canvas, imported texture, offscreen texture, and layer
 intermediate targets are represented by the same target descriptor shape. A
 target descriptor is not a resource handle and must be safe to dump.
 
-When command encoding needs the current surface or swapchain texture, the
-execution layer creates a `GPUSurfaceTextureLease`. The lease is scoped to the
-frame and target generation, records available usage flags, and cannot be
+When command encoding needs the current surface or swapchain texture,
+`GPUFramePreflighter` acquires `GPUSurfaceTextureLease` as its final ephemeral
+operation, after reusable scene resources are ready and before encoder
+creation. The lease is scoped to the frame and target generation, records
+available usage flags, and cannot be
 stored in material keys, pipeline keys, reusable recordings, or shared caches.
 Sampling, copying, rendering to, or reading back from a leased surface texture
 requires the corresponding usage flag and a non-stale lease.
 
 ## Command Encoding Scopes
 
-`GPUTaskList.addCommands` encodes work through explicit scopes:
+`GPUFrameExecutor` encodes the preflighted command stream through explicit
+scopes:
 
 - render pass scope;
 - compute pass scope;
@@ -185,6 +230,48 @@ It includes:
 Submission may fail before encoding, during resource preparation, during command
 encoding, at queue submission, or during asynchronous completion. Each class is
 reported separately.
+
+`GPUFrameExecutor` creates exactly one command encoder, records every planned
+render/compute/copy/readback/surface-blit scope in `GPUFramePlan` order,
+finishes exactly one command buffer, and calls `queue.submit()` exactly once.
+It registers the exact prepared resource set against the submission and arms
+the pre-reserved `GPUQueueCompletionTicket` immediately after submit, before
+any fallible presentation action. No blend, copy, filter, layer, or output path
+may submit an intermediate encoder.
+
+Presentation is a separate lifecycle:
+
+```text
+AcquireSurfaceOutput
+  -> encode SurfaceBlitRenderPassStep
+  -> queue.submit(commandBuffer)
+  -> arm GPUQueueCompletionTicket
+  -> PostSubmitPresentAction
+```
+
+`present()` is neither encoded GPU work nor a terminal queue signal. The host
+output handoff may occur before the queue callback; a throwing present leaves
+the already submitted work and its retained leases tracked. Ordinary
+submission resources are released, reused, or evicted only after accepted
+queue-completion success.
+Completion failure or device loss quarantines them through teardown.
+
+`GPUQueueCompletionTicket` wraps the unchanged wgpu4k
+`GPUQueue.onSubmittedWorkDone()` facade API only after the corrected facade
+revision passes native conformance for callback/upcall/userdata lifetime,
+explicit callback mode, event pumping or polling, ordered exactly-once terminal
+delivery, device loss, close, cancellation, and failure. Kanvas must not add a
+private native completion workaround. Without that proof, preflight refuses
+before surface acquisition and submission with
+`dependency.resource.queue_completion_unavailable`.
+
+Execution and output states remain independent:
+
+```text
+execution: Planned -> Prepared -> Encoded -> Submitted
+           -> GPUCompleted | FailedPreSubmit | FailedAfterSubmit
+output:    NotApplicable | Acquired | Presented | PresentFailed
+```
 
 ## Readback And Evidence Requests
 

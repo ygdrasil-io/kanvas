@@ -585,31 +585,31 @@ fun planGPUTextResourceContracts(fixture: GPUTextResourceContractFixture): GPUTe
             reasonId = "upload-plan-missing",
             blocker = GPUTextRouteBlocker.UPLOAD_PLAN,
             handoffDiagnostic = "text.gpu.upload-plan-missing",
-            rendererDiagnostic = "unsupported.text.upload_plan_missing",
+            rendererDiagnostic = GPUTextRefusalCodes.UPLOAD_PLAN_MISSING,
         )
         fixture.uploadByteSize > fixture.uploadByteBudget -> fixture.refusal(
             reasonId = "upload-budget-exceeded",
             blocker = GPUTextRouteBlocker.UPLOAD_BUDGET,
             handoffDiagnostic = "text.gpu.upload-budget-exceeded",
-            rendererDiagnostic = "unsupported.text.upload_budget_exceeded",
+            rendererDiagnostic = GPUTextRefusalCodes.UPLOAD_BUDGET_EXCEEDED,
         )
         !fixture.atlasPageAvailable -> fixture.refusal(
             reasonId = "atlas-page-unavailable",
             blocker = GPUTextRouteBlocker.ATLAS_PAGE,
             handoffDiagnostic = "text.gpu.atlas-page-unavailable",
-            rendererDiagnostic = "unsupported.text.atlas_page_unavailable",
+            rendererDiagnostic = GPUTextRefusalCodes.ATLAS_PAGE_UNAVAILABLE,
         )
         !fixture.atlasEntryAvailable -> fixture.refusal(
             reasonId = "atlas-entry-missing",
             blocker = GPUTextRouteBlocker.ATLAS_ENTRY,
             handoffDiagnostic = "text.gpu.atlas-entry-missing",
-            rendererDiagnostic = "unsupported.text.atlas_entry_missing",
+            rendererDiagnostic = GPUTextRefusalCodes.ATLAS_ENTRY_MISSING,
         )
         !fixture.bindingLayoutAvailable -> fixture.refusal(
             reasonId = "binding-layout-unavailable",
             blocker = GPUTextRouteBlocker.BINDING_LAYOUT,
             handoffDiagnostic = "text.gpu.binding-layout-unavailable",
-            rendererDiagnostic = "unsupported.text.binding_layout_unavailable",
+            rendererDiagnostic = GPUTextRefusalCodes.BINDING_LAYOUT_UNAVAILABLE,
         )
         else -> null
     }

@@ -1,29 +1,42 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
-import kotlin.math.pow
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 object BlendWgslBuilder {
-    fun buildWgsl(dst: GPUMaterialDescriptor, src: GPUMaterialDescriptor, mode: String): String {
+    fun buildWgsl(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+    ): String = buildSource(dst, src, mode, composable = false)
+
+    fun buildComposableDeclarationsWgsl(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+    ): String = buildSource(dst, src, mode, composable = true)
+
+    private fun buildSource(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+        composable: Boolean,
+    ): String {
         val dstFields = childFields("dst", dst)
         val srcFields = childFields("src", src)
         val dstEval = childEval("dst", dst)
         val srcEval = childEval("src", src)
-        val blendFn = blendFormula(mode)
+        val blendMode = GPUBlendMode.entries.singleOrNull {
+            it.name.equals(mode, ignoreCase = true) || it.gpuLabel.equals(mode, ignoreCase = true)
+        } ?: error("Unsupported blend mode: $mode")
+        val blendFormula = GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(blendMode)
         val hasImageDraw = dst is GPUMaterialDescriptor.ImageDraw || src is GPUMaterialDescriptor.ImageDraw
         val texDecl = if (hasImageDraw) """
 @group(1) @binding(1) var blend_image_texture: texture_2d<f32>;
 @group(1) @binding(2) var blend_image_sampler: sampler;
 """.trimIndent() else ""
-        return """
-struct BlendBlock {
-    ${dstFields}
-    ${srcFields}
-    _pad0: u32, _pad1: u32, _pad2: u32,
-}
-@group(0) @binding(0) var<uniform> blend: BlendBlock;
-${texDecl}
-
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
 struct VertexOutput {
     @builtin(position) pos: vec4f,
     @location(0) uv: vec2f,
@@ -38,18 +51,39 @@ struct VertexOutput {
     let pos = verts[vi];
     return VertexOutput(vec4f(pos, 0.0, 1.0), vec2f(pos.x * 0.5 + 0.5, 1.0 - (pos.y * 0.5 + 0.5)));
 }
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2f) -> vec4f {
+    let uv = localPosition;
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {"
+        }
+        return """
+struct BlendBlock {
+    ${dstFields}
+    ${srcFields}
+    _pad0: u32, _pad1: u32, _pad2: u32,
+}
+@group($bindingGroup) @binding(0) var<uniform> blend: BlendBlock;
+${texDecl}
 
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+$vertexStage
+
+${blendFormula}
+
+$evaluationStart
     ${dstEval}
     ${srcEval}
-    return ${blendFn};
+    return kanvasBlendPremul(src_result, dst_result);
 }
 """.trimIndent()
     }
 
     fun packUniforms(dst: GPUMaterialDescriptor, src: GPUMaterialDescriptor, mode: String): ByteArray {
-        val bb = java.nio.ByteBuffer.allocate(64 + (32 * 2))
-            .order(java.nio.ByteOrder.nativeOrder())
+        val bb = java.nio.ByteBuffer.allocate(BLEND_UNIFORM_SIZE_BYTES)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
         packChild("dst", dst, bb)
         packChild("src", src, bb)
         bb.putInt(0); bb.putInt(0); bb.putInt(0)
@@ -119,63 +153,48 @@ struct VertexOutput {
         else -> error("Unsupported blend child: ${child.kind}")
     }
 
-    private fun blendFormula(mode: String): String = when (mode.uppercase()) {
-        "SRC_OVER" -> "src_result + dst_result * (1.0 - src_result.a)"
-        "DST_OVER" -> "dst_result + src_result * (1.0 - dst_result.a)"
-        "SRC_IN" -> "src_result * dst_result.a"
-        "DST_IN" -> "dst_result * src_result.a"
-        "SRC_OUT" -> "src_result * (1.0 - dst_result.a)"
-        "DST_OUT" -> "dst_result * (1.0 - src_result.a)"
-        "SRC_ATOP" -> "dst_result * src_result.a + src_result * (1.0 - dst_result.a)"
-        "DST_ATOP" -> "src_result * dst_result.a + dst_result * (1.0 - src_result.a)"
-        "XOR" -> "src_result * (1.0 - dst_result.a) + dst_result * (1.0 - src_result.a)"
-        "PLUS" -> "src_result + dst_result"
-        "MODULATE" -> "src_result * dst_result"
-        else -> "src_result * dst_result"
-    } + ";"
-
     private fun packChild(prefix: String, child: GPUMaterialDescriptor, bb: java.nio.ByteBuffer) {
         when (child) {
             is GPUMaterialDescriptor.LinearGradient -> {
                 bb.putFloat(child.startX); bb.putFloat(child.startY)
                 bb.putFloat(child.endX); bb.putFloat(child.endY)
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.RadialGradient -> {
                 bb.putFloat(child.centerX); bb.putFloat(child.centerY)
                 bb.putFloat(child.radius); bb.putFloat(0f) // pad
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.SweepGradient -> {
                 bb.putFloat(child.centerX); bb.putFloat(child.centerY)
                 bb.putFloat(child.startAngle); bb.putFloat(child.endAngle)
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.SolidColor -> {
-                val r = child.r * child.a
-                val g = child.g * child.a
-                val b = child.b * child.a
+                val r = preparedMaterialSrgbToLinear(child.r) * child.a
+                val g = preparedMaterialSrgbToLinear(child.g) * child.a
+                val b = preparedMaterialSrgbToLinear(child.b) * child.a
                 bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(child.a)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
@@ -189,8 +208,5 @@ struct VertexOutput {
         }
     }
 
-    private fun srgbToLinear(c: Float): Float {
-        return if (c <= 0.04045f) c / 12.92f
-        else ((c + 0.055f) / 1.055f).pow(2.4f)
-    }
+    private const val BLEND_UNIFORM_SIZE_BYTES = 112
 }

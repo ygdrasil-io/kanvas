@@ -23,16 +23,21 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -113,6 +118,33 @@ class GPUAlphaImageMaterialTest {
     }
 
     @Test
+    fun `prepared alpha image retains upload bytes only in the immutable artifact`() {
+        val preparedAlphaImage = alphaImage.copy(alphaType = AlphaType.PREMUL)
+        val operation = DisplayOp.DrawImage(
+            image = preparedAlphaImage,
+            src = Rect(0f, 0f, 2f, 1f),
+            dst = Rect(0f, 0f, 2f, 1f),
+            paint = Paint.fill(Color.RED).copy(
+                shader = Shader.Image(preparedAlphaImage, sampling = SamplingOptions.NEAREST),
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(operation),
+            target = GPUTargetFacts(width = 16, height = 16, colorFormat = "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = GPUProductFlagConfig().buildCapabilities(),
+        )
+        val visual = inventory.visualCommands.single()
+        val material = visual.normalized.material as GPUMaterialDescriptor.ImageDraw
+        val prepared = requireNotNull(visual.preparedImage)
+
+        assertEquals(0, material.rgbaPixels.size)
+        assertArrayEquals(expandedAlphaPixels, prepared.artifact.tightRgba8BytesForUpload())
+    }
+
+    @Test
     fun `draw image command uses black tint for alpha image without paint`() {
         val op = DisplayOp.DrawImage(
             image = alphaImage,
@@ -183,6 +215,54 @@ class GPUAlphaImageMaterialTest {
     }
 
     @Test
+    fun `legacy invalid gradient matrix dispatch emits typed local matrix refusal`() {
+        val command = DisplayOp.DrawRect(
+            rect = Rect(0f, 0f, 8f, 8f),
+            paint = Paint(
+                shader = Shader.WithLocalMatrix(
+                    shader = Shader.RadialGradient(
+                        center = Point(4f, 4f),
+                        radius = 4f,
+                        stops = listOf(
+                            GradientStop(0f, Color.RED),
+                            GradientStop(1f, Color.BLUE),
+                        ),
+                    ),
+                    matrix = Matrix33.makeAll(
+                        1f, 0f, 0f,
+                        0f, Float.NaN, 0f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        ).toNormalizedCommand(
+            GPUDrawCommandID(17),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+
+        recorder.dispatchFillRect(
+            cmd = command,
+            dispatched = dispatched,
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.material.mapping.local_matrix",
+            diagnostics.entries.single().reason,
+        )
+        assertEquals(emptyList<String>(), dispatched)
+    }
+
+    @Test
     fun `draw image command dispatches alpha texture and tint uniforms`() {
         val paint = Paint(
             color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
@@ -219,7 +299,7 @@ class GPUAlphaImageMaterialTest {
         assertEquals(2, pass.textureWidth)
         assertEquals(1, pass.textureHeight)
         assertEquals("rgba8unorm", pass.textureFormat)
-        assertEquals(GPUBlendMode.SRC_OVER, pass.blendMode)
+        assertEquals("one_isa", pass.blendMode?.stateId)
         assertNull(pass.stencilMode)
 
         val draw = pass.draws.single()
@@ -521,7 +601,7 @@ class GPUAlphaImageMaterialTest {
             textureHeight: Int,
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilMode: GPUBackendStencilMode?,
             stencilConfig: GPUBackendStencilCoverConfig,
         ) {
@@ -543,7 +623,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRectDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
 
@@ -551,7 +631,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendUniformPayloadDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             sourceLabel: String,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
@@ -560,7 +640,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
 
@@ -570,7 +650,7 @@ class GPUAlphaImageMaterialTest {
             stencilMode: GPUBackendStencilMode,
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
         ) {
             stencilPasses += StencilPass(stencilMode, triangleData, stencilConfig)
@@ -582,7 +662,7 @@ class GPUAlphaImageMaterialTest {
             vertexBufferLabel: String,
             indexCount: Int,
             uniformDraw: GPUBackendRawUniformDraw,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = unsupported()
@@ -595,7 +675,7 @@ class GPUAlphaImageMaterialTest {
             textureWidth: Int,
             textureHeight: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawVertexPositionDualUVIndexed(
@@ -609,7 +689,7 @@ class GPUAlphaImageMaterialTest {
             texture2Width: Int,
             texture2Height: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unsupported()
@@ -625,7 +705,7 @@ class GPUAlphaImageMaterialTest {
             colorFormat: String,
             textureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawTwoTexturePass(
@@ -634,7 +714,7 @@ class GPUAlphaImageMaterialTest {
             firstTextureLabel: String,
             secondTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawThreeTexturePass(
@@ -644,7 +724,7 @@ class GPUAlphaImageMaterialTest {
             secondTextureLabel: String,
             thirdTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawBlendPass(
@@ -663,7 +743,7 @@ class GPUAlphaImageMaterialTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawColorGlyphPass(
@@ -674,7 +754,7 @@ class GPUAlphaImageMaterialTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         private fun unsupported(): Nothing = error("Unexpected recorder call")
@@ -686,7 +766,7 @@ class GPUAlphaImageMaterialTest {
         val textureHeight: Int,
         val textureFormat: String,
         val draws: List<GPUBackendRawUniformDraw>,
-        val blendMode: GPUBlendMode?,
+        val blendMode: GPUFixedFunctionBlendState?,
         val stencilMode: GPUBackendStencilMode?,
         val stencilConfig: GPUBackendStencilCoverConfig,
     )

@@ -17,6 +17,17 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
 
+internal enum class DrawPathSourceOperation(internal val stableName: String) {
+    DRAW_PATH("drawPath"),
+    TEXT_EXPANDED("text-expanded"),
+    ;
+
+    internal companion object {
+        internal fun fromStableName(value: String): DrawPathSourceOperation? =
+            entries.firstOrNull { it.stableName == value }
+    }
+}
+
 /**
  * A tagged union of every display operation a [Canvas] can record.
  *
@@ -41,7 +52,37 @@ sealed interface DisplayOp {
     data class DrawPath(
         val path: Path, val paint: Paint,
         val transform: Matrix33, val clip: ClipStack,
-    ) : DisplayOp
+    ) : DisplayOp {
+        private var sourceOperationToken: DrawPathSourceOperation = DrawPathSourceOperation.DRAW_PATH
+
+        internal val sourceOperation: String
+            get() = sourceOperationToken.stableName
+
+        internal fun copyPreservingSourceOperation(
+            path: Path = this.path,
+            paint: Paint = this.paint,
+            transform: Matrix33 = this.transform,
+            clip: ClipStack = this.clip,
+        ): DrawPath = withSourceOperation(
+            path = path,
+            paint = paint,
+            transform = transform,
+            clip = clip,
+            sourceOperation = sourceOperationToken,
+        )
+
+        internal companion object {
+            internal fun withSourceOperation(
+                path: Path,
+                paint: Paint,
+                transform: Matrix33,
+                clip: ClipStack,
+                sourceOperation: DrawPathSourceOperation,
+            ): DrawPath = DrawPath(path, paint, transform, clip).also {
+                it.sourceOperationToken = sourceOperation
+            }
+        }
+    }
 
     /** Draw a sub-region of an image, optionally modulated by [paint]. */
     data class DrawImage(
