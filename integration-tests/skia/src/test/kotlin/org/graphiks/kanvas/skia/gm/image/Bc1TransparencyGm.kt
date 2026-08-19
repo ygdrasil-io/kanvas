@@ -14,14 +14,8 @@ import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImages
 import org.skia.foundation.SkTextureCompressionType
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-import org.graphiks.math.SkISize
-import org.graphiks.math.SK_ColorBLACK
-import org.graphiks.math.SK_ColorGREEN
-import org.graphiks.math.SK_ColorRED
-import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.SizeI32
 
 /** Port of Skia's `gm/bc1_transparency.cpp`.
  *  Tests BC1 compressed texture transparency — decodes and renders
@@ -38,9 +32,9 @@ class Bc1TransparencyGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(
-            SkColorGetR(SK_ColorGREEN) / 255f,
-            SkColorGetG(SK_ColorGREEN) / 255f,
-            SkColorGetB(SK_ColorGREEN) / 255f,
+            ColorARGB.Green.red / 255f,
+            ColorARGB.Green.green / 255f,
+            ColorARGB.Green.blue / 255f,
         )
 
         val bc1Data = makeCompressedData()
@@ -67,9 +61,9 @@ class Bc1TransparencyGm : SkiaGm {
         )
         val redStroke = Paint(
             color = Color.fromRGBA(
-                SkColorGetR(SK_ColorRED) / 255f,
-                SkColorGetG(SK_ColorRED) / 255f,
-                SkColorGetB(SK_ColorRED) / 255f,
+                ColorARGB.Red.red / 255f,
+                ColorARGB.Red.green / 255f,
+                ColorARGB.Red.blue / 255f,
             ),
             style = PaintStyle.STROKE,
             strokeWidth = 2f,
@@ -78,7 +72,7 @@ class Bc1TransparencyGm : SkiaGm {
     }
 
     private fun makeCompressedData(): SkData {
-        val dim = SkISize.Make(kImgWidth, kImgHeight)
+        val dim = SizeI32.of(kImgWidth, kImgHeight)
         val totalSize = SkCompressedDataUtils.SkCompressedDataSize(
             SkTextureCompressionType.kBC1_RGB8_UNORM, dim, null, false,
         )
@@ -108,12 +102,12 @@ class Bc1TransparencyGm : SkiaGm {
         val color0: Int
         val color1: Int
         if (transparent) {
-            color0 = to565(SK_ColorBLACK)
-            color1 = to565(SK_ColorWHITE)
+            color0 = to565(ColorARGB.Black)
+            color1 = to565(ColorARGB.White)
             byte = (0x0 shl 0) or (0x2 shl 2) or (0x3 shl 4) or (0x1 shl 6)
         } else {
-            color0 = to565(SK_ColorWHITE)
-            color1 = to565(SK_ColorBLACK)
+            color0 = to565(ColorARGB.White)
+            color1 = to565(ColorARGB.Black)
             byte = (0x1 shl 0) or (0x3 shl 2) or (0x2 shl 4) or (0x0 shl 6)
         }
         val indices = (byte shl 24) or (byte shl 16) or (byte shl 8) or byte
@@ -139,10 +133,10 @@ class Bc1TransparencyGm : SkiaGm {
 
         private fun num4x4Blocks(size: Int): Int = ((size + 3) and 3.inv()) shr 2
 
-        private fun to565(col: Int): Int {
-            val r5 = (SkColorGetR(col) * 31 + 127) / 255
-            val g6 = (SkColorGetG(col) * 63 + 127) / 255
-            val b5 = (SkColorGetB(col) * 31 + 127) / 255
+        private fun to565(col: ColorARGB): Int {
+            val r5 = (col.red * 31 + 127) / 255
+            val g6 = (col.green * 63 + 127) / 255
+            val b5 = (col.blue * 31 + 127) / 255
             return ((r5 and 0x1F) shl 11) or ((g6 and 0x3F) shl 5) or (b5 and 0x1F)
         }
     }

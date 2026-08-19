@@ -9,7 +9,7 @@ dependencies {
     implementation(project(":codec"))
     implementation(project(":codec:core"))
     implementation(project(":kanvas"))
-    implementation(project(":math"))
+    implementation(project(":math:geometry"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.color.icc
 
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -105,14 +105,14 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
         upperBoundary
     }
 
-    fun toTransferFunction(): SkcmsTransferFunction = when (type) {
-        0 -> SkcmsTransferFunction(values[0], 1f, 0f, 0f, 0f, 0f, 0f)
-        1 -> SkcmsTransferFunction(values[0], values[1], values[2], 0f, -values[2] / values[1], 0f, 0f)
-        2 -> SkcmsTransferFunction(
+    fun toTransferFunction(): ColorTransferFunction.Parametric = when (type) {
+        0 -> ColorTransferFunction.parametric(values[0], 1f, 0f, 0f, 0f, 0f, 0f)
+        1 -> ColorTransferFunction.parametric(values[0], values[1], values[2], 0f, -values[2] / values[1], 0f, 0f)
+        2 -> ColorTransferFunction.parametric(
             values[0], values[1], values[2], 0f, -values[2] / values[1], values[3], values[3],
         )
-        3 -> SkcmsTransferFunction(values[0], values[1], values[2], values[3], values[4], 0f, 0f)
-        else -> SkcmsTransferFunction(values[0], values[1], values[2], values[3], values[4], values[5], values[6])
+        3 -> ColorTransferFunction.parametric(values[0], values[1], values[2], values[3], values[4], 0f, 0f)
+        else -> ColorTransferFunction.parametric(values[0], values[1], values[2], values[3], values[4], values[5], values[6])
     }
 }
 

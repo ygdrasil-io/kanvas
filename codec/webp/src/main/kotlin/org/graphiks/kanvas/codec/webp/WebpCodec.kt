@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.webp
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
@@ -55,7 +55,7 @@ public class WebpCodec internal constructor(
                 requiredFrame = if (index == 0) kNoFrame else index - 1,
                 durationMs = frame.durationMs,
                 alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
-                frameRect = SkIRect.MakeXYWH(frame.x, frame.y, frame.width, frame.height),
+                frameRect = RectI32.ofOriginSize(frame.x, frame.y, frame.width, frame.height),
             )
         } ?: super.getFrameInfo()
 

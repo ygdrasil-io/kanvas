@@ -1,8 +1,9 @@
 package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.IccTransformPipeline
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.ConsistentCopyVisibility
 import kotlin.math.exp
 import kotlin.math.ln
@@ -35,15 +36,15 @@ public sealed interface ColorProfileParseResult {
 public data class ColorProfile private constructor(
     public val colorModel: ColorModel,
     private val matrix: Matrix3x3Value?,
-    public val transferFunction: SkcmsTransferFunction? = null,
+    public val transferFunction: ColorTransferFunction.Parametric? = null,
     public val unsupportedCode: String? = null,
     private val lut: LutProfileValue? = null,
     internal val hdrTransferFunction: HdrTransferFunction? = null,
 ) {
     public constructor(
         colorModel: ColorModel,
-        toXyzD50: SkcmsMatrix3x3? = null,
-        transferFunction: SkcmsTransferFunction? = null,
+        toXyzD50: Matrix3x3F32? = null,
+        transferFunction: ColorTransferFunction.Parametric? = null,
         unsupportedCode: String? = null,
     ) : this(
         colorModel = colorModel,
@@ -55,8 +56,8 @@ public data class ColorProfile private constructor(
     )
 
     /** Returns a fresh matrix copy so callers cannot mutate this profile. */
-    public val toXyzD50: SkcmsMatrix3x3?
-        get() = matrix?.toSkcmsMatrix3x3()
+    public val toXyzD50: Matrix3x3F32?
+        get() = matrix?.toMatrix3x3F32()
 
     public val hasMatrixTrc: Boolean
         get() = unsupportedCode == null && matrix != null && (transferFunction != null || hdrTransferFunction != null)
@@ -100,7 +101,7 @@ public data class ColorProfile private constructor(
         }
 
         internal fun hdr(
-            toXyzD50: SkcmsMatrix3x3,
+            toXyzD50: Matrix3x3F32,
             transferFunction: HdrTransferFunction,
         ): ColorProfile = ColorProfile(
             colorModel = ColorModel.RGB,
@@ -235,23 +236,23 @@ private data class Matrix3x3Value(
     val r2c1: Float,
     val r2c2: Float,
 ) {
-    fun toSkcmsMatrix3x3(): SkcmsMatrix3x3 = SkcmsMatrix3x3.of(
+    fun toMatrix3x3F32(): Matrix3x3F32 = Matrix3x3F32.of(
         r0c0, r0c1, r0c2,
         r1c0, r1c1, r1c2,
         r2c0, r2c1, r2c2,
     )
 
     companion object {
-        fun copyOf(matrix: SkcmsMatrix3x3): Matrix3x3Value = Matrix3x3Value(
-            r0c0 = matrix[0, 0],
-            r0c1 = matrix[0, 1],
-            r0c2 = matrix[0, 2],
-            r1c0 = matrix[1, 0],
-            r1c1 = matrix[1, 1],
-            r1c2 = matrix[1, 2],
-            r2c0 = matrix[2, 0],
-            r2c1 = matrix[2, 1],
-            r2c2 = matrix[2, 2],
+        fun copyOf(matrix: Matrix3x3F32): Matrix3x3Value = Matrix3x3Value(
+            r0c0 = matrix.iccGet(0, 0),
+            r0c1 = matrix.iccGet(0, 1),
+            r0c2 = matrix.iccGet(0, 2),
+            r1c0 = matrix.iccGet(1, 0),
+            r1c1 = matrix.iccGet(1, 1),
+            r1c2 = matrix.iccGet(1, 2),
+            r2c0 = matrix.iccGet(2, 0),
+            r2c1 = matrix.iccGet(2, 1),
+            r2c2 = matrix.iccGet(2, 2),
         )
     }
 }
@@ -259,12 +260,12 @@ private data class Matrix3x3Value(
 public object ColorProfiles {
     private val sRgb: ColorProfile = ColorProfile(
         colorModel = ColorModel.RGB,
-        toXyzD50 = SkcmsMatrix3x3.of(
+        toXyzD50 = Matrix3x3F32.of(
             0.43606567f, 0.3851471f, 0.1430664f,
             0.2224884f, 0.71687317f, 0.06060791f,
             0.01391602f, 0.097076416f, 0.71409607f,
         ),
-        transferFunction = SkcmsTransferFunction(
+        transferFunction = ColorTransferFunction.parametric(
             g = 2.4f,
             a = 1f / 1.055f,
             b = 0.055f / 1.055f,
@@ -277,7 +278,7 @@ public object ColorProfiles {
 
     private val displayP3: ColorProfile = ColorProfile(
         colorModel = ColorModel.RGB,
-        toXyzD50 = SkcmsMatrix3x3.of(
+        toXyzD50 = Matrix3x3F32.of(
             0.51512146f, 0.29197693f, 0.15710449f,
             0.24119568f, 0.6922455f, 0.0665741f,
             -0.0010528564f, 0.041885376f, 0.7840729f,
@@ -287,12 +288,12 @@ public object ColorProfiles {
 
     private val rec2020: ColorProfile = ColorProfile(
         colorModel = ColorModel.RGB,
-        toXyzD50 = SkcmsMatrix3x3.of(
+        toXyzD50 = Matrix3x3F32.of(
             0.673459f, 0.165661f, 0.125100f,
             0.279033f, 0.675338f, 0.0456288f,
             -0.00193139f, 0.0299794f, 0.797162f,
         ),
-        transferFunction = SkcmsTransferFunction(
+        transferFunction = ColorTransferFunction.parametric(
             g = 2.22222f,
             a = 0.909672f,
             b = 0.0903276f,

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
@@ -86,7 +86,7 @@ class AnimatedImageOwnershipTest {
                 FrameInfo(
                     requiredFrame = if (index == 0) kNoFrame else index - 1,
                     durationMs = delayMs,
-                    frameRect = SkIRect.MakeWH(info.width, info.height),
+                    frameRect = RectI32.ofSize(info.width, info.height),
                 )
             }
 

@@ -1,8 +1,9 @@
 package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.parametricCurveValidationError
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 import kotlin.math.pow
 
@@ -10,8 +11,8 @@ import kotlin.math.pow
 internal class MatrixColorTransform(
     sourceToXyzD50: FloatArray,
     destinationFromXyzD50: FloatArray,
-    private val sourceTransferFunction: SkcmsTransferFunction,
-    private val destinationTransferFunction: SkcmsTransferFunction,
+    private val sourceTransferFunction: ColorTransferFunction.Parametric,
+    private val destinationTransferFunction: ColorTransferFunction.Parametric,
     private val alphaType: AlphaType,
 ) : CompiledRgbPlan {
     private val sourceToXyzD50 = sourceToXyzD50.copyOf()
@@ -64,13 +65,13 @@ internal class MatrixColorTransform(
     }
 }
 
-private fun decode(transferFunction: SkcmsTransferFunction, encoded: Float): Float = if (encoded >= transferFunction.d) {
+private fun decode(transferFunction: ColorTransferFunction.Parametric, encoded: Float): Float = if (encoded >= transferFunction.d) {
     (transferFunction.a * encoded + transferFunction.b).pow(transferFunction.g) + transferFunction.e
 } else {
     transferFunction.c * encoded + transferFunction.f
 }
 
-private fun encode(transferFunction: SkcmsTransferFunction, linear: Float): Float {
+private fun encode(transferFunction: ColorTransferFunction.Parametric, linear: Float): Float {
     val lowerLimit = transferFunction.c * transferFunction.d + transferFunction.f
     val upperLimit = decode(transferFunction, transferFunction.d)
     return when {
@@ -83,7 +84,7 @@ private fun encode(transferFunction: SkcmsTransferFunction, linear: Float): Floa
 
 private fun clampEncoded(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 
-internal fun validTransferFunction(transferFunction: SkcmsTransferFunction): Boolean {
+internal fun validTransferFunction(transferFunction: ColorTransferFunction.Parametric): Boolean {
     val parameters = floatArrayOf(
         transferFunction.g,
         transferFunction.a,
@@ -96,8 +97,8 @@ internal fun validTransferFunction(transferFunction: SkcmsTransferFunction): Boo
     return parametricCurveValidationError(4, parameters) == null
 }
 
-internal fun matrixValues(matrix: SkcmsMatrix3x3): FloatArray = FloatArray(9) { index ->
-    matrix[index / 3, index % 3]
+internal fun matrixValues(matrix: Matrix3x3F32): FloatArray = FloatArray(9) { index ->
+    matrix.iccGet(index / 3, index % 3)
 }
 
 internal fun invert3x3(matrix: FloatArray): FloatArray? {

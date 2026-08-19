@@ -5,7 +5,6 @@ plugins {
 
 dependencies {
     api(project(":font:core"))
-    api(project(":math"))
 
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))

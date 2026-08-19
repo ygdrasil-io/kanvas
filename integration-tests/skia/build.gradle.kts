@@ -8,6 +8,8 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas"))
+    implementation(project(":math:color"))
+    implementation(project(":math:geometry"))
     implementation(project(":codec"))
     implementation(project(":integration-tests:test-utils"))
     implementation(project(":integration-tests:diagnostic"))

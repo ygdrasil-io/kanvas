@@ -3,8 +3,9 @@ package org.graphiks.kanvas.color.icc
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -47,7 +48,7 @@ class IccProfileWriterTest {
 
     @Test
     fun `type four corrected semantics always declare ICC 4_4`() {
-        val transferFunction = SkcmsTransferFunction(
+        val transferFunction = ColorTransferFunction.parametric(
             g = 1f,
             a = 0.9f,
             b = 0f,
@@ -112,12 +113,12 @@ class IccProfileWriterTest {
 
     @Test
     fun `quantizes signed fixed values without overflow or non finite coercion`() {
-        val nanMatrix = SkcmsMatrix3x3.of(
+        val nanMatrix = Matrix3x3F32.of(
             Float.NaN, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
         )
-        val overflowMatrix = SkcmsMatrix3x3.of(
+        val overflowMatrix = Matrix3x3F32.of(
             32_768f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -134,7 +135,7 @@ class IccProfileWriterTest {
 
     @Test
     fun `rejects a matrix that becomes singular in ICC fixed point`() {
-        val singularMatrix = SkcmsMatrix3x3.of(
+        val singularMatrix = Matrix3x3F32.of(
             1f, 0f, 0f,
             1f, 0f, 0f,
             0f, 0f, 1f,
@@ -153,7 +154,7 @@ class IccProfileWriterTest {
 
     @Test
     fun `rejects an invertible RGB matrix whose white is not D50`() {
-        val identity = SkcmsMatrix3x3.of(
+        val identity = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -170,9 +171,9 @@ class IccProfileWriterTest {
         }
     }
 
-    private fun assertMatrixNear(expected: SkcmsMatrix3x3, actual: SkcmsMatrix3x3) {
+    private fun assertMatrixNear(expected: Matrix3x3F32, actual: Matrix3x3F32) {
         for (row in 0 until 3) for (column in 0 until 3) {
-            assertEquals(expected[row, column], actual[row, column], WHITE_NORMALIZATION_TOLERANCE)
+            assertEquals(expected.iccGet(row, column), actual.iccGet(row, column), WHITE_NORMALIZATION_TOLERANCE)
         }
     }
 
@@ -198,7 +199,7 @@ class IccProfileWriterTest {
         error("missing ICC tag ${IccSignature(wanted)}")
     }
 
-    private fun assertTransferFunctionNear(expected: SkcmsTransferFunction, actual: SkcmsTransferFunction) {
+    private fun assertTransferFunctionNear(expected: ColorTransferFunction.Parametric, actual: ColorTransferFunction.Parametric) {
         val expectedValues = listOf(expected.g, expected.a, expected.b, expected.c, expected.d, expected.e, expected.f)
         val actualValues = listOf(actual.g, actual.a, actual.b, actual.c, actual.d, actual.e, actual.f)
         assertTrue(
@@ -230,7 +231,7 @@ class IccProfileWriterTest {
         const val FIXED_TOLERANCE: Float = 1f / 65_536f
         const val WHITE_NORMALIZATION_TOLERANCE: Float = 64f / 65_536f
         const val ICC_VERSION_4_4: Int = 0x04400000
-        val LINEAR_TRANSFER: SkcmsTransferFunction = SkcmsTransferFunction(
+        val LINEAR_TRANSFER: ColorTransferFunction.Parametric = ColorTransferFunction.parametric(
             g = 1f,
             a = 1f,
             b = 0f,

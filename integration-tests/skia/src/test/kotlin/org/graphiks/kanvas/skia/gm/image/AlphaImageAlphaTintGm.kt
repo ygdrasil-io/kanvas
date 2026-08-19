@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/alpha_image.cpp` (alpha-tint variant).
  *  Creates an ALPHA_8 image from pixel data and renders it with a
@@ -26,7 +26,7 @@ class AlphaImageAlphaTintGm : SkiaGm {
     override val height = 80
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.clear(SK_ColorGRAY)
+        canvas.clear(ColorARGB.Gray.toPackedInt())
 
         val pixels = ByteArray(64 * 64)
         for (y in 0 until 64) {

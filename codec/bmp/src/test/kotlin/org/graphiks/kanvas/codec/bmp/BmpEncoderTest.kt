@@ -10,10 +10,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkICC
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import java.io.ByteArrayOutputStream
 
 class BmpEncoderTest {
@@ -46,9 +43,9 @@ class BmpEncoderTest {
         for (y in 0 until src.height) for (x in 0 until src.width) {
             val expected = src.getPixel(x, y)
             val actualArgb = decoded.getPixel(x, y)
-            assertEquals(SkColorGetR(expected), SkColorGetR(actualArgb), "R($x,$y)")
-            assertEquals(SkColorGetG(expected), SkColorGetG(actualArgb), "G($x,$y)")
-            assertEquals(SkColorGetB(expected), SkColorGetB(actualArgb), "B($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(expected).red, ColorARGB.fromPackedInt(actualArgb).red, "R($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(expected).green, ColorARGB.fromPackedInt(actualArgb).green, "G($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(expected).blue, ColorARGB.fromPackedInt(actualArgb).blue, "B($x,$y)")
         }
     }
 
@@ -63,9 +60,9 @@ class BmpEncoderTest {
         val bpp = readU16LE(bytes, 14 + 14)
         assertEquals(24, bpp)
         val decoded = decodeBmp(bytes)
-        assertEquals(0xFF, SkColorGetR(decoded.getPixel(0, 0)))
-        assertEquals(0xFF, SkColorGetG(decoded.getPixel(1, 0)))
-        assertEquals(0x11, SkColorGetR(decoded.getPixel(1, 1)))
+        assertEquals(0xFF, ColorARGB.fromPackedInt(decoded.getPixel(0, 0)).red)
+        assertEquals(0xFF, ColorARGB.fromPackedInt(decoded.getPixel(1, 0)).green)
+        assertEquals(0x11, ColorARGB.fromPackedInt(decoded.getPixel(1, 1)).red)
     }
 
     @Test
@@ -103,9 +100,9 @@ class BmpEncoderTest {
         assertEquals(32, bpp)
         val dataOffset = readU32LE(bytes, 10)
         val p0a = bytes[dataOffset + 3].toInt() and 0xFF
-        assertEquals(SkColorGetA(src.pixels[0]), p0a)
+        assertEquals(ColorARGB.fromPackedInt(src.pixels[0]).alpha, p0a)
         val p1a = bytes[dataOffset + 7].toInt() and 0xFF
-        assertEquals(SkColorGetA(src.pixels[1]), p1a)
+        assertEquals(ColorARGB.fromPackedInt(src.pixels[1]).alpha, p1a)
     }
 
     private fun makeGradient(width: Int, height: Int): SkBitmap {
@@ -146,9 +143,9 @@ class BmpEncoderTest {
         assertEquals(1, readU32LE(bytes, 14 + 16), "compression must be BI_RLE8")
         val decoded = decodeBmp(bytes)
         for (y in 0 until 2) for (x in 0 until 4) {
-            assertEquals(SkColorGetR(src.getPixel(x, y)), SkColorGetR(decoded.getPixel(x, y)), "R($x,$y)")
-            assertEquals(SkColorGetG(src.getPixel(x, y)), SkColorGetG(decoded.getPixel(x, y)), "G($x,$y)")
-            assertEquals(SkColorGetB(src.getPixel(x, y)), SkColorGetB(decoded.getPixel(x, y)), "B($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, y)).red, ColorARGB.fromPackedInt(decoded.getPixel(x, y)).red, "R($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, y)).green, ColorARGB.fromPackedInt(decoded.getPixel(x, y)).green, "G($x,$y)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, y)).blue, ColorARGB.fromPackedInt(decoded.getPixel(x, y)).blue, "B($x,$y)")
         }
     }
 
@@ -163,7 +160,7 @@ class BmpEncoderTest {
         assertEquals(2, readU32LE(bytes, 14 + 16), "compression must be BI_RLE4")
         val decoded = decodeBmp(bytes)
         for (x in 0 until 4) {
-            assertEquals(0xFF, SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+            assertEquals(0xFF, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).blue, "B($x,0)")
         }
     }
 
@@ -192,9 +189,9 @@ class BmpEncoderTest {
         assertEquals(1, readU32LE(bytes, 14 + 16), "compression must be BI_RLE8")
         val decoded = decodeBmp(bytes)
         for (x in 0 until 4) {
-            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
-            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
-            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).red, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).red, "R($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).green, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).green, "G($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).blue, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).blue, "B($x,0)")
         }
     }
 
@@ -225,9 +222,9 @@ class BmpEncoderTest {
         assertEquals(2, readU32LE(bytes, 14 + 16))
         val decoded = decodeBmp(bytes)
         for (x in 0 until 4) {
-            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
-            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
-            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).red, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).red, "R($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).green, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).green, "G($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).blue, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).blue, "B($x,0)")
         }
     }
 
@@ -244,9 +241,9 @@ class BmpEncoderTest {
         assertEquals(2, readU32LE(bytes, 14 + 16))
         val decoded = decodeBmp(bytes)
         for (x in 0 until 4) {
-            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
-            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
-            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).red, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).red, "R($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).green, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).green, "G($x,0)")
+            assertEquals(ColorARGB.fromPackedInt(src.getPixel(x, 0)).blue, ColorARGB.fromPackedInt(decoded.getPixel(x, 0)).blue, "B($x,0)")
         }
     }
 

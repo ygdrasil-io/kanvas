@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.image
 
 import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkISize
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -29,8 +29,8 @@ class ImageMetadataTest {
             colorSpace = ColorSpace.SRGB,
         )
 
-        assertEquals(SkISize.Make(3, 4), info.dimensions())
-        assertEquals(SkIRect.MakeWH(3, 4), info.bounds())
+        assertEquals(SizeI32.of(3, 4), info.dimensions())
+        assertEquals(RectI32.ofSize(3, 4), info.bounds())
         assertFalse(info.isEmpty())
         assertFalse(info.isOpaque())
         assertEquals(4, info.bytesPerPixel())

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfileParseResult
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.HdrTransferFunction
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
 
 /** H.273 colour signalling carried by a PNG cICP chunk. */
 public data class CicpColorInfo(
@@ -65,7 +65,7 @@ private const val TRANSFER_REC2020_12: Int = 15
 private const val TRANSFER_PQ: Int = 16
 private const val TRANSFER_HLG: Int = 18
 
-private val LINEAR_TRANSFER: SkcmsTransferFunction = SkcmsTransferFunction(
+private val LINEAR_TRANSFER: ColorTransferFunction.Parametric = ColorTransferFunction.parametric(
     g = 1f,
     a = 1f,
     b = 0f,

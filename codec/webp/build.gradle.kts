@@ -5,7 +5,7 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas"))
-    implementation(project(":math"))
+    implementation(project(":math:geometry"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
 

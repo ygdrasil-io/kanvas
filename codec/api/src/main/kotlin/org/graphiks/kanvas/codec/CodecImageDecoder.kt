@@ -4,10 +4,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ImageDecodeResult
 import org.graphiks.kanvas.image.ImageDecoder
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import java.security.MessageDigest
 
 public class CodecImageDecoder : ImageDecoder {
@@ -31,12 +28,12 @@ public class CodecImageDecoder : ImageDecoder {
 
         val pixels = ByteArray(bitmap.width * bitmap.height * 4)
         for (index in bitmap.pixels8888.indices) {
-            val color = bitmap.pixels8888[index]
+            val color = ColorARGB.fromPackedInt(bitmap.pixels8888[index])
             val offset = index * 4
-            pixels[offset] = SkColorGetR(color).toByte()
-            pixels[offset + 1] = SkColorGetG(color).toByte()
-            pixels[offset + 2] = SkColorGetB(color).toByte()
-            pixels[offset + 3] = SkColorGetA(color).toByte()
+            pixels[offset] = color.red.toByte()
+            pixels[offset + 1] = color.green.toByte()
+            pixels[offset + 2] = color.blue.toByte()
+            pixels[offset + 3] = color.alpha.toByte()
         }
 
         return ImageDecodeResult.Success(

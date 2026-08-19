@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.real
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -152,7 +152,7 @@ class CodecAllKotlinRealImageTest {
         val requiredFrame: Int? = null,
         val durationMs: Int? = null,
         val alphaType: SkAlphaType? = null,
-        val frameRect: SkIRect? = null,
+        val frameRect: RectI32? = null,
     )
 
     data class FramePixelProbe(
@@ -394,7 +394,7 @@ class CodecAllKotlinRealImageTest {
                         index = 0,
                         requiredFrame = Codec.kNoFrame,
                         durationMs = 0,
-                        frameRect = SkIRect.MakeXYWH(0, 0, 200, 55),
+                        frameRect = RectI32.ofOriginSize(0, 0, 200, 55),
                     ),
                 ),
                 pixelProbes = listOf(PixelProbe(0, 0, 0xFF000000.toInt())),
@@ -411,7 +411,7 @@ class CodecAllKotlinRealImageTest {
                     FrameInfoExpectation(
                         index = index,
                         durationMs = 200,
-                        frameRect = SkIRect.MakeXYWH(0, 0, 640, 479),
+                        frameRect = RectI32.ofOriginSize(0, 0, 640, 479),
                     )
                 },
                 pixelProbes = listOf(PixelProbe(0, 0, 0xFF4FEFB9.toInt())),
@@ -428,11 +428,11 @@ class CodecAllKotlinRealImageTest {
                 frameCount = 5,
                 hasAlpha = false,
                 frameInfo = listOf(
-                    FrameInfoExpectation(0, requiredFrame = Codec.kNoFrame, durationMs = 50, frameRect = SkIRect.MakeXYWH(0, 0, 3, 1)),
-                    FrameInfoExpectation(1, requiredFrame = 0, durationMs = 60, frameRect = SkIRect.MakeXYWH(1, 0, 1, 1)),
-                    FrameInfoExpectation(2, requiredFrame = 1, durationMs = 70, frameRect = SkIRect.MakeXYWH(2, 0, 1, 1)),
-                    FrameInfoExpectation(3, requiredFrame = 2, durationMs = 80, frameRect = SkIRect.MakeXYWH(1, 0, 1, 1)),
-                    FrameInfoExpectation(4, requiredFrame = 2, durationMs = 90, frameRect = SkIRect.MakeXYWH(2, 0, 1, 1)),
+                    FrameInfoExpectation(0, requiredFrame = Codec.kNoFrame, durationMs = 50, frameRect = RectI32.ofOriginSize(0, 0, 3, 1)),
+                    FrameInfoExpectation(1, requiredFrame = 0, durationMs = 60, frameRect = RectI32.ofOriginSize(1, 0, 1, 1)),
+                    FrameInfoExpectation(2, requiredFrame = 1, durationMs = 70, frameRect = RectI32.ofOriginSize(2, 0, 1, 1)),
+                    FrameInfoExpectation(3, requiredFrame = 2, durationMs = 80, frameRect = RectI32.ofOriginSize(1, 0, 1, 1)),
+                    FrameInfoExpectation(4, requiredFrame = 2, durationMs = 90, frameRect = RectI32.ofOriginSize(2, 0, 1, 1)),
                 ),
                 pixelProbes = listOf(PixelProbe(0, 0, 0xFFFF0000.toInt())),
                 framePixelProbes = listOf(
@@ -576,21 +576,21 @@ class CodecAllKotlinRealImageTest {
                         requiredFrame = Codec.kNoFrame,
                         durationMs = 10,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(0, 0, 4, 1),
+                        frameRect = RectI32.ofOriginSize(0, 0, 4, 1),
                     ),
                     FrameInfoExpectation(
                         index = 1,
                         requiredFrame = 0,
                         durationMs = 20,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(0, 0, 4, 1),
+                        frameRect = RectI32.ofOriginSize(0, 0, 4, 1),
                     ),
                     FrameInfoExpectation(
                         index = 2,
                         requiredFrame = 1,
                         durationMs = 30,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(2, 0, 2, 1),
+                        frameRect = RectI32.ofOriginSize(2, 0, 2, 1),
                     ),
                 ),
                 pixelProbes = listOf(
@@ -633,21 +633,21 @@ class CodecAllKotlinRealImageTest {
                         requiredFrame = Codec.kNoFrame,
                         durationMs = 1000,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(0, 0, 11, 29),
+                        frameRect = RectI32.ofOriginSize(0, 0, 11, 29),
                     ),
                     FrameInfoExpectation(
                         index = 1,
                         requiredFrame = 0,
                         durationMs = 500,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(2, 10, 7, 17),
+                        frameRect = RectI32.ofOriginSize(2, 10, 7, 17),
                     ),
                     FrameInfoExpectation(
                         index = 2,
                         requiredFrame = 1,
                         durationMs = 1000,
                         alphaType = SkAlphaType.kUnpremul,
-                        frameRect = SkIRect.MakeXYWH(2, 2, 7, 16),
+                        frameRect = RectI32.ofOriginSize(2, 2, 7, 16),
                     ),
                 ),
                 expectedResult = Codec.Result.kErrorInInput,

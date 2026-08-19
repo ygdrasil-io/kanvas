@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.image
 
 import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkISize
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 
 data class ImageInfo(
     val width: Int,
@@ -15,9 +15,9 @@ data class ImageInfo(
         require(width >= 0 && height >= 0) { "negative dimensions: ${width}x$height" }
     }
 
-    fun dimensions(): SkISize = SkISize.Make(width, height)
+    fun dimensions(): SizeI32 = SizeI32.of(width, height)
 
-    fun bounds(): SkIRect = SkIRect.MakeWH(width, height)
+    fun bounds(): RectI32 = RectI32.ofSize(width, height)
 
     fun isEmpty(): Boolean = width <= 0 || height <= 0
 

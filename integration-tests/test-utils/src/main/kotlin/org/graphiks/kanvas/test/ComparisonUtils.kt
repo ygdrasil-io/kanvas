@@ -2,13 +2,9 @@ package org.graphiks.kanvas.test
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.png.PngEncoder
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-import org.graphiks.math.SkColorSetARGB
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -22,7 +18,7 @@ import kotlin.math.pow
 
 object ComparisonUtils {
     private const val BYTES_PER_PIXEL = 4
-    private val REC2020_TRANSFER_FN = SkcmsTransferFunction(
+    private val REC2020_TRANSFER_FN = ColorTransferFunction.parametric(
         g = 2.2222137f,
         a = 0.909668f,
         b = 0.09033203f,
@@ -204,7 +200,7 @@ object ComparisonUtils {
                 val g = rgba[i + 1].toInt() and 0xFF
                 val b = rgba[i + 2].toInt() and 0xFF
                 val a = rgba[i + 3].toInt() and 0xFF
-                bitmap.setPixel(x, y, SkColorSetARGB(a, r, g, b))
+                bitmap.setPixel(x, y, ColorARGB.of(a, r, g, b).toPackedInt())
             }
         }
         return bitmap
@@ -239,11 +235,12 @@ object ComparisonUtils {
                     )
                 } else {
                     val argb = bitmap.getPixel(x, y)
-                    a = (SkColorGetA(argb) / 255f).coerceIn(0f, 1f)
+                    val color = ColorARGB.fromPackedInt(argb)
+                    a = (color.alpha / 255f).coerceIn(0f, 1f)
                     floatArrayOf(
-                        SkColorGetR(argb) / 255f,
-                        SkColorGetG(argb) / 255f,
-                        SkColorGetB(argb) / 255f,
+                        color.red / 255f,
+                        color.green / 255f,
+                        color.blue / 255f,
                     )
                 }
                 val srgb = convertEncodedRgbToSrgb(encodedRgb, sourceColorSpace, xyzToSrgb)
@@ -269,7 +266,7 @@ object ComparisonUtils {
         return DoubleArray(3) { i -> encodeSrgb(srgbLinear[i].coerceIn(0.0, 1.0)) }
     }
 
-    private fun decodeTransfer(value: Double, transfer: SkcmsTransferFunction): Double {
+    private fun decodeTransfer(value: Double, transfer: ColorTransferFunction.Parametric): Double {
         val x = value.coerceIn(0.0, 1.0)
         return if (x < transfer.d.toDouble()) {
             transfer.c.toDouble() * x + transfer.f.toDouble()
@@ -285,7 +282,7 @@ object ComparisonUtils {
             1.055 * linear.pow(1.0 / 2.4) - 0.055
         }
 
-    private fun multiply(matrix: SkcmsMatrix3x3, vector: DoubleArray): DoubleArray =
+    private fun multiply(matrix: Matrix3x3F32, vector: DoubleArray): DoubleArray =
         DoubleArray(3) { row ->
             matrix[row, 0].toDouble() * vector[0] +
                 matrix[row, 1].toDouble() * vector[1] +
@@ -297,7 +294,7 @@ object ComparisonUtils {
             matrix[row][0] * vector[0] + matrix[row][1] * vector[1] + matrix[row][2] * vector[2]
         }
 
-    private fun invert3x3(matrix: SkcmsMatrix3x3): Array<DoubleArray> {
+    private fun invert3x3(matrix: Matrix3x3F32): Array<DoubleArray> {
         val a = matrix[0, 0].toDouble(); val b = matrix[0, 1].toDouble(); val c = matrix[0, 2].toDouble()
         val d = matrix[1, 0].toDouble(); val e = matrix[1, 1].toDouble(); val f = matrix[1, 2].toDouble()
         val g = matrix[2, 0].toDouble(); val h = matrix[2, 1].toDouble(); val i = matrix[2, 2].toDouble()

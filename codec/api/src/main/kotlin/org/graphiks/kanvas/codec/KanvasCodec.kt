@@ -13,8 +13,8 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.kanvas.types.Gamut
 import org.graphiks.kanvas.types.TransferFunction
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -175,7 +175,7 @@ private val Gamut.displayName: String
         Gamut.REC2020 -> "Rec.2020"
     }
 
-private val NAMED_GAMUTS: List<Pair<List<SkcmsMatrix3x3>, Gamut>> by lazy {
+private val NAMED_GAMUTS: List<Pair<List<Matrix3x3F32>, Gamut>> by lazy {
     listOf(
         allowedGamutMatrices(SkNamedGamut.kSRGB) to Gamut.SRGB,
         allowedGamutMatrices(SkNamedGamut.kDisplayP3) to Gamut.DISPLAY_P3,
@@ -183,12 +183,12 @@ private val NAMED_GAMUTS: List<Pair<List<SkcmsMatrix3x3>, Gamut>> by lazy {
     )
 }
 
-private fun SkcmsMatrix3x3.classifyNamedGamut(): Gamut? =
+private fun Matrix3x3F32.classifyNamedGamut(): Gamut? =
     NAMED_GAMUTS.firstOrNull { (matrices, _) ->
         matrices.any { matrix -> isNear(matrix, GAMUT_CLASSIFICATION_TOLERANCE) }
     }?.second
 
-private fun allowedGamutMatrices(canonical: SkcmsMatrix3x3): List<SkcmsMatrix3x3> {
+private fun allowedGamutMatrices(canonical: Matrix3x3F32): List<Matrix3x3F32> {
     val canonicalSnapshot = canonical.copy()
     return listOf(
         canonicalSnapshot,
@@ -198,20 +198,20 @@ private fun allowedGamutMatrices(canonical: SkcmsMatrix3x3): List<SkcmsMatrix3x3
 }
 
 private fun serializedGamutMatrix(
-    transferFunction: SkcmsTransferFunction,
-    gamut: SkcmsMatrix3x3,
-): SkcmsMatrix3x3 = requireNotNull(
+    transferFunction: ColorTransferFunction.Parametric,
+    gamut: Matrix3x3F32,
+): Matrix3x3F32 = requireNotNull(
     SkColorSpace.make(requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut)))),
 ).toXYZD50
 
-private fun SkcmsMatrix3x3.isNear(other: SkcmsMatrix3x3, tolerance: Float): Boolean {
+private fun Matrix3x3F32.isNear(other: Matrix3x3F32, tolerance: Float): Boolean {
     for (row in 0 until 3) for (column in 0 until 3) {
         if (abs(this[row, column] - other[row, column]) > tolerance) return false
     }
     return true
 }
 
-private fun SkcmsTransferFunction.isNear(other: SkcmsTransferFunction): Boolean = listOf(
+private fun ColorTransferFunction.Parametric.isNear(other: ColorTransferFunction.Parametric): Boolean = listOf(
     g to other.g,
     a to other.a,
     b to other.b,

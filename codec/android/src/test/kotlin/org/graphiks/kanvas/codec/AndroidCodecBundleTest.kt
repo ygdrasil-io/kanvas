@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
@@ -27,7 +27,7 @@ class AndroidCodecBundleTest {
     @Test
     fun `getAndroidPixels crops downsamples and writes RGBA ByteBuffer`() {
         val codec = AndroidCodec.MakeFromData(fiveByFivePng())!!
-        val subset = SkIRect.MakeLTRB(1, 1, 5, 5)
+        val subset = RectI32.ofLTRB(1, 1, 5, 5)
         val info = SkImageInfo.MakeN32(width = 2, height = 2)
         val rowBytes = info.minRowBytes()
         val pixels = ByteBuffer.allocate(rowBytes * info.height)
@@ -49,7 +49,7 @@ class AndroidCodecBundleTest {
     @Test
     fun `getAndroidPixels crops downsamples JPEG through codec providers`() {
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.simpleGrayscaleJpeg(width = 16, height = 16))!!
-        val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(4, 4, 16, 16), sampleSize = 4)
+        val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(4, 4, 16, 16), sampleSize = 4)
 
         assertEquals(SkEncodedImageFormat.kJPEG, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = 0xFF808080.toInt())
@@ -61,7 +61,7 @@ class AndroidCodecBundleTest {
         val indexes = List(4) { y -> IntArray(4) { x -> (x + y) and 3 } }
         val palette = intArrayOf(0xFF101820.toInt(), 0xFF305060.toInt(), 0xFF708090.toInt(), 0xFFA0B0C0.toInt())
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.indexedGif(indexes, palette))!!
-        val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(1, 1, 4, 4), sampleSize = 2)
+        val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(1, 1, 4, 4), sampleSize = 2)
 
         assertEquals(SkEncodedImageFormat.kGIF, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = palette[indexes[1][1]])
@@ -71,7 +71,7 @@ class AndroidCodecBundleTest {
     fun `getAndroidPixels crops downsamples BMP through codec providers`() {
         val rows = patternedRows(width = 4, height = 4)
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.rgbBmp(rows))!!
-        val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(1, 1, 4, 4), sampleSize = 2)
+        val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(1, 1, 4, 4), sampleSize = 2)
 
         assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = rows[1][1])
@@ -110,7 +110,7 @@ class AndroidCodecBundleTest {
                 info = info,
                 pixels = pixels,
                 rowBytes = rowBytes,
-                options = AndroidCodec.AndroidOptions(subset = SkIRect.MakeLTRB(9, 9, 10, 10)),
+                options = AndroidCodec.AndroidOptions(subset = RectI32.ofLTRB(9, 9, 10, 10)),
             ),
         )
     }
@@ -157,7 +157,7 @@ class AndroidCodecBundleTest {
             },
         )
 
-    private fun decodeSampledRgba(codec: AndroidCodec, subset: SkIRect, sampleSize: Int): PixelBuffer {
+    private fun decodeSampledRgba(codec: AndroidCodec, subset: RectI32, sampleSize: Int): PixelBuffer {
         val info = SkImageInfo.MakeN32(width = subset.width() / sampleSize, height = subset.height() / sampleSize)
         val rowBytes = info.minRowBytes()
         val buffer = ByteBuffer.allocate(rowBytes * info.height)

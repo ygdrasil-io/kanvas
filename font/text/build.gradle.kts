@@ -6,7 +6,6 @@ plugins {
 dependencies {
     api(project(":font:core"))
     api(project(":font:sfnt"))
-    api(project(":math"))
 
     implementation(project(":font:scaler"))
     implementation(kotlin("stdlib"))

@@ -5,8 +5,8 @@ import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.SkICC
 import kotlin.math.abs
 import kotlin.test.Test
@@ -62,7 +62,7 @@ class SkcmsCompatTest {
     }
 
     @Test
-    fun `legacy data class source and binary surface remains available`() {
+    fun `compatibility profile source and binary surface remains available`() {
         val original = SkcmsICCProfile(byteArrayOf(1, 2, 3))
         val (bytes, transferFn, matrix) = original
         val copied = original.copy(bytes = byteArrayOf(4, 5, 6))
@@ -79,8 +79,8 @@ class SkcmsCompatTest {
 
         val methods = SkcmsICCProfile::class.java.declaredMethods
         assertTrue(methods.any { it.name == "component1" && it.returnType == ByteArray::class.java })
-        assertTrue(methods.any { it.name == "component2" && it.returnType == SkcmsTransferFunction::class.java })
-        assertTrue(methods.any { it.name == "component3" && it.returnType == SkcmsMatrix3x3::class.java })
+        assertTrue(methods.any { it.name == "component2" && it.returnType == ColorTransferFunction.Parametric::class.java })
+        assertTrue(methods.any { it.name == "component3" && it.returnType == Matrix3x3F32::class.java })
         assertTrue(methods.any { it.name == "copy" && it.parameterCount == 3 })
         val copyDefault = methods.single { it.name == "copy\$default" && it.parameterCount == 6 }
         val bridgeCopy = copyDefault.invoke(null, original, null, null, null, 7, null) as SkcmsICCProfile
@@ -102,11 +102,11 @@ class SkcmsCompatTest {
     }
 
     @Test
-    fun `legacy getters remain nonnull for profiles outside the facade subset`() {
+    fun `compatibility getters remain nonnull for profiles outside the facade subset`() {
         val profile = SkcmsICCProfile.fromColorProfile(ColorProfile(ColorModel.GRAY))
 
-        val transferFn: SkcmsTransferFunction = profile.transferFn
-        val matrix: SkcmsMatrix3x3 = profile.toXYZD50
+        val transferFn: ColorTransferFunction.Parametric = profile.transferFn
+        val matrix: Matrix3x3F32 = profile.toXYZD50
 
         assertEquals(SkNamedTransferFn.kSRGB, transferFn)
         assertEquals(SkNamedGamut.kSRGB, matrix)
@@ -133,8 +133,8 @@ class SkcmsCompatTest {
     }
 
     private fun assertMatrixNear(
-        expected: org.graphiks.math.SkcmsMatrix3x3,
-        actual: org.graphiks.math.SkcmsMatrix3x3,
+        expected: Matrix3x3F32,
+        actual: Matrix3x3F32,
     ) {
         for (row in 0 until 3) for (column in 0 until 3) {
             assertEquals(expected[row, column], actual[row, column], 1f / 65_536f)
@@ -142,8 +142,8 @@ class SkcmsCompatTest {
     }
 
     private fun assertTransferFunctionNear(
-        expected: org.graphiks.math.SkcmsTransferFunction,
-        actual: org.graphiks.math.SkcmsTransferFunction,
+        expected: ColorTransferFunction.Parametric,
+        actual: ColorTransferFunction.Parametric,
     ) {
         val expectedValues = listOf(expected.g, expected.a, expected.b, expected.c, expected.d, expected.e, expected.f)
         val actualValues = listOf(actual.g, actual.a, actual.b, actual.c, actual.d, actual.e, actual.f)
