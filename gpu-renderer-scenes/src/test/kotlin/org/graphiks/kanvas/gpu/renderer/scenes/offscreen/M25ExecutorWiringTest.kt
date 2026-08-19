@@ -34,10 +34,12 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
 /**
@@ -72,7 +74,7 @@ class M25ExecutorWiringTest {
     @Test
     fun `KGPU-M25-003 runtime effect routes through the registered SimpleRT snippet`() {
         val lines = runtimeEffectWiringDiagnostics()
-        assertTrue(lines.any { it.contains("wgslSnippetSourceHash=fragment:simple_rt:v1") }, lines.toString())
+        assertTrue(lines.any { it.contains("wgslSnippetSourceHash=$SimpleRTSourceHash") }, lines.toString())
         assertTrue(lines.any { it.contains("entryPoint=simple_rt_source") }, lines.toString())
         assertTrue(lines.any { it.contains("uniformPacker=UniformPacker.simpleRtBytes") }, lines.toString())
         assertTrue(lines.any { it.contains("realGpuOutput=true") }, lines.toString())
@@ -201,6 +203,45 @@ class M25ExecutorWiringTest {
         }
 
         assertEquals(listOf("texture-b", "texture-a"), recorder.compositeTextureLabels)
+        assertEquals(listOf<String?>("one_isa", "one_isa"), recorder.compositeBlendStateIds)
+    }
+
+    @Test
+    fun `solid fills use canonical translucent SrcOver attachment blending`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "solid-src-over-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(fillRect(label = "translucent-solid", paintOrder = 1)),
+        )
+        val target = RecordingOffscreenTarget(width = 64, height = 64)
+
+        RectOnlyOffscreenRenderer().renderToPixels(target, drawPlan)
+
+        assertEquals(listOf<String?>("one_isa"), target.mainRecorder.fullscreenBlendStateIds)
+    }
+
+    @Test
+    fun `stencil cover uses canonical SrcOver while stencil write keeps color blending disabled`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "stencil-cover-src-over-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(
+                fillRect(label = "concave-path", paintOrder = 1).copy(family = "path-fill-stencil"),
+            ),
+        )
+        val target = RecordingOffscreenTarget(width = 64, height = 64)
+
+        RectOnlyOffscreenRenderer().renderToPixels(target, drawPlan)
+
+        assertEquals(
+            listOf<Pair<GPUBackendStencilMode, String?>>(
+                GPUBackendStencilMode.Write to null,
+                GPUBackendStencilMode.Test to "one_isa",
+            ),
+            target.mainRecorder.stencilBlendStateIds,
+        )
     }
 
     @Test
@@ -266,50 +307,11 @@ class M25ExecutorWiringTest {
             clearCount = 1,
             fills = listOf(
                 fillRect(label = "background", paintOrder = 1),
-                fillRect(label = "foreground", paintOrder = 2),
-            ),
-        )
-        val plan = GPUIntermediatePlan(
-            planId = "scene-intermediate:destination-copy-scene",
-            targetId = "target:destination-copy-scene",
-            steps = listOf(
-                GPUIntermediatePlanStep.CreateIntermediate(
-                    intermediateDescriptor("dst-copy:foreground").copy(
-                        purpose = GPUIntermediatePurpose.DestinationCopy,
-                        sourceTargetLabel = "surface:destination-copy-scene",
-                        usageLabels = listOf("render_attachment", "texture_binding", "copy_dst"),
-                    ),
-                ),
-                GPUIntermediatePlanStep.CopyDestination(
-                    sourceLabel = "surface:destination-copy-scene",
-                    destination = intermediateDescriptor("dst-copy:foreground").copy(
-                        purpose = GPUIntermediatePurpose.DestinationCopy,
-                        sourceTargetLabel = "surface:destination-copy-scene",
-                        usageLabels = listOf("render_attachment", "texture_binding", "copy_dst"),
-                    ),
-                    boundsLabel = "copy:foreground",
-                    tokenLabel = "copy-token:foreground",
-                    passSplitRequired = true,
-                    copyBeforeSample = true,
-                ),
-                GPUIntermediatePlanStep.BindIntermediate(
-                    descriptor = intermediateDescriptor("dst-copy:foreground"),
-                    bindingLabel = "dst-read:foreground",
-                    layoutHash = "layout:foreground",
-                ),
-                GPUIntermediatePlanStep.RenderToTarget(
-                    commandId = "foreground",
-                    targetLabel = "surface:destination-copy-scene",
-                    routeLabel = "shader-blend:Screen",
-                    orderingToken = "order:foreground",
-                ),
+                fillRect(label = "foreground", paintOrder = 2).copy(blendMode = SceneBlendMode.Multiply),
             ),
         )
         val target = RecordingOffscreenTarget(width = 64, height = 64)
-        val renderer = RectOnlyOffscreenRenderer(
-            intermediatePlanAdapter = SceneIntermediatePlanAdapter { plan },
-            intermediatePlanExecutor = SceneIntermediatePlanExecutor(),
-        )
+        val renderer = RectOnlyOffscreenRenderer()
         val intermediateDiagnostics = mutableListOf<String>()
 
         renderer.renderToPixels(target, drawPlan, intermediateDiagnostics)
@@ -420,7 +422,9 @@ class M25ExecutorWiringTest {
 
     private fun loopPath(vertices: List<Point>): PathData =
         PathData(
-            verbs = vertices.map { PathVerb.LineTo(it) } + listOf(PathVerb.Close),
+            verbs = listOf(PathVerb.MoveTo(vertices.first())) +
+                vertices.drop(1).map { PathVerb.LineTo(it) } +
+                listOf(PathVerb.Close),
             points = emptyList(),
         )
 
@@ -543,10 +547,11 @@ class M25ExecutorWiringTest {
             private set
         val createdTextureLabels: MutableList<String> = mutableListOf()
         val targetCopyTextureLabels: MutableList<String> = mutableListOf()
+        val mainRecorder = RecordingRenderRecorder()
 
         override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
             mainEncodeCount += 1
-            RecordingRenderRecorder().block()
+            mainRecorder.block()
         }
 
         override fun readRgba(): ByteArray =
@@ -592,20 +597,25 @@ class M25ExecutorWiringTest {
 
     private class RecordingRenderRecorder : GPUBackendRenderRecorder {
         val compositeTextureLabels = mutableListOf<String>()
+        val compositeBlendStateIds = mutableListOf<String?>()
+        val fullscreenBlendStateIds = mutableListOf<String?>()
+        val stencilBlendStateIds = mutableListOf<Pair<GPUBackendStencilMode, String?>>()
 
         override fun drawFullscreenPass(
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRectDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
-        ) = Unit
+        ) {
+            fullscreenBlendStateIds += blendMode?.stateId
+        }
 
         override fun drawFullscreenUniformPayloadPass(
             wgsl: String,
             colorFormat: String,
             draws: List<org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             sourceLabel: String,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
         ) = Unit
@@ -614,7 +624,7 @@ class M25ExecutorWiringTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
         ) = Unit
 
@@ -626,7 +636,7 @@ class M25ExecutorWiringTest {
             textureHeight: Int,
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilMode: GPUBackendStencilMode?,
             stencilConfig: GPUBackendStencilCoverConfig,
         ) = Unit
@@ -637,9 +647,11 @@ class M25ExecutorWiringTest {
             stencilMode: GPUBackendStencilMode,
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilConfig: GPUBackendStencilCoverConfig,
-        ) = Unit
+        ) {
+            stencilBlendStateIds += stencilMode to blendMode?.stateId
+        }
 
         override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = "vertex-color"
 
@@ -647,7 +659,7 @@ class M25ExecutorWiringTest {
             vertexBufferLabel: String,
             indexCount: Int,
             uniformDraw: GPUBackendRawUniformDraw,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = "vertex-uv"
@@ -660,7 +672,7 @@ class M25ExecutorWiringTest {
             textureWidth: Int,
             textureHeight: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawVertexPositionDualUVIndexed(
@@ -674,7 +686,7 @@ class M25ExecutorWiringTest {
             texture2Width: Int,
             texture2Height: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = "texture"
@@ -690,9 +702,10 @@ class M25ExecutorWiringTest {
             colorFormat: String,
             textureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) {
             compositeTextureLabels += textureLabel
+            compositeBlendStateIds += blendMode?.stateId
         }
 
         override fun drawTwoTexturePass(
@@ -701,7 +714,7 @@ class M25ExecutorWiringTest {
             firstTextureLabel: String,
             secondTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawThreeTexturePass(
@@ -711,7 +724,7 @@ class M25ExecutorWiringTest {
             secondTextureLabel: String,
             thirdTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawBlendPass(
@@ -730,7 +743,7 @@ class M25ExecutorWiringTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawColorGlyphPass(
@@ -741,7 +754,7 @@ class M25ExecutorWiringTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
     }
 }

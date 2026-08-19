@@ -87,7 +87,7 @@ class VerticesRouteDecisionTest {
             ),
             RefusalCase(
                 expectedCode = "unsupported.vertices.primitive_blend_destination_read",
-                descriptor = verticesDescriptor(hasColors = true, primitiveBlendMode = "Screen"),
+                descriptor = verticesDescriptor(hasColors = true, primitiveBlendMode = "Multiply"),
                 expectedFacts = mapOf("primitiveBlendDestinationRead" to "true"),
             ),
             RefusalCase(

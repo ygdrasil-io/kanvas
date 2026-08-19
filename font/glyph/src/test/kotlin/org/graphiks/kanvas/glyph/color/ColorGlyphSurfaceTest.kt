@@ -177,6 +177,18 @@ class ColorGlyphSurfaceTest {
     }
 
     @Test
+    fun parsesRetainedCOLRV0RecordsFromVersionOneContainerWithoutWeakeningStrictParser() {
+        val bytes = syntheticColrV0()
+        writeU16(bytes, 0, 1)
+
+        assertNull(COLRV0Parser.parse(bytes))
+        val retained = assertNotNull(COLRV0Parser.parseRetainedV0Records(bytes))
+
+        assertEquals(listOf(100), retained.baseGlyphRecords.map { it.glyphId })
+        assertEquals(listOf(11, 12), retained.layersForGlyph(100).map { it.glyphId })
+    }
+
+    @Test
     fun rejectsCOLRV0TablesWithOutOfRangeLayerSlices() {
         val bytes = syntheticColrV0()
         writeU16(bytes, 16, 1)
@@ -470,6 +482,40 @@ class ColorGlyphSurfaceTest {
         assertEquals("png", dispatcher.dispatch(glyphId = 30, strikeKey = strikeKey()).route)
         assertEquals("svg", dispatcher.dispatch(glyphId = 40, strikeKey = strikeKey()).route)
         assertEquals("outline", dispatcher.dispatch(glyphId = 50, strikeKey = strikeKey()).route)
+    }
+
+    @Test
+    fun canonicalRepresentationPriorityIsReusableWithoutDispatcherState() {
+        assertEquals(
+            EmojiGlyphRepresentationRoute.COLR,
+            EmojiGlyphRepresentationPriority.select(
+                colrAvailable = true,
+                bitmapAvailable = true,
+                pngAvailable = true,
+                svgAvailable = true,
+                outlineAvailable = true,
+            ),
+        )
+        assertEquals(
+            EmojiGlyphRepresentationRoute.BITMAP,
+            EmojiGlyphRepresentationPriority.select(
+                colrAvailable = false,
+                bitmapAvailable = true,
+                pngAvailable = false,
+                svgAvailable = true,
+                outlineAvailable = true,
+            ),
+        )
+        assertEquals(
+            EmojiGlyphRepresentationRoute.OUTLINE,
+            EmojiGlyphRepresentationPriority.select(
+                colrAvailable = false,
+                bitmapAvailable = false,
+                pngAvailable = false,
+                svgAvailable = false,
+                outlineAvailable = true,
+            ),
+        )
     }
 
     @Test

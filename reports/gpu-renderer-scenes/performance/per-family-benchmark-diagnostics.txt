@@ -1,0 +1,48 @@
+per-family-benchmark backend=webgpu-offscreen adapter=llvmpipe/llvmpipe (LLVM 21.1.8, 256 bits) desc=Mesa 26.0.3-1ubuntu1 (LLVM 21.1.8) baseline=Apple M-series warmupFrames=10 measuredFrames=90 sampled=7/10
+sampled FillRect scene=solid-card-stack via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+solidRectCache creations=1 reuses=100
+fps=214.2344 meanMs=4.6678 minMs=3.0698 medianMs=4.4850 maxMs=19.1290
+frameGateStatus=pass
+sampled LinearGradient scene=linear-gradient-lanes via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+registeredUniformCache creations=2 reuses=402
+fps=213.7118 meanMs=4.6792 minMs=2.8060 medianMs=4.0750 maxMs=12.7449
+frameGateStatus=pass
+sampled RadialGradient scene=radial-swatch via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+registeredUniformCache creations=2 reuses=402
+fps=250.2770 meanMs=3.9956 minMs=2.4637 medianMs=3.6001 maxMs=9.2975
+frameGateStatus=pass
+sampled SweepGradient scene=sweep-disk via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+registeredUniformCache creations=2 reuses=402
+fps=269.3202 meanMs=3.7131 minMs=2.4749 medianMs=3.4429 maxMs=7.9329
+frameGateStatus=pass
+unsupported.prepared-scene.family: path-fill-stencil has no typed prepared semantic route
+unsupported.prepared-scene.family: bitmap-sampler-matrix has no typed prepared semantic route
+unsupported.prepared-scene.family: glyph-atlas-strip has no typed prepared semantic route
+sampled Blur scene=gaussian-blur-photo via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+separableBlurCache invariants=1/100 intermediates=1/100
+fps=148.5630 meanMs=6.7312 minMs=4.3531 medianMs=6.5689 maxMs=12.2489
+frameGateStatus=pass
+sampled ColorMatrix scene=color-matrix-filter via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+registeredUniformCache creations=2 reuses=402
+fps=322.2370 meanMs=3.1033 minMs=1.8785 medianMs=2.8403 maxMs=9.8686
+frameGateStatus=pass
+sampled Stroke scene=stroke-rect-outline via prepared submit+completion
+metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=101 encoders=101 commandBuffers=101 submits=101
+strokeGeometry=analytic-annular-rect.coverage bands=4 legacyStrokeWgsl=false
+solidRectCache creations=1 reuses=100
+fps=307.4041 meanMs=3.2530 minMs=2.5002 medianMs=2.8961 maxMs=9.1260
+frameGateStatus=pass
+nonclaim:per-family-benchmark no-product-activation apple-m-series-baseline-only no-cross-platform-claim

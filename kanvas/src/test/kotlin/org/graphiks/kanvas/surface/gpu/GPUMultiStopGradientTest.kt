@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.io.File
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
@@ -9,6 +10,25 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
 class GPUMultiStopGradientTest {
+
+    @Test
+    fun `direct gradient dispatch does not assert cached stop snapshots`() {
+        val projectRoot = File("..").canonicalFile
+        listOf(
+            projectRoot.resolve(
+                "kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUDispatchRect.kt",
+            ),
+            projectRoot.resolve(
+                "kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUDispatchPath.kt",
+            ),
+        ).forEach { source ->
+            val text = source.readText()
+            assertFalse("allStopPositions!!" in text)
+            assertFalse("allStopColors!!" in text)
+            assertFalse("stopPositions!!" in text)
+            assertFalse("stopColors!!" in text)
+        }
+    }
 
     @Test
     fun `LinearGradient with 3 stops populates allStopPositions and allStopColors`() {

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.compositeBlendPlan
 
 fun GPUPassCommandStream.Companion.fromIntermediatePlan(
     streamId: String,
@@ -94,8 +95,11 @@ fun GPUPassCommandStream.Companion.fromIntermediatePlan(
                             sourceLabel = step.source.label,
                             parentTargetLabel = step.parentTargetLabel,
                             blendModeLabel = step.blendModeLabel,
+                            blendPlan = compositeBlendPlan(step.blendModeLabel, step.source.formatClass),
                             routeLabel = step.routeLabel,
                             tokenLabel = step.tokenLabel,
+                            alpha = step.alpha,
+                            clipLabel = step.clipLabel,
                         ),
                     )
                 }

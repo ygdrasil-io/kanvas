@@ -12,7 +12,11 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
@@ -29,6 +33,8 @@ import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 
 internal const val MASK_BLUR_HORIZONTAL_MODULE_KEY = "mask-blur.horizontal.v1"
 internal const val MASK_BLUR_VERTICAL_MODULE_KEY = "mask-blur.vertical.v1"
@@ -58,12 +64,13 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
         diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
         return GPUMaskBlurDispatchResult(rendered = false)
     }
-    val material = command.material as? GPUMaterialDescriptor.SolidColor
+    val commandMaterial = command.material
+    val material = commandMaterial as? GPUMaterialDescriptor.SolidColor
         ?: run {
             diagnostics.fatal(
                 "refuse:${command.diagnosticName}",
                 command.diagnosticName,
-                "unsupported.mask-filter.blur.material.${command.material.kind.name}",
+                "unsupported.mask-filter.blur.material.${commandMaterial?.kind?.name ?: "missing"}",
             )
             return GPUMaskBlurDispatchResult(rendered = false)
         }
@@ -155,7 +162,7 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
             colorFormat,
             styled,
             listOf(finalSolidUniformDraw(material, plan)),
-            GPUBlendMode.SRC_OVER,
+            GPUBlendMode.SRC_OVER.canonicalFixedFunctionState(),
         )
     }
 
@@ -213,12 +220,21 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
 }
 
 internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? {
-    val rrect = this as? NormalizedDrawCommand.FillRRect ?: return null
-    val blur = rrect.maskFilter as? NormalizedMaskFilter.Blur ?: return null
-    return if (blur.sigma != 0f) rrect.nonUniformRadiiRefusalReasonOrNull() else null
+    return when (this) {
+        is NormalizedDrawCommand.FillPath -> when {
+            transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
+            transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
+            else -> null
+        }
+        is NormalizedDrawCommand.FillRRect -> {
+            val blur = maskFilter as? NormalizedMaskFilter.Blur ?: return null
+            if (blur.sigma != 0f) nonUniformRadiiRefusalReasonOrNull() else null
+        }
+        else -> null
+    }
 }
 
-private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): NormalizedDrawCommand {
+internal fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): NormalizedDrawCommand {
     val origin = plan.deviceBounds
     val localClip = GPUClipFacts.wideOpen(
         GPUBounds(0f, 0f, plan.localWidth.toFloat(), plan.localHeight.toFloat()),
@@ -233,19 +249,10 @@ private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): 
             bounds = bounds.toLocal(origin, plan.scale),
             maskFilter = null,
         )
-        is NormalizedDrawCommand.FillPath -> copy(
-            tessellatedVertices = tessellatedVertices.mapIndexed { index, value ->
-                if (index % 2 == 0) local(value, origin.left, plan.scale)
-                else local(value, origin.top, plan.scale)
-            },
-            clip = localClip,
-            material = white,
-            blend = GPUBlendFacts.srcOver(),
-            bounds = bounds.toLocal(origin, plan.scale),
-            strokeWidth = strokeWidth * plan.scale,
-            dashIntervals = dashIntervals?.map { it * plan.scale }?.toFloatArray(),
-            dashPhase = dashPhase * plan.scale,
-            maskFilter = null,
+        is NormalizedDrawCommand.FillPath -> toLocalMaskPathCommand(
+            plan = plan,
+            localClip = localClip,
+            white = white,
         )
         is NormalizedDrawCommand.FillRRect -> copy(
             rrect = rrect.toLocal(origin, plan.scale),
@@ -258,6 +265,107 @@ private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): 
         else -> error("Mask blur supports only fill rect, path, and rrect commands")
     }
 }
+
+private fun NormalizedDrawCommand.FillPath.toLocalMaskPathCommand(
+    plan: MaskBlurPlan.Ready,
+    localClip: GPUClipFacts,
+    white: GPUMaterialDescriptor.SolidColor,
+): NormalizedDrawCommand.FillPath {
+    if (transform.type == GPUTransformType.Perspective ||
+        transform.type == GPUTransformType.Singular ||
+        transform.isAffineDeterminantNonFinite() ||
+        transform.isAffineDeterminantSingular()
+    ) {
+        return copy(
+            clip = localClip,
+            material = white,
+            blend = GPUBlendFacts.srcOver(),
+            bounds = bounds.toLocal(plan.deviceBounds, plan.scale),
+            maskFilter = null,
+        )
+    }
+
+    val deviceGeometry = if (stroke) {
+        val cap = when (strokeCap) {
+            "round" -> StrokeCap.ROUND
+            "square" -> StrokeCap.SQUARE
+            else -> StrokeCap.BUTT
+        }
+        val join = when (strokeJoin) {
+            "round" -> StrokeJoin.ROUND
+            "bevel" -> StrokeJoin.BEVEL
+            else -> StrokeJoin.MITER
+        }
+        strokeToFillGeometry(
+            contourVertices = tessellatedVertices,
+            contourStarts = contourStarts,
+            strokeWidth = strokeWidth,
+            dashArray = dashIntervals,
+            dashPhase = dashPhase,
+            capStyle = cap,
+            joinStyle = join,
+            miterLimit = strokeMiterLimit,
+            transform = transform,
+        ).also { geometry ->
+            check(geometry.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
+        }
+    } else {
+        StrokeGeometry(
+            vertices = tessellatedVertices.chunked(2).flatMap { (x, y) ->
+                val device = transform.mapAffinePoint(x, y)
+                listOf(device.first, device.second)
+            },
+            contourStarts = contourStarts,
+        )
+    }
+    val localVertices = deviceGeometry.vertices.mapIndexed { index, value ->
+        if (index % 2 == 0) {
+            local(value, plan.deviceBounds.left, plan.scale)
+        } else {
+            local(value, plan.deviceBounds.top, plan.scale)
+        }
+    }
+    val vertexCount = localVertices.size / 2
+    val exactContourStarts = deviceGeometry.contourStarts
+        .filter { start -> start in 0 until vertexCount }
+        .distinct()
+        .ifEmpty { listOf(0) }
+    val geometryForBounds = if (antiAlias) offsetForAA(localVertices) else localVertices
+    val localBounds = when {
+        !stroke && pathDescriptor.inverseFill -> localClip.bounds
+        geometryForBounds.isEmpty() -> bounds.toLocal(plan.deviceBounds, plan.scale)
+        else -> computeBounds(geometryForBounds)
+    }
+    return copy(
+        pathDescriptor = pathDescriptor.copy(
+            verbCount = vertexCount + exactContourStarts.size,
+            pointCount = vertexCount,
+            fillRule = if (stroke) "winding" else pathDescriptor.fillRule,
+            inverseFill = if (stroke) false else pathDescriptor.inverseFill,
+            transformClass = "identity",
+            edgeCount = vertexCount,
+        ),
+        tessellatedVertices = localVertices,
+        contourStarts = exactContourStarts,
+        totalVertexCount = vertexCount,
+        edgeCount = vertexCount,
+        transform = GPUTransformFacts.identity(),
+        clip = localClip,
+        material = white,
+        blend = GPUBlendFacts.srcOver(),
+        bounds = localBounds,
+        stroke = false,
+        strokeWidth = 1f,
+        dashIntervals = null,
+        dashPhase = 0f,
+        maskFilter = null,
+    )
+}
+
+private fun GPUTransformFacts.mapAffinePoint(x: Float, y: Float): Pair<Float, Float> = Pair(
+    scaleX * x + skewX * y + translateX,
+    skewY * x + scaleY * y + translateY,
+)
 
 private fun GPURect.toLocal(origin: GPUBounds, scale: Float): GPURect = GPURect(
     left = local(left, origin.left, scale),

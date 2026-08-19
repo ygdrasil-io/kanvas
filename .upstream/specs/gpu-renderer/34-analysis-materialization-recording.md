@@ -24,15 +24,25 @@ NormalizedDrawCommand
   -> GPUDrawAnalysisDecision
   -> GPULayerExecutionPlan / GPUFilterPlan / GPUClipPlan
   -> GPUDrawInvocation / sort-window plan
-  -> GPUMaterialAssemblyPlan / pipeline preflight
-  -> GPUResourceMaterializationDecision
-  -> GPUTaskList finalization
-  -> GPUDrawPass / compute / copy / upload task encoding
-  -> GPUCommandSubmission
+  -> GPUMaterialAssemblyPlan / handle-free pipeline descriptor
+  -> GPURecording / GPUTaskList dependency finalization
+  -> GPUFramePlanner / GPUFramePlan linear order
+  -> GPUFramePreflighter
+       -> GPUResourceMaterializationDecision
+       -> GPUPassCommandStream / GPUCommandEncoderPlan
+       -> PreparedGPUFrame | terminal preflight refusal + rollback
+  -> GPUFrameExecutor / one GPUCommandSubmission
+  -> GPUQueueCompletionTicket terminal result
 ```
 
 Each stage may add diagnostics. A later stage may refuse an earlier accepted
 candidate only with a stable reason code and visible evidence.
+
+Analysis, recording, task, and frame-plan products contain no concrete GPU
+handles, surface leases, transient offsets, or pass command streams.
+`GPUFrameCoordinator` is the sole product entry across planner finalization,
+preflight, and execution. It adds no route decision and preserves a planning or
+preflight refusal as a terminal frame outcome.
 
 ## `GPUDrawAnalysisDecision`
 
@@ -68,9 +78,11 @@ succeeds". It cannot claim product support by itself.
 
 ## `GPUResourceMaterializationDecision`
 
-`GPUResourceMaterializationDecision` is the late decision produced when the
-renderer resolves resources, pipelines, atlases, uploads, target snapshots,
-intermediates, and device-generation facts for a recording or frame.
+`GPUResourceMaterializationDecision` is the late decision produced only by
+`GPUFramePreflighter`, after `GPUTaskList` dependencies have been projected
+into final `GPUFramePlan` order, when the renderer resolves resources,
+pipelines, atlases, uploads, target snapshots, intermediates, and
+device-generation facts for a frame.
 
 It records:
 
@@ -175,9 +187,9 @@ Deferred resources must expose:
 
 ## Target Preparation Context
 
-`GPUTargetPreparationContext` is the target-scoped coordinator for late
-preparation. It is the Kanvas analogue of Graphite's target/draw-context
-coordination, not a public API compatibility object.
+`GPUFramePreflighter` is the only materialization boundary. Its internal
+`GPUTargetPreparationContext` is target-scoped state for late preparation, not
+a second coordinator or public API compatibility object.
 
 It coordinates:
 
@@ -193,6 +205,14 @@ It coordinates:
 
 It does not own material semantics, public Canvas state, codec policy, or
 arbitrary CPU raster fallback.
+
+Preflight reserves all pipelines, bind groups, buffers, textures, views,
+scratch intervals, destination bindings, optional readback layout, and one
+version-scoped `GPUQueueCompletionTicket`. Surface acquisition is its final
+ephemeral operation. Success returns one `PreparedGPUFrame` pairing the
+immutable semantic frame plan with a one-to-one command-encoder plan and an
+opaque prepared resource set. Failure runs every recorded rollback action and
+creates no encoder or submission.
 
 ## Scratch And Intermediate Lifetime
 
@@ -217,8 +237,10 @@ Lifetime classes:
 - imported external;
 - surface lease.
 
-Reuse is legal only when pending reads/writes are satisfied, usage flags match,
-format/sample/size constraints match, and device generation is current.
+Reuse is legal only when pending reads/writes are satisfied by real queue
+completion, usage flags match, format/sample/size constraints match, and
+device generation is current. Presentation, target close, or command-buffer
+creation never fabricates completion.
 
 ## Negative CPU-Fallback Contract
 
@@ -253,4 +275,3 @@ Promoted routes must provide evidence for:
 - ordered recording dependency tokens when multiple recordings are used;
 - scratch/intermediate lifetime and pending-read/write tokens;
 - no hidden CPU-rendered compatibility path.
-

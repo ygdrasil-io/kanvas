@@ -409,7 +409,7 @@ fun planTextWgslValidation(fixture: TextWgslValidationFixture): TextWgslValidati
             message = "Reflected text WGSL binding layout did not match GPUTextBinding.",
         )
         fixture.sdfParamsRequired && !fixture.sdfParamsAvailable -> textWgslDiagnostic(
-            code = "unsupported.text.sdf_params_missing",
+            code = GPUTextRefusalCodes.SDF_PARAMS_MISSING,
             fieldOrBinding = "GPUTextSDFParams",
             message = "SDF text WGSL validation requires GPUTextSDFParams before route promotion.",
         )

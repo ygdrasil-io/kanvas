@@ -2795,7 +2795,7 @@ fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxo
             requiredFields = listOf("artifactId", "generation"),
         ),
         fontDiagnosticCode(
-            code = "unsupported.text.artifact_unregistered",
+            code = FontTextRefusalCodes.ARTIFACT_UNREGISTERED,
             namespace = "unsupported.text",
             claimImpact = FontDiagnosticClaimImpact.GPU_GATED,
             severity = FontDiagnosticSeverity.ERROR,
@@ -2900,7 +2900,7 @@ fun defaultFontDiagnosticTaxonomy(): FontDiagnosticTaxonomy = FontDiagnosticTaxo
         ),
         fontDiagnosticSample(
             label = "gpu-text-route-refusal",
-            code = "unsupported.text.artifact_unregistered",
+            code = FontTextRefusalCodes.ARTIFACT_UNREGISTERED,
             subject = "artifact:text-a8-atlas",
             route = "gpu-renderer-text",
             severity = FontDiagnosticSeverity.ERROR,

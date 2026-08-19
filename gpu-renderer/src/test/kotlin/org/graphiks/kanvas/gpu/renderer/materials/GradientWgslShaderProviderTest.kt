@@ -3,8 +3,38 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 
 class GradientWgslShaderProviderTest {
+    @Test
+    fun `uniform packing reads each stop getter once`() {
+        val source = java.io.File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/" +
+                "GradientWgslShaderProvider.kt",
+        ).readText()
+
+        listOf(
+            "linearUniformBytes",
+            "radialUniformBytes",
+            "sweepUniformBytes",
+            "conicalUniformBytes",
+        ).forEach { functionName ->
+            val body = source
+                .substringAfter("private fun $functionName")
+                .substringBefore("\n    private fun")
+            assertEquals(
+                1,
+                Regex("desc\\.allStopPositions").findAll(body).count(),
+                functionName,
+            )
+            assertEquals(
+                1,
+                Regex("desc\\.allStopColors").findAll(body).count(),
+                functionName,
+            )
+        }
+    }
+
     @Test
     fun `conical gradient wgsl solves positive-radius quadratic root`() {
         val descriptor = GPUMaterialDescriptor.ConicalGradient(

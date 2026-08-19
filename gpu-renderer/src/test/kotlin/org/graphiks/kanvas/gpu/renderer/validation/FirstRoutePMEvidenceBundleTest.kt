@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
@@ -23,11 +24,14 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandSubmission
-import org.graphiks.kanvas.gpu.renderer.execution.GPUDeviceGeneration
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.execution.GPUExecutionDiagnostic
-import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
@@ -662,7 +666,7 @@ class FirstRoutePMEvidenceBundleTest {
         )
         assertContains(
             lines,
-            "execution:GPUReadbackResult.Completed:synthetic-test-executed-first-route-pm-evidence execution.readback:completed request=readback-1 source=first-route-webgpu-submit bounds=0,0 16x16 format=rgba8unorm sync=after-submit expectedArtifact=first-route-fill.png failureReason=none bytes=1024 payloadHash=sha256:0123456789abcdef diagnostics=none",
+            "execution:GPUReadbackResult.Completed:synthetic-test-executed-first-route-pm-evidence execution.readback:completed request=readback-1 bounds=0,0,16,16 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 bytes=1024 payloadHash=sha256:0123456789abcdef diagnostics=none",
         )
         assertContains(
             lines,
@@ -845,7 +849,9 @@ class FirstRoutePMEvidenceBundleTest {
     fun `executed PM evidence fails when materialization submission or readback do not match recording`() {
         val recording = acceptedFillRectRecording(recordingIdValue = "recording.executed-pm", commandIdValue = 9)
         val submittedReadbackRequest = completedReadbackRequest()
-        val unsubmittedReadbackRequest = completedReadbackRequest().copy(requestId = "readback-unsubmitted")
+        val unsubmittedReadbackRequest = completedReadbackRequest().copy(
+            requestId = GPUReadbackRequestID("readback-unsubmitted"),
+        )
 
         val report = GPUValidationFixture().firstRouteExecutedPMEvidenceBundle(
             name = "synthetic-test-mismatched-executed-first-route-pm-evidence",
@@ -894,7 +900,7 @@ class FirstRoutePMEvidenceBundleTest {
     fun `executed PM evidence fails when submitted readback request has no result`() {
         val recording = acceptedFillRectRecording(recordingIdValue = "recording.executed-pm", commandIdValue = 9)
         val completedReadbackRequest = completedReadbackRequest()
-        val missingReadbackRequest = completedReadbackRequest().copy(requestId = "readback-2")
+        val missingReadbackRequest = completedReadbackRequest().copy(requestId = GPUReadbackRequestID("readback-2"))
         val submission = submittedFirstRouteCommand(
             commandIdValue = 9,
             readbackRequest = completedReadbackRequest,
@@ -1143,9 +1149,8 @@ class FirstRoutePMEvidenceBundleTest {
         assertContains(
             bundle.artifactLines("synthetic-test-executed-first-route-pm-evidence-10-readback.txt"),
             "execution:GPUReadbackResult.Completed:synthetic-test-executed-first-route-pm-evidence " +
-                "execution.readback:completed request=readback-1 source=first-route-webgpu-submit " +
-                "bounds=0,0 16x16 format=rgba8unorm sync=after-submit " +
-                "expectedArtifact=first-route-fill.png failureReason=none bytes=1024 " +
+                "execution.readback:completed request=readback-1 bounds=0,0,16,16 " +
+                "pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 bytes=1024 " +
                 "payloadHash=sha256:0123456789abcdef diagnostics=none",
         )
     }
@@ -1376,6 +1381,7 @@ class FirstRoutePMEvidenceBundleTest {
     private fun acceptedFillRectRecording(recordingIdValue: String, commandIdValue: Int): GPURecording {
         val recorder = GPURecorder(
             recordingId = GPURecordingID(recordingIdValue),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(29),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(acceptedFillRect(commandIdValue = commandIdValue))
@@ -1386,6 +1392,7 @@ class FirstRoutePMEvidenceBundleTest {
     private fun refusedFillRectRecording(recordingIdValue: String, commandIdValue: Int): GPURecording {
         val recorder = GPURecorder(
             recordingId = GPURecordingID(recordingIdValue),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(29),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(
@@ -1489,12 +1496,12 @@ class FirstRoutePMEvidenceBundleTest {
     /** Synthetic submitted command evidence matching the executed first-route recording. */
     private fun submittedFirstRouteCommand(
         commandIdValue: Int,
-        readbackRequest: GPUReadbackRequest,
+        readbackRequest: GPUFrameReadbackRequest,
     ): GPUCommandSubmission.Submitted =
         GPUCommandSubmission.Submitted(
             submissionId = "submit.executed",
             scopeLabel = "root-pass",
-            deviceGeneration = GPUDeviceGeneration(1),
+            deviceGeneration = GPUDeviceGenerationID(1),
             targetGeneration = 1L,
             scopeLabels = listOf("root-pass"),
             taskIds = listOf("task.render.$commandIdValue"),
@@ -1505,14 +1512,12 @@ class FirstRoutePMEvidenceBundleTest {
         )
 
     /** Synthetic completed readback request for the first-route target. */
-    private fun completedReadbackRequest(): GPUReadbackRequest =
-        GPUReadbackRequest(
-            requestId = "readback-1",
-            sourceLabel = "first-route-webgpu-submit",
-            boundsLabel = "0,0 16x16",
-            format = "rgba8unorm",
-            synchronizationLabel = "after-submit",
-            expectedArtifactLabel = "first-route-fill.png",
+    private fun completedReadbackRequest(): GPUFrameReadbackRequest =
+        GPUFrameReadbackRequest(
+            requestId = GPUReadbackRequestID("readback-1"),
+            sourceBounds = GPUPixelBounds(0, 0, 16, 16),
+            pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
+            outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
         )
 
     /** Parser-backed WGSL reflection fixture for executed PM evidence tests. */

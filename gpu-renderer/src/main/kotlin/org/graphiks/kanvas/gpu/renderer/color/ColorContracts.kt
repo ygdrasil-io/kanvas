@@ -1,5 +1,34 @@
 package org.graphiks.kanvas.gpu.renderer.color
 
+/** Stable handle-free target/intermediate color format identity. */
+@JvmInline
+value class GPUColorFormat(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUColorFormat.value must not be blank" }
+    }
+
+    companion object {
+        val RGBA8Unorm: GPUColorFormat = GPUColorFormat("rgba8unorm")
+        val RGBA8UnormSrgb: GPUColorFormat = GPUColorFormat("rgba8unorm-srgb")
+        val BGRA8Unorm: GPUColorFormat = GPUColorFormat("bgra8unorm")
+    }
+}
+
+/** Stable handle-free color and alpha interpretation identity. */
+@JvmInline
+value class GPUColorInterpretation(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUColorInterpretation.value must not be blank" }
+    }
+
+    companion object {
+        val EncodedPremulSrgb: GPUColorInterpretation = GPUColorInterpretation("encoded-premul-srgb")
+        val LinearPremul: GPUColorInterpretation = GPUColorInterpretation("linear-premul")
+        val StraightEncodedSrgb: GPUColorInterpretation =
+            GPUColorInterpretation("straight-encoded-srgb")
+    }
+}
+
 /** Color-space descriptor used by color planning. */
 data class GPUColorSpaceDescriptor(
     val name: String,

@@ -149,15 +149,15 @@ private const val TEXT_PAYLOAD_LEAK_REPORT_HASH_SCHEMA =
 private const val TEXT_GPU_SK_TYPE_LEAKED_HANDOFF_DIAGNOSTIC =
     "text.gpu.sk-type-leaked"
 private const val TEXT_GPU_SK_TYPE_LEAKED_RENDERER_DIAGNOSTIC =
-    "unsupported.text.sk_type_leaked"
+    GPUTextRefusalCodes.SK_TYPE_LEAKED
 private const val TEXT_GPU_CPU_RENDERED_TEXTURE_HANDOFF_DIAGNOSTIC =
     "text.gpu.CPU-rendered-texture-forbidden"
 private const val TEXT_GPU_CPU_RENDERED_TEXTURE_RENDERER_DIAGNOSTIC =
-    "unsupported.text.cpu_rendered_texture_forbidden"
+    GPUTextRefusalCodes.CPU_RENDERED_TEXTURE_FORBIDDEN
 private const val TEXT_GPU_PAYLOAD_NONDUMPABLE_HANDOFF_DIAGNOSTIC =
     "text.gpu.payload-nondumpable"
 private const val TEXT_GPU_PAYLOAD_NONDUMPABLE_RENDERER_DIAGNOSTIC =
-    "unsupported.text.payload_nondumpable"
+    GPUTextRefusalCodes.PAYLOAD_NONDUMPABLE
 
 private fun TextPayloadField.toLeakFinding(
     payloadKind: String,

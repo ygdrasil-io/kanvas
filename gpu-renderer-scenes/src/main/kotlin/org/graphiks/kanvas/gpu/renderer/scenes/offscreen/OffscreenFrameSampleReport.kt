@@ -47,8 +47,8 @@ data class OffscreenFrameSampleReport(
         when (runStatus) {
             OffscreenFrameSampleStatus.Sampled -> {
                 require(metricName == "frame-time-ms") { "sampled reports must use frame-time-ms metricName" }
-                require(metricSource == "wall-clock-offscreen-render-readback") {
-                    "sampled reports must use wall-clock-offscreen-render-readback metricSource"
+                require(metricSource in SAMPLED_METRIC_SOURCES) {
+                    "sampled reports must use one declared wall-clock metricSource"
                 }
                 require(!adapterInfo.isNullOrBlank()) { "sampled reports must include adapterInfo" }
                 require(rawSampleCount > 0) { "sampled reports must include samples" }
@@ -109,6 +109,7 @@ data class OffscreenFrameSampleReport(
             warmupFrames: Int,
             samples: List<Long>,
             diagnostics: List<String>,
+            metricSource: String = "wall-clock-offscreen-render-readback",
         ): OffscreenFrameSampleReport {
             require(samples.all { sample -> sample > 0L }) {
                 "offscreen frame samples must be positive"
@@ -120,7 +121,7 @@ data class OffscreenFrameSampleReport(
                 runStatus = OffscreenFrameSampleStatus.Sampled,
                 backend = "webgpu-offscreen",
                 metricName = "frame-time-ms",
-                metricSource = "wall-clock-offscreen-render-readback",
+                metricSource = metricSource,
                 adapterInfo = adapterInfo,
                 rawSampleCount = samples.size,
                 warmupFrames = warmupFrames,
@@ -170,6 +171,11 @@ data class OffscreenFrameSampleReport(
             )
     }
 }
+
+private val SAMPLED_METRIC_SOURCES = setOf(
+    "wall-clock-offscreen-render-readback",
+    "wall-clock-prepared-submit-completion",
+)
 
 data class OffscreenFrameSample(
     val frameIndex: Int,

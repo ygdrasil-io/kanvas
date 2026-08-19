@@ -83,4 +83,14 @@ class SkiaGmRegistryTest {
             failures.joinToString(separator = "\n")
         }
     }
+
+    @Test
+    fun `registered GMs have unique logical names`() {
+        val gms = SkiaGmRegistry.all()
+        val names = gms.map { it.name }
+
+        assertEquals(names.size, names.toSet().size) {
+            "Duplicate registered GM names: ${names.groupingBy { it }.eachCount().filterValues { it > 1 }}"
+        }
+    }
 }

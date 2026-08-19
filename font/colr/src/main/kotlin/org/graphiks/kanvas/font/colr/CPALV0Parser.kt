@@ -18,12 +18,27 @@ object CPALV0Parser {
      * @return parsed CPAL table, or null when the bytes are unsupported, truncated, out of range,
      * or exceed the defensive color-font caps used by the pure Kotlin parser.
      */
-    fun parse(bytes: ByteArray): CPALTable? {
+    fun parse(bytes: ByteArray): CPALTable? =
+        parseCommonPrefix(bytes = bytes, allowVersionOne = false)
+
+    /**
+     * Parses the version 0-compatible palette prefix retained by a CPAL version 1 table.
+     *
+     * This entry point shares all common count, offset and color-record validation with [parse].
+     * CPAL version 1 metadata arrays are deliberately outside this version 0-prefix authority.
+     */
+    fun parseCompatibleV0Prefix(bytes: ByteArray): CPALTable? =
+        parseCommonPrefix(bytes = bytes, allowVersionOne = true)
+
+    private fun parseCommonPrefix(
+        bytes: ByteArray,
+        allowVersionOne: Boolean,
+    ): CPALTable? {
         val reader = ColorTableReader(bytes)
         if (!reader.fits(0, CPAL_V0_HEADER_SIZE.toLong())) return null
 
         val version = reader.u16(0) ?: return null
-        if (version != 0) return null
+        if (version != 0 && !(allowVersionOne && version == 1)) return null
 
         val numPaletteEntries = reader.u16(2) ?: return null
         val numPalettes = reader.u16(4) ?: return null
@@ -62,7 +77,10 @@ object CPALV0Parser {
         }
 
         val paletteTypesOffset = CPAL_V0_HEADER_SIZE + numPalettes * U16_SIZE_BYTES
-        val paletteTypes = if (reader.fits(paletteTypesOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())) {
+        val paletteTypes = if (
+            version == 0 &&
+            reader.fits(paletteTypesOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())
+        ) {
             List(numPalettes) { index ->
                 reader.u16(paletteTypesOffset + index * U16_SIZE_BYTES) ?: 0
             }
@@ -71,7 +89,10 @@ object CPALV0Parser {
         }
 
         val paletteLabelsOffset = paletteTypesOffset + numPalettes * U16_SIZE_BYTES
-        val paletteLabels = if (reader.fits(paletteLabelsOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())) {
+        val paletteLabels = if (
+            version == 0 &&
+            reader.fits(paletteLabelsOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())
+        ) {
             List(numPalettes) { index ->
                 reader.u16(paletteLabelsOffset + index * U16_SIZE_BYTES) ?: 0
             }
@@ -80,7 +101,9 @@ object CPALV0Parser {
         }
 
         val paletteEntryLabelsOffset = paletteLabelsOffset + numPalettes * U16_SIZE_BYTES
-        val paletteEntryLabels = if (numPaletteEntries > 0 &&
+        val paletteEntryLabels = if (
+            version == 0 &&
+            numPaletteEntries > 0 &&
             reader.fits(paletteEntryLabelsOffset, numPaletteEntries.toLong() * U16_SIZE_BYTES.toLong())
         ) {
             List(numPaletteEntries) { index ->

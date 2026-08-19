@@ -22,8 +22,16 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main() -> @location(0) vec4f {
     let c = uniforms.color;
-    let r = uniforms.m0 * c.x + uniforms.m1 * c.y + uniforms.m2 * c.z + uniforms.m3 * c.w + uniforms.m4;
-    return vec4f(r.x, r.y, r.z, r.w);
+    let filtered = clamp(
+        vec4f(
+            dot(uniforms.m0, c),
+            dot(uniforms.m1, c),
+            dot(uniforms.m2, c),
+            dot(uniforms.m3, c),
+        ) + uniforms.m4,
+        vec4f(0.0),
+        vec4f(1.0),
+    );
+    return vec4f(filtered.rgb * filtered.a, filtered.a);
 }
 """
-

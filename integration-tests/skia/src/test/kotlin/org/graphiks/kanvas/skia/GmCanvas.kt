@@ -191,7 +191,7 @@ class GmCanvas(
         }
         val innerRect = transformRect(clip) ?: return
         inner.save()
-        inner.clipRect(innerRect)
+        inner.clipRect(innerRect, antiAlias = false)
         block()
         inner.restore()
     }

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 2,
+  "gate": "open",
+  "accepted": true,
+  "verifiedAt": "2026-07-17",
+  "host": {
+    "os": "Darwin",
+    "architecture": "arm64"
+  },
+  "publishedSnapshotJob": {
+    "url": "https://github.com/wgpu4k/wgpu4k/actions/runs/29542588206/job/87767701438",
+    "status": "succeeded",
+    "sourceRevision": "9a35a17effbfbe33ddc436052664ef8651d3fc52"
+  },
+  "declaredDependency": {
+    "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
+    "consumers": [
+      "gpu-renderer",
+      "gpu-renderer-scenes",
+      "integration-tests/test-utils",
+      "integration-tests/skia",
+      "integration-tests/svg"
+    ],
+    "centralVersionAlias": true
+  },
+  "resolvedDependency": {
+    "toolkitCoordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
+    "facadeCoordinate": "io.ygdrasil:wgpu4k:0.2.0-20260716.235022-2",
+    "ktypesCoordinate": "io.ygdrasil:webgpu-ktypes:0.0.10-20260716.185724-3",
+    "nativeCoordinate": "io.ygdrasil:wgpu4k-native:v29.0.0-20260716.085936-2",
+    "resolutionIsHybrid": false,
+    "wgpu4kRevision": "9a35a17effbfbe33ddc436052664ef8651d3fc52",
+    "wgpu4kNativeRevision": "d3da8969f7968e5f6ab5d7aebd38cf10c0f0e136",
+    "wgpuNativeRevision": "d2e3330ade4ae1bb238d76b485926f067e7ee64c"
+  },
+  "repositoryProvenance": {
+    "ygdrasilArtifactsResolveFromRemoteRepositoriesOnly": true,
+    "immutableResolutionRules": true,
+    "dependencyVerificationCompleteForTestGraph": true,
+    "verificationMetadataSha256": "5cf093a280602bae7d3d8ca328a75b4aa1190b4b9a1452b5e79dd6ffb297d855"
+  },
+  "artifacts": [
+    {
+      "coordinate": "io.ygdrasil:kffi:v29.0.0-20260716.085936-2",
+      "moduleSha256": "42e95fb5fec3a639fbcc5dd81f5d3d3e80e4d30f8b9e75623cb8493489de92df"
+    },
+    {
+      "coordinate": "io.ygdrasil:kffi-jvm:v29.0.0-20260716.085936-2",
+      "jarSha256": "59e8ea9dec4e1c5762b88663427d6f2c42cfc2dcceef22fa439b52b7bc4e89c7",
+      "moduleSha256": "99c401c004db17619e2df04bc86447280622c590c6e9128750f3a3eedea61d0b"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes:0.0.10-20260716.185724-3",
+      "moduleSha256": "a615c462afadd165b99db68bacbd8531666a109f8d26209e02dd9ab0a81062d3"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes-descriptors:0.0.10-20260716.185724-3",
+      "moduleSha256": "22aab09ebe38d87200118da100fc37274a63e2056402f4e8cd8304d6b4a70877"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes-descriptors-jvm:0.0.10-20260716.185724-3",
+      "jarSha256": "f4b0f1d5bdfe1defb5b2d7bbca826a4ae18eaac05b0deb8cb5bbeada85c616a6",
+      "moduleSha256": "573d8ca6c3e1729f2990a6bbb2f08d30981e4aa4d425b48526277519130cce25"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes-jvm:0.0.10-20260716.185724-3",
+      "jarSha256": "de26c37078f2ebbf47abc8cf2b62d9d3254527eda79986ab90115bed790f5a28",
+      "moduleSha256": "031cda1573dba496fe18a2c7faa07957b3bba29be824bc54c0756d1c2393bdab"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k:0.2.0-20260716.235022-2",
+      "moduleSha256": "479262788e73a19585335f24529cce83db2ba8a5e59c83033d0c97f4ab02a91e"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-jvm:0.2.0-20260716.235022-2",
+      "jarSha256": "80090cacfeebfb198bf03265cc0cebb2b8a49367d01b8bb249098b3dba9e2ca6",
+      "moduleSha256": "606861aa5cde1a27a24fcce658665e1f343994e6eb66e0a4405f32b4c0951387"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-native:v29.0.0-20260716.085936-2",
+      "moduleSha256": "03448315f109b6c0fbf8a4f96ed313a60da060e6b7b96491ec64c29653213059"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-native-jvm:v29.0.0-20260716.085936-2",
+      "jarSha256": "a3429a7335e3fbc814cb07088908b4c4a95fa4d7ece3c914f6b9b6f161cc04a8",
+      "moduleSha256": "74b478b19014d7f504dac748b57437dd1de247c6f879d299a35368789ecf5bb0"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
+      "moduleSha256": "b15d5c09652f3528e503952eeb70e6c227c2eed44fd8b3bf7ea9d3cb3758e8e0"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-toolkit-jvm:0.2.0-20260716.235022-2",
+      "jarSha256": "4cff600988aec394a799d933635f11b12cf88f6d20b9f16e16217858dd3b2cd8",
+      "moduleSha256": "bd83b93e476da887f64ecddd66b285412e645b15c407ce340f63f1251d751f3f"
+    }
+  ],
+  "publicApi": {
+    "signature": "suspend GPUQueue.onSubmittedWorkDone(): Result<Unit>",
+    "unchanged": true,
+    "kanvasNativeCallbackOrPollingWorkaround": false
+  },
+  "callbackProgress": {
+    "callbackMode": "AllowProcessEvents",
+    "eventPumpOwner": "wgpu4k",
+    "kanvasEventPump": false
+  },
+  "nativeConformance": {
+    "status": "passed",
+    "testCount": 97,
+    "failureCount": 0,
+    "skippedCount": 0,
+    "submittedEmptyRenderPass": "passed",
+    "callbackAfterRegisteringScope": "passed",
+    "callbackOffSubmitterThread": "passed",
+    "memoryAndGcChurn": "passed",
+    "orderedTickets": "passed-64-ordered-submissions",
+    "exactlyOnceSuccess": "passed",
+    "adapterClose": "passed-after-native-submit-and-arm",
+    "cancellation": "passed-native-race-with-following-sentinel",
+    "failure": "passed-public-device-close-before-registration",
+    "failureMessage": "Device is closed",
+    "pendingRegistrationThenClose": "race-with-legitimate-fast-success",
+    "deviceLoss": "not-exercisable-public-api",
+    "unitFailureNormalization": "exhaustive",
+    "unitDeviceLossNormalization": "exhaustive"
+  },
+  "acceptedAmendment": {
+    "scope": "native-device-loss-triggering-only",
+    "rule": "Native device-loss injection is mandatory when a stable public facade API can trigger it. Otherwise exhaustive normalization tests and an explicit not-exercisable-public-api report are accepted.",
+    "stablePublicFailureTriggerAvailable": true,
+    "stablePublicFailureTriggerSequence": "empty-submit-then-device-close-then-onSubmittedWorkDone-registration",
+    "stablePublicDeviceLossTriggerAvailable": false,
+    "privateHandleAccessAllowed": false,
+    "nativeMessageParsingAllowed": false,
+    "kanvasWorkaroundAllowed": false
+  },
+  "kanvasBoundary": {
+    "dependencyPinCommit": "720e703aa9f4f3c0b98122f02b645b8806f829e1",
+    "completionBoundaryAvailable": true,
+    "nativeRouteActivated": false,
+    "capabilityRevision": "wgpu4k.0.2.0-20260716.235022-2",
+    "capabilityAccepted": true,
+    "consumerViewOwnsLifecycle": false
+  },
+  "limitations": [
+    "A real native window surface was not exercised because the test host does not expose an AppKit MetalLayer handle.",
+    "The stable public facade does not expose a deterministic trigger for device loss.",
+    "Closing a device after a pending registration races legitimately with fast success; deterministic callback-failure conformance therefore closes the device before registering onSubmittedWorkDone."
+  ],
+  "evidenceCommands": [
+    "rtk ./gradlew :gpu-renderer:dependencyInsight --configuration runtimeClasspath --dependency wgpu4k",
+    "rtk shasum -a 256 gradle/verification-metadata.xml",
+    "rtk ./gradlew :gpu-renderer:test --rerun-tasks --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeContractsTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionAdapterTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueManagerTest"
+  ]
+}

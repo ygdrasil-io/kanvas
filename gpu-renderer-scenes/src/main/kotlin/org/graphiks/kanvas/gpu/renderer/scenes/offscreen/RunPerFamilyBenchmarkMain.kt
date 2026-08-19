@@ -1,9 +1,16 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGatePolicy
 
-fun main(args: Array<String>) = runPerFamilyBenchmark(args)
+fun main(args: Array<String>) {
+    try {
+        runPerFamilyBenchmark(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
+}
 
 /**
  * KGPU-M27-001/002/003: runs the per-family benchmark and writes the three M27

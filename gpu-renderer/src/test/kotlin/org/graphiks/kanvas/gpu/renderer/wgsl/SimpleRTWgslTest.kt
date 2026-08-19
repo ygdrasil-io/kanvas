@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class SimpleRTWgslTest {
@@ -27,8 +28,12 @@ class SimpleRTWgslTest {
     }
 
     @Test
-    fun `SimpleRTSourceHash is fragment simple rt v1`() {
-        assertEquals("fragment:simple_rt:v1", SimpleRTSourceHash)
+    fun `SimpleRTSourceHash is derived from WGSL content`() {
+        assertEquals(wgslSourceContentHash(SimpleRTWgsl), SimpleRTSourceHash)
+        assertNotEquals(
+            SimpleRTSourceHash,
+            wgslSourceContentHash(SimpleRTWgsl.replace("gColor", "otherColor")),
+        )
     }
 
     @Test

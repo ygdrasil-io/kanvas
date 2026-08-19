@@ -12,6 +12,7 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class LatticeDecompositionTest {
@@ -54,5 +55,54 @@ class LatticeDecompositionTest {
         assertEquals(Color.RED, cells[3].color)
         assertEquals(Color(0x880000FFu), cells[4].color)
         assertEquals(Color(0xFF00FF00u), cells[5].color)
+    }
+
+    @Test
+    fun `explicit lattice rects retain source row order when transparent cells are omitted`() {
+        val explicitRects = List(6) { index ->
+            Rect.fromLTRB(
+                index * 10f,
+                20f,
+                index * 10f + 8f,
+                28f,
+            )
+        }
+        val operation = DisplayOp.DrawImageLattice(
+            image = Image(6, 4, ColorType.RGBA_8888, "explicit-lattice", ByteArray(6 * 4 * 4)),
+            lattice = Lattice(
+                xDivs = listOf(2, 4),
+                yDivs = listOf(2),
+                rects = explicitRects,
+                flags = listOf(
+                    LatticeFlags.DEFAULT,
+                    LatticeFlags.TRANSPARENT,
+                    LatticeFlags.FIXED_COLOR,
+                    LatticeFlags.DEFAULT,
+                    LatticeFlags.DEFAULT,
+                    LatticeFlags.DEFAULT,
+                ),
+                colors = listOf(
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                    Color.RED,
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                ),
+            ),
+            dst = Rect.fromLTRB(0f, 0f, 60f, 40f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val cells = operation.decompose()
+
+        assertEquals(
+            listOf(explicitRects[0], explicitRects[2], explicitRects[3], explicitRects[4], explicitRects[5]),
+            cells.map(ImageCell::dst),
+        )
+        assertEquals(Color.RED, cells[1].color)
+        assertTrue(cells.filterIndexed { index, _ -> index != 1 }.all { it.color == null })
     }
 }

@@ -103,6 +103,14 @@ class BitmapTest {
         val img = bmp.toImage()
         bmp.setPixel(0, 0, Color.BLUE)
         assertEquals(Color.RED, Color.fromRGBA(1f, 0f, 0f, 1f))
+        assertEquals(AlphaType.UNPREMUL, img.alphaType)
+    }
+
+    @Test
+    fun `toImage uses the color type default alpha type for A8`() {
+        val image = Bitmap(1, 1, ColorType.ALPHA_8).toImage()
+
+        assertEquals(AlphaType.PREMUL, image.alphaType)
     }
 
     @Test

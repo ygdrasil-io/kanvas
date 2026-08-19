@@ -1,10 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
-import kotlin.math.pow
 
 data class GradientWgslShader(
     val wgslSource: String,
+    val composableDeclarationsWgsl: String,
     val uniformLayoutHash: String,
 )
 
@@ -57,6 +57,7 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildLinearWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildLinearWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:linear-gradient-material-block:v1",
         )
     }
@@ -65,6 +66,7 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildRadialWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildRadialWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:radial-gradient-material-block:v1",
         )
     }
@@ -73,11 +75,16 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildSweepWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildSweepWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:sweep-gradient-material-block:v1",
         )
     }
 
-    private fun buildLinearWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildLinearWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -98,10 +105,15 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
-    private fun buildRadialWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildRadialWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -121,10 +133,15 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
-    private fun buildSweepWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildSweepWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -154,6 +171,7 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
@@ -166,11 +184,46 @@ object GradientWgslShaderProvider {
                 tileFn = tileFn,
                 decalSuffix = decalSuffix,
             ),
+            composableDeclarationsWgsl = buildConicalWgsl(
+                stopCount = n,
+                tileFn = tileFn,
+                decalSuffix = decalSuffix,
+                composable = true,
+            ),
             uniformLayoutHash = "layout:conical-gradient-material-block:v1",
         )
     }
 
-    private fun buildConicalWgsl(stopCount: Int, tileFn: String, decalSuffix: String): String = """
+    private fun buildConicalWgsl(
+        stopCount: Int,
+        tileFn: String,
+        decalSuffix: String,
+        composable: Boolean = false,
+    ): String {
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
+struct VertexOutput {
+    @builtin(position) pos: vec4<f32>,
+}
+
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    let verts = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+        vec2<f32>(-1.0, 3.0),
+    );
+    return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
+}
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+    let pos = vec4<f32>(localPosition, 0.0, 1.0);
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {"
+        }
+        return """
 struct GradientBlock {
     start: vec2<f32>,
     end: vec2<f32>,
@@ -184,22 +237,11 @@ struct GradientBlock {
     _pad4: u32,
     stopData: array<vec4<f32>, 32>,
 }
-@group(0) @binding(0) var<uniform> gradient: GradientBlock;
+@group($bindingGroup) @binding(0) var<uniform> gradient: GradientBlock;
 
-struct VertexOutput {
-    @builtin(position) pos: vec4<f32>,
-}
+$vertexStage
 
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
-    let verts = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>(3.0, -1.0),
-        vec2<f32>(-1.0, 3.0),
-    );
-    return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
-}
-
-@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+$evaluationStart
     let dx = gradient.end.x - gradient.start.x;
     let dy = gradient.end.y - gradient.start.y;
     let fx = pos.x - gradient.start.x;
@@ -263,20 +305,23 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
+    }
 
     private fun conicalUniformBytes(desc: GPUMaterialDescriptor.ConicalGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.startX); bb.putFloat(desc.startY)
                 bb.putFloat(desc.endX); bb.putFloat(desc.endY)
                 bb.putFloat(desc.startRadius); bb.putFloat(desc.endRadius)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0)
                 bb.putInt(0); bb.putInt(0) // pad to 48
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
             headerSize = 48,
         )
     }
@@ -304,14 +349,10 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         structFields: String,
         tileFn: String,
         decalSuffix: String = "",
-    ): String = """
-struct GradientBlock {
-    $structFields
-    count: u32,
-    stopData: array<vec4<f32>, 32>,
-}
-@group(0) @binding(0) var<uniform> gradient: GradientBlock;
-
+        composable: Boolean = false,
+    ): String {
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
 }
@@ -324,8 +365,26 @@ struct VertexOutput {
     );
     return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
 }
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+    let pos = vec4<f32>(localPosition, 0.0, 1.0);
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {"
+        }
+        return """
+struct GradientBlock {
+    $structFields
+    count: u32,
+    stopData: array<vec4<f32>, 32>,
+}
+@group($bindingGroup) @binding(0) var<uniform> gradient: GradientBlock;
 
-@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+$vertexStage
+
+$evaluationStart
     $preamble
     $tileFn
     var positions: array<vec4<f32>, 16>;
@@ -357,47 +416,55 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
+    }
 
     // ---- Uniform packing ----
 
     private fun linearUniformBytes(desc: GPUMaterialDescriptor.LinearGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.startX); bb.putFloat(desc.startY)
                 bb.putFloat(desc.endX); bb.putFloat(desc.endY)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
         )
     }
 
     private fun radialUniformBytes(desc: GPUMaterialDescriptor.RadialGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.centerX); bb.putFloat(desc.centerY)
                 bb.putFloat(desc.radius)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
+            headerSize = 16,
         )
     }
 
     private fun sweepUniformBytes(desc: GPUMaterialDescriptor.SweepGradient): ByteArray {
+        val stopPositions = desc.allStopPositions
+        val stopColors = desc.allStopColors
         return packGradientUniforms(
             geometryPacker = { bb ->
                 bb.putFloat(desc.centerX); bb.putFloat(desc.centerY)
                 bb.putFloat(desc.startAngle); bb.putFloat(desc.endAngle)
-                val n = desc.allStopPositions?.size ?: 2
+                val n = stopPositions?.size ?: 2
                 bb.putInt(n)
                 bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
             },
-            allStopPositions = desc.allStopPositions,
-            allStopColors = desc.allStopColors,
+            allStopPositions = stopPositions,
+            allStopColors = stopColors,
         )
     }
 
@@ -413,7 +480,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         val n = allStopPositions?.size ?: 2
         val bufferSize = headerSize + MAX_STOPS_WGSL * BYTES_PER_STOP
         val bb = java.nio.ByteBuffer.allocate(bufferSize)
-            .order(java.nio.ByteOrder.nativeOrder())
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
         geometryPacker(bb)
         for (i in 0 until MAX_STOPS_WGSL) {
             if (i < n) {
@@ -422,9 +489,12 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
                 } ?: (i.toFloat() / (n - 1).coerceAtLeast(1))
                 bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 if (allStopColors != null && i * 4 + 3 < allStopColors.size) {
-                    val r = srgbToLinear(allStopColors[i * 4]) * allStopColors[i * 4 + 3]
-                    val g = srgbToLinear(allStopColors[i * 4 + 1]) * allStopColors[i * 4 + 3]
-                    val b = srgbToLinear(allStopColors[i * 4 + 2]) * allStopColors[i * 4 + 3]
+                    val r = preparedMaterialSrgbToLinear(allStopColors[i * 4]) *
+                        allStopColors[i * 4 + 3]
+                    val g = preparedMaterialSrgbToLinear(allStopColors[i * 4 + 1]) *
+                        allStopColors[i * 4 + 3]
+                    val b = preparedMaterialSrgbToLinear(allStopColors[i * 4 + 2]) *
+                        allStopColors[i * 4 + 3]
                     val a = allStopColors[i * 4 + 3]
                     bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(a)
                 } else {
@@ -438,8 +508,4 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         return bb.array()
     }
 
-    private fun srgbToLinear(c: Float): Float {
-        return if (c <= 0.04045f) c / 12.92f
-        else ((c + 0.055f) / 1.055f).pow(2.4f)
-    }
 }

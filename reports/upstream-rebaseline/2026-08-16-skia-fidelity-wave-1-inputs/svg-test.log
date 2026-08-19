@@ -1,0 +1,205 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/Users/chaos/.gradle/wrapper/dists/gradle-9.2.0-bin/11i5gvueggl8a5cioxuftxrik/gradle-9.2.0/lib/native-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders UP-TO-DATE
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins UP-TO-DATE
+> Task :buildSrc:compilePluginsBlocks UP-TO-DATE
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors UP-TO-DATE
+> Task :buildSrc:generateScriptPluginAdapters UP-TO-DATE
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :color-management:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:kmpPartiallyResolvedDependenciesChecker
+> Task :math:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:compileKotlinJvm UP-TO-DATE
+> Task :math:compileJvmMainJava NO-SOURCE
+> Task :math:jvmProcessResources NO-SOURCE
+> Task :math:processJvmMainResources SKIPPED
+> Task :math:jvmMainClasses UP-TO-DATE
+> Task :math:jvmJar UP-TO-DATE
+> Task :color-management:compileKotlin UP-TO-DATE
+> Task :color-management:compileJava NO-SOURCE
+> Task :font:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:compileKotlin UP-TO-DATE
+> Task :font:core:compileJava NO-SOURCE
+> Task :font:colr:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:compileKotlin UP-TO-DATE
+> Task :font:sfnt:compileJava NO-SOURCE
+> Task :font:colr:compileKotlin UP-TO-DATE
+> Task :font:colr:compileJava NO-SOURCE
+> Task :font:colr:processResources NO-SOURCE
+> Task :font:colr:classes UP-TO-DATE
+> Task :font:colr:jar UP-TO-DATE
+> Task :font:glyph:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:compileKotlin UP-TO-DATE
+> Task :font:gpu-api:compileJava NO-SOURCE
+> Task :font:scaler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:scaler:compileKotlin UP-TO-DATE
+> Task :font:scaler:compileJava NO-SOURCE
+> Task :font:text:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:text:compileKotlin UP-TO-DATE
+> Task :font:text:compileJava NO-SOURCE
+> Task :font:glyph:compileKotlin UP-TO-DATE
+> Task :font:glyph:compileJava NO-SOURCE
+> Task :font:compileKotlin UP-TO-DATE
+> Task :font:compileJava NO-SOURCE
+> Task :gpu-renderer:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gpu-renderer:compileKotlin UP-TO-DATE
+> Task :gpu-renderer:compileJava NO-SOURCE
+> Task :kanvas:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kanvas:compileKotlin UP-TO-DATE
+> Task :kanvas:compileJava NO-SOURCE
+> Task :integration-tests:svg:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:api:compileKotlin UP-TO-DATE
+> Task :codec:api:compileJava NO-SOURCE
+> Task :codec:common:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:compileKotlin UP-TO-DATE
+> Task :codec:common:compileJava NO-SOURCE
+> Task :codec:common:processResources NO-SOURCE
+> Task :codec:common:classes UP-TO-DATE
+> Task :codec:common:jar UP-TO-DATE
+> Task :codec:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:core:compileKotlin NO-SOURCE
+> Task :codec:core:compileJava NO-SOURCE
+> Task :codec:png:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:compileKotlin UP-TO-DATE
+> Task :codec:png:compileJava NO-SOURCE
+> Task :codec:png:processResources UP-TO-DATE
+> Task :codec:png:classes UP-TO-DATE
+> Task :codec:png:jar UP-TO-DATE
+> Task :integration-tests:test-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:compileKotlin UP-TO-DATE
+> Task :integration-tests:test-utils:compileJava NO-SOURCE
+> Task :kanvas:svg:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kanvas:svg:compileKotlin UP-TO-DATE
+> Task :kanvas:svg:compileJava NO-SOURCE
+> Task :integration-tests:svg:compileKotlin NO-SOURCE
+> Task :integration-tests:svg:compileJava NO-SOURCE
+> Task :integration-tests:svg:processResources UP-TO-DATE
+> Task :integration-tests:svg:classes UP-TO-DATE
+> Task :integration-tests:svg:jar UP-TO-DATE
+> Task :color-management:processResources NO-SOURCE
+> Task :color-management:classes UP-TO-DATE
+> Task :color-management:jar UP-TO-DATE
+> Task :font:processResources NO-SOURCE
+> Task :font:classes UP-TO-DATE
+> Task :font:jar UP-TO-DATE
+> Task :gpu-renderer:processResources UP-TO-DATE
+> Task :gpu-renderer:classes UP-TO-DATE
+> Task :gpu-renderer:jar UP-TO-DATE
+> Task :kanvas:processResources NO-SOURCE
+> Task :kanvas:classes UP-TO-DATE
+> Task :kanvas:jar UP-TO-DATE
+> Task :codec:api:processResources UP-TO-DATE
+> Task :codec:api:classes UP-TO-DATE
+> Task :codec:api:jar UP-TO-DATE
+> Task :codec:core:processResources NO-SOURCE
+> Task :codec:core:classes UP-TO-DATE
+> Task :codec:core:jar UP-TO-DATE
+> Task :font:core:processResources NO-SOURCE
+> Task :font:core:classes UP-TO-DATE
+> Task :font:core:jar UP-TO-DATE
+> Task :font:glyph:processResources NO-SOURCE
+> Task :font:glyph:classes UP-TO-DATE
+> Task :font:glyph:jar UP-TO-DATE
+> Task :font:gpu-api:processResources NO-SOURCE
+> Task :font:gpu-api:classes UP-TO-DATE
+> Task :font:gpu-api:jar UP-TO-DATE
+> Task :font:scaler:processResources NO-SOURCE
+> Task :font:scaler:classes UP-TO-DATE
+> Task :font:scaler:jar UP-TO-DATE
+> Task :font:sfnt:processResources NO-SOURCE
+> Task :font:sfnt:classes UP-TO-DATE
+> Task :font:sfnt:jar UP-TO-DATE
+> Task :font:text:processResources UP-TO-DATE
+> Task :font:text:classes UP-TO-DATE
+> Task :font:text:jar UP-TO-DATE
+> Task :integration-tests:svg:compileTestKotlin UP-TO-DATE
+> Task :integration-tests:svg:compileTestJava NO-SOURCE
+> Task :integration-tests:svg:processTestResources UP-TO-DATE
+> Task :integration-tests:svg:testClasses UP-TO-DATE
+> Task :integration-tests:test-utils:processResources NO-SOURCE
+> Task :integration-tests:test-utils:classes UP-TO-DATE
+> Task :integration-tests:test-utils:jar UP-TO-DATE
+> Task :kanvas:svg:processResources NO-SOURCE
+> Task :kanvas:svg:classes UP-TO-DATE
+> Task :kanvas:svg:jar UP-TO-DATE
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.lwjgl.system.MemoryUtil (file:/Users/chaos/.gradle/caches/modules-2/files-2.1/org.lwjgl/lwjgl/3.3.3/29589b5f87ed335a6c7e7ee6a5775f81f97ecb84/lwjgl-3.3.3.jar)
+WARNING: Please consider reporting this to the maintainers of class org.lwjgl.system.MemoryUtil
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+
+> Task :integration-tests:svg:test
+
+SvgIntegrationTest > test complex-paths-2() SKIPPED
+
+SvgIntegrationTest > test complex-paths-3() SKIPPED
+
+SvgIntegrationTest > test geometric-1() PASSED
+
+SvgIntegrationTest > test geometric-2() SKIPPED
+
+SvgIntegrationTest > test geometric-3() PASSED
+
+SvgIntegrationTest > SVG expected unsupported classification is limited to the explicit allowlist() PASSED
+
+SvgIntegrationTest > test texture-2() PASSED
+
+SvgIntegrationTest > test texture-3() FAILED
+    org.opentest4j.AssertionFailedError at SvgIntegrationTest.kt:68
+
+SvgIntegrationTest > test ghostscript-tiger() SKIPPED
+
+SvgIntegrationTest > test laptop-computer() SKIPPED
+
+SvgIntegrationTest > test shadow-2() SKIPPED
+
+SvgIntegrationTest > test shadow-3() SKIPPED
+
+SvgIntegrationTest > test layer-1() SKIPPED
+
+SvgIntegrationTest > test gradient-1() SKIPPED
+
+SvgIntegrationTest > test gradient-2() SKIPPED
+
+SvgIntegrationTest > test gradient-3() SKIPPED
+
+SvgIntegrationTest > test icon-computer() SKIPPED
+
+17 tests completed, 1 failed, 12 skipped
+
+> Task :integration-tests:svg:test FAILED
+
+[Incubating] Problems report is available at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':integration-tests:svg:test'.
+> There were failing tests. See the report at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/integration-tests/svg/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to generate a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 12s
+54 actionable tasks: 2 executed, 52 up-to-date

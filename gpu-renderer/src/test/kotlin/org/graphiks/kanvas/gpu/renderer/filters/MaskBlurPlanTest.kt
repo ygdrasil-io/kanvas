@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 
 class MaskBlurPlanTest {
 

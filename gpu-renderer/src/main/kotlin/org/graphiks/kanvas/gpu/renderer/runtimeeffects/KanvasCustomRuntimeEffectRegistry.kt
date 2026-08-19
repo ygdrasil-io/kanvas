@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLHashUtils
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLReflectionProvider
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLValidator
 
 /**
  * Concrete custom runtime-effect registry wired to registered WGSL validation and security checks.
@@ -96,31 +98,3 @@ class KanvasCustomRuntimeEffectRegistry(
         descriptors[id] = descriptor
     }
 }
-
-/** Validates WGSL source and produces a parsed module carrying resource and feature information. */
-interface WGSLValidator {
-    /** Parses the WGSL [source] into a [WGSLParsedModule] with syntax errors and resource usage. */
-    fun parse(source: String): WGSLParsedModule
-}
-
-/** Reflects on a parsed WGSL module to extract entry point, uniform/texture counts, and layout metadata. */
-interface WGSLReflectionProvider {
-    /** Reflects [module] into a [WGSLReflectionResult] carrying layout and entry point metadata. */
-    fun reflect(module: WGSLParsedModule): WGSLReflectionResult
-}
-
-/** Parser-backed reflection result for a custom runtime-effect WGSL module.
- *  Contains hash-based module identity, entry point name, and resource counts
- *  derived from [WGSLReflectionProvider.reflect]. Fields are populated from
- *  live parser-backed output when available, or from fixture defaults when the
- *  parser-backed path is absent from the classpath. */
-data class WGSLReflectionResult(
-    val moduleHash: String,
-    val entryPoint: String,
-    val uniformCount: Int,
-    val textureCount: Int,
-    val bindGroupCount: Int,
-    val reflectionHash: String,
-    /** Full parser-backed reflection report when produced by a live parse; null on fixture fallback. */
-    val report: WgslReflectionReport? = null,
-)

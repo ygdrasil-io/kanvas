@@ -9,8 +9,10 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPathClipRegressionTest {
@@ -20,116 +22,148 @@ class GPUPathClipRegressionTest {
     }
 
     @Test
-    fun `device rect clip preserves translated path color and exterior`() {
+    fun `device rect clip path frame refuses with the path stencil code`() {
         requireWebGpu()
 
-        val surface = Surface(width = 32, height = 32)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-            save()
-            clipRect(Rect(8f, 8f, 24f, 24f))
-            drawPath(
-                Path {
-                    moveTo(8f, 8f)
-                    lineTo(24f, 8f)
-                    lineTo(16f, 24f)
-                    close()
-                },
-                Paint.fill(Color.RED).copy(antiAlias = false),
-            )
-            restore()
+        // The AA background (uniform80) and the analytic-clipped path pair now
+        // split into separate layout runs, but the path-stencil cover under an analytic clip
+        // still cannot exact the exactly-one-path-pass authority, so the frame re-points to the
+        // path-stencil preflight refusal.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    // The AA background paint (Paint.fill default) splits into its own uniform80
+                    // layout run; the clipped path pair is the path-analytic-clip run.
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(8f, 8f, 24f, 24f))
+                    drawPath(
+                        Path {
+                            moveTo(8f, 8f)
+                            lineTo(24f, 8f)
+                            lineTo(16f, 24f)
+                            close()
+                        },
+                        Paint.fill(Color.RED).copy(antiAlias = false),
+                    )
+                    restore()
+                }
+                render()
+            }
         }
-
-        val pixels = surface.render().pixels.toByteArray()
-        assertPixelAtLeast(pixels, 16, 12, red = 200, green = 0, blue = 0, alpha = 200)
-        assertPixelAtLeast(pixels, 2, 2, red = 200, green = 200, blue = 200, alpha = 200)
+        assertEquals(
+            "invalid.preflight.core_primitive_path_stencil",
+            failure.diagnostic.code.value,
+        )
     }
 
     @Test
-    fun `dst in path preserves destination outside the source geometry`() {
+    fun `dst in path frame refuses on the path stencil machinery boundary`() {
         requireWebGpu()
 
-        val surface = Surface(width = 32, height = 32)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-            drawPath(
-                Path {
-                    moveTo(8f, 8f)
-                    lineTo(24f, 8f)
-                    lineTo(16f, 24f)
-                    close()
-                },
-                Paint.fill(Color.BLACK).copy(
-                    antiAlias = false,
-                    blendMode = BlendMode.DST_IN,
-                ),
-            )
+        // The DST_IN path frame splits into the analytic-shape background
+        // pass and the path pair pass; the path-stencil machinery's direct authority is
+        // uniform32-only, so the shape pass refuses on the path-stencil code.
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawPath(
+                        Path {
+                            moveTo(8f, 8f)
+                            lineTo(24f, 8f)
+                            lineTo(16f, 24f)
+                            close()
+                        },
+                        Paint.fill(Color.BLACK).copy(
+                            antiAlias = false,
+                            blendMode = BlendMode.DST_IN,
+                        ),
+                    )
+                }
+                render()
+            }
         }
-
-        val pixels = surface.render().pixels.toByteArray()
-        assertPixelAtLeast(pixels, 2, 2, red = 200, green = 200, blue = 200, alpha = 200)
+        assertEquals(
+            "invalid.preflight.core_primitive_path_stencil",
+            failure.diagnostic.code.value,
+        )
     }
 
     @Test
-    fun `darken advanced blend preserves destination outside source geometry`() {
+    fun `darken rect over destination renders prepared via the multi render dst copy lane`() {
         requireWebGpu()
 
-        val surface = Surface(width = 32, height = 32)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-            drawRect(
-                Rect(8f, 8f, 24f, 24f),
-                Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
-            )
+        // A destination-read rect over an existing destination render is the
+        // designed multi-render dst-copy shape (producer render, ordered snapshot copy,
+        // consuming render). The prepared direct lane admits it and executes the Graphite
+        // copy-then-formula recipe. The paints are hard (antiAlias = false) so the frame stays
+        // on the full-coverage direct lane: default-AA rects lower to the analytic-shape
+        // dst-read family whose formula program is a designed closed refusal.
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawRect(
+                    Rect(8f, 8f, 24f, 24f),
+                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                )
+            }
+            render()
         }
-
-        val pixels = surface.render().pixels.toByteArray()
-        assertPixelAtLeast(pixels, 2, 2, red = 200, green = 200, blue = 200, alpha = 200)
+        val pixels = result.pixels
+        // CPU reference: DARKEN over an opaque white destination = per-channel min; the black
+        // source yields opaque black inside the rect and retained white outside.
+        assertEquals(255, pixels[(12 * 32 + 12) * 4 + 3].toInt(), "in-rect pixel is opaque")
+        assertEquals(0, pixels[(12 * 32 + 12) * 4 + 0].toInt(), "in-rect pixel is DARKEN(black, white) = black")
+        assertEquals(255, pixels[(2 * 32 + 2) * 4 + 0].toInt(), "outside the rect the white destination is retained")
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.code.startsWith("route:destination-read:DrawRect:") && entry.reason == "gpu-copy-then-formula"
+            },
+            "the dst-read multi-render frame must emit the copy-then-formula route evidence",
+        )
     }
 
     @Test
-    fun `advanced path blend renders through the destination snapshot formula`() {
+    fun `advanced path blend frame renders prepared via the continued path dst read lane`() {
         requireWebGpu()
 
-        val surface = Surface(width = 32, height = 32)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-            drawPath(
-                Path {
-                    moveTo(8f, 8f)
-                    lineTo(24f, 8f)
-                    lineTo(16f, 24f)
-                    close()
-                },
-                Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
-            )
+        // An unclipped rect plus a destination-reading path now admits the
+        // continued path dst-read shape (background render, producer fan Store, ordered snapshot
+        // copy, cover fan read-only + dst-read formula).
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawPath(
+                    Path {
+                        moveTo(8f, 8f)
+                        lineTo(24f, 8f)
+                        lineTo(16f, 24f)
+                        close()
+                    },
+                    Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
+                )
+            }
+            render()
         }
-
-        val result = surface.render()
-        val pixels = result.pixels.toByteArray()
-        assertPixelAtLeast(pixels, 16, 12, red = 0, green = 200, blue = 200, alpha = 200)
-        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
+        val pixels = result.pixels
+        // CPU reference: DIFFERENCE(red, white) = |red - white| = cyan inside the path; the
+        // destination white is retained outside the path.
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 3].toInt(), "in-path pixel is opaque")
+        assertEquals(0, pixels[(16 * 32 + 12) * 4 + 0].toInt(), "in-path pixel red channel is DIFFERENCE(255, 255) = 0")
+        assertEquals(255, pixels[(16 * 32 + 12) * 4 + 1].toInt(), "in-path pixel green channel is DIFFERENCE(0, 255) = 255")
+        assertEquals(255, pixels[(4 * 32 + 4) * 4 + 0].toInt(), "outside the path the white destination is retained")
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.code.startsWith("route:destination-read:DrawPath:") && entry.reason == "gpu-copy-then-formula"
+            },
+            "the continued path dst-read frame must emit the copy-then-formula route evidence",
+        )
     }
 
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
         runtime!!.close()
-    }
-
-    private fun assertPixelAtLeast(
-        pixels: ByteArray,
-        x: Int,
-        y: Int,
-        red: Int,
-        green: Int,
-        blue: Int,
-        alpha: Int,
-    ) {
-        val offset = (y * 32 + x) * 4
-        assertTrue((pixels[offset].toInt() and 0xff) >= red, "red at ($x,$y)")
-        assertTrue((pixels[offset + 1].toInt() and 0xff) >= green, "green at ($x,$y)")
-        assertTrue((pixels[offset + 2].toInt() and 0xff) >= blue, "blue at ($x,$y)")
-        assertTrue((pixels[offset + 3].toInt() and 0xff) >= alpha, "alpha at ($x,$y)")
     }
 }

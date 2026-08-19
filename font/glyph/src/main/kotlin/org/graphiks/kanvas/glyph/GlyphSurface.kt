@@ -2,7 +2,11 @@ package org.graphiks.kanvas.glyph
 
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasPackingResult
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectItem
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectPacker
 import java.security.MessageDigest
+import java.util.Collections
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -880,17 +884,104 @@ interface GlyphMaskGenerator {
  * @property sourceOutlineSha256 optional SHA-256 over the source outline facts
  * used to generate this mask.
  */
-data class A8GlyphMask(
+class A8GlyphMask(
     override val glyphId: Int,
     val width: Int,
     val height: Int,
     val left: Int = 0,
     val top: Int = 0,
     val rowBytes: Int = width,
-    val pixels: List<Int> = List(rowBytes * height) { 0 },
-    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+    pixels: List<Int> = List(rowBytes * height) { 0 },
+    diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
     val sourceOutlineSha256: String? = null,
-) : GlyphRepresentation
+) : GlyphRepresentation {
+    val pixels: List<Int> = Collections.unmodifiableList(ArrayList(pixels))
+
+    val diagnostics: List<GlyphRouteDiagnostic> =
+        Collections.unmodifiableList(ArrayList(diagnostics))
+
+    fun copy(
+        glyphId: Int = this.glyphId,
+        width: Int = this.width,
+        height: Int = this.height,
+        left: Int = this.left,
+        top: Int = this.top,
+        rowBytes: Int = this.rowBytes,
+        pixels: List<Int> = this.pixels,
+        diagnostics: List<GlyphRouteDiagnostic> = this.diagnostics,
+        sourceOutlineSha256: String? = this.sourceOutlineSha256,
+    ): A8GlyphMask =
+        A8GlyphMask(
+            glyphId = glyphId,
+            width = width,
+            height = height,
+            left = left,
+            top = top,
+            rowBytes = rowBytes,
+            pixels = pixels,
+            diagnostics = diagnostics,
+            sourceOutlineSha256 = sourceOutlineSha256,
+        )
+
+    operator fun component1(): Int = glyphId
+
+    operator fun component2(): Int = width
+
+    operator fun component3(): Int = height
+
+    operator fun component4(): Int = left
+
+    operator fun component5(): Int = top
+
+    operator fun component6(): Int = rowBytes
+
+    operator fun component7(): List<Int> = pixels
+
+    operator fun component8(): List<GlyphRouteDiagnostic> = diagnostics
+
+    operator fun component9(): String? = sourceOutlineSha256
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is A8GlyphMask) return false
+
+        return glyphId == other.glyphId &&
+            width == other.width &&
+            height == other.height &&
+            left == other.left &&
+            top == other.top &&
+            rowBytes == other.rowBytes &&
+            pixels == other.pixels &&
+            diagnostics == other.diagnostics &&
+            sourceOutlineSha256 == other.sourceOutlineSha256
+    }
+
+    override fun hashCode(): Int {
+        var result = glyphId
+        result = 31 * result + width
+        result = 31 * result + height
+        result = 31 * result + left
+        result = 31 * result + top
+        result = 31 * result + rowBytes
+        result = 31 * result + pixels.hashCode()
+        result = 31 * result + diagnostics.hashCode()
+        result = 31 * result + (sourceOutlineSha256?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String =
+        "A8GlyphMask(" +
+            "glyphId=$glyphId, " +
+            "width=$width, " +
+            "height=$height, " +
+            "left=$left, " +
+            "top=$top, " +
+            "rowBytes=$rowBytes, " +
+            "pixels=$pixels, " +
+            "diagnostics=$diagnostics, " +
+            "sourceOutlineSha256=$sourceOutlineSha256" +
+            ")"
+}
 
 /**
  * Deterministic evidence for one CPU-prepared A8 glyph mask.
@@ -3749,6 +3840,8 @@ private fun appendGlyphRouteDiagnosticsInlineJson(diagnostics: List<GlyphRouteDi
 fun List<GlyphRouteDiagnostic>.glyphRouteDiagnosticsSha256(): String =
     glyphSha256(toCanonicalGlyphRouteDiagnosticsJson().toByteArray(Charsets.UTF_8))
 
+private val A8SampleOffsets = doubleArrayOf(0.125, 0.375, 0.625, 0.875)
+
 private const val MaxGlyphPathCommands = 4_096
 private const val MaxGeneratedA8MaskPixels = 16_777_216L
 private const val MaxGeneratedSDFMaskPixels = 16_777_216L
@@ -4017,11 +4110,19 @@ private fun rasterizeOutlineToA8(
 
     val pixels = MutableList(pixelCount.toInt()) { 0 }
     for (row in 0 until height) {
-        val sampleY = top + row + 0.5
         for (column in 0 until width) {
-            val sampleX = left + column + 0.5
-            if (contours.nonZeroContains(sampleX, sampleY)) {
-                pixels[row * width + column] = 255
+            var insideCount = 0
+            for (offsetY in A8SampleOffsets) {
+                val sampleY = top + row + offsetY
+                for (offsetX in A8SampleOffsets) {
+                    val sampleX = left + column + offsetX
+                    if (contours.nonZeroContains(sampleX, sampleY)) {
+                        insideCount++
+                    }
+                }
+            }
+            if (insideCount > 0) {
+                pixels[row * width + column] = ((insideCount * 255) + 8) / 16
             }
         }
     }
@@ -4526,36 +4627,41 @@ private fun packAtlasItems(
     atlasWidth: Int,
     padding: Int,
 ): List<GlyphAtlasPlacement> {
-    val placements = mutableListOf<GlyphAtlasPlacement>()
-    var x = padding
-    var y = padding
-    var rowHeight = 0
-
     items.forEach { item ->
         require(item.width >= 0) { "Glyph ${item.glyphId} width must be non-negative." }
         require(item.height >= 0) { "Glyph ${item.glyphId} height must be non-negative." }
         require(item.width.toLong() + padding.toLong() * 2L <= atlasWidth.toLong()) {
             "Glyph ${item.glyphId} width plus padding exceeds atlas width."
         }
-
-        if (x != padding && x + item.width + padding > atlasWidth) {
-            x = padding
-            y += rowHeight + padding
-            rowHeight = 0
-        }
-
-        placements += GlyphAtlasPlacement(
+    }
+    if (items.isEmpty()) return emptyList()
+    val packed = GPUTextAtlasRectPacker.pack(
+        items = items.mapIndexed { index, item ->
+            GPUTextAtlasRectItem(
+                itemKey = "$index:${item.glyphId}",
+                width = item.width,
+                height = item.height,
+                guardPx = 0,
+            )
+        },
+        pageWidth = atlasWidth,
+        pageHeight = Int.MAX_VALUE,
+        maxPages = 1,
+        outerPaddingPx = padding,
+        interItemPaddingPx = padding,
+    )
+    val ready = packed as? GPUTextAtlasPackingResult.Ready
+        ?: error("Validated row-atlas items must fit the unbounded-height page.")
+    return ready.placements.mapIndexed { index, placement ->
+        val item = items[index]
+        GlyphAtlasPlacement(
             glyphId = item.glyphId,
-            x = x,
-            y = y,
+            x = placement.contentRect.left,
+            y = placement.contentRect.top,
             width = item.width,
             height = item.height,
         )
-        x += item.width + padding
-        rowHeight = maxOf(rowHeight, item.height)
     }
-
-    return placements
 }
 
 /**

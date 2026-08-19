@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.text
 
+import org.graphiks.kanvas.font.FontIdentityAuthority
 import org.graphiks.kanvas.font.FontSource
 import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
+import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.scaler.CFF2Scaler
 import org.graphiks.kanvas.font.scaler.CFFScaler
 import org.graphiks.kanvas.font.scaler.GlyphScaleResult
@@ -14,14 +16,39 @@ import org.graphiks.kanvas.font.scaler.VariationPosition
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.font.sfnt.OpenTypeFaceData
 import org.graphiks.kanvas.geometry.Path
-import kotlin.uuid.Uuid
+
+internal sealed interface PreparedTextOutline {
+    data class ProvenNonEmpty(val path: Path) : PreparedTextOutline
+    data object ProvenEmpty : PreparedTextOutline
+    data object Unavailable : PreparedTextOutline
+}
 
 class FontTypeface(
-    val fontBytes: ByteArray,
+    fontBytes: ByteArray,
     override val fontName: String = "unknown",
+    val faceIndex: Int = 0,
 ) : Typeface {
+    private val fontBytesSnapshot: ByteArray = fontBytes.copyOf()
+
+    val fontBytes: ByteArray
+        get() = fontBytesSnapshot.copyOf()
+
+    val sourceId: FontSourceID =
+        FontIdentityAuthority.memorySource(fontBytesSnapshot, fontName).sourceId()
+
+    val typefaceId: TypefaceID?
+        get() = parsedFace?.id
+
+    init {
+        require(faceIndex >= 0) { "faceIndex must be non-negative." }
+    }
+
+    /**
+     * Legacy scaler retained for historical consumers. Prepared text must use
+     * [preparedTextOutline], whose parsed-face authority includes [faceIndex].
+     */
     internal val scaler: GlyphScaler? = try {
-        GlyphScaler.fromBytes(fontBytes)
+        GlyphScaler.fromBytes(fontBytesSnapshot)
     } catch (_: NoClassDefFoundError) {
         null
     } catch (_: ClassNotFoundException) {
@@ -30,88 +57,92 @@ class FontTypeface(
         null
     }
 
-    private data class CffBridge(
+    private data class ExactOutlineBridge(
         val face: OpenTypeFaceData,
         val scaler: OutlineScaler,
         val unitsPerEm: Float,
+        val cff: Boolean,
+        val variableTrueType: Boolean,
     )
 
     private val parsedFace: OpenTypeFaceData? by lazy {
         runCatching {
             DefaultOpenTypeFaceParser().parse(
                 FontSource(
-                    id = FontSourceID(Uuid.parse("10000000-0000-0000-0000-000000000001")),
+                    id = sourceId,
                     kind = FontSourceKind.MEMORY,
                     displayName = fontName,
-                    bytes = fontBytes,
+                    bytes = fontBytesSnapshot,
                 ),
+                faceIndex = faceIndex,
             )
         }.getOrNull()
     }
 
-    /**
-     * CFF outlines are parsed by the pure Kotlin CFF scaler instead of the legacy
-     * `GlyphScaler`, whose CFF route intentionally reports a refusal.
-     */
-    private val cffBridge: CffBridge? by lazy {
+    /** Exact face-indexed outline authority shared by prepared text and Canvas. */
+    private val exactOutlineBridge: ExactOutlineBridge? by lazy {
         parsedFace?.let { face ->
             runCatching {
-                val scaler = when {
-                    face.rawTables.keys.any { it.value == "CFF " } -> CFFScaler(face)
-                    face.rawTables.keys.any { it.value == "CFF2" } -> CFF2Scaler(face)
+                val (scaler, cff) = when {
+                    face.rawTables.keys.any { it.value == "CFF " } -> CFFScaler(face) to true
+                    face.rawTables.keys.any { it.value == "CFF2" } -> CFF2Scaler(face) to true
+                    face.rawTables.keys.any { it.value == "glyf" } &&
+                        face.rawTables.keys.any { it.value == "loca" } ->
+                        TrueTypeGlyfScaler(face) to false
                     else -> return@runCatching null
                 }
-                CffBridge(
+                ExactOutlineBridge(
                     face = face,
                     scaler = scaler,
                     unitsPerEm = (face.metrics.unitsPerEm ?: 1_000).toFloat(),
-                )
-            }.getOrNull()
-        }
-    }
-
-    /** Pure Kotlin variable TrueType scaler, activated only for a non-default variation request. */
-    private val trueTypeVariationBridge: CffBridge? by lazy {
-        parsedFace?.let { face ->
-            runCatching {
-                if (
-                    face.rawTables.keys.none { it.value == "glyf" } ||
-                    face.rawTables.keys.none { it.value == "loca" } ||
-                    face.rawTables.keys.none { it.value == "gvar" }
-                ) {
-                    return@runCatching null
-                }
-                CffBridge(
-                    face = face,
-                    scaler = TrueTypeGlyfScaler(face),
-                    unitsPerEm = (face.metrics.unitsPerEm ?: 1_000).toFloat(),
+                    cff = cff,
+                    variableTrueType = !cff && face.rawTables.keys.any { it.value == "gvar" },
                 )
             }.getOrNull()
         }
     }
 
     internal val usesCffOutlines: Boolean
-        get() = cffBridge != null
+        get() = exactOutlineBridge?.cff == true
 
     /**
-     * Distinguishes a valid CFF glyph with no ink (for example a space) from a
-     * parser refusal. Canvas may omit the former when lowering a text run to
-     * paths, but must retain the latter for its normal diagnostic route.
+     * Classifies one glyph with the exact parsed collection face and variation position.
+     *
+     * This is the sole outline proof used by prepared text. A parser/scaler
+     * failure remains [PreparedTextOutline.Unavailable], never an empty glyph.
      */
-    internal fun isCffGlyphWithoutOutline(
+    internal fun preparedTextOutline(
         glyphId: Int,
+        fontSize: Float,
         variationCoordinates: Map<String, Float> = emptyMap(),
-    ): Boolean = cffBridge?.let { bridge ->
-        runCatching {
-            bridge.scaler.outline(glyphId.toUInt(), variationCoordinates.toVariationPosition()).commands.isEmpty()
-        }.getOrDefault(false)
-    } ?: false
+    ): PreparedTextOutline {
+        if (glyphId < 0 || !fontSize.isFinite() || fontSize < 0f) {
+            return PreparedTextOutline.Unavailable
+        }
+        val bridge = exactOutlineBridge ?: return PreparedTextOutline.Unavailable
+        val outline = runCatching {
+            bridge.scaler.outline(
+                glyphId.toUInt(),
+                variationCoordinates.toVariationPosition(),
+            )
+        }.getOrElse {
+            return PreparedTextOutline.Unavailable
+        }
+        if (outline.commands.isEmpty()) return PreparedTextOutline.ProvenEmpty
+        return PreparedTextOutline.ProvenNonEmpty(
+            outline.commands.toPath(fontSize / bridge.unitsPerEm),
+        )
+    }
 
     override val unitsPerEm: Float
-        get() = cffBridge?.unitsPerEm ?: scaler?.unitsPerEmInt?.toFloat() ?: 1_000f
+        get() = exactOutlineBridge
+            ?.takeIf { bridge -> bridge.cff }
+            ?.unitsPerEm
+            ?: scaler?.unitsPerEmInt?.toFloat()
+            ?: 1_000f
 
     override fun glyphIdForCodepoint(codepoint: Int): Int {
-        cffBridge?.let { bridge ->
+        exactOutlineBridge?.takeIf { bridge -> bridge.cff }?.let { bridge ->
             return try {
                 bridge.face.cmap.lookupGlyphId(codepoint) ?: 0
             } catch (_: Exception) {
@@ -134,27 +165,28 @@ class FontTypeface(
         fontSize: Float,
         variationCoordinates: Map<String, Float>,
     ): Float {
-        cffBridge?.let { bridge ->
-            // The Type 2 `width` operand is a delta from the CFF private
-            // dictionary's nominal/default width.  Until those private values
-            // are exposed by the scaler, use OpenType's authoritative `hmtx`
-            // metric rather than mistaking that delta for an absolute advance.
+        exactOutlineBridge?.takeIf { bridge -> bridge.cff }?.let { bridge ->
+            // Type 2 width operands are deltas; hmtx remains the exact advance authority.
             val advance = bridge.face.metrics.horizontalMetrics
-                .firstOrNull { it.glyphId == glyphId }
+                .firstOrNull { metric -> metric.glyphId == glyphId }
                 ?.advanceWidth
             return (advance?.toFloat() ?: fontSize * 0.5f) * fontSize / bridge.unitsPerEm
         }
         if (variationCoordinates.isNotEmpty()) {
-            trueTypeVariationBridge?.let { bridge ->
-                return try {
-                    (
-                        bridge.scaler.metrics(glyphId.toUInt(), variationCoordinates.toVariationPosition()).advanceX *
-                            fontSize / bridge.unitsPerEm
-                        ).toFloat()
-                } catch (_: Exception) {
-                    fontSize * 0.5f
+            exactOutlineBridge
+                ?.takeIf { bridge -> bridge.variableTrueType }
+                ?.let { bridge ->
+                    return try {
+                        (
+                            bridge.scaler.metrics(
+                                glyphId.toUInt(),
+                                variationCoordinates.toVariationPosition(),
+                            ).advanceX * fontSize / bridge.unitsPerEm
+                            ).toFloat()
+                    } catch (_: Exception) {
+                        fontSize * 0.5f
+                    }
                 }
-            }
         }
         return try {
             scaler?.scaleGlyph(glyphId, fontSize)?.advanceWidth ?: (fontSize * 0.5f)
@@ -172,26 +204,38 @@ class FontTypeface(
         fontSize: Float,
         variationCoordinates: Map<String, Float>,
     ): Path? {
-        cffBridge?.let { bridge ->
+        exactOutlineBridge?.takeIf { bridge -> bridge.cff }?.let { bridge ->
             return try {
-                val outline = bridge.scaler.outline(glyphId.toUInt(), variationCoordinates.toVariationPosition())
+                val outline = bridge.scaler.outline(
+                    glyphId.toUInt(),
+                    variationCoordinates.toVariationPosition(),
+                )
                 if (outline.commands.isEmpty()) null else outline.commands.toPath(fontSize / bridge.unitsPerEm)
             } catch (_: Exception) {
                 null
             }
         }
         if (variationCoordinates.isNotEmpty()) {
-            trueTypeVariationBridge?.let { bridge ->
-                return try {
-                    val outline = bridge.scaler.outline(glyphId.toUInt(), variationCoordinates.toVariationPosition())
-                    if (outline.commands.isEmpty()) null else outline.commands.toPath(fontSize / bridge.unitsPerEm)
-                } catch (_: Exception) {
-                    null
+            exactOutlineBridge
+                ?.takeIf { bridge -> bridge.variableTrueType }
+                ?.let { bridge ->
+                    return try {
+                        val outline = bridge.scaler.outline(
+                            glyphId.toUInt(),
+                            variationCoordinates.toVariationPosition(),
+                        )
+                        if (outline.commands.isEmpty()) {
+                            null
+                        } else {
+                            outline.commands.toPath(fontSize / bridge.unitsPerEm)
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
-            }
         }
-        val s = scaler ?: return null
-        val result = s.scaleGlyphOrDiagnostic(glyphId, fontSize)
+        val legacyScaler = scaler ?: return null
+        val result = legacyScaler.scaleGlyphOrDiagnostic(glyphId, fontSize)
         if (result !is GlyphScaleResult.Success) return null
         val scaled = result.glyph
         if (scaled.commands.isEmpty()) return null

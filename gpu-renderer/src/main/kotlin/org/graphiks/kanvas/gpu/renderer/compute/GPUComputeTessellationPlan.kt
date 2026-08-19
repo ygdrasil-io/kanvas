@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.compute
 
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
-import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasWGSLValidator
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLBindingLayout
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLComputeModule
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLFragment

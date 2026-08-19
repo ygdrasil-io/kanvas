@@ -7,7 +7,7 @@ val colrV0ColorGlyphScene: GPURendererScene<SceneCommand> =
     GPURendererScene(
         sceneId = SceneId("colr-v0-color-glyph"),
         title = "COLRv0 Color Glyph",
-        description = "Two-layer COLRv0 color glyph (red A over blue B) rendered via drawColorGlyphPass single-pass composite.",
+        description = "Real Skia colr.ttf glyph 2 rendered from its CPAL red and black layers through the prepared WebGPU frame route.",
         dimensions = SceneDimensions(64, 64),
         tags = setOf(SceneTag.Text),
         roadmapLinks = listOf(SceneRoadmapLink.ticket("KGPU-M34-002")),
@@ -16,14 +16,11 @@ val colrV0ColorGlyphScene: GPURendererScene<SceneCommand> =
             SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
             SceneCommand.ColorTextRun(
                 label = "colr-v0-composite",
-                text = "AB",
-                fontSize = 48f,
-                layerColors = listOf(
-                    SceneColor(1f, 0f, 0f, 1f),
-                    SceneColor(0f, 0f, 1f, 1f),
-                ),
-                glyphText = "AB",
-                glyphFontSize = 48f,
+                colrFontResource = "/fonts/skia/colr.ttf",
+                colrBaseGlyphId = 2,
+                colrFontSize = 48f,
+                glyphOriginX = 8,
+                glyphOriginY = 8,
             ),
         ),
     )

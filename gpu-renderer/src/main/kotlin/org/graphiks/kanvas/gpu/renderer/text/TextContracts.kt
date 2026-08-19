@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 
 /** Text ordering token. */
 @JvmInline
@@ -193,7 +195,7 @@ data class GPUTextArtifactRef(
     val artifactType: String,
     val artifactId: String,
     val artifactKeyHash: String,
-    val generationToken: String,
+    val generation: GPUTextArtifactGeneration,
     val routeHint: String? = null,
 )
 
@@ -207,48 +209,60 @@ fun GPUTextArtifactReference.toRendererTextArtifactRef(
     artifactType = artifactName,
     artifactId = artifactID.value.toHexDashString(),
     artifactKeyHash = contentFingerprint,
-    generationToken = generation.value.toString(),
+    generation = generation,
     routeHint = routeHint,
 )
 
 /** Stable diagnostic codes for GPU text route selection and refusals. */
 object GPUTextDiagnosticCodes {
-    const val PAYLOAD_NONDUMPABLE: String = "unsupported.text.payload_nondumpable"
-    const val SK_TYPE_LEAKED: String = "unsupported.text.sk_type_leaked"
-    const val ARTIFACT_UNREGISTERED: String = "unsupported.text.artifact_unregistered"
-    const val ARTIFACT_KEY_NONDETERMINISTIC: String = "unsupported.text.artifact_key_nondeterministic"
-    const val ARTIFACT_GENERATION_STALE: String = "unsupported.text.artifact_generation_stale"
-    const val ARTIFACT_BUDGET_EXCEEDED: String = "unsupported.text.artifact_budget_exceeded"
-    const val UPLOAD_PLAN_MISSING: String = "unsupported.text.upload_plan_missing"
-    const val UPLOAD_BUDGET_EXCEEDED: String = "unsupported.text.upload_budget_exceeded"
-    const val UPLOAD_FAILED: String = "unsupported.text.upload_failed"
-    const val ATLAS_DESCRIPTOR_UNACCEPTED: String = "unsupported.text.atlas_descriptor_unaccepted"
-    const val ATLAS_PAGE_UNAVAILABLE: String = "unsupported.text.atlas_page_unavailable"
-    const val ATLAS_ENTRY_MISSING: String = "unsupported.text.atlas_entry_missing"
-    const val ATLAS_GENERATION_STALE: String = "unsupported.text.atlas_generation_stale"
-    const val A8_ATLAS_ROUTE_UNAVAILABLE: String = "unsupported.text.a8_atlas_route_unavailable"
-    const val SDF_ROUTE_UNAVAILABLE: String = "unsupported.text.sdf_route_unavailable"
-    const val SDF_PARAMS_MISSING: String = "unsupported.text.sdf_params_missing"
-    const val SDF_TRANSFORM_UNSUPPORTED: String = "unsupported.text.sdf_transform_unsupported"
-    const val OUTLINE_ROUTE_UNAVAILABLE: String = "unsupported.text.outline_route_unavailable"
-    const val COLOR_PLAN_UNSUPPORTED: String = "unsupported.text.color_plan_unsupported"
-    const val COLOR_COMPOSITE_UNSUPPORTED: String = "unsupported.text.color_composite_unsupported"
+    const val PAYLOAD_NONDUMPABLE: String = GPUTextRefusalCodes.PAYLOAD_NONDUMPABLE
+    const val SK_TYPE_LEAKED: String = GPUTextRefusalCodes.SK_TYPE_LEAKED
+    const val ARTIFACT_UNREGISTERED: String = GPUTextRefusalCodes.ARTIFACT_UNREGISTERED
+    const val ARTIFACT_KEY_NONDETERMINISTIC: String =
+        GPUTextRefusalCodes.ARTIFACT_KEY_NONDETERMINISTIC
+    const val ARTIFACT_GENERATION_STALE: String =
+        GPUTextRefusalCodes.ARTIFACT_GENERATION_STALE
+    const val ARTIFACT_BUDGET_EXCEEDED: String =
+        GPUTextRefusalCodes.ARTIFACT_BUDGET_EXCEEDED
+    const val UPLOAD_PLAN_MISSING: String = GPUTextRefusalCodes.UPLOAD_PLAN_MISSING
+    const val UPLOAD_BUDGET_EXCEEDED: String = GPUTextRefusalCodes.UPLOAD_BUDGET_EXCEEDED
+    const val UPLOAD_FAILED: String = GPUTextRefusalCodes.UPLOAD_FAILED
+    const val ATLAS_DESCRIPTOR_UNACCEPTED: String =
+        GPUTextRefusalCodes.ATLAS_DESCRIPTOR_UNACCEPTED
+    const val ATLAS_PAGE_UNAVAILABLE: String = GPUTextRefusalCodes.ATLAS_PAGE_UNAVAILABLE
+    const val ATLAS_ENTRY_MISSING: String = GPUTextRefusalCodes.ATLAS_ENTRY_MISSING
+    const val ATLAS_GENERATION_STALE: String = GPUTextRefusalCodes.ATLAS_GENERATION_STALE
+    const val A8_ATLAS_ROUTE_UNAVAILABLE: String =
+        GPUTextRefusalCodes.A8_ATLAS_ROUTE_UNAVAILABLE
+    const val SDF_ROUTE_UNAVAILABLE: String = GPUTextRefusalCodes.SDF_ROUTE_UNAVAILABLE
+    const val SDF_PARAMS_MISSING: String = GPUTextRefusalCodes.SDF_PARAMS_MISSING
+    const val SDF_TRANSFORM_UNSUPPORTED: String = GPUTextRefusalCodes.SDF_TRANSFORM_UNSUPPORTED
+    const val OUTLINE_ROUTE_UNAVAILABLE: String = GPUTextRefusalCodes.OUTLINE_ROUTE_UNAVAILABLE
+    const val COLOR_PLAN_UNSUPPORTED: String = GPUTextRefusalCodes.COLOR_PLAN_UNSUPPORTED
+    const val COLOR_COMPOSITE_UNSUPPORTED: String =
+        GPUTextRefusalCodes.COLOR_COMPOSITE_UNSUPPORTED
     const val COLOR_FONT_FORMAT_UNAVAILABLE: String =
-        "unsupported.text.color_font.format_unavailable"
+        GPUTextRefusalCodes.COLOR_FONT_FORMAT_UNAVAILABLE
     const val COLOR_FONT_LAYER_COUNT_EXCEEDED: String =
-        "unsupported.text.color_font.layer_count_exceeded"
-    const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
-    const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
-    const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
-    const val LCD_FUTURE_RESEARCH: String = "unsupported.text.lcd_future_research"
-    const val INSTANCE_BUFFER_BUDGET_EXCEEDED: String = "unsupported.text.instance_buffer_budget_exceeded"
-    const val BINDING_LAYOUT_UNAVAILABLE: String = "unsupported.text.binding_layout_unavailable"
-    const val DESTINATION_READ_UNACCEPTED: String = "unsupported.text.destination_read_unaccepted"
-    const val CLIP_ROUTE_UNACCEPTED: String = "unsupported.text.clip_route_unaccepted"
-    const val CPU_RENDERED_TEXTURE_FORBIDDEN: String = "unsupported.text.cpu_rendered_texture_forbidden"
-    const val SUBPIXEL_PIXEL_GEOMETRY: String = "unsupported.text.subpixel_pixel_geometry"
-    const val SUBPIXEL_TARGET_FORMAT: String = "unsupported.text.subpixel_target_format"
-    const val FALLBACK_EXHAUSTED: String = "unsupported.text.fallback_exhausted"
+        GPUTextRefusalCodes.COLOR_FONT_LAYER_COUNT_EXCEEDED
+    const val BITMAP_ROUTE_UNSUPPORTED: String = GPUTextRefusalCodes.BITMAP_ROUTE_UNSUPPORTED
+    const val SVG_PLAN_UNSUPPORTED: String = GPUTextRefusalCodes.SVG_PLAN_UNSUPPORTED
+    const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String =
+        GPUTextRefusalCodes.EMOJI_COLOR_GLYPH_UNAVAILABLE
+    const val LCD_FUTURE_RESEARCH: String = GPUTextRefusalCodes.LCD_FUTURE_RESEARCH
+    const val INSTANCE_BUFFER_BUDGET_EXCEEDED: String =
+        GPUTextRefusalCodes.INSTANCE_BUFFER_BUDGET_EXCEEDED
+    const val BINDING_LAYOUT_UNAVAILABLE: String =
+        GPUTextRefusalCodes.BINDING_LAYOUT_UNAVAILABLE
+    const val DESTINATION_READ_UNACCEPTED: String =
+        GPUTextRefusalCodes.DESTINATION_READ_UNACCEPTED
+    const val CLIP_ROUTE_UNACCEPTED: String = GPUTextRefusalCodes.CLIP_ROUTE_UNACCEPTED
+    const val CPU_RENDERED_TEXTURE_FORBIDDEN: String =
+        GPUTextRefusalCodes.CPU_RENDERED_TEXTURE_FORBIDDEN
+    const val SUBPIXEL_PIXEL_GEOMETRY: String =
+        GPUTextRefusalCodes.SUBPIXEL_PIXEL_GEOMETRY
+    const val SUBPIXEL_TARGET_FORMAT: String = GPUTextRefusalCodes.SUBPIXEL_TARGET_FORMAT
+    const val FALLBACK_EXHAUSTED: String = GPUTextRefusalCodes.FALLBACK_EXHAUSTED
 
     val all: List<String> = listOf(
         PAYLOAD_NONDUMPABLE,

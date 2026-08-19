@@ -213,6 +213,18 @@ class PathTessellator(
      * stencil write pass. Unlike [triangulate], contour boundaries are retained.
      */
     fun stencilEdgeFan(flattened: FlattenedPath): GeometryTriangleData {
+        if (flattened.points.isEmpty()) {
+            require(flattened.contourStarts.isEmpty() || flattened.contourStarts == listOf(0)) {
+                "Empty FlattenedPath contour starts must point to zero exactly once"
+            }
+            // The GPU triangle contracts intentionally reject empty buffers. A
+            // zero-area triangle preserves that invariant while rasterizing no
+            // fragments, which is the correct result for an empty path/stroke.
+            return GeometryTriangleData(
+                vertices = FloatArray(6),
+                indices = intArrayOf(0, 1, 2),
+            )
+        }
         val anchor = Point(
             minOf(-1f, flattened.points.minOf { it.x } - 1f),
             minOf(-1f, flattened.points.minOf { it.y } - 1f),

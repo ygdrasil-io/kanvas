@@ -2,6 +2,8 @@ package org.graphiks.kanvas.font.atlas
 
 import org.graphiks.kanvas.font.glyph.A8Bitmap
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasPageCursor
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectItem
 
 data class AtlasRegion(
     val x: Int,
@@ -47,35 +49,29 @@ class GlyphAtlasPacker(
     private val atlasWidth: Int,
     private val atlasHeight: Int,
 ) {
-    private var shelfX = 0
-    private var shelfY = 0
-    private var shelfMaxHeight = 0
+    private val cursor = GPUTextAtlasPageCursor(atlasWidth, atlasHeight)
+    private var placementIndex = 0
 
     fun place(key: GlyphStrikeKey, bitmap: A8Bitmap): GlyphAtlasPlacement? {
-        val w = bitmap.width
-        val h = bitmap.height
-
-        if (w > atlasWidth || h > atlasHeight) return null
-
-        if (shelfX == 0 && shelfY + h > atlasHeight) {
-            return null
-        }
-
-        if (shelfX + w > atlasWidth) {
-            shelfY += shelfMaxHeight
-            if (shelfY + h > atlasHeight) return null
-            shelfX = 0
-            shelfMaxHeight = 0
-        }
-
-        if (h > shelfMaxHeight) {
-            if (shelfY + h > atlasHeight) return null
-            shelfMaxHeight = h
-        }
-
-        val region = AtlasRegion(shelfX, shelfY, w, h)
-        shelfX += w
-        return GlyphAtlasPlacement(key, region)
+        val placement = cursor.place(
+            item = GPUTextAtlasRectItem(
+                itemKey = "legacy:${placementIndex}:${key.glyphId}",
+                width = bitmap.width,
+                height = bitmap.height,
+                guardPx = 0,
+            ),
+            pageIndex = 0,
+        ) ?: return null
+        placementIndex += 1
+        return GlyphAtlasPlacement(
+            strikeKey = key,
+            region = AtlasRegion(
+                x = placement.contentRect.left,
+                y = placement.contentRect.top,
+                width = bitmap.width,
+                height = bitmap.height,
+            ),
+        )
     }
 }
 

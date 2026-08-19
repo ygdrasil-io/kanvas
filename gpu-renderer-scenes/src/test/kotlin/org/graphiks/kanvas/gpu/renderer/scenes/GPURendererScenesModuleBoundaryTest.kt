@@ -116,8 +116,14 @@ class GPURendererScenesModuleBoundaryTest {
 
     private fun runGradleDryRun(task: String): String {
         val output = StringBuilder()
-        val process = ProcessBuilder("./gradlew", "--no-daemon", task, "--dry-run")
-            .directory(repoRoot().toFile())
+        val root = repoRoot()
+        val process = ProcessBuilder(
+            gradleWrapper(root).toAbsolutePath().toString(),
+            "--no-daemon",
+            task,
+            "--dry-run",
+        )
+            .directory(root.toFile())
             .redirectErrorStream(true)
             .start()
         val reader = thread(start = true, name = "gradle-dry-run-output-reader") {
@@ -136,6 +142,19 @@ class GPURendererScenesModuleBoundaryTest {
             fail("Gradle dry-run failed for $task with exit code $exitCode.\n$output")
         }
         return output.toString()
+    }
+
+    private fun gradleWrapper(repoRoot: Path): Path {
+        val wrapperName = if (
+            System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+        ) {
+            "gradlew.bat"
+        } else {
+            "gradlew"
+        }
+        return repoRoot.resolve(wrapperName).also { wrapper ->
+            check(Files.isRegularFile(wrapper)) { "Gradle wrapper is missing: $wrapper" }
+        }
     }
 
     private fun repoPath(path: String): Path = repoRoot().resolve(path)

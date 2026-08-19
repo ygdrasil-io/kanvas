@@ -366,12 +366,28 @@ object COLRV0Parser {
      * @return parsed COLR version 0 table, or null when the bytes are unsupported, truncated,
      * out of range, or exceed defensive color-font caps.
      */
-    fun parse(bytes: ByteArray): COLRV0Table? {
+    fun parse(bytes: ByteArray): COLRV0Table? =
+        parseRecords(bytes = bytes, allowVersionOne = false)
+
+    /**
+     * Parses the version 0 base/layer record prefix retained by a COLR version 1 table.
+     *
+     * COLR version 1 deliberately preserves the first fourteen bytes and the
+     * version 0 record arrays. This entry point shares every bounds/count check
+     * with [parse] while admitting the version 1 marker.
+     */
+    fun parseRetainedV0Records(bytes: ByteArray): COLRV0Table? =
+        parseRecords(bytes = bytes, allowVersionOne = true)
+
+    private fun parseRecords(
+        bytes: ByteArray,
+        allowVersionOne: Boolean,
+    ): COLRV0Table? {
         val reader = ColorTableReader(bytes)
         if (!reader.fits(0, COLR_V0_HEADER_SIZE.toLong())) return null
 
         val version = reader.u16(0) ?: return null
-        if (version != 0) return null
+        if (version != 0 && !(allowVersionOne && version == 1)) return null
 
         val numBaseGlyphRecords = reader.u16(2) ?: return null
         val baseGlyphRecordsOffset = reader.u32(4)?.toIntOrNull() ?: return null
@@ -3915,6 +3931,51 @@ data class EmojiGlyphRouteAvailability(
     val outlineGlyphs: Set<Int> = emptySet(),
 )
 
+/** Canonical representation priority shared by emoji and prepared-text routing. */
+enum class EmojiGlyphRepresentationRoute(val stableName: String) {
+    COLR("colr"),
+    BITMAP("bitmap"),
+    PNG("png"),
+    SVG("svg"),
+    OUTLINE("outline"),
+}
+
+/**
+ * Sole authority for choosing between simultaneously available glyph representations.
+ *
+ * The order is intentionally identical to Skia-like color-glyph dispatch:
+ * COLR, embedded bitmap, decoded PNG, SVG, then monochrome outline.
+ */
+object EmojiGlyphRepresentationPriority {
+    fun select(
+        colrAvailable: Boolean,
+        bitmapAvailable: Boolean,
+        pngAvailable: Boolean,
+        svgAvailable: Boolean,
+        outlineAvailable: Boolean,
+    ): EmojiGlyphRepresentationRoute? = orderedCandidates(
+        colrAvailable = colrAvailable,
+        bitmapAvailable = bitmapAvailable,
+        pngAvailable = pngAvailable,
+        svgAvailable = svgAvailable,
+        outlineAvailable = outlineAvailable,
+    ).firstOrNull { (_, available) -> available }?.first
+
+    internal fun orderedCandidates(
+        colrAvailable: Boolean,
+        bitmapAvailable: Boolean,
+        pngAvailable: Boolean,
+        svgAvailable: Boolean,
+        outlineAvailable: Boolean,
+    ): List<Pair<EmojiGlyphRepresentationRoute, Boolean>> = listOf(
+        EmojiGlyphRepresentationRoute.COLR to colrAvailable,
+        EmojiGlyphRepresentationRoute.BITMAP to bitmapAvailable,
+        EmojiGlyphRepresentationRoute.PNG to pngAvailable,
+        EmojiGlyphRepresentationRoute.SVG to svgAvailable,
+        EmojiGlyphRepresentationRoute.OUTLINE to outlineAvailable,
+    )
+}
+
 /**
  * Dispatches emoji glyphs to the best available color glyph route.
  */
@@ -4013,13 +4074,15 @@ class SimpleEmojiGlyphDispatcher(
      * Builds route candidates in the public emoji dispatch preference order.
      */
     private fun routeCandidates(glyphId: Int): List<EmojiRouteCandidate> =
-        listOf(
-            EmojiRouteCandidate(route = "colr", available = glyphId in availability.colrGlyphs),
-            EmojiRouteCandidate(route = "bitmap", available = glyphId in availability.bitmapGlyphs),
-            EmojiRouteCandidate(route = "png", available = glyphId in availability.pngGlyphs),
-            EmojiRouteCandidate(route = "svg", available = glyphId in availability.svgGlyphs),
-            EmojiRouteCandidate(route = "outline", available = glyphId in availability.outlineGlyphs),
-        )
+        EmojiGlyphRepresentationPriority.orderedCandidates(
+            colrAvailable = glyphId in availability.colrGlyphs,
+            bitmapAvailable = glyphId in availability.bitmapGlyphs,
+            pngAvailable = glyphId in availability.pngGlyphs,
+            svgAvailable = glyphId in availability.svgGlyphs,
+            outlineAvailable = glyphId in availability.outlineGlyphs,
+        ).map { (route, available) ->
+            EmojiRouteCandidate(route = route.stableName, available = available)
+        }
 
     /**
      * Builds an unavailable-route diagnostic for one candidate.

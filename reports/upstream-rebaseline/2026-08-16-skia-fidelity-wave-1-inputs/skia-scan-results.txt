@@ -1,0 +1,610 @@
+FAIL|0|animated-backdrop-blur|825|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|1|bigblurs|74|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|2|blur2rects|210
+FAIL|3|blur2rectsnonninepatch|13|unsupported.native-mask-blur.mixed-local-sizes: The top-level mask blur lane serializes one local mask size per frame.
+PASS|4|BlurBigSigma|127
+FAIL|5|blurcircles2|19|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|6|blurcircles|6|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|7|BlurDrawImage|5|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|8|blur_ignore_xform_circle|489|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|9|blur_ignore_xform_rrect|352|stale.preflight.resource_generation: A render packet resource generation is stale.
+FAIL|10|blur_ignore_xform_rect|256|stale.preflight.resource_generation: A render packet resource generation is stale.
+FAIL|11|blur_image|4|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|12|blur_matrix_rect|53|unsupported.native-mask-blur.mixed-local-sizes: The top-level mask blur lane serializes one local mask size per frame.
+FAIL|13|check_small_sigma_offset|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|14|blurquickreject|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|15|blurrect_compare|7120|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|16|blurrect_gallery|5423|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|17|blurrects|15|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|18|BlurSmallSigma|18
+FAIL|19|blurredclippedcircle|12|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+PASS|20|crbug_899512|18
+FAIL|21|emboss|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|22|embossmaskfilter|5|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|23|fast_slow_blurimagefilter|11|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|24|hdr-pip-blur|5|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|25|imageblur2|107
+FAIL|26|imageblurclampmode|7|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|27|imageblur|18
+FAIL|28|imageblurrepeatmode|8|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|29|imageblurrepeatunclipped|1|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|30|inverse_fill_filters|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|31|inverse_windingmode_filters|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|32|matrixconvolution|14
+PASS|33|matrixconvolution_big_color|10
+PASS|34|matrixconvolution_big|10
+PASS|35|matrixconvolution_bigger|9
+PASS|36|matrixconvolution_biggest|9
+FAIL|37|matrixconvolution_color|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|38|rrect_blurs|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|39|simpleblurroundrect|2|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|40|smallemboss|59
+PASS|41|tablemaskfilter|23
+FAIL|42|TiledBlurBigSigma|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|43|aaclip|14|invalid.preflight.core_primitive_path_stencil_msaa_authority: Path stencil MSAA authority requires one unique path-bearing render scope.
+FAIL|44|bug339297_as_clip|3401|unsupported.clip.complex_stack: unsupported.clip.complex_stack
+FAIL|45|circular-clips|16|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|46|clipcubic|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|47|clipdrawdraw|19
+FAIL|48|cliplargerect|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|49|clip_region|0|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|50|clip_sierpinski_region|2|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|51|clip_strokerect|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|52|clipsuperrrect|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|53|complexclip3_complex|563|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|54|complexclip3_simple|489|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|55|complexclip4_aa|2|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|56|complexclip4_bw|3|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|57|complexclip_aa|365|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|58|complexclip_aa_invert|403|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|59|complexclip_aa_layer|9|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|60|complexclip_aa_layer_invert|7|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|61|complexclip_blur_tiled|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|62|complexclip_bw|383|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|63|complexclip_bw_invert|350|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|64|complexclip_bw_layer|7|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|65|complexclip_bw_layer_invert|6|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|66|convex_poly_clip|2|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|67|crbug_892988|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|68|croppedrects|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|69|distantclip|0|unsupported.recording.core_primitive_analytic_shape_clip: Prepared analytic shapes currently require NoClip or ScissorOnly execution.
+FAIL|70|fast_constraint_red_is_allowed|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|71|fast_constraint_red_is_allowed_manual|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|72|inverseclip|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|73|manypathatlases_128|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|74|manypathatlases_2048|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|75|pdf_crbug_772685|0|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|76|perspective_clip|5|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|77|rrect_clip_aa|3|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|78|rrect_clip_bw|2|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|79|rrect_clip_draw_paint|0|unsupported.composite.clip: Prepared Surface composite could not be lowered.
+FAIL|80|simpleaaclip_path|53|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|81|simpleaaclip_rect|45|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|82|skbug1719|1|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|83|skbug_9319|4|invalid.preflight.core_primitive_clip_producer_authority: Resource-backed clip consumer is missing its sealed producer topology.
+FAIL|84|strict_constraint_batch_no_red_allowed|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|85|strict_constraint_batch_no_red_allowed_manual|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|86|strict_constraint_no_red_allowed|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|87|strict_constraint_no_red_allowed_manual|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|88|windowrectangles|66|unsupported.recording.core_primitive_analytic_shape_clip: Prepared analytic shapes currently require NoClip or ScissorOnly execution.
+PASS|89|color|11
+PASS|90|filter|7
+PASS|91|orientation|9
+FAIL|92|p3_ovals|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|93|paint_alpha_normals_rt|13|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|94|rect|10
+FAIL|95|shader|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|96|aaxfermodes|750|unsupported.composite.picture.budget: Prepared Surface composite could not be lowered.
+FAIL|97|aarectmodes|190|unsupported.composite.preflight: Prepared Surface composite could not be lowered.
+FAIL|98|arithmode_blender|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|99|backdrop_hintrect_clipping|2|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|100|backdrop_imagefilter_croprect|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|101|badpaint|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|102|clip_shader_difference|11
+FAIL|103|clipshadermatrix|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+PASS|104|clip_shader_layer|8
+FAIL|105|clip_shader_nested|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+PASS|106|clip_shader_persp|26
+PASS|107|clip_shader|14
+PASS|108|color4blendcf|15
+PASS|109|color4shader|13
+FAIL|110|colorfilterimagefilter|1|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|111|colorfilterimagefilter_layer|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|112|colorfiltershader|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|113|lightingcolorfilter|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|114|colormatrix|4515|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|115|colorcomposefilter_alpha|5|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|116|colorcomposefilter_wacky|4|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|117|compare_atlas_vertices|19|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|118|composeshader_alpha|4|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|119|composeshader_bitmap|1|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|120|composeshader_bitmap_lm|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|121|composeshader|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|122|composeshader_grid|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|123|composeCFIF|0|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|124|compositor_quads_color|114|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|125|crbug_1162942|1|unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|126|crbug_1167277|18
+PASS|127|crbug_1174186|80
+FAIL|128|crbug_1177833|3|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|129|crbug_918512|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|130|destcolor|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|131|discard|1685|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|132|displacement|69|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|133|draw-atlas-colors|445|unsupported.image.atlas.source_blend: Prepared Surface operation could not be lowered.
+FAIL|134|draw-atlas|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|135|draw_image_set_alpha_only|2|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|136|draw_image_set|4|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|137|draw_image_set_rect_to_rect|2|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|138|draw_quad_set|166|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|139|dropshadow_pseudopersp|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|140|dstreadshuffle|8|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|141|ducky_yuv_blend|24
+FAIL|142|encode|327|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|143|fadefilter|9
+FAIL|144|filterfastbounds|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|145|hslcolorfilter|1|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|146|hairmodes|41|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|147|highcontrastfilter|7|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|148|hsl|132|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|149|HSL_duck|16
+PASS|150|imagefilter_composed_transform|21
+PASS|151|imagefilter_convolve_subset|7
+FAIL|152|imagefiltersbase|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|153|imagefiltersclipped|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|154|imagefilterscropped|28|unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|155|imagefilters_effect_order|10
+FAIL|156|imagefiltersstroked|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|157|imagefilter_matrix_localmatrix|9
+FAIL|158|imagefilterstransformed|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|159|imagefiltersunpremul|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|160|imagefilters_xfermodes|1|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|161|internal_links|52|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|162|lcdblendmodes|1956|invalid.preflight.text.blend: Prepared Surface operation could not be lowered.
+FAIL|163|lighting|16|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|164|localmatriximagefilter|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|165|luminosity_overflow|1|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+PASS|166|matriximagefilter|23
+FAIL|167|mixerCF|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|168|modecolorfilters|7378
+FAIL|169|offsetimagefilter|74|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|170|overdraw_canvas|38|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|171|overdrawcolorfilter|0|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|172|patch_alpha|96|failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+FAIL|173|patch_alpha_test|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|174|patch_image|70|unsupported.prepared-vertices.sampled-material: Prepared-vertices material sha256:37e57c289d3862ef3788e7bf1a87609e752ce2d7e2ad3532ca5c627999b83aae samples frame resources that require the sampled-material materializer.
+FAIL|175|patch_image_persp|7|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|176|patch_primitive|66|failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+FAIL|177|perlinnoise|2|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|178|perlinnoise_layered|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+PASS|179|perlinnoise_localmatrix|15
+FAIL|180|perlinnoise_rotated|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|181|PlusMergesAA|2|unsupported.layer.bounds_unbounded: Prepared Surface composite could not be lowered.
+FAIL|182|rasterallocator|6|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|183|recordopts|51|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|184|rotate_imagefilter|0|invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample: Stencil1x requires a single-sample frame and cannot be relabeled as multisample coverage.
+FAIL|185|runtimecolorfilter_vertices_atlas_and_patch|1|invalid.surface.prepared.empty-frame-accounting: A prepared no-op frame requires every text operation to have exact elided or culled authority.
+FAIL|186|gpusamplerstress|27|unsupported.material.mapping.image_tile_mode: Prepared Surface operation could not be lowered.
+PASS|187|save_behind|19
+FAIL|188|savelayer_f16|0|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+PASS|189|savelayer_initfromprev|8
+FAIL|190|shadermaskfilter_gradient|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|191|shadow_utils_gray|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|192|shadow_utils_occl|0|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|193|simple-offsetimagefilter|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|194|sk3d_simple|0|unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.
+PASS|195|skbug_14554|9
+FAIL|196|srcmode|194|invalid.preflight.text.blend: Prepared Surface operation could not be lowered.
+FAIL|197|srgb_colorfilter|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|198|tablecolorfilter|1|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|199|extractalpha|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|200|tileimagefilter|61|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|201|transparency_check|424|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|202|xfermodeimagefilter|80|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|203|xfermodes2|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|204|xfermodes3|13|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|205|xfermodes|4|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|206|alphagradients|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|207|analytic_gradients|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|208|bug6643|0|unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+FAIL|209|clamped_gradients|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|210|gradients_2pt_conical_inside_nodither|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|211|gradients_2pt_conical_outside|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|212|crbug_938592|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|213|degenerate_gradients|223|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|214|emptyshader|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|215|fillrect_gradient|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|216|gradient_dirty_laundry|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|217|gradients_many|1|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|218|gradient_many_hard_stops|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|219|gradient_many_stops|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|220|gradient_matrix|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|221|gradients_alpha_many_stops|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|222|gradients_color_space|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|223|gradients_color_space_many_stops|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|224|gradients_color_space_tilemode|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|225|gradients_degenerate_2pt|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|226|gradients_dup_color_stops|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|227|gradients|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|228|gradients_hue_method|52|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|229|gradients_interesting|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|230|gradients_local_perspective|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|231|gradients_no_texture|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|232|gradients_powerless_hue|94|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|233|gradients_view_perspective|1|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|234|hardstop_gradients|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|235|hardstop_gradients_many|1|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|236|linear_gradient|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|237|linear_gradient_rt|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|238|linear_gradient_tiny|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|239|persp_shaders_bw|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|240|persp_shaders_aa|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|241|radial_gradient2|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|242|radial_gradient3|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|243|radial_gradient3_nodither|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|244|radial_gradient4|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|245|radial_gradient4_nodither|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|246|radial_gradient|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|247|radial_gradient_precision|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|248|scaled_tilemode_gradient|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|249|shallow_gradient_conical|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|250|shallow_gradient_conical_nodither|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|251|shallow_gradient_linear|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|252|shallow_gradient_linear_nodither|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|253|shallow_gradient_radial|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|254|shallow_gradient_radial_nodither|0|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|255|shallow_gradient_sweep|0|unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+FAIL|256|shallow_gradient_sweep_nodither|0|unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+FAIL|257|small_color_stop|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|258|sweep_tiling|0|unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+FAIL|259|testgradient|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|260|all_bitmap_configs|118|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|261|all_variants_8888|7|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|262|alpha_image_alpha_tint|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|263|alpha_image_shader_rt|2|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|264|animatedGif|46
+FAIL|265|anisomips|502|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|266|anisotropic_image_scale_aniso|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|267|anisotropic_image_scale_linear|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|268|anisotropic_image_scale_mip|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|269|async_rescale_and_read_alpha_type|26
+PASS|270|async_rescale_and_read_rose|70
+PASS|271|async_rescale_and_read_no_bleed|17
+PASS|272|async_yuv_no_scale|26
+FAIL|273|bc1_transparency|2|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|274|bicubic|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|275|bigmatrix|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|276|bitmapcopy|91|unsupported.image.pixel.format: Prepared Surface operation could not be lowered.
+FAIL|277|bitmapfilters|80|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|278|bitmap-image-srgb-legacy|495|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|279|bitmap_premul|4|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|280|bitmaprect_rounding|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|281|bitmapshaders|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|282|bitmap_subset_shader|1|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|283|bleed_downscale|70
+FAIL|284|bmp_filter_quality_repeat|165|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|285|bug6783|7|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|286|cgimage|29
+FAIL|287|child_sampling_rt|0|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+PASS|288|clippedbitmapshaders|9
+PASS|289|color_cube_cf_rt|11
+FAIL|290|colorwheel_alphatypes|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|291|colorwheel|22|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|292|colorspace2|583|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|293|colorspace|544|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+PASS|294|compositor_quads_image|18
+FAIL|295|compressed_textures|6|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|296|coordclampshader|20
+FAIL|297|copyTo4444|60|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|298|crbug_224618|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|299|crbug_404394639|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|300|deferred_shader_rt|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|301|bitmaprect_s|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|302|bitmaprect_i|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|303|3x3bitmaprect|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|304|draw_bitmap_rect_skbug4734|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|305|drawminibitmaprect|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|306|drawimage_sampling|3|null
+FAIL|307|drawimagerect_filter|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|308|encode-alpha-jpeg|7
+FAIL|309|encode-color-types-webp-lossless|15|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|310|encode-platform|20
+FAIL|311|encode-srgb-png|103|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|312|exoticformats|5|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|313|filterbug|13|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|314|filterindiabox|6
+FAIL|315|flight_animated_image|5|unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.
+FAIL|316|flippity|154|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|317|format4444|0|unsupported.image.pixel.format: Prepared Surface operation could not be lowered.
+FAIL|318|giantbitmap_clamp_bilerp_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|319|giantbitmap_clamp_bilerp_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|320|giantbitmap_clamp_point_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|321|giantbitmap_clamp_point_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|322|giantbitmap_mirror_bilerp_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|323|giantbitmap_mirror_bilerp_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|324|giantbitmap_mirror_point_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|325|giantbitmap_mirror_point_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|326|giantbitmap_repeat_bilerp_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|327|giantbitmap_repeat_bilerp_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|328|giantbitmap_repeat_point_rotate|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|329|giantbitmap_repeat_point_scale|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|330|grayscalejpg|5
+FAIL|331|hugebitmapshader|2|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|332|image-cacherator-from-picture|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|333|image_dither|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|334|imagefilter_transformed_image|38|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|335|imagefilterscropexpand|11|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|336|imagefiltersgraph|48|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|337|image-surface|6|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|338|imagemagnifier_bounds|49|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|339|imagemagnifier_cropped|12|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|340|imagemagnifier|5|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|341|imagemakewithfilter|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|342|imagemasksubset|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|343|image_out_of_gamut|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|344|image-picture|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|345|imageresizetiled|6|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|346|image-shader|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|347|imagesource|49|unsupported.surface.prepared.image-clip: Prepared Surface operation could not be lowered.
+FAIL|348|image_subset|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|349|imageshader_tinyscale|20
+TIMEOUT|350|jpg-color-cube|30000
+FAIL|351|lit_shader_linear_rt|840|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+FAIL|352|localmatriximageshader_filtering|30|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|353|localmatriximageshader|270|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|354|localmatrixshader_nested|5|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|355|localmatrixshader_persp|3|null
+FAIL|356|local_matrix_shader_rt|3|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|357|localmatrix_order|7|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|358|makecolorspace|11|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|359|makecolortypeandspace|51
+FAIL|360|makeRasterImage|4|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|361|mipmap_gray8_srgb|1|unsupported.image.pixel.format: Prepared Surface operation could not be lowered.
+FAIL|362|mipmap_srgb|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|363|mirror_tile|2|unsupported.transform.affine_material: unsupported.transform.affine_material
+FAIL|364|nearest_half_pixel_image|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|365|new_texture_image|12
+FAIL|366|ninepatch-stretch|22|unsupported.image.nine_geometry: Prepared Surface operation could not be lowered.
+FAIL|367|not_native32_bitmap_config|23|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|368|null_child_rt|3|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|369|p3|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|370|persp_images|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|371|pictureimagefilter|6|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|372|pictureimagegenerator|61|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|373|pictureshader_alpha|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|374|pictureshadercache|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|375|pictureshader|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|376|pictureshader_localwrapper|1|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|377|pictureshader_persp|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|378|pictureshadertile|1|unsupported.transform.class_downgrade: unsupported.transform.class_downgrade
+PASS|379|poster_circle|19
+PASS|380|raw_image_shader_normals_rt|29
+FAIL|381|readpixelscodec|8|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|382|readpixelspicture|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|383|reinterpretcolorspace|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|384|repeated_bitmap|14|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|385|repeated_bitmap_jpg|47|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|386|scale-pixels|19
+FAIL|387|scaled_tilemode_bitmap|1|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+PASS|388|scaled_tilemodes|20
+PASS|389|scaled_tilemodes_npot|20
+FAIL|390|scalepixels_unpremul|19|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|391|shaderpath|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+PASS|392|showmiplevels_explicit|28
+FAIL|393|skbug_8664|1|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|394|skbug_9819|0|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|395|stoplight_animated_image|11|unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.
+FAIL|396|surface_underdraw|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|397|texture|9|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|398|textureimage_and_shader|0|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+FAIL|399|tiled_picture_shader|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|400|tiledscaledbitmap|7|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|401|tilemode_decal|2|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|402|tilemodes_alpha|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|403|tilemodes|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|404|tilemode_bitmap|14|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|405|tilemode_gradient|584|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|406|tinybitmap|0|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|407|unpremul|1|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|408|verylargebitmap|0|unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported
+FAIL|409|verylarge_picture_image|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+PASS|410|wacky_yuv_formats|51
+PASS|411|yuv420_odd_dim|9
+PASS|412|yuv420_odd_dim_repeat|20
+FAIL|413|custommesh_cs|125|failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+FAIL|414|custommesh_cs_uniforms|83|failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+FAIL|415|custommesh|33|invalid.frame_plan.destination_read_unbound: Destination-reading packet has no exact Task 5 copy or refusal association
+PASS|416|custommesh_uniforms|24
+FAIL|417|mesh_updates|15|failed.prepared-surface.materialization: Mixed prepared-surface materialization failed: IllegalArgumentException: List has more than one element..
+FAIL|418|mesh_with_effects|4|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|419|mesh_with_image|16|unsupported.prepared-vertices.sampled-material: Prepared-vertices material sha256:f27e08a553990ae560b958ae261c67e9db35955cc20dd3426867414789f7c986 samples frame resources that require the sampled-material materializer.
+PASS|420|mesh_with_paint_color|13
+FAIL|421|mesh_with_paint_image|11|unsupported.prepared-vertices.sampled-material: Prepared-vertices material sha256:5ca44f7445e37f527df1d45e22613291afab5ec1cec0592c1194840af0fa6e43 samples frame resources that require the sampled-material materializer.
+FAIL|422|mesh_zero_init|0|STUB.MESH.GPU_ZERO_INIT
+FAIL|423|picture_mesh|0|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|424|skbug_13047|1|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|425|vertices_batching|0|unsupported.vertices.topology: Prepared Surface operation could not be lowered.
+FAIL|426|vertices_collapsed|0|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|427|vertices|7|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|428|vertices_perspective|0|unsupported.vertices.material: Prepared Surface operation could not be lowered.
+FAIL|429|bezier_conic_effects|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|430|bezier_quad_effects|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|431|bug41422450|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|432|ctmpatheffect|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|433|circle_sizes|5|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|434|clockwise|1|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|435|concavepaths|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|436|conicpaths|11|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|437|convex_lineonly_paths|11|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|438|convex_lineonly_paths_stroke_and_fill|7|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|439|convexpaths|8|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|440|convex-polygon-inset|0|An operation is not implemented: STUB.CONVEX_POLYGON_INSET — requires SkInsetConvexPolygon (Skia-internal utility)
+PASS|441|crbug_640176|22
+FAIL|442|crbug_691386|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|443|cubicclosepath|4|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|444|cubicpath|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|445|cubicpath_shader|0|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|446|dashcircle|8|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|447|dashtextcaps|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|448|dashing5_aa|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|449|dashing|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|450|drawlines_with_local_matrix|1|unsupported.material.radial_gradient_capability_missing: unsupported.material.radial_gradient_capability_missing
+TIMEOUT|451|drawregion|30000
+FAIL|452|drawregionmodes|878|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|453|fancy_gradients|0|An operation is not implemented: STUB.FANCY_GRADIENTS — requires picture shader + sweep/radial shader composition
+FAIL|454|fatpathfill|16|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|455|filltypespersp|36|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+FAIL|456|inner_join_geometry|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|457|lattice2|253|unsupported.image.native_binding: Prepared Surface operation could not be lowered.
+FAIL|458|lineclosepath|2961|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|459|linepath|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|460|macaatest|0|An operation is not implemented: STUB.MACAATEST — requires macOS CoreText APIs (platform-specific)
+FAIL|461|mandoline|52|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|462|manycircles|672|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|463|manypathatlases|3|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|464|nested|42|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|465|nonclosedpaths|4|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|466|OverStroke|6|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|467|parsedpaths|22|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|468|path_huge_aa|96|unsupported.core_primitive.coverage_sample.color_capability: RGBA8Unorm render-and-resolve capability is unavailable: unsupported.capability.texture_size requires 102400 but observed 8192.
+FAIL|469|path_huge_aa_manual|18|unsupported.core_primitive.coverage_sample.color_capability: RGBA8Unorm render-and-resolve capability is unavailable: unsupported.capability.texture_size requires 102400 but observed 8192.
+FAIL|470|path_mask_cache|4|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|471|pathops_blend|0|An operation is not implemented: STUB.PATHOPS_BLEND — requires SkPathOps::Op or equivalent blend-mode compositing
+FAIL|472|pathopsinverse|0|An operation is not implemented: STUB.PATHOPS_INVERSE — requires SkPathOps::Op with inverse fill types
+FAIL|473|pathops_skbug_10155|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|474|path-reverse|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|475|path_stroke_clip_crbug1070835|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|476|points|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|477|poly2poly|147|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|478|polygons|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|479|preservefillrule_big|1|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|480|preservefillrule_little|1|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|481|quadclosepath|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|482|quadpath|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|483|roundrects|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|484|shadow_utils_directional|26
+FAIL|485|sharedcorners|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|486|simpleshapes_bw|12|invalid.preflight.core_primitive_path_stencil: Path stencil CorePrimitive requires exactly one prepared render pass.
+FAIL|487|simpleshapes|2|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|488|stlouisarch|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|489|stroke_rect_shader|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|490|strokedline_caps|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|491|strokes3|8|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|492|strokes_round|10|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|493|teenyStrokes|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|494|thin_aa_dash_lines|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|495|thinconcavepaths|73
+FAIL|496|thinrects|7|unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|497|thinroundrects|6|unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|498|thinstrokedrects|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|499|tinyanglearcs|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|500|trickycubicstrokes_largeradius|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|501|trimpatheffect|3|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|502|widebuttcaps|1|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|503|zero_control_stroke|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|504|zeroPath|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|505|zero_length_paths_aa|2|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|506|zero_length_paths_bw|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|507|zero_length_paths_dbl_aa|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|508|zero_length_paths_dbl_bw|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|509|zerolinedash|31|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|510|zerolinestroke|0|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|511|AlternateLuma|3|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|512|arithmode|4|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|513|color_cube_rt|5|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|514|composeCF|1|unsupported.material.sweep_gradient_capability_missing: unsupported.material.sweep_gradient_capability_missing
+FAIL|515|runtime_intrinsics_common|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|516|runtime_intrinsics_exponential|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|517|runtime_intrinsics_geometric|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|518|runtime_intrinsics_matrix|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|519|runtime_intrinsics_relational|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|520|runtime_intrinsics_trig|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|521|kawase_blur_rt|10|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+PASS|522|lineargradientrt|20
+FAIL|523|lumafilter|1|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|524|rippleshader|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|525|rtif_distort|25|unsupported.composite.paint: Prepared Surface composite could not be lowered.
+FAIL|526|rtif_unsharp|4|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|527|runtimecolorfilter|3|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|528|runtimefunctions|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|529|runtime_shader|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|530|spiral_rt|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|531|threshold_rt|0|unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|532|unsharp_rt|4|unsupported.image.alpha_interpretation: Prepared Surface operation could not be lowered.
+PASS|533|workingspace|19
+FAIL|534|annotated_text|115|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|535|bigtext_crbug_1370488|4428|unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+FAIL|536|bigtext|308|unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+FAIL|537|blob_rsxform_distortable|103|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|538|blob_rsxform|68|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|539|chrome_gradtext2|164|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|540|cliperror|817|unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.
+FAIL|541|coloremoji_colrv0|111|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|542|coloremoji|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|543|colorwheelnative|440|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|544|coloremoji_blendmodes_colrv0|46|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|545|coloremoji_blendmodes|2|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+FAIL|546|colrv1_gradient_stops_repeat|45|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|547|crbug_1073670|812|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|548|dftext_blob_persp|627|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|549|dftext|1177|unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+FAIL|550|drawTextRSXform|2458|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+PASS|551|fontcache|4731
+FAIL|552|fontmgr_bounds|52|unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.
+PASS|553|fontmgr_iter|124
+PASS|554|fontmgr_match|70
+FAIL|555|font_palette_default|194|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+PASS|556|fontregen|571
+FAIL|557|fontscalerdistortable|3334|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|558|fontscaler|3705|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+PASS|559|gammagradienttext|424
+FAIL|560|gammatext_color_shader|796|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|561|gammatext|2102|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|562|getpostextpath|76|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|563|gradtext|333|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|564|largeglyphblur|1052|unsupported.text.atlas_page_budget_exceeded: Prepared Surface operation could not be lowered.
+FAIL|565|lcdoverlap|759|invalid.preflight.text.blend: Prepared Surface operation could not be lowered.
+FAIL|566|macaa_colors|777|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|567|mixedtextblobs|1272|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|568|overdraw_text_xform|818|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+PASS|569|palette|9
+FAIL|570|pdf_never_embed|231|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+PASS|571|pdf_table_based_subset|6
+FAIL|572|persptext|35|unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+FAIL|573|persptext_minimal|35|unsupported.text.transform_perspective: Prepared Surface operation could not be lowered.
+PASS|574|rsx_blob_shader|17
+FAIL|575|scaledemojiperspective_colrv0|49|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|576|scaledemojipos_colrv0|49|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|577|scaledemoji_colrv0|97|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|578|scaledemoji_rendering|50|unsupported.text.font_bytes_malformed: Prepared Surface operation could not be lowered.
+FAIL|579|shadertext3|22|unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered.
+PASS|580|skbug_12212|10
+FAIL|581|skbug_257|328|unsupported.material.source_unimplemented: unsupported.material.source_unimplemented
+PASS|582|skbug_5321|76
+FAIL|583|skbug_8955|18|unsupported.text.transform_singular: Prepared Surface operation could not be lowered.
+FAIL|584|slug|450|invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.
+FAIL|585|stroketext|104|unsupported.text.path_effect_unsupported: Prepared Surface operation could not be lowered.
+FAIL|586|stroketext_native|61|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|587|surfaceprops|80|unsupported.material.linear_gradient_capability_missing: unsupported.material.linear_gradient_capability_missing
+FAIL|588|textblobblockreordering|80|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|589|textblobcolortrans|333|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|590|textblobgeometrychange|106|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|591|textblob|233|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|592|textblob_intercepts|131|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|593|textblobmixedsizes|735|unsupported.text.mask_generation_failed: Prepared Surface operation could not be lowered.
+FAIL|594|textblobrandomfont|1755|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+PASS|595|textblobshader|404
+FAIL|596|textblobtransforms|650|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|597|textblobuseaftergpufree|74|invalid.prepared-surface.run-plan: The sealed mixed run plan is internally inconsistent.
+FAIL|598|fancyblobunderline|298|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic
+FAIL|599|textfilter_color|6|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+FAIL|600|textfilter_image|5|unsupported.composite.operation: Prepared Surface composite could not be lowered.
+PASS|601|text_scale_skew|331
+FAIL|602|text_scale_skew_rotate|301|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|603|typefacerendering|294|unsupported.layer.bounds_unbounded: Prepared Surface composite could not be lowered.
+PASS|604|typefacerendering_pfa|15
+PASS|605|typefacerendering_pfb|13
+FAIL|606|typefacestyles|118|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|607|typefacestyles_kerning|188|invalid.surface.prepared.text-command: Prepared Surface operation could not be lowered.
+FAIL|608|typeface_styling|187|unsupported.text.paint_style_unsupported: Prepared Surface operation could not be lowered.
+FAIL|609|user_typeface|22|unsupported.geometry.path_key_nondeterministic: unsupported.geometry.path_key_nondeterministic

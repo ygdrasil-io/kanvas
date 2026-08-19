@@ -32,20 +32,6 @@ enum class GPUPaintEvaluationOrder {
     CoverageThenSource,
 }
 
-/** Material source kind. */
-enum class GPUMaterialSourceKind {
-    /** Solid color source. */
-    SolidColor,
-    /** Gradient source. */
-    Gradient,
-    /** Image shader source. */
-    ImageShader,
-    /** Registered runtime effect source. */
-    RuntimeEffect,
-    /** Unsupported source that must route to refusal. */
-    Unsupported,
-}
-
 /** Gradient kind. */
 enum class GPUGradientKind {
     /** Linear gradient. */
@@ -230,11 +216,163 @@ data class GPUMaterialDictionary(
     val rootSets: List<GPUMaterialRootSet>,
 )
 
+/** Reflected scalar/vector/matrix type admitted by a registered runtime-effect program. */
+enum class GPUPreparedRuntimeEffectUniformType {
+    Float1,
+    Float2,
+    Float3,
+    Float4,
+    Int1,
+    Matrix3x3,
+    Matrix4x4,
+}
+
+/** Exact reflected field layout owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectUniformField internal constructor(
+    val name: String,
+    val type: GPUPreparedRuntimeEffectUniformType,
+    val offsetBytes: Int,
+    val sizeBytes: Int,
+    val alignmentBytes: Int,
+    val strideBytes: Int? = null,
+)
+
+/** Exact reflected resource-binding topology owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectBinding internal constructor(
+    val group: Int,
+    val binding: Int,
+    val resourceKind: String,
+    val minBindingSizeBytes: Int?,
+)
+
+enum class GPUPreparedRuntimeEffectSourceColorContract {
+    LinearStraightRgba,
+    LinearPremultipliedRgba,
+}
+
+/** Reflected, ordered child-slot ABI owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectChildSlot internal constructor(
+    val name: String,
+    val role: GPUPreparedRuntimeEffectChildRole,
+    val bindingIndex: Int?,
+    val abiHash: String,
+) {
+    init {
+        require(name.isNotBlank()) { "Prepared runtime-effect child slot name must not be blank" }
+        require(bindingIndex == null || bindingIndex >= 0) {
+            "Prepared runtime-effect child binding index must be non-negative"
+        }
+        require(abiHash.matches(Regex("sha256:[0-9a-f]{64}"))) {
+            "Prepared runtime-effect child slot ABI hash must be canonical"
+        }
+    }
+}
+
+/** Canonical invocation ABI shared by every child program admitted for [role]. */
+internal fun preparedRuntimeEffectChildAbiHash(
+    role: GPUPreparedRuntimeEffectChildRole,
+): String = CanonicalIdentityEncoder("prepared-runtime-effect-child-abi-v1")
+    .text("role", role.name)
+    .text(
+        "inputContract",
+        when (role) {
+            GPUPreparedRuntimeEffectChildRole.Shader -> "local-position-vec2-f32"
+            GPUPreparedRuntimeEffectChildRole.ColorFilter -> "linear-premul-rgba-f32"
+            GPUPreparedRuntimeEffectChildRole.Blender -> "two-linear-premul-rgba-f32"
+        },
+    )
+    .text("outputContract", "linear-premul-rgba-f32")
+    .digestIdentity()
+
+/**
+ * Canonical executable facts for one registered Kanvas runtime effect.
+ *
+ * The constructor is module-internal so consumers cannot inject arbitrary
+ * WGSL, entry points, ABI layouts, or hashes through the public compiler API.
+ */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectProgram internal constructor(
+    val effectId: String,
+    val descriptorVersion: Int,
+    val wgslSource: String,
+    val sourceFunction: String,
+    val sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+    val sourceHash: String,
+    val moduleHash: String,
+    val reflectionHash: String,
+    val uniformSchemaHash: String,
+    val uniformBlockSizeBytes: Int,
+    val uniformFields: List<GPUPreparedRuntimeEffectUniformField>,
+    val bindings: List<GPUPreparedRuntimeEffectBinding>,
+    val bindingPlanHash: String,
+    val routeContractHash: String,
+    val childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
+) {
+    init {
+        require(childSlots.map { slot -> slot.name }.distinct().size == childSlots.size) {
+            "Prepared runtime-effect child slot names must be unique"
+        }
+        val bindingIndices = childSlots.mapNotNull { slot -> slot.bindingIndex }
+        require(bindingIndices.distinct().size == bindingIndices.size) {
+            "Prepared runtime-effect child binding indices must be unique"
+        }
+    }
+}
+
+/** Result of resolving a descriptor against registered Kanvas program authority. */
+sealed interface GPUPreparedRuntimeEffectResolution {
+    /** The canonical descriptor is absent or its version differs. */
+    data class DescriptorUnavailable(val message: String) :
+        GPUPreparedRuntimeEffectResolution
+
+    /** The closed authority which prevented an executable program from being issued. */
+    enum class ProgramUnavailableReason {
+        CpuUnavailable,
+        WgslUnavailable,
+        WgslValidation,
+        Abi,
+        Unknown,
+    }
+
+    /** The descriptor exists but no fully proven Kotlin/CPU plus WGSL program is available. */
+    data class ProgramUnavailable(
+        val message: String,
+        val reason: ProgramUnavailableReason = ProgramUnavailableReason.Unknown,
+    ) :
+        GPUPreparedRuntimeEffectResolution
+
+    /** A descriptor-, CPU-, parser-, reflection-, and ABI-validated program. */
+    @ConsistentCopyVisibility
+    data class Ready internal constructor(val program: GPUPreparedRuntimeEffectProgram) :
+        GPUPreparedRuntimeEffectResolution
+}
+
+/** Neutral lookup seam consumed by material lowering without importing runtime-effect ownership. */
+fun interface GPUPreparedRuntimeEffectResolver {
+    fun resolve(effectId: String, descriptorVersion: Int): GPUPreparedRuntimeEffectResolution
+}
+
+/** Fail-closed resolver used by contexts that do not opt into registered runtime effects. */
+object GPUPreparedRuntimeEffectResolverUnavailable : GPUPreparedRuntimeEffectResolver {
+    override fun resolve(
+        effectId: String,
+        descriptorVersion: Int,
+    ): GPUPreparedRuntimeEffectResolution =
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+            "Registered runtime-effect program resolver is unavailable",
+        )
+}
+
 /** Material lowering context facts. */
 data class GPUMaterialLoweringContext(
     val capabilityClass: String,
     val targetFormatClass: String,
     val dictionaryVersion: String,
+    val runtimeEffectResolver: GPUPreparedRuntimeEffectResolver =
+        GPUPreparedRuntimeEffectResolverUnavailable,
 )
 
 /** Material root set used for assembly. */

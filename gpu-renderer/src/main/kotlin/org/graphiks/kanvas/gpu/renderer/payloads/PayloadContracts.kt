@@ -3,6 +3,20 @@ package org.graphiks.kanvas.gpu.renderer.payloads
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildPreparedColorGlyphR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -210,6 +224,295 @@ data class GPUGradientPayloadStore(
     val uploadPlanHash: String,
 )
 
+/** Closed material kinds accepted by the CorePrimitive payload ABI. */
+enum class GPUCorePrimitiveMaterialKind(val wireId: String) {
+    SolidColor("solid"),
+    RadialGradient("radial"),
+    SweepGradient("sweep"),
+}
+
+/**
+ * Immutable, handle-free CorePrimitive material payload.
+ *
+ * Gradient colors retain encoded sRGB RGBA. The fixed-stop packer converts RGB to linear light
+ * and premultiplies it at upload time, matching [GradientWgslShaderProvider] exactly. The local
+ * matrix is retained as raw material authority for the next native route; this task only admits
+ * finite nine-value matrices and does not interpret them.
+ */
+sealed interface GPUCorePrimitiveMaterialPayload {
+    val kind: GPUCorePrimitiveMaterialKind
+    val tileMode: String
+    val interpolation: String
+    val materialHash: String
+
+    /** Existing solid CorePrimitive color, already linear-light and premultiplied. */
+    class SolidColor(premultipliedRgba: List<Float>) : GPUCorePrimitiveMaterialPayload {
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SolidColor
+        override val tileMode: String = "none"
+        override val interpolation: String = "none"
+        override val materialHash: String = "sha256:${sha256Hex(canonicalPreimage())}"
+
+        init {
+            require(premultipliedRgba.isPremultipliedRgba()) {
+                "Core solid material must be finite premultiplied RGBA"
+            }
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is SolidColor &&
+                premultipliedRgba.rawBits() == other.premultipliedRgba.rawBits()
+            )
+
+        override fun hashCode(): Int = premultipliedRgba.rawBits().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+
+    /** Radial gradient facts admitted by the CorePrimitive material ABI. */
+    class RadialGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val radius: Float,
+        localMatrix: List<Float>,
+        override val interpolation: String,
+        override val tileMode: String,
+        positions: List<Float>,
+        colors: List<Float>,
+        materialHash: String? = null,
+    ) : GPUCorePrimitiveMaterialPayload {
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.RadialGradient
+        val localMatrix: List<Float> = immutableList(localMatrix)
+        val positions: List<Float> = immutableList(positions)
+        val colors: List<Float> = immutableList(colors)
+        private val contentMaterialHash: String = "sha256:${sha256Hex(
+            corePrimitiveGradientMaterialPreimage(
+                kind = kind,
+                geometry = listOf(centerX, centerY, radius),
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = null,
+            ),
+        )}"
+        override val materialHash: String = materialHash ?: contentMaterialHash
+
+        init {
+            require(this.materialHash == contentMaterialHash) {
+                "Core radial gradient material hash must match its immutable facts"
+            }
+            validateGradientMaterial(
+                kind = kind,
+                center = listOf(centerX, centerY),
+                angles = emptyList(),
+                radius = radius,
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = this.materialHash,
+            )
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is RadialGradient &&
+                centerX.rawBitsEqual(other.centerX) &&
+                centerY.rawBitsEqual(other.centerY) &&
+                radius.rawBitsEqual(other.radius) &&
+                localMatrix.rawBits() == other.localMatrix.rawBits() &&
+                interpolation == other.interpolation &&
+                tileMode == other.tileMode &&
+                positions.rawBits() == other.positions.rawBits() &&
+                colors.rawBits() == other.colors.rawBits() &&
+                materialHash == other.materialHash
+            )
+
+        override fun hashCode(): Int = canonicalPreimage().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+
+    /** Sweep gradient facts admitted by the CorePrimitive material ABI. */
+    class SweepGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val startAngle: Float,
+        val endAngle: Float,
+        localMatrix: List<Float>,
+        override val interpolation: String,
+        override val tileMode: String,
+        positions: List<Float>,
+        colors: List<Float>,
+        materialHash: String? = null,
+    ) : GPUCorePrimitiveMaterialPayload {
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SweepGradient
+        val localMatrix: List<Float> = immutableList(localMatrix)
+        val positions: List<Float> = immutableList(positions)
+        val colors: List<Float> = immutableList(colors)
+        private val contentMaterialHash: String = "sha256:${sha256Hex(
+            corePrimitiveGradientMaterialPreimage(
+                kind = kind,
+                geometry = listOf(centerX, centerY, startAngle, endAngle),
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = null,
+            ),
+        )}"
+        override val materialHash: String = materialHash ?: contentMaterialHash
+
+        init {
+            require(this.materialHash == contentMaterialHash) {
+                "Core sweep gradient material hash must match its immutable facts"
+            }
+            validateGradientMaterial(
+                kind = kind,
+                center = listOf(centerX, centerY),
+                angles = listOf(startAngle, endAngle),
+                radius = null,
+                localMatrix = this.localMatrix,
+                interpolation = interpolation,
+                tileMode = tileMode,
+                positions = this.positions,
+                colors = this.colors,
+                materialHash = this.materialHash,
+            )
+        }
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is SweepGradient &&
+                centerX.rawBitsEqual(other.centerX) &&
+                centerY.rawBitsEqual(other.centerY) &&
+                startAngle.rawBitsEqual(other.startAngle) &&
+                endAngle.rawBitsEqual(other.endAngle) &&
+                localMatrix.rawBits() == other.localMatrix.rawBits() &&
+                interpolation == other.interpolation &&
+                tileMode == other.tileMode &&
+                positions.rawBits() == other.positions.rawBits() &&
+                colors.rawBits() == other.colors.rawBits() &&
+                materialHash == other.materialHash
+            )
+
+        override fun hashCode(): Int = canonicalPreimage().hashCode()
+
+        override fun toString(): String = canonicalPreimage()
+    }
+}
+
+private fun GPUCorePrimitiveMaterialPayload.canonicalPreimage(): String = when (this) {
+    is GPUCorePrimitiveMaterialPayload.SolidColor -> listOf(
+        "kind=${kind.wireId}",
+        "premultipliedRgba=${premultipliedRgba.rawBits().joinToString(",")}",
+    ).joinToString("\n")
+    is GPUCorePrimitiveMaterialPayload.RadialGradient -> corePrimitiveGradientMaterialPreimage(
+        kind = kind,
+        geometry = listOf(centerX, centerY, radius),
+        localMatrix = localMatrix,
+        interpolation = interpolation,
+        tileMode = tileMode,
+        positions = positions,
+        colors = colors,
+        materialHash = materialHash,
+    )
+    is GPUCorePrimitiveMaterialPayload.SweepGradient -> corePrimitiveGradientMaterialPreimage(
+        kind = kind,
+        geometry = listOf(centerX, centerY, startAngle, endAngle),
+        localMatrix = localMatrix,
+        interpolation = interpolation,
+        tileMode = tileMode,
+        positions = positions,
+        colors = colors,
+        materialHash = materialHash,
+    )
+}
+
+private fun corePrimitiveGradientMaterialPreimage(
+    kind: GPUCorePrimitiveMaterialKind,
+    geometry: List<Float>,
+    localMatrix: List<Float>,
+    interpolation: String,
+    tileMode: String,
+    positions: List<Float>,
+    colors: List<Float>,
+    materialHash: String?,
+): String = listOf(
+    "kind=${kind.wireId}",
+    "geometry=${geometry.rawBits().joinToString(",")}",
+    "localMatrix=${localMatrix.rawBits().joinToString(",")}",
+    "interpolation=$interpolation",
+    "tileMode=$tileMode",
+    "positions=${positions.rawBits().joinToString(",")}",
+    "colors=${colors.rawBits().joinToString(",")}",
+    "materialHash=${materialHash ?: "auto"}",
+).joinToString("\n")
+
+private fun validateGradientMaterial(
+    kind: GPUCorePrimitiveMaterialKind,
+    center: List<Float>,
+    angles: List<Float>,
+    radius: Float?,
+    localMatrix: List<Float>,
+    interpolation: String,
+    tileMode: String,
+    positions: List<Float>,
+    colors: List<Float>,
+    materialHash: String,
+) {
+    require(center.size == 2 && center.all(Float::isFinite)) {
+        "Core gradient center must contain two finite scalars"
+    }
+    require(angles.all(Float::isFinite)) {
+        "Core gradient angles must be finite"
+    }
+    require(localMatrix.size == 9 && localMatrix.all(Float::isFinite)) {
+        "Core gradient local matrix must contain nine finite scalars"
+    }
+    require(interpolation == "srgb") {
+        "Core gradient interpolation must be standard sRGB"
+    }
+    require(tileMode == "clamp") {
+        "Core gradient tile mode must be clamp"
+    }
+    require(positions.size in 1..CORE_PRIMITIVE_GRADIENT_MAX_STOPS) {
+        "Core gradient must contain 1..$CORE_PRIMITIVE_GRADIENT_MAX_STOPS stops"
+    }
+    require(colors.size == positions.size * 4) {
+        "Core gradient stop colors must contain exactly four scalars per stop"
+    }
+    require(positions.all { it.isFinite() && it in 0f..1f } &&
+        positions.zipWithNext().all { (left, right) -> left <= right }) {
+        "Core gradient stop positions must be finite, normalized, and ordered"
+    }
+    require(colors.all { it.isFinite() && it in 0f..1f }) {
+        "Core gradient stop colors must be finite normalized RGBA"
+    }
+    require(materialHash.isNotBlank()) {
+        "Core gradient material hash must not be blank"
+    }
+    when (kind) {
+        GPUCorePrimitiveMaterialKind.RadialGradient -> {
+            require(radius != null && radius.isFinite() && radius > 0f) {
+                "Core radial gradient radius must be finite and positive"
+            }
+            require(angles.isEmpty()) {
+                "Core radial gradient cannot contain sweep angles"
+            }
+        }
+        GPUCorePrimitiveMaterialKind.SweepGradient -> {
+            require(radius == null && angles.size == 2 && angles[1] > angles[0]) {
+                "Core sweep gradient angle range must be finite and positive"
+            }
+        }
+        GPUCorePrimitiveMaterialKind.SolidColor ->
+            error("Solid colors do not use gradient validation")
+    }
+}
+
 /** Reference from a draw invocation to pass-local payload. */
 data class GPUDrawPayloadRef(
     val commandIdValue: Int,
@@ -219,7 +522,3437 @@ data class GPUDrawPayloadRef(
     val gradientStore: GPUGradientPayloadStore? = null,
     val uniformBlock: GPUUniformPayloadBlock? = null,
     val resourceBlock: GPUResourceBindingBlock? = null,
+    /** Compatibility retention for CorePrimitive copies that predate the material field. */
+    val corePrimitiveMaterial: GPUCorePrimitiveMaterialPayload? = null,
+) {
+    /** Preserves the pre-material JVM constructor descriptor. */
+    constructor(
+        commandIdValue: Int,
+        renderStepIdentity: String,
+        uniformSlot: GPUUniformPayloadSlot?,
+        resourceSlot: GPUResourceBindingSlot?,
+        gradientStore: GPUGradientPayloadStore?,
+        uniformBlock: GPUUniformPayloadBlock?,
+        resourceBlock: GPUResourceBindingBlock?,
+    ) : this(
+        commandIdValue,
+        renderStepIdentity,
+        uniformSlot,
+        resourceSlot,
+        gradientStore,
+        uniformBlock,
+        resourceBlock,
+        null,
+    )
+}
+
+/** Closed native atlas format accepted by the COLRv0 color-glyph payload. */
+enum class GPUColorGlyphAtlasFormat(val gpuLabel: String) {
+    R8Unorm("r8unorm"),
+}
+
+/** Closed layer count encoded by the prepared COLRv0 uniform ABI. */
+const val GPU_COLOR_GLYPH_MAX_LAYERS: Int = GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+
+const val COLOR_GLYPH_RENDER_STEP_IDENTITY = "text.colrv0.composite"
+
+/** Closed shader identities; each native route accepts and validates an explicit supported subset. */
+enum class GPURegisteredUniformProgram(
+    val wireId: String,
+    val uniformByteSize: Int,
+) {
+    SolidColor("solid-color-v1", 16),
+    LinearGradient("linear-gradient-2stop-v1", 64),
+    RadialGradient("radial-gradient-2stop-v1", 48),
+    SweepGradient("sweep-gradient-2stop-v1", 64),
+    Blur("analytic-blur-v1", 48),
+    ColorMatrix("color-matrix-v1", 96),
+    Stroke("analytic-stroke-v1", 48),
+    SimpleRuntimeEffect("simple-runtime-effect-v1", 16),
+}
+
+const val REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY = "rect.registered-uniform"
+const val SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY = "filter.blur.separable-rect"
+const val CORE_PRIMITIVE_RENDER_STEP_IDENTITY = "core-primitive.device-geometry"
+const val CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY = "rect.fill.coverage"
+const val CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY = "rrect.fill.coverage"
+const val CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY = "rect.fill.affine-direct-triangles"
+const val CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY = "first_slice.fill_rect.affine.native"
+
+/** Closed Slice 12A source identities retained after one Canvas-state translation. */
+enum class GPUCorePrimitiveSourceFamily {
+    Color,
+    PointLine,
+    Rect,
+    RRect,
+    DRRect,
+    Path,
+}
+
+/** Closed analysis-owned choice for FillRect device geometry. */
+enum class GPUCorePrimitiveRectRouteAuthority {
+    RectAxisAligned,
+    RectAffineDirectTrianglesV1,
+}
+
+/** Closed transform classification retained by exact FillRect geometry authority. */
+enum class GPUCorePrimitiveRectTransformType(val wireId: String) {
+    Identity("identity"),
+    Translate("translate"),
+    Scale("scale"),
+    Affine("affine"),
+    Perspective("perspective"),
+    Singular("singular"),
+}
+
+/**
+ * Collision-free raw facts proving the exact local rect and transform analyzed for one FillRect.
+ *
+ * The value is intentionally opaque outside `gpu-renderer`: downstream modules may retain and
+ * compare analysis-issued instances, but cannot construct, copy, or mutate the signed facts.
+ */
+private object GPUCorePrimitiveRectGeometryAuthorityIssuerProof
+
+class GPUCorePrimitiveRectGeometryAuthority private constructor(
+    issuerProof: GPUCorePrimitiveRectGeometryAuthorityIssuerProof,
+    private val version: Int,
+    private val rectLeftBits: Int,
+    private val rectTopBits: Int,
+    private val rectRightBits: Int,
+    private val rectBottomBits: Int,
+    private val transformType: GPUCorePrimitiveRectTransformType,
+    private val transformTranslateXBits: Int,
+    private val transformTranslateYBits: Int,
+    private val transformScaleXBits: Int,
+    private val transformScaleYBits: Int,
+    private val transformSkewXBits: Int,
+    private val transformSkewYBits: Int,
+) {
+    init {
+        require(issuerProof === GPUCorePrimitiveRectGeometryAuthorityIssuerProof) {
+            "FillRect geometry authority requires the gpu-renderer issuer proof"
+        }
+        require(version == 1) { "Unsupported FillRect geometry authority version: $version" }
+    }
+
+    override fun equals(other: Any?): Boolean = this === other || (
+        other is GPUCorePrimitiveRectGeometryAuthority &&
+            version == other.version &&
+            rectLeftBits == other.rectLeftBits &&
+            rectTopBits == other.rectTopBits &&
+            rectRightBits == other.rectRightBits &&
+            rectBottomBits == other.rectBottomBits &&
+            transformType == other.transformType &&
+            transformTranslateXBits == other.transformTranslateXBits &&
+            transformTranslateYBits == other.transformTranslateYBits &&
+            transformScaleXBits == other.transformScaleXBits &&
+            transformScaleYBits == other.transformScaleYBits &&
+            transformSkewXBits == other.transformSkewXBits &&
+            transformSkewYBits == other.transformSkewYBits
+        )
+
+    override fun hashCode(): Int {
+        var result = version
+        result = 31 * result + rectLeftBits
+        result = 31 * result + rectTopBits
+        result = 31 * result + rectRightBits
+        result = 31 * result + rectBottomBits
+        result = 31 * result + transformType.wireId.hashCode()
+        result = 31 * result + transformTranslateXBits
+        result = 31 * result + transformTranslateYBits
+        result = 31 * result + transformScaleXBits
+        result = 31 * result + transformScaleYBits
+        result = 31 * result + transformSkewXBits
+        result = 31 * result + transformSkewYBits
+        return result
+    }
+
+    override fun toString(): String = "GPUCorePrimitiveRectGeometryAuthority(opaque)"
+
+    private fun canonicalPreimage(): String =
+        "v=$version;" +
+            "rect=$rectLeftBits,$rectTopBits,$rectRightBits,$rectBottomBits;" +
+            "transformType=${transformType.wireId};" +
+            "translate=$transformTranslateXBits,$transformTranslateYBits;" +
+            "scale=$transformScaleXBits,$transformScaleYBits;" +
+            "skew=$transformSkewXBits,$transformSkewYBits"
+
+    private fun hasExactAxisAlignedDeviceGeometry(
+        geometry: GPUCorePrimitiveGeometry.Rect,
+    ): Boolean {
+        val transform = exactTransformOrNull() ?: return false
+        if (transform.hasSkew) return false
+        val corners = transformedCornersOrNull(transform) ?: return false
+        return geometry.left.hasSameRawBits(corners.minX) &&
+            geometry.top.hasSameRawBits(corners.minY) &&
+            geometry.right.hasSameRawBits(corners.maxX) &&
+            geometry.bottom.hasSameRawBits(corners.maxY)
+    }
+
+    private fun hasExactAffineDeviceGeometry(
+        geometry: GPUCorePrimitiveGeometry.TriangulatedPath,
+        targetBounds: GPUPixelBounds,
+    ): Boolean {
+        val transform = exactTransformOrNull() ?: return false
+        if (transformType != GPUCorePrimitiveRectTransformType.Affine || !transform.hasSkew) return false
+        val corners = transformedCornersOrNull(transform) ?: return false
+        val exactCoverBounds = corners.toPixelCoverBounds(targetBounds) ?: return false
+        return geometry.vertices[0].hasSameRawBits(corners.leftTopX) &&
+            geometry.vertices[1].hasSameRawBits(corners.leftTopY) &&
+            geometry.vertices[2].hasSameRawBits(corners.rightTopX) &&
+            geometry.vertices[3].hasSameRawBits(corners.rightTopY) &&
+            geometry.vertices[4].hasSameRawBits(corners.rightBottomX) &&
+            geometry.vertices[5].hasSameRawBits(corners.rightBottomY) &&
+            geometry.vertices[6].hasSameRawBits(corners.leftBottomX) &&
+            geometry.vertices[7].hasSameRawBits(corners.leftBottomY) &&
+            geometry.coverBounds == exactCoverBounds
+    }
+
+    private fun exactTransformOrNull(): GPUCorePrimitiveExactTransform? {
+        if (transformType == GPUCorePrimitiveRectTransformType.Perspective ||
+            transformType == GPUCorePrimitiveRectTransformType.Singular
+        ) return null
+        val transform = GPUCorePrimitiveExactTransform(
+            translateX = Float.fromBits(transformTranslateXBits),
+            translateY = Float.fromBits(transformTranslateYBits),
+            scaleX = Float.fromBits(transformScaleXBits),
+            scaleY = Float.fromBits(transformScaleYBits),
+            skewX = Float.fromBits(transformSkewXBits),
+            skewY = Float.fromBits(transformSkewYBits),
+        )
+        if (!transform.translateX.isFinite() || !transform.translateY.isFinite() ||
+            !transform.scaleX.isFinite() || !transform.scaleY.isFinite() ||
+            !transform.skewX.isFinite() || !transform.skewY.isFinite()
+        ) return null
+        val positiveZeroBits = 0.0f.toRawBits()
+        val positiveOneBits = 1.0f.toRawBits()
+        when (transformType) {
+            GPUCorePrimitiveRectTransformType.Identity -> if (
+                transformTranslateXBits != positiveZeroBits ||
+                transformTranslateYBits != positiveZeroBits ||
+                transformScaleXBits != positiveOneBits ||
+                transformScaleYBits != positiveOneBits ||
+                transformSkewXBits != positiveZeroBits ||
+                transformSkewYBits != positiveZeroBits
+            ) return null
+            GPUCorePrimitiveRectTransformType.Translate -> if (
+                transformScaleXBits != positiveOneBits ||
+                transformScaleYBits != positiveOneBits ||
+                transformSkewXBits != positiveZeroBits ||
+                transformSkewYBits != positiveZeroBits
+            ) return null
+            GPUCorePrimitiveRectTransformType.Scale -> if (
+                transformTranslateXBits != positiveZeroBits ||
+                transformTranslateYBits != positiveZeroBits ||
+                transformSkewXBits != positiveZeroBits ||
+                transformSkewYBits != positiveZeroBits ||
+                !transform.hasFiniteNonZeroDeterminant()
+            ) return null
+            GPUCorePrimitiveRectTransformType.Affine -> if (!transform.hasFiniteNonZeroDeterminant()) {
+                return null
+            }
+            GPUCorePrimitiveRectTransformType.Perspective,
+            GPUCorePrimitiveRectTransformType.Singular,
+            -> return null
+        }
+        return transform
+    }
+
+    private fun transformedCornersOrNull(
+        transform: GPUCorePrimitiveExactTransform,
+    ): GPUCorePrimitiveTransformedRectCorners? {
+        val left = Float.fromBits(rectLeftBits)
+        val top = Float.fromBits(rectTopBits)
+        val right = Float.fromBits(rectRightBits)
+        val bottom = Float.fromBits(rectBottomBits)
+        if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite() ||
+            left >= right || top >= bottom
+        ) return null
+
+        fun mapX(x: Float, y: Float): Float =
+            transform.scaleX * x + transform.skewX * y + transform.translateX
+        fun mapY(x: Float, y: Float): Float =
+            transform.skewY * x + transform.scaleY * y + transform.translateY
+
+        val corners = GPUCorePrimitiveTransformedRectCorners(
+            leftTopX = mapX(left, top),
+            leftTopY = mapY(left, top),
+            rightTopX = mapX(right, top),
+            rightTopY = mapY(right, top),
+            rightBottomX = mapX(right, bottom),
+            rightBottomY = mapY(right, bottom),
+            leftBottomX = mapX(left, bottom),
+            leftBottomY = mapY(left, bottom),
+        )
+        return corners.takeIf {
+            it.leftTopX.isFinite() && it.leftTopY.isFinite() &&
+                it.rightTopX.isFinite() && it.rightTopY.isFinite() &&
+                it.rightBottomX.isFinite() && it.rightBottomY.isFinite() &&
+                it.leftBottomX.isFinite() && it.leftBottomY.isFinite()
+        }
+    }
+
+    internal companion object {
+        fun issue(
+            version: Int,
+            rectLeftBits: Int,
+            rectTopBits: Int,
+            rectRightBits: Int,
+            rectBottomBits: Int,
+            transformType: GPUCorePrimitiveRectTransformType,
+            transformTranslateXBits: Int,
+            transformTranslateYBits: Int,
+            transformScaleXBits: Int,
+            transformScaleYBits: Int,
+            transformSkewXBits: Int,
+            transformSkewYBits: Int,
+        ): GPUCorePrimitiveRectGeometryAuthority = GPUCorePrimitiveRectGeometryAuthority(
+            GPUCorePrimitiveRectGeometryAuthorityIssuerProof,
+            version,
+            rectLeftBits,
+            rectTopBits,
+            rectRightBits,
+            rectBottomBits,
+            transformType,
+            transformTranslateXBits,
+            transformTranslateYBits,
+            transformScaleXBits,
+            transformScaleYBits,
+            transformSkewXBits,
+            transformSkewYBits,
+        )
+
+        fun canonicalPreimage(authority: GPUCorePrimitiveRectGeometryAuthority): String =
+            authority.canonicalPreimage()
+
+        fun hasExactAxisAlignedDeviceGeometry(
+            authority: GPUCorePrimitiveRectGeometryAuthority,
+            geometry: GPUCorePrimitiveGeometry.Rect,
+        ): Boolean = authority.hasExactAxisAlignedDeviceGeometry(geometry)
+
+        fun hasExactAffineDeviceGeometry(
+            authority: GPUCorePrimitiveRectGeometryAuthority,
+            geometry: GPUCorePrimitiveGeometry.TriangulatedPath,
+            targetBounds: GPUPixelBounds,
+        ): Boolean = authority.hasExactAffineDeviceGeometry(geometry, targetBounds)
+    }
+}
+
+/**
+ * Collision-free raw facts proving one exact source RRect, its single normalized result,
+ * and the axis-aligned transform analyzed for it.
+ *
+ * The authority is opaque: downstream code can retain it and ask it for the sealed device
+ * geometry, but cannot construct, copy, or mutate its signed facts.
+ */
+sealed interface GPUCorePrimitiveRRectGeometryAuthority {
+    companion object {
+        @JvmSynthetic
+        internal fun issue(
+            source: GPUCorePrimitiveRRectRawFacts,
+            normalized: GPUCorePrimitiveRRectRawFacts,
+            transform: GPUCorePrimitiveRRectTransformRawFacts,
+            device: GPUCorePrimitiveRRectRawFacts,
+        ): GPUCorePrimitiveRRectGeometryAuthority? =
+            if (normalized.hasValidGeometry() && device.hasValidGeometry()) {
+                GPUCorePrimitiveRRectGeometryAuthorityImpl(source, normalized, transform, device)
+            } else {
+                null
+            }
+
+        internal fun canonicalPreimage(authority: GPUCorePrimitiveRRectGeometryAuthority): String =
+            authority.impl().canonicalPreimage()
+
+        internal fun matchesRawSource(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+            source: GPUCorePrimitiveRRectRawFacts,
+            transform: GPUCorePrimitiveRRectTransformRawFacts,
+        ): Boolean = authority.impl().matchesRawSource(source, transform)
+
+        internal fun sealedDeviceGeometryInput(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+        ): GPUCorePrimitiveGeometryInput.RRect = authority.impl().sealedDeviceGeometryInput()
+
+        internal fun hasExactDeviceGeometry(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+            geometry: GPUCorePrimitiveGeometry.RRect,
+        ): Boolean = authority.impl().hasExactDeviceGeometry(geometry)
+    }
+}
+
+/** Raw, collision-free RRect values passed only across the analysis/payload boundary. */
+internal data class GPUCorePrimitiveRRectRawFacts(
+    val leftBits: Int,
+    val topBits: Int,
+    val rightBits: Int,
+    val bottomBits: Int,
+    val topLeftXBits: Int,
+    val topLeftYBits: Int,
+    val topRightXBits: Int,
+    val topRightYBits: Int,
+    val bottomRightXBits: Int,
+    val bottomRightYBits: Int,
+    val bottomLeftXBits: Int,
+    val bottomLeftYBits: Int,
+) {
+    private fun values(): List<Float> = listOf(
+        Float.fromBits(leftBits),
+        Float.fromBits(topBits),
+        Float.fromBits(rightBits),
+        Float.fromBits(bottomBits),
+        Float.fromBits(topLeftXBits),
+        Float.fromBits(topLeftYBits),
+        Float.fromBits(topRightXBits),
+        Float.fromBits(topRightYBits),
+        Float.fromBits(bottomRightXBits),
+        Float.fromBits(bottomRightYBits),
+        Float.fromBits(bottomLeftXBits),
+        Float.fromBits(bottomLeftYBits),
+    )
+
+    fun hasValidGeometry(): Boolean {
+        val values = values()
+        val left = values[0]
+        val top = values[1]
+        val right = values[2]
+        val bottom = values[3]
+        val radii = values.drop(4)
+        if (values.any { !it.isFinite() } || left >= right || top >= bottom ||
+            radii.any { it < 0f }
+        ) return false
+        for (corner in 0 until 4) {
+            val x = radii[corner * 2]
+            val y = radii[corner * 2 + 1]
+            if ((x == 0f) != (y == 0f)) return false
+        }
+        val width = right.toDouble() - left.toDouble()
+        val height = bottom.toDouble() - top.toDouble()
+        return radii[0].toDouble() + radii[2].toDouble() <= width &&
+            radii[3].toDouble() + radii[5].toDouble() <= height &&
+            radii[4].toDouble() + radii[6].toDouble() <= width &&
+            radii[7].toDouble() + radii[1].toDouble() <= height
+    }
+
+    fun canonicalBounds(): String = "$leftBits,$topBits,$rightBits,$bottomBits"
+
+    fun canonicalRadii(): String =
+        "$topLeftXBits,$topLeftYBits,$topRightXBits,$topRightYBits," +
+            "$bottomRightXBits,$bottomRightYBits,$bottomLeftXBits,$bottomLeftYBits"
+
+    fun toGeometryInput(): GPUCorePrimitiveGeometryInput.RRect = GPUCorePrimitiveGeometryInput.RRect(
+        left = Float.fromBits(leftBits),
+        top = Float.fromBits(topBits),
+        right = Float.fromBits(rightBits),
+        bottom = Float.fromBits(bottomBits),
+        radii = listOf(
+            Float.fromBits(topLeftXBits),
+            Float.fromBits(topLeftYBits),
+            Float.fromBits(topRightXBits),
+            Float.fromBits(topRightYBits),
+            Float.fromBits(bottomRightXBits),
+            Float.fromBits(bottomRightYBits),
+            Float.fromBits(bottomLeftXBits),
+            Float.fromBits(bottomLeftYBits),
+        ),
+    )
+
+    fun matches(geometry: GPUCorePrimitiveGeometry.RRect): Boolean =
+        geometry.left.toRawBits() == leftBits &&
+            geometry.top.toRawBits() == topBits &&
+            geometry.right.toRawBits() == rightBits &&
+            geometry.bottom.toRawBits() == bottomBits &&
+            geometry.radii.map(Float::toRawBits) == listOf(
+                topLeftXBits,
+                topLeftYBits,
+                topRightXBits,
+                topRightYBits,
+                bottomRightXBits,
+                bottomRightYBits,
+                bottomLeftXBits,
+                bottomLeftYBits,
+            )
+}
+
+/** Raw, command-agnostic transform values retained by the passive payload authority. */
+internal data class GPUCorePrimitiveRRectTransformRawFacts(
+    val type: GPUCorePrimitiveRectTransformType,
+    val translateXBits: Int,
+    val translateYBits: Int,
+    val scaleXBits: Int,
+    val scaleYBits: Int,
+    val skewXBits: Int,
+    val skewYBits: Int,
+) {
+    fun canonicalPreimage(): String =
+        "transformType=${type.wireId};" +
+            "transform=$translateXBits,$translateYBits,$scaleXBits,$scaleYBits,$skewXBits,$skewYBits"
+}
+
+/** Private implementation leaves no constructible public authority class on the JVM surface. */
+private class GPUCorePrimitiveRRectGeometryAuthorityImpl(
+    private val source: GPUCorePrimitiveRRectRawFacts,
+    private val normalized: GPUCorePrimitiveRRectRawFacts,
+    private val transform: GPUCorePrimitiveRRectTransformRawFacts,
+    private val device: GPUCorePrimitiveRRectRawFacts,
+) : GPUCorePrimitiveRRectGeometryAuthority {
+    fun canonicalPreimage(): String =
+        "v=1;" +
+            "sourceBounds=${source.canonicalBounds()};" +
+            "sourceRadii=${source.canonicalRadii()};" +
+            "normalizedBounds=${normalized.canonicalBounds()};" +
+            "normalizedRadii=${normalized.canonicalRadii()};" +
+            transform.canonicalPreimage()
+
+    fun matchesRawSource(
+        source: GPUCorePrimitiveRRectRawFacts,
+        transform: GPUCorePrimitiveRRectTransformRawFacts,
+    ): Boolean = this.source == source && this.transform == transform
+
+    fun sealedDeviceGeometryInput(): GPUCorePrimitiveGeometryInput.RRect = device.toGeometryInput()
+
+    fun hasExactDeviceGeometry(geometry: GPUCorePrimitiveGeometry.RRect): Boolean = device.matches(geometry)
+
+    override fun equals(other: Any?): Boolean = this === other || (
+        other is GPUCorePrimitiveRRectGeometryAuthorityImpl &&
+            source == other.source &&
+            normalized == other.normalized &&
+            transform == other.transform &&
+            device == other.device
+        )
+
+    override fun hashCode(): Int {
+        var result = source.hashCode()
+        result = 31 * result + normalized.hashCode()
+        result = 31 * result + transform.hashCode()
+        result = 31 * result + device.hashCode()
+        return result
+    }
+
+    override fun toString(): String = "GPUCorePrimitiveRRectGeometryAuthority(opaque)"
+}
+
+private fun GPUCorePrimitiveRRectGeometryAuthority.impl(): GPUCorePrimitiveRRectGeometryAuthorityImpl =
+    this as GPUCorePrimitiveRRectGeometryAuthorityImpl
+
+/** Returns the immutable device RRect signed by analysis, without repeating normalization. */
+fun GPUCorePrimitiveRRectGeometryAuthority.sealedDeviceGeometryInput(): GPUCorePrimitiveGeometryInput.RRect =
+    GPUCorePrimitiveRRectGeometryAuthority.sealedDeviceGeometryInput(this)
+
+/** Exact fill authority retained for path stencil-cover materialization. */
+enum class GPUCorePrimitiveFillRule {
+    Winding,
+    EvenOdd,
+}
+
+/** Geometry preparation strategy already selected before native materialization. */
+enum class GPUCorePrimitiveGeometryMode {
+    DirectTriangles,
+    StencilEdgeFan,
+    StrokeStencilEdgeFan,
+}
+
+/** Geometry coverage authority retained independently from paint blending. */
+enum class GPUCorePrimitiveCoverageMode {
+    FullOrScissor,
+    ScalarAA,
+    Stencil1x,
+    StencilAA,
+}
+
+/** Closed proof for the only stroke outlines currently demonstrated exact. */
+enum class GPUCorePrimitiveStrokeLoweringProof {
+    SingleSegmentButtV1,
+    SingleSegmentSquareV1,
+}
+
+/** Exact source stroke facts plus the named lowering implementation that consumed them. */
+data class GPUCorePrimitiveStrokeStyle(
+    val width: Float,
+    val cap: String,
+    val join: String,
+    val miterLimit: Float,
+    val dashIntervals: List<Float>,
+    val dashPhase: Float,
+    val loweringProof: GPUCorePrimitiveStrokeLoweringProof,
+) {
+    init {
+        require(width.isFinite() && width >= 0f) { "Core stroke width must be finite and non-negative" }
+        require(cap in setOf("butt", "round", "square")) { "Core stroke cap must be butt, round, or square" }
+        require(join in setOf("miter", "round", "bevel")) { "Core stroke join must be miter, round, or bevel" }
+        require(miterLimit.isFinite() && miterLimit >= 0f) { "Core stroke miter limit must be finite and non-negative" }
+        require(dashIntervals.all { it.isFinite() && it > 0f }) {
+            "Core stroke dash intervals must be finite and positive"
+        }
+        require(dashPhase.isFinite()) { "Core stroke dash phase must be finite" }
+    }
+}
+
+/** Handle-free device-space geometry consumed by the sole native core materializer. */
+sealed interface GPUCorePrimitiveGeometry {
+    val canonicalType: String
+
+    class Rect internal constructor(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "Rect"
+    }
+
+    class RRect internal constructor(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        radii: List<Float>,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "RRect"
+        val radii: List<Float> = immutableList(radii)
+    }
+
+    class TriangulatedPath internal constructor(
+        vertices: List<Float>,
+        indices: List<Int>,
+        sourceContourStarts: List<Int>,
+        val sourceVertexCount: Int,
+        val coverBounds: GPUPixelBounds,
+        val geometryMode: GPUCorePrimitiveGeometryMode,
+        val fillRule: GPUCorePrimitiveFillRule,
+        val inverseFill: Boolean,
+        strokeStyle: GPUCorePrimitiveStrokeStyle?,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "TriangulatedPath"
+        val vertices: List<Float> = immutableList(vertices)
+        val indices: List<Int> = immutableList(indices)
+        val sourceContourStarts: List<Int> = immutableList(sourceContourStarts)
+        val strokeStyle: GPUCorePrimitiveStrokeStyle? = strokeStyle?.copy(
+            dashIntervals = immutableList(strokeStyle.dashIntervals),
+        )
+    }
+}
+
+/** Construction input whose mutable collections are snapshotted by the gatherer. */
+data class GPUCorePrimitivePayloadInput(
+    val commandIdValue: Int,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val premultipliedRgba: List<Float>,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String? = null,
+    val blendPlanIdentity: String,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+    val analysisRecordId: String? = null,
+    val analysisCommandFamily: String? = null,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    /** New material authority; null preserves the pre-Task-2 solid constructor surface. */
+    val material: GPUCorePrimitiveMaterialPayload? = null,
+) {
+    /** Preserves the pre-material JVM constructor descriptor. */
+    constructor(
+        commandIdValue: Int,
+        sourceFamily: GPUCorePrimitiveSourceFamily,
+        geometry: GPUCorePrimitiveGeometryInput,
+        premultipliedRgba: List<Float>,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+        clipCoveragePlan: GPUClipCoveragePlan,
+        clipExecutionPlanIdentity: String?,
+        blendPlanIdentity: String,
+        frameProvenance: GPUFrameProvenance,
+        coverageMode: GPUCorePrimitiveCoverageMode,
+        analysisRecordId: String?,
+        analysisCommandFamily: String?,
+        rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+        rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+        rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    ) : this(
+        commandIdValue,
+        sourceFamily,
+        geometry,
+        premultipliedRgba,
+        targetBounds,
+        scissorBounds,
+        clipCoveragePlan,
+        clipExecutionPlanIdentity,
+        blendPlanIdentity,
+        frameProvenance,
+        coverageMode,
+        analysisRecordId,
+        analysisCommandFamily,
+        rectRouteAuthority,
+        rectGeometryAuthority,
+        rrectGeometryAuthority,
+        null,
+    )
+}
+
+/** Closed geometry input; callers cannot smuggle backend handles into frame planning. */
+sealed interface GPUCorePrimitiveGeometryInput {
+    data class Rect(val left: Float, val top: Float, val right: Float, val bottom: Float) :
+        GPUCorePrimitiveGeometryInput
+
+    data class RRect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val radii: List<Float>,
+    ) : GPUCorePrimitiveGeometryInput
+
+    data class TriangulatedPath(
+        val vertices: List<Float>,
+        val indices: List<Int>,
+        val sourceContourStarts: List<Int>,
+        val sourceVertexCount: Int,
+        val coverBounds: GPUPixelBounds,
+        val geometryMode: GPUCorePrimitiveGeometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        val fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
+        val inverseFill: Boolean = false,
+        val strokeStyle: GPUCorePrimitiveStrokeStyle? = null,
+    ) : GPUCorePrimitiveGeometryInput
+}
+
+/** Typed proof tying one layer to one exact packed atlas placement and strike. */
+data class GPUColorGlyphAtlasPlacementProofInput(
+    val atlasArtifactKey: GPUTextArtifactKey,
+    val strikeGlyphId: Int,
+    val strikeSize: Float,
+    val strikeSubpixelX: Int,
+    val strikeSubpixelY: Int,
+    val atlasBounds: GPUPixelBounds,
 )
+
+/** Immutable placement proof retained by the semantic payload. */
+class GPUColorGlyphAtlasPlacementProof internal constructor(input: GPUColorGlyphAtlasPlacementProofInput) {
+    val atlasArtifactKey: GPUTextArtifactKey = input.atlasArtifactKey.copy()
+    val strikeGlyphId: Int = input.strikeGlyphId
+    val strikeSize: Float = input.strikeSize
+    val strikeSubpixelX: Int = input.strikeSubpixelX
+    val strikeSubpixelY: Int = input.strikeSubpixelY
+    val atlasBounds: GPUPixelBounds = input.atlasBounds
+}
+
+/** Mutable-boundary layer input consumed and snapshotted by [GPUColorGlyphPayloadGatherer]. */
+data class GPUColorGlyphLayerPayloadInput(
+    /** Boundary proof that this ordered layer belongs to the enclosing color-glyph plan. */
+    val planArtifactKey: GPUTextArtifactKey,
+    val layerGlyphID: UInt,
+    val paletteIndex: Int,
+    val atlasBounds: GPUPixelBounds,
+    val deviceBounds: GPUPixelBounds,
+    val premultipliedRgba: FloatArray,
+    val useForeground: Boolean,
+    val foregroundResolved: Boolean,
+    val placementProof: GPUColorGlyphAtlasPlacementProofInput,
+    val colorLayerIndex: Int? = null,
+)
+
+/** Immutable, handle-free color-glyph layer retained through frame planning. */
+class GPUColorGlyphLayerPayload internal constructor(input: GPUColorGlyphLayerPayloadInput) {
+    val layerGlyphID: UInt = input.layerGlyphID
+    val paletteIndex: Int = input.paletteIndex
+    val atlasBounds: GPUPixelBounds = input.atlasBounds
+    val deviceBounds: GPUPixelBounds = input.deviceBounds
+    val premultipliedRgba: List<Float> = immutableList(input.premultipliedRgba.toList())
+    val useForeground: Boolean = input.useForeground
+    val foregroundResolved: Boolean = input.foregroundResolved
+    val placementProof: GPUColorGlyphAtlasPlacementProof = GPUColorGlyphAtlasPlacementProof(input.placementProof)
+    val colorLayerIndex: Int? = input.colorLayerIndex
+}
+
+/** Mutable-boundary input for one exact prepared A8 text sub-run. */
+data class GPUPreparedTextDeviceToLocalAffine(
+    val m00: Float,
+    val m01: Float,
+    val m02: Float,
+    val m10: Float,
+    val m11: Float,
+    val m12: Float,
+) {
+    init {
+        require(isFinite()) {
+            "Prepared text device-to-local affine must contain only finite coefficients"
+        }
+    }
+
+    fun rawBits(): List<Int> = immutableList(
+        listOf(m00, m01, m02, m10, m11, m12).map(Float::toRawBits),
+    )
+
+    internal fun isFinite(): Boolean =
+        m00.isFinite() &&
+            m01.isFinite() &&
+            m02.isFinite() &&
+            m10.isFinite() &&
+            m11.isFinite() &&
+            m12.isFinite()
+}
+
+/** Mutable-boundary input for one exact prepared A8 text sub-run. */
+data class GPUPreparedTextA8PayloadInput(
+    val commandIdValue: Int,
+    val atlas: GPUPreparedR8UploadArtifact,
+    val atlasGeneration: GPUTextArtifactGeneration,
+    val pageIndex: Int,
+    val instances: List<GPUTextA8Instance>,
+    val material: GPUPreparedMaterialProgram,
+    val deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipIdentity: String,
+    val blendPlanIdentity: String,
+    val capabilitySnapshotHash: String,
+    val frameProvenance: GPUFrameProvenance,
+)
+
+/** Mutable-boundary input for one exact prepared COLRv0 text sub-run. */
+data class GPUPreparedColorGlyphPayloadInput(
+    val commandIdValue: Int,
+    val planArtifactKey: GPUTextArtifactKey,
+    val atlasArtifactKey: GPUTextArtifactKey,
+    val atlas: GPUPreparedR8UploadArtifact,
+    val instances: List<GPUTextA8Instance>,
+    val layers: List<GPUColorGlyphLayerPayloadInput>,
+    val material: GPUPreparedMaterialProgram,
+    val globalPaintAlpha: Float = material.paintAlpha,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipIdentity: String,
+    val blendPlanIdentity: String,
+    val capabilitySnapshotHash: String,
+    val frameProvenance: GPUFrameProvenance,
+)
+
+/** Closed, handle-free semantic payload retained from gathering through preflight. */
+sealed interface GPUDrawSemanticPayload {
+    val canonicalType: String
+    val payloadRef: GPUDrawPayloadRef
+
+    /** Exact solid rectangle block packed by [GPUSolidPayloadGatherer]. */
+    class SolidRect internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SolidRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
+    /** Exact core geometry, material, target, and typed clip plan for Slice 12A. */
+    class CorePrimitive internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val sourceFamily: GPUCorePrimitiveSourceFamily,
+        val geometry: GPUCorePrimitiveGeometry,
+        premultipliedRgba: List<Float>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val clipCoveragePlan: GPUClipCoveragePlan,
+        val clipExecutionPlanIdentity: String? = null,
+        val blendPlanIdentity: String,
+        val frameProvenance: GPUFrameProvenance,
+        canonicalHash: String? = null,
+        val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+        val analysisRecordId: String? = null,
+        val analysisCommandFamily: String? = null,
+        val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
+        val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+        val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        material: GPUCorePrimitiveMaterialPayload? = null,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "CorePrimitive"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        val material: GPUCorePrimitiveMaterialPayload = material
+            ?: payloadRef.corePrimitiveMaterial
+            ?: GPUCorePrimitiveMaterialPayload.SolidColor(this.premultipliedRgba)
+        private val suppliedCanonicalHash: String? = canonicalHash
+        val canonicalHash: String by lazy {
+            suppliedCanonicalHash ?: corePrimitiveCanonicalHash(
+                payloadRef = this.payloadRef,
+                sourceFamily = sourceFamily,
+                geometry = geometry,
+                premultipliedRgba = this.premultipliedRgba,
+                material = this.material,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+                frameProvenance = frameProvenance,
+                coverageMode = coverageMode,
+                analysisRecordId = analysisRecordId,
+                analysisCommandFamily = analysisCommandFamily,
+                rectRouteAuthority = rectRouteAuthority,
+                rectGeometryAuthority = rectGeometryAuthority,
+                rrectGeometryAuthority = rrectGeometryAuthority,
+            )
+        }
+
+        internal fun hasStructuralIntegrity(): Boolean =
+            payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.byteSize == corePrimitiveUniformByteSize(material).toLong() &&
+                payloadRef.uniformBlock.bytes.size == corePrimitiveUniformByteSize(material) &&
+                payloadRef.uniformBlock.bytes == corePrimitiveUniformBytes(targetBounds, material) &&
+                (payloadRef.corePrimitiveMaterial == null || payloadRef.corePrimitiveMaterial == material) &&
+                (material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    material.premultipliedRgba == premultipliedRgba ||
+                    material !is GPUCorePrimitiveMaterialPayload.SolidColor) &&
+                premultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(scissorBounds) &&
+                clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
+                (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
+                hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
+                    payloadRef.commandIdValue,
+                    sourceFamily,
+                    geometry,
+                    targetBounds,
+                    coverageMode,
+                    analysisRecordId,
+                    analysisCommandFamily,
+                    rectRouteAuthority,
+                    rectGeometryAuthority,
+                    rrectGeometryAuthority,
+                )
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            hasStructuralIntegrity() &&
+                (suppliedCanonicalHash == null || suppliedCanonicalHash == corePrimitiveCanonicalHash(
+                    payloadRef = payloadRef,
+                    sourceFamily = sourceFamily,
+                    geometry = geometry,
+                    premultipliedRgba = premultipliedRgba,
+                    material = material,
+                    targetBounds = targetBounds,
+                    scissorBounds = scissorBounds,
+                    clipCoveragePlan = clipCoveragePlan,
+                    clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                    blendPlanIdentity = blendPlanIdentity,
+                    frameProvenance = frameProvenance,
+                    coverageMode = coverageMode,
+                    analysisRecordId = analysisRecordId,
+                    analysisCommandFamily = analysisCommandFamily,
+                    rectRouteAuthority = rectRouteAuthority,
+                    rectGeometryAuthority = rectGeometryAuthority,
+                    rrectGeometryAuthority = rrectGeometryAuthority,
+                ))
+
+        internal fun withClipExecutionPlanIdentity(identity: String): CorePrimitive {
+            require(identity.isNotBlank()) { "Core clip execution plan identity must not be blank" }
+            if (clipExecutionPlanIdentity == identity) return this
+            return CorePrimitive(
+                payloadRef = payloadRef,
+                sourceFamily = sourceFamily,
+                geometry = geometry,
+                premultipliedRgba = premultipliedRgba,
+                material = material,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = identity,
+                blendPlanIdentity = blendPlanIdentity,
+                frameProvenance = frameProvenance,
+                coverageMode = coverageMode,
+                analysisRecordId = analysisRecordId,
+                analysisCommandFamily = analysisCommandFamily,
+                rectRouteAuthority = rectRouteAuthority,
+                rectGeometryAuthority = rectGeometryAuthority,
+                rrectGeometryAuthority = rrectGeometryAuthority,
+            )
+        }
+    }
+
+    /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */
+    class RegisteredUniformRect internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val program: GPURegisteredUniformProgram,
+        uniformBytes: List<Int>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "RegisteredUniformRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val uniformBytes: List<Int> = immutableList(uniformBytes)
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            payloadRef.uniformBlock?.let { block ->
+                payloadRef.uniformSlot?.fingerprint == block.fingerprint &&
+                    block.bytes == uniformBytes &&
+                    block.byteSize == program.uniformByteSize.toLong() &&
+                    uniformBytes.size == program.uniformByteSize &&
+                    uniformBytes.all { it in 0..255 } &&
+                    canonicalHash == sha256Hex(
+                        registeredUniformRectCanonicalPreimage(
+                            payloadRef,
+                            program,
+                            uniformBytes,
+                            targetBounds,
+                            scissorBounds,
+                        ),
+                    )
+            } == true
+    }
+
+    /** Immutable input, kernel, and attachment facts for one bounded three-pass blur. */
+    class SeparableBlurRect internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        sourcePremultipliedRgba: List<Float>,
+        clearPremultipliedRgba: List<Float>,
+        val sourceBounds: GPUPixelBounds,
+        val targetBounds: GPUPixelBounds,
+        val effectiveSigma: Float,
+        val tapCount: Int,
+        weights: List<Float>,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SeparableBlurRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val sourcePremultipliedRgba: List<Float> = immutableList(sourcePremultipliedRgba)
+        val clearPremultipliedRgba: List<Float> = immutableList(clearPremultipliedRgba)
+        val weights: List<Float> = immutableList(weights)
+
+        fun hasCanonicalHashIntegrity(): Boolean {
+            val expectedBytes = separableBlurRectPayloadBytes(
+                sourcePremultipliedRgba,
+                clearPremultipliedRgba,
+                effectiveSigma,
+                tapCount,
+                weights,
+            )
+            return sourcePremultipliedRgba.isPremultipliedRgba() &&
+                clearPremultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(sourceBounds) &&
+                effectiveSigma.isFinite() && effectiveSigma in 0.5f..12f &&
+                tapCount in 3..25 && tapCount % 2 == 1 &&
+                weights.size == 25 && weights.all { it.isFinite() && it >= 0f } &&
+                kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f &&
+                weights.drop(tapCount).all { it == 0f } &&
+                payloadRef.renderStepIdentity == SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.bytes == expectedBytes &&
+                canonicalHash == sha256Hex(
+                    separableBlurRectCanonicalPreimage(
+                        payloadRef,
+                        sourcePremultipliedRgba,
+                        clearPremultipliedRgba,
+                        sourceBounds,
+                        targetBounds,
+                        effectiveSigma,
+                        tapCount,
+                        weights,
+                    ),
+                )
+        }
+    }
+
+    /** Closed sampled-image semantic, retained without native texture or sampler handles. */
+    class SampledImage internal constructor(input: GPUPreparedImagePayloadInput) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SampledImage"
+        override val payloadRef: GPUDrawPayloadRef = input.payloadRef.deepSnapshot()
+        private val snapshot = GPUPreparedImagePayloadSnapshot(input.copy(payloadRef = payloadRef))
+        val artifact = snapshot.artifact
+        val geometry = snapshot.geometry
+        val sampling = snapshot.sampling
+        val tintPremultipliedRgba: List<Float> = snapshot.tintPremultipliedRgba
+        val atlasColorPremultipliedRgba: List<Float>? = snapshot.atlasColorPremultipliedRgba
+        val atlasSourceBlend = snapshot.atlasSourceBlend
+        val targetBounds = snapshot.targetBounds
+        val scissorBounds = snapshot.scissorBounds
+        val blendPlanIdentity = snapshot.blendPlanIdentity
+        val frameProvenance = snapshot.frameProvenance
+        val pipelineKey: GPUPreparedImagePipelineKey = snapshot.toInput().pipelineKey()
+        val artifactUploadFormat: String = snapshot.artifactUploadFormat
+        val artifactUploadEncoding: String = snapshot.artifactUploadEncoding
+        val shaderInterpretation: String = snapshot.shaderInterpretation
+        val canonicalHash: String = snapshot.toInput().canonicalHash()
+
+        fun stableDumpLine(): String = snapshot.toInput().stableDumpLine(canonicalHash)
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            canonicalHash == snapshot.toInput().canonicalHash()
+    }
+
+    /** Closed prepared vertices semantic with no native or cache state. */
+    class Vertices internal constructor(
+        private val snapshot: GPUPreparedVerticesPayloadSnapshot,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "Vertices"
+        override val payloadRef: GPUDrawPayloadRef = snapshot.payloadRef
+        val artifact = snapshot.artifact
+        val material = snapshot.material
+        val materialIdentity = snapshot.materialIdentity
+        val topologyIdentity: GPUPreparedVerticesTopologyIdentity = snapshot.topologyIdentity
+        val transformBytes: List<Int> = snapshot.transformBytes
+        val targetBounds = snapshot.targetBounds
+        val scissorBounds = snapshot.scissorBounds
+        val targetFormat = snapshot.targetFormat
+        val clipIdentity = snapshot.clipIdentity
+        val clipCoverageIdentity = snapshot.clipCoverageIdentity
+        val primitiveColorPresent = snapshot.primitiveColorPresent
+        val primitiveBlendIdentity = snapshot.primitiveBlendIdentity
+        val finalBlendIdentity = snapshot.finalBlendIdentity
+        val capabilitySnapshotHash = snapshot.capabilitySnapshotHash
+        val drawProvenance = snapshot.drawProvenance
+        val frameProvenance = snapshot.frameProvenance
+        val canonicalHash = snapshot.canonicalHash
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            canonicalHash == snapshot.canonicalHash()
+    }
+
+    /** Exact immutable A8 atlas, instances, material, and frame facts for one prepared text sub-run. */
+    class TextA8 internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val atlas: GPUPreparedR8UploadArtifact,
+        val atlasGeneration: GPUTextArtifactGeneration,
+        val pageIndex: Int,
+        instances: List<GPUTextA8Instance>,
+        material: GPUPreparedMaterialProgram,
+        deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val clipIdentity: String,
+        val blendPlanIdentity: String,
+        val capabilitySnapshotHash: String,
+        val frameProvenance: GPUFrameProvenance,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "TextA8"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val instances: List<GPUTextA8Instance> = immutableList(instances)
+        val material: GPUPreparedMaterialProgram = material.preparedTextSnapshot()
+        val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            canonicalHash == preparedTextA8CanonicalHash(
+                payloadRef = payloadRef,
+                atlas = atlas,
+                atlasGeneration = atlasGeneration,
+                pageIndex = pageIndex,
+                instances = instances,
+                material = material,
+                deviceToLocal = deviceToLocal,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipIdentity = clipIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+                capabilitySnapshotHash = capabilitySnapshotHash,
+                frameProvenance = frameProvenance,
+            )
+    }
+
+    /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
+    class ColorGlyph internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        planArtifactKey: GPUTextArtifactKey,
+        atlasArtifactKey: GPUTextArtifactKey,
+        val atlas: GPUPreparedR8UploadArtifact,
+        val atlasFormat: GPUColorGlyphAtlasFormat,
+        layers: List<GPUColorGlyphLayerPayload>,
+        vertexData: List<Float>,
+        indexData: List<Int>,
+        uniformBytes: List<Int>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        instances: List<GPUTextA8Instance> = emptyList(),
+        material: GPUPreparedMaterialProgram? = null,
+        val clipIdentity: String? = null,
+        val blendPlanIdentity: String? = null,
+        val capabilitySnapshotHash: String? = null,
+        val frameProvenance: GPUFrameProvenance? = null,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "ColorGlyph"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val planArtifactKey: GPUTextArtifactKey = planArtifactKey.copy()
+        val atlasArtifactKey: GPUTextArtifactKey = atlasArtifactKey.copy()
+        val atlasWidth: Int get() = atlas.width
+        val atlasHeight: Int get() = atlas.height
+        val atlasGeneration: Long get() = atlas.generation
+        val atlasA8Bytes: List<Int>
+            get() = atlas.tightBytesForUpload().map { byte -> byte.toInt() and 0xff }
+        /** SHA-256 derived from the exact immutable A8 snapshot, independent of caller artifact labels. */
+        val atlasBytesSha256: String = atlas.contentHash
+        val layers: List<GPUColorGlyphLayerPayload> = immutableList(layers)
+        val vertexData: List<Float> = immutableList(vertexData)
+        val indexData: List<Int> = immutableList(indexData)
+        val uniformBytes: List<Int> = immutableList(uniformBytes)
+        val instances: List<GPUTextA8Instance> = immutableList(instances)
+        val material: GPUPreparedMaterialProgram? = material?.preparedTextSnapshot()
+
+        fun stableDumpLines(): List<String> = immutableList(
+            listOf(
+                "payload.color-glyph hash=$canonicalHash command=${payloadRef.commandIdValue} " +
+                    "step=${payloadRef.renderStepIdentity} atlas=${atlasWidth}x$atlasHeight " +
+                    "format=${atlasFormat.gpuLabel} generation=$atlasGeneration " +
+                    "atlasKey=${atlas.key} atlasRowBytes=${atlas.rowBytes} " +
+                    "atlasBytesSha256=$atlasBytesSha256 " +
+                    "planArtifact=${planArtifactKey.dumpIdentity()} " +
+                    "atlasArtifact=${atlasArtifactKey.dumpIdentity()} " +
+                    "atlasBytes=${atlas.byteSize} vertices=${vertexData.size / 4} " +
+                    "indices=${indexData.size} uniformBytes=${uniformBytes.size} " +
+                    "target=$targetBounds scissor=$scissorBounds",
+            ) + layers.mapIndexed { index, layer ->
+                "payload.color-glyph.layer index=$index " +
+                    "sourceLayer=${layer.colorLayerIndex ?: "legacy"} " +
+                    "glyph=${layer.layerGlyphID} palette=${layer.paletteIndex} " +
+                    "atlasBounds=${layer.atlasBounds} " +
+                    "deviceBounds=${layer.deviceBounds.canonicalBounds()} " +
+                    "color=${layer.premultipliedRgba.joinToString(",")} " +
+                    "foreground=${layer.useForeground}:${layer.foregroundResolved} " +
+                    "strike=${layer.placementProof.strikeGlyphId}@${layer.placementProof.strikeSize}:" +
+                    "${layer.placementProof.strikeSubpixelX},${layer.placementProof.strikeSubpixelY}"
+            },
+        )
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            hasCanonicalColorGlyphUniformIntegrity(payloadRef, uniformBytes) &&
+                canonicalHash == sha256Hex(
+                    colorGlyphCanonicalPreimage(
+                        payloadRef,
+                        planArtifactKey,
+                        atlasArtifactKey,
+                        atlas.key,
+                        atlas.rowBytes,
+                        atlasWidth,
+                        atlasHeight,
+                        atlasFormat,
+                        atlasGeneration,
+                        atlasBytesSha256,
+                        layers,
+                        vertexData,
+                        indexData,
+                        uniformBytes,
+                        targetBounds,
+                        scissorBounds,
+                        instances,
+                        material,
+                        clipIdentity,
+                        blendPlanIdentity,
+                        capabilitySnapshotHash,
+                        frameProvenance,
+                    ),
+                )
+    }
+    /** Immutable plan, kernel, local-geometry, and scene-shade facts of one top-level mask blur draw. */
+    class MaskBlur internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val sourceFamily: String,
+        val deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+        val localWidth: Int,
+        val localHeight: Int,
+        val scale: Float,
+        val style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+        val effectiveSigma: Float,
+        val tapCount: Int,
+        weights: List<Float>,
+        val localGeometry: GPUMaskBlurLocalGeometry,
+        premultipliedRgba: List<Float>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val clipCoveragePlan: GPUClipCoveragePlan,
+        val clipExecutionPlanIdentity: String?,
+        val blendPlanIdentity: String,
+        canonicalHash: String? = null,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "MaskBlur"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val weights: List<Float> = immutableList(weights)
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+        private val suppliedCanonicalHash: String? = canonicalHash
+        val canonicalHash: String by lazy {
+            suppliedCanonicalHash ?: maskBlurCanonicalPreimage(
+                payloadRef = this.payloadRef,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = this.weights,
+                localGeometry = localGeometry,
+                premultipliedRgba = this.premultipliedRgba,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload()
+        }
+
+        internal fun hasStructuralIntegrity(): Boolean =
+            payloadRef.renderStepIdentity == MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.byteSize == MASK_BLUR_PAYLOAD_BYTES.toLong() &&
+                payloadRef.uniformBlock.bytes.size == MASK_BLUR_PAYLOAD_BYTES &&
+                payloadRef.uniformBlock.bytes == maskBlurPayloadBytes(
+                    deviceBounds,
+                    premultipliedRgba,
+                    style,
+                    scale,
+                    effectiveSigma,
+                    tapCount,
+                    localWidth,
+                    localHeight,
+                    localGeometry,
+                ) &&
+                sourceFamily in setOf("FillRect", "FillRRect", "FillPath") &&
+                deviceBounds.left.isFinite() && deviceBounds.top.isFinite() &&
+                deviceBounds.right.isFinite() && deviceBounds.bottom.isFinite() &&
+                deviceBounds.right > deviceBounds.left && deviceBounds.bottom > deviceBounds.top &&
+                localWidth > 0 && localHeight > 0 && scale > 0f && scale.isFinite() &&
+                effectiveSigma.isFinite() && effectiveSigma >= 0.5f &&
+                tapCount in 3..25 && tapCount % 2 == 1 &&
+                weights.size == 25 &&
+                weights.all { it.isFinite() && it >= 0f } &&
+                kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f &&
+                weights.drop(tapCount).all { it == 0f } &&
+                premultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(scissorBounds) &&
+                clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
+                (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
+                blendPlanIdentity.isNotBlank()
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            hasStructuralIntegrity() && canonicalHash == maskBlurCanonicalPreimage(
+                payloadRef = payloadRef,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = weights,
+                localGeometry = localGeometry,
+                premultipliedRgba = premultipliedRgba,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload()
+    }
+
+}
+
+/** Gathers one immutable prepared A8 text semantic without allocating native resources. */
+class GPUPreparedTextPayloadGatherer {
+    fun gather(input: GPUPreparedTextA8PayloadInput): GPUDrawSemanticPayload.TextA8 {
+        require(input.commandIdValue >= 0) { "Prepared text command id must be non-negative" }
+        require(input.atlasGeneration.value.toLong() == input.atlas.generation) {
+            "Prepared text atlas generation must match the shared R8 artifact"
+        }
+        require(input.pageIndex >= 0) { "Prepared text page index must be non-negative" }
+        require(input.instances.isNotEmpty()) {
+            "Prepared text A8 payload must contain at least one instance"
+        }
+        require(input.instances.all { instance ->
+            instance.pageIndex == input.pageIndex &&
+                instance.colorLayerIndex == null &&
+                instance.deviceQuad.size == 8 &&
+                instance.deviceQuad.all(Float::isFinite)
+        }) {
+            "Prepared text A8 instances must be finite non-color atlas instances"
+        }
+        require(input.targetBounds.left == 0 && input.targetBounds.top == 0 && !input.targetBounds.isEmpty) {
+            "Prepared text target bounds must be a non-empty zero-origin extent"
+        }
+        require(!input.scissorBounds.isEmpty && input.scissorBounds.isContainedBy(input.targetBounds)) {
+            "Prepared text scissor bounds must be non-empty and contained by the target"
+        }
+        require(input.clipIdentity.isNotBlank()) { "Prepared text clip identity must not be blank" }
+        require(input.blendPlanIdentity.isNotBlank()) { "Prepared text blend identity must not be blank" }
+        require(input.capabilitySnapshotHash.isNotBlank()) {
+            "Prepared text capability snapshot hash must not be blank"
+        }
+        require(input.deviceToLocal.isFinite()) {
+            "Prepared text device-to-local affine must contain only finite coefficients"
+        }
+
+        val payloadRef = GPUDrawPayloadRef(
+            commandIdValue = input.commandIdValue,
+            renderStepIdentity = TEXT_A8_RENDER_STEP_IDENTITY,
+        )
+        val instances = immutableList(input.instances)
+        val material = input.material.preparedTextSnapshot()
+        return GPUDrawSemanticPayload.TextA8(
+            payloadRef = payloadRef,
+            atlas = input.atlas,
+            atlasGeneration = input.atlasGeneration,
+            pageIndex = input.pageIndex,
+            instances = instances,
+            material = material,
+            deviceToLocal = input.deviceToLocal.copy(),
+            targetBounds = input.targetBounds,
+            scissorBounds = input.scissorBounds,
+            clipIdentity = input.clipIdentity,
+            blendPlanIdentity = input.blendPlanIdentity,
+            capabilitySnapshotHash = input.capabilitySnapshotHash,
+            frameProvenance = input.frameProvenance,
+            canonicalHash = preparedTextA8CanonicalHash(
+                payloadRef = payloadRef,
+                atlas = input.atlas,
+                atlasGeneration = input.atlasGeneration,
+                pageIndex = input.pageIndex,
+                instances = instances,
+                material = material,
+                deviceToLocal = input.deviceToLocal,
+                targetBounds = input.targetBounds,
+                scissorBounds = input.scissorBounds,
+                clipIdentity = input.clipIdentity,
+                blendPlanIdentity = input.blendPlanIdentity,
+                capabilitySnapshotHash = input.capabilitySnapshotHash,
+                frameProvenance = input.frameProvenance,
+            ),
+        )
+    }
+}
+
+const val TEXT_A8_RENDER_STEP_IDENTITY: String = "text.a8_mask.sample"
+
+/** Gathers one immutable Slice 12A semantic without allocating native resources. */
+class GPUCorePrimitivePayloadGatherer {
+    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive {
+        require(input.commandIdValue >= 0) { "Core primitive command id must be non-negative" }
+        require(input.premultipliedRgba.isPremultipliedRgba()) {
+            "Core primitive color must be finite premultiplied RGBA"
+        }
+        require(input.targetBounds.left == 0 && input.targetBounds.top == 0 &&
+            input.targetBounds.right > 0 && input.targetBounds.bottom > 0) {
+            "Core primitive target must be a non-empty zero-origin target"
+        }
+        require(input.targetBounds.containsRegisteredUniformRect(input.scissorBounds)) {
+            "Core primitive scissor must be non-empty and contained by its target"
+        }
+        require(input.clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
+            "Refused clip coverage cannot enter a core semantic payload"
+        }
+        require(input.blendPlanIdentity.isNotBlank()) {
+            "Core primitive blend identity must not be blank"
+        }
+
+        val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
+        require(
+            hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
+                input.commandIdValue,
+                input.sourceFamily,
+                geometry,
+                input.targetBounds,
+                input.coverageMode,
+                input.analysisRecordId,
+                input.analysisCommandFamily,
+                input.rectRouteAuthority,
+                input.rectGeometryAuthority,
+                input.rrectGeometryAuthority,
+            ),
+        ) {
+            "Core primitive analysis authority must match source family, identity, and exact geometry"
+        }
+        val color = input.premultipliedRgba.toList()
+        val material = input.material ?: GPUCorePrimitiveMaterialPayload.SolidColor(color)
+        if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
+            require(material.premultipliedRgba == color) {
+                "Core primitive solid material must match premultiplied RGBA"
+            }
+        }
+        val uniformBytes = corePrimitiveUniformBytes(input.targetBounds, material)
+        val fingerprint = corePrimitiveUniformFingerprint(uniformBytes)
+        val gradient = material !is GPUCorePrimitiveMaterialPayload.SolidColor
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = if (gradient) {
+                "core-primitive.gradient-uniform592-v1"
+            } else {
+                "core-primitive.uniform32-v1"
+            },
+            byteSize = corePrimitiveUniformByteSize(material).toLong(),
+            zeroedPadding = true,
+            scope = "pass.core-primitive.prepared",
+            bytes = uniformBytes,
+            fields = corePrimitiveUniformFields(material),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = input.commandIdValue,
+            renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("core-primitive:${input.commandIdValue}"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            ),
+            uniformBlock = block,
+            corePrimitiveMaterial = material,
+        )
+        return GPUDrawSemanticPayload.CorePrimitive(
+            payloadRef = ref,
+            sourceFamily = input.sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = color,
+            material = material,
+            targetBounds = input.targetBounds,
+            scissorBounds = input.scissorBounds,
+            clipCoveragePlan = input.clipCoveragePlan.snapshot(),
+            clipExecutionPlanIdentity = input.clipExecutionPlanIdentity,
+            blendPlanIdentity = input.blendPlanIdentity,
+            frameProvenance = input.frameProvenance,
+            coverageMode = input.coverageMode,
+            analysisRecordId = input.analysisRecordId,
+            analysisCommandFamily = input.analysisCommandFamily,
+            rectRouteAuthority = input.rectRouteAuthority,
+            rectGeometryAuthority = input.rectGeometryAuthority,
+            rrectGeometryAuthority = input.rrectGeometryAuthority,
+        )
+    }
+}
+
+private const val CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX = "core-primitive.uniform32-v1:"
+private const val CORE_PRIMITIVE_GRADIENT_UNIFORM_FINGERPRINT_PREFIX =
+    "core-primitive.gradient-uniform592-v1:"
+private const val LOWERCASE_HEX_DIGITS = "0123456789abcdef"
+
+internal fun corePrimitiveUniformFingerprint(uniformBytes: List<Int>): GPUPayloadFingerprint {
+    require(uniformBytes.size == CORE_PRIMITIVE_UNIFORM_BYTES ||
+        uniformBytes.size == CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES) {
+        "Core primitive uniform fingerprint requires a supported fixed payload size"
+    }
+    require(uniformBytes.all { byte -> byte in 0..255 }) {
+        "Core primitive uniform fingerprint bytes must be unsigned"
+    }
+    return GPUPayloadFingerprint(
+        buildString(CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX.length + uniformBytes.size * 2) {
+            append(
+                if (uniformBytes.size == CORE_PRIMITIVE_UNIFORM_BYTES) {
+                    CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX
+                } else {
+                    CORE_PRIMITIVE_GRADIENT_UNIFORM_FINGERPRINT_PREFIX
+                },
+            )
+            uniformBytes.forEach { byte ->
+                append(LOWERCASE_HEX_DIGITS[byte ushr 4])
+                append(LOWERCASE_HEX_DIGITS[byte and 0x0f])
+            }
+        },
+    )
+}
+
+private fun GPUCorePrimitiveRectGeometryAuthority?.canonicalPreimage(): String =
+    this?.let { authority ->
+        GPUCorePrimitiveRectGeometryAuthority.canonicalPreimage(authority)
+    } ?: "none"
+
+private fun GPUCorePrimitiveRRectGeometryAuthority?.canonicalPreimage(): String =
+    this?.let { authority ->
+        GPUCorePrimitiveRRectGeometryAuthority.canonicalPreimage(authority)
+    } ?: "none"
+
+private fun corePrimitiveCanonicalHash(
+    payloadRef: GPUDrawPayloadRef,
+    sourceFamily: GPUCorePrimitiveSourceFamily,
+    geometry: GPUCorePrimitiveGeometry,
+    premultipliedRgba: List<Float>,
+    material: GPUCorePrimitiveMaterialPayload,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    clipCoveragePlan: GPUClipCoveragePlan,
+    clipExecutionPlanIdentity: String?,
+    blendPlanIdentity: String,
+    frameProvenance: GPUFrameProvenance,
+    coverageMode: GPUCorePrimitiveCoverageMode,
+    analysisRecordId: String?,
+    analysisCommandFamily: String?,
+    rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+): String = sha256Hex(
+    listOf(
+        "type=CorePrimitive",
+        "command=${payloadRef.commandIdValue}",
+        "family=${sourceFamily.name}",
+        "analysis=${analysisRecordId ?: "none"}",
+        "commandFamily=${analysisCommandFamily ?: "none"}",
+        "rectRoute=${rectRouteAuthority?.name ?: "none"}",
+        "rectGeometryAuthority=${rectGeometryAuthority.canonicalPreimage()}",
+        "rrectGeometryAuthority=${rrectGeometryAuthority.canonicalPreimage()}",
+        "fingerprint=${requireNotNull(payloadRef.uniformBlock).fingerprint.value}",
+        "geometry=${geometry.canonicalPreimage()}",
+        "color=${premultipliedRgba.joinToString(",")}",
+        "material=${material.canonicalPreimage()}",
+        "target=${targetBounds.canonicalBounds()}",
+        "scissor=${scissorBounds.canonicalBounds()}",
+        "clip=${clipCoveragePlan.canonicalPreimage()}",
+        "clipExecution=${clipExecutionPlanIdentity ?: "none"}",
+        "blend=$blendPlanIdentity",
+        "provenance=${frameProvenance.annotationValue}",
+        "coverage=${coverageMode.name}",
+    ).joinToString("\n"),
+)
+
+private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
+    commandIdValue: Int,
+    sourceFamily: GPUCorePrimitiveSourceFamily,
+    geometry: GPUCorePrimitiveGeometry,
+    targetBounds: GPUPixelBounds,
+    coverageMode: GPUCorePrimitiveCoverageMode,
+    analysisRecordId: String?,
+    analysisCommandFamily: String?,
+    rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+): Boolean {
+    return when (sourceFamily) {
+        GPUCorePrimitiveSourceFamily.Rect -> {
+            if (rectRouteAuthority == null ||
+                rectGeometryAuthority == null ||
+                rrectGeometryAuthority != null ||
+                analysisRecordId != "analysis.fill_rect.$commandIdValue" ||
+                analysisCommandFamily != "FillRect"
+            ) return false
+            when (rectRouteAuthority) {
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
+                    geometry is GPUCorePrimitiveGeometry.Rect &&
+                        coverageMode in setOf(
+                            GPUCorePrimitiveCoverageMode.FullOrScissor,
+                            GPUCorePrimitiveCoverageMode.ScalarAA,
+                        ) &&
+                        GPUCorePrimitiveRectGeometryAuthority.hasExactAxisAlignedDeviceGeometry(
+                            rectGeometryAuthority,
+                            geometry,
+                        )
+                GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 -> {
+                    val triangles = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+                    coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                        triangles.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+                        triangles.vertices.size == 8 &&
+                        triangles.indices == listOf(0, 1, 2, 0, 2, 3) &&
+                        triangles.sourceContourStarts == listOf(0) &&
+                        triangles.sourceVertexCount == 4 &&
+                        triangles.fillRule == GPUCorePrimitiveFillRule.Winding &&
+                        !triangles.inverseFill && triangles.strokeStyle == null &&
+                        GPUCorePrimitiveRectGeometryAuthority.hasExactAffineDeviceGeometry(
+                            rectGeometryAuthority,
+                            triangles,
+                            targetBounds,
+                        )
+                }
+            }
+        }
+        GPUCorePrimitiveSourceFamily.RRect -> {
+            val rrect = geometry as? GPUCorePrimitiveGeometry.RRect ?: return false
+            rectRouteAuthority == null &&
+                rectGeometryAuthority == null &&
+                rrectGeometryAuthority != null &&
+                analysisRecordId == "analysis.fill_rrect.$commandIdValue" &&
+                analysisCommandFamily == "FillRRect" &&
+                coverageMode in setOf(
+                    GPUCorePrimitiveCoverageMode.FullOrScissor,
+                    GPUCorePrimitiveCoverageMode.ScalarAA,
+                ) &&
+                GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    rrectGeometryAuthority,
+                    rrect,
+                )
+        }
+        else ->
+            rectRouteAuthority == null &&
+                rectGeometryAuthority == null &&
+                rrectGeometryAuthority == null &&
+                analysisRecordId == null &&
+                analysisCommandFamily == null
+    }
+}
+
+private data class GPUCorePrimitiveExactTransform(
+    val translateX: Float,
+    val translateY: Float,
+    val scaleX: Float,
+    val scaleY: Float,
+    val skewX: Float,
+    val skewY: Float,
+) {
+    val hasSkew: Boolean get() = skewX != 0f || skewY != 0f
+}
+
+private data class GPUCorePrimitiveTransformedRectCorners(
+    val leftTopX: Float,
+    val leftTopY: Float,
+    val rightTopX: Float,
+    val rightTopY: Float,
+    val rightBottomX: Float,
+    val rightBottomY: Float,
+    val leftBottomX: Float,
+    val leftBottomY: Float,
+) {
+    val minX: Float = minOf(leftTopX, rightTopX, rightBottomX, leftBottomX)
+    val minY: Float = minOf(leftTopY, rightTopY, rightBottomY, leftBottomY)
+    val maxX: Float = maxOf(leftTopX, rightTopX, rightBottomX, leftBottomX)
+    val maxY: Float = maxOf(leftTopY, rightTopY, rightBottomY, leftBottomY)
+}
+
+private fun GPUCorePrimitiveExactTransform.hasFiniteNonZeroDeterminant(): Boolean {
+    val determinant = scaleX * scaleY - skewX * skewY
+    return determinant.isFinite() && determinant != 0f
+}
+
+private fun GPUCorePrimitiveTransformedRectCorners.toPixelCoverBounds(
+    target: GPUPixelBounds,
+): GPUPixelBounds? {
+    val left = kotlin.math.floor(minX).toInt().coerceIn(target.left, target.right)
+    val top = kotlin.math.floor(minY).toInt().coerceIn(target.top, target.bottom)
+    val right = kotlin.math.ceil(maxX).toInt().coerceIn(target.left, target.right)
+    val bottom = kotlin.math.ceil(maxY).toInt().coerceIn(target.top, target.bottom)
+    return GPUPixelBounds(left, top, right, bottom).takeIf {
+        it.left < it.right && it.top < it.bottom
+    }
+}
+
+private fun Float.hasSameRawBits(other: Float): Boolean = toRawBits() == other.toRawBits()
+
+private fun Float.rawBitsEqual(other: Float): Boolean = hasSameRawBits(other)
+
+private fun List<Float>.rawBits(): List<Int> = map(Float::toRawBits)
+
+private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
+    target: GPUPixelBounds,
+): GPUCorePrimitiveGeometry = when (this) {
+    is GPUCorePrimitiveGeometryInput.Rect -> {
+        require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
+            "Core Rect geometry must have finite non-empty bounds"
+        }
+        GPUCorePrimitiveGeometry.Rect(left, top, right, bottom)
+    }
+    is GPUCorePrimitiveGeometryInput.RRect -> {
+        require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
+            "Core RRect geometry must have finite non-empty bounds"
+        }
+        require(radii.size == 8 && radii.all { it.isFinite() && it >= 0f }) {
+            "Core RRect geometry requires four finite non-negative xy radii pairs"
+        }
+        GPUCorePrimitiveGeometry.RRect(left, top, right, bottom, radii.toList())
+    }
+    is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
+        require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
+            "Core path geometry requires at least three finite xy vertices"
+        }
+        val vertexCount = vertices.size / 2
+        require(indices.size >= 3 && indices.size % 3 == 0 && indices.all { it in 0 until vertexCount }) {
+            "Core path geometry requires complete in-range triangles"
+        }
+        require(sourceVertexCount > 0 && sourceContourStarts.isNotEmpty() && sourceContourStarts.first() == 0 &&
+            sourceContourStarts.zipWithNext().all { (left, right) -> left < right } &&
+            sourceContourStarts.last() < sourceVertexCount) {
+            "Core path source contour starts must be strictly ordered within the source geometry"
+        }
+        require(target.containsRegisteredUniformRect(coverBounds)) {
+            "Core path cover bounds must be contained by its target"
+        }
+        val stroke = strokeStyle?.copy(dashIntervals = dashIntervalsSnapshot(strokeStyle.dashIntervals))
+        when (geometryMode) {
+            GPUCorePrimitiveGeometryMode.DirectTriangles -> require(stroke == null) {
+                "Direct core triangles cannot retain stroke lowering facts"
+            }
+            GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                require(stroke == null) {
+                    "Fill stencil edge fans cannot retain stroke lowering facts"
+                }
+                require(sourceVertexCount <= CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET) {
+                    CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
+                }
+                require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
+                    "Core stencil edge fan contours must each retain at least two source vertices"
+                }
+                require(
+                    hasCanonicalStencilEdgeFanTopology(
+                        vertices = vertices,
+                        indices = indices,
+                        sourceContourStarts = sourceContourStarts,
+                        sourceVertexCount = sourceVertexCount,
+                    ),
+                ) {
+                    "Core stencil edge fan topology must exactly match its source contour metadata"
+                }
+            }
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> {
+                require(stroke != null) {
+                    "Stroke stencil edge fans require exact stroke lowering facts"
+                }
+                require(sourceContourStarts == listOf(0) && sourceVertexCount == 2) {
+                    "Core single-segment stroke proof requires exactly one two-vertex source contour"
+                }
+                require(fillRule == GPUCorePrimitiveFillRule.Winding && !inverseFill) {
+                    "Core single-segment stroke proof requires non-inverse winding fill"
+                }
+                require(stroke.dashIntervals.isEmpty()) {
+                    "Core single-segment stroke proof does not support dashes"
+                }
+                require(
+                    when (stroke.loweringProof) {
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 -> stroke.cap == "butt"
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 -> stroke.cap == "square"
+                    },
+                ) {
+                    "Core single-segment stroke cap must match its closed lowering proof"
+                }
+            }
+        }
+        GPUCorePrimitiveGeometry.TriangulatedPath(
+            vertices.toList(),
+            indices.toList(),
+            sourceContourStarts.toList(),
+            sourceVertexCount,
+            coverBounds,
+            geometryMode,
+            fillRule,
+            inverseFill,
+            stroke,
+        )
+    }
+}
+
+private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 256
+private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
+    "unsupported.core_primitive.stencil_edge_fan_budget"
+
+private fun List<Int>.hasCanonicalContourLengths(sourceVertexCount: Int): Boolean =
+    indices.all { contourIndex ->
+        val start = this[contourIndex]
+        val end = getOrElse(contourIndex + 1) { sourceVertexCount }
+        end - start >= 2
+    }
+
+private fun hasCanonicalStencilEdgeFanTopology(
+    vertices: List<Float>,
+    indices: List<Int>,
+    sourceContourStarts: List<Int>,
+    sourceVertexCount: Int,
+): Boolean {
+    val emittedVertexCount = vertices.size / 2
+    if (emittedVertexCount != sourceVertexCount * 3 || indices != indices.indices.toList()) return false
+
+    fun samePoint(leftFloatIndex: Int, rightFloatIndex: Int): Boolean =
+        vertices[leftFloatIndex].toRawBits() == vertices[rightFloatIndex].toRawBits() &&
+            vertices[leftFloatIndex + 1].toRawBits() == vertices[rightFloatIndex + 1].toRawBits()
+
+    if ((1 until sourceVertexCount).any { sourceIndex -> !samePoint(0, sourceIndex * 6) }) return false
+    sourceContourStarts.forEachIndexed { contourIndex, start ->
+        val end = sourceContourStarts.getOrElse(contourIndex + 1) { sourceVertexCount }
+        for (sourceIndex in start until end) {
+            val nextSourceIndex = if (sourceIndex + 1 == end) start else sourceIndex + 1
+            val edgeNextPoint = sourceIndex * 6 + 4
+            val nextEdgePoint = nextSourceIndex * 6 + 2
+            if (!samePoint(edgeNextPoint, nextEdgePoint)) return false
+        }
+    }
+    return true
+}
+
+private fun GPUCorePrimitiveGeometry.canonicalPreimage(): String = when (this) {
+    is GPUCorePrimitiveGeometry.Rect -> "$canonicalType:$left,$top,$right,$bottom"
+    is GPUCorePrimitiveGeometry.RRect -> "$canonicalType:$left,$top,$right,$bottom:${radii.joinToString(",")}" 
+    is GPUCorePrimitiveGeometry.TriangulatedPath ->
+        "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:" +
+            "${sourceContourStarts.joinToString(",")}:$sourceVertexCount:${coverBounds.canonicalBounds()}:" +
+            "${geometryMode.name}:${fillRule.name}:$inverseFill:" +
+            strokeStyle.canonicalPreimage()
+}
+
+private fun GPUCorePrimitiveStrokeStyle?.canonicalPreimage(): String = this?.let { stroke ->
+    listOf(
+        stroke.width,
+        stroke.cap,
+        stroke.join,
+        stroke.miterLimit,
+        stroke.dashIntervals.joinToString(","),
+        stroke.dashPhase,
+        stroke.loweringProof.name,
+    ).joinToString(":")
+} ?: "fill"
+
+private fun dashIntervalsSnapshot(intervals: List<Float>): List<Float> = immutableList(intervals)
+
+private fun GPUClipCoveragePlan.snapshot(): GPUClipCoveragePlan = when (this) {
+    GPUClipCoveragePlan.NoClip -> this
+    is GPUClipCoveragePlan.Scissor -> copy(bounds = bounds.copy())
+    is GPUClipCoveragePlan.AnalyticIntersection -> GPUClipCoveragePlan.AnalyticIntersection(elements)
+    is GPUClipCoveragePlan.Mask -> copy(elements = elements.toList())
+    is GPUClipCoveragePlan.Refused -> copy()
+}
+
+private fun GPUClipCoveragePlan.canonicalPreimage(): String = when (this) {
+    GPUClipCoveragePlan.NoClip -> "none"
+    is GPUClipCoveragePlan.Scissor ->
+        "scissor:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
+            "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}"
+    is GPUClipCoveragePlan.AnalyticIntersection ->
+        "analytic-intersection:${elements.joinToString(";") { element ->
+            "${element.operation.name}/${element.kind.name}/vertices=${element.vertexCount}/" +
+                "aa=${element.antiAlias}/fill=${element.fillRule.name}/inverse=${element.inverseFill}/" +
+                "values=${element.values.joinToString(",") { value -> value.toRawBits().toString() }}"
+        }}"
+    is GPUClipCoveragePlan.Mask -> buildString {
+        append("mask:").append(contentKey)
+        append(":size=").append(width).append('x').append(height)
+        append(":samples=").append(sampleCount)
+        append(":resolvedBytes=").append(resolvedBytes)
+        append(":requiredBytes=").append(requiredBytes)
+        elements.forEach { element ->
+            append(':').append(element.operation.name).append('/').append(element.kind.name)
+            append("/vertices=").append(element.vertexCount)
+            append("/aa=").append(element.antiAlias).append("/fill=").append(element.fillRule.name)
+            append("/inverse=").append(element.inverseFill).append("/values=")
+            append(element.values.joinToString(",") { value -> value.toRawBits().toString() })
+        }
+    }
+    is GPUClipCoveragePlan.Refused -> "refused:$code"
+}
+
+private const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
+internal const val CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES = 80 + 16 * 32
+private const val CORE_PRIMITIVE_GRADIENT_HEADER_BYTES = 80
+private const val CORE_PRIMITIVE_GRADIENT_MAX_STOPS = 16
+private const val CORE_PRIMITIVE_GRADIENT_STOP_BYTES = 32
+
+internal fun corePrimitiveUniformBytes(
+    targetBounds: GPUPixelBounds,
+    premultipliedRgba: List<Float>,
+): List<Int> = ByteBuffer.allocate(CORE_PRIMITIVE_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    putFloat(targetBounds.width.toFloat())
+    putFloat(targetBounds.height.toFloat())
+    putFloat(0f)
+    putFloat(0f)
+    premultipliedRgba.forEach(::putFloat)
+}.array().map { it.toInt() and 0xff }
+
+internal fun corePrimitiveUniformByteSize(material: GPUCorePrimitiveMaterialPayload): Int =
+    if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
+        CORE_PRIMITIVE_UNIFORM_BYTES
+    } else {
+        CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+    }
+
+private fun corePrimitiveUniformFields(material: GPUCorePrimitiveMaterialPayload): List<GPUUniformPayloadField> =
+    when (material) {
+        is GPUCorePrimitiveMaterialPayload.SolidColor -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("target.padding", 8L, 8L, "padding", zeroFilled = true),
+            GPUUniformPayloadField("material.premul-rgba", 16L, 16L, "float32x4"),
+        )
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.kind", 8L, 4L, "uint32"),
+            GPUUniformPayloadField("material.stop-count", 12L, 4L, "uint32"),
+            GPUUniformPayloadField("material.center", 16L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.radius", 24L, 4L, "float32"),
+            GPUUniformPayloadField("material.geometry-padding", 28L, 4L, "padding", zeroFilled = true),
+            GPUUniformPayloadField("material.local-matrix", 32L, 36L, "float32x9"),
+            GPUUniformPayloadField("material.header-padding", 68L, 12L, "padding", zeroFilled = true),
+            GPUUniformPayloadField(
+                "material.stops",
+                CORE_PRIMITIVE_GRADIENT_HEADER_BYTES.toLong(),
+                (material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "gradient-stop[${material.positions.size}]",
+            ),
+            GPUUniformPayloadField(
+                "material.unused-stops",
+                (CORE_PRIMITIVE_GRADIENT_HEADER_BYTES +
+                    material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                ((CORE_PRIMITIVE_GRADIENT_MAX_STOPS - material.positions.size) *
+                    CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "padding",
+                zeroFilled = true,
+            ),
+        )
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> listOf(
+            GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.kind", 8L, 4L, "uint32"),
+            GPUUniformPayloadField("material.stop-count", 12L, 4L, "uint32"),
+            GPUUniformPayloadField("material.center", 16L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.angles", 24L, 8L, "float32x2"),
+            GPUUniformPayloadField("material.local-matrix", 32L, 36L, "float32x9"),
+            GPUUniformPayloadField("material.header-padding", 68L, 12L, "padding", zeroFilled = true),
+            GPUUniformPayloadField(
+                "material.stops",
+                CORE_PRIMITIVE_GRADIENT_HEADER_BYTES.toLong(),
+                (material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "gradient-stop[${material.positions.size}]",
+            ),
+            GPUUniformPayloadField(
+                "material.unused-stops",
+                (CORE_PRIMITIVE_GRADIENT_HEADER_BYTES +
+                    material.positions.size * CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                ((CORE_PRIMITIVE_GRADIENT_MAX_STOPS - material.positions.size) *
+                    CORE_PRIMITIVE_GRADIENT_STOP_BYTES).toLong(),
+                "padding",
+                zeroFilled = true,
+            ),
+        )
+    }
+
+internal fun corePrimitiveUniformBytes(
+    targetBounds: GPUPixelBounds,
+    material: GPUCorePrimitiveMaterialPayload,
+): List<Int> = when (material) {
+    is GPUCorePrimitiveMaterialPayload.SolidColor ->
+        corePrimitiveUniformBytes(targetBounds, material.premultipliedRgba)
+    is GPUCorePrimitiveMaterialPayload.RadialGradient ->
+        gradientCorePrimitiveUniformBytes(targetBounds, material)
+    is GPUCorePrimitiveMaterialPayload.SweepGradient ->
+        gradientCorePrimitiveUniformBytes(targetBounds, material)
+}
+
+private fun gradientCorePrimitiveUniformBytes(
+    targetBounds: GPUPixelBounds,
+    material: GPUCorePrimitiveMaterialPayload,
+): List<Int> {
+    val positions = when (material) {
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.positions
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.positions
+        is GPUCorePrimitiveMaterialPayload.SolidColor ->
+            error("Solid colors use the 32-byte CorePrimitive ABI")
+    }
+    val colors = when (material) {
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.colors
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.colors
+        is GPUCorePrimitiveMaterialPayload.SolidColor ->
+            error("Solid colors use the 32-byte CorePrimitive ABI")
+    }
+    return ByteBuffer.allocate(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES)
+    .order(ByteOrder.LITTLE_ENDIAN)
+    .apply {
+        putFloat(targetBounds.width.toFloat())
+        putFloat(targetBounds.height.toFloat())
+        putInt(material.kind.wireValue())
+        putInt(positions.size)
+        when (material) {
+            is GPUCorePrimitiveMaterialPayload.RadialGradient -> {
+                putFloat(material.centerX)
+                putFloat(material.centerY)
+                putFloat(material.radius)
+                putFloat(0f)
+                material.localMatrix.forEach(::putFloat)
+            }
+            is GPUCorePrimitiveMaterialPayload.SweepGradient -> {
+                putFloat(material.centerX)
+                putFloat(material.centerY)
+                putFloat(material.startAngle)
+                putFloat(material.endAngle)
+                material.localMatrix.forEach(::putFloat)
+            }
+            is GPUCorePrimitiveMaterialPayload.SolidColor ->
+                error("Solid colors use the 32-byte CorePrimitive ABI")
+        }
+        repeat((CORE_PRIMITIVE_GRADIENT_HEADER_BYTES - position()) / Float.SIZE_BYTES) {
+            putFloat(0f)
+        }
+        positions.indices.forEach { index ->
+            val colorOffset = index * 4
+            val alpha = colors[colorOffset + 3]
+            putFloat(positions[index])
+            repeat(3) { putFloat(0f) }
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset]) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset + 1]) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(colors[colorOffset + 2]) * alpha)
+            putFloat(alpha)
+        }
+        repeat(CORE_PRIMITIVE_GRADIENT_MAX_STOPS - positions.size) {
+            repeat(CORE_PRIMITIVE_GRADIENT_STOP_BYTES / Float.SIZE_BYTES) { putFloat(0f) }
+        }
+    }
+    .array()
+    .map { it.toInt() and 0xff }
+}
+
+private fun GPUCorePrimitiveMaterialKind.wireValue(): Int = when (this) {
+    GPUCorePrimitiveMaterialKind.SolidColor -> 0
+    GPUCorePrimitiveMaterialKind.RadialGradient -> 1
+    GPUCorePrimitiveMaterialKind.SweepGradient -> 2
+}
+
+/** Packs one closed registered shader payload without carrying source code or native handles. */
+class GPURegisteredUniformRectPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        program: GPURegisteredUniformProgram,
+        uniformBytes: ByteArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+    ): GPUDrawSemanticPayload.RegisteredUniformRect {
+        require(commandIdValue >= 0) { "Registered uniform command id must be non-negative" }
+        require(uniformBytes.size == program.uniformByteSize) {
+            "${program.wireId} requires exactly ${program.uniformByteSize} uniform bytes"
+        }
+        require(targetBounds.containsRegisteredUniformRect(scissorBounds)) {
+            "Registered uniform scissor must be non-empty and contained by the target"
+        }
+        val bytes = uniformBytes.map { it.toInt() and 0xff }
+        val packingPlanHash = "registered-uniform.${program.wireId}.abi${program.uniformByteSize}"
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=registered-uniform-rect",
+                    "program=${program.wireId}",
+                    "command=$commandIdValue",
+                    "packing=$packingPlanHash",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = packingPlanHash,
+            byteSize = program.uniformByteSize.toLong(),
+            zeroedPadding = false,
+            scope = "pass.registered-uniform.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField(
+                    fieldPath = "program.${program.wireId}.uniforms",
+                    byteOffset = 0L,
+                    byteSize = program.uniformByteSize.toLong(),
+                    valueClass = "registered-uniform-bytes",
+                    zeroFilled = bytes.all { it == 0 },
+                ),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("registered-uniform:$commandIdValue"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.RegisteredUniformRect(
+            payloadRef = ref,
+            program = program,
+            uniformBytes = bytes,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            canonicalHash = sha256Hex(
+                registeredUniformRectCanonicalPreimage(
+                    ref,
+                    program,
+                    bytes,
+                    targetBounds,
+                    scissorBounds,
+                ),
+            ),
+        )
+    }
+}
+
+/** Snapshots the complete CPU-owned input for one bounded separable blur rectangle. */
+class GPUSeparableBlurRectPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        sourcePremultipliedRgba: FloatArray,
+        clearPremultipliedRgba: FloatArray,
+        sourceBounds: GPUPixelBounds,
+        targetBounds: GPUPixelBounds,
+        effectiveSigma: Float,
+        tapCount: Int,
+        weights: FloatArray,
+    ): GPUDrawSemanticPayload.SeparableBlurRect {
+        require(commandIdValue >= 0) { "Separable blur command id must be non-negative" }
+        require(sourcePremultipliedRgba.toList().isPremultipliedRgba()) {
+            "Separable blur source color must be finite premultiplied RGBA"
+        }
+        require(clearPremultipliedRgba.toList().isPremultipliedRgba()) {
+            "Separable blur clear color must be finite premultiplied RGBA"
+        }
+        require(targetBounds.containsRegisteredUniformRect(sourceBounds)) {
+            "Separable blur source bounds must be contained by the target"
+        }
+        require(effectiveSigma.isFinite() && effectiveSigma in 0.5f..12f) {
+            "Separable blur effective sigma must be in 0.5..12"
+        }
+        require(tapCount in 3..25 && tapCount % 2 == 1) {
+            "Separable blur tap count must be an odd value in 3..25"
+        }
+        require(weights.size == 25 && weights.all { it.isFinite() && it >= 0f }) {
+            "Separable blur weights must contain 25 finite non-negative values"
+        }
+        require(kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f) {
+            "Separable blur active weights must be normalized"
+        }
+        require(weights.drop(tapCount).all { it == 0f }) {
+            "Separable blur padded weights must be zero"
+        }
+        val source = sourcePremultipliedRgba.toList()
+        val clear = clearPremultipliedRgba.toList()
+        val kernel = weights.toList()
+        val bytes = separableBlurRectPayloadBytes(source, clear, effectiveSigma, tapCount, kernel)
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=separable-blur-rect",
+                    "command=$commandIdValue",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = "separable-blur-rect.input-v1",
+            byteSize = SEPARABLE_BLUR_RECT_PAYLOAD_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = "pass.separable-blur.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField("source.premul-rgba", 0L, 16L, "float32x4"),
+                GPUUniformPayloadField("clear.premul-rgba", 16L, 16L, "float32x4"),
+                GPUUniformPayloadField("kernel.sigma", 32L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.tap-count", 36L, 4L, "uint32"),
+                GPUUniformPayloadField("kernel.weights", 40L, 100L, "float32x25"),
+                GPUUniformPayloadField("padding", 140L, 4L, "padding", zeroFilled = true),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("separable-blur:$commandIdValue"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.SeparableBlurRect(
+            payloadRef = ref,
+            sourcePremultipliedRgba = source,
+            clearPremultipliedRgba = clear,
+            sourceBounds = sourceBounds,
+            targetBounds = targetBounds,
+            effectiveSigma = effectiveSigma,
+            tapCount = tapCount,
+            weights = kernel,
+            canonicalHash = sha256Hex(
+                separableBlurRectCanonicalPreimage(
+                    ref,
+                    source,
+                    clear,
+                    sourceBounds,
+                    targetBounds,
+                    effectiveSigma,
+                    tapCount,
+                    kernel,
+                ),
+            ),
+        )
+    }
+}
+
+private fun separableBlurRectPayloadBytes(
+    sourcePremultipliedRgba: List<Float>,
+    clearPremultipliedRgba: List<Float>,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+): List<Int> = ByteBuffer.allocate(SEPARABLE_BLUR_RECT_PAYLOAD_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    sourcePremultipliedRgba.forEach(::putFloat)
+    clearPremultipliedRgba.forEach(::putFloat)
+    putFloat(effectiveSigma)
+    putInt(tapCount)
+    weights.forEach(::putFloat)
+    putInt(0)
+}.array().map { it.toInt() and 0xff }
+
+private fun separableBlurRectCanonicalPreimage(
+    ref: GPUDrawPayloadRef,
+    sourcePremultipliedRgba: List<Float>,
+    clearPremultipliedRgba: List<Float>,
+    sourceBounds: GPUPixelBounds,
+    targetBounds: GPUPixelBounds,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+): String = listOf(
+    "type=SeparableBlurRect",
+    "command=${ref.commandIdValue}",
+    "step=${ref.renderStepIdentity}",
+    "fingerprint=${ref.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "source=${sourcePremultipliedRgba.joinToString(",")}",
+    "clear=${clearPremultipliedRgba.joinToString(",")}",
+    "sourceBounds=${sourceBounds.left},${sourceBounds.top},${sourceBounds.right},${sourceBounds.bottom}",
+    "targetBounds=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "sigma=$effectiveSigma",
+    "tapCount=$tapCount",
+    "weights=${weights.joinToString(",")}",
+).joinToString("\n")
+
+private fun List<Float>.isPremultipliedRgba(): Boolean =
+    size == 4 && all { it.isFinite() && it in 0f..1f } &&
+        this[0] <= this[3] && this[1] <= this[3] && this[2] <= this[3]
+
+private const val SEPARABLE_BLUR_RECT_PAYLOAD_BYTES = 144
+
+/** Primary render step identity of the prepared top-level mask blur lane (the scene composite). */
+const val MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY = "mask-blur.composite"
+
+/** Largest localized path accepted by the prepared top-level mask blur semantic. */
+const val MAX_MASK_BLUR_PATH_VERTICES = 64
+
+/** Closed stage set for the prepared top-level mask blur lane. */
+enum class GPUMaskBlurStage(val wireId: String) {
+    Mask("mask"),
+    BlurH("blur-h"),
+    BlurV("blur-v"),
+    Style("style"),
+    Composite("composite"),
+}
+
+/** Returns the closed render-step identity of one top-level mask blur stage. */
+internal fun maskBlurRenderStepId(stage: GPUMaskBlurStage): String = "mask-blur.${stage.wireId}"
+
+/** Returns the closed stage for a mask blur render step, or null for foreign steps. */
+internal fun maskBlurStageFromRenderStepId(stepId: String): GPUMaskBlurStage? =
+    GPUMaskBlurStage.entries.firstOrNull { maskBlurRenderStepId(it) == stepId }
+
+/** Exact immutable local-space geometry of one blurred shape (plan-scaled, origin-shifted). */
+sealed interface GPUMaskBlurLocalGeometry {
+    data class Rect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+    ) : GPUMaskBlurLocalGeometry
+
+    data class RRect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val radii: List<Float>,
+    ) : GPUMaskBlurLocalGeometry {
+        init {
+            require(radii.size == 8 && radii.all(Float::isFinite)) {
+                "Mask blur local RRect requires exactly eight finite radii"
+            }
+        }
+    }
+
+    data class Path(
+        val vertices: List<Float>,
+        val contourStarts: List<Int>,
+        val fillRule: String,
+        val inverseFill: Boolean,
+    ) : GPUMaskBlurLocalGeometry {
+        init {
+            require(vertices.isNotEmpty() && vertices.size % 2 == 0) {
+                "Mask blur local path requires non-empty even vertex pairs"
+            }
+            require(vertices.size / 2 <= MAX_MASK_BLUR_PATH_VERTICES) {
+                "Mask blur local path exceeds $MAX_MASK_BLUR_PATH_VERTICES vertices"
+            }
+            require(contourStarts.isNotEmpty() && contourStarts.first() == 0) {
+                "Mask blur local path requires a zero-start contour list"
+            }
+            require(
+                fillRule == "winding" || fillRule == "Winding" || fillRule == "NonZero" ||
+                    fillRule == "even-odd" || fillRule == "EvenOdd" || fillRule == "evenOdd",
+            ) {
+                "Mask blur local path requires a closed fill rule"
+            }
+        }
+    }
+}
+
+/**
+ * Immutable input, plan, kernel, local-geometry, and scene-shade facts of one prepared
+ * top-level mask blur draw. One semantic rides all five lane stages; the stage is derived
+ * from the packet render step ([maskBlurStageFromRenderStepId]).
+ */
+
+
+private const val MASK_BLUR_PAYLOAD_BYTES = 416
+
+/** Closed payload-block gatherer for one prepared top-level mask blur draw. */
+class GPUMaskBlurPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        sourceFamily: String,
+        deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+        localWidth: Int,
+        localHeight: Int,
+        scale: Float,
+        style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+        effectiveSigma: Float,
+        tapCount: Int,
+        weights: FloatArray,
+        localGeometry: GPUMaskBlurLocalGeometry,
+        premultipliedRgba: FloatArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+        clipCoveragePlan: GPUClipCoveragePlan,
+        clipExecutionPlanIdentity: String?,
+        blendPlanIdentity: String,
+    ): GPUDrawSemanticPayload.MaskBlur {
+        require(commandIdValue >= 0) { "Mask blur command id must be non-negative" }
+        require(sourceFamily in setOf("FillRect", "FillRRect", "FillPath")) {
+            "Mask blur source family must be a closed core family"
+        }
+        require(deviceBounds.right > deviceBounds.left && deviceBounds.bottom > deviceBounds.top) {
+            "Mask blur device bounds must be non-empty"
+        }
+        require(localWidth > 0 && localHeight > 0) { "Mask blur local mask must be non-empty" }
+        require(scale > 0f && scale.isFinite()) { "Mask blur scale must be finite and positive" }
+        require(effectiveSigma.isFinite() && effectiveSigma >= 0.5f) {
+            "Mask blur effective sigma must be finite and at least 0.5"
+        }
+        require(tapCount in 3..25 && tapCount % 2 == 1) {
+            "Mask blur tap count must be an odd value in 3..25"
+        }
+        require(weights.size == 25 && weights.all { it.isFinite() && it >= 0f }) {
+            "Mask blur weights must contain 25 finite non-negative values"
+        }
+        require(kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f) {
+            "Mask blur active weights must be normalized"
+        }
+        require(weights.drop(tapCount).all { it == 0f }) {
+            "Mask blur padded weights must be zero"
+        }
+        require(premultipliedRgba.toList().isPremultipliedRgba()) {
+            "Mask blur source color must be finite premultiplied RGBA"
+        }
+        require(targetBounds.containsRegisteredUniformRect(scissorBounds)) {
+            "Mask blur scissor bounds must be contained by the target"
+        }
+        require(clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
+            "Mask blur clip coverage plan must not be refused"
+        }
+        require(blendPlanIdentity.isNotBlank()) { "Mask blur blend identity must not be blank" }
+        val weightsList = weights.toList()
+        val color = premultipliedRgba.toList()
+        val bytes = maskBlurPayloadBytes(
+            deviceBounds, color, style, scale, effectiveSigma, tapCount, localWidth, localHeight, localGeometry,
+        )
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=mask-blur",
+                    "command=$commandIdValue",
+                    "family=$sourceFamily",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = "mask-blur.input-v1",
+            byteSize = MASK_BLUR_PAYLOAD_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = "pass.mask-blur.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField("device-bounds", 0L, 16L, "float32x4"),
+                GPUUniformPayloadField("color.premul-rgba", 16L, 16L, "float32x4"),
+                GPUUniformPayloadField("style", 32L, 4L, "uint32"),
+                GPUUniformPayloadField("scale", 36L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.sigma", 40L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.tap-count", 44L, 4L, "uint32"),
+                GPUUniformPayloadField("mask.size", 48L, 8L, "uint32x2"),
+                GPUUniformPayloadField("geometry", 56L, 360L, "mask-blur.geometry-v1"),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = MASK_BLUR_COMPOSITE_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("mask-blur:$commandIdValue"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.MaskBlur(
+            payloadRef = ref,
+            sourceFamily = sourceFamily,
+            deviceBounds = deviceBounds,
+            localWidth = localWidth,
+            localHeight = localHeight,
+            scale = scale,
+            style = style,
+            effectiveSigma = effectiveSigma,
+            tapCount = tapCount,
+            weights = weightsList,
+            localGeometry = localGeometry,
+            premultipliedRgba = color,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
+            canonicalHash = maskBlurCanonicalPreimage(
+                payloadRef = ref,
+                sourceFamily = sourceFamily,
+                deviceBounds = deviceBounds,
+                localWidth = localWidth,
+                localHeight = localHeight,
+                scale = scale,
+                style = style,
+                effectiveSigma = effectiveSigma,
+                tapCount = tapCount,
+                weights = weightsList,
+                localGeometry = localGeometry,
+                premultipliedRgba = color,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+            ).sha256HexPayload(),
+        )
+    }
+}
+
+private fun maskBlurPayloadBytes(
+    deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+    premultipliedRgba: List<Float>,
+    style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+    scale: Float,
+    effectiveSigma: Float,
+    tapCount: Int,
+    localWidth: Int,
+    localHeight: Int,
+    localGeometry: GPUMaskBlurLocalGeometry,
+): List<Int> = ByteBuffer.allocate(MASK_BLUR_PAYLOAD_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    putFloat(deviceBounds.left)
+    putFloat(deviceBounds.top)
+    putFloat(deviceBounds.right)
+    putFloat(deviceBounds.bottom)
+    premultipliedRgba.forEach(::putFloat)
+    putInt(style.ordinal)
+    putFloat(scale)
+    putFloat(effectiveSigma)
+    putInt(tapCount)
+    putInt(localWidth)
+    putInt(localHeight)
+    when (localGeometry) {
+        is GPUMaskBlurLocalGeometry.Rect -> {
+            putInt(0)
+            putFloat(localGeometry.left)
+            putFloat(localGeometry.top)
+            putFloat(localGeometry.right)
+            putFloat(localGeometry.bottom)
+            repeat(12) { put(0) }
+        }
+        is GPUMaskBlurLocalGeometry.RRect -> {
+            putInt(1)
+            putFloat(localGeometry.left)
+            putFloat(localGeometry.top)
+            putFloat(localGeometry.right)
+            putFloat(localGeometry.bottom)
+            localGeometry.radii.forEach(::putFloat)
+            repeat(4) { put(0) }
+        }
+        is GPUMaskBlurLocalGeometry.Path -> {
+            putInt(2)
+            localGeometry.vertices.forEach(::putFloat)
+            repeat(MAX_MASK_BLUR_PATH_VERTICES * 2 - localGeometry.vertices.size) { put(0) }
+            localGeometry.contourStarts.forEach { putInt(it) }
+            repeat(8 - localGeometry.contourStarts.size) { putInt(0) }
+            putInt(if (localGeometry.fillRule == "even-odd" || localGeometry.fillRule == "EvenOdd") 1 else 0)
+            putInt(if (localGeometry.inverseFill) 1 else 0)
+        }
+    }
+}.array().map { it.toInt() and 0xff }
+
+private fun maskBlurCanonicalPreimage(
+    payloadRef: GPUDrawPayloadRef,
+    sourceFamily: String,
+    deviceBounds: org.graphiks.kanvas.gpu.renderer.clips.GPUBounds,
+    localWidth: Int,
+    localHeight: Int,
+    scale: Float,
+    style: org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+    localGeometry: GPUMaskBlurLocalGeometry,
+    premultipliedRgba: List<Float>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    clipCoveragePlan: GPUClipCoveragePlan,
+    clipExecutionPlanIdentity: String?,
+    blendPlanIdentity: String,
+): String = listOf(
+    "type=MaskBlur",
+    "command=${payloadRef.commandIdValue}",
+    "step=${payloadRef.renderStepIdentity}",
+    "fingerprint=${payloadRef.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "family=$sourceFamily",
+    "bounds=${deviceBounds.left},${deviceBounds.top},${deviceBounds.right},${deviceBounds.bottom}",
+    "local=${localWidth}x$localHeight",
+    "scale=$scale",
+    "style=${style.name}",
+    "sigma=$effectiveSigma",
+    "tapCount=$tapCount",
+    "weights=${weights.joinToString(",")}",
+    "geometry=${maskBlurLocalGeometryPreimage(localGeometry)}",
+    "color=${premultipliedRgba.joinToString(",")}",
+    "target=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "scissor=${scissorBounds.left},${scissorBounds.top},${scissorBounds.right},${scissorBounds.bottom}",
+    "clip=${clipCoveragePlan.canonicalPreimage()}",
+    "clipExecution=${clipExecutionPlanIdentity.orEmpty()}",
+    "blend=$blendPlanIdentity",
+).joinToString("\n")
+
+private fun maskBlurLocalGeometryPreimage(geometry: GPUMaskBlurLocalGeometry): String = when (geometry) {
+    is GPUMaskBlurLocalGeometry.Rect ->
+        "rect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}"
+    is GPUMaskBlurLocalGeometry.RRect ->
+        "rrect:${geometry.left},${geometry.top},${geometry.right},${geometry.bottom}:" +
+            geometry.radii.joinToString(",")
+    is GPUMaskBlurLocalGeometry.Path ->
+        "path:${geometry.fillRule}:${geometry.inverseFill}:" +
+            geometry.vertices.joinToString(",") + ":" + geometry.contourStarts.joinToString(",")
+}
+
+private fun String.sha256HexPayload(): String = sha256Hex(this)
+
+private fun registeredUniformRectCanonicalPreimage(
+    ref: GPUDrawPayloadRef,
+    program: GPURegisteredUniformProgram,
+    uniformBytes: List<Int>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+): String = listOf(
+    "type=RegisteredUniformRect",
+    "command=${ref.commandIdValue}",
+    "step=${ref.renderStepIdentity}",
+    "program=${program.wireId}",
+    "fingerprint=${ref.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "packing=${ref.uniformBlock?.packingPlanHash.orEmpty()}",
+    "bytes=${uniformBytes.joinToString(",")}",
+    "target=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "scissor=${scissorBounds.left},${scissorBounds.top},${scissorBounds.right},${scissorBounds.bottom}",
+).joinToString("\n")
+
+private fun GPUPreparedMaterialProgram.preparedTextSnapshot(): GPUPreparedMaterialProgram {
+    return authenticatedSnapshot()
+}
+
+private fun preparedTextA8CanonicalHash(
+    payloadRef: GPUDrawPayloadRef,
+    atlas: GPUPreparedR8UploadArtifact,
+    atlasGeneration: GPUTextArtifactGeneration,
+    pageIndex: Int,
+    instances: List<GPUTextA8Instance>,
+    material: GPUPreparedMaterialProgram,
+    deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    clipIdentity: String,
+    blendPlanIdentity: String,
+    capabilitySnapshotHash: String,
+    frameProvenance: GPUFrameProvenance,
+): String = sha256Hex(
+    buildString {
+        appendCanonicalField("type", "TextA8")
+        appendCanonicalField("command", payloadRef.commandIdValue.toString())
+        appendCanonicalField("step", payloadRef.renderStepIdentity)
+        appendCanonicalField("atlas.key", atlas.key)
+        appendCanonicalField("atlas.width", atlas.width.toString())
+        appendCanonicalField("atlas.height", atlas.height.toString())
+        appendCanonicalField("atlas.rowBytes", atlas.rowBytes.toString())
+        appendCanonicalField("atlas.generation", atlas.generation.toString())
+        appendCanonicalField("atlas.contentHash", atlas.contentHash)
+        appendCanonicalField("generation", atlasGeneration.value.toString())
+        appendCanonicalField("pageIndex", pageIndex.toString())
+        instances.forEachIndexed { index, instance ->
+            appendCanonicalField(
+                "instance",
+                "$index:${instance.glyphId}:${instance.pageIndex}:" +
+                    "${instance.colorLayerIndex ?: "none"}:${instance.sourceGlyphIndex.value}:" +
+                    instance.deviceQuad.joinToString(",") { value -> value.toRawBits().toString() } +
+                    ":" + listOf(
+                    instance.uvRect.left,
+                    instance.uvRect.top,
+                    instance.uvRect.right,
+                    instance.uvRect.bottom,
+                ).joinToString(",") { value -> value.toRawBits().toString() },
+            )
+        }
+        appendCanonicalField("material.key", material.materialKey)
+        appendCanonicalField("material.wgsl", sha256Hex(material.wgslSource))
+        appendCanonicalField("material.entryPoint", material.entryPoint)
+        appendCanonicalField("material.uniformBytes", material.uniformBytes.joinToString(","))
+        appendCanonicalField(
+            "material.resources",
+            material.sampledResources.joinToString("|") { resource ->
+                "${resource.resourceKey}:${resource.contentHash}:${resource.width}x${resource.height}:" +
+                    "${resource.samplingFilterMode}:${resource.alphaOnly}"
+            },
+        )
+        appendCanonicalField("material.paintAlpha", material.paintAlpha.toRawBits().toString())
+        appendCanonicalField("material.sourceKind", material.sourceKind.name)
+        appendCanonicalField("material.abiHash", material.abiHash)
+        appendCanonicalField(
+            "deviceToLocal",
+            deviceToLocal.rawBits().joinToString(","),
+        )
+        appendCanonicalField("target", targetBounds.canonicalBounds())
+        appendCanonicalField("scissor", scissorBounds.canonicalBounds())
+        appendCanonicalField("clip", clipIdentity)
+        appendCanonicalField("blend", blendPlanIdentity)
+        appendCanonicalField("capability", capabilitySnapshotHash)
+        appendCanonicalField("provenance", frameProvenance.annotationValue)
+    },
+)
+
+private fun GPUPixelBounds.containsRegisteredUniformRect(other: GPUPixelBounds): Boolean =
+    other.right > other.left && other.bottom > other.top &&
+        other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
+
+private fun GPUDrawPayloadRef.deepSnapshot(): GPUDrawPayloadRef = copy(
+    uniformBlock = uniformBlock?.copy(
+        bytes = immutableList(uniformBlock.bytes),
+        fields = immutableList(uniformBlock.fields),
+    ),
+    resourceBlock = resourceBlock?.copy(
+        resourceDescriptorLabels = immutableList(resourceBlock.resourceDescriptorLabels),
+        dynamicOffsets = immutableList(resourceBlock.dynamicOffsets),
+        bindingFacts = immutableList(
+            resourceBlock.bindingFacts.map { fact ->
+                fact.copy(
+                    requiredUsageLabels = immutableSet(fact.requiredUsageLabels),
+                    availableUsageLabels = immutableSet(fact.availableUsageLabels),
+                )
+            },
+        ),
+    ),
+)
+
+private val EMPTY_COLOR_GLYPH_ATLAS_BYTES = byteArrayOf()
+
+/** Gathers the exact immutable CPU-owned payload required by the native COLRv0 materializer. */
+class GPUColorGlyphPayloadGatherer {
+    fun gatherPreparedSemantic(
+        input: GPUPreparedColorGlyphPayloadInput,
+    ): GPUDrawSemanticPayload.ColorGlyph {
+        require(input.atlasArtifactKey.generation.value.toLong() == input.atlas.generation) {
+            "Prepared color-glyph atlas generation must match the shared R8 artifact"
+        }
+        require(input.instances.isNotEmpty() && input.instances.all { instance ->
+            instance.colorLayerIndex != null &&
+                instance.pageIndex >= 0 &&
+                instance.deviceQuad.size == 8 &&
+                instance.deviceQuad.all(Float::isFinite)
+        }) {
+            "Prepared color-glyph instances must retain finite layer-indexed atlas geometry"
+        }
+        require(input.instances.size == input.layers.size) {
+            "Prepared color-glyph instances and gathered layers must be bijective"
+        }
+        require(input.instances.indices.all { index ->
+            val instance = input.instances[index]
+            val layer = input.layers[index]
+            instance.pageIndex == input.instances.first().pageIndex &&
+                instance.colorLayerIndex == layer.colorLayerIndex &&
+                instance.glyphId.toUInt() == layer.layerGlyphID &&
+                instance.uvRect.matchesRawAtlasBounds(
+                    bounds = layer.atlasBounds,
+                    atlasWidth = input.atlas.width,
+                    atlasHeight = input.atlas.height,
+                )
+        }) {
+            "Prepared color-glyph instances must match one page and their exact ordered source layer glyphs and UVs"
+        }
+        require(input.clipIdentity.isNotBlank() &&
+            input.blendPlanIdentity.isNotBlank() &&
+            input.capabilitySnapshotHash.isNotBlank()
+        ) {
+            "Prepared color-glyph clip, blend and capability identities must not be blank"
+        }
+        require(input.globalPaintAlpha.isFinite() && input.globalPaintAlpha in 0f..1f) {
+            "Prepared color-glyph global paint alpha must be finite and normalized"
+        }
+        val preparedLayers = input.layers.map { layer ->
+            layer.copy(
+                premultipliedRgba = layer.premultipliedRgba.map { component ->
+                    component * input.globalPaintAlpha
+                }.toFloatArray(),
+            )
+        }
+        val vertexData = preparedColorGlyphVertexData(preparedLayers)
+        val uniformBytes = preparedColorGlyphUniformBytes(
+            targetBounds = input.targetBounds,
+            atlasWidth = input.atlas.width,
+            atlasHeight = input.atlas.height,
+            layers = preparedLayers,
+        )
+        val base = gatherSemantic(
+            commandIdValue = input.commandIdValue,
+            renderStepIdentity = COLOR_GLYPH_RENDER_STEP_IDENTITY,
+            planArtifactKey = input.planArtifactKey,
+            atlasArtifactKey = input.atlasArtifactKey,
+            atlasWidth = input.atlas.width,
+            atlasHeight = input.atlas.height,
+            atlasFormat = GPUColorGlyphAtlasFormat.R8Unorm.gpuLabel,
+            atlasGeneration = input.atlas.generation,
+            layers = preparedLayers,
+            vertexData = vertexData,
+            indexData = COLOR_GLYPH_QUAD_INDICES,
+            uniformBytes = uniformBytes,
+            targetBounds = input.targetBounds,
+            scissorBounds = input.scissorBounds,
+            preparedAtlas = input.atlas,
+        )
+        val instances = immutableList(input.instances)
+        val material = input.material.preparedTextSnapshot()
+        val canonicalHash = sha256Hex(
+            colorGlyphCanonicalPreimage(
+                payloadRef = base.payloadRef,
+                planArtifactKey = base.planArtifactKey,
+                atlasArtifactKey = base.atlasArtifactKey,
+                atlasKey = base.atlas.key,
+                atlasRowBytes = base.atlas.rowBytes,
+                atlasWidth = base.atlasWidth,
+                atlasHeight = base.atlasHeight,
+                atlasFormat = base.atlasFormat,
+                atlasGeneration = base.atlasGeneration,
+                atlasBytesSha256 = base.atlasBytesSha256,
+                layers = base.layers,
+                vertices = base.vertexData,
+                indices = base.indexData,
+                uniformBytes = base.uniformBytes,
+                targetBounds = base.targetBounds,
+                scissorBounds = base.scissorBounds,
+                instances = instances,
+                material = material,
+                clipIdentity = input.clipIdentity,
+                blendPlanIdentity = input.blendPlanIdentity,
+                capabilitySnapshotHash = input.capabilitySnapshotHash,
+                frameProvenance = input.frameProvenance,
+            ),
+        )
+        return GPUDrawSemanticPayload.ColorGlyph(
+            payloadRef = base.payloadRef,
+            planArtifactKey = base.planArtifactKey,
+            atlasArtifactKey = base.atlasArtifactKey,
+            atlas = input.atlas,
+            atlasFormat = base.atlasFormat,
+            layers = base.layers,
+            vertexData = base.vertexData,
+            indexData = base.indexData,
+            uniformBytes = base.uniformBytes,
+            targetBounds = base.targetBounds,
+            scissorBounds = base.scissorBounds,
+            instances = instances,
+            material = material,
+            clipIdentity = input.clipIdentity,
+            blendPlanIdentity = input.blendPlanIdentity,
+            capabilitySnapshotHash = input.capabilitySnapshotHash,
+            frameProvenance = input.frameProvenance,
+            canonicalHash = canonicalHash,
+        )
+    }
+
+    fun gatherSemantic(
+        commandIdValue: Int,
+        renderStepIdentity: String,
+        planArtifactKey: GPUTextArtifactKey,
+        atlasArtifactKey: GPUTextArtifactKey,
+        atlasA8Bytes: ByteArray = EMPTY_COLOR_GLYPH_ATLAS_BYTES,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        atlasGeneration: Long,
+        layers: List<GPUColorGlyphLayerPayloadInput>,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        uniformBytes: ByteArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+        preparedAtlas: GPUPreparedR8UploadArtifact? = null,
+    ): GPUDrawSemanticPayload.ColorGlyph {
+        require(commandIdValue >= 0) { "Color-glyph command id must be non-negative" }
+        requireDumpSafeIdentity(renderStepIdentity, "Color-glyph render step")
+        require(renderStepIdentity == COLOR_GLYPH_RENDER_STEP_IDENTITY) {
+            "Color-glyph render step must be $COLOR_GLYPH_RENDER_STEP_IDENTITY"
+        }
+        requireArtifactIdentity(planArtifactKey, "Color-glyph plan artifact")
+        requireArtifactIdentity(atlasArtifactKey, "Color-glyph atlas artifact")
+        require(planArtifactKey != atlasArtifactKey) {
+            "Color-glyph plan and atlas must have distinct artifact identities"
+        }
+        require(atlasWidth > 0 && atlasHeight > 0) { "Color-glyph atlas dimensions must be positive" }
+        if (preparedAtlas == null) {
+            val expectedAtlasBytes = atlasWidth.toLong() * atlasHeight.toLong()
+            require(expectedAtlasBytes <= Int.MAX_VALUE && atlasA8Bytes.size.toLong() == expectedAtlasBytes) {
+                "Color-glyph A8 atlas must contain exactly width*height bytes"
+            }
+        } else {
+            require(
+                preparedAtlas.width == atlasWidth &&
+                    preparedAtlas.height == atlasHeight &&
+                    preparedAtlas.generation == atlasGeneration,
+            ) {
+                "Prepared color-glyph R8 artifact must match declared dimensions and generation"
+            }
+        }
+        val closedFormat = GPUColorGlyphAtlasFormat.entries.singleOrNull { it.gpuLabel == atlasFormat }
+        requireNotNull(closedFormat) { "Color-glyph atlas format must be r8unorm" }
+        require(atlasGeneration >= 0L) { "Color-glyph atlas generation must be non-negative" }
+        require(atlasArtifactKey.generation.value.toLong() == atlasGeneration) {
+            "Color-glyph atlas artifact generation must match the atlas generation"
+        }
+        require(layers.size in 1..GPU_COLOR_GLYPH_MAX_LAYERS) {
+            "Color-glyph payload must contain 1..$GPU_COLOR_GLYPH_MAX_LAYERS layers"
+        }
+        require(targetBounds.left == 0 && targetBounds.top == 0 && !targetBounds.isEmpty) {
+            "Color-glyph target bounds must be a non-empty zero-origin extent"
+        }
+        require(!scissorBounds.isEmpty && scissorBounds.isContainedBy(targetBounds)) {
+            "Color-glyph scissor bounds must be non-empty and contained by the target"
+        }
+        layers.forEachIndexed { index, layer ->
+            require(layer.planArtifactKey == planArtifactKey) {
+                "Color-glyph layer $index plan identity must match the enclosing plan artifact"
+            }
+            require(layer.colorLayerIndex == null || layer.colorLayerIndex >= 0) {
+                "Color-glyph layer $index prepared layer index must be non-negative"
+            }
+            val proof = layer.placementProof
+            require(proof.atlasArtifactKey == atlasArtifactKey) {
+                "Color-glyph layer $index placement atlas identity must match the enclosing atlas artifact"
+            }
+            require(proof.strikeGlyphId >= 0 && layer.layerGlyphID == proof.strikeGlyphId.toUInt()) {
+                "Color-glyph layer $index glyph identity must match its atlas strike placement"
+            }
+            require(proof.strikeSize.isFinite() && proof.strikeSize > 0f) {
+                "Color-glyph layer $index strike size must be finite and positive"
+            }
+            require(proof.atlasBounds == layer.atlasBounds) {
+                "Color-glyph layer $index bounds must match its atlas placement proof"
+            }
+            require(layer.paletteIndex >= 0) { "Color-glyph layer $index palette index must be non-negative" }
+            require(!layer.atlasBounds.isEmpty && layer.atlasBounds.isContainedByAtlas(atlasWidth, atlasHeight)) {
+                "Color-glyph layer $index bounds must be inside the atlas"
+            }
+            require(!layer.deviceBounds.isEmpty && layer.deviceBounds.isContainedBy(targetBounds)) {
+                "Color-glyph layer $index device bounds must be non-empty and inside the target"
+            }
+            require(!layer.useForeground || layer.foregroundResolved) {
+                "Color-glyph foreground layer $index must be resolved before gathering"
+            }
+            require(layer.premultipliedRgba.size == 4) {
+                "Color-glyph layer $index color must contain four channels"
+            }
+            require(layer.premultipliedRgba.all { it.isFinite() && it in 0f..1f }) {
+                "Color-glyph layer $index color channels must be finite and normalized"
+            }
+            val alpha = layer.premultipliedRgba[3]
+            require(layer.premultipliedRgba.take(3).all { it <= alpha }) {
+                "Color-glyph layer $index color must be premultiplied"
+            }
+        }
+        if (preparedAtlas == null) {
+            require(layers.map { it.placementProof }.distinctBy { proof ->
+                listOf(
+                    proof.strikeGlyphId,
+                    proof.strikeSize.toRawBits(),
+                    proof.strikeSubpixelX,
+                    proof.strikeSubpixelY,
+                    proof.atlasBounds,
+                )
+            }.size == layers.size) {
+                "Color-glyph atlas placement proofs must be unique"
+            }
+            require(layers.indices.none { first ->
+                (first + 1 until layers.size).any { second ->
+                    layers[first].atlasBounds.overlaps(layers[second].atlasBounds)
+                }
+            }) { "Color-glyph atlas placements must not overlap" }
+        } else {
+            require(layers.indices.none { first ->
+                (first + 1 until layers.size).any { second ->
+                    val left = layers[first]
+                    val right = layers[second]
+                    if (left.atlasBounds == right.atlasBounds) {
+                        !left.hasSamePreparedAtlasPlacement(right)
+                    } else {
+                        left.atlasBounds.overlaps(right.atlasBounds)
+                    }
+                }
+            }) {
+                "Prepared color-glyph atlas placements must be disjoint or exact shared occurrences"
+            }
+        }
+        require(vertexData.size == COLOR_GLYPH_QUAD_FLOATS) {
+            "Color-glyph first-slice geometry must contain exactly four packed position/UV vertices"
+        }
+        require(vertexData.all(Float::isFinite)) { "Color-glyph vertices must be finite" }
+        require(vertexData.indices.filter { it % COLOR_GLYPH_VERTEX_FLOATS >= 2 }.all { vertexData[it] in 0f..1f }) {
+            "Color-glyph vertex UV coordinates must be normalized"
+        }
+        val vertexCount = vertexData.size / COLOR_GLYPH_VERTEX_FLOATS
+        require(indexData.contentEquals(COLOR_GLYPH_QUAD_INDICES)) {
+            "Color-glyph first-slice indices must describe the canonical two-triangle quad"
+        }
+        require(indexData.all { it in 0 until vertexCount }) {
+            "Color-glyph indices must reference the provided vertices"
+        }
+        require(uniformBytes.size == COLOR_GLYPH_UNIFORM_BYTES) {
+            "Color-glyph uniform ABI must contain exactly $COLOR_GLYPH_UNIFORM_BYTES bytes"
+        }
+        validateColorGlyphUniform(uniformBytes, targetBounds, atlasWidth, atlasHeight, layers)
+
+        val layerSnapshots = layers.map(::GPUColorGlyphLayerPayload)
+        val vertexSnapshot = vertexData.toList()
+        val indexSnapshot = indexData.toList()
+        val uniformSnapshot = uniformBytes.map { it.toInt() and 0xff }
+        val uniformFields = colorGlyphUniformFields()
+        val uniformScope = "color-glyph:$commandIdValue"
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                colorGlyphUniformIntegrityPreimage(
+                    packingPlanHash = COLOR_GLYPH_UNIFORM_LAYOUT,
+                    byteSize = COLOR_GLYPH_UNIFORM_BYTES.toLong(),
+                    zeroedPadding = true,
+                    scope = uniformScope,
+                    bytes = uniformSnapshot,
+                    fields = uniformFields,
+                ),
+            ),
+        )
+        val uniformBlock = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = COLOR_GLYPH_UNIFORM_LAYOUT,
+            byteSize = COLOR_GLYPH_UNIFORM_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = uniformScope,
+            bytes = uniformSnapshot,
+            fields = uniformFields,
+        )
+        val payloadRef = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = renderStepIdentity,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("color-glyph:$commandIdValue:uniform"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = uniformBlock,
+        )
+        val atlasArtifact = preparedAtlas ?: buildPreparedColorGlyphR8UploadArtifact(
+            artifactKey = atlasArtifactKey,
+            width = atlasWidth,
+            height = atlasHeight,
+            bytes = atlasA8Bytes,
+        )
+        val atlasBytesSha256 = atlasArtifact.contentHash
+        val canonicalHash = sha256Hex(
+            colorGlyphCanonicalPreimage(
+                payloadRef,
+                planArtifactKey,
+                atlasArtifactKey,
+                atlasArtifact.key,
+                atlasArtifact.rowBytes,
+                atlasWidth,
+                atlasHeight,
+                closedFormat,
+                atlasGeneration,
+                atlasBytesSha256,
+                layerSnapshots,
+                vertexSnapshot,
+                indexSnapshot,
+                uniformSnapshot,
+                targetBounds,
+                scissorBounds,
+            ),
+        )
+        return GPUDrawSemanticPayload.ColorGlyph(
+            payloadRef = payloadRef,
+            planArtifactKey = planArtifactKey,
+            atlasArtifactKey = atlasArtifactKey,
+            atlas = atlasArtifact,
+            atlasFormat = closedFormat,
+            layers = layerSnapshots,
+            vertexData = vertexSnapshot,
+            indexData = indexSnapshot,
+            uniformBytes = uniformSnapshot,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            canonicalHash = canonicalHash,
+        )
+    }
+}
+
+private fun GPUPixelBounds.isContainedBy(container: GPUPixelBounds): Boolean =
+    left >= container.left && top >= container.top && right <= container.right && bottom <= container.bottom
+
+private fun GPUPixelBounds.isContainedByAtlas(width: Int, height: Int): Boolean =
+    left >= 0 && top >= 0 && right <= width && bottom <= height
+
+private fun validateColorGlyphUniform(
+    bytes: ByteArray,
+    targetBounds: GPUPixelBounds,
+    atlasWidth: Int,
+    atlasHeight: Int,
+    layers: List<GPUColorGlyphLayerPayloadInput>,
+) {
+    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    require(buffer.float.rawEquals(targetBounds.width.toFloat())) { "Color-glyph uniform target width mismatch" }
+    require(buffer.float.rawEquals(targetBounds.height.toFloat())) { "Color-glyph uniform target height mismatch" }
+    require(buffer.int == layers.size) { "Color-glyph uniform layer count mismatch" }
+    require(buffer.int == 0) { "Color-glyph uniform reserved header must be zero" }
+    repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+        val expected = layers.getOrNull(index)?.premultipliedRgba ?: ZERO_COLOR
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index color mismatch"
+            }
+        }
+    }
+    repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+        val bounds = layers.getOrNull(index)?.atlasBounds
+        val expected = if (bounds == null) {
+            ZERO_COLOR
+        } else {
+            floatArrayOf(
+                bounds.left.toFloat() / atlasWidth,
+                bounds.top.toFloat() / atlasHeight,
+                bounds.width.toFloat() / atlasWidth,
+                bounds.height.toFloat() / atlasHeight,
+            )
+        }
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index atlas bounds mismatch"
+            }
+        }
+    }
+    repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+        val bounds = layers.getOrNull(index)?.deviceBounds
+        val expected = if (bounds == null) {
+            ZERO_COLOR
+        } else {
+            floatArrayOf(
+                bounds.left.toFloat(),
+                bounds.top.toFloat(),
+                bounds.width.toFloat(),
+                bounds.height.toFloat(),
+            )
+        }
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index device bounds mismatch"
+            }
+        }
+    }
+}
+
+private fun Float.rawEquals(other: Float): Boolean = toRawBits() == other.toRawBits()
+
+private fun GPUTextFloatRect.matchesRawAtlasBounds(
+    bounds: GPUPixelBounds,
+    atlasWidth: Int,
+    atlasHeight: Int,
+): Boolean =
+    left.rawEquals(bounds.left.toFloat() / atlasWidth.toFloat()) &&
+        top.rawEquals(bounds.top.toFloat() / atlasHeight.toFloat()) &&
+        right.rawEquals(bounds.right.toFloat() / atlasWidth.toFloat()) &&
+        bottom.rawEquals(bounds.bottom.toFloat() / atlasHeight.toFloat())
+
+private fun GPUColorGlyphLayerPayloadInput.hasSamePreparedAtlasPlacement(
+    other: GPUColorGlyphLayerPayloadInput,
+): Boolean {
+    val leftProof = placementProof
+    val rightProof = other.placementProof
+    return planArtifactKey == other.planArtifactKey &&
+        layerGlyphID == other.layerGlyphID &&
+        atlasBounds == other.atlasBounds &&
+        leftProof.atlasArtifactKey == rightProof.atlasArtifactKey &&
+        leftProof.strikeGlyphId == rightProof.strikeGlyphId &&
+        leftProof.strikeSize.toRawBits() == rightProof.strikeSize.toRawBits() &&
+        leftProof.strikeSubpixelX == rightProof.strikeSubpixelX &&
+        leftProof.strikeSubpixelY == rightProof.strikeSubpixelY &&
+        leftProof.atlasBounds == rightProof.atlasBounds
+}
+
+private fun colorGlyphCanonicalPreimage(
+    payloadRef: GPUDrawPayloadRef,
+    planArtifactKey: GPUTextArtifactKey,
+    atlasArtifactKey: GPUTextArtifactKey,
+    atlasKey: String,
+    atlasRowBytes: Int,
+    atlasWidth: Int,
+    atlasHeight: Int,
+    atlasFormat: GPUColorGlyphAtlasFormat,
+    atlasGeneration: Long,
+    atlasBytesSha256: String,
+    layers: List<GPUColorGlyphLayerPayload>,
+    vertices: List<Float>,
+    indices: List<Int>,
+    uniformBytes: List<Int>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    instances: List<GPUTextA8Instance> = emptyList(),
+    material: GPUPreparedMaterialProgram? = null,
+    clipIdentity: String? = null,
+    blendPlanIdentity: String? = null,
+    capabilitySnapshotHash: String? = null,
+    frameProvenance: GPUFrameProvenance? = null,
+): String = buildString {
+    appendCanonicalField("type", "ColorGlyph")
+    appendCanonicalField("payloadRef", colorGlyphPayloadRefCanonicalPreimage(payloadRef))
+    appendCanonicalField("planArtifact", planArtifactKey.canonicalIdentity())
+    appendCanonicalField("atlasArtifact", atlasArtifactKey.canonicalIdentity())
+    appendCanonicalField("atlasKey", atlasKey)
+    appendCanonicalField("atlasRowBytes", atlasRowBytes.toString())
+    appendCanonicalField("atlas", "${atlasWidth}x$atlasHeight:${atlasFormat.gpuLabel}:$atlasGeneration")
+    appendCanonicalField("atlasBytesSha256", atlasBytesSha256)
+    layers.forEachIndexed { index, layer ->
+        appendCanonicalField(
+            "layer",
+            "$index:${layer.layerGlyphID}:${layer.paletteIndex}:" +
+                "${layer.atlasBounds.canonicalBounds()}:${layer.deviceBounds.canonicalBounds()}:" +
+                "${layer.premultipliedRgba.joinToString(",") { it.toRawBits().toString() }}:" +
+                "${layer.useForeground}:${layer.foregroundResolved}:" +
+                "${layer.colorLayerIndex ?: "legacy"}:" +
+                "${layer.placementProof.atlasArtifactKey.canonicalIdentity()}:" +
+                "${layer.placementProof.strikeGlyphId}:${layer.placementProof.strikeSize.toRawBits()}:" +
+                "${layer.placementProof.strikeSubpixelX}:${layer.placementProof.strikeSubpixelY}:" +
+                layer.placementProof.atlasBounds.canonicalBounds(),
+        )
+    }
+    appendCanonicalField("vertices", vertices.joinToString(",") { it.toRawBits().toString() })
+    appendCanonicalField("indices", indices.joinToString(","))
+    appendCanonicalField("uniform", uniformBytes.joinToString(","))
+    appendCanonicalField("target", targetBounds.canonicalBounds())
+    appendCanonicalField("scissor", scissorBounds.canonicalBounds())
+    instances.forEachIndexed { index, instance ->
+        appendCanonicalField(
+            "instance",
+            "$index:${instance.glyphId}:${instance.pageIndex}:${instance.colorLayerIndex}:" +
+                "${instance.sourceGlyphIndex.value}:" +
+                instance.deviceQuad.joinToString(",") { value -> value.toRawBits().toString() } +
+                ":" + listOf(
+                instance.uvRect.left,
+                instance.uvRect.top,
+                instance.uvRect.right,
+                instance.uvRect.bottom,
+            ).joinToString(",") { value -> value.toRawBits().toString() },
+        )
+    }
+    appendCanonicalField("material.present", (material != null).toString())
+    if (material != null) {
+        appendCanonicalField("material.key", material.materialKey)
+        appendCanonicalField("material.wgsl", sha256Hex(material.wgslSource))
+        appendCanonicalField("material.entryPoint", material.entryPoint)
+        appendCanonicalField("material.uniformBytes", material.uniformBytes.joinToString(","))
+        appendCanonicalField(
+            "material.resources",
+            material.sampledResources.joinToString("|") { resource ->
+                "${resource.resourceKey}:${resource.contentHash}:${resource.width}x${resource.height}:" +
+                    "${resource.samplingFilterMode}:${resource.alphaOnly}"
+            },
+        )
+        appendCanonicalField("material.paintAlpha", material.paintAlpha.toRawBits().toString())
+        appendCanonicalField("material.sourceKind", material.sourceKind.name)
+        appendCanonicalField("material.abiHash", material.abiHash)
+    }
+    appendCanonicalField("clip", clipIdentity ?: "none")
+    appendCanonicalField("blend", blendPlanIdentity ?: "none")
+    appendCanonicalField("capability", capabilitySnapshotHash ?: "none")
+    appendCanonicalField("provenance", frameProvenance?.annotationValue ?: "none")
+}
+
+private fun preparedColorGlyphVertexData(
+    layers: List<GPUColorGlyphLayerPayloadInput>,
+): FloatArray {
+    val left = layers.minOf { layer -> layer.deviceBounds.left }.toFloat()
+    val top = layers.minOf { layer -> layer.deviceBounds.top }.toFloat()
+    val right = layers.maxOf { layer -> layer.deviceBounds.right }.toFloat()
+    val bottom = layers.maxOf { layer -> layer.deviceBounds.bottom }.toFloat()
+    return floatArrayOf(
+        left, top, 0f, 0f,
+        right, top, 1f, 0f,
+        right, bottom, 1f, 1f,
+        left, bottom, 0f, 1f,
+    )
+}
+
+private fun preparedColorGlyphUniformBytes(
+    targetBounds: GPUPixelBounds,
+    atlasWidth: Int,
+    atlasHeight: Int,
+    layers: List<GPUColorGlyphLayerPayloadInput>,
+): ByteArray = ByteBuffer.allocate(COLOR_GLYPH_UNIFORM_BYTES)
+    .order(ByteOrder.LITTLE_ENDIAN)
+    .apply {
+        putFloat(targetBounds.width.toFloat())
+        putFloat(targetBounds.height.toFloat())
+        putInt(layers.size)
+        putInt(0)
+        repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+            val color = layers.getOrNull(index)?.premultipliedRgba ?: ZERO_COLOR
+            color.forEach(::putFloat)
+        }
+        repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+            val bounds = layers.getOrNull(index)?.atlasBounds
+            val values = if (bounds == null) {
+                ZERO_COLOR
+            } else {
+                floatArrayOf(
+                    bounds.left.toFloat() / atlasWidth,
+                    bounds.top.toFloat() / atlasHeight,
+                    bounds.width.toFloat() / atlasWidth,
+                    bounds.height.toFloat() / atlasHeight,
+                )
+            }
+            values.forEach(::putFloat)
+        }
+        repeat(GPU_COLOR_GLYPH_MAX_LAYERS) { index ->
+            val bounds = layers.getOrNull(index)?.deviceBounds
+            val values = if (bounds == null) {
+                ZERO_COLOR
+            } else {
+                floatArrayOf(
+                    bounds.left.toFloat(),
+                    bounds.top.toFloat(),
+                    bounds.width.toFloat(),
+                    bounds.height.toFloat(),
+                )
+            }
+            values.forEach(::putFloat)
+        }
+    }
+    .array()
+
+private fun colorGlyphPayloadRefCanonicalPreimage(ref: GPUDrawPayloadRef): String = buildString {
+    appendCanonicalField("command", ref.commandIdValue.toString())
+    appendCanonicalField("step", ref.renderStepIdentity)
+    val slot = ref.uniformSlot
+    appendCanonicalField("uniformSlot.present", (slot != null).toString())
+    if (slot != null) {
+        appendCanonicalField("uniformSlot.id", slot.slotId.value)
+        appendCanonicalField("uniformSlot.fingerprint", slot.fingerprint.value)
+        appendCanonicalField("uniformSlot.offset", slot.byteOffset.toString())
+    }
+    val block = ref.uniformBlock
+    appendCanonicalField("uniformBlock.present", (block != null).toString())
+    if (block != null) {
+        appendCanonicalField("uniformBlock.fingerprint", block.fingerprint.value)
+        appendCanonicalField("uniformBlock.abi", colorGlyphUniformIntegrityPreimage(block))
+    }
+    appendCanonicalField("resourceSlot.present", (ref.resourceSlot != null).toString())
+    appendCanonicalField("gradientStore.present", (ref.gradientStore != null).toString())
+    appendCanonicalField("resourceBlock.present", (ref.resourceBlock != null).toString())
+}
+
+private fun colorGlyphUniformIntegrityPreimage(block: GPUUniformPayloadBlock): String =
+    colorGlyphUniformIntegrityPreimage(
+        packingPlanHash = block.packingPlanHash,
+        byteSize = block.byteSize,
+        zeroedPadding = block.zeroedPadding,
+        scope = block.scope,
+        bytes = block.bytes,
+        fields = block.fields,
+    )
+
+private fun colorGlyphUniformIntegrityPreimage(
+    packingPlanHash: String,
+    byteSize: Long,
+    zeroedPadding: Boolean,
+    scope: String,
+    bytes: List<Int>,
+    fields: List<GPUUniformPayloadField>,
+): String = buildString {
+    appendCanonicalField("packingPlanHash", packingPlanHash)
+    appendCanonicalField("byteSize", byteSize.toString())
+    appendCanonicalField("zeroedPadding", zeroedPadding.toString())
+    appendCanonicalField("scope", scope)
+    appendCanonicalField("bytes", bytes.joinToString(","))
+    fields.forEachIndexed { index, field ->
+        appendCanonicalField(
+            "field",
+            "$index:${field.fieldPath}:${field.byteOffset}:${field.byteSize}:${field.valueClass}:${field.zeroFilled}",
+        )
+    }
+}
+
+private fun colorGlyphUniformFields(): List<GPUUniformPayloadField> = listOf(
+    GPUUniformPayloadField("targetSize.layerCount", 0, 16, "header"),
+    GPUUniformPayloadField("layers.premultipliedRgba", 16, 256, "array<vec4f,16>"),
+    GPUUniformPayloadField("layers.atlasBounds", 272, 256, "array<vec4f,16>"),
+    GPUUniformPayloadField("layers.deviceBounds", 528, 256, "array<vec4f,16>"),
+)
+
+private fun hasCanonicalColorGlyphUniformIntegrity(
+    ref: GPUDrawPayloadRef,
+    uniformBytes: List<Int>,
+): Boolean {
+    val slot = ref.uniformSlot ?: return false
+    val block = ref.uniformBlock ?: return false
+    if (ref.resourceSlot != null || ref.gradientStore != null || ref.resourceBlock != null) return false
+    if (slot.slotId != GPUPayloadSlotID("color-glyph:${ref.commandIdValue}:uniform") || slot.byteOffset != 0L) {
+        return false
+    }
+    if (block.packingPlanHash != COLOR_GLYPH_UNIFORM_LAYOUT ||
+        block.byteSize != COLOR_GLYPH_UNIFORM_BYTES.toLong() ||
+        !block.zeroedPadding ||
+        block.scope != "color-glyph:${ref.commandIdValue}" ||
+        block.bytes != uniformBytes ||
+        block.bytes.size != COLOR_GLYPH_UNIFORM_BYTES ||
+        block.bytes.any { it !in 0..255 } ||
+        block.fields != colorGlyphUniformFields()
+    ) {
+        return false
+    }
+    val expectedFingerprint = GPUPayloadFingerprint(sha256Hex(colorGlyphUniformIntegrityPreimage(block)))
+    return block.fingerprint == expectedFingerprint && slot.fingerprint == expectedFingerprint
+}
+
+private fun sha256BytesHex(bytes: List<Int>): String {
+    if (bytes.any { it !in 0..255 }) return ""
+    return MessageDigest.getInstance("SHA-256")
+        .digest(ByteArray(bytes.size) { index -> bytes[index].toByte() })
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+}
+
+private fun StringBuilder.appendCanonicalField(name: String, value: String) {
+    append(name).append('#').append(value.length).append(':').append(value).append('\n')
+}
+
+private fun GPUTextArtifactKey.canonicalIdentity(): String =
+    "${artifactID.value}:${generation.value}:${contentFingerprint.length}:$contentFingerprint"
+
+private fun GPUTextArtifactKey.dumpIdentity(): String =
+    "${artifactID.value}@${generation.value}/$contentFingerprint"
+
+private fun GPUPixelBounds.canonicalBounds(): String = "$left,$top,$right,$bottom"
+
+private fun GPUPixelBounds.overlaps(other: GPUPixelBounds): Boolean =
+    left < other.right && other.left < right && top < other.bottom && other.top < bottom
+
+private fun requireArtifactIdentity(key: GPUTextArtifactKey, label: String) {
+    require(key.generation.value >= 0) { "$label generation must be non-negative" }
+    requireDumpSafeIdentity(key.contentFingerprint, "$label content fingerprint")
+}
+
+private fun requireDumpSafeIdentity(value: String, label: String) {
+    require(value.isNotBlank()) { "$label must not be blank" }
+    require(value.all { character -> character.code in 0x21..0x7e && character !in DUMP_IDENTITY_DELIMITERS }) {
+        "$label must contain only dump-safe identity characters"
+    }
+}
+
+private const val COLOR_GLYPH_VERTEX_FLOATS = 4
+private const val COLOR_GLYPH_QUAD_FLOATS = 16
+private const val COLOR_GLYPH_UNIFORM_BYTES = 784
+private const val COLOR_GLYPH_UNIFORM_LAYOUT = "color-glyph-composite-uniform-v2"
+private val ZERO_COLOR = floatArrayOf(0f, 0f, 0f, 0f)
+private val DUMP_IDENTITY_DELIMITERS = setOf('=', ':', ',', '|', '@', '/')
+private val COLOR_GLYPH_QUAD_INDICES = intArrayOf(0, 1, 2, 0, 2, 3)
 
 /** Payload gathering contract. */
 interface GPUPayloadGatherer {
@@ -283,6 +4016,16 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
             uniformSlot = slot,
             uniformBlock = block,
         )
+    }
+
+    /** Packs once through [gather] and closes the resulting deeply immutable semantic value. */
+    fun gatherSemantic(
+        plan: GPUPayloadGatherPlan,
+        payload: GPUMaterialPayload,
+    ): GPUDrawSemanticPayload.SolidRect = GPUDrawSemanticPayload.SolidRect(gather(plan, payload)).also { semantic ->
+        check(semanticValidationFailure(semantic.payloadRef) == null) {
+            "GPUSolidPayloadGatherer produced an invalid semantic payload"
+        }
     }
 
     override fun reset(scopeId: String) {
@@ -349,7 +4092,7 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
         return requireNotNull(rawValue.toIntOrNull()) { "Payload field $fieldPath must be an integer" }
     }
 
-    private companion object {
+    companion object {
         private const val solidPayloadClass = "solid-rgba-rect"
         private const val solidRectPackingPlanHash = "solid-rect-layout-v1"
         private const val solidRectByteSize = 64
@@ -369,6 +4112,64 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
             "color.b",
             "color.a",
         )
+
+        /** Revalidates the gatherer's exact ABI without repacking or reconstructing source values. */
+        internal fun semanticValidationFailure(ref: GPUDrawPayloadRef): String? {
+            val slot = ref.uniformSlot ?: return "invalid.preflight.solid_semantic_uniform_missing"
+            val block = ref.uniformBlock ?: return "invalid.preflight.solid_semantic_uniform_missing"
+            if (ref.resourceSlot != null || ref.resourceBlock != null || ref.gradientStore != null) {
+                return "invalid.preflight.solid_semantic_layout"
+            }
+            if (slot.fingerprint != block.fingerprint) {
+                return "invalid.preflight.solid_semantic_fingerprint_mismatch"
+            }
+            if (slot.byteOffset != 0L || block.packingPlanHash != solidRectPackingPlanHash || block.scope.isBlank()) {
+                return "invalid.preflight.solid_semantic_layout"
+            }
+            if (block.byteSize != solidRectByteSize.toLong() || block.bytes.size != solidRectByteSize ||
+                block.bytes.any { it !in 0..255 }
+            ) {
+                return "invalid.preflight.solid_semantic_byte_count"
+            }
+            val expectedFields = solidRectFloatFields.mapIndexed { index, fieldPath ->
+                Triple(fieldPath, index * Float.SIZE_BYTES.toLong(), "f32")
+            } + Triple("padding.reserved", solidRectUsedByteSize.toLong(), "padding")
+            val rangesValid = block.fields.size == expectedFields.size && block.fields.indices.all { index ->
+                val field = block.fields[index]
+                val expected = expectedFields[index]
+                val expectedSize = if (index < solidRectFloatFields.size) {
+                    Float.SIZE_BYTES.toLong()
+                } else {
+                    (solidRectByteSize - solidRectUsedByteSize).toLong()
+                }
+                field.fieldPath == expected.first && field.byteOffset == expected.second &&
+                    field.byteSize == expectedSize && field.valueClass == expected.third &&
+                    field.byteOffset >= 0L && field.byteSize > 0L &&
+                    field.byteOffset <= block.byteSize - field.byteSize
+            } && block.fields.zipWithNext().all { (left, right) ->
+                left.byteOffset + left.byteSize <= right.byteOffset
+            }
+            if (!rangesValid) return "invalid.preflight.solid_semantic_field_ranges"
+
+            if (!block.zeroedPadding || block.bytes.drop(solidRectUsedByteSize).any { it != 0 }) {
+                return "invalid.preflight.solid_semantic_padding"
+            }
+            val fieldZeroFactsValid = block.fields.all { field ->
+                val start = field.byteOffset.toInt()
+                val end = (field.byteOffset + field.byteSize).toInt()
+                field.zeroFilled == block.bytes.subList(start, end).all { it == 0 }
+            }
+            if (!fieldZeroFactsValid) return "invalid.preflight.solid_semantic_field_metadata"
+
+            val byteArray = ByteArray(block.bytes.size) { index -> block.bytes[index].toByte() }
+            val floatBuffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+            val values = List(solidRectFloatFields.size) { index -> floatBuffer.get(index) }
+            if (values.any { !it.isFinite() }) return "invalid.preflight.solid_semantic_non_finite"
+            if (values.subList(4, 8).any { it < 0f } || values.subList(8, 12).any { it !in 0f..1f }) {
+                return "invalid.preflight.solid_semantic_value_range"
+            }
+            return null
+        }
 
     }
 }

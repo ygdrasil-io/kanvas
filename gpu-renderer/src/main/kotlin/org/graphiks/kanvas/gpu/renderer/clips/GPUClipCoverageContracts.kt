@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.clips
 
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+
 /** Conservative scalar bounds used by clip transport and planning contracts. */
 data class GPUBounds(
     val left: Float,
@@ -42,7 +44,7 @@ class GPUClipCoverageElement(
     val fillRule: GPUClipFillRule,
     val inverseFill: Boolean,
 ) {
-    val values: List<Float> = values.toList()
+    val values: List<Float> = immutableList(values)
 
     init {
         require(vertexCount >= 0) { "GPUClipCoverageElement.vertexCount must be non-negative" }
@@ -174,6 +176,27 @@ sealed interface GPUClipCoveragePlan {
 
     data class Scissor(val bounds: GPUBounds) : GPUClipCoveragePlan
 
+    /** Two to four ordered simple intersections that need no texture intermediate. */
+    class AnalyticIntersection(
+        elements: List<GPUClipCoverageElement>,
+    ) : GPUClipCoveragePlan {
+        val elements: List<GPUClipCoverageElement> = immutableList(elements)
+
+        init {
+            require(elements.size in 2..4) { "AnalyticIntersection requires two to four elements" }
+            require(elements.all(GPUClipCoverageElement::isSimpleAnalyticIntersection)) {
+                "AnalyticIntersection accepts only finite intersect rects and simple rrects"
+            }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other || other is AnalyticIntersection && elements == other.elements
+
+        override fun hashCode(): Int = elements.hashCode()
+
+        override fun toString(): String = "AnalyticIntersection(elements=$elements)"
+    }
+
     data class Mask(
         val contentKey: String,
         val width: Int,
@@ -185,4 +208,29 @@ sealed interface GPUClipCoveragePlan {
     ) : GPUClipCoveragePlan
 
     data class Refused(val code: String) : GPUClipCoveragePlan
+}
+
+fun GPUClipCoverageElement.isSimpleAnalyticIntersection(): Boolean {
+    if (
+        operation != GPUClipCoverageOperation.Intersect ||
+        inverseFill ||
+        values.any { !it.isFinite() }
+    ) {
+        return false
+    }
+    if (kind == GPUClipCoverageElementKind.Path) return false
+    val width = values[2] - values[0]
+    val height = values[3] - values[1]
+    if (width <= 0f || height <= 0f) return false
+    return when (kind) {
+        GPUClipCoverageElementKind.Rect -> true
+        GPUClipCoverageElementKind.Path -> false
+        GPUClipCoverageElementKind.RRect -> {
+            val radii = values.subList(4, 12)
+            val firstX = radii[0]
+            val firstY = radii[1]
+            radii.chunked(2).all { pair -> pair[0] == firstX && pair[1] == firstY } &&
+                firstX >= 0f && firstY >= 0f && firstX * 2f <= width && firstY * 2f <= height
+        }
+    }
 }

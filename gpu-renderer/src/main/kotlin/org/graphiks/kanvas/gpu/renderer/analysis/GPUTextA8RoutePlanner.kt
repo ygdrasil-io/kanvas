@@ -2,9 +2,12 @@ package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextAtlasPlan
@@ -40,9 +43,9 @@ class GPUTextA8RoutePlanner {
             materialKeyHash = "pending.material.text",
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
-            diagnostics = command.atlasGenerationTokens.map { token ->
+            diagnostics = command.atlasGenerations.map { generation ->
                 GPUAnalysisDiagnostic(
-                    code = "text:atlas_gen=$token",
+                    code = "text:atlas_gen=${generation.value}",
                     recordId = recordId,
                     terminal = false,
                 )
@@ -68,11 +71,18 @@ class GPUTextA8RoutePlanner {
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.preparedBlendPlan ?: command.blend.canonicalPlan(
+                command.layer.target.colorFormat,
+                GPUCoverageConsumption.ScalarCoverage,
+            ),
             boundsHash = command.bounds.stableBoundsHash(),
-            scissorBoundsHash = command.scissorBoundsHash(),
+            scissorBoundsHash = command.preparedTextScissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -154,12 +164,12 @@ class GPUTextA8RoutePlanner {
 
     private fun NormalizedDrawCommand.DrawTextRun.refusalCode(): String? =
         when {
-            artifactRefs.isEmpty() -> "unsupported.text.artifact_unregistered"
+            artifactRefs.isEmpty() -> GPUTextRefusalCodes.ARTIFACT_UNREGISTERED
             artifactRefs.any { ref -> ref.routeHint != null && ref.routeHint !in acceptedRouteHints } ->
-                "unsupported.text.a8_atlas_route_unavailable"
-            atlasGenerationTokens.any { token -> !token.startsWith("atlas-generation-") } ->
-                "unsupported.text.atlas_generation_stale"
-            uploadDependencyFacts.isEmpty() -> "unsupported.text.upload_plan_missing"
+                GPUTextRefusalCodes.A8_ATLAS_ROUTE_UNAVAILABLE
+            atlasGenerations != artifactRefs.map { reference -> reference.generation } ->
+                GPUTextRefusalCodes.ATLAS_GENERATION_STALE
+            uploadDependencyFacts.isEmpty() -> GPUTextRefusalCodes.UPLOAD_PLAN_MISSING
             routeDiagnostics.any { diag -> diag.terminal } ->
                 routeDiagnostics.first { diag -> diag.terminal }.code
             else -> null
@@ -173,8 +183,13 @@ class GPUTextA8RoutePlanner {
 private fun NormalizedDrawCommand.DrawTextRun.targetStateHash(): String =
     "target.${layer.target.colorFormat}.${layer.target.width}x${layer.target.height}"
 
-private fun NormalizedDrawCommand.DrawTextRun.scissorBoundsHash(): String? =
-    null
+internal fun NormalizedDrawCommand.DrawTextRun.preparedTextScissorBoundsHash(): String? =
+    (clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.ScissorOnly)
+        ?.scissor
+        ?.let { scissor ->
+            "scissor_${scissor.left.toFloat()}_${scissor.top.toFloat()}_" +
+                "${scissor.right.toFloat()}_${scissor.bottom.toFloat()}"
+        }
 
 private fun GPUBounds.stableBoundsHash(): String =
     "bounds:$left,$top,$right,$bottom"

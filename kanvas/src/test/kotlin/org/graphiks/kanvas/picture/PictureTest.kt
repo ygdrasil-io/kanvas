@@ -5,8 +5,11 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ImageFilter
@@ -15,6 +18,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
@@ -26,6 +30,152 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PictureTest {
+    @Test
+    fun `format 6 preserves expanded text provenance through round trip and playback`() {
+        val path = DisplayOp.DrawPath.withSourceOperation(
+            path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+            sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
+        )
+        val original = Picture(Rect.fromLTRB(0f, 0f, 8f, 8f), listOf(path))
+
+        val encoded = original.toByteArray()
+        assertEquals(6, encoded.readBigEndianInt(offset = 4))
+        val restored = requireNotNull(Picture.fromByteArray(encoded))
+        assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
+
+        val playback = TestBuffer()
+        restored.playback(Canvas(playback))
+        assertEquals(
+            "text-expanded",
+            assertIs<DisplayOp.DrawPath>(playback.ops().single()).sourceOperation,
+        )
+    }
+
+    @Test
+    fun `format 5 DrawPath remains decodable with the truthful legacy source`() {
+        val source = "text-expanded"
+        val current = Picture(
+            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            listOf(
+                DisplayOp.DrawPath.withSourceOperation(
+                    path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+                    paint = Paint.fill(Color.RED),
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                    sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
+                ),
+            ),
+        ).toByteArray()
+        val legacy = current.copyOf(current.size - 2 - source.encodeToByteArray().size).also { bytes ->
+            bytes.writeBigEndianInt(offset = 4, value = 5)
+        }
+
+        val restored = requireNotNull(Picture.fromByteArray(legacy))
+
+        assertEquals("drawPath", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
+    }
+
+    @Test
+    fun `format 6 leaves non path opcode payload compatible with format 5`() {
+        val current = Picture(
+            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            listOf(
+                DisplayOp.DrawRect(
+                    rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
+                    paint = Paint.fill(Color.BLUE),
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+        ).toByteArray()
+        val legacyHeader = current.copyOf().also { bytes ->
+            bytes.writeBigEndianInt(offset = 4, value = 5)
+        }
+
+        val restored = requireNotNull(Picture.fromByteArray(legacyHeader))
+
+        assertEquals(
+            DisplayOp.DrawRect(
+                rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
+                paint = Paint.fill(Color.BLUE),
+                transform = Matrix33.identity(),
+                clip = ClipStack.WideOpen,
+            ),
+            restored.ops.single(),
+        )
+    }
+
+    @Test
+    fun `format 6 refuses an arbitrary serialized DrawPath source`() {
+        val encoded = Picture(
+            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            listOf(
+                DisplayOp.DrawPath.withSourceOperation(
+                    path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+                    paint = Paint.fill(Color.RED),
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                    sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
+                ),
+            ),
+        ).toByteArray()
+        "forged-source".encodeToByteArray().copyInto(
+            destination = encoded,
+            destinationOffset = encoded.size - "forged-source".length,
+        )
+
+        assertNull(Picture.fromByteArray(encoded))
+    }
+
+    @Test
+    fun `format 5 round trip preserves each explicit image alpha authority`() {
+        for (alpha in listOf(AlphaType.PREMUL, AlphaType.OPAQUE, AlphaType.UNPREMUL)) {
+            val picture = pictureWithImageAlpha(alpha)
+            val restored = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
+            val images = mutableListOf<Image>()
+            restored.walkImages(images::add)
+            val restoredImage = images.single()
+
+            assertEquals(alpha, restoredImage.alphaType)
+        }
+    }
+
+    @Test
+    fun `formats one through four decode legacy images as conservative unpremultiplied`() {
+        val v5 = pictureWithImageAlpha(AlphaType.PREMUL).toByteArray()
+        val sourceId = "legacy-alpha".encodeToByteArray()
+        val sourceIndex = v5.indexOfSubArray(sourceId)
+        assertTrue(sourceIndex >= 0)
+        val afterSource = sourceIndex + sourceId.size
+        val colorSpaceStart = if (v5[afterSource].toInt() == 0) {
+            afterSource + 1
+        } else {
+            val pixelLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 24) or
+                ((v5[afterSource + 2].toInt() and 0xFF) shl 16) or
+                ((v5[afterSource + 3].toInt() and 0xFF) shl 8) or
+                (v5[afterSource + 4].toInt() and 0xFF)
+            afterSource + 5 + pixelLength
+        }
+        val colorSpaceNameLength = ((v5[colorSpaceStart].toInt() and 0xFF) shl 8) or (v5[colorSpaceStart + 1].toInt() and 0xFF)
+        val alphaIndex = colorSpaceStart + 2 + colorSpaceNameLength + 2
+        val legacy = v5.copyInto(ByteArray(v5.size - 1), 0, 0, alphaIndex).also { target ->
+            v5.copyInto(target, alphaIndex, alphaIndex + 1, v5.size)
+        }
+        for (version in 1..4) {
+            legacy[4] = 0
+            legacy[5] = 0
+            legacy[6] = 0
+            legacy[7] = version.toByte()
+            val restored = requireNotNull(Picture.fromByteArray(legacy))
+            val images = mutableListOf<Image>()
+            restored.walkImages(images::add)
+            assertEquals(AlphaType.UNPREMUL, images.single().alphaType)
+        }
+    }
+
     @Test
     fun `PictureRecorder records and produces Picture`() {
         val recorder = PictureRecorder()
@@ -180,6 +330,19 @@ class PictureTest {
         assertNull(Picture.fromByteArray(ByteArray(0)))
     }
 
+    private fun ByteArray.readBigEndianInt(offset: Int): Int =
+        ((this[offset].toInt() and 0xff) shl 24) or
+            ((this[offset + 1].toInt() and 0xff) shl 16) or
+            ((this[offset + 2].toInt() and 0xff) shl 8) or
+            (this[offset + 3].toInt() and 0xff)
+
+    private fun ByteArray.writeBigEndianInt(offset: Int, value: Int) {
+        this[offset] = (value ushr 24).toByte()
+        this[offset + 1] = (value ushr 16).toByte()
+        this[offset + 2] = (value ushr 8).toByte()
+        this[offset + 3] = value.toByte()
+    }
+
     @Test
     fun `opCount returns top-level operation count`() {
         val recorder = PictureRecorder()
@@ -322,6 +485,18 @@ class PictureTest {
         assertTrue(collected.any { it is DisplayOp.DrawPicture })
     }
 }
+
+private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
+    val recorder = PictureRecorder()
+    recorder.beginRecording(Rect.fromLTRB(0f, 0f, 2f, 2f)).drawImage(
+        Image(1, 1, ColorType.RGBA_8888, "legacy-alpha", byteArrayOf(1, 2, 3, 4), alphaType = alphaType),
+        Rect.fromLTRB(0f, 0f, 1f, 1f),
+    )
+    return recorder.finishRecordingAsPicture()
+}
+
+private fun ByteArray.indexOfSubArray(needle: ByteArray): Int =
+    indices.firstOrNull { index -> index + needle.size <= size && needle.indices.all { offset -> this[index + offset] == needle[offset] } } ?: -1
 
 private val V1_LAYER_PICTURE_FIXTURE = byteArrayOf(
     0x4B, 0x50, 0x49, 0x43, // KPIC

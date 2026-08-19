@@ -35,9 +35,16 @@ consumes those facts instead of reinterpreting matrices ad hoc.
 `GPUTaskList` owns ordered GPU work and resource dependencies.
 
 `GPUDrawPass` owns immutable draw-pass data close to GPU submission.
-The packet and pass-command materialization boundary from `GPUDrawPass` into
-`GPUExecutionContext.submit()` is defined in
+The handle-free packet boundary from `GPUDrawPass` into final frame planning
+and preflight command-stream materialization is defined in
 `37-draw-packet-command-stream.md`.
+
+`GPUTaskList` is the dependency authority. `GPUFramePlan` is its immutable,
+deterministic linear execution schedule and never a parallel task model.
+`GPUFrameCoordinator` is the sole product entry across planner finalization,
+`GPUFramePreflighter`, and `GPUFrameExecutor`. The coordinator performs no
+route decision and preserves planning or preflight refusals as terminal frame
+outcomes; neither a scene nor a surface entry may bypass it.
 
 `GPURenderStep` owns the geometry/coverage technique used by a draw inside a
 pass.
@@ -72,11 +79,12 @@ subrun splitting, text atlas resource needs, upload dependencies, instance
 buffer facts, and text diagnostics as defined in
 `21-text-glyph-pipeline.md`.
 
-Analysis and resource materialization are separate stages. Immutable
-`GPUDrawAnalysis` records capture pre-allocation decisions; resource, pipeline,
-atlas, upload, lazy/promise resource, and destination-copy outcomes are
-confirmed or refused later by the materialization policy in
-`34-analysis-materialization-recording.md`.
+Analysis and recording are handle-free. Immutable `GPUDrawAnalysis` records
+capture pre-allocation decisions and `GPUTaskList` captures dependencies.
+Resource, pipeline, atlas, upload, lazy/promise resource, destination-copy,
+pass-command-stream, and concrete-handle outcomes are confirmed or refused
+only by `GPUFramePreflighter` after the final `GPUFramePlan` order is known, as
+defined in `34-analysis-materialization-recording.md`.
 
 ## `GPURecorder`
 
@@ -134,9 +142,9 @@ Each analysis record contains:
 - text run/subrun plan facts, text atlas entry requirements, text upload plans,
   and `GPUTextOrderingToken` dependencies when a route draws glyph artifacts;
 - opacity and blend classification;
-- destination-read requirements;
-- `GPUDestinationReadPlan` references when a route observes previous
-  destination pixels;
+- semantic destination-read requirements, conservative bounds, and dependency
+  roles when a route observes previous destination pixels; the concrete
+  `GPUDestinationReadPlan` does not exist until preflight;
 - clip, stencil, upload, atlas, and target-load dependencies;
 - `GPUTextureOwnershipPlan` references for image or texture sources;
 - layer assignment request;
@@ -297,23 +305,18 @@ must be treated as one-shot.
 
 ## `GPUTaskList`
 
-`GPUTaskList` is an ordered collection of tasks. A task may prepare resources,
-encode commands, or represent a synchronization boundary.
+`GPUTaskList` is the ordered dependency authority for handle-free tasks. A task
+declares render, compute, copy, upload, output, or refusal intent plus resource
+roles and dependency tokens. It does not allocate a resource, acquire a
+surface, create a pass command stream, hold a concrete handle, or encode
+against the `GPU` facade.
 
-Task phases:
-
-1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
-   texture views, samplers, imports, surface texture leases, atlases, atlas
-   entry mutations, clip stencil producers, clip mask resources, clip shader
-   resources, image upload artifacts, animated image frame uploads, filter
-   intermediates, filter render/compute node resources, text atlas pages, text
-   instance buffers, destination copy/intermediate resources, bind groups, and
-   gathered payload uploads.
-2. `addCommands`: encode packet-derived pass command streams through the `GPU`
-   facade.
-
-The split exists so route selection, resource failure, and command encoding
-failures are reported separately.
+`GPUFramePlanner` validates dependencies and projects the list into one
+immutable `GPUFramePlan`. It preserves task IDs, dependency seals, recording
+insertion order, route decisions, and refusals. A cycle, incompatible replay
+key, or unisolatable dependency is an atomic planning failure. Only after this
+order is final may `GPUFramePreflighter` materialize resources and the
+one-to-one command-encoder plan.
 
 Atlas mutations from `19-path-coverage-atlas-strategy.md` are resource
 preparation work. A task that samples a path or coverage atlas must depend on
@@ -321,18 +324,18 @@ the upload, compute write, page activation, eviction, or split-pass retry plan
 that made the entry valid.
 Clip stencil producers, clip mask uploads or compute writes, clip shader mask
 resources, and clip ordering tokens from `24-clip-stencil-mask-pipeline.md`
-are resource preparation and ordering work. A task that draws through a clip
+are resource preparation and ordering requirements. A task that draws through a clip
 must depend on its accepted `GPUClipPlan`, `GPUClipStencilPlan` or
 `GPUClipMaskPlan` when present, and any `GPUCoverageAtlasPlan` or
 `GPUCoverageAtlasBinding` it references.
 Destination-read target copies and isolated intermediates from
-`20-destination-read-strategy.md` are resource preparation and ordering work. A
+`20-destination-read-strategy.md` are resource preparation and ordering requirements. A
 task that samples a copied destination or existing intermediate must depend on
 the corresponding copy/intermediate validation plan.
 Layer target allocation, transparent clear, previous-content copy, backdrop
 filter initialization, child layer rendering, source filter execution,
 restore composite, and layer target release from
-`28-layer-savelayer-execution.md` are resource preparation and ordering work.
+`28-layer-savelayer-execution.md` are resource preparation and ordering requirements.
 A task that samples or composites a layer source must depend on its accepted
 `GPULayerTaskPlan`, `GPULayerResourcePlan`, and `GPULayerOrderingToken`.
 Filter graph intermediates, render/compute node resources, runtime-effect
@@ -344,7 +347,7 @@ references.
 
 Text atlas uploads, atlas generation validation, text instance buffer uploads,
 and text artifact resource bindings from `21-text-glyph-pipeline.md` are
-resource preparation and ordering work. A task that samples a text atlas or
+resource preparation and ordering requirements. A task that samples a text atlas or
 bitmap glyph texture must depend on its accepted `GPUTextUploadPlan`,
 `GPUTextAtlasEntryRef`, `GPUTextBinding`, and `GPUTextOrderingToken`.
 Image decode artifacts, animated frame selection/composition, mip generation,
@@ -363,7 +366,9 @@ Task outcomes:
 ## `GPUDrawPass`
 
 `GPUDrawPass` is immutable after creation. It consumes `GPUDrawAnalysis` and
-the `GPUDrawLayerPlanner` output, then materializes immutable pass commands.
+the `GPUDrawLayerPlanner` output, then records immutable, handle-free packet
+intent. `GPUPassCommandStream` is produced later in preflight after the final
+frame order is known.
 It must not rediscover route, material, layer, culling, or dependency facts
 from raw normalized commands.
 
@@ -384,7 +389,7 @@ analysis and layer ordering facts prove correctness. If the pass changes
 ordering, it must preserve the diagnostic trail from original command ID to
 analysis record, layer, sort key, and materialized pass command.
 
-Pass materialization must preserve refused and discarded analysis outcomes in
+Pass planning must preserve refused and discarded analysis outcomes in
 diagnostics. A command that cannot become a pass command must report whether it
 was culled, discarded as redundant, refused, or blocked by resource planning.
 
@@ -423,9 +428,12 @@ The task graph must preserve:
 Optimization is allowed only after those dependencies are explicit in
 `GPUDrawAnalysis`, `GPUDrawLayer`, and `SortKey` diagnostics.
 
-## Resource Preparation
+## Preflight Resource Materialization
 
-Resource preparation uses `GPUResourceProvider`. It must produce deterministic
+After `GPUFramePlan` finalization, `GPUFramePreflighter` uses
+`GPUResourceProvider` to produce `GPUResourceMaterializationDecision` values,
+pass command streams, concrete handles hidden inside the prepared resource set,
+and either rollback or one `PreparedGPUFrame`. It must produce deterministic
 diagnostics for:
 
 - unsupported capabilities;
@@ -473,7 +481,7 @@ Recording Session
   -> snapshots as GPUDeferredDisplayList
   -> later frame: replay with new CTM/clip
   -> GPUDeferredDisplayListReplayPlan produces new GPUTaskList
-  -> submit
+  -> GPUFrameCoordinator
 ```
 
 The replay path avoids full material-source re-evaluation when the recording is

@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawInvocation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
@@ -13,6 +16,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandR
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -45,8 +51,8 @@ class GPUExecutionContextTest {
         assertEquals("unsupported.execution.readback_unavailable", skipped.diagnostics.single().code)
         assertEquals(
             listOf(
-                "execution.readback:skipped request=readback-1 source=pm-evidence bounds=0,0 64x64 format=rgba8unorm sync=after-submit expectedArtifact=first-route.png failureReason=none reason=unsupported.execution.readback_unavailable diagnostics=unsupported.execution.readback_unavailable",
-                "execution.diagnostic code=unsupported.execution.readback_unavailable stage=readback terminal=true facts=boundsLabel=0,0 64x64;failureReason=none;format=rgba8unorm;requestId=readback-1;sourceLabel=pm-evidence",
+                "execution.readback:skipped request=readback-1 bounds=0,0,64,64 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 reason=unsupported.execution.readback_unavailable diagnostics=unsupported.execution.readback_unavailable",
+                "execution.diagnostic code=unsupported.execution.readback_unavailable stage=readback terminal=true facts=bufferOffsetBytes=0;pixelFormat=Rgba8Unorm;requestId=readback-1;sourceBounds=0,0,64,64",
             ),
             skipped.dumpLines(),
         )
@@ -85,10 +91,7 @@ class GPUExecutionContextTest {
     @Test
     fun `readback capable unconfigured context emits readback stage diagnostic`() {
         val context = ReadbackCapableUnconfiguredContextDouble()
-        val request = readbackRequest(
-            requestId = "readback-configured-capability",
-            failureReason = "backend-not-configured",
-        )
+        val request = readbackRequest(requestId = "readback-configured-capability")
 
         val readback = context.readback(request)
 
@@ -97,8 +100,8 @@ class GPUExecutionContextTest {
         assertEquals("readback", skipped.diagnostics.single().stage)
         assertEquals(
             listOf(
-                "execution.readback:skipped request=readback-configured-capability source=pm-evidence bounds=0,0 64x64 format=rgba8unorm sync=after-submit expectedArtifact=first-route.png failureReason=backend-not-configured reason=unsupported.execution.readback_unconfigured diagnostics=unsupported.execution.readback_unconfigured",
-                "execution.diagnostic code=unsupported.execution.readback_unconfigured stage=readback terminal=true facts=boundsLabel=0,0 64x64;failureReason=backend-not-configured;format=rgba8unorm;requestId=readback-configured-capability;sourceLabel=pm-evidence",
+                "execution.readback:skipped request=readback-configured-capability bounds=0,0,64,64 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 reason=unsupported.execution.readback_unconfigured diagnostics=unsupported.execution.readback_unconfigured",
+                "execution.diagnostic code=unsupported.execution.readback_unconfigured stage=readback terminal=true facts=bufferOffsetBytes=0;pixelFormat=Rgba8Unorm;requestId=readback-configured-capability;sourceBounds=0,0,64,64",
             ),
             skipped.dumpLines(),
         )
@@ -230,7 +233,7 @@ class GPUExecutionContextTest {
                 targetGeneration = 4,
                 usageLabels = setOf("texture_binding"),
             ),
-            deviceGeneration = GPUDeviceGeneration(10),
+            deviceGeneration = GPUDeviceGenerationID(10),
         )
 
         val report = context.preflight(
@@ -349,7 +352,7 @@ class GPUExecutionContextTest {
         assertEquals(listOf(invocation), request.pass.invocations)
         assertEquals(listOf("pipeline-key:first-fill-rect"), request.pass.pipelineKeys)
         assertEquals(listOf(42), request.payloadRefs.map { ref -> ref.commandIdValue })
-        assertEquals(listOf("readback-1"), request.readbackRequests.map { readback -> readback.requestId })
+        assertEquals(listOf("readback-1"), request.readbackRequests.map { readback -> readback.requestId.value })
     }
 
     /** Ensures preflight request properties snapshot caller-owned collections for backend readers. */
@@ -402,7 +405,7 @@ class GPUExecutionContextTest {
                             surfaceBacked = true,
                             usageLabels = setOf("render_attachment"),
                         ),
-                        deviceGeneration = GPUDeviceGeneration(11),
+                        deviceGeneration = GPUDeviceGenerationID(11),
                     ),
                     materializationDecision = materialization,
                     taskIds = listOf("task-fill"),
@@ -442,7 +445,7 @@ class GPUExecutionContextTest {
                             surfaceBacked = true,
                             usageLabels = setOf("render_attachment"),
                         ),
-                        deviceGeneration = GPUDeviceGeneration(11),
+                        deviceGeneration = GPUDeviceGenerationID(11),
                     ),
                     materializationDecision = materialization,
                     taskIds = listOf("task-fill"),
@@ -588,7 +591,7 @@ class GPUExecutionContextTest {
             submissionId = "submit-1",
             scopeLabel = "root-pass",
             scopeLabels = listOf("root-pass"),
-            deviceGeneration = GPUDeviceGeneration(11),
+            deviceGeneration = GPUDeviceGenerationID(11),
             targetGeneration = 4,
             taskIds = listOf("task-fill-rect"),
             passIds = listOf("pass-root"),
@@ -616,7 +619,7 @@ class GPUExecutionContextTest {
             submissionId = "submit-ordered",
             scopeLabel = "scope-z",
             scopeLabels = listOf("scope-z", "scope-a", "scope-m"),
-            deviceGeneration = GPUDeviceGeneration(11),
+            deviceGeneration = GPUDeviceGenerationID(11),
             targetGeneration = 4,
             taskIds = listOf("task-z", "task-a"),
             passIds = listOf("pass-z", "pass-a"),
@@ -659,7 +662,7 @@ class GPUExecutionContextTest {
             submissionId = "submit-snapshot",
             scopeLabel = "scope-b",
             scopeLabels = scopeLabels,
-            deviceGeneration = GPUDeviceGeneration(11),
+            deviceGeneration = GPUDeviceGenerationID(11),
             targetGeneration = 4,
             taskIds = taskIds,
             passIds = passIds,
@@ -712,7 +715,8 @@ class GPUExecutionContextTest {
 
         assertEquals("unsupported.execution.readback_unavailable", result.reasonCode)
         assertEquals("unit-test", result.diagnostics.single().stage)
-        assertContains(result.diagnostics.single().message, "pm-evidence")
+        assertContains(result.diagnostics.single().message, "readback-1")
+        assertContains(result.diagnostics.single().message, "0,0,64,64")
     }
 
     /** Ensures failed command submissions carry stable diagnostic facts for PM reports. */
@@ -756,47 +760,40 @@ class GPUExecutionContextTest {
                 stage = "readback",
                 message = "Readback unavailable.",
                 terminal = true,
-                facts = mapOf("requestId" to request.requestId),
+                facts = mapOf("requestId" to request.requestId.value),
             ),
         )
 
         assertEquals(
             listOf(
-                "execution.readback:completed request=readback-1 source=pm-evidence bounds=0,0 64x64 format=rgba8unorm sync=after-submit expectedArtifact=first-route.png failureReason=none bytes=16384 payloadHash=sha256:pm-readback diagnostics=none",
+                "execution.readback:completed request=readback-1 bounds=0,0,64,64 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 bytes=16384 payloadHash=sha256:pm-readback diagnostics=none",
             ),
             completed.dumpLines(),
         )
         assertEquals(
             listOf(
-                "execution.readback:refused request=readback-1 source=pm-evidence bounds=0,0 64x64 format=rgba8unorm sync=after-submit expectedArtifact=first-route.png failureReason=none code=unsupported.execution.readback_unavailable terminal=true",
+                "execution.readback:refused request=readback-1 bounds=0,0,64,64 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 code=unsupported.execution.readback_unavailable terminal=true",
                 "execution.diagnostic code=unsupported.execution.readback_unavailable stage=readback terminal=true facts=requestId=readback-1",
             ),
             refused.dumpLines(),
         )
     }
 
-    /** Ensures readback failure reasons are limited to skipped and refused outcomes. */
+    /** Ensures readback failure reasons belong to skipped/refused outcomes, not canonical requests. */
     @Test
-    fun `readback result dumps include request failure reasons only when bytes are absent`() {
-        val completedFailure = assertFailsWith<IllegalArgumentException> {
-            GPUReadbackResult.Completed(
-                request = readbackRequest(requestId = "readback-completed", failureReason = "late-hash-only"),
-                payloadHash = "sha256:pm-readback",
-                byteCount = 16384,
-            )
-        }
-        val skippedRequest = readbackRequest(requestId = "readback-skipped", failureReason = "policy-skip")
+    fun `readback result dumps keep failure reasons on outcomes only`() {
+        val skippedRequest = readbackRequest(requestId = "readback-skipped")
         val skippedDiagnostic = GPUExecutionDiagnostic.readbackUnavailable(
             request = skippedRequest,
             stage = "readback",
         )
         val skipped = GPUReadbackResult.Skipped(
             request = skippedRequest,
-            reasonCode = skippedDiagnostic.code,
+            reasonCode = "policy-skip",
             diagnostics = listOf(skippedDiagnostic),
         )
         val refused = GPUReadbackResult.Refused(
-            request = readbackRequest(requestId = "readback-refused", failureReason = "backend-refused"),
+            request = readbackRequest(requestId = "readback-refused"),
             diagnostic = GPUExecutionDiagnostic(
                 code = "unsupported.execution.readback_unavailable",
                 stage = "readback",
@@ -808,12 +805,11 @@ class GPUExecutionContextTest {
 
         val lines = (skipped.dumpLines() + refused.dumpLines()).joinToString("\n")
 
-        assertContains(completedFailure.message.orEmpty(), "failureReason must be null")
         assertContains(lines, "request=readback-skipped")
-        assertContains(lines, "failureReason=policy-skip")
-        assertContains(lines, "facts=boundsLabel=0,0 64x64;failureReason=policy-skip;format=rgba8unorm;requestId=readback-skipped;sourceLabel=pm-evidence")
+        assertContains(lines, "reason=policy-skip")
+        assertContains(lines, "facts=bufferOffsetBytes=0;pixelFormat=Rgba8Unorm;requestId=readback-skipped;sourceBounds=0,0,64,64")
         assertContains(lines, "request=readback-refused")
-        assertContains(lines, "failureReason=backend-refused")
+        assertContains(lines, "code=unsupported.execution.readback_unavailable")
     }
 
     /** Ensures mutable readback diagnostic inputs cannot rewrite dump evidence. */
@@ -845,7 +841,7 @@ class GPUExecutionContextTest {
 
         assertEquals(
             listOf(
-                "execution.readback:skipped request=readback-snapshot source=pm-evidence bounds=0,0 64x64 format=rgba8unorm sync=after-submit expectedArtifact=first-route.png failureReason=none reason=unstable.readback diagnostics=unstable.readback",
+                "execution.readback:skipped request=readback-snapshot bounds=0,0,64,64 pixelFormat=Rgba8Unorm color=srgb-premul bufferOffsetBytes=0 reason=unstable.readback diagnostics=unstable.readback",
                 "execution.diagnostic code=unstable.readback stage=readback terminal=true facts=rank=1",
             ),
             result.dumpLines(),
@@ -872,7 +868,7 @@ class GPUExecutionContextTest {
         val submission = GPUCommandSubmission.Submitted(
             submissionId = "submit-diagnostics",
             scopeLabel = "scope",
-            deviceGeneration = GPUDeviceGeneration(11),
+            deviceGeneration = GPUDeviceGenerationID(11),
             diagnostics = listOf(later, earlier),
         )
 
@@ -889,16 +885,12 @@ class GPUExecutionContextTest {
     /** Creates a readback request used by execution tests. */
     private fun readbackRequest(
         requestId: String = "readback-1",
-        failureReason: String? = null,
-    ): GPUReadbackRequest =
-        GPUReadbackRequest(
-            requestId = requestId,
-            sourceLabel = "pm-evidence",
-            boundsLabel = "0,0 64x64",
-            format = "rgba8unorm",
-            synchronizationLabel = "after-submit",
-            expectedArtifactLabel = "first-route.png",
-            failureReason = failureReason,
+    ): GPUFrameReadbackRequest =
+        GPUFrameReadbackRequest(
+            requestId = GPUReadbackRequestID(requestId),
+            sourceBounds = GPUPixelBounds(0, 0, 64, 64),
+            pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
+            outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
         )
 
     /** Creates a valid first-route submit request for default-refusal tests. */
@@ -907,7 +899,7 @@ class GPUExecutionContextTest {
         payloadRefs: List<GPUDrawPayloadRef> = listOf(
             GPUDrawPayloadRef(commandIdValue = 42, renderStepIdentity = "fill-rect"),
         ),
-        readbackRequests: List<GPUReadbackRequest> = listOf(readbackRequest()),
+        readbackRequests: List<GPUFrameReadbackRequest> = listOf(readbackRequest()),
     ): GPUFirstRouteRenderSubmitRequest {
         val materialization = GPUResourceMaterializationDecision.Materialized(
             resources = listOf(GPUTextureResourceRef("surface-ref")),
@@ -929,7 +921,7 @@ class GPUExecutionContextTest {
                         targetGeneration = 4,
                         usageLabels = setOf("render_attachment", "copy_src"),
                     ),
-                    deviceGeneration = GPUDeviceGeneration(11),
+                    deviceGeneration = GPUDeviceGenerationID(11),
                 ),
                 requiredTargetUsageLabels = setOf("render_attachment", "copy_src"),
                 materializationDecision = materialization,
@@ -1021,24 +1013,24 @@ class GPUExecutionContextTest {
 
     /** Execution test double that relies on production refuse-by-default behavior. */
     private class RefusingExecutionContextDouble : GPUExecutionContext {
-        override val deviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(11)
+        override val deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(11)
     }
 
     /** Execution test double with readback capability but no backend implementation. */
     private class ReadbackCapableUnconfiguredContextDouble : GPUExecutionContext {
-        override val deviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(11)
+        override val deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(11)
         override val capabilities: GPUExecutionCapabilities = GPUExecutionCapabilities(readback = true)
     }
 
     /** Execution test double with render capability facts but no backend implementation. */
     private class RenderCapableUnconfiguredContextDouble : GPUExecutionContext {
-        override val deviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(11)
+        override val deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(11)
         override val capabilities: GPUExecutionCapabilities = GPUExecutionCapabilities(render = true)
     }
 
     /** Execution test double that returns a terminal diagnostic with colliding fact names. */
     private class TerminalFactCollisionContextDouble : GPUExecutionContext {
-        override val deviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(11)
+        override val deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(11)
         override val capabilities: GPUExecutionCapabilities = GPUExecutionCapabilities(render = true)
 
         override fun preflight(request: GPUExecutionPreflightRequest): GPUExecutionPreflightReport =

@@ -351,25 +351,25 @@ fun planGPUTextOrderingTrace(fixture: GPUTextOrderingFixture): GPUTextOrderingPl
             reasonId = "upload-before-sample-edge-missing",
             blocker = GPUTextRouteBlocker.UPLOAD_PLAN,
             handoffDiagnostic = "text.gpu.upload-before-sample-edge-missing",
-            rendererDiagnostic = "unsupported.text.upload_plan_missing",
+            rendererDiagnostic = GPUTextRefusalCodes.UPLOAD_PLAN_MISSING,
         )
         fixture.expectedAtlasGeneration != fixture.observedAtlasGeneration -> fixture.orderingRefusal(
             reasonId = "atlas-generation-stale",
             blocker = GPUTextRouteBlocker.STALE_GENERATION,
             handoffDiagnostic = "text.gpu.atlas-generation-stale",
-            rendererDiagnostic = "unsupported.text.atlas_generation_stale",
+            rendererDiagnostic = GPUTextRefusalCodes.ATLAS_GENERATION_STALE,
         )
         fixture.evictionBeforeDraw && !fixture.evictionBarrierRecorded -> fixture.orderingRefusal(
             reasonId = "eviction-before-dependent-draw",
             blocker = GPUTextRouteBlocker.EVICTION_BARRIER,
             handoffDiagnostic = "text.gpu.eviction-before-dependent-draw",
-            rendererDiagnostic = "unsupported.text.eviction_before_dependent_draw",
+            rendererDiagnostic = GPUTextRefusalCodes.EVICTION_BEFORE_DEPENDENT_DRAW,
         )
         !fixture.instanceUploadBeforeDraw -> fixture.orderingRefusal(
             reasonId = "instance-upload-after-draw",
             blocker = GPUTextRouteBlocker.INSTANCE_UPLOAD_ORDER,
             handoffDiagnostic = "text.gpu.instance-upload-after-draw",
-            rendererDiagnostic = "unsupported.text.instance_upload_after_draw",
+            rendererDiagnostic = GPUTextRefusalCodes.INSTANCE_UPLOAD_AFTER_DRAW,
         )
         else -> null
     }

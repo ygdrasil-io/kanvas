@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLParsedModule
+
 /** Severity level for a WGSL security violation. */
 enum class WGSLSecurityErrorSeverity {
     ERROR,
@@ -27,32 +29,6 @@ data class WGSLDeviceCapabilities(
     val maxTextureDimensions: Int = 4096,
     val maxUniformBufferSize: Int = 16 * 1024,
     val maxStorageBufferSize: Int = 64 * 1024,
-)
-
-/** Minimal stub for a wgsl4k-parsed module consumed by security validation. */
-data class WGSLParsedModule(
-    val sourceHash: String,
-    val source: String = "",
-    val uniforms: List<String> = emptyList(),
-    val textures: List<String> = emptyList(),
-    val bindGroups: List<String> = emptyList(),
-    val storageBuffers: List<String> = emptyList(),
-    val usesAtomics: Boolean = false,
-    val usesUnboundedStorageBuffers: Boolean = false,
-    val usesReadWriteBuffers: Boolean = false,
-    val usesPtrOperations: Boolean = false,
-    val hasRecursiveFunctions: Boolean = false,
-    val hasUnboundedLoops: Boolean = false,
-    val usesDynamicSampling: Boolean = false,
-    val usesTextureStore: Boolean = false,
-    val usesDynamicBinding: Boolean = false,
-    val usesRayQuery: Boolean = false,
-    val usesComputeShader: Boolean = false,
-    val usesWorkgroupBuiltins: Boolean = false,
-    val loopIterationCount: Int = 0,
-    val functionDepth: Int = 0,
-    val maxTextureDimensions: Int = 0,
-    val syntaxErrors: List<String> = emptyList(),
 )
 
 /** Validates custom WGSL against blocked features, resource limits, device capabilities, and buffer/texture bounds. */

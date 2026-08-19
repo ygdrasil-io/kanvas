@@ -1,0 +1,694 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/Users/chaos/.gradle/wrapper/dists/gradle-9.2.0-bin/11i5gvueggl8a5cioxuftxrik/gradle-9.2.0/lib/native-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:generateExternalPluginSpecBuilders UP-TO-DATE
+> Task :buildSrc:extractPrecompiledScriptPluginPlugins UP-TO-DATE
+> Task :buildSrc:compilePluginsBlocks UP-TO-DATE
+> Task :buildSrc:generatePrecompiledScriptPluginAccessors UP-TO-DATE
+> Task :buildSrc:generateScriptPluginAdapters UP-TO-DATE
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+> Task :codec:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :color-management:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:kmpPartiallyResolvedDependenciesChecker
+> Task :math:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :math:compileKotlinJvm UP-TO-DATE
+> Task :math:compileJvmMainJava NO-SOURCE
+> Task :math:jvmProcessResources NO-SOURCE
+> Task :math:processJvmMainResources SKIPPED
+> Task :math:jvmMainClasses UP-TO-DATE
+> Task :math:jvmJar UP-TO-DATE
+> Task :color-management:compileKotlin UP-TO-DATE
+> Task :color-management:compileJava NO-SOURCE
+> Task :font:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:core:compileKotlin UP-TO-DATE
+> Task :font:core:compileJava NO-SOURCE
+> Task :font:colr:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:sfnt:compileKotlin UP-TO-DATE
+> Task :font:sfnt:compileJava NO-SOURCE
+> Task :font:colr:compileKotlin UP-TO-DATE
+> Task :font:colr:compileJava NO-SOURCE
+> Task :font:colr:processResources NO-SOURCE
+> Task :font:colr:classes UP-TO-DATE
+> Task :font:colr:jar UP-TO-DATE
+> Task :font:glyph:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:gpu-api:compileKotlin UP-TO-DATE
+> Task :font:gpu-api:compileJava NO-SOURCE
+> Task :font:scaler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:scaler:compileKotlin UP-TO-DATE
+> Task :font:scaler:compileJava NO-SOURCE
+> Task :font:text:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :font:text:compileKotlin UP-TO-DATE
+> Task :font:text:compileJava NO-SOURCE
+> Task :font:glyph:compileKotlin UP-TO-DATE
+> Task :font:glyph:compileJava NO-SOURCE
+> Task :font:compileKotlin UP-TO-DATE
+> Task :font:compileJava NO-SOURCE
+> Task :gpu-renderer:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gpu-renderer:compileKotlin UP-TO-DATE
+> Task :gpu-renderer:compileJava NO-SOURCE
+> Task :kanvas:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :kanvas:compileKotlin UP-TO-DATE
+> Task :kanvas:compileJava NO-SOURCE
+> Task :codec:api:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:api:compileKotlin UP-TO-DATE
+> Task :codec:api:compileJava NO-SOURCE
+> Task :codec:bmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:common:compileKotlin UP-TO-DATE
+> Task :codec:common:compileJava NO-SOURCE
+> Task :codec:common:processResources NO-SOURCE
+> Task :codec:common:classes UP-TO-DATE
+> Task :codec:common:jar UP-TO-DATE
+> Task :codec:core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:core:compileKotlin NO-SOURCE
+> Task :codec:core:compileJava NO-SOURCE
+> Task :codec:bmp:compileKotlin UP-TO-DATE
+> Task :codec:bmp:compileJava NO-SOURCE
+> Task :codec:bmp:processResources UP-TO-DATE
+> Task :codec:bmp:classes UP-TO-DATE
+> Task :codec:bmp:jar UP-TO-DATE
+> Task :codec:extended:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:extended:compileKotlin UP-TO-DATE
+> Task :codec:extended:compileJava NO-SOURCE
+> Task :codec:extended:processResources UP-TO-DATE
+> Task :codec:extended:classes UP-TO-DATE
+> Task :codec:extended:jar UP-TO-DATE
+> Task :codec:gif:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:gif:compileKotlin UP-TO-DATE
+> Task :codec:gif:compileJava NO-SOURCE
+> Task :codec:gif:processResources UP-TO-DATE
+> Task :codec:gif:classes UP-TO-DATE
+> Task :codec:gif:jar UP-TO-DATE
+> Task :codec:ico:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:png:compileKotlin UP-TO-DATE
+> Task :codec:png:compileJava NO-SOURCE
+> Task :codec:png:processResources UP-TO-DATE
+> Task :codec:png:classes UP-TO-DATE
+> Task :codec:png:jar UP-TO-DATE
+> Task :codec:ico:compileKotlin UP-TO-DATE
+> Task :codec:ico:compileJava NO-SOURCE
+> Task :codec:ico:processResources UP-TO-DATE
+> Task :codec:ico:classes UP-TO-DATE
+> Task :codec:ico:jar UP-TO-DATE
+> Task :codec:jpeg:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg:compileKotlin UP-TO-DATE
+> Task :codec:jpeg:compileJava NO-SOURCE
+> Task :codec:jpeg:processResources UP-TO-DATE
+> Task :codec:jpeg:classes UP-TO-DATE
+> Task :codec:jpeg:jar UP-TO-DATE
+> Task :codec:jpeg-ls:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg-ls:compileKotlin UP-TO-DATE
+> Task :codec:jpeg-ls:compileJava NO-SOURCE
+> Task :codec:jpeg-ls:processResources UP-TO-DATE
+> Task :codec:jpeg-ls:classes UP-TO-DATE
+> Task :codec:jpeg-ls:jar UP-TO-DATE
+> Task :codec:jpeg2000:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpeg2000:compileKotlin UP-TO-DATE
+> Task :codec:jpeg2000:compileJava NO-SOURCE
+> Task :codec:jpeg2000:processResources UP-TO-DATE
+> Task :codec:jpeg2000:classes UP-TO-DATE
+> Task :codec:jpeg2000:jar UP-TO-DATE
+> Task :codec:jpegxl:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:jpegxl:compileKotlin UP-TO-DATE
+> Task :codec:jpegxl:compileJava NO-SOURCE
+> Task :codec:jpegxl:processResources UP-TO-DATE
+> Task :codec:jpegxl:classes UP-TO-DATE
+> Task :codec:jpegxl:jar UP-TO-DATE
+> Task :codec:wbmp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:wbmp:compileKotlin UP-TO-DATE
+> Task :codec:wbmp:compileJava NO-SOURCE
+> Task :codec:wbmp:processResources UP-TO-DATE
+> Task :codec:wbmp:classes UP-TO-DATE
+> Task :codec:wbmp:jar UP-TO-DATE
+> Task :codec:webp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :codec:webp:compileKotlin UP-TO-DATE
+> Task :codec:webp:compileJava NO-SOURCE
+> Task :codec:webp:processResources UP-TO-DATE
+> Task :codec:webp:classes UP-TO-DATE
+> Task :codec:webp:jar UP-TO-DATE
+> Task :codec:compileKotlin NO-SOURCE
+> Task :codec:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:test-utils:compileKotlin UP-TO-DATE
+> Task :integration-tests:test-utils:compileJava NO-SOURCE
+> Task :integration-tests:diagnostic:compileKotlin UP-TO-DATE
+> Task :integration-tests:diagnostic:compileJava NO-SOURCE
+> Task :integration-tests:skia:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :integration-tests:skia:compileKotlin NO-SOURCE
+> Task :integration-tests:skia:compileJava NO-SOURCE
+> Task :integration-tests:skia:processResources NO-SOURCE
+> Task :integration-tests:skia:classes UP-TO-DATE
+> Task :integration-tests:skia:jar UP-TO-DATE
+> Task :codec:processResources NO-SOURCE
+> Task :codec:classes UP-TO-DATE
+> Task :codec:jar UP-TO-DATE
+> Task :color-management:processResources NO-SOURCE
+> Task :color-management:classes UP-TO-DATE
+> Task :color-management:jar UP-TO-DATE
+> Task :font:processResources NO-SOURCE
+> Task :font:classes UP-TO-DATE
+> Task :font:jar UP-TO-DATE
+> Task :gpu-renderer:processResources UP-TO-DATE
+> Task :gpu-renderer:classes UP-TO-DATE
+> Task :gpu-renderer:jar UP-TO-DATE
+> Task :kanvas:processResources NO-SOURCE
+> Task :kanvas:classes UP-TO-DATE
+> Task :kanvas:jar UP-TO-DATE
+> Task :codec:api:processResources UP-TO-DATE
+> Task :codec:api:classes UP-TO-DATE
+> Task :codec:api:jar UP-TO-DATE
+> Task :codec:core:processResources NO-SOURCE
+> Task :codec:core:classes UP-TO-DATE
+> Task :codec:core:jar UP-TO-DATE
+> Task :font:core:processResources NO-SOURCE
+> Task :font:core:classes UP-TO-DATE
+> Task :font:core:jar UP-TO-DATE
+> Task :font:glyph:processResources NO-SOURCE
+> Task :font:glyph:classes UP-TO-DATE
+> Task :font:glyph:jar UP-TO-DATE
+> Task :font:gpu-api:processResources NO-SOURCE
+> Task :font:gpu-api:classes UP-TO-DATE
+> Task :font:gpu-api:jar UP-TO-DATE
+> Task :font:scaler:processResources NO-SOURCE
+> Task :font:scaler:classes UP-TO-DATE
+> Task :font:scaler:jar UP-TO-DATE
+> Task :font:sfnt:processResources NO-SOURCE
+> Task :font:sfnt:classes UP-TO-DATE
+> Task :font:sfnt:jar UP-TO-DATE
+> Task :font:text:processResources UP-TO-DATE
+> Task :font:text:classes UP-TO-DATE
+> Task :font:text:jar UP-TO-DATE
+> Task :integration-tests:diagnostic:processResources NO-SOURCE
+> Task :integration-tests:diagnostic:classes UP-TO-DATE
+> Task :integration-tests:diagnostic:jar UP-TO-DATE
+> Task :integration-tests:skia:compileTestKotlin UP-TO-DATE
+> Task :integration-tests:skia:compileTestJava NO-SOURCE
+> Task :integration-tests:skia:processTestResources UP-TO-DATE
+> Task :integration-tests:skia:testClasses UP-TO-DATE
+> Task :integration-tests:test-utils:processResources NO-SOURCE
+> Task :integration-tests:test-utils:classes UP-TO-DATE
+> Task :integration-tests:test-utils:jar UP-TO-DATE
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.lwjgl.system.MemoryUtil (file:/Users/chaos/.gradle/caches/modules-2/files-2.1/org.lwjgl/lwjgl/3.3.3/29589b5f87ed335a6c7e7ee6a5775f81f97ecb84/lwjgl-3.3.3.jar)
+WARNING: Please consider reporting this to the maintainers of class org.lwjgl.system.MemoryUtil
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+
+> Task :integration-tests:skia:test
+
+SkiaGmRunner > render GM(SkiaGm) > [1] drawregionmodes FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [2] fancy_gradients FAILED
+    kotlin.NotImplementedError at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [3] fatpathfill FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [4] filltypespersp FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [5] inner_join_geometry FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [6] lattice2 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [7] lineclosepath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [8] linepath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [9] macaatest FAILED
+    kotlin.NotImplementedError at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [10] mandoline FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [11] manycircles FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [12] manypathatlases FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [13] nested FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [14] nonclosedpaths FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [15] OverStroke FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [16] parsedpaths FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [17] path_huge_aa FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [18] path_huge_aa_manual FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [19] path_mask_cache FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [20] pathops_blend FAILED
+    kotlin.NotImplementedError at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [21] pathopsinverse FAILED
+    kotlin.NotImplementedError at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [22] pathops_skbug_10155 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [23] path-reverse FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [24] path_stroke_clip_crbug1070835 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [25] points FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [26] poly2poly FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [27] polygons FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [28] preservefillrule_big FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [29] preservefillrule_little FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [30] quadclosepath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [31] quadpath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [32] roundrects FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [33] shadow_utils_directional PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [34] sharedcorners FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [35] simpleshapes_bw FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [36] simpleshapes FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [37] stlouisarch FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [38] stroke_rect_shader FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [39] strokedline_caps FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [40] strokes3 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [41] strokes_round FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [42] teenyStrokes FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [43] thin_aa_dash_lines FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [44] thinconcavepaths PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [45] thinrects FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [46] thinroundrects FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [47] thinstrokedrects FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [48] tinyanglearcs FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [49] trickycubicstrokes_largeradius FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [50] trimpatheffect FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [51] widebuttcaps FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [52] zero_control_stroke FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [53] zeroPath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [54] zero_length_paths_aa FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [55] zero_length_paths_bw FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [56] zero_length_paths_dbl_aa FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [57] zero_length_paths_dbl_bw FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [58] zerolinedash FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [59] zerolinestroke FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [60] AlternateLuma FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [61] arithmode FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [62] color_cube_rt FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [63] composeCF FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [64] runtime_intrinsics_common FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [65] runtime_intrinsics_exponential FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [66] runtime_intrinsics_geometric FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [67] runtime_intrinsics_matrix FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [68] runtime_intrinsics_relational FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [69] runtime_intrinsics_trig FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [70] kawase_blur_rt FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [71] lineargradientrt FAILED
+    java.lang.IllegalStateException at SkiaGmRunner.kt:83
+
+SkiaGmRunner > render GM(SkiaGm) > [72] lumafilter FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [73] rippleshader FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [74] rtif_distort FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [75] rtif_unsharp FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [76] runtimecolorfilter FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [77] runtimefunctions FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [78] runtime_shader FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [79] spiral_rt FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [80] threshold_rt FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [81] unsharp_rt FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [82] workingspace PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [83] annotated_text FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [84] bigtext_crbug_1370488 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [85] bigtext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [86] blob_rsxform_distortable FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [87] blob_rsxform FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [88] chrome_gradtext2 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [89] cliperror FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [90] coloremoji_colrv0 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [91] coloremoji FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [92] colorwheelnative FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [93] coloremoji_blendmodes_colrv0 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [94] coloremoji_blendmodes FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [95] colrv1_gradient_stops_repeat FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [96] crbug_1073670 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [97] dftext_blob_persp FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [98] dftext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [99] drawTextRSXform FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [100] fontcache PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [101] fontmgr_bounds FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [102] fontmgr_iter PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [103] fontmgr_match PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [104] font_palette_default FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [105] fontregen PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [106] fontscalerdistortable FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [107] fontscaler FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [108] gammagradienttext PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [109] gammatext_color_shader FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [110] gammatext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [111] getpostextpath FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [112] gradtext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [113] largeglyphblur FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [114] lcdoverlap FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [115] macaa_colors FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [116] mixedtextblobs FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [117] overdraw_text_xform FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [118] palette PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [119] pdf_never_embed FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [120] pdf_table_based_subset PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [121] persptext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [122] persptext_minimal FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [123] rsx_blob_shader PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [124] scaledemojiperspective_colrv0 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [125] scaledemojipos_colrv0 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [126] scaledemoji_colrv0 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [127] scaledemoji_rendering FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [128] shadertext3 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [129] skbug_12212 PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [130] skbug_257 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [131] skbug_5321 PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [132] skbug_8955 FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [133] slug FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [134] stroketext FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [135] stroketext_native FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [136] surfaceprops FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [137] textblobblockreordering FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [138] textblobcolortrans FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [139] textblobgeometrychange FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [140] textblob FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [141] textblob_intercepts FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [142] textblobmixedsizes FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [143] textblobrandomfont FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [144] textblobshader PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [145] textblobtransforms FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [146] textblobuseaftergpufree FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [147] fancyblobunderline FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [148] textfilter_color FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [149] textfilter_image FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [150] text_scale_skew FAILED
+    org.opentest4j.AssertionFailedError at SkiaGmRunner.kt:155
+
+SkiaGmRunner > render GM(SkiaGm) > [151] text_scale_skew_rotate FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [152] typefacerendering FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [153] typefacerendering_pfa PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [154] typefacerendering_pfb PASSED
+
+SkiaGmRunner > render GM(SkiaGm) > [155] typefacestyles FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [156] typefacestyles_kerning FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [157] typeface_styling FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+SkiaGmRunner > render GM(SkiaGm) > [158] user_typeface FAILED
+    org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException at SkiaGmRunner.kt:69
+
+158 tests completed, 142 failed
+
+> Task :integration-tests:skia:test FAILED
+
+[Incubating] Problems report is available at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':integration-tests:skia:test'.
+> There were failing tests. See the report at: file:///Users/chaos/.local/share/opencode/worktree/b0ac68aba2977c8e330962597a21babf616d6567/quick-sailor/integration-tests/skia/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to generate a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 58s
+84 actionable tasks: 2 executed, 82 up-to-date

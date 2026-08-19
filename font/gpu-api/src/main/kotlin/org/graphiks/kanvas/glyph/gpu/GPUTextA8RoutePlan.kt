@@ -230,7 +230,7 @@ fun planGPUTextA8Route(fixture: GPUTextA8RouteFixture): GPUTextA8RoutePlanningRe
                 reasonId = "upload-plan-missing",
                 blocker = GPUTextRouteBlocker.UPLOAD_PLAN,
                 handoffDiagnostic = "text.gpu.upload-plan-missing",
-                rendererDiagnostic = "unsupported.text.upload_plan_missing",
+                rendererDiagnostic = GPUTextRefusalCodes.UPLOAD_PLAN_MISSING,
             ),
         )
     }
@@ -240,7 +240,7 @@ fun planGPUTextA8Route(fixture: GPUTextA8RouteFixture): GPUTextA8RoutePlanningRe
                 reasonId = "atlas-descriptor-unaccepted",
                 blocker = GPUTextRouteBlocker.ATLAS_DESCRIPTOR,
                 handoffDiagnostic = "text.gpu.atlas-descriptor-unaccepted",
-                rendererDiagnostic = "unsupported.text.atlas_descriptor_unaccepted",
+                rendererDiagnostic = GPUTextRefusalCodes.ATLAS_DESCRIPTOR_UNACCEPTED,
             ),
         )
     }
@@ -250,7 +250,7 @@ fun planGPUTextA8Route(fixture: GPUTextA8RouteFixture): GPUTextA8RoutePlanningRe
                 reasonId = "atlas-entry-missing",
                 blocker = GPUTextRouteBlocker.ATLAS_ENTRY,
                 handoffDiagnostic = "text.gpu.atlas-entry-missing",
-                rendererDiagnostic = "unsupported.text.atlas_entry_missing",
+                rendererDiagnostic = GPUTextRefusalCodes.ATLAS_ENTRY_MISSING,
             ),
         )
     }
@@ -260,7 +260,7 @@ fun planGPUTextA8Route(fixture: GPUTextA8RouteFixture): GPUTextA8RoutePlanningRe
                 reasonId = "atlas-generation-stale",
                 blocker = GPUTextRouteBlocker.STALE_GENERATION,
                 handoffDiagnostic = "text.gpu.atlas-generation-stale",
-                rendererDiagnostic = "unsupported.text.atlas_generation_stale",
+                rendererDiagnostic = GPUTextRefusalCodes.ATLAS_GENERATION_STALE,
             ),
         )
     }

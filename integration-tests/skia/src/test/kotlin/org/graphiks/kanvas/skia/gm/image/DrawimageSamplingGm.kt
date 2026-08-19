@@ -35,6 +35,7 @@ class DrawimageSamplingGm : SkiaGm {
         for (mm in listOf(false, true)) {
             for (fm in listOf(false, true)) {
                 canvas.save()
+                canvas.save()
                 canvas.concat(mx)
                 canvas.drawImage(img, Rect(0f, 0f, img.width.toFloat(), img.height.toFloat()))
                 canvas.restore()

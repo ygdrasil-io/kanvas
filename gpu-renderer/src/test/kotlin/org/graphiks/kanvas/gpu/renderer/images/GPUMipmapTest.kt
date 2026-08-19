@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey as ArtifactKey
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
 class GPUMipmapTest {
@@ -13,19 +14,19 @@ class GPUMipmapTest {
     fun `mip level count is computed correctly from base dimensions`() {
         val planner = GPUImageMipmapPlanner()
 
-        val square256 = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val square256 = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(square256)
         assertEquals(9, square256.plan.levels)
 
-        val square512 = planner.plan(512, 512, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val square512 = planner.plan(512, 512, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(square512)
         assertEquals(10, square512.plan.levels)
 
-        val singlePixel = planner.plan(1, 1, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val singlePixel = planner.plan(1, 1, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(singlePixel)
         assertEquals(1, singlePixel.plan.levels)
 
-        val nonPowerOfTwo = planner.plan(300, 200, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val nonPowerOfTwo = planner.plan(300, 200, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(nonPowerOfTwo)
         assertEquals(9, nonPowerOfTwo.plan.levels)
     }
@@ -34,7 +35,7 @@ class GPUMipmapTest {
     fun `mip level budget is enforced and generation is refused when level count exceeds adapter limit`() {
         val planner = GPUImageMipmapPlanner(maxMipLevels = 4)
 
-        val result = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
 
         assertIs<GPUImageMipmapGenerationResult.Refused>(result)
         assertEquals("unsupported.image.mipmap_budget_exceeded", result.code)
@@ -45,7 +46,7 @@ class GPUMipmapTest {
     fun `compute unavailable falls back to blit path with computePlan null`() {
         val planner = GPUImageMipmapPlanner()
 
-        val result = planner.plan(256, 256, MipmapFilter.Tent, computeAvailable = false, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(256, 256, MipmapFilter.Tent, computeAvailable = false, artifactKey = ArtifactKey("test-image"))
 
         assertIs<GPUImageMipmapGenerationResult.Generated>(result)
         assertEquals(MipmapGenerationPath.Blit, result.plan.path)
@@ -63,7 +64,7 @@ class GPUMipmapTest {
             256,
             MipmapFilter.Box,
             computeAvailable = false,
-            artifactKey = GPUImageUploadArtifactKey("no-path-image"),
+            artifactKey = ArtifactKey("no-path-image"),
             blitAvailable = false,
         )
 
@@ -79,7 +80,7 @@ class GPUMipmapTest {
     fun `compute path generates both blit and compute plans with correct dispatch sizes`() {
         val planner = GPUImageMipmapPlanner()
 
-        val result = planner.plan(256, 256, MipmapFilter.Kaiser, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(256, 256, MipmapFilter.Kaiser, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
 
         assertIs<GPUImageMipmapGenerationResult.Generated>(result)
         assertEquals(MipmapGenerationPath.Compute, result.plan.path)
@@ -104,7 +105,7 @@ class GPUMipmapTest {
     fun `nearest sampled no-mipmap single-level texture is not regressed by mipmap planner`() {
         val planner = GPUImageMipmapPlanner()
 
-        val result = planner.plan(64, 64, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(64, 64, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
 
         assertIs<GPUImageMipmapGenerationResult.Generated>(result)
         assertEquals(7, result.plan.levels)
@@ -127,7 +128,7 @@ class GPUMipmapTest {
             128,
             MipmapFilter.Box,
             computeAvailable = true,
-            artifactKey = GPUImageUploadArtifactKey("cache-image-a"),
+            artifactKey = ArtifactKey("cache-image-a"),
             format = "RGBA8Unorm",
         )
         assertIs<GPUImageMipmapGenerationResult.Generated>(result)
@@ -145,7 +146,7 @@ class GPUMipmapTest {
             128,
             MipmapFilter.Box,
             computeAvailable = true,
-            artifactKey = GPUImageUploadArtifactKey("cache-image-a"),
+            artifactKey = ArtifactKey("cache-image-a"),
             format = "RGBA8Unorm",
         )
         assertIs<GPUImageMipmapGenerationResult.Generated>(again)
@@ -161,7 +162,7 @@ class GPUMipmapTest {
             256,
             MipmapFilter.Box,
             computeAvailable = true,
-            artifactKey = GPUImageUploadArtifactKey("image-a"),
+            artifactKey = ArtifactKey("image-a"),
             format = "RGBA8Unorm",
         )
         val artifactB = planner.plan(
@@ -169,7 +170,7 @@ class GPUMipmapTest {
             256,
             MipmapFilter.Box,
             computeAvailable = true,
-            artifactKey = GPUImageUploadArtifactKey("image-b"),
+            artifactKey = ArtifactKey("image-b"),
             format = "RGBA8Unorm",
         )
         assertIs<GPUImageMipmapGenerationResult.Generated>(artifactA)
@@ -182,7 +183,7 @@ class GPUMipmapTest {
     fun `refused mipmap generation returns terminal RefuseDiagnostic`() {
         val planner = GPUImageMipmapPlanner(maxMipLevels = 3)
 
-        val result = planner.plan(4096, 4096, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(4096, 4096, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Refused>(result)
 
         val diagnostic = result.toRefuseDiagnostic("mipmap-plan")
@@ -196,11 +197,11 @@ class GPUMipmapTest {
     fun `mip level count for rectangular non-square textures uses max dimension`() {
         val planner = GPUImageMipmapPlanner()
 
-        val tall = planner.plan(64, 512, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val tall = planner.plan(64, 512, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(tall)
         assertEquals(10, tall.plan.levels)
 
-        val wide = planner.plan(512, 64, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val wide = planner.plan(512, 64, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(wide)
         assertEquals(10, wide.plan.levels)
     }
@@ -209,7 +210,7 @@ class GPUMipmapTest {
     fun `mipmap plan dump provides stable evidence lines for reporting`() {
         val planner = GPUImageMipmapPlanner()
 
-        val result = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = GPUImageUploadArtifactKey("test-image"))
+        val result = planner.plan(256, 256, MipmapFilter.Box, computeAvailable = true, artifactKey = ArtifactKey("test-image"))
         assertIs<GPUImageMipmapGenerationResult.Generated>(result)
 
         val dump = result.dumpLines()

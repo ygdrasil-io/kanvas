@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.graphiks.kanvas.skia.GmCanvasTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:41:07.275Z" hostname="b3-16-2026-08-13-16-13" time="0.007">
+  <properties/>
+  <testcase name="clip path follows adapter transform()" classname="org.graphiks.kanvas.skia.GmCanvasTest" time="0.003"/>
+  <testcase name="clear accepts skia color constants()" classname="org.graphiks.kanvas.skia.GmCanvasTest" time="0.0"/>
+  <testcase name="clear records a canvas clear operation()" classname="org.graphiks.kanvas.skia.GmCanvasTest" time="0.0"/>
+  <testcase name="rotated clip rect is captured as a device path()" classname="org.graphiks.kanvas.skia.GmCanvasTest" time="0.001"/>
+  <testcase name="restore removes path clip added after save()" classname="org.graphiks.kanvas.skia.GmCanvasTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

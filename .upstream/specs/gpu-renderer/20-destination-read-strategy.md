@@ -67,7 +67,7 @@ Kanvas intentionally does not copy:
 Owned by this spec:
 
 - `GPUDestinationReadPlan`;
-- `GPUDestinationReadRequirement`;
+- `GPUDestinationReadStrategyPlanner`;
 - `GPUDestinationReadStrategy`;
 - `GPUDestinationReadClass`;
 - `GPUDestinationReadBounds`;
@@ -79,7 +79,10 @@ Owned by this spec:
 - `GPUDestinationReadToken`;
 - `GPUDestinationReadDiagnostic`.
 
-`GPUBlendPlan` declares whether a blend route needs a destination read.
+`passes` owns the canonical blend mode, `GPUBlendPlan`, and semantic
+`GPUBlendDestinationReadRequirement`. This spec consumes that closed semantic
+requirement; it never reinterprets a blend mode, coverage formula,
+fixed-function state, shader formula identity, or opacity specialization.
 `GPULayerPlan`, `GPUFilterPlan`, and `GPUClipPlan` declare
 destination/backdrop/source-read and clip-bound semantics for layers, filters,
 and clipped draws. Detailed filter node, bounds, sample-radius, and
@@ -91,10 +94,12 @@ backdrop input, source filters, restore composite, elision, and layer ordering
 tokens, is defined in `28-layer-savelayer-execution.md`.
 Common coordinate, transform, and bounds proof policy is defined in
 `30-coordinate-transform-bounds-policy.md`.
-`GPUDrawAnalysis` resolves those facts into `GPUDestinationReadPlan` values.
-`GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList` and
-`GPUResourceProvider` materialize copies, intermediates, texture ownership, and
-payload bindings.
+`GPUDrawAnalysis` records semantic requirements, bounds, and dependency facts.
+`GPUDrawLayerPlanner` preserves ordering and split barriers. `GPUTaskList`
+remains the handle-free dependency authority. After `GPUFramePlan` finalizes
+that order, `GPUFramePreflighter` invokes `GPUDestinationReadStrategyPlanner`
+and `GPUResourceProvider` to choose and materialize copies, intermediates,
+texture ownership, and payload bindings.
 
 `GPUPayloadGatherer` may consume an accepted `GPUDestinationReadBinding`; it
 must not allocate the copy texture, copy the target, split passes, or invent a
@@ -120,23 +125,16 @@ replace copy/intermediate semantics.
 
 ## Core Objects
 
-### `GPUDestinationReadRequirement`
+### Semantic Input
 
-Describes why a command or layer needs previous destination pixels:
-
-- `None`: previous destination values do not affect the result;
-- `FixedFunctionOnly`: destination contributes through GPU attachment blend
-  state and is not sampled by WGSL;
-- `ShaderBlend`: WGSL blend code needs destination color;
-- `CoverageBlend`: shader coverage, analytic coverage, or clip behavior needs
-  destination color when fixed-function blend cannot express the route;
-- `BackdropFilter`: a filter observes content already in the parent target;
-- `LayerComposite`: layer restore/composite needs parent destination content;
-- `RuntimeEffect`: a registered effect declares destination color input;
-- `Unknown`: requirement cannot be proven and must refuse.
-
-The requirement is produced before pipeline materialization. It is not inferred
-from shader source strings.
+For blend-driven reads, `GPUDestinationReadStrategyPlanner` consumes
+`GPUBlendDestinationReadRequirement.None`,
+`GPUBlendDestinationReadRequirement.DestinationTextureRequired`, or
+`GPUBlendDestinationReadRequirement.Refused` from `passes`. Layer, filter,
+backdrop, and registered runtime-effect planners provide equivalent typed
+semantic inputs with their provenance. No input is inferred from shader source
+strings, and this planner cannot turn a semantic refusal into a materialized
+route.
 
 ### `GPUDestinationReadBounds`
 
@@ -193,7 +191,8 @@ key and must not be used outside the planner/pass product that created it.
 
 ### `GPUDestinationReadPlan`
 
-The planning product for one draw, layer composite, or filter node:
+The preflight materialization product for one draw, layer composite, or filter
+node after final frame order is known:
 
 - requirement;
 - strategy;
@@ -208,12 +207,18 @@ The planning product for one draw, layer composite, or filter node:
 - memory, copy, and binding budget decisions;
 - route outcome or refusal reason.
 
-The plan is created before payload gathering and resource materialization. It
-is a resource and ordering plan, not a material key.
+Analysis and recording carry only the semantic requirement, conservative
+bounds, target/resource roles, and dependency tokens. After `GPUFramePlan`
+finalization, `GPUDestinationReadStrategyPlanner` creates this plan together
+with the matching `GPUResourceMaterializationDecision`; payload bindings and
+pass command streams then consume the accepted result. It is not a material
+key and cannot change blend semantics.
 
 ### `GPUDestinationReadAction`
 
-Records the concrete task/list consequence of an accepted or refused plan:
+Records the concrete preflight/encoder consequence selected after final
+`GPUFramePlan` order for destination-read intent whose semantics, conservative
+bounds, target/resource roles, and dependencies are already fixed:
 
 | Action | Meaning |
 |---|---|
@@ -221,11 +226,19 @@ Records the concrete task/list consequence of an accepted or refused plan:
 | `UseFixedFunctionBlend` | Use attachment blend state and no sampled destination. |
 | `SplitPassAndCopyTarget` | Close pending writes, copy target bounds, then sample the copy. |
 | `UseExistingIntermediate` | Bind a separate validated intermediate texture. |
-| `CreateIsolatedLayer` | Allocate/render an isolated layer or backdrop input. |
-| `CompositeIsolatedLayer` | Composite an isolated result into the parent target. |
+| `CreateIsolatedLayer` | Materialize and render the isolated target already declared by the semantic layer plan. |
+| `CompositeIsolatedLayer` | Encode the composite required by the already-declared child/parent target roles and dependency. |
 | `Refuse` | Return a stable refusal diagnostic. |
 
-Actions are consumed by `GPUTaskList` and `GPUDrawLayerPlanner`. They must be
+`GPUTaskList` and `GPUDrawLayerPlanner` carry only semantic destination-read
+intent, conservative bounds, target/resource roles, and dependency tokens.
+Neither consumes this action nor accepts any late materialization product.
+After final `GPUFramePlan` order, `GPUFramePreflighter` produces and consumes
+`GPUDestinationReadAction` while building the prepared
+`GPUCommandEncoderPlan`; `GPUFrameExecutor` exclusively records the resulting
+commands. Layer action variants instantiate roles already declared by semantic
+layer plans; they do not introduce isolation, change blend/filter/layer
+semantics, or reroute the command stream after final ordering. Actions remain
 dumpable so pass splits and copies are visible in evidence.
 
 ### `GPUDestinationCopyTextureDescriptor`
@@ -263,9 +276,12 @@ Records copy work:
 - budget decision;
 - failure and refusal behavior.
 
-The copy plan is materialized by `GPUResourceProvider` and encoded by
-`GPUTaskList`. The draw that samples the copied destination must depend on the
-copy plan.
+After final `GPUFramePlan` order, `GPUFramePreflighter` asks
+`GPUResourceProvider` to materialize the copy resources and includes the copy
+in the prepared `GPUCommandEncoderPlan`. `GPUFrameExecutor` exclusively records
+that planned copy into the frame's one encoder. `GPUTaskList` remains
+handle-free dependency authority, and the draw that samples the copied
+destination must depend on the copy plan.
 
 ### `GPUDestinationReadBudgetPolicy`
 
@@ -283,6 +299,14 @@ intermediates:
 
 Diagnostics must distinguish a hard capability refusal from a configurable
 budget refusal.
+
+Preflight applies one aggregate scratch budget across canonical scene bytes,
+persistent/retained MSAA color and depth-stencil, layer/filter targets,
+destination snapshots, readback staging, and other scratch. It records logical
+and backing dimensions, aligned requested bytes, live/reusable/evictable bytes,
+device limits, `peakFrameTransientBytes`, and `targetResidentBytes`. Reuse is
+legal only after real queue completion. No historical fixed per-copy ceiling
+defines feature support.
 
 ### `GPUDestinationReadBinding`
 
@@ -359,7 +383,35 @@ Rules:
 - copy failure refuses the affected draw/layer/filter.
 
 `TargetCopySnapshot` is the primary portable WebGPU route for shader
-destination reads.
+destination reads. Its materialization is either `NativeTextureCopy`, when the
+source has copy-source usage, or `CopyAsDrawMaterialization`, when a real
+non-copyable source is nevertheless texturable. Copy-as-draw remains part of
+the same strategy and must execute on the frame's one encoder. A
+non-copyable, non-texturable source refuses; CPU readback/upload is never a
+materialization.
+
+The canonical `GPUSceneTarget` is Kanvas-owned with copy-source usage, so its
+ordinary route is `NativeTextureCopy`. A destination snapshot closes the
+active render-pass segment, records the bounded copy, and resumes a later pass
+on the same encoder. Persistent MSAA continuation keeps the authoritative
+attachment alive across the break; a fresh transient MSAA attachment is not a
+valid continuation.
+
+### Bounded Snapshot Grouping
+
+Snapshot sharing is target-scoped and may occur only after final task order is
+known. A group key includes target and device generation, format/color
+interpretation, sample/MSAA continuation state, and source-intermediate
+identity. It closes on target/layer/filter/generation transitions,
+incompatible sample state, composite refusal, an intersecting intervening
+write, source change, or budget/cost rejection.
+
+Bounds are expanded conservatively, rounded by floor/ceil, intersected with
+clip and target bounds, and kept separate from pooled backing size. Sharing
+must prove non-intersection with writes and pass a deterministic checked-in
+cost calibration. Until that calibration exists, the policy is one bounded
+snapshot per destination-reading draw. No distant union may grow into an
+effectively full-target copy merely to save a pass break.
 
 ### `SampleExistingIntermediate`
 
@@ -505,16 +557,17 @@ Destination-read route selection follows:
 
 1. `NoDestinationRead` when requirement is none.
 2. `FixedFunctionAttachmentBlend` when `GPUBlendPlan` proves native attachment blend.
-3. `TargetCopySnapshot` when WGSL needs destination color and bounded GPU
-   copy/sampling is accepted.
+3. `LayerCompositeIsolation` when layer/filter semantics require stable
+   offscreen or backdrop inputs.
 4. `SampleExistingIntermediate` when a validated separate texture already
    preserves the needed destination contents.
-5. `LayerCompositeIsolation` when layer/filter semantics require stable
-   offscreen or backdrop inputs.
+5. `TargetCopySnapshot` when WGSL needs destination color and bounded GPU
+   `NativeTextureCopy` or `CopyAsDrawMaterialization` is accepted.
 6. `RefuseDiagnostic`.
 
-The selected plan becomes part of the analysis and task graph. It is not a
-payload-only or shader-only decision.
+Analysis and `GPUTaskList` preserve the semantic need, bounds, and ordering;
+the selected concrete plan is created only in preflight after `GPUFramePlan`
+order is final. It is not a payload-only or shader-only decision.
 
 `CPUReferenceOnly` may compute oracle output for tests. It is never a product
 destination-read route.
@@ -608,7 +661,7 @@ Stable reason-code examples:
 Promoted destination-read behavior requires:
 
 - canonical dumps for `GPUDestinationReadPlan`,
-  `GPUDestinationReadRequirement`, `GPUDestinationReadStrategy`,
+  consumed `GPUBlendDestinationReadRequirement`, `GPUDestinationReadStrategy`,
   `GPUDestinationReadBounds`, `GPUDestinationReadAction`,
   `GPUDestinationReadBudgetPolicy`, `GPUDestinationCopyPlan`,
   `GPUDestinationCopyTextureDescriptor`, `GPUDestinationReadBinding`,

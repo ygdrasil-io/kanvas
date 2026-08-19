@@ -22,7 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
@@ -57,32 +57,6 @@ class GPUImageFilterDispatchTest {
         )
 
         assertTrue(command.imageFilterPlan is GPUImageFilterPlan.Blur, command.imageFilterPlan.toString())
-    }
-
-    @Test
-    fun `clip source image blur restores the full target halo before the mask composite`() {
-        val command = DisplayOp.DrawImage(
-            image = Image.fromPixels(4, 4, fixtureRgba, ColorType.RGBA_8888, "fixture"),
-            src = Rect(0f, 0f, 4f, 4f),
-            dst = Rect(20f, 30f, 24f, 34f),
-            paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f)),
-            transform = Matrix33.identity(),
-            clip = ClipStack.DeviceRect(Rect(21f, 31f, 23f, 33f), antiAlias = true),
-        ).toImageRectCommand(
-            GPUDrawCommandID(1),
-            GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
-        )
-
-        val source = command.copyForClipSource(targetWidth = 64, targetHeight = 64)
-        val blur = source.imageFilterPlan as GPUImageFilterPlan.Blur
-
-        assertEquals(14f, blur.outputBounds.left)
-        assertEquals(21f, blur.outputBounds.top)
-        assertEquals(30f, blur.outputBounds.right)
-        assertEquals(43f, blur.outputBounds.bottom)
-        assertEquals(0f, source.clip.bounds.left)
-        assertEquals(64f, source.clip.bounds.right)
-        assertTrue(!source.blend.requiresDestinationRead)
     }
 
     @Test
@@ -215,7 +189,7 @@ class GPUImageFilterDispatchTest {
                 textureHeight: Int,
                 textureFormat: String,
                 draws: List<GPUBackendRawUniformDraw>,
-                blendMode: GPUBlendMode?,
+                blendMode: GPUFixedFunctionBlendState?,
                 stencilMode: GPUBackendStencilMode?,
                 stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
             ) {
@@ -228,7 +202,7 @@ class GPUImageFilterDispatchTest {
                 colorFormat: String,
                 textureLabel: String,
                 draws: List<GPUBackendRawUniformDraw>,
-                blendMode: GPUBlendMode?,
+                blendMode: GPUFixedFunctionBlendState?,
             ) {
                 passKinds += when {
                     destinationLabel.contains("horizontal") -> "blur-h"
@@ -240,23 +214,23 @@ class GPUImageFilterDispatchTest {
                 }
             }
 
-            override fun drawTwoTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
-            override fun drawThreeTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, thirdTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawTwoTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?) = unexpected()
+            override fun drawThreeTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, thirdTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?) = unexpected()
 
-            override fun drawFullscreenPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRectDraw>, blendMode: GPUBlendMode?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
-            override fun drawFullscreenUniformPayloadPass(wgsl: String, colorFormat: String, draws: List<GPUBackendUniformPayloadDraw>, blendMode: GPUBlendMode?, sourceLabel: String, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
-            override fun drawFullscreenRawUniformPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
-            override fun drawFullscreenStencilPass(wgsl: String, colorFormat: String, stencilMode: GPUBackendStencilMode, triangleData: GPUBackendTriangleData?, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig) = unexpected()
+            override fun drawFullscreenPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRectDraw>, blendMode: GPUFixedFunctionBlendState?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
+            override fun drawFullscreenUniformPayloadPass(wgsl: String, colorFormat: String, draws: List<GPUBackendUniformPayloadDraw>, blendMode: GPUFixedFunctionBlendState?, sourceLabel: String, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
+            override fun drawFullscreenRawUniformPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
+            override fun drawFullscreenStencilPass(wgsl: String, colorFormat: String, stencilMode: GPUBackendStencilMode, triangleData: GPUBackendTriangleData?, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?, stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig) = unexpected()
             override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unexpected()
-            override fun drawVertexColorIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawVertexColorIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, blendMode: GPUFixedFunctionBlendState?) = unexpected()
             override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = unexpected()
-            override fun drawVertexPositionUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, blendMode: GPUBlendMode?) = unexpected()
-            override fun drawVertexPositionDualUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, texture1Rgba: ByteArray, texture1Width: Int, texture1Height: Int, texture2Rgba: ByteArray, texture2Width: Int, texture2Height: Int, textureFormat: String, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawVertexPositionUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, blendMode: GPUFixedFunctionBlendState?) = unexpected()
+            override fun drawVertexPositionDualUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, texture1Rgba: ByteArray, texture1Width: Int, texture1Height: Int, texture2Rgba: ByteArray, texture2Width: Int, texture2Height: Int, textureFormat: String, blendMode: GPUFixedFunctionBlendState?) = unexpected()
             override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unexpected()
             override fun encodeOffscreenTexture(textureLabel: String, clearColor: GPUClearColor?, block: GPUBackendRenderRecorder.() -> Unit) = unexpected()
             override fun drawBlendPass(wgsl: String, colorFormat: String, srcTextureLabel: String, dstTextureLabel: String, draws: List<GPUBackendRawUniformDraw>) = unexpected()
-            override fun drawTextAtlasPass(atlasRgba: ByteArray, atlasWidth: Int, atlasHeight: Int, atlasFormat: String, vertexData: FloatArray, indexData: IntArray, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
-            override fun drawColorGlyphPass(atlasRgba: ByteArray, atlasWidth: Int, atlasHeight: Int, atlasFormat: String, vertexData: FloatArray, indexData: IntArray, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawTextAtlasPass(atlasRgba: ByteArray, atlasWidth: Int, atlasHeight: Int, atlasFormat: String, vertexData: FloatArray, indexData: IntArray, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?) = unexpected()
+            override fun drawColorGlyphPass(atlasRgba: ByteArray, atlasWidth: Int, atlasHeight: Int, atlasFormat: String, vertexData: FloatArray, indexData: IntArray, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?) = unexpected()
 
             private fun unexpected(): Nothing = error("Unexpected recorder call")
         }

@@ -274,13 +274,13 @@ private const val TEXT_GPU_ARTIFACT_DESCRIPTOR_HASH_SCHEMA =
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_HANDOFF_DIAGNOSTIC =
     "text.gpu.artifact-unregistered"
 private const val TEXT_GPU_ARTIFACT_UNREGISTERED_RENDERER_DIAGNOSTIC =
-    "unsupported.text.artifact_unregistered"
+    GPUTextRefusalCodes.ARTIFACT_UNREGISTERED
 private const val TEXT_GPU_ARTIFACT_MISSING_RENDERER_DIAGNOSTIC =
-    "unsupported.text.artifact_missing"
+    GPUTextRefusalCodes.ARTIFACT_MISSING
 private const val TEXT_GPU_ARTIFACT_GENERATION_STALE_DIAGNOSTIC =
-    "unsupported.text.artifact_generation_stale"
+    GPUTextRefusalCodes.ARTIFACT_GENERATION_STALE
 private const val TEXT_GPU_ARTIFACT_BUDGET_EXCEEDED_DIAGNOSTIC =
-    "unsupported.text.artifact_budget_exceeded"
+    GPUTextRefusalCodes.ARTIFACT_BUDGET_EXCEEDED
 
 private fun textGPUArtifactDescriptor(
     artifactName: String,

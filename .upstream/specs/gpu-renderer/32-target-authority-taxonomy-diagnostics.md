@@ -40,6 +40,30 @@ runtime effects, material lowering, resources, pass construction, or
 `gpu-raster` integration must cite this pack and the older evidence they are
 superseding or preserving.
 
+## Normative Authority Registry
+
+This table is the single ownership registry for the frame-planning amendment.
+Other active specs consume these contracts and may explain them, but they must
+not declare a second owner or alternate product entry.
+
+| Contract | Sole authority and invariant |
+|---|---|
+| `GPUBlendPlan` | `passes` owns the canonical 29-mode identity, planner, exact fixed-function state, shader formula identity, coverage encoding, opacity specialization, and semantic `GPUBlendDestinationReadRequirement`; it never imports `destination`. |
+| `GPUFramePlan` | `recording` owns the immutable deterministic linear execution schedule projected from the dependency-authoritative `GPUTaskList`; it is not a second task graph. |
+| `GPUFrameCoordinator` | `execution` owns the sole product entry across frame finalization, preflight, and execution; it makes no route decision, preserves planning/preflight refusals as terminal frame outcomes, and cannot be bypassed by scene or surface entries. |
+| `GPUFramePreflighter` | `execution` owns orchestration of the only materialization boundary after final frame order is known, consuming `recording` plans and `resources` contracts for resource decisions, command streams, scratch budgeting, late surface acquisition, and rollback. |
+| `PreparedGPUFrame` | `execution` owns the sealed preflight result consumed by the executor; it pairs one semantic frame plan with one encoder plan, opaque prepared resources, a completion ticket, and rollback/retention facts. |
+| `GPUSceneTarget` | `resources` owns the canonical single-sample scene texture, optional persistent/retained MSAA continuation, generation, references to `color`-owned format/interpretation, and resident-memory accounting for both offscreen and window outputs. |
+| `GPUQueueCompletionTicket` | `execution` owns the version-scoped real queue-completion proof; presentation never completes or releases a submission, and the unchanged wgpu4k facade API is used only after its corrected revision passes native conformance. |
+| `LCDCoverage` | `passes` owns vector RGB coverage: channel-wise interpolation, maximum channel alpha, destination-shader routing for every non-`Dst` mode, and exact MSAA refusal when a single-sample lowering is unproven. |
+| `RefusedCompositeCommand` | `recording` owns terminal refusal of one normalized composite scope with child provenance and ordering tokens, preventing unsupported layer, picture, or filter children from leaking into the parent target. |
+
+The registry forbids a second blend-mode enum, any product snapshot sourced
+from host readback, release or terminal queue status inferred from the host
+output handoff, materialization until after the final
+`GPUTaskList`/`GPUFramePlan` order, and any product path that bypasses
+`GPUFrameCoordinator`.
+
 ## Status Vocabulary
 
 Spec status describes document maturity:
@@ -211,4 +235,3 @@ Before an implementation ticket promotes route support, it must prove:
 - capability facts that affect validity are present in dumps;
 - refusal remains stable across equivalent inputs;
 - no hidden CPU-rendered compatibility path was selected.
-
