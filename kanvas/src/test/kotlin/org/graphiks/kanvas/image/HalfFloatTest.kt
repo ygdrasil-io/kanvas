@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.math.halfToFloat
-import org.graphiks.math.floatToHalf
+import org.graphiks.math.color.halfToFloat
+import org.graphiks.math.color.floatToHalf
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

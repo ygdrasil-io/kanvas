@@ -9,6 +9,7 @@ dependencies {
     api(project(":color-management"))
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
+    implementation(project(":math:color"))
     implementation(project(":font"))
     implementation(project(":font:colr"))
     api(project(":font:glyph"))
