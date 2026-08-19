@@ -15,17 +15,8 @@ import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImages
 import org.skia.foundation.SkTextureCompressionType
-import org.graphiks.math.SK_ColorBLACK
-import org.graphiks.math.SK_ColorBLUE
-import org.graphiks.math.SK_ColorCYAN
-import org.graphiks.math.SK_ColorGREEN
-import org.graphiks.math.SK_ColorMAGENTA
-import org.graphiks.math.SK_ColorRED
-import org.graphiks.math.SK_ColorTRANSPARENT
-import org.graphiks.math.SK_ColorWHITE
-import org.graphiks.math.SK_ColorYELLOW
-import org.graphiks.math.SkColor
-import org.graphiks.math.SkISize
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.SizeI32
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.max
@@ -45,7 +36,7 @@ class CompressedTexturesGm : SkiaGm {
             0xCC / 255f, 0xCC / 255f, 0xCC / 255f,
         )
 
-        val dim = SkISize.Make(kBaseTexWidth, kBaseTexHeight)
+        val dim = SizeI32.of(kBaseTexWidth, kBaseTexHeight)
 
         val opaqueBC1 = try {
             makeCompressedImage(dim, SkColorType.kRGBA_8888, opaque = true, SkTextureCompressionType.kBC1_RGB8_UNORM)
@@ -87,7 +78,7 @@ class CompressedTexturesGm : SkiaGm {
         const val kCellWidth = (1.5f * kBaseTexWidth).toInt()
 
         private fun makeCompressedImage(
-            dimensions: SkISize,
+            dimensions: SizeI32,
             colorType: SkColorType,
             opaque: Boolean,
             compression: SkTextureCompressionType,
@@ -99,9 +90,9 @@ class CompressedTexturesGm : SkiaGm {
             val bytes = ByteArray(totalSize.toInt())
             val numMipLevels = computeLevelCount(dimensions) + 1
 
-            val kColors = intArrayOf(
-                SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE,
-                SK_ColorCYAN, SK_ColorMAGENTA, SK_ColorYELLOW, SK_ColorWHITE,
+            val kColors = arrayOf(
+                ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue,
+                ColorARGB.Cyan, ColorARGB.Magenta, ColorARGB.Yellow, ColorARGB.White,
             )
 
             var offset = 0L
@@ -123,7 +114,7 @@ class CompressedTexturesGm : SkiaGm {
                     SkTextureCompressionType.kBC1_RGB8_UNORM,
                     SkTextureCompressionType.kBC1_RGBA8_UNORM -> {
                         SkCompressedDataUtils.TwoColorBC1Compress(
-                            srcBitmap = bm, otherColor = kColors[i % 7],
+                            srcBitmap = bm, otherColor = kColors[i % 7].toPackedInt(),
                             dst = bytes, dstOffset = offset.toInt(),
                         )
                     }
@@ -131,7 +122,7 @@ class CompressedTexturesGm : SkiaGm {
                 }
 
                 offset += levelSize
-                levelDims = SkISize.Make(
+                levelDims = SizeI32.of(
                     max(1, levelDims.width / 2), max(1, levelDims.height / 2),
                 )
             }
@@ -141,14 +132,14 @@ class CompressedTexturesGm : SkiaGm {
             )
         }
 
-        private fun renderLevel(dimensions: SkISize, color: SkColor, colorType: SkColorType, opaque: Boolean): SkBitmap {
+        private fun renderLevel(dimensions: SizeI32, color: ColorARGB, colorType: SkColorType, opaque: Boolean): SkBitmap {
             val bm = SkBitmap(
                 width = dimensions.width,
                 height = dimensions.height,
                 colorType = colorType,
             )
-            bm.eraseColor(if (opaque) SK_ColorBLACK else SK_ColorTRANSPARENT)
-            val fillColor = color or 0xFF000000.toInt()
+            bm.eraseColor((if (opaque) ColorARGB.Black else ColorARGB.Transparent).toPackedInt())
+            val fillColor = color.withAlpha(0xFF).toPackedInt()
             for (y in 0 until dimensions.height) {
                 for (x in 0 until dimensions.width) {
                     if (insideGear(x + 0.5f, y + 0.5f, dimensions, numTeeth = 9)) {
@@ -159,7 +150,7 @@ class CompressedTexturesGm : SkiaGm {
             return bm
         }
 
-        private fun insideGear(x: Float, y: Float, dimensions: SkISize, numTeeth: Int): Boolean {
+        private fun insideGear(x: Float, y: Float, dimensions: SizeI32, numTeeth: Int): Boolean {
             val cx = dimensions.width / 2f
             val cy = dimensions.height / 2f
             val nx = (x - cx) / cx
@@ -171,7 +162,7 @@ class CompressedTexturesGm : SkiaGm {
             return radius <= outer
         }
 
-        private fun computeLevelCount(dim: SkISize): Int {
+        private fun computeLevelCount(dim: SizeI32): Int {
             var n = max(dim.width, dim.height); var levels = 0
             while (n > 1) { n = n shr 1; levels++ }
             return levels

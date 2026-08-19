@@ -1,9 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
 
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
@@ -319,11 +316,12 @@ private class JpegHierarchyWriter(
     }
 
     private fun grayscaleSample(argb: Int): Int {
-        var r = SkColorGetR(argb)
-        var g = SkColorGetG(argb)
-        var b = SkColorGetB(argb)
+        val color = ColorARGB.fromPackedInt(argb)
+        var r = color.red
+        var g = color.green
+        var b = color.blue
         if (options.effectiveAlphaPolicy() == JpegAlphaPolicy.BlendOnBlack) {
-            val alpha = SkColorGetA(argb)
+            val alpha = color.alpha
             r = (r * alpha + 127) / 255
             g = (g * alpha + 127) / 255
             b = (b * alpha + 127) / 255
@@ -560,10 +558,11 @@ private class JpegWriter(
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
                 val argb = bitmap.getPixel(x, y)
-                val a = SkColorGetA(argb)
-                val r = SkColorGetR(argb)
-                val g = SkColorGetG(argb)
-                val b = SkColorGetB(argb)
+                val color = ColorARGB.fromPackedInt(argb)
+                val a = color.alpha
+                val r = color.red
+                val g = color.green
+                val b = color.blue
                 val packed = when (options.effectiveAlphaPolicy()) {
                     JpegAlphaPolicy.Ignore -> packRgb(r, g, b)
                     JpegAlphaPolicy.BlendOnBlack -> {

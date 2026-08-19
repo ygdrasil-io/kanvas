@@ -52,6 +52,18 @@ public data class Matrix3x3F32(
     val persp1: Float = 0f,
     val persp2: Float = 1f,
 ) {
+    /** Returns the coefficient at [row], [column] in row-major order. */
+    public operator fun get(row: Int, column: Int): Float {
+        require(row in 0..2 && column in 0..2) {
+            "get($row, $column) out of range for 3x3 matrix"
+        }
+        return when (row) {
+            0 -> when (column) { 0 -> sx; 1 -> kx; else -> tx }
+            1 -> when (column) { 0 -> ky; 1 -> sy; else -> ty }
+            else -> when (column) { 0 -> persp0; 1 -> persp1; else -> persp2 }
+        }
+    }
+
     /**
      * `ScaleToFit` describes how [Companion.MakeRectToRect] maps one
      * rect to another.
@@ -100,12 +112,6 @@ public data class Matrix3x3F32(
      */
     public fun isScaleTranslate(): Boolean =
         (getType() and (kAffine_Mask or kPerspective_Mask)) == 0
-
-    /**
-     * Compatibility alias for [isScaleTranslate]. New code should prefer
-     * [isScaleTranslate] for naming consistency.
-     */
-    public val isAxisAligned: Boolean get() = isScaleTranslate()
 
     /**
      * `true` if the matrix maps a rect to a rect — identity, scale,
@@ -300,15 +306,6 @@ public data class Matrix3x3F32(
         require(scaleFactors.size >= 2)
         return computeScaleFactor(scaleKind = SCALE_KIND_BOTH, scaleFactors)
     }
-
-    /**
-     * Compatibility alias for [getMaxScale].
-     */
-    @Deprecated(
-        "Use getMaxScale() for naming consistency",
-        ReplaceWith("getMaxScale()"),
-    )
-    public fun computeMaxScale(): Float = getMaxScale()
 
     /**
      * Decompose this matrix into a pure scale and a "remaining" rotation
@@ -990,7 +987,7 @@ public data class Matrix3x3F32(
          * `sin` and `cos` results within `SK_ScalarSinCosNearlyZero` of zero
          * are snapped to exactly `0f`. This guarantees that `rotation(90)`,
          * `rotation(180)`, etc. produce bit-exact axis-aligned matrices,
-         * so [isAxisAligned] returns `true` for cardinal angles instead of
+         * so [rectStaysRect] returns `true` for cardinal angles instead of
          * tripping over a `~6e-8` cosine residue.
          */
         public fun rotation(degrees: Float): Matrix3x3F32 {

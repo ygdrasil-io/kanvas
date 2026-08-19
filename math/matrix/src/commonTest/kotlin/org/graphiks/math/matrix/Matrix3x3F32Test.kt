@@ -17,7 +17,7 @@ import org.graphiks.math.geometry.RectF32
 /**
  * Coverage for the Phase 4b [Matrix3x3F32] data class — affine 2 × 3 matrix
  * operations: factories, point/rect mapping, pre-* composition,
- * `computeMaxScale`, `isAxisAligned`.
+ * `getMaxScale`, `isScaleTranslate`.
  */
 class Matrix3x3F32Test {
 
@@ -30,7 +30,7 @@ class Matrix3x3F32Test {
     fun `Identity is identity`() {
         val m = Matrix3x3F32.Identity
         assertTrue(m.isIdentity)
-        assertTrue(m.isAxisAligned)
+        assertTrue(m.isScaleTranslate())
         val (x, y) = m.mapXY(7f, 11f)
         assertEquals(7f, x); assertEquals(11f, y)
     }
@@ -39,7 +39,7 @@ class Matrix3x3F32Test {
     fun `MakeTrans translates points`() {
         val m = Matrix3x3F32.translation(3f, 5f)
         assertFalse(m.isIdentity)
-        assertTrue(m.isAxisAligned)
+        assertTrue(m.isScaleTranslate())
         val (x, y) = m.mapXY(1f, 2f)
         assertEquals(4f, x); assertEquals(7f, y)
     }
@@ -61,7 +61,7 @@ class Matrix3x3F32Test {
         // And (0, 1) goes to (-1, 0).
         val (x2, y2) = m.mapXY(0f, 1f)
         assertNear(-1f, x2); assertNear(0f, y2)
-        assertFalse(m.isAxisAligned)
+        assertFalse(m.isScaleTranslate())
     }
 
     @Test
@@ -79,7 +79,7 @@ class Matrix3x3F32Test {
         val (x, y) = m.mapXY(1f, 4f)
         assertEquals(3f, x)         // 1 + 0.5 * 4 = 3
         assertEquals(4f, y)
-        assertFalse(m.isAxisAligned)
+        assertFalse(m.isScaleTranslate())
     }
 
     @Test
@@ -125,7 +125,7 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `computeMaxScale of pure scale returns max abs scale`() {
+    fun `getMaxScale of pure scale returns max abs scale`() {
         assertNear(2f, Matrix3x3F32.scaling(2f, 1f).getMaxScale())
         assertNear(3f, Matrix3x3F32.scaling(1f, 3f).getMaxScale())
         assertNear(2f, Matrix3x3F32.scaling(-2f, 1f).getMaxScale())
@@ -133,7 +133,7 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `computeMaxScale of pure rotation is 1`() {
+    fun `getMaxScale of pure rotation is 1`() {
         for (deg in listOf(0f, 30f, 45f, 90f, 180f, -135f)) {
             assertNear(1f, Matrix3x3F32.rotation(deg).getMaxScale(),
                 msg = "rotation $deg deg max scale")
@@ -141,19 +141,19 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `computeMaxScale of rotated scale equals scale`() {
+    fun `getMaxScale of rotated scale equals scale`() {
         // Rotate then scale: max scale should still be the scale magnitude.
         val m = Matrix3x3F32.rotation(30f).preScale(4f, 4f)
         assertNear(4f, m.getMaxScale())
     }
 
     @Test
-    fun `computeMaxScale of identity is 1`() {
+    fun `getMaxScale of identity is 1`() {
         assertNear(1f, Matrix3x3F32.Identity.getMaxScale())
     }
 
     @Test
-    fun `computeMaxScale never returns NaN for typical inputs`() {
+    fun `getMaxScale never returns NaN for typical inputs`() {
         // Worst case: extreme aspect ratio + skew.
         val m = Matrix3x3F32(sx = 1000f, kx = 0.5f, tx = 0f, ky = 1f, sy = 0.001f, ty = 0f)
         val s = m.getMaxScale()
@@ -170,12 +170,12 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `isAxisAligned distinguishes pure scale from rotation`() {
-        assertTrue(Matrix3x3F32.Identity.isAxisAligned)
-        assertTrue(Matrix3x3F32.translation(5f, 7f).isAxisAligned)
-        assertTrue(Matrix3x3F32.scaling(2f, 3f).isAxisAligned)
-        assertFalse(Matrix3x3F32.rotation(45f).isAxisAligned)
-        assertFalse(Matrix3x3F32.skewing(0.5f, 0f).isAxisAligned)
+    fun `isScaleTranslate distinguishes pure scale from rotation`() {
+        assertTrue(Matrix3x3F32.Identity.isScaleTranslate())
+        assertTrue(Matrix3x3F32.translation(5f, 7f).isScaleTranslate())
+        assertTrue(Matrix3x3F32.scaling(2f, 3f).isScaleTranslate())
+        assertFalse(Matrix3x3F32.rotation(45f).isScaleTranslate())
+        assertFalse(Matrix3x3F32.skewing(0.5f, 0f).isScaleTranslate())
     }
 
     @Test
@@ -203,7 +203,7 @@ class Matrix3x3F32Test {
     @Test
     fun `singular value matches sqrt(eigenvalue) sanity check`() {
         // For pure horizontal stretch + 90° rotation: maps (1,0) to (0, k).
-        // Singular values should be {k, 1}. computeMaxScale returns k.
+        // Singular values should be {k, 1}. getMaxScale returns k.
         val k = 7f
         val m = Matrix3x3F32.scaling(k, 1f).preRotate(90f)
         assertNear(k, m.getMaxScale(), eps = 1e-3f)
@@ -215,7 +215,7 @@ class Matrix3x3F32Test {
         val (x, y) = m.mapXY(3f, 4f)
         assertEquals(3f, x)
         assertEquals(-4f, y)
-        assertTrue(m.isAxisAligned)
+        assertTrue(m.isScaleTranslate())
         assertNear(1f, m.getMaxScale(), msg = "negative-uniform-flip max scale")
     }
 
@@ -315,16 +315,16 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `rotation(0) and rotation(180) are isAxisAligned`() {
+    fun `rotation(0) and rotation(180) are scale-translate`() {
         // 0° and 180° preserve `kx == ky == 0` after snap — they fit our
-        // strict isAxisAligned (translate + scale only) definition.
-        // 90/270/-90 swap axes (kx, ky != 0) so they're NOT isAxisAligned;
+        // strict isScaleTranslate (translate + scale only) definition.
+        // 90/270/-90 swap axes (kx, ky != 0) so they're not scale-translate;
         // matching Skia, that's `rectStaysRect`, a looser predicate we don't expose yet.
-        assertTrue(Matrix3x3F32.rotation(0f).isAxisAligned)
-        assertTrue(Matrix3x3F32.rotation(180f).isAxisAligned)
-        assertTrue(Matrix3x3F32.rotation(-180f).isAxisAligned)
-        assertFalse(Matrix3x3F32.rotation(90f).isAxisAligned)
-        assertFalse(Matrix3x3F32.rotation(-90f).isAxisAligned)
+        assertTrue(Matrix3x3F32.rotation(0f).isScaleTranslate())
+        assertTrue(Matrix3x3F32.rotation(180f).isScaleTranslate())
+        assertTrue(Matrix3x3F32.rotation(-180f).isScaleTranslate())
+        assertFalse(Matrix3x3F32.rotation(90f).isScaleTranslate())
+        assertFalse(Matrix3x3F32.rotation(-90f).isScaleTranslate())
     }
 
     @Test
@@ -815,7 +815,7 @@ class Matrix3x3F32Test {
     // ─── Phase 3: getMaxScale / getMinScale / getMinMaxScales ────────────
 
     @Test
-    fun `getMaxScale matches legacy computeMaxScale on canonical inputs`() {
+    fun `getMaxScale covers canonical inputs`() {
         // Pure scale.
         assertNear(2f, Matrix3x3F32.scaling(2f, 1f).getMaxScale())
         // Rotation only.
@@ -844,13 +844,6 @@ class Matrix3x3F32Test {
         val m = Matrix3x3F32.scaling(4f, 1f).preRotate(45f)
         m.getMinMaxScales(s)
         assertNear(1f, s[0], eps = 1e-3f); assertNear(4f, s[1], eps = 1e-3f)
-    }
-
-    @Test
-    fun `deprecated computeMaxScale forwards to getMaxScale`() {
-        @Suppress("DEPRECATION")
-        assertEquals(Matrix3x3F32.scaling(7f, 3f).getMaxScale(),
-            Matrix3x3F32.scaling(7f, 3f).computeMaxScale())
     }
 
     // ─── Phase 3: decomposeScale ──────────────────────────────────────

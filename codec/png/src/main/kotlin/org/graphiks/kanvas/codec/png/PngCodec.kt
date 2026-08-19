@@ -5,8 +5,8 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -643,7 +643,7 @@ public class PngCodec private constructor(
                 ColorProfile(
                     colorModel = ColorModel.RGB,
                     toXyzD50 = matrix,
-                    transferFunction = SkcmsTransferFunction(
+                    transferFunction = ColorTransferFunction.parametric(
                         g = exponent.toFloat(),
                         a = 1f,
                         b = 0f,
@@ -676,7 +676,7 @@ public class PngCodec private constructor(
             )
         }
 
-        private fun chromaticitiesToXyzD50(chromaticities: PngChromaticitiesMetadata): SkcmsMatrix3x3? {
+        private fun chromaticitiesToXyzD50(chromaticities: PngChromaticitiesMetadata): Matrix3x3F32? {
             val white = chromaticityToXyz(chromaticities.whitePoint) ?: return null
             val red = chromaticityToXyz(chromaticities.red) ?: return null
             val green = chromaticityToXyz(chromaticities.green) ?: return null
@@ -703,7 +703,7 @@ public class PngCodec private constructor(
                 BRADFORD_INVERSE * Matrix3x3D(diagonal) * BRADFORD * Matrix3x3D(sourceToXyz)
                 ).toArray()
             if (adapted.any { !it.isFinite() || it < -Float.MAX_VALUE || it > Float.MAX_VALUE }) return null
-            return SkcmsMatrix3x3.of(
+            return Matrix3x3F32.of(
                 adapted[0].toFloat(), adapted[1].toFloat(), adapted[2].toFloat(),
                 adapted[3].toFloat(), adapted[4].toFloat(), adapted[5].toFloat(),
                 adapted[6].toFloat(), adapted[7].toFloat(), adapted[8].toFloat(),

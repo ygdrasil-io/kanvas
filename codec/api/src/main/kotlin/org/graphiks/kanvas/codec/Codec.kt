@@ -5,8 +5,8 @@ import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkISize
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 import org.skia.foundation.skcms.SkcmsICCProfile
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -115,8 +115,8 @@ public abstract class Codec protected constructor() {
      */
     public open fun getOrigin(): SkEncodedOrigin = SkEncodedOrigin.kTopLeft
 
-    public fun dimensions(): SkISize = getInfo().dimensions()
-    public fun bounds(): SkIRect = getInfo().bounds()
+    public fun dimensions(): SizeI32 = SizeI32.of(getInfo().width, getInfo().height)
+    public fun bounds(): RectI32 = RectI32.ofSize(getInfo().width, getInfo().height)
 
     /**
      * Decode into [dst], whose [SkBitmap.width] / [SkBitmap.height] /
@@ -187,7 +187,7 @@ public abstract class Codec protected constructor() {
         val requiredFrame: Int = kNoFrame,
         val durationMs: Int = 0,
         val alphaType: SkAlphaType = SkAlphaType.kUnpremul,
-        val frameRect: SkIRect = SkIRect.MakeEmpty(),
+        val frameRect: RectI32 = RectI32.Empty,
     )
 
     /**
@@ -207,7 +207,7 @@ public abstract class Codec protected constructor() {
             requiredFrame = kNoFrame,
             durationMs = 0,
             alphaType = getInfo().alphaType,
-            frameRect = SkIRect.MakeWH(getInfo().width, getInfo().height),
+            frameRect = RectI32.ofSize(getInfo().width, getInfo().height),
         ),
     )
 

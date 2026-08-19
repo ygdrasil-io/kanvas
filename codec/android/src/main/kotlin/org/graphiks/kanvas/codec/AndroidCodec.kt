@@ -5,13 +5,10 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkImageInfo
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkISize
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -60,7 +57,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      */
     public data class AndroidOptions(
         public val sampleSize: Int = 1,
-        public val subset: SkIRect? = null,
+        public val subset: RectI32? = null,
         public val zeroInitialized: ZeroInitialized = ZeroInitialized.kNo,
     )
 
@@ -118,7 +115,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      * size.height`, clamped to `1` if the request is already larger than
      * the source.
      */
-    public fun computeSampleSize(size: SkISize): Int {
+    public fun computeSampleSize(size: SizeI32): Int {
         val info = getInfo()
         val srcW = info.width
         val srcH = info.height
@@ -158,12 +155,12 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      * upstream contract is "always recommend a non-zero output"). When
      * [sampleSize] is `<= 1` the source dimensions are returned as-is.
      */
-    public fun getSampledDimensions(sampleSize: Int): SkISize {
+    public fun getSampledDimensions(sampleSize: Int): SizeI32 {
         val info = getInfo()
-        if (sampleSize <= 1) return SkISize.Make(info.width, info.height)
+        if (sampleSize <= 1) return SizeI32.of(info.width, info.height)
         val w = maxOf(1, info.width / sampleSize)
         val h = maxOf(1, info.height / sampleSize)
-        return SkISize.Make(w, h)
+        return SizeI32.of(w, h)
     }
 
     /**
@@ -177,15 +174,15 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      * subset is taken via [org.skia.foundation.SkPixmap.extractSubset]).
      * The returned rect is the input clamped to `[0, 0, w, h]`.
      */
-    public fun getSupportedSubset(desiredSubset: SkIRect): SkIRect? {
+    public fun getSupportedSubset(desiredSubset: RectI32): RectI32? {
         val info = getInfo()
-        val srcBounds = SkIRect.MakeWH(info.width, info.height)
+        val srcBounds = RectI32.ofSize(info.width, info.height)
         val l = maxOf(desiredSubset.left, 0)
         val t = maxOf(desiredSubset.top, 0)
         val r = minOf(desiredSubset.right, srcBounds.right)
         val b = minOf(desiredSubset.bottom, srcBounds.bottom)
         if (l >= r || t >= b) return null
-        return SkIRect.MakeLTRB(l, t, r, b)
+        return RectI32.ofLTRB(l, t, r, b)
     }
 
     /**
@@ -195,11 +192,11 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      * [sampleSize], clamped to `1` per axis. If [subset] is empty, the
      * returned size is `(1, 1)`.
      */
-    public fun getSampledSubsetDimensions(sampleSize: Int, subset: SkIRect): SkISize {
+    public fun getSampledSubsetDimensions(sampleSize: Int, subset: RectI32): SizeI32 {
         val s = maxOf(1, sampleSize)
         val w = maxOf(1, subset.width() / s)
         val h = maxOf(1, subset.height() / s)
-        return SkISize.Make(w, h)
+        return SizeI32.of(w, h)
     }
 
     /**
@@ -265,8 +262,8 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
             val r = minOf(req.right, srcInfo.width)
             val b = minOf(req.bottom, srcInfo.height)
             if (l >= r || t >= b) return Codec.Result.kInvalidParameters
-            SkIRect.MakeLTRB(l, t, r, b)
-        } ?: SkIRect.MakeWH(srcInfo.width, srcInfo.height)
+            RectI32.ofLTRB(l, t, r, b)
+        } ?: RectI32.ofSize(srcInfo.width, srcInfo.height)
 
         // 2) Verify the caller's `info` dimensions match the
         //    post-sample-size output. Upstream surfaces a mismatch as
@@ -320,35 +317,36 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
         colorType: SkColorType,
         c: Int,
     ) {
+        val color = ColorARGB.fromPackedInt(c)
         when (colorType) {
             SkColorType.kRGBA_8888 -> {
                 // Wire order : R G B A.
-                buf.put(off, SkColorGetR(c).toByte())
-                buf.put(off + 1, SkColorGetG(c).toByte())
-                buf.put(off + 2, SkColorGetB(c).toByte())
-                buf.put(off + 3, SkColorGetA(c).toByte())
+                buf.put(off, color.red.toByte())
+                buf.put(off + 1, color.green.toByte())
+                buf.put(off + 2, color.blue.toByte())
+                buf.put(off + 3, color.alpha.toByte())
             }
             SkColorType.kBGRA_8888 -> {
                 // Wire order : B G R A.
-                buf.put(off, SkColorGetB(c).toByte())
-                buf.put(off + 1, SkColorGetG(c).toByte())
-                buf.put(off + 2, SkColorGetR(c).toByte())
-                buf.put(off + 3, SkColorGetA(c).toByte())
+                buf.put(off, color.blue.toByte())
+                buf.put(off + 1, color.green.toByte())
+                buf.put(off + 2, color.red.toByte())
+                buf.put(off + 3, color.alpha.toByte())
             }
-            SkColorType.kAlpha_8 -> buf.put(off, SkColorGetA(c).toByte())
+            SkColorType.kAlpha_8 -> buf.put(off, color.alpha.toByte())
             SkColorType.kGray_8 -> {
                 // Rec.601 luminance — matches SkBitmap.setPixel's
                 // quantisation for kGray_8.
-                val r = SkColorGetR(c)
-                val g = SkColorGetG(c)
-                val b = SkColorGetB(c)
+                val r = color.red
+                val g = color.green
+                val b = color.blue
                 val l = ((r * 77 + g * 150 + b * 29) shr 8).coerceIn(0, 255)
                 buf.put(off, l.toByte())
             }
             SkColorType.kRGB_565 -> {
-                val r5 = (SkColorGetR(c) * 31 + 127) / 255
-                val g6 = (SkColorGetG(c) * 63 + 127) / 255
-                val b5 = (SkColorGetB(c) * 31 + 127) / 255
+                val r5 = (color.red * 31 + 127) / 255
+                val g6 = (color.green * 63 + 127) / 255
+                val b5 = (color.blue * 31 + 127) / 255
                 val packed = ((r5 and 0x1F) shl 11) or ((g6 and 0x3F) shl 5) or (b5 and 0x1F)
                 // LE on the wire.
                 buf.put(off, (packed and 0xFF).toByte())
@@ -357,11 +355,11 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
             SkColorType.kARGB_4444 -> {
                 // Premul ARGB 4-bit-per-channel, packed RGBA in upstream's
                 // `kARGB_4444_SkColorType` wire layout : R<<12 | G<<8 | B<<4 | A.
-                val a = SkColorGetA(c) / 255f
+                val a = color.alpha / 255f
                 fun q(v: Int): Int = (((v / 255f) * a) * 15f + 0.5f).toInt().coerceIn(0, 15)
-                val rN = q(SkColorGetR(c))
-                val gN = q(SkColorGetG(c))
-                val bN = q(SkColorGetB(c))
+                val rN = q(color.red)
+                val gN = q(color.green)
+                val bN = q(color.blue)
                 val aN = (a * 15f + 0.5f).toInt().coerceIn(0, 15)
                 val packed = (rN shl 12) or (gN shl 8) or (bN shl 4) or aN
                 buf.put(off, (packed and 0xFF).toByte())

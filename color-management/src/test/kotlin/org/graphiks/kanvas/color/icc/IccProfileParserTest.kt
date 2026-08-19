@@ -2,8 +2,9 @@ package org.graphiks.kanvas.color.icc
 
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfiles
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -635,9 +636,9 @@ class IccProfileParserTest {
 
         val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
-        assertEquals(0.9642f, profile.toXyzD50!![0, 0], 0f)
-        assertEquals(1f, profile.toXyzD50!![1, 1], 0f)
-        assertEquals(0.8249f, profile.toXyzD50!![2, 2], 0f)
+        assertEquals(0.9642f, profile.toXyzD50!!.iccGet(0, 0), 0f)
+        assertEquals(1f, profile.toXyzD50!!.iccGet(1, 1), 0f)
+        assertEquals(0.8249f, profile.toXyzD50!!.iccGet(2, 2), 0f)
     }
 
     @Test
@@ -1504,7 +1505,7 @@ class IccProfileParserTest {
         writeU32(bytes, offset, (value * 65536f).toInt())
     }
 
-    private fun assertTransferFunctionNear(expected: SkcmsTransferFunction, actual: SkcmsTransferFunction) {
+    private fun assertTransferFunctionNear(expected: ColorTransferFunction.Parametric, actual: ColorTransferFunction.Parametric) {
         val differences = listOf(
             abs(expected.g - actual.g),
             abs(expected.a - actual.a),
@@ -1517,9 +1518,9 @@ class IccProfileParserTest {
         assertTrue(differences.all { it <= 7e-5f }, "transfer function differs: $actual")
     }
 
-    private fun assertMatrixNear(expected: SkcmsMatrix3x3, actual: SkcmsMatrix3x3) {
+    private fun assertMatrixNear(expected: Matrix3x3F32, actual: Matrix3x3F32) {
         for (row in 0 until 3) for (column in 0 until 3) {
-            assertEquals(expected[row, column], actual[row, column], 1f / 65536f, "matrix[$row,$column]")
+            assertEquals(expected.iccGet(row, column), actual.iccGet(row, column), 1f / 65536f, "matrix[$row,$column]")
         }
     }
 }

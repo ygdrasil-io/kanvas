@@ -2,11 +2,7 @@ package org.graphiks.kanvas.codec
 
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageGenerator
@@ -47,11 +43,12 @@ public class CodecImageGenerator private constructor(
             val rowOff = y * rowBytes
             for (x in 0 until width) {
                 val c = bm.pixels[y * width + x]
+                val color = ColorARGB.fromPackedInt(c)
                 val off = rowOff + x * 4
-                pixels.put(off, SkColorGetR(c).toByte())
-                pixels.put(off + 1, SkColorGetG(c).toByte())
-                pixels.put(off + 2, SkColorGetB(c).toByte())
-                pixels.put(off + 3, SkColorGetA(c).toByte())
+                pixels.put(off, color.red.toByte())
+                pixels.put(off + 1, color.green.toByte())
+                pixels.put(off + 2, color.blue.toByte())
+                pixels.put(off + 3, color.alpha.toByte())
             }
         }
         return true
@@ -121,7 +118,7 @@ public object ImageGeneratorImages {
                 val g = bytes.get(off + 1).toInt() and 0xFF
                 val b = bytes.get(off + 2).toInt() and 0xFF
                 val a = bytes.get(off + 3).toInt() and 0xFF
-                pixels[y * w + x] = SkColorSetARGB(a, r, g, b)
+                pixels[y * w + x] = ColorARGB.of(a, r, g, b).toPackedInt()
             }
         }
         return SkImage(w, h, pixels, SkColorType.kRGBA_8888)

@@ -106,7 +106,6 @@ includeBuild("external/poc-koreos") {
     }
 }
 
-include(":math")
 include(":math:scalar")
 include(":math:vector")
 include(":math:matrix")

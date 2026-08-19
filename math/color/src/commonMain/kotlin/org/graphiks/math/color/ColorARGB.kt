@@ -26,6 +26,9 @@ public value class ColorARGB internal constructor(public val value: UInt) {
     /** Blue component in `[0, 255]`. */
     public val blue: Int get() = (value and 0xFFu).toInt()
 
+    /** Returns the packed signed `Int` representation used by ARGB pixel buffers. */
+    public fun toPackedInt(): Int = value.toInt()
+
     /** Returns a new color with the given alpha, preserving RGB. */
     public fun withAlpha(a: Int): ColorARGB =
         ColorARGB(((a and 0xFF) shl 24).toUInt() or (value and 0x00FFFFFFu))
@@ -83,6 +86,9 @@ public value class ColorARGB internal constructor(public val value: UInt) {
         /** Creates an opaque color from RGB components (each in `[0, 255]`). */
         public fun of(red: Int, green: Int, blue: Int): ColorARGB =
             of(0xFF, red, green, blue)
+
+        /** Creates a color from a packed signed `Int` in `AARRGGBB` order. */
+        public fun fromPackedInt(packed: Int): ColorARGB = ColorARGB(packed.toUInt())
     }
 }
 

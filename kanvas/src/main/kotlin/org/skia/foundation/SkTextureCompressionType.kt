@@ -1,10 +1,7 @@
 package org.skia.foundation
 
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-import org.graphiks.math.SkISize
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.SizeI32
 
 public enum class SkTextureCompressionType {
     kNone,
@@ -19,7 +16,7 @@ public val SkTextureCompressionType.kETC1_RGB8_UNORM: SkTextureCompressionType
 public object SkCompressedDataUtils {
     public fun SkCompressedDataSize(
         compression: SkTextureCompressionType,
-        dimensions: SkISize,
+        dimensions: SizeI32,
         mipMapOffsetsAndSizes: IntArray? = null,
         mipMapped: Boolean = false,
     ): Long {
@@ -113,7 +110,8 @@ public object SkCompressedDataUtils {
                         val x = bx * 4 + lx
                         val y = by * 4 + ly
                         val c = if (x < srcBitmap.width && y < srcBitmap.height) srcBitmap.getPixel(x, y) else 0
-                        val idx = if (SkColorGetA(c) < 128) {
+                        val color = ColorARGB.fromPackedInt(c)
+                        val idx = if (color.alpha < 128) {
                             hasTransparent = true
                             3
                         } else if (approxSameRgb(c, otherColor)) {
@@ -157,9 +155,10 @@ public object SkCompressedDataUtils {
                 val x = bx * 4 + lx
                 val y = by * 4 + ly
                 val c = if (x < src.width && y < src.height) src.getPixel(x, y) else 0
-                val r = SkColorGetR(c)
-                val g = SkColorGetG(c)
-                val b = SkColorGetB(c)
+                val color = ColorARGB.fromPackedInt(c)
+                val r = color.red
+                val g = color.green
+                val b = color.blue
                 if (ly < 2) {
                     srSum += r
                     sgSum += g
@@ -204,16 +203,19 @@ public object SkCompressedDataUtils {
     }
 
     private fun approxSameRgb(a: Int, b: Int): Boolean {
-        val dr = kotlin.math.abs(SkColorGetR(a) - SkColorGetR(b))
-        val dg = kotlin.math.abs(SkColorGetG(a) - SkColorGetG(b))
-        val db = kotlin.math.abs(SkColorGetB(a) - SkColorGetB(b))
+        val colorA = ColorARGB.fromPackedInt(a)
+        val colorB = ColorARGB.fromPackedInt(b)
+        val dr = kotlin.math.abs(colorA.red - colorB.red)
+        val dg = kotlin.math.abs(colorA.green - colorB.green)
+        val db = kotlin.math.abs(colorA.blue - colorB.blue)
         return dr <= 2 && dg <= 2 && db <= 2
     }
 
     private fun to565(c: Int): Int {
-        val r = (SkColorGetR(c) * 31 + 127) / 255
-        val g = (SkColorGetG(c) * 63 + 127) / 255
-        val b = (SkColorGetB(c) * 31 + 127) / 255
+        val color = ColorARGB.fromPackedInt(c)
+        val r = (color.red * 31 + 127) / 255
+        val g = (color.green * 63 + 127) / 255
+        val b = (color.blue * 31 + 127) / 255
         return (r shl 11) or (g shl 5) or b
     }
 

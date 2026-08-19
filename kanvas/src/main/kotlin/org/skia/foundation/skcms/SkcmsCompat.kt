@@ -7,8 +7,8 @@ import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -16,16 +16,16 @@ public class SkcmsICCProfile private constructor(
     public val colorProfile: ColorProfile,
     originalBytes: ByteArray,
     /** Non-null legacy projection; use [colorProfile] to determine actual facade support. */
-    public val transferFn: SkcmsTransferFunction,
+    public val transferFn: ColorTransferFunction.Parametric,
     /** Non-null legacy projection; use [colorProfile] to determine actual facade support. */
-    public val toXYZD50: SkcmsMatrix3x3,
+    public val toXYZD50: Matrix3x3F32,
 ) {
     private val originalBytes: ByteArray = originalBytes.copyOf()
 
     public constructor(
         bytes: ByteArray,
-        transferFn: SkcmsTransferFunction = SkNamedTransferFn.kSRGB,
-        toXYZD50: SkcmsMatrix3x3 = SkNamedGamut.kSRGB,
+        transferFn: ColorTransferFunction.Parametric = SkNamedTransferFn.kSRGB,
+        toXYZD50: Matrix3x3F32 = SkNamedGamut.kSRGB,
     ) : this(
         colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
         originalBytes = bytes,
@@ -47,13 +47,13 @@ public class SkcmsICCProfile private constructor(
     public val hasToXYZD50: Boolean get() = colorProfile.toXyzD50 != null
 
     public operator fun component1(): ByteArray = bytes
-    public operator fun component2(): SkcmsTransferFunction = transferFn
-    public operator fun component3(): SkcmsMatrix3x3 = toXYZD50
+    public operator fun component2(): ColorTransferFunction.Parametric = transferFn
+    public operator fun component3(): Matrix3x3F32 = toXYZD50
 
     public fun copy(
         bytes: ByteArray = this.bytes,
-        transferFn: SkcmsTransferFunction = this.transferFn,
-        toXYZD50: SkcmsMatrix3x3 = this.toXYZD50,
+        transferFn: ColorTransferFunction.Parametric = this.transferFn,
+        toXYZD50: Matrix3x3F32 = this.toXYZD50,
     ): SkcmsICCProfile = if (
         bytes.contentEquals(originalBytes) && transferFn == this.transferFn && toXYZD50 == this.toXYZD50
     ) {
@@ -126,22 +126,14 @@ public class SkcmsICCProfile private constructor(
 }
 
 public object SkNamedTransferFn {
-    public val kSRGB: SkcmsTransferFunction = checkNotNull(ColorProfiles.sRGB().transferFunction)
-    public val kLinear: SkcmsTransferFunction = SkcmsTransferFunction(
-        g = 1f,
-        a = 1f,
-        b = 0f,
-        c = 1f,
-        d = 0f,
-        e = 0f,
-        f = 0f,
-    )
+    public val kSRGB: ColorTransferFunction.Parametric = checkNotNull(ColorProfiles.sRGB().transferFunction)
+    public val kLinear: ColorTransferFunction.Parametric = ColorTransferFunction.linear
 }
 
 public object SkNamedGamut {
-    public val kSRGB: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.sRGB().toXyzD50)
-    public val kDisplayP3: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.displayP3().toXyzD50)
-    public val kRec2020: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.rec2020().toXyzD50)
+    public val kSRGB: Matrix3x3F32 = checkNotNull(ColorProfiles.sRGB().toXyzD50)
+    public val kDisplayP3: Matrix3x3F32 = checkNotNull(ColorProfiles.displayP3().toXyzD50)
+    public val kRec2020: Matrix3x3F32 = checkNotNull(ColorProfiles.rec2020().toXyzD50)
 }
 
 public fun skcmsParse(bytes: ByteArray): SkcmsICCProfile? {

@@ -8,8 +8,8 @@ import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.kanvas.types.Gamut
 import org.graphiks.kanvas.types.TransferFunction
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -153,7 +153,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `unknown SDR transfer is refused instead of retagged`() {
-        val unknownTransfer = SkcmsTransferFunction(
+        val unknownTransfer = ColorTransferFunction.parametric(
             g = 1.8f,
             a = 1f,
             b = 0f,
@@ -176,7 +176,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `unknown gamut is refused instead of retagged`() {
-        val unknownGamut = SkcmsMatrix3x3.of(
+        val unknownGamut = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -195,12 +195,10 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `nearby unknown gamut is refused instead of retagged as sRGB`() {
-        val unknownGamut = SkNamedGamut.kSRGB.copy().also {
-            for (row in 0 until 3) {
-                it.vals[row][0] += 3f / 65_536f
-                it.vals[row][1] -= 3f / 65_536f
-            }
-        }
+        val unknownGamut = SkNamedGamut.kSRGB.copy(
+            sx = SkNamedGamut.kSRGB.sx + 3f / 65_536f,
+            kx = SkNamedGamut.kSRGB.kx - 3f / 65_536f,
+        )
         val source = serializedColorSpace(SkNamedTransferFn.kSRGB, unknownGamut)
 
         val failure = assertThrows<IllegalArgumentException> {
@@ -220,19 +218,14 @@ class KanvasCodecColorSpaceTest {
         val stableSource = sdrColorSpace(originalGamut)
         assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
 
-        try {
-            publicGamut.vals[0][0] += 0.25f
-            val mutatedSource = sdrColorSpace(publicGamut.copy())
+        val mutatedSource = sdrColorSpace(publicGamut.copy(sx = publicGamut.sx + 0.25f))
 
-            val failure = assertThrows<UnsupportedKanvasColorSpaceException> {
-                imageInfo(mutatedSource).toKanvasImageInfo()
-            }
-
-            assertEquals("gamut", failure.reason)
-            assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
-        } finally {
-            restoreMatrix(publicGamut, originalGamut)
+        val failure = assertThrows<UnsupportedKanvasColorSpaceException> {
+            imageInfo(mutatedSource).toKanvasImageInfo()
         }
+
+        assertEquals("gamut", failure.reason)
+        assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
 
         assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
     }
@@ -245,12 +238,12 @@ class KanvasCodecColorSpaceTest {
         colorSpace = colorSpace,
     )
 
-    private fun sdrColorSpace(gamut: SkcmsMatrix3x3): SkColorSpace =
+    private fun sdrColorSpace(gamut: Matrix3x3F32): SkColorSpace =
         requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, gamut))
 
     private fun serializedColorSpace(
-        transferFunction: SkcmsTransferFunction,
-        gamut: SkcmsMatrix3x3,
+        transferFunction: ColorTransferFunction.Parametric,
+        gamut: Matrix3x3F32,
     ): SkColorSpace = requireNotNull(
         SkColorSpace.make(
             requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut))),
@@ -269,12 +262,6 @@ class KanvasCodecColorSpaceTest {
 
         assertEquals(expectedColorSpace, result.colorSpace)
         assertEquals(SAMPLE_ARGB, result.getArgb(0, 0))
-    }
-
-    private fun restoreMatrix(target: SkcmsMatrix3x3, source: SkcmsMatrix3x3) {
-        for (row in 0 until 3) for (column in 0 until 3) {
-            target.vals[row][column] = source[row, column]
-        }
     }
 
     private fun cicpProfile(transfer: Int): ColorProfile = when (

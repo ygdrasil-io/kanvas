@@ -14,6 +14,17 @@ class ColorARGBTest {
     }
 
     @Test
+    fun `packed Int conversion preserves ARGB bits`() {
+        val c = ColorARGB.fromPackedInt(0x80123456.toInt())
+
+        assertEquals(0x80123456.toInt(), c.toPackedInt())
+        assertEquals(0x80, c.alpha)
+        assertEquals(0x12, c.red)
+        assertEquals(0x34, c.green)
+        assertEquals(0x56, c.blue)
+    }
+
+    @Test
     fun `colorRGB sets alpha to 0xFF`() {
         val c = ColorARGB.of(0x12, 0x34, 0x56)
         assertEquals(0xFF, c.alpha)
