@@ -30,10 +30,10 @@ class EvidenceBundleTamperTest {
     private fun refusalBundle(): Path {
         val root = Files.createTempDirectory("gpu-evidence")
         val descriptor = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
-        val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route(), emptyList(), environment())
+        val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused"), emptyList(), environment())
         return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, attemptId = "attempt")
     }
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
     private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", null, null, null, true)
-    private fun route() = RouteEvidence("route", null, null, "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+    private fun route(outcome: String = "rendered") = RouteEvidence("route", null, null, outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
 }

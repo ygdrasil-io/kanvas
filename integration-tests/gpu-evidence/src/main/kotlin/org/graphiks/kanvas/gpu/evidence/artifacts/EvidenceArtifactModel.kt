@@ -18,6 +18,8 @@ data class EvidenceManifest(
     val oracleId: String,
     val oracleVersion: Int,
     val files: Map<String, String>,
+    val oracleProvenance: String = "generated",
+    val oracleSha256: String? = null,
 )
 
 data class EvidenceStats(
@@ -46,7 +48,7 @@ internal val EvidenceJson = Json { prettyPrint = false; explicitNulls = true; ig
 internal fun EvidenceManifest.toJson(): JsonObject = buildJsonObject {
     put("schemaVersion", schemaVersion); put("sceneId", sceneId); put("expectation", expectation)
     put("observedOutcome", observedOutcome); put("sourceCommit", sourceCommit); put("generatedAtUtc", generatedAtUtc)
-    put("oracleKind", oracleKind); put("oracleId", oracleId); put("oracleVersion", oracleVersion)
+    put("oracleKind", oracleKind); put("oracleId", oracleId); put("oracleVersion", oracleVersion); put("oracleProvenance", oracleProvenance); put("oracleSha256", oracleSha256)
     put("files", buildJsonObject { files.toSortedMap().forEach { (name, hash) -> put(name, hash) } })
 }
 

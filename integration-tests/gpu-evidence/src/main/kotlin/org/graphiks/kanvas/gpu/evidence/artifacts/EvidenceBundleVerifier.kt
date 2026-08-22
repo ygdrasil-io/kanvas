@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.evidence.artifacts
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.security.MessageDigest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -27,9 +28,10 @@ object EvidenceBundleVerifier {
         var sceneId: String? = directory.fileName?.toString()
         val errors = mutableListOf<String>()
         try {
-            require(Files.isDirectory(directory)) { "bundle is not a directory" }
+            require(Files.isDirectory(directory, NOFOLLOW_LINKS)) { "bundle is not a directory" }
+            require(!Files.isSymbolicLink(directory)) { "bundle directory cannot be a symlink" }
             val manifest = readObject(directory.resolve("manifest.json"), "manifest")
-            manifest.requireKeys(setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "sourceCommit", "generatedAtUtc", "oracleKind", "oracleId", "oracleVersion", "files"))
+            manifest.requireKeys(setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "sourceCommit", "generatedAtUtc", "oracleKind", "oracleId", "oracleVersion", "oracleProvenance", "oracleSha256", "files"))
             val schema = manifest.requiredString("schemaVersion")
             require(schema == GPU_EVIDENCE_SCHEMA) { "unsupported schemaVersion: $schema" }
             sceneId = manifest.requiredString("sceneId")
@@ -39,17 +41,27 @@ object EvidenceBundleVerifier {
             val observed = manifest.requiredString("observedOutcome")
             val expectation = manifest.requiredString("expectation")
             manifest.requiredString("generatedAtUtc")
-            manifest.requiredString("oracleKind"); manifest.requiredString("oracleId"); manifest.requiredInt("oracleVersion")
+            val oracleKind = manifest.requiredString("oracleKind")
+            manifest.requiredString("oracleId"); manifest.requiredInt("oracleVersion"); manifest.requiredString("oracleProvenance")
+            val oracleSha256 = manifest.optionalNullableString("oracleSha256")
             val fileObject = manifest.requiredObject("files")
             val hashes = fileObject.entries.associate { (name, value) ->
                 require(isSafeFileName(name)) { "unsafe logical file name: $name" }
                 name to value.jsonPrimitive.asString("hash")
             }
-            val actual = Files.list(directory).use { stream -> stream.iterator().asSequence().map { it.fileName.toString() }.toSet() }
-            val expected = if (observed == "rendered") RENDER_FILES else if (observed == "refused") REFUSAL_FILES else error("unknown observedOutcome")
+            val actualPaths = Files.list(directory).use { stream -> stream.iterator().asSequence().toList() }
+            require(actualPaths.none { Files.isSymbolicLink(it) }) { "bundle contains symlink" }
+            val actual = actualPaths.map { it.fileName.toString() }.toSet()
+            val expected = if (observed == "rendered") {
+                if (oracleKind == "checked-in-png") CHECKED_IN_RENDER_FILES else RENDER_FILES
+            } else if (observed == "refused") REFUSAL_FILES else error("unknown observedOutcome")
             require(actual == expected) { "file set mismatch: expected=$expected actual=$actual" }
             require(hashes.keys == expected - "manifest.json") { "manifest file hashes are incomplete" }
             hashes.forEach { (name, expectedHash) -> require(expectedHash == sha256(Files.readAllBytes(directory.resolve(name)))) { "hash mismatch for $name" } }
+            if (oracleKind == "checked-in-png") {
+                require(oracleSha256 != null) { "checked-in oracle must declare sha256" }
+                require(oracleSha256 == sha256(Files.readAllBytes(directory.resolve("skia.png")))) { "checked-in oracle sha256 mismatch" }
+            } else require(oracleSha256 == null) { "generated oracle must not declare checked-in sha256" }
             val environment = readObject(directory.resolve("environment.json"), "environment")
             environment.requireKeys(setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "capabilityImplementation", "available", "adapter"))
             require(manifest.requiredString("sourceCommit") == environment.requiredString("sourceCommit")) { "environment sourceCommit mismatch" }
@@ -64,19 +76,32 @@ object EvidenceBundleVerifier {
             route.requireKeys(setOf("routeId", "attemptId", "furthestPhase", "outcome", "encodedScopeKinds", "structuralEvents", "structuralCounters", "runtimeTelemetryDelta"))
             route.requiredString("routeId"); route.optionalString("attemptId"); route.optionalString("furthestPhase"); route.requiredString("outcome")
             route["encodedScopeKinds"]?.jsonArray?.forEach { it.jsonPrimitive.asString("encoded scope kind") } ?: error("encodedScopeKinds must be an array")
-            route["structuralEvents"]?.jsonArray?.forEach { event -> val e = event.jsonObject; e.requiredString("kind"); e.requiredString("phase"); e.optionalString("label") } ?: error("structuralEvents must be an array")
+            route["structuralEvents"]?.jsonArray?.forEach { event -> val e = event.jsonObject; e.requireKeys(setOf("kind", "phase", "label")); e.requiredString("kind"); e.requiredString("phase"); e.optionalString("label") } ?: error("structuralEvents must be an array")
             route.requiredObject("structuralCounters").forEach { (key, value) -> require(key.isNotBlank()); value.jsonPrimitive.longOrNull ?: error("structural counter must be a long") }
             val telemetry = route.requiredObject("runtimeTelemetryDelta")
+            telemetry.requireKeys(TELEMETRY_FIELDS)
             TELEMETRY_FIELDS.forEach { telemetry.requiredLong(it) }
             val stats = readObject(directory.resolve("stats.json"), "stats")
             stats.requireKeys(setOf("width", "height", "colorFormat", "colorInterpretation", "tolerance", "minimumSimilarityPercent", "similarityPercent", "differingPixels", "maxChannelDifference", "meanChannelDifference", "pass"))
-            stats.requiredInt("width"); stats.requiredInt("height"); require(stats.requiredString("colorFormat") == "rgba8unorm") { "invalid colorFormat" }; require(stats.requiredString("colorInterpretation") == "encoded-premul-srgb") { "invalid colorInterpretation" }; stats.requiredInt("tolerance"); stats.requiredDouble("minimumSimilarityPercent"); stats.requiredDouble("similarityPercent"); stats.requiredInt("differingPixels"); stats.requiredInt("maxChannelDifference"); stats.requiredDouble("meanChannelDifference")
+            val width = stats.requiredInt("width"); val height = stats.requiredInt("height"); require(width > 0 && height > 0) { "invalid dimensions" }; require(stats.requiredString("colorFormat") == "rgba8unorm") { "invalid colorFormat" }; require(stats.requiredString("colorInterpretation") == "encoded-premul-srgb") { "invalid colorInterpretation" }; val tolerance = stats.requiredInt("tolerance"); require(tolerance in 0..255); val minimumSimilarity = stats.requiredDouble("minimumSimilarityPercent"); require(minimumSimilarity in 0.0..100.0); val similarity = stats.requiredDouble("similarityPercent"); require(similarity in 0.0..100.0); val differingPixels = stats.requiredInt("differingPixels"); val totalPixels = Math.multiplyExact(width, height); require(differingPixels in 0..totalPixels); val maxChannelDifference = stats.requiredInt("maxChannelDifference"); require(maxChannelDifference in 0..255); val meanChannelDifference = stats.requiredDouble("meanChannelDifference"); require(meanChannelDifference >= 0.0)
             val pass = stats.requiredBoolean("pass")
+            val expectedSimilarity = (totalPixels - differingPixels).toDouble() / totalPixels.toDouble() * 100.0
+            require(kotlin.math.abs(expectedSimilarity - similarity) <= 1e-9) { "similarity contradicts differingPixels" }
+            require(pass == (similarity >= minimumSimilarity)) { "stats pass contradicts similarity threshold" }
             val diagnostics = readObject(directory.resolve("diagnostics.json"), "diagnostics")
             diagnostics.requireKeys(setOf("attemptId", "diagnostics", "stableReasonCode", "message", "submissionDelta"))
             diagnostics.requiredString("attemptId"); diagnostics["diagnostics"]?.jsonArray?.forEach { it.jsonPrimitive.asString("diagnostic") } ?: error("diagnostics must be an array"); diagnostics.optionalNullableString("stableReasonCode"); diagnostics.optionalNullableString("message")
+            val diagnosticAttemptId = diagnostics.requiredString("attemptId")
             val submissionDelta = diagnostics.requiredLong("submissionDelta")
+            require(submissionDelta >= 0L) { "submissionDelta must be non-negative" }
             val reasonCode = diagnostics.optionalString("stableReasonCode")
+            val routeAttemptId = route.optionalString("attemptId")
+            require(routeAttemptId == diagnosticAttemptId) { "route and diagnostics attempt ids differ" }
+            val routeOutcome = route.requiredString("outcome")
+            require(routeOutcome == observed) { "route outcome does not match observed outcome" }
+            val telemetrySubmissions = telemetry.requiredLong("submissions")
+            require(telemetrySubmissions == submissionDelta) { "route submissions differ from diagnostics" }
+            if (observed == "refused") require(submissionDelta == 0L && telemetrySubmissions == 0L) { "refusal submitted commands" }
             val verdictJson = readObject(directory.resolve("verdict.json"), "verdict")
             verdictJson.requireKeys(setOf("expectation", "observedOutcome", "verdictKind", "reason"))
             val recordedKind = verdictJson.requiredString("verdictKind")
@@ -84,16 +109,22 @@ object EvidenceBundleVerifier {
             val recordedObserved = verdictJson.requiredString("observedOutcome")
             val recordedReason = verdictJson.requiredString("reason")
             require(recordedExpectation == expectation && recordedObserved == observed) { "verdict identity mismatch" }
-            val reconstructed = if (expectation == "render") {
-                if (observed == "rendered" && pass) EvidenceVerdict.Pass("rendered image passed comparison") else EvidenceVerdict.Fail("rendered image failed comparison")
-            } else if (expectation.startsWith("refuse:") && observed == "refused") {
-                val expectedReason = expectation.removePrefix("refuse:")
-                when {
-                    reasonCode != expectedReason -> EvidenceVerdict.Fail("expected refusal $expectedReason, got $reasonCode")
-                    submissionDelta != 0L -> EvidenceVerdict.Fail("refusal submitted $submissionDelta command(s)")
-                    else -> EvidenceVerdict.Pass("exact refusal before submission")
+            val reconstructed = when {
+                expectation == "render" && observed == "rendered" -> if (pass) EvidenceVerdict.Pass("rendered image passed comparison") else EvidenceVerdict.Fail("rendered image failed comparison")
+                expectation == "render" && observed == "refused" -> EvidenceVerdict.Fail("scene refused: ${reasonCode ?: "unknown"}")
+                expectation == "render" && observed == "unavailable" -> EvidenceVerdict.Unavailable("scene unavailable: ${reasonCode ?: "unknown"}")
+                expectation.startsWith("refuse:") && observed == "rendered" -> EvidenceVerdict.Fail("scene rendered instead of refusing")
+                expectation.startsWith("refuse:") && observed == "refused" -> {
+                    val expectedReason = expectation.removePrefix("refuse:")
+                    when {
+                        reasonCode != expectedReason -> EvidenceVerdict.Fail("expected refusal $expectedReason, got $reasonCode")
+                        submissionDelta != 0L -> EvidenceVerdict.Fail("refusal submitted $submissionDelta command(s)")
+                        else -> EvidenceVerdict.Pass("exact refusal before submission")
+                    }
                 }
-            } else EvidenceVerdict.Fail("observation does not satisfy expectation")
+                expectation.startsWith("refuse:") && observed == "unavailable" -> EvidenceVerdict.Unavailable("scene unavailable: ${reasonCode ?: "unknown"}")
+                else -> error("unknown expectation/observation pair")
+            }
             require(recordedKind == reconstructed.kind()) { "verdict kind mismatch" }
             require(recordedReason == reconstructed.reason()) { "verdict reason mismatch" }
             return EvidenceBundleVerification.Verified(sceneId, reconstructed)
@@ -104,8 +135,10 @@ object EvidenceBundleVerifier {
     }
 
     private fun readObject(path: Path, label: String): JsonObject {
-        require(Files.isRegularFile(path)) { "missing $label" }
-        val parsed = EvidenceJson.parseToJsonElement(Files.readString(path))
+        require(Files.isRegularFile(path, NOFOLLOW_LINKS)) { "missing $label" }
+        val text = Files.readString(path)
+        rejectDuplicateKeys(text)
+        val parsed = EvidenceJson.parseToJsonElement(text)
         return parsed.jsonObject
     }
 
@@ -119,10 +152,10 @@ object EvidenceBundleVerifier {
         if (value is JsonNull) return null
         return value.jsonPrimitive.asString(key)
     }
-    private fun JsonObject.requiredInt(key: String): Int = (this[key] as? JsonPrimitive)?.intOrNull ?: error("$key must be an integer")
-    private fun JsonObject.requiredDouble(key: String): Double = (this[key] as? JsonPrimitive)?.doubleOrNull ?: error("$key must be a number")
-    private fun JsonObject.requiredLong(key: String): Long = (this[key] as? JsonPrimitive)?.longOrNull ?: error("$key must be a long")
-    private fun JsonObject.requiredBoolean(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: error("$key must be a boolean")
+    private fun JsonObject.requiredInt(key: String): Int = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull ?: error("$key must be an integer")
+    private fun JsonObject.requiredDouble(key: String): Double = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull ?: error("$key must be a number")
+    private fun JsonObject.requiredLong(key: String): Long = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: error("$key must be a long")
+    private fun JsonObject.requiredBoolean(key: String): Boolean = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: error("$key must be a boolean")
     private fun JsonObject.requiredObject(key: String): JsonObject = this[key]?.jsonObject ?: error("$key must be an object")
     private fun JsonObject.requireKeys(expected: Set<String>) { require(keys == expected) { "unexpected or missing keys: expected=$expected actual=$keys" } }
     private fun JsonObject.optionalNullableString(key: String): String? {
@@ -143,9 +176,34 @@ object EvidenceBundleVerifier {
     private fun JsonPrimitive.asString(label: String): String = require(isString && contentOrNull != null) { "$label must be a string" }.let { content }
     private fun isSafeFileName(name: String): Boolean = name.isNotBlank() && !name.startsWith('/') && !name.contains("\\") && !name.split('/').any { it == ".." || it.isBlank() } && name == Path.of(name).fileName.toString()
     private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
+    private fun rejectDuplicateKeys(text: String) {
+        val objects = ArrayDeque<MutableSet<String>>()
+        var index = 0
+        while (index < text.length) {
+            when (text[index]) {
+                '"' -> {
+                    val start = index++
+                    while (index < text.length) {
+                        if (text[index] == '\\') index += 2
+                        else if (text[index++] == '"') break
+                    }
+                    var next = index
+                    while (next < text.length && text[next].isWhitespace()) next++
+                    if (next < text.length && text[next] == ':' && objects.isNotEmpty()) {
+                        val key = text.substring(start + 1, index - 1)
+                        require(objects.last().add(key)) { "duplicate JSON key: $key" }
+                    }
+                }
+                '{' -> objects.addLast(mutableSetOf())
+                '}' -> if (objects.isNotEmpty()) objects.removeLast()
+            }
+            index++
+        }
+    }
     private fun EvidenceVerdict.kind() = when (this) { is EvidenceVerdict.Pass -> "pass"; is EvidenceVerdict.Fail -> "fail"; is EvidenceVerdict.Unavailable -> "unavailable" }
     private fun EvidenceVerdict.reason() = when (this) { is EvidenceVerdict.Pass -> reason; is EvidenceVerdict.Fail -> reason; is EvidenceVerdict.Unavailable -> reason }
     private val RENDER_FILES = setOf("manifest.json", "gpu.png", "cpu.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
+    private val CHECKED_IN_RENDER_FILES = setOf("manifest.json", "gpu.png", "skia.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
     private val REFUSAL_FILES = setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
     private val TELEMETRY_FIELDS = setOf("renderPasses", "offscreenPasses", "windowPasses", "submissions", "commandBuffers", "buffersCreated", "texturesCreated", "intermediateTexturesCreated", "coverageMasksDestroyed", "destinationCopies", "destinationReadbackSnapshots", "msaaTargets", "msaaResolves", "bindGroupsCreated", "samplersCreated", "queueWrites", "uniformSlabsCreated", "uniformSlabBytesAllocated", "uniformSlabFallbacks", "passBatchPlans", "passBatchesAccepted", "passBatchCuts", "passBatchPackets")
 }

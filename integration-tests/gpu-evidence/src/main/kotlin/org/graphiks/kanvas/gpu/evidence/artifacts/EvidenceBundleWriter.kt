@@ -4,7 +4,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
-import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.security.MessageDigest
 import java.time.Clock
 import org.graphiks.kanvas.gpu.evidence.catalog.*
@@ -24,10 +24,12 @@ class EvidenceBundleWriter(
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val root = repositoryRoot.toAbsolutePath().normalize()
+    private val rootReal: Path
 
     init {
         require(SOURCE_COMMIT.matches(sourceCommit)) { "source commit must be a single safe path component" }
         Files.createDirectories(root)
+        rootReal = root.toRealPath(NOFOLLOW_LINKS)
     }
 
     constructor(repositoryRoot: java.io.File, sourceCommit: String, clock: Clock = Clock.systemUTC()) :
@@ -43,15 +45,19 @@ class EvidenceBundleWriter(
         require(observation !is SceneObservation.Unavailable) { "unavailable observations cannot produce bundles" }
         require(observation.environment.sourceCommit == sourceCommit) { "observation sourceCommit does not match writer sourceCommit" }
         val destination = destination(descriptor.id.value)
+        var temp: Path? = null
         return try {
-            val temp = siblingTemp(destination)
+            temp = siblingTemp(destination)
             Files.createDirectories(temp)
             writeBundle(temp, descriptor, observation, expectedRgba, attemptId)
             moveIntoPlace(temp, destination)
+            temp = null
             destination
         } catch (failure: Throwable) {
             retainFailure(descriptor, observation, attemptId, failure)
             throw failure
+        } finally {
+            temp?.let { deleteTree(it) }
         }
     }
 
@@ -86,12 +92,14 @@ class EvidenceBundleWriter(
             val gpuPng = pngBytes(rendered.rgba, descriptor.width, descriptor.height)
             val cpuPng = pngBytes(cpu, descriptor.width, descriptor.height)
             val diff = rendered.comparison.diffRgba
+            val policy = descriptor.comparison
+            val oracleIsCheckedIn = descriptor.oracle is OraclePolicy.CheckedInPng
+            files[if (oracleIsCheckedIn) "skia.png" else "cpu.png"] = cpuPng
             files["gpu.png"] = gpuPng
-            files["cpu.png"] = cpuPng
             files["diff.png"] = pngBytes(diff, descriptor.width, descriptor.height)
             files["stats.json"] = EvidenceStats(
                 descriptor.width, descriptor.height, "rgba8unorm", "encoded-premul-srgb",
-                descriptor.comparison!!.perChannelTolerance, descriptor.comparison.minimumSimilarityPercent,
+                policy?.perChannelTolerance ?: 0, policy?.minimumSimilarityPercent ?: 100.0,
                 rendered.comparison.similarityPercent, rendered.comparison.differingPixels,
                 rendered.comparison.maxChannelDifference, rendered.comparison.meanChannelDifference,
                 rendered.comparison.passed,
@@ -110,7 +118,7 @@ class EvidenceBundleWriter(
         val hashes = files.mapValues { sha256(it.value) }
         files["manifest.json"] = EvidenceManifest(
             GPU_EVIDENCE_SCHEMA, descriptor.id.value, expectation, observed, sourceCommit,
-            clock.instant().toString(), oracleKind(descriptor.oracle), oracleId(descriptor.oracle), oracleVersion(descriptor.oracle), hashes,
+            clock.instant().toString(), oracleKind(descriptor.oracle), oracleId(descriptor.oracle), oracleVersion(descriptor.oracle), hashes, oracleProvenance(descriptor.oracle), oracleSha256(descriptor.oracle),
         ).toJson().canonicalBytes()
         files.toSortedMap().forEach { (name, bytes) ->
             val target = directory.resolve(name)
@@ -124,6 +132,7 @@ class EvidenceBundleWriter(
     }
 
     private fun siblingTemp(destination: Path): Path {
+        ensureNoSymlinkComponents(destination.parent!!)
         var current = root
         val relative = root.relativize(destination.parent!!)
         for (index in 0 until relative.nameCount) {
@@ -131,13 +140,35 @@ class EvidenceBundleWriter(
             require(!Files.isSymbolicLink(current)) { "evidence destination contains a symlink" }
         }
         Files.createDirectories(destination.parent)
+        require(destination.parent!!.toRealPath(NOFOLLOW_LINKS).startsWith(rootReal)) { "destination parent escapes repository root" }
         return Files.createTempDirectory(destination.parent, ".${destination.fileName}.tmp-")
     }
 
     private fun moveIntoPlace(temp: Path, destination: Path) {
-        Files.deleteIfExists(destination)
-        try { Files.move(temp, destination, ATOMIC_MOVE) } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(temp, destination, REPLACE_EXISTING)
+        require(!Files.isSymbolicLink(destination)) { "evidence destination cannot be a symlink" }
+        if (!Files.exists(destination, NOFOLLOW_LINKS)) {
+            try { Files.move(temp, destination, ATOMIC_MOVE) } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp, destination)
+            }
+            return
+        }
+        require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "evidence destination must be a directory" }
+        val backup = Files.createTempDirectory(destination.parent, ".${destination.fileName}.backup-")
+        deleteTree(backup)
+        try {
+            Files.move(destination, backup, ATOMIC_MOVE)
+            try {
+                Files.move(temp, destination, ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp, destination)
+            }
+        } catch (failure: Throwable) {
+            if (!Files.exists(destination, NOFOLLOW_LINKS) && Files.exists(backup, NOFOLLOW_LINKS)) {
+                runCatching { Files.move(backup, destination, ATOMIC_MOVE) }.getOrElse { Files.move(backup, destination) }
+            }
+            throw failure
+        } finally {
+            if (Files.exists(backup, NOFOLLOW_LINKS)) deleteTree(backup)
         }
     }
 
@@ -146,14 +177,34 @@ class EvidenceBundleWriter(
             val failed = root.resolve("reports/gpu-renderer/evidence/correctness/generated").resolve(sourceCommit)
                 .resolve("_failed").resolve("${descriptor.id.value}-$attemptId").normalize()
             if (!failed.startsWith(root)) return@runCatching
+            ensureNoSymlinkComponents(failed.parent!!)
             Files.createDirectories(failed)
             Files.write(failed.resolve("diagnostics.json"), diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
             Files.write(failed.resolve("environment.json"), environmentJson(observation.environment))
         }
     }
 
+    private fun ensureNoSymlinkComponents(path: Path) {
+        require(path.startsWith(root)) { "path escapes repository root" }
+        var current = root
+        val relative = root.relativize(path)
+        for (index in 0 until relative.nameCount) {
+            current = current.resolve(relative.getName(index).toString())
+            require(!Files.isSymbolicLink(current)) { "path contains a symlink" }
+        }
+        if (Files.exists(path, NOFOLLOW_LINKS)) require(path.toRealPath(NOFOLLOW_LINKS).startsWith(rootReal)) { "path escapes repository root" }
+    }
+
+    private fun deleteTree(path: Path) {
+        if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
+        if (Files.isDirectory(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            Files.list(path).use { stream -> stream.forEach { deleteTree(it) } }
+        }
+        Files.deleteIfExists(path)
+    }
+
     private fun routeJson(route: RouteEvidence, attemptId: String): ByteArray = buildJsonObject {
-        put("routeId", route.routeId); put("attemptId", route.attemptId ?: attemptId)
+        put("routeId", route.routeId); put("attemptId", attemptId)
         put("furthestPhase", route.furthestPhase); put("outcome", route.outcome)
         put("encodedScopeKinds", buildJsonArray { route.encodedScopeKinds.forEach(::add) })
         put("structuralEvents", buildJsonArray { route.structuralEvents.forEach { e -> add(buildJsonObject { put("kind", e.kind); put("phase", e.phase); put("label", e.label) }) } })
@@ -181,6 +232,8 @@ class EvidenceBundleWriter(
     private fun oracleKind(o: OraclePolicy) = when (o) { is OraclePolicy.GeneratedCpu -> "generated-cpu"; is OraclePolicy.CheckedInPng -> "checked-in-png"; OraclePolicy.StableRefusal -> "stable-refusal" }
     private fun oracleId(o: OraclePolicy) = when (o) { is OraclePolicy.GeneratedCpu -> o.oracleId; is OraclePolicy.CheckedInPng -> o.resourcePath; OraclePolicy.StableRefusal -> "stable-refusal" }
     private fun oracleVersion(o: OraclePolicy) = when (o) { is OraclePolicy.GeneratedCpu -> o.version; else -> 1 }
+    private fun oracleProvenance(o: OraclePolicy) = when (o) { is OraclePolicy.CheckedInPng -> o.provenance; is OraclePolicy.GeneratedCpu -> "generated-cpu"; OraclePolicy.StableRefusal -> "stable-refusal" }
+    private fun oracleSha256(o: OraclePolicy) = (o as? OraclePolicy.CheckedInPng)?.sha256
     private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
     private fun SceneObservation.route() = when (this) { is SceneObservation.Rendered -> route; is SceneObservation.Refused -> route; is SceneObservation.Unavailable -> error("unavailable") }
     private fun SceneObservation.routeAttemptId() = route().attemptId

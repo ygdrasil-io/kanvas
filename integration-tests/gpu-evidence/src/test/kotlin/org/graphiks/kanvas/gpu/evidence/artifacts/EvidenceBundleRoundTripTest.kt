@@ -32,7 +32,7 @@ class EvidenceBundleRoundTripTest {
         val root = Files.createTempDirectory("gpu-evidence")
         val writer = EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC))
         val descriptor = refusalDescriptor()
-        val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route(), listOf("no-submit"), environment())
+        val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused"), listOf("no-submit"), environment())
         val path = writer.writeGenerated(descriptor, observation, attemptId = "attempt-2")
         assertEquals(setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json"), Files.list(path).use { stream -> stream.iterator().asSequence().map { p -> p.fileName.toString() }.toSet() })
         val verified = assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "abc123"))
@@ -42,5 +42,5 @@ class EvidenceBundleRoundTripTest {
     private fun renderDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("oracle", 1), ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
     private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", null, null, null, true)
-    private fun route() = RouteEvidence("route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+    private fun route(outcome: String = "rendered") = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
 }
