@@ -2,17 +2,15 @@
 
 Date: 2026-05-26
 
-This document describes the intended end state for Kanvas after the proof
-of concept phase. It is a target architecture, not an epic breakdown. The
-follow-up planning work should decompose this target into measurable epics
-and milestones.
+This document defines the target architecture for Kanvas. It is an
+architecture contract, not an implementation schedule.
 
 ## Context
 
-Kanvas has working CPU raster coverage, a WebGPU backend, handwritten WGSL
-shader resources, and a compatibility facade for runtime effects. A WGSL
-parser exists at `/Volumes/Cache/webgpu-ktypes/wgsl` and is expected to be
-integrated soon.
+Kanvas has CPU raster coverage, a WebGPU backend, handwritten WGSL shader
+resources, and a compatibility facade for runtime effects. WGSL parsing and
+reflection are provided through the evolving `wgsl4k` dependency and its
+integration contracts under `.upstream/specs/wgsl-pipeline/`.
 
 The target keeps the current upstream-sync decisions:
 
@@ -65,11 +63,11 @@ The CPU backend remains the primary reference for Skia-like behavior. GPU
 results are validated against CPU and upstream GM references with explicit
 similarity thresholds.
 
-For bounded Kadre replay-pack scenes, `ReplayCpuOracle` is the shared CPU
-reference API for command interpretation, sampled checksums, nontransparent
-pixels, bitmap sampled pixels, and expected-unsupported reasons. This is a
-replay oracle for the typed M72-M80 command subset, not a broad SkCanvas or
-display-list CPU renderer.
+For bounded replay-pack scenes, `ReplayCpuOracle` is the shared CPU reference
+API for command interpretation, sampled checksums, nontransparent pixels,
+bitmap sampled pixels, and expected-unsupported reasons. This is a replay
+oracle for the typed command subset, not a broad SkCanvas or display-list CPU
+renderer.
 
 The pipeline must preserve:
 
@@ -339,8 +337,8 @@ matrix, color-filter shader, working-color-space shader, coord-clamp shader,
 and blend shader become compositional appenders instead of backend-specific
 special cases.
 
-Detailed implementation specs for the pre-Geometry paint-pipeline milestones
-live under `.upstream/specs/wgsl-pipeline/`. Those specs refine this target into
+Detailed implementation specs for the paint pipeline live under
+`.upstream/specs/wgsl-pipeline/`. Those specs refine this target into
 PipelineIR contracts, WGSL parser/reflection rules, CPU/GPU backend mappings,
 runtime-effect descriptors, diagnostics, validation, migration, and ADRs.
 
@@ -480,7 +478,7 @@ Non-goals for this geometry layer:
 - Do not add GPU compute tessellation until profiling identifies CPU-side
   geometry preparation as a bottleneck.
 
-Initial geometry milestones should be tracked separately from the WGSL paint
+Geometry rollout and ownership are specified separately from the WGSL paint
 pipeline:
 
 1. Inventory current rect/path/stroke/clip behavior across CPU and GPU.
@@ -490,7 +488,7 @@ pipeline:
 5. Formalize GPU coverage strategies and fallback diagnostics.
 6. Add PM-visible geometry-heavy CPU/GPU diff evidence.
 
-The legacy `:kanvas` implementation may be used as historical or porting
+The legacy `:kanvas` implementation may be used as compatibility or porting
 evidence, but it must not become load-bearing for this target.
 
 ### Concurrency Contract
@@ -1009,7 +1007,7 @@ performance separately.
 ### Correctness
 
 - Golden screenshot tests for representative GMs.
-- CPU old-path vs CPU pipeline equivalence tests during migration.
+- CPU reference vs CPU pipeline equivalence tests while routes coexist.
 - CPU pipeline vs GPU pipeline cross-backend tests.
 - WGSL parser validation tests for all resources and generated modules.
 - Uniform layout reflection tests: reflected offsets vs packer output.
@@ -1126,30 +1124,3 @@ The architecture target is reached when:
 - GPU generated-shader benchmarks meet the GPU gates after warmup.
 - Performance benchmarks show that the pipeline layer does not regress common
   CPU raster paths and improves at least one vectorized shader/composite path.
-
-## Planning Notes For Epic Breakdown
-
-The next document should not turn this target into one large migration. It
-should split the work by independently verifiable capabilities:
-
-- IR skeleton and dumps.
-- CPU solid/gradient pilot.
-- WGSL parser validation integration.
-- WGSL IR module builder pilot.
-- Uniform reflection and packer generation.
-- IR color/alpha value contracts.
-- PipelineKey specialization taxonomy.
-- BlendPlan allowlist and diagnostics.
-- GPU generated-shader pilot.
-- Runtime-effect descriptor unification.
-- Java 25 vector kernels.
-- Migration fallback policy.
-- GPU success gates.
-- Legacy path retirement criteria.
-
-Each epic should name the tests, benchmarks, affected GMs, and fallback
-behavior it owns.
-
-That decomposition is now captured in `.upstream/specs/wgsl-pipeline/` for the
-pre-Geometry M0-M11 paint-pipeline work and `.upstream/specs/geometry-coverage/`
-for the Geometry/Coverage convergence work.
