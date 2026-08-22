@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
+import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -8,9 +9,16 @@ import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.StandardOpenOption.CREATE_NEW
 import java.nio.file.StandardOpenOption.WRITE
 import java.nio.ByteBuffer
+import java.nio.channels.WritableByteChannel
 import java.nio.file.SecureDirectoryStream
 import java.security.MessageDigest
 import java.time.Clock
+import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
+import java.lang.foreign.ValueLayout
+import java.lang.invoke.MethodHandle
+import sun.misc.Unsafe
 import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
@@ -22,14 +30,24 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.JsonNull
 
-class EvidenceBundleWriter(
+class EvidenceBundleWriter internal constructor(
     repositoryRoot: Path,
     private val sourceCommit: String,
     private val clock: Clock = Clock.systemUTC(),
     private val moveStrategy: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
         if (atomic) Files.move(source, destination, ATOMIC_MOVE) else Files.move(source, destination)
     },
+    private val secureFilesystem: SecureEvidenceFilesystem,
 ) {
+    constructor(
+        repositoryRoot: Path,
+        sourceCommit: String,
+        clock: Clock = Clock.systemUTC(),
+        moveStrategy: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
+            if (atomic) Files.move(source, destination, ATOMIC_MOVE) else Files.move(source, destination)
+        },
+    ) : this(repositoryRoot, sourceCommit, clock, moveStrategy, UnixSecureEvidenceFilesystem)
+
     private val root = repositoryRoot.toAbsolutePath().normalize()
     private val rootReal: Path
 
@@ -37,9 +55,7 @@ class EvidenceBundleWriter(
         require(SOURCE_COMMIT.matches(sourceCommit)) { "source commit must be a single safe path component" }
         Files.createDirectories(root)
         rootReal = root.toRealPath(NOFOLLOW_LINKS)
-        require(Files.newDirectoryStream(root).use { it is SecureDirectoryStream<*> }) {
-            "repository provider does not offer secure directory handles"
-        }
+        secureFilesystem.openRoot(root).close()
     }
 
     constructor(repositoryRoot: java.io.File, sourceCommit: String, clock: Clock = Clock.systemUTC()) :
@@ -200,34 +216,29 @@ class EvidenceBundleWriter(
 
     private fun retainFailure(descriptor: EvidenceSceneDescriptor, observation: SceneObservation, attemptId: String, failure: Throwable) {
         runCatching {
-            val failed = root.resolve("reports/gpu-renderer/evidence/correctness/generated").resolve(sourceCommit)
-                .resolve("_failed").resolve("${descriptor.id.value}-$attemptId").normalize()
-            if (!failed.startsWith(root)) return@runCatching
-            ensureNoSymlinkComponents(failed.parent!!)
-            if (Files.exists(failed, NOFOLLOW_LINKS)) return@runCatching
-            secureCreateDirectories(failed.parent!!)
-            Files.createDirectory(failed)
-            writeNoFollow(failed.resolve("diagnostics.json"), diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
-            writeNoFollow(failed.resolve("environment.json"), environmentJson(observation.environment))
+            val components = listOf("reports", "gpu-renderer", "evidence", "correctness", "generated", sourceCommit, "_failed", "${descriptor.id.value}-$attemptId")
+            val opened = mutableListOf<SecureEvidenceDirectory>()
+            try {
+                var current = secureFilesystem.openRoot(root).also(opened::add)
+                components.forEachIndexed { index, component ->
+                    val existing = current.openDirectory(component)
+                    if (index == components.lastIndex && existing != null) {
+                        existing.close()
+                        return@runCatching
+                    }
+                    current = existing ?: current.createDirectory(component)
+                    opened += current
+                }
+                current.openNewFile("diagnostics.json").use { channel ->
+                    writeFully(channel, diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
+                }
+                current.openNewFile("environment.json").use { channel ->
+                    writeFully(channel, environmentJson(observation.environment))
+                }
+            } finally {
+                opened.asReversed().forEach(SecureEvidenceDirectory::close)
+            }
         }
-    }
-
-    private fun secureCreateDirectories(path: Path) {
-        require(path.startsWith(root)) { "path escapes repository root" }
-        var current = root
-        require(Files.newDirectoryStream(current).use { it is SecureDirectoryStream<*> }) { "secure directory handles unavailable" }
-        val relative = root.relativize(path)
-        for (index in 0 until relative.nameCount) {
-            current = current.resolve(relative.getName(index).toString())
-            if (Files.exists(current, NOFOLLOW_LINKS)) {
-                require(!Files.isSymbolicLink(current) && Files.isDirectory(current, NOFOLLOW_LINKS)) { "path component is unsafe" }
-            } else Files.createDirectory(current)
-            require(Files.newDirectoryStream(current).use { it is SecureDirectoryStream<*> }) { "secure directory handles unavailable" }
-        }
-    }
-
-    private fun writeNoFollow(path: Path, bytes: ByteArray) {
-        Files.newByteChannel(path, CREATE_NEW, WRITE, NOFOLLOW_LINKS).use { channel -> channel.write(ByteBuffer.wrap(bytes)) }
     }
 
     private fun ensureNoSymlinkComponents(path: Path) {
@@ -289,5 +300,115 @@ class EvidenceBundleWriter(
     companion object {
         private val SOURCE_COMMIT = Regex("[A-Za-z0-9][A-Za-z0-9._-]*")
         private val SAFE_COMPONENT = Regex("[A-Za-z0-9][A-Za-z0-9._-]*")
+    }
+}
+
+/** Narrow handle-relative boundary used only for failure artifact retention. */
+internal interface SecureEvidenceFilesystem {
+    fun openRoot(root: Path): SecureEvidenceDirectory
+}
+
+internal interface SecureEvidenceDirectory : AutoCloseable {
+    /** Opens one existing child directory with NOFOLLOW semantics, or returns null when it is absent. */
+    fun openDirectory(name: String): SecureEvidenceDirectory?
+
+    /** Creates one child through this directory's operating-system handle, then opens it with NOFOLLOW semantics. */
+    fun createDirectory(name: String): SecureEvidenceDirectory
+
+    /** Opens a new file through this directory's operating-system handle with CREATE_NEW and NOFOLLOW semantics. */
+    fun openNewFile(name: String): WritableByteChannel
+}
+
+/**
+ * Unix implementation. Java exposes handle-relative opens and files through [SecureDirectoryStream],
+ * but not mkdirat; this adapter uses the stream's directory descriptor for mkdirat and immediately
+ * reopens every created component through the stream with NOFOLLOW semantics. Other providers fail closed.
+ */
+internal object UnixSecureEvidenceFilesystem : SecureEvidenceFilesystem {
+    override fun openRoot(root: Path): SecureEvidenceDirectory = wrap(Files.newDirectoryStream(root))
+
+    private fun wrap(stream: java.nio.file.DirectoryStream<Path>): SecureEvidenceDirectory {
+        require(stream is SecureDirectoryStream<*>) { "repository provider does not offer secure directory handles" }
+        @Suppress("UNCHECKED_CAST")
+        return UnixSecureEvidenceDirectory(stream as SecureDirectoryStream<Path>)
+    }
+
+    private class UnixSecureEvidenceDirectory(
+        private val stream: SecureDirectoryStream<Path>,
+    ) : SecureEvidenceDirectory {
+        override fun openDirectory(name: String): SecureEvidenceDirectory? {
+            require(isSafeComponent(name)) { "unsafe secure directory component" }
+            return try {
+                @Suppress("UNCHECKED_CAST")
+                UnixSecureEvidenceDirectory(stream.newDirectoryStream(Path.of(name), NOFOLLOW_LINKS) as SecureDirectoryStream<Path>)
+            } catch (_: java.nio.file.NoSuchFileException) {
+                null
+            }
+        }
+
+        override fun createDirectory(name: String): SecureEvidenceDirectory {
+            require(isSafeComponent(name)) { "unsafe secure directory component" }
+            val result = mkdirAt(directoryFileDescriptor(stream), name)
+            if (result == 0) return checkNotNull(openDirectory(name)) { "created directory was not reopenable" }
+            return openDirectory(name) ?: throw IOException("mkdirat failed for secure directory component")
+        }
+
+        override fun openNewFile(name: String): WritableByteChannel {
+            require(isSafeComponent(name)) { "unsafe secure file name" }
+            return stream.newByteChannel(Path.of(name), setOf(CREATE_NEW, WRITE, NOFOLLOW_LINKS))
+        }
+
+        override fun close() = stream.close()
+    }
+
+    private fun isSafeComponent(value: String): Boolean = value.isNotBlank() && value != "." && value != ".." && !value.contains('/') && !value.contains('\\')
+
+    @Suppress("DEPRECATION")
+    private fun directoryFileDescriptor(stream: SecureDirectoryStream<Path>): Int {
+        require(stream.javaClass.name == UNIX_SECURE_DIRECTORY_STREAM) { "secure directory descriptor is unavailable" }
+        return unsafe.getInt(stream, secureDirectoryDescriptorOffset)
+    }
+
+    private fun mkdirAt(directoryFileDescriptor: Int, name: String): Int = Arena.ofConfined().use { arena ->
+        try {
+            val path = arena.allocateFrom(name)
+            mkdirAtHandle.invokeExact(directoryFileDescriptor, path, DIRECTORY_MODE) as Int
+        } catch (failure: Throwable) {
+            throw IOException("mkdirat is unavailable for secure evidence retention", failure)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private val unsafe: Unsafe by lazy {
+        val field = Unsafe::class.java.getDeclaredField("theUnsafe")
+        field.isAccessible = true
+        field.get(null) as Unsafe
+    }
+
+    @Suppress("DEPRECATION")
+    private val secureDirectoryDescriptorOffset: Long by lazy {
+        val field = Class.forName(UNIX_SECURE_DIRECTORY_STREAM).getDeclaredField("dfd")
+        unsafe.objectFieldOffset(field)
+    }
+
+    private val mkdirAtHandle: MethodHandle by lazy {
+        val linker = Linker.nativeLinker()
+        val address = linker.defaultLookup().find("mkdirat").orElseThrow {
+            IllegalStateException("mkdirat is unavailable for secure evidence retention")
+        }
+        linker.downcallHandle(
+            address,
+            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+        )
+    }
+
+    private const val UNIX_SECURE_DIRECTORY_STREAM = "sun.nio.fs.UnixSecureDirectoryStream"
+    private const val DIRECTORY_MODE = 448 // 0700
+}
+
+private fun writeFully(channel: WritableByteChannel, bytes: ByteArray) {
+    val buffer = ByteBuffer.wrap(bytes)
+    while (buffer.hasRemaining()) {
+        require(channel.write(buffer) > 0) { "secure file channel made no progress" }
     }
 }
