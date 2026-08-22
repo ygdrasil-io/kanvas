@@ -29,8 +29,8 @@ class GpuEvidenceCliRunner(
             System.err.println("gpu evidence arguments rejected: ${failure.message}")
             return EvidenceCliRunResult(2, null)
         }
-        var primary: Exception? = null
-        var fatal: Error? = null
+        val failures = mutableListOf<Throwable>()
+        var primaryFailure: Throwable? = null
         var exitCode = 1
         try {
             val backend = runtime.open()
@@ -55,47 +55,59 @@ class GpuEvidenceCliRunner(
                 }
             }
         } catch (failure: Exception) {
-            primary = failure
+            primaryFailure = failure
+            recordDistinctFailure(failures, failure)
             System.err.println("gpu evidence failed: ${failure.message}")
             exitCode = 1
         } catch (failure: Error) {
-            fatal = failure
-        }
-        finally {
-            var cleanupFailure: Throwable? = null
+            primaryFailure = failure
+            recordDistinctFailure(failures, failure)
+        } finally {
             try {
                 runtime.close()
             } catch (failure: Exception) {
-                cleanupFailure = failure
+                recordDistinctFailure(failures, failure)
             } catch (failure: Error) {
-                cleanupFailure = failure
+                recordDistinctFailure(failures, failure)
             }
             try {
                 runtime.dispose()
             } catch (failure: Exception) {
-                if (cleanupFailure == null) cleanupFailure = failure else cleanupFailure.addSuppressed(failure)
+                recordDistinctFailure(failures, failure)
             } catch (failure: Error) {
-                if (cleanupFailure == null) cleanupFailure = failure else cleanupFailure.addSuppressed(failure)
-            }
-            if (cleanupFailure != null) {
-                when {
-                    fatal != null -> fatal.addSuppressed(cleanupFailure)
-                    cleanupFailure is Error -> {
-                        primary?.let(cleanupFailure::addSuppressed)
-                        fatal = cleanupFailure
-                    }
-                    primary == null -> primary = cleanupFailure as Exception
-                    else -> primary.addSuppressed(cleanupFailure)
-                }
-                if (fatal == null) {
-                    System.err.println("gpu evidence cleanup failed: ${cleanupFailure.message}")
-                    exitCode = 1
-                }
+                recordDistinctFailure(failures, failure)
             }
         }
-        fatal?.let { throw it }
-        return EvidenceCliRunResult(exitCode, primary)
+        val rootFailure = failures.firstOrNull { it is Error } ?: failures.firstOrNull()
+        if (rootFailure == null) return EvidenceCliRunResult(exitCode, null)
+        attachDistinctFailures(rootFailure, failures)
+        if (rootFailure is Error) throw rootFailure
+        if (primaryFailure == null) System.err.println("gpu evidence cleanup failed: ${rootFailure.message}")
+        return EvidenceCliRunResult(1, rootFailure)
     }
+}
+
+private fun recordDistinctFailure(failures: MutableList<Throwable>, failure: Throwable) {
+    if (failures.none { it === failure }) failures += failure
+}
+
+private fun attachDistinctFailures(root: Throwable, failures: List<Throwable>) {
+    failures.forEach { failure ->
+        if (failure !== root && !hasSuppressedPath(root, failure) && !hasSuppressedPath(failure, root)) root.addSuppressed(failure)
+    }
+}
+
+private fun hasSuppressedPath(source: Throwable, target: Throwable): Boolean {
+    val pending = mutableListOf(source)
+    val visited = mutableListOf<Throwable>()
+    while (pending.isNotEmpty()) {
+        val current = pending.removeAt(pending.lastIndex)
+        if (current === target) return true
+        if (visited.any { it === current }) continue
+        visited += current
+        current.suppressed.forEach { pending += it }
+    }
+    return false
 }
 
 internal data class EvidenceCliRunResult(val exitCode: Int, val failure: Throwable?)

@@ -692,7 +692,7 @@ Require `Succeeded`, `Completed`, a `GPUSceneFrameOutput.ReadbackRgba` with the 
 | `solid-card-stack` | 64×64 | three opaque `GPUSolidRectFrameResolvedDraw` values | `ReferenceRaster` rect/SrcOver v1 | tolerance 0, similarity 100.0%, policy v1 |
 | `custom-runtime-effect-unregistered-refusal` | 16×16 | `GPUCustomRuntimeEffectID("gpu-evidence.unregistered")` against empty registry | stable refusal | exact code, zero submissions |
 
-- [ ] Implement `GpuEvidenceCli` arguments as `--repository-root <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative repository root, unknown scene, or duplicate flag. Derive the output internally as `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; callers cannot supply an arbitrary output path. The CLI writes one generated bundle per case and exits nonzero for `Fail` or `Unavailable`.
+- [ ] Implement `GpuEvidenceCli` arguments as `--repository-root <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative repository root, unknown scene, or duplicate flag. Derive the output internally as `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; callers cannot supply an arbitrary output path. The CLI writes generated bundles only for `Rendered` or exact pre-submission `Refused` observations; `Unavailable` and `ExecutionFailure` write no bundle and exit nonzero.
 
 - [ ] Add `generateBootstrapGpuEvidence` as an opt-in `JavaExec` using the same native JVM flags as the old runner. Require `-PsourceCommit=<40-hex>`, pass the repository root, and write to `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; do not run Git from Gradle or Kotlin.
 
