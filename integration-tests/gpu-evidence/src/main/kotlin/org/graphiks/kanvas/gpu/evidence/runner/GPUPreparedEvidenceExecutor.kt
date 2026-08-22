@@ -44,6 +44,7 @@ sealed interface EvidenceExecutionResult {
 data class EvidenceCompletedFrame(
     val attemptId: String?, val furthestPhase: String?, val outcome: String, val diagnosticCode: String?, val diagnosticMessage: String?,
     val readbackRequestId: String?, val readbackBytes: ByteArray?, val encodedScopeKinds: List<String>, val events: List<StructuralEventEvidence>, val counters: Map<String, Long>,
+    val diagnosticDetails: List<String> = emptyList(),
 ) {
     companion object {
         fun succeeded(requestId: String, bytes: ByteArray) = EvidenceCompletedFrame("test-attempt", "Completed", "Succeeded", null, null, requestId, bytes, emptyList(), emptyList(), mapOf("queue.submit" to 1L))
@@ -108,10 +109,10 @@ class GPUPreparedEvidenceExecutor(
                 delta.submissions <= 0L -> "Prepared scene frame completed without a positive runtime submission delta."
                 else -> "Prepared scene frame did not produce the requested RGBA readback."
             }
-            return EvidenceExecutionResult.ExecutionFailure(completed.diagnosticCode ?: "failed.gpu.execution", message, route.copy(outcome = "failed"), prepared.diagnostics, environment)
+            return EvidenceExecutionResult.ExecutionFailure(completed.diagnosticCode ?: "failed.gpu.execution", message, route.copy(outcome = "failed"), prepared.diagnostics + completed.diagnosticDetails, environment)
         }
         val expected = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
-        return EvidenceExecutionResult.Observed(SceneObservation.Rendered(completed.readbackBytes, route, prepared.diagnostics, environment, comparator.compare(completed.readbackBytes, expected, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))))
+        return EvidenceExecutionResult.Observed(SceneObservation.Rendered(completed.readbackBytes, route, prepared.diagnostics + completed.diagnosticDetails, environment, comparator.compare(completed.readbackBytes, expected, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))))
     }
 }
 
@@ -148,7 +149,12 @@ class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : Evide
 
 private fun GPUPreparedSceneCompletedFrameResult.toEvidenceCompletedFrame(): EvidenceCompletedFrame {
     val output = output as? GPUSceneFrameOutput.ReadbackRgba
-    return EvidenceCompletedFrame(attemptId.value, furthestPhase.name, outcome.name, diagnostic?.code?.value, diagnostic?.message, output?.requestId?.value, output?.bytes, encodedScopeKinds.map { it.name }, telemetry.events.map { StructuralEventEvidence(it.kind.name, it.phase.name, it.label) }, telemetry.counters.mapKeys { it.key.label })
+    return EvidenceCompletedFrame(attemptId.value, furthestPhase.name, outcome.name, diagnostic?.code?.value, diagnostic?.message, output?.requestId?.value, output?.bytes, encodedScopeKinds.map { it.name }, telemetry.events.map { StructuralEventEvidence(it.kind.name, it.phase.name, it.label) }, telemetry.counters.mapKeys { it.key.label }, diagnostic?.let(::completionDiagnosticLines).orEmpty())
+}
+
+internal fun completionDiagnosticLines(diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic): List<String> = buildList {
+    add("diagnostic.code=${diagnostic.code.value}"); add("diagnostic.domain=${diagnostic.domain.name}"); add("diagnostic.severity=${diagnostic.severity.name}"); add("diagnostic.message=${diagnostic.message}"); add("diagnostic.terminal=${diagnostic.isTerminal}"); add("diagnostic.retryable=${diagnostic.isRetryable}")
+    diagnostic.facts.toSortedMap().forEach { (key, value) -> add("diagnostic.fact.$key=$value") }
 }
 
 private fun environmentOf(port: EvidenceBackendPort, sourceCommit: String) = EvidenceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), null, port.deviceGeneration, port.capabilities?.implementation, port.capabilities != null)

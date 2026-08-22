@@ -683,7 +683,7 @@ val completed = handle.completion.toCompletableFuture().get(30, TimeUnit.SECONDS
 
 Require `Succeeded`, `Completed`, a `GPUSceneFrameOutput.ReadbackRgba` with the same request ID, and exact byte size. Copy all observed structural events/counters, encoded scope kinds, diagnostics, and runtime telemetry delta into `RouteEvidence`. Close the prepared session in `finally`. The CLI owns `GPUBackendRuntimeFactory.dispose()` in its outermost `finally`; it creates one backend session for the requested catalog run and never calls `createOffscreenTarget`.
 
-- [ ] After a successful readback, invoke the case's CPU oracle, compare it through `EvidenceComparator`, construct `SceneObservation.Rendered`, evaluate `EvidenceExpectationGate`, and pass the descriptor, observation, oracle pixels, and reconstructed verdict to `EvidenceBundleWriter`. For a refusal, skip oracle/comparator execution and pass the exact refusal observation through the same gate/writer sequence. The writer must never accept a caller-supplied verdict without recomputing it.
+- [ ] After a successful readback, invoke the case's CPU oracle, compare it through `EvidenceComparator`, construct `SceneObservation.Rendered`, evaluate `EvidenceExpectationGate`, and pass the descriptor, observation, oracle pixels, and reconstructed verdict to `EvidenceBundleWriter`. For a refusal, skip oracle/comparator execution and pass the exact refusal observation through the same gate/writer sequence. `Unavailable` and post-submission execution failure write no bundle and exit non-zero. The writer must never accept a caller-supplied verdict without recomputing it.
 
 - [ ] Build the bootstrap cases with exact policies:
 
