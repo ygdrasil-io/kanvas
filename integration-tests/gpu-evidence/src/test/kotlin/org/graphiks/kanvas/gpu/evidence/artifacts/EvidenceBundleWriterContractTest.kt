@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -15,7 +16,21 @@ import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.graphiks.kanvas.test.ComparisonUtils
 
-class EvidenceBundleRound2RegressionTest {
+class EvidenceBundleWriterContractTest {
+    @Test fun `first generation failure keeps typed diagnostics under failed`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK)
+
+        kotlin.test.assertFailsWith<IllegalArgumentException> {
+            writer.writeGenerated(renderDescriptor(), rendered(), ByteArray(3), "attempt")
+        }
+
+        val failed = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT/_failed/render-scene-attempt")
+        assertTrue(Files.isRegularFile(failed.resolve("diagnostics.json")))
+        assertTrue(Files.isRegularFile(failed.resolve("environment.json")))
+        assertFalse(Files.isSymbolicLink(failed))
+    }
+
     @Test fun `pre-existing failed final symlink cannot escape repository`() {
         val root = Files.createTempDirectory("gpu-evidence-root")
         val outside = Files.createTempDirectory("gpu-evidence-outside")
@@ -23,9 +38,30 @@ class EvidenceBundleRound2RegressionTest {
         Files.createDirectories(failedParent)
         Files.createSymbolicLink(failedParent.resolve("render-scene-attempt"), outside)
         val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK)
-        kotlin.test.assertFailsWith<Throwable> { writer.writeGenerated(renderDescriptor(), rendered(), ByteArray(3), "attempt") }
+        val failure = kotlin.test.assertFailsWith<IllegalArgumentException> {
+            writer.writeGenerated(renderDescriptor(), rendered(), ByteArray(3), "attempt")
+        }
+        assertTrue(failure.message.orEmpty().contains("CPU RGBA byte count does not match descriptor"))
+        assertTrue(failure.suppressed.any { it.message.orEmpty().contains("failure attempt cannot be a symlink") })
         assertFalse(Files.exists(outside.resolve("diagnostics.json")))
         assertTrue(Files.isSymbolicLink(failedParent.resolve("render-scene-attempt")))
+    }
+
+    @Test fun `staging cleanup failure is suppressed by the generation failure`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        val writer = EvidenceBundleWriter(
+            root,
+            COMMIT,
+            FIXED_CLOCK,
+            cleanupStrategy = { throw IOException("injected cleanup failure") },
+        )
+
+        val failure = kotlin.test.assertFailsWith<IllegalArgumentException> {
+            writer.writeGenerated(renderDescriptor(), rendered(), ByteArray(3), "attempt")
+        }
+
+        assertTrue(failure.message.orEmpty().contains("CPU RGBA byte count does not match descriptor"))
+        assertTrue(failure.suppressed.any { it.message == "injected cleanup failure" })
     }
 
     @Test fun `render submissions are preserved and verify`() {
@@ -75,6 +111,18 @@ class EvidenceBundleRound2RegressionTest {
         val path = writer.writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
         assertTrue(atomicAttempts > 0)
         assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
+    }
+
+    @Test fun `successful replacement installs the new generated bundle`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK)
+        val original = writer.writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
+
+        val replacement = writer.writeGenerated(renderDescriptor(), rendered(), byteArrayOf(9, 8, 7, 6), "attempt-2")
+
+        assertTrue(original == replacement)
+        assertTrue(Files.readString(replacement.resolve("route.json")).contains("\"attemptId\":\"attempt-2\""))
+        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(replacement, COMMIT))
     }
 
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())

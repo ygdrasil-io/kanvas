@@ -12,6 +12,30 @@ import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
 class EvidenceBundleRoundTripTest {
+    @Test fun `writer has no native operating system dependency`() {
+        val previousOsName = System.getProperty("os.name")
+        try {
+            System.setProperty("os.name", "Kanvas test filesystem")
+            val root = Files.createTempDirectory("gpu-evidence")
+            val writer = EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC))
+            val descriptor = refusalDescriptor()
+            val observation = SceneObservation.Refused(
+                "unsupported.example",
+                "unsupported",
+                0,
+                route("refused"),
+                emptyList(),
+                environment(),
+            )
+
+            val path = writer.writeGenerated(descriptor, observation, attemptId = "attempt-portable")
+
+            assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "abc123"))
+        } finally {
+            if (previousOsName == null) System.clearProperty("os.name") else System.setProperty("os.name", previousOsName)
+        }
+    }
+
     @Test fun `render bundle has complete deterministic file set and verifies`() {
         val root = Files.createTempDirectory("gpu-evidence")
         val writer = EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.parse("2026-01-02T03:04:05Z"), ZoneOffset.UTC))

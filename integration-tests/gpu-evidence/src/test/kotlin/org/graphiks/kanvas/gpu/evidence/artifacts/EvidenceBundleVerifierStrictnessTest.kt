@@ -15,7 +15,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
-class EvidenceBundleRound1RegressionTest {
+class EvidenceBundleVerifierStrictnessTest {
     @Test fun `verifier reproduces render expectation refusal reason`() {
         val path = bundle(renderDescriptor(), refusedObservation())
         val verified = assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
@@ -67,6 +67,13 @@ class EvidenceBundleRound1RegressionTest {
         replace(second.resolve("route.json"), "\"submissions\":0", "\"submissions\":0,\"unknown\":0")
         refreshHash(second, "route.json")
         assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(second, COMMIT))
+    }
+
+    @Test fun `quoted structural counter is invalid after hash refresh`() {
+        val path = bundle(renderDescriptor(), renderedObservation())
+        replace(path.resolve("route.json"), "\"structuralCounters\":{}", "\"structuralCounters\":{\"draws\":\"1\"}")
+        refreshHash(path, "route.json")
+        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, COMMIT))
     }
 
     @Test fun `symlinked repository path cannot receive failure artifacts`() {

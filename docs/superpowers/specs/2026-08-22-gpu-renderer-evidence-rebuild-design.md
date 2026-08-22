@@ -126,7 +126,10 @@ The new module must obey these boundaries:
 6. A feature that cannot be expressed or executed through product APIs is
    omitted from the positive catalog or represented by `ShouldRefuse`. The
    harness never implements it locally.
-7. Native interactive windowing remains out of scope.
+7. The harness does not justify a new `:gpu-renderer` API by itself. A new
+   product seam must first have a real Kanvas or renderer consumer and its own
+   executable verification.
+8. Native interactive windowing remains out of scope.
 
 Package-boundary tests in both `:gpu-renderer` and the new module enforce these
 rules by scanning dependencies, imports, source resources, and forbidden call
@@ -236,6 +239,15 @@ copies a verified generated bundle into the matching `promoted/` namespace and
 adds review metadata. A normal run cannot write into a `promoted/` directory.
 No GPU evidence report is written under a module `build/reports/` directory or
 directly into the catch-all `reports/gpu-renderer/` root.
+
+The writer uses pure Java NIO in a trusted developer or CI workspace. It
+derives the canonical destination internally, writes and verifies a sibling
+temporary bundle, then uses an atomic move when supported with a normal move
+fallback. Existing symlink components and traversal are rejected, but the
+design does not claim protection against a hostile process racing filesystem
+changes. Failure retention under `_failed/` is best-effort: the original
+generation error stays primary. No FFM, JNI, libc shim, or native-access JVM
+flag is required for evidence artifact IO.
 
 For `ShouldRender`, one bundle contains:
 

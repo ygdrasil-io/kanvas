@@ -1,13 +1,7 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
-import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
-import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption.CREATE_NEW
-import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.Instant
@@ -21,10 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.catalog.ComparisonPolicy
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
@@ -39,40 +30,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.catalog.StructuralEventEvidence
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
-class EvidenceBundleRound4RegressionTest {
-    @Test fun `failure retention uses handle relative writes and drains partial channels`() {
-        val root = Files.createTempDirectory("gpu-evidence")
-        val filesystem = RecordingSecureEvidenceFilesystem(root, maxBytesPerWrite = 2)
-        val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK, secureFilesystem = filesystem)
-
-        assertFailsWith<IllegalArgumentException> {
-            writer.writeGenerated(renderDescriptor(), rendered(), expectedRgba = ByteArray(3), attemptId = "attempt")
-        }
-
-        assertEquals(
-            listOf("_failed", "render-scene-attempt"),
-            filesystem.createdDirectories,
-        )
-        assertEquals(
-            listOf(
-                "reports",
-                "reports/gpu-renderer",
-                "reports/gpu-renderer/evidence",
-                "reports/gpu-renderer/evidence/correctness",
-                "reports/gpu-renderer/evidence/correctness/generated",
-                "reports/gpu-renderer/evidence/correctness/generated/$COMMIT",
-                "reports/gpu-renderer/evidence/correctness/generated/$COMMIT/_failed",
-                "reports/gpu-renderer/evidence/correctness/generated/$COMMIT/_failed/render-scene-attempt",
-            ),
-            filesystem.openedDirectories,
-        )
-        assertEquals(listOf("diagnostics.json", "environment.json"), filesystem.openedFiles)
-        assertTrue(filesystem.partialWrites > 2, "the test channel must have forced multiple writes")
-        val failed = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT/_failed/render-scene-attempt")
-        assertTrue(Files.readString(failed.resolve("diagnostics.json")).contains("CPU RGBA byte count does not match descriptor"))
-        assertTrue(Files.readString(failed.resolve("environment.json")).contains("\"sourceCommit\":\"$COMMIT\""))
-    }
-
+class EvidenceBundleSchemaSerializationTest {
     @Test fun `writer serializes every v1 field with its complete value`() {
         val root = Files.createTempDirectory("gpu-evidence")
         val telemetry = GPUBackendRuntimeTelemetry(
@@ -167,93 +125,14 @@ class EvidenceBundleRound4RegressionTest {
         assertEquals("render", verdict.string("expectation")); assertEquals("rendered", verdict.string("observedOutcome")); assertEquals("pass", verdict.string("verdictKind")); assertEquals("rendered image passed comparison", verdict.string("reason"))
     }
 
-    @Test fun `failed replacement restores byte-identical bundle and cleans backup`() {
-        val root = Files.createTempDirectory("gpu-evidence")
-        val baseline = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
-        val original: Map<String, ByteArray> = Files.list(baseline).use { stream ->
-            stream.iterator().asSequence().associate { it.fileName.toString() to Files.readAllBytes(it) }
-        }
-        var moves = 0
-        val installFailureThenRestore: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
-            moves++
-            when (moves) {
-                1 -> Files.move(source, destination)
-                2 -> throw java.nio.file.AtomicMoveNotSupportedException(source.toString(), destination.toString(), "injected")
-                3 -> throw IOException("injected install failure")
-                4 -> Files.move(source, destination)
-                else -> error("unexpected move $moves (atomic=$atomic)")
-            }
-        }
-        val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK, installFailureThenRestore)
-
-        assertFailsWith<IOException> { writer.writeGenerated(renderDescriptor(), rendered(), byteArrayOf(9, 8, 7, 6), "attempt-2") }
-
-        assertEquals(4, moves)
-        assertEquals(original.keys, Files.list(baseline).use { stream -> stream.map { it.fileName.toString() }.toList().toSet() })
-        original.forEach { (name, bytes) -> assertContentEquals(bytes, Files.readAllBytes(baseline.resolve(name)), name) }
-        assertFalse(Files.list(baseline.parent).use { stream -> stream.anyMatch { it.fileName.toString().contains(".backup-") } })
-    }
-
     private fun json(path: Path, name: String) = EvidenceJson.parseToJsonElement(Files.readString(path.resolve(name))).jsonObject
     private fun kotlinx.serialization.json.JsonObject.string(key: String) = this[key]!!.jsonPrimitive.content
     private fun kotlinx.serialization.json.JsonObject.int(key: String) = this[key]!!.jsonPrimitive.int
     private fun kotlinx.serialization.json.JsonObject.double(key: String) = this[key]!!.jsonPrimitive.double
     private fun kotlinx.serialization.json.JsonObject.boolean(key: String) = this[key]!!.jsonPrimitive.boolean
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-    private fun renderDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("oracle", 1), ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
-    private fun rendered() = SceneObservation.Rendered(PIXEL, RouteEvidence("route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty), emptyList(), EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "25", null, null, null, true), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
-
-    private class RecordingSecureEvidenceFilesystem(
-        private val root: Path,
-        private val maxBytesPerWrite: Int,
-    ) : SecureEvidenceFilesystem {
-        val createdDirectories = mutableListOf<String>()
-        val openedDirectories = mutableListOf<String>()
-        val openedFiles = mutableListOf<String>()
-        var partialWrites = 0
-
-        override fun openRoot(root: Path): SecureEvidenceDirectory = directory(this.root)
-
-        private fun directory(path: Path): SecureEvidenceDirectory = object : SecureEvidenceDirectory {
-            override fun openDirectory(name: String): SecureEvidenceDirectory? {
-                val child = path.resolve(name)
-                return if (Files.isDirectory(child, NOFOLLOW_LINKS) && !Files.isSymbolicLink(child)) {
-                    openedDirectories += root.relativize(child).joinToString("/") { it.toString() }
-                    directory(child)
-                } else null
-            }
-
-            override fun createDirectory(name: String): SecureEvidenceDirectory {
-                val child = path.resolve(name)
-                Files.createDirectory(child)
-                createdDirectories += root.relativize(child).joinToString("/") { it.toString() }.substringAfterLast('/')
-                return openDirectory(name) ?: error("created directory was not opened through the handle")
-            }
-
-            override fun openNewFile(name: String): WritableByteChannel {
-                openedFiles += name
-                return object : WritableByteChannel {
-                    private val delegate = Files.newByteChannel(path.resolve(name), CREATE_NEW, WRITE, NOFOLLOW_LINKS)
-                    override fun isOpen(): Boolean = delegate.isOpen
-                    override fun close() = delegate.close()
-                    override fun write(source: ByteBuffer): Int {
-                        val count = minOf(maxBytesPerWrite, source.remaining())
-                        val slice = source.slice().apply { limit(count) }
-                        val written = delegate.write(slice)
-                        source.position(source.position() + written)
-                        partialWrites++
-                        return written
-                    }
-                }
-            }
-
-            override fun close() = Unit
-        }
-    }
-
     companion object {
         private const val COMMIT = "abc123"
-        private val PIXEL = byteArrayOf(1, 2, 3, 4)
         private val PIXELS = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
         private val ORACLE_PNG = byteArrayOf(42, 43, 44, 45)
         private val FIXED_CLOCK = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)

@@ -35,7 +35,7 @@ The checked-in production code at the evaluated commit is authoritative for impl
 | Gate | Result | May proceed when |
 |---|---|---|
 | 1 | Shadow module and frozen legacy inventory | Boundary and freeze tests pass |
-| 2 | Product-owned registered-uniform payload API | ABI tests and recorder tests pass |
+| 2 | No speculative product API | `gpu-renderer` stays unchanged until a production consumer requires a seam |
 | 3 | Typed scene/result contracts and expectation gate | Full decision matrix passes without GPU |
 | 4 | Comparator, evidence schema, writer, verifier | Artifact round-trip and tamper tests pass |
 | 5 | Canonical product runner and 3-scene bootstrap | Eligible GPU produces three valid bundles |
@@ -193,118 +193,19 @@ rtk git commit -m "test: freeze legacy GPU scene surface"
 
 ---
 
-## Task 2: Move registered-uniform ABI packing behind a product-owned typed API
+## Task 2: Defer product API changes until a production consumer needs them
 
-**Files:**
-
-- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPURegisteredUniformPayload.kt`
-- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPURegisteredUniformPayloadTest.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorder.kt`
-- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorderTest.kt`
+**Files:** None in this foundation slice.
 
 ### Contract to establish
 
-The product, not the evidence harness, owns the byte layout for the six natively implemented registered-uniform programs: `SolidColor`, `LinearGradient`, `RadialGradient`, `SweepGradient`, `ColorMatrix`, and `SimpleRuntimeEffect`. `Blur` and `Stroke` remain excluded from this API because the current native registered-uniform shader switch does not implement them. Existing raw callers remain source-compatible during shadow mode, but the new harness can only use the typed payload constructor.
+The evidence harness must not create a convenience API in `:gpu-renderer` solely for tests. It uses existing code-backed production inputs and routes. If a future evidence scene cannot be expressed without harness-owned ABI packing, omit that positive scene until a real Kanvas or renderer consumer needs and validates a product seam.
 
-- [ ] Write failing payload tests for exact program identity, byte count, little-endian channel order, defensive ownership, finite inputs, normalized colors, positive radial radius, finite sweep angles, and exactly 20 matrix coefficients.
+- [ ] Confirm this branch has no effective `:gpu-renderer` source or test diff against its base after the speculative registered-uniform payload API is removed.
+- [ ] Keep the architecture boundary that forbids shader ABI packing inside `:integration-tests:gpu-evidence`.
+- [ ] When a production consumer eventually requires a typed registered-uniform input, land it as a separate consumer-backed change with its own tests before the evidence catalog adopts it.
 
-```kotlin
-@Test
-fun `linear gradient owns the 64 byte product ABI`() {
-    val payload = GPURegisteredUniformPayloads.linearGradient(
-        startX = 1f, startY = 2f, endX = 9f, endY = 10f,
-        start = GPUUniformColor(1f, 0f, 0f, 1f),
-        end = GPUUniformColor(0f, 0f, 1f, 1f),
-    )
-
-    assertEquals(GPURegisteredUniformProgram.LinearGradient, payload.program)
-    assertEquals(64, payload.bytes.size)
-    assertContentEquals(
-        floatArrayOf(1f, 2f, 0f, 0f, 9f, 10f, 0f, 0f),
-        payload.bytes.asLittleEndianFloats().copyOfRange(0, 8),
-    )
-}
-```
-
-- [ ] Run the focused test and observe unresolved `GPURegisteredUniformPayloads`/`GPUUniformColor` symbols:
-
-```bash
-rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*GPURegisteredUniformPayloadTest'
-```
-
-- [ ] Implement immutable value types and factories. The primary payload constructor and stored bytes stay private; `bytes` returns a copy:
-
-```kotlin
-data class GPUUniformColor(val red: Float, val green: Float, val blue: Float, val alpha: Float) {
-    init {
-        require(listOf(red, green, blue, alpha).all { it.isFinite() && it in 0f..1f })
-    }
-}
-
-class GPURegisteredUniformPayload private constructor(
-    val program: GPURegisteredUniformProgram,
-    bytes: ByteArray,
-) {
-    private val ownedBytes = bytes.copyOf()
-    val bytes: ByteArray get() = ownedBytes.copyOf()
-
-    init { require(ownedBytes.size == program.uniformByteSize) }
-
-    companion object {
-        internal fun create(program: GPURegisteredUniformProgram, bytes: ByteArray) =
-            GPURegisteredUniformPayload(program, bytes)
-    }
-}
-
-object GPURegisteredUniformPayloads {
-    fun solidColor(color: GPUUniformColor): GPURegisteredUniformPayload =
-        payload(GPURegisteredUniformProgram.SolidColor, 4) { putColor(color) }
-
-    fun simpleRuntimeEffect(color: GPUUniformColor): GPURegisteredUniformPayload =
-        payload(GPURegisteredUniformProgram.SimpleRuntimeEffect, 4) { putColor(color) }
-}
-```
-
-Add typed `linearGradient(startX, startY, endX, endY, start, end)`, `radialGradient(centerX, centerY, radius, start, end)`, `sweepGradient(centerX, centerY, startAngle, endAngle, start, end)`, and `colorMatrix(inputColor, coefficients)` factories to the same object. For the implementation, use a private `ByteBuffer.allocate(program.uniformByteSize).order(ByteOrder.LITTLE_ENDIAN)` helper. `colorMatrix` accepts `coefficients: List<Float>` ordered as four RGBA rows followed by one RGBA translation row; require exactly 20 finite coefficients. Do not copy the legacy `UniformPacker` object or expose a general byte-builder API.
-
-- [ ] Add an overload to `GPURegisteredUniformRectResolvedDraw` that accepts `payload: GPURegisteredUniformPayload` and delegates to the current primary constructor using owned bytes:
-
-```kotlin
-constructor(
-    commandIdValue: Int,
-    bounds: GPUPixelBounds,
-    payload: GPURegisteredUniformPayload,
-    scissorBounds: GPUPixelBounds = bounds,
-    paintOrder: Int = commandIdValue,
-) : this(
-    commandIdValue = commandIdValue,
-    bounds = bounds,
-    program = payload.program,
-    uniformBytes = payload.bytes,
-    scissorBounds = scissorBounds,
-    paintOrder = paintOrder,
-)
-```
-
-- [ ] Add a recorder test proving a typed payload records and that mutating a caller-owned byte array returned from `payload.bytes` cannot alter a previously created draw.
-
-- [ ] Run focused and boundary verification:
-
-```bash
-rtk ./gradlew --no-daemon \
-  :gpu-renderer:test --tests '*GPURegisteredUniformPayloadTest' --tests '*GPURegisteredUniformRectFrameRecorderTest' \
-  :gpu-renderer:test --tests '*GPURendererPackageBoundaryTest'
-```
-
-- [ ] Commit only the product seam:
-
-```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPURegisteredUniformPayload.kt \
-  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorder.kt \
-  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPURegisteredUniformPayloadTest.kt \
-  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorderTest.kt
-rtk git commit -m "feat: own registered uniform payload ABI"
-```
+This deferral is intentional: the current foundation PR establishes evidence contracts, not new renderer behavior.
 
 ---
 
@@ -624,7 +525,9 @@ data class EvidenceManifest(
 
 - [ ] Implement JSON with `kotlinx.serialization.json` builders and strict parsers. Reject unknown schema versions, missing required keys, wrong primitive types, absolute paths, `..` path traversal, and duplicate logical files. Do not use Markdown as an input or output of the verifier.
 
-- [ ] Implement `EvidenceBundleWriter.writeGenerated` with an injected `java.time.Clock`, an explicit repository root, and this canonical destination only: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/<scene-id>/`. Write through a sibling temporary directory, close every file, calculate SHA-256, then atomically move when supported. On failure, retain `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/_failed/<scene-id>-<attempt-id>/` with `diagnostics.json` and `environment.json`. Reject traversal, symlinks escaping the root, direct-child writes in `reports/gpu-renderer/` outside `evidence/`, any module `build/reports/` destination, and every path containing `/promoted/`. Tests inject a fixed clock so identical inputs produce identical JSON and hashes.
+- [ ] Implement `EvidenceBundleWriter.writeGenerated` with pure Java NIO, an injected `java.time.Clock`, an explicit repository root, and this canonical destination only: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/<scene-id>/`. Write through a sibling temporary directory, close every file, calculate SHA-256, verify the completed bundle, then atomically move when supported with a normal move fallback. Generated bundles are disposable and may be replaced; promoted bundles are never writable through this API.
+
+  The filesystem threat model is a trusted developer or CI workspace. Reject traversal, existing symlink components, direct-child writes in `reports/gpu-renderer/` outside `evidence/`, module `build/reports/` destinations, and paths containing `/promoted/`. Do not use FFM, JNI, libc handles, or native-access JVM flags, and do not claim protection from a hostile process racing filesystem changes. On failure, make a best-effort write to `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/_failed/<scene-id>-<attempt-id>/`; the original generation failure remains authoritative and any retention failure is suppressed. Tests inject a fixed clock so identical inputs produce identical JSON and hashes.
 
 - [ ] Implement `EvidenceBundleVerifier.verify(directory, expectedSourceCommit)` to recompute every hash and expectation verdict rather than trusting `verdict.json`. Return `Verified(sceneId, verdict)` or `Invalid(sceneId?, errors: List<String>)`. A serialized `Pass` with reconstructed `Fail` is invalid.
 
@@ -741,12 +644,12 @@ object ProductScenePrograms {
             }
         }
 
-    fun registeredUniform(payload: GPURegisteredUniformPayload, budgetBytes: Long = 1L shl 30): SceneProgram
+    // Add a registered-uniform program only after a production consumer-backed input API exists.
     fun unregisteredRuntimeEffect(id: GPUCustomRuntimeEffectID): SceneProgram
 }
 ```
 
-Implement `registeredUniform` with `GPURegisteredUniformRectFrameRecorder` and the typed payload overload from Task 2. Implement `unregisteredRuntimeEffect` with `GPUCustomRuntimeEffectExecutor` and an empty `GPUCustomRuntimeEffectRegistry`; it must pass no WGSL string and return the executor's observed `reason` unchanged.
+Do not implement or locally pack a registered-uniform payload in the evidence harness. Add that positive scene only after a production consumer-backed input API exists. Implement `unregisteredRuntimeEffect` with `GPUCustomRuntimeEffectExecutor` and an empty `GPUCustomRuntimeEffectRegistry`; it must pass no WGSL string and return the executor's observed `reason` unchanged.
 
 - [ ] Implement the production executor with dependency injection around runtime creation, but use these exact product operations in the real port:
 
@@ -788,7 +691,7 @@ Require `Succeeded`, `Completed`, a `GPUSceneFrameOutput.ReadbackRgba` with the 
 | Scene | Size | Product input | Oracle | Comparison |
 |---|---:|---|---|---|
 | `solid-card-stack` | 64×64 | three opaque `GPUSolidRectFrameResolvedDraw` values | `ReferenceRaster` rect/SrcOver v1 | tolerance 0, similarity 100.0%, policy v1 |
-| `registered-simple-runtime-effect` | 32×32 | full-target `GPURegisteredUniformPayloads.simpleRuntimeEffect(0.25, 0.50, 0.75, 1.0)` | `SimpleRTCPUOracle` projected to full target, v1 | tolerance 0, similarity 100.0%, policy v1 |
+| `registered-simple-runtime-effect` | 32×32 | product-owned registered-uniform input available when Task 5 starts; no harness ABI packing | `SimpleRTCPUOracle` projected to full target, v1 | tolerance 0, similarity 100.0%, policy v1 |
 | `custom-runtime-effect-unregistered-refusal` | 16×16 | `GPUCustomRuntimeEffectID("gpu-evidence.unregistered")` against empty registry | stable refusal | exact code, zero submissions |
 
 - [ ] Implement `GpuEvidenceCli` arguments as `--repository-root <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative repository root, unknown scene, or duplicate flag. Derive the output internally as `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; callers cannot supply an arbitrary output path. The CLI writes one generated bundle per case and exits nonzero for `Fail` or `Unavailable`.

@@ -18,7 +18,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformProgram
 import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformRectPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY
@@ -47,22 +46,7 @@ data class GPURegisteredUniformRectResolvedDraw(
     val uniformBytes: ByteArray,
     val scissorBounds: GPUPixelBounds = bounds,
     val paintOrder: Int = commandIdValue,
-) {
-    constructor(
-        commandIdValue: Int,
-        bounds: GPUPixelBounds,
-        payload: GPURegisteredUniformPayload,
-        scissorBounds: GPUPixelBounds = bounds,
-        paintOrder: Int = commandIdValue,
-    ) : this(
-        commandIdValue = commandIdValue,
-        bounds = bounds,
-        program = payload.program,
-        uniformBytes = payload.bytes,
-        scissorBounds = scissorBounds,
-        paintOrder = paintOrder,
-    )
-}
+)
 
 /** Handle-free input for one prepared batch which may mix registered uniform programs. */
 data class GPURegisteredUniformRectFrameRecordingRequest(

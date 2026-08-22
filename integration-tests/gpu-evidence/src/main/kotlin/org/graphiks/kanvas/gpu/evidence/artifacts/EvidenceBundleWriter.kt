@@ -1,25 +1,14 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
-import java.io.IOException
-import java.lang.foreign.Arena
-import java.lang.foreign.FunctionDescriptor
-import java.lang.foreign.Linker
-import java.lang.foreign.MemoryLayout
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout
-import java.lang.invoke.MethodHandle
 import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
-import java.nio.ByteBuffer
-import java.nio.channels.WritableByteChannel
-import java.nio.file.SecureDirectoryStream
+import java.nio.file.StandardOpenOption.CREATE_NEW
+import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
 import java.time.Clock
-import java.util.UUID
 import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
@@ -38,17 +27,8 @@ class EvidenceBundleWriter internal constructor(
     private val moveStrategy: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
         if (atomic) Files.move(source, destination, ATOMIC_MOVE) else Files.move(source, destination)
     },
-    private val secureFilesystem: SecureEvidenceFilesystem,
+    private val cleanupStrategy: (Path) -> Unit = ::deleteEvidenceTree,
 ) {
-    constructor(
-        repositoryRoot: Path,
-        sourceCommit: String,
-        clock: Clock = Clock.systemUTC(),
-        moveStrategy: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
-            if (atomic) Files.move(source, destination, ATOMIC_MOVE) else Files.move(source, destination)
-        },
-    ) : this(repositoryRoot, sourceCommit, clock, moveStrategy, UnixSecureEvidenceFilesystem())
-
     private val root = repositoryRoot.toAbsolutePath().normalize()
     private val rootReal: Path
 
@@ -57,7 +37,6 @@ class EvidenceBundleWriter internal constructor(
         Files.createDirectories(root)
         require(!Files.isSymbolicLink(root)) { "repository root cannot be a symlink" }
         rootReal = root.toRealPath(NOFOLLOW_LINKS)
-        secureFilesystem.verifyAvailable(rootReal)
     }
 
     constructor(repositoryRoot: java.io.File, sourceCommit: String, clock: Clock = Clock.systemUTC()) :
@@ -74,24 +53,34 @@ class EvidenceBundleWriter internal constructor(
         require(observation !is SceneObservation.Unavailable) { "unavailable observations cannot produce bundles" }
         require(observation.environment.sourceCommit == sourceCommit) { "observation sourceCommit does not match writer sourceCommit" }
         val destination = destination(descriptor.id.value)
-        var temp: Path? = null
+        var stagingRoot: Path? = null
+        var primaryFailure: Throwable? = null
         return try {
-            temp = siblingTemp(destination)
-            Files.createDirectories(temp)
+            stagingRoot = siblingTemp(destination)
+            val temp = stagingRoot.resolve(destination.fileName)
+            Files.createDirectory(temp)
             writeBundle(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
+            val verification = EvidenceBundleVerifier.verify(temp, sourceCommit)
+            require(verification is EvidenceBundleVerification.Verified) {
+                val errors = (verification as EvidenceBundleVerification.Invalid).errors.joinToString("; ")
+                "generated evidence bundle failed independent verification: $errors"
+            }
             moveIntoPlace(temp, destination)
-            temp = null
             destination
         } catch (failure: Throwable) {
-            try {
-                retainFailure(descriptor, observation, attemptId, failure)
-            } catch (retentionFailure: SecureEvidenceFilesystemUnavailableException) {
-                retentionFailure.addSuppressed(failure)
-                throw retentionFailure
-            }
+            primaryFailure = failure
+            runCatching { retainFailure(descriptor, observation, attemptId, failure) }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressed)
             throw failure
         } finally {
-            temp?.let { deleteTree(it) }
+            stagingRoot?.let { path ->
+                try {
+                    cleanupStrategy(path)
+                } catch (cleanupFailure: Throwable) {
+                    primaryFailure?.addSuppressed(cleanupFailure) ?: throw cleanupFailure
+                }
+            }
         }
     }
 
@@ -186,70 +175,46 @@ class EvidenceBundleWriter internal constructor(
 
     private fun moveIntoPlace(temp: Path, destination: Path) {
         require(!Files.isSymbolicLink(destination)) { "evidence destination cannot be a symlink" }
-        if (!Files.exists(destination, NOFOLLOW_LINKS)) {
-            try { moveStrategy(temp, destination, true) } catch (_: AtomicMoveNotSupportedException) {
-                moveStrategy(temp, destination, false)
-            }
-            return
+        if (Files.exists(destination, NOFOLLOW_LINKS)) {
+            require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "evidence destination must be a directory" }
+            deleteEvidenceTree(destination)
         }
-        require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "evidence destination must be a directory" }
-        val backup = Files.createTempDirectory(destination.parent, ".${destination.fileName}.backup-")
-        deleteTree(backup)
-        var backupInstalled = false
-        var installSucceeded = false
-        var restoreSucceeded = false
         try {
-            try { moveStrategy(destination, backup, true) } catch (_: AtomicMoveNotSupportedException) { moveStrategy(destination, backup, false) }
-            backupInstalled = true
-            try {
-                moveStrategy(temp, destination, true)
-            } catch (_: AtomicMoveNotSupportedException) {
-                moveStrategy(temp, destination, false)
-            }
-            installSucceeded = true
-        } catch (failure: Throwable) {
-            if (!Files.exists(destination, NOFOLLOW_LINKS) && Files.exists(backup, NOFOLLOW_LINKS)) {
-                restoreSucceeded = runCatching { moveStrategy(backup, destination, true); true }.getOrElse {
-                    runCatching { moveStrategy(backup, destination, false); true }.getOrDefault(false)
-                }
-            }
-            throw failure
-        } finally {
-            if (installSucceeded || (backupInstalled && restoreSucceeded)) {
-                if (Files.exists(backup, NOFOLLOW_LINKS)) deleteTree(backup)
-            }
+            moveStrategy(temp, destination, true)
+        } catch (_: AtomicMoveNotSupportedException) {
+            moveStrategy(temp, destination, false)
         }
     }
 
     private fun retainFailure(descriptor: EvidenceSceneDescriptor, observation: SceneObservation, attemptId: String, failure: Throwable) {
-        try {
-            val components = listOf("reports", "gpu-renderer", "evidence", "correctness", "generated", sourceCommit, "_failed", "${descriptor.id.value}-$attemptId")
-            val opened = mutableListOf<SecureEvidenceDirectory>()
-            try {
-                var current = secureFilesystem.openRoot(root).also(opened::add)
-                components.forEachIndexed { index, component ->
-                    val existing = current.openDirectory(component)
-                    if (index == components.lastIndex && existing != null) {
-                        existing.close()
-                        return
-                    }
-                    current = existing ?: current.createDirectory(component)
-                    opened += current
-                }
-                current.openNewFile("diagnostics.json").use { channel ->
-                    writeFully(channel, diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
-                }
-                current.openNewFile("environment.json").use { channel ->
-                    writeFully(channel, environmentJson(observation.environment))
-                }
-            } finally {
-                opened.asReversed().forEach(SecureEvidenceDirectory::close)
-            }
-        } catch (unavailable: SecureEvidenceFilesystemUnavailableException) {
-            throw unavailable
-        } catch (_: Throwable) {
-            // The original generation error remains authoritative when no additional path is safely writable.
+        val failedParent = root.resolve("reports/gpu-renderer/evidence/correctness/generated")
+            .resolve(sourceCommit)
+            .resolve("_failed")
+            .normalize()
+        require(failedParent.startsWith(root)) { "failure destination escapes repository root" }
+        ensureNoSymlinkComponents(failedParent)
+        Files.createDirectories(failedParent)
+        require(!Files.isSymbolicLink(failedParent)) { "failure destination cannot be a symlink" }
+
+        val failed = failedParent.resolve("${descriptor.id.value}-$attemptId").normalize()
+        require(failed.parent == failedParent) { "failure attempt escapes generated evidence root" }
+        if (Files.exists(failed, NOFOLLOW_LINKS)) {
+            require(!Files.isSymbolicLink(failed)) { "failure attempt cannot be a symlink" }
+            return
         }
+        Files.createDirectory(failed)
+        Files.write(
+            failed.resolve("diagnostics.json"),
+            diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()),
+            CREATE_NEW,
+            WRITE,
+        )
+        Files.write(
+            failed.resolve("environment.json"),
+            environmentJson(observation.environment),
+            CREATE_NEW,
+            WRITE,
+        )
     }
 
     private fun ensureNoSymlinkComponents(path: Path) {
@@ -261,14 +226,6 @@ class EvidenceBundleWriter internal constructor(
             require(!Files.isSymbolicLink(current)) { "path contains a symlink" }
         }
         if (Files.exists(path, NOFOLLOW_LINKS)) require(path.toRealPath(NOFOLLOW_LINKS).startsWith(rootReal)) { "path escapes repository root" }
-    }
-
-    private fun deleteTree(path: Path) {
-        if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
-        if (Files.isDirectory(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-            Files.list(path).use { stream -> stream.forEach { deleteTree(it) } }
-        }
-        Files.deleteIfExists(path)
     }
 
     private fun routeJson(route: RouteEvidence, attemptId: String): ByteArray = buildJsonObject {
@@ -314,436 +271,10 @@ class EvidenceBundleWriter internal constructor(
     }
 }
 
-/** Narrow handle-relative boundary used only for failure artifact retention. */
-internal interface SecureEvidenceFilesystem {
-    /** Verifies that secure native filesystem operations are available before any generation starts. */
-    fun verifyAvailable(root: Path) {
-        openRoot(root).close()
+private fun deleteEvidenceTree(path: Path) {
+    if (!Files.exists(path, NOFOLLOW_LINKS)) return
+    if (Files.isDirectory(path, NOFOLLOW_LINKS)) {
+        Files.list(path).use { stream -> stream.forEach(::deleteEvidenceTree) }
     }
-
-    fun openRoot(root: Path): SecureEvidenceDirectory
-}
-
-/** Raised when secure handle-relative retention cannot be provided by this host. */
-internal class SecureEvidenceFilesystemUnavailableException(
-    message: String,
-    cause: Throwable? = null,
-) : IOException(message, cause)
-
-internal interface SecureEvidenceDirectory : AutoCloseable {
-    /** Opens one existing child directory with NOFOLLOW semantics, or returns null when it is absent. */
-    fun openDirectory(name: String): SecureEvidenceDirectory?
-
-    /** Creates one child through this directory's operating-system handle, then opens it with NOFOLLOW semantics. */
-    fun createDirectory(name: String): SecureEvidenceDirectory
-
-    /** Opens a new file through this directory's operating-system handle with CREATE_NEW and NOFOLLOW semantics. */
-    fun openNewFile(name: String): WritableByteChannel
-}
-
-/**
- * Unix implementation backed by public FFM calls only. Java's secure stream is used as a capability
- * gate, but no JDK-private descriptor is extracted from it: libc opens the repository root itself and
- * every child is subsequently addressed through its owned file descriptor.
- */
-internal class UnixSecureEvidenceFilesystem(
-    private val directoryStreamFactory: (Path) -> DirectoryStream<Path> = { Files.newDirectoryStream(it) },
-) : SecureEvidenceFilesystem {
-    override fun verifyAvailable(root: Path) {
-        requireSecureDirectoryProvider(root)
-        PosixEvidenceNativeShim.probe(root)
-    }
-
-    override fun openRoot(root: Path): SecureEvidenceDirectory {
-        requireSecureDirectoryProvider(root)
-        return PosixEvidenceNativeShim.openRoot(root)
-    }
-
-    private fun requireSecureDirectoryProvider(root: Path) {
-        val stream = try {
-            directoryStreamFactory(root)
-        } catch (failure: Throwable) {
-            throw SecureEvidenceFilesystemUnavailableException(
-                "repository provider cannot open a secure directory stream for evidence retention",
-                failure,
-            )
-        }
-        stream.use {
-            if (it !is SecureDirectoryStream<*>) {
-                throw SecureEvidenceFilesystemUnavailableException(
-                    "repository provider does not offer secure directory handles for evidence retention",
-                )
-            }
-        }
-    }
-}
-
-/**
- * Minimal POSIX FFM shim for secure evidence retention. It owns every native descriptor it opens and
- * never derives a descriptor from JDK implementation state.
- */
-private object PosixEvidenceNativeShim {
-    private val bindings: PosixEvidenceBindings by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        PosixEvidenceBindings.load()
-    }
-
-    fun probe(root: Path) {
-        try {
-            bindings.probe(root)
-        } catch (failure: SecureEvidenceFilesystemUnavailableException) {
-            throw failure
-        } catch (failure: Throwable) {
-            throw SecureEvidenceFilesystemUnavailableException(
-                "native POSIX secure filesystem capability probe failed before evidence generation",
-                failure,
-            )
-        }
-    }
-
-    fun openRoot(root: Path): SecureEvidenceDirectory = try {
-        bindings.openRoot(root)
-    } catch (failure: SecureEvidenceFilesystemUnavailableException) {
-        throw failure
-    } catch (failure: Throwable) {
-        throw SecureEvidenceFilesystemUnavailableException(
-            "native POSIX secure filesystem cannot open the repository root for failure retention",
-            failure,
-        )
-    }
-}
-
-private class PosixEvidenceBindings private constructor(
-    private val flags: PosixEvidenceFlags,
-    private val openHandle: MethodHandle,
-    private val openAtHandle: MethodHandle,
-    private val mkdirAtHandle: MethodHandle,
-    private val closeHandle: MethodHandle,
-    private val writeHandle: MethodHandle,
-    private val unlinkAtHandle: MethodHandle,
-) {
-    private val callStateLayout = Linker.Option.captureStateLayout()
-    private val errnoOffset = callStateLayout.byteOffset(MemoryLayout.PathElement.groupElement("errno"))
-
-    fun probe(root: Path) {
-        val probeDirectoryName = ".kanvas-gpu-evidence-probe-${UUID.randomUUID()}"
-        var rootDirectory: NativeEvidenceDirectory? = null
-        var probeDirectory: NativeEvidenceDirectory? = null
-        var probeFileCreated = false
-        var probeDirectoryCreated = false
-        var failure: Throwable? = null
-
-        try {
-            rootDirectory = openNativeRoot(root)
-            probeDirectory = rootDirectory.createDirectory(probeDirectoryName) as NativeEvidenceDirectory
-            probeDirectoryCreated = true
-            probeDirectory.openNewFile(PROBE_FILE_NAME).use { channel ->
-                probeFileCreated = true
-                writeFully(channel, PROBE_BYTES)
-            }
-            probeDirectory.removeFileIfPresent(PROBE_FILE_NAME)
-            probeFileCreated = false
-            probeDirectory.close()
-            probeDirectory = null
-            rootDirectory.removeDirectoryIfPresent(probeDirectoryName)
-            probeDirectoryCreated = false
-        } catch (probeFailure: Throwable) {
-            failure = probeFailure
-        } finally {
-            failure = cleanupProbe(
-                failure,
-                rootDirectory,
-                probeDirectory,
-                probeDirectoryName,
-                probeFileCreated,
-                probeDirectoryCreated,
-            )
-        }
-        failure?.let { throw it }
-    }
-
-    fun openRoot(root: Path): SecureEvidenceDirectory = openNativeRoot(root)
-
-    private fun openNativeRoot(root: Path): NativeEvidenceDirectory = NativeEvidenceDirectory(this, openDirectory(root.toString()))
-
-    private fun openDirectoryAt(parentDescriptor: Int, name: String): NativeEvidenceDirectory? {
-        requireSafeComponent(name)
-        val result = withCString(name) { path -> callInt(openAtHandle, parentDescriptor, path, flags.directoryOpen, 0) }
-        return when {
-            result.value >= 0 -> NativeEvidenceDirectory(this, result.value)
-            result.errno == ERRNO_NO_ENTRY -> null
-            else -> throw nativeFailure("openat directory", name, result.errno)
-        }
-    }
-
-    private fun createDirectoryAt(parentDescriptor: Int, name: String): NativeEvidenceDirectory {
-        requireSafeComponent(name)
-        val result = withCString(name) { path -> callInt(mkdirAtHandle, parentDescriptor, path, DIRECTORY_MODE) }
-        if (result.value == 0) {
-            return checkNotNull(openDirectoryAt(parentDescriptor, name)) { "new secure directory was not reopenable" }
-        }
-        if (result.errno == ERRNO_ALREADY_EXISTS) {
-            return openDirectoryAt(parentDescriptor, name)
-                ?: throw nativeFailure("open existing directory after mkdirat", name, result.errno)
-        }
-        throw nativeFailure("mkdirat", name, result.errno)
-    }
-
-    fun openNewFileAt(parentDescriptor: Int, name: String): WritableByteChannel {
-        requireSafeComponent(name)
-        val result = withCString(name) { path -> callInt(openAtHandle, parentDescriptor, path, flags.newFileOpen, FILE_MODE) }
-        if (result.value < 0) throw nativeFailure("openat new file", name, result.errno)
-        return NativeEvidenceWritableByteChannel(this, result.value)
-    }
-
-    fun write(descriptor: Int, source: ByteBuffer): Int {
-        if (!source.hasRemaining()) return 0
-        val requested = source.remaining()
-        val result = Arena.ofConfined().use { arena ->
-            val nativeBuffer = arena.allocate(requested.toLong())
-            nativeBuffer.copyFrom(MemorySegment.ofBuffer(source.slice()))
-            callLong(writeHandle, descriptor, nativeBuffer, requested.toLong())
-        }
-        if (result.value < 0L) throw nativeFailure("write", "file descriptor $descriptor", result.errno)
-        require(result.value <= requested.toLong()) { "native write returned more bytes than requested" }
-        source.position(source.position() + result.value.toInt())
-        return result.value.toInt()
-    }
-
-    fun close(descriptor: Int) {
-        val result = callInt(closeHandle, descriptor)
-        if (result.value != 0) throw nativeFailure("close", "file descriptor $descriptor", result.errno)
-    }
-
-    fun removeFileIfPresent(parentDescriptor: Int, name: String) {
-        removeAt(parentDescriptor, name, 0, "unlinkat file")
-    }
-
-    fun removeDirectoryIfPresent(parentDescriptor: Int, name: String) {
-        removeAt(parentDescriptor, name, flags.removeDirectory, "unlinkat directory")
-    }
-
-    private fun removeAt(parentDescriptor: Int, name: String, removalFlag: Int, operation: String) {
-        requireSafeComponent(name)
-        val result = withCString(name) { path -> callInt(unlinkAtHandle, parentDescriptor, path, removalFlag) }
-        if (result.value != 0 && result.errno != ERRNO_NO_ENTRY) throw nativeFailure(operation, name, result.errno)
-    }
-
-    private fun openDirectory(path: String): Int {
-        val result = withCString(path) { cPath -> callInt(openHandle, cPath, flags.directoryOpen) }
-        if (result.value < 0) throw nativeFailure("open repository root", path, result.errno)
-        return result.value
-    }
-
-    private fun cleanupProbe(
-        initialFailure: Throwable?,
-        rootDirectory: NativeEvidenceDirectory?,
-        probeDirectory: NativeEvidenceDirectory?,
-        probeDirectoryName: String,
-        probeFileCreated: Boolean,
-        probeDirectoryCreated: Boolean,
-    ): Throwable? {
-        var failure = initialFailure
-        fun cleanup(action: () -> Unit) {
-            try {
-                action()
-            } catch (cleanupFailure: Throwable) {
-                if (failure == null) failure = cleanupFailure else failure!!.addSuppressed(cleanupFailure)
-            }
-        }
-        if (probeFileCreated) cleanup { probeDirectory?.removeFileIfPresent(PROBE_FILE_NAME) }
-        if (probeDirectory != null) cleanup { probeDirectory.close() }
-        if (probeDirectoryCreated) cleanup { rootDirectory?.removeDirectoryIfPresent(probeDirectoryName) }
-        if (rootDirectory != null) cleanup { rootDirectory.close() }
-        return failure
-    }
-
-    private fun callInt(handle: MethodHandle, vararg arguments: Any): PosixIntResult = Arena.ofConfined().use { arena ->
-        val state = arena.allocate(callStateLayout)
-        val value = handle.invokeWithArguments(listOf<Any>(state) + arguments.toList()) as Int
-        PosixIntResult(value, state.get(ValueLayout.JAVA_INT, errnoOffset))
-    }
-
-    private fun callLong(handle: MethodHandle, vararg arguments: Any): PosixLongResult = Arena.ofConfined().use { arena ->
-        val state = arena.allocate(callStateLayout)
-        val value = handle.invokeWithArguments(listOf<Any>(state) + arguments.toList()) as Long
-        PosixLongResult(value, state.get(ValueLayout.JAVA_INT, errnoOffset))
-    }
-
-    private fun <T> withCString(value: String, block: (MemorySegment) -> T): T = Arena.ofConfined().use { arena ->
-        block(arena.allocateFrom(value))
-    }
-
-    private fun nativeFailure(operation: String, target: String, errno: Int): IOException =
-        IOException("$operation failed for secure evidence retention at '$target' (errno=$errno)")
-
-    private fun requireSafeComponent(value: String) {
-        require(value.isNotBlank() && value != "." && value != ".." && !value.contains('/') && !value.contains('\\')) {
-            "unsafe secure directory component"
-        }
-    }
-
-    private data class PosixIntResult(val value: Int, val errno: Int)
-    private data class PosixLongResult(val value: Long, val errno: Int)
-
-    private class NativeEvidenceDirectory(
-        private val bindings: PosixEvidenceBindings,
-        private var descriptor: Int,
-    ) : SecureEvidenceDirectory {
-        override fun openDirectory(name: String): SecureEvidenceDirectory? = bindings.openDirectoryAt(openDescriptor(), name)
-
-        override fun createDirectory(name: String): SecureEvidenceDirectory = bindings.createDirectoryAt(openDescriptor(), name)
-
-        override fun openNewFile(name: String): WritableByteChannel = bindings.openNewFileAt(openDescriptor(), name)
-
-        fun removeFileIfPresent(name: String) = bindings.removeFileIfPresent(openDescriptor(), name)
-
-        fun removeDirectoryIfPresent(name: String) = bindings.removeDirectoryIfPresent(openDescriptor(), name)
-
-        override fun close() {
-            val ownedDescriptor = descriptor
-            if (ownedDescriptor < 0) return
-            descriptor = CLOSED_DESCRIPTOR
-            bindings.close(ownedDescriptor)
-        }
-
-        private fun openDescriptor(): Int {
-            check(descriptor >= 0) { "secure evidence directory is closed" }
-            return descriptor
-        }
-    }
-
-    private class NativeEvidenceWritableByteChannel(
-        private val bindings: PosixEvidenceBindings,
-        private var descriptor: Int,
-    ) : WritableByteChannel {
-        override fun isOpen(): Boolean = descriptor >= 0
-
-        override fun write(source: ByteBuffer): Int = bindings.write(openDescriptor(), source)
-
-        override fun close() {
-            val ownedDescriptor = descriptor
-            if (ownedDescriptor < 0) return
-            descriptor = CLOSED_DESCRIPTOR
-            bindings.close(ownedDescriptor)
-        }
-
-        private fun openDescriptor(): Int {
-            check(descriptor >= 0) { "secure evidence file channel is closed" }
-            return descriptor
-        }
-    }
-
-    companion object {
-        fun load(): PosixEvidenceBindings {
-            val flags = PosixEvidenceFlags.forCurrentOperatingSystem()
-            try {
-                val linker = Linker.nativeLinker()
-                val lookup = linker.defaultLookup()
-                fun symbol(name: String): MemorySegment = lookup.find(name).orElseThrow {
-                    SecureEvidenceFilesystemUnavailableException("libc symbol '$name' is unavailable for secure evidence retention")
-                }
-                return PosixEvidenceBindings(
-                    flags = flags,
-                    openHandle = linker.downcallHandle(
-                        symbol("open"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                    openAtHandle = linker.downcallHandle(
-                        symbol("openat"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
-                        Linker.Option.firstVariadicArg(3),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                    mkdirAtHandle = linker.downcallHandle(
-                        symbol("mkdirat"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                    closeHandle = linker.downcallHandle(
-                        symbol("close"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                    writeHandle = linker.downcallHandle(
-                        symbol("write"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                    unlinkAtHandle = linker.downcallHandle(
-                        symbol("unlinkat"),
-                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
-                        Linker.Option.captureCallState("errno"),
-                    ),
-                )
-            } catch (failure: SecureEvidenceFilesystemUnavailableException) {
-                throw failure
-            } catch (failure: Throwable) {
-                throw SecureEvidenceFilesystemUnavailableException(
-                    "native access or required POSIX secure filesystem symbols are unavailable",
-                    failure,
-                )
-            }
-        }
-
-        private const val DIRECTORY_MODE = 448 // 0700
-        private const val FILE_MODE = 384 // 0600
-        private const val ERRNO_NO_ENTRY = 2
-        private const val ERRNO_ALREADY_EXISTS = 17
-        private const val CLOSED_DESCRIPTOR = -1
-        private const val PROBE_FILE_NAME = "probe.bin"
-        private val PROBE_BYTES = byteArrayOf(0x4b, 0x47, 0x50, 0x55)
-    }
-}
-
-private data class PosixEvidenceFlags(
-    val directoryOpen: Int,
-    val newFileOpen: Int,
-    val removeDirectory: Int,
-) {
-    companion object {
-        fun forCurrentOperatingSystem(): PosixEvidenceFlags {
-            val operatingSystem = System.getProperty("os.name").lowercase()
-            return when {
-                operatingSystem.contains("mac") || operatingSystem.contains("darwin") -> macOs()
-                operatingSystem.contains("linux") -> linux()
-                else -> throw SecureEvidenceFilesystemUnavailableException(
-                    "native POSIX secure evidence retention supports only macOS and Linux (found '${System.getProperty("os.name")}')",
-                )
-            }
-        }
-
-        private fun macOs(): PosixEvidenceFlags {
-            val noFollow = 0x00000100
-            val create = 0x00000200
-            val exclusive = 0x00000800
-            val directory = 0x00100000
-            val closeOnExec = 0x01000000
-            return PosixEvidenceFlags(
-                directoryOpen = directory or noFollow or closeOnExec,
-                newFileOpen = 0x0001 or create or exclusive or noFollow or closeOnExec,
-                removeDirectory = 0x0080,
-            )
-        }
-
-        private fun linux(): PosixEvidenceFlags {
-            val noFollow = 0x00020000
-            val create = 0x00000040
-            val exclusive = 0x00000080
-            val directory = 0x00010000
-            val closeOnExec = 0x00080000
-            return PosixEvidenceFlags(
-                directoryOpen = directory or noFollow or closeOnExec,
-                newFileOpen = 0x0001 or create or exclusive or noFollow or closeOnExec,
-                removeDirectory = 0x0200,
-            )
-        }
-    }
-}
-
-private fun writeFully(channel: WritableByteChannel, bytes: ByteArray) {
-    val buffer = ByteBuffer.wrap(bytes)
-    while (buffer.hasRemaining()) {
-        require(channel.write(buffer) > 0) { "secure file channel made no progress" }
-    }
+    Files.deleteIfExists(path)
 }
