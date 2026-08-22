@@ -8,7 +8,7 @@ M0,M1 - Rect - `ShouldRender`
 Intention: Verifier une pile de cartes solides avec ordre de dessin stable.
 Valide: Valide Clear, FillRect, alpha borne et paintOrder deterministe.
 Ne revendique pas: Ne revendique pas les rrect, paths, gradients ou textures.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Activation Candidate Boundary Board (`activation-candidate-boundary-board`)
 M0,M1 - Rect, Cache, LegacyComparison - `ShouldRender`
@@ -24,7 +24,7 @@ M1 - Rect, LegacyComparison - `ShouldRender`
 Intention: Montrer le premier routage FillRect avec voie de rollback explicite.
 Valide: Valide les lanes legacy, route candidate, rollback et refus de variante.
 Ne revendique pas: Ne revendique pas une activation par defaut ni une migration globale.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Product Route Smoke Lanes (`product-route-smoke-lanes`)
 M0,M1 - Rect, LegacyComparison - `ShouldRender`
@@ -32,7 +32,7 @@ M0,M1 - Rect, LegacyComparison - `ShouldRender`
 Intention: Verifier une lecture smoke des routes produit, legacy et rollback sans activation finale.
 Valide: Valide des lanes rectangulaires lisibles pour transition M0/M1 et refus visibles.
 Ne revendique pas: Ne revendique pas activation produit par defaut ni decision release.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Rounded Panel Gradient (`rounded-panel-gradient`)
 M2 - RRect, Gradient, Clip - `ShouldRender`
@@ -40,7 +40,7 @@ M2 - RRect, Gradient, Clip - `ShouldRender`
 Intention: Verifier un panneau arrondi avec clip simple et degrade lineaire.
 Valide: Valide FillRRect, Clip et LinearGradientRect dans une scene compacte.
 Ne revendique pas: Ne revendique pas les rayons par coin, tile modes ou transforms complexes.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### RRect Gradient Route Board (`rrect-gradient-route-board`)
 M2 - Rect, RRect, Gradient, Clip - `ShouldRender`
@@ -56,7 +56,7 @@ M2 - Rect, RRect, Gradient, Clip - `ShouldRender`
 Intention: Representer une progression de gate release dans un panneau clippe.
 Valide: Valide rrect, scissor simple, degrade de progression et marqueur ordonne.
 Ne revendique pas: Ne revendique pas une gate release bloquante ni une mesure de performance.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Gradient Tile Mode Boundary (`gradient-tile-mode-boundary`)
 M2 - Rect, Gradient, Clip - `ShouldRender`
@@ -72,7 +72,7 @@ M3 - RRect, Rect - `ShouldRender`
 Intention: Garder une scene simple pour badge et proxy de stroke.
 Valide: Valide un FillRRect et un FillRect utilise comme proxy visuel de stroke.
 Ne revendique pas: Ne revendique pas la couverture path native ni les joins/caps.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Path Coverage Review Board (`path-coverage-review-board`)
 M3 - Rect, RRect, Clip, Path, Stroke - `ShouldRender`
@@ -104,7 +104,7 @@ M3,M5 - Clip, Image - `ShouldRender`
 Intention: Verifier un contenu image fixture-backed dans une zone clippee.
 Valide: Valide Clip et BitmapRect avec sampling lineaire dans une grille d'avatars.
 Ne revendique pas: Ne revendique pas un vrai decode image, texture arbitraire ou clip rrect complet.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Texture Swatch Board (`texture-swatch-board`)
 M4 - Image - `ShouldRender`
@@ -112,7 +112,7 @@ M4 - Image - `ShouldRender`
 Intention: Comparer deux swatches bitmap deja decodees.
 Valide: Valide BitmapRect nearest et linear avec fixtures de couleur.
 Ne revendique pas: Ne revendique pas codec, mipmap, tile mode ou color management.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Asset Intake Thumbnail Grid (`asset-intake-thumbnail-grid`)
 M4 - Image, Clip, RRect - `ShouldRender`
@@ -120,7 +120,7 @@ M4 - Image, Clip, RRect - `ShouldRender`
 Intention: Verifier des thumbnails d'asset deja decodees dans un tray.
 Valide: Valide Clear, FillRRect, Clip et deux BitmapRect upload-ready.
 Ne revendique pas: Ne revendique pas l'upload texture arbitraire ni la provenance codec complete.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Photo Contact Sheet (`photo-contact-sheet`)
 M4 - Image, Clip, RRect - `ShouldRender`
@@ -128,7 +128,7 @@ M4 - Image, Clip, RRect - `ShouldRender`
 Intention: Verifier un contact sheet de quatre photos deja decodees.
 Valide: Valide un tray rrect clippe et quatre BitmapRect fixture-backed.
 Ne revendique pas: Ne revendique pas codec reel, upload texture arbitraire ou color management.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Codec Provenance Gate Board (`codec-provenance-gate-board`)
 M4 - Rect, RRect, Clip, Image - `ShouldRender`
@@ -152,7 +152,7 @@ M4 - Image, Clip, RRect - `ShouldRender`
 Intention: Comparer une matrice compacte de fixtures bitmap avec deux politiques de sampling.
 Valide: Valide un tray rrect clippe et plusieurs BitmapRect nearest ou linear bien bornes.
 Ne revendique pas: Ne revendique pas mipmap, tile mode, anisotropic ni decode color-managed.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### SaveLayer Isolation Gate Board (`savelayer-isolation-gate-board`)
 M5 - Rect, RRect, Clip, Layer - `ShouldRender`
@@ -184,7 +184,7 @@ M5 - Layer, Filter - `ShouldRender`
 Intention: Verifier une carte shadow bornee materialisee par fixture.
 Valide: Valide SaveLayer fixture-backed et FilterNode drop-shadow borne.
 Ne revendique pas: Ne revendique pas saveLayer general ni image-filter DAG arbitraire.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Notification Shadow Stack (`notification-shadow-stack`)
 M5 - Layer, Filter - `ShouldRender`
@@ -192,7 +192,7 @@ M5 - Layer, Filter - `ShouldRender`
 Intention: Verifier deux notifications shadow bornees empilees.
 Valide: Valide deux SaveLayer fixture-backed et deux FilterNode drop-shadow.
 Ne revendique pas: Ne revendique pas saveLayer general, blur arbitraire ou filtre DAG complet.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Filtered Photo Chip (`filtered-photo-chip`)
 M5 - Filter, Image - `ShouldRender`
@@ -200,7 +200,7 @@ M5 - Filter, Image - `ShouldRender`
 Intention: Verifier un chip photo avec filtre luma-tint borne.
 Valide: Valide BitmapRect fixture-backed et FilterNode luma-tint.
 Ne revendique pas: Ne revendique pas image-filter DAG ni color filter general.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Tinted Avatar Card (`tinted-avatar-card`)
 M5 - Image, Clip, RRect, Filter - `ShouldRender`
@@ -208,7 +208,7 @@ M5 - Image, Clip, RRect, Filter - `ShouldRender`
 Intention: Verifier une carte avatar clippee avec teinte luma.
 Valide: Valide Clear, FillRRect, Clip, BitmapRect et FilterNode luma-tint.
 Ne revendique pas: Ne revendique pas DAG filtre general ni sampling image avance.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Filter DAG Refusal Board (`filter-dag-refusal-board`)
 M5 - Rect, Filter - `ShouldRender`
@@ -264,7 +264,7 @@ M7 - RuntimeEffect - `ShouldRender`
 Intention: Verifier une tuile RuntimeEffect SimpleRT enregistree.
 Valide: Valide RuntimeEffectTile registered simple_rt avec uniform gColor.
 Ne revendique pas: Ne revendique pas SkSL dynamique ni runtime effects arbitraires.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Runtime Effect Descriptor Gate Board (`runtime-effect-descriptor-gate-board`)
 M7 - Rect, RRect, Clip, RuntimeEffect - `ShouldRender`
@@ -288,7 +288,7 @@ M7 - RuntimeEffect, RRect, Clip - `ShouldRender`
 Intention: Verifier plusieurs tuiles RuntimeEffect SimpleRT avec une echelle de uniforms visible.
 Valide: Valide le descriptor SimpleRT, le layout gColor et la stabilite des tuiles runtime fixture-backed.
 Ne revendique pas: Ne revendique pas SkSL dynamique, SpiralRT ou runtime effects enfants.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Custom Runtime Effect Valid Tile (`custom-runtime-effect-valid-tile`)
 M32 - RuntimeEffect, Rect - `ShouldRender`
@@ -312,7 +312,7 @@ M7 - Rect - `ShouldRender`
 Intention: Garder une scene minimale pour une lane blend simple.
 Valide: Valide un FillRect borne dans la famille blend/color actuelle.
 Ne revendique pas: Ne revendique pas modes blend avances ni destination-read.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Translucent Card Overlap (`translucent-card-overlap`)
 M7 - Rect, Blend - `ShouldRender`
@@ -320,7 +320,7 @@ M7 - Rect, Blend - `ShouldRender`
 Intention: Verifier trois cartes alpha SrcOver bornees.
 Valide: Valide FillRect avec alpha partiel et ordre de peinture stable.
 Ne revendique pas: Ne revendique pas blend modes arbitraires ni color space large.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### SDR Color Boundary Board (`sdr-color-boundary-board`)
 M7 - Rect, RRect, Clip - `ShouldRender`
@@ -336,7 +336,7 @@ M8 - Vertices - `ShouldRender`
 Intention: Verifier un ruban mesh fixture-backed borne.
 Valide: Valide MeshRibbon bounded-ribbon-strip dans le runner actuel.
 Ne revendique pas: Ne revendique pas DrawVertices general ni vertex/index buffer arbitraire.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Vertices Route Gate Board (`vertices-route-gate-board`)
 M8 - Rect, RRect, Clip, Vertices - `ShouldRender`
@@ -352,7 +352,7 @@ M8 - Vertices, RRect, Clip - `ShouldRender`
 Intention: Verifier plusieurs rubans mesh bornes avec overlaps lisibles dans un cadre simple.
 Valide: Valide un stack de MeshRibbon fixture-backed avec ordre visuel stable et clipping borne.
 Ne revendique pas: Ne revendique pas DrawVertices general ni upload libre de vertex/index buffers.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Cache Pressure Deck (`cache-pressure-deck`)
 M9 - Rect - `ShouldRender`
@@ -360,7 +360,7 @@ M9 - Rect - `ShouldRender`
 Intention: Representer une pression cache minimale et stable.
 Valide: Valide deux rectangles comme deck de pression cache fixture.
 Ne revendique pas: Ne revendique pas telemetry cache runtime observee.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Cache Frame Budget Strip (`cache-frame-budget-strip`)
 M9 - Rect, Cache - `ShouldRender`
@@ -400,7 +400,7 @@ M10 - Rect - `ShouldRender`
 Intention: Garder une comparaison legacy minimale.
 Valide: Valide un proxy rectangulaire pour route legacy courante.
 Ne revendique pas: Ne revendique pas comparaison pixel complete ni retrait legacy.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Legacy Inventory Hygiene Board (`legacy-inventory-hygiene-board`)
 M10 - Rect, RRect, Clip, LegacyComparison - `ShouldRender`
@@ -432,7 +432,7 @@ M10 - LegacyComparison, Rect, RRect - `ShouldRender`
 Intention: Verifier une vue de parite legacy lisible avant toute decision de retirement.
 Valide: Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.
 Ne revendique pas: Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Rounded Rect Solids (`rounded-rect-solids`)
 M10 - RRect - `ShouldRender`
@@ -440,7 +440,7 @@ M10 - RRect - `ShouldRender`
 Intention: Verifier trois rrects solides avec rayons varies.
 Valide: Valide FillRRect avec rayons petits, moyens et grands.
 Ne revendique pas: Ne revendique pas rayons par coin, gradients ou transforms avances.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Linear Gradient Lanes (`linear-gradient-lanes`)
 M10 - Rect, Gradient - `ShouldRender`
@@ -448,7 +448,7 @@ M10 - Rect, Gradient - `ShouldRender`
 Intention: Verifier trois degradees lineaires bornes avec clamp.
 Valide: Valide LinearGradientRect horizontal, vertical et diagonal.
 Ne revendique pas: Ne revendique pas repeat, mirror, decal, local matrix ou plus de deux arrets.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Scissor Overlay (`scissor-overlay`)
 M10 - Rect, Clip - `ShouldRender`
@@ -456,7 +456,7 @@ M10 - Rect, Clip - `ShouldRender`
 Intention: Verifier un scissor simple avec rectangles bornes.
 Valide: Valide Clip device-rect et FillRect ordonnes.
 Ne revendique pas: Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Radial Swatch (`radial-swatch`)
 M14 - Rect, Gradient - `ShouldRender`
@@ -464,7 +464,7 @@ M14 - Rect, Gradient - `ShouldRender`
 Intention: Verifier trois degradees radiales avec centres et rayons varies.
 Valide: Valide RadialGradientRect avec centres decales et rayons differs.
 Ne revendique pas: Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Sweep Disk (`sweep-disk`)
 M14 - Rect, Gradient - `ShouldRender`
@@ -472,7 +472,7 @@ M14 - Rect, Gradient - `ShouldRender`
 Intention: Verifier trois degradees angulaires avec angles de depart/fin varies.
 Valide: Valide SweepGradientRect avec sweeps 360, 180 et 90 degres.
 Ne revendique pas: Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Path Fill Stencil (`path-fill-stencil`)
 M15 - Path - `ShouldRender`
@@ -576,7 +576,7 @@ M21 - RuntimeEffect - `ShouldRender`
 Intention: Verifier quatre tuiles SimpleRT avec uniforms gColor differents.
 Valide: Valide RuntimeEffectTile SimpleRT avec variation d uniforms et route registered descriptor.
 Ne revendique pas: Ne revendique pas compilation SkSL dynamique, SpiralRT ou runtime effects enfants.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Runtime Effect Child (`runtime-effect-child`)
 M21 - RuntimeEffect - `ShouldRender`
@@ -584,7 +584,7 @@ M21 - RuntimeEffect - `ShouldRender`
 Intention: Verifier une tuile SimpleRT avec reference a un shader enfant.
 Valide: Valide RuntimeEffectTile avec label child-effect-tile et descriptor registered simple_rt.
 Ne revendique pas: Ne revendique pas enfant runtime effect actif ni pipeline child compose.
-Preuve: Preuve WebGPU offscreen et Kadre windowed.
+Preuve: Preuve WebGPU offscreen.
 
 ### Stroke Cap Join (`stroke-cap-join`)
 M16 - Stroke - `ShouldRender`
@@ -697,6 +697,14 @@ Intention: Verifier une etoile degradee avec texte superpose via atlas A8.
 Valide: Valide PathFillGradient et TextRun actif en composition.
 Ne revendique pas: Ne revendique pas stencil-cover GPU natif ni activation produit.
 Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
+
+### COLRv0 Color Glyph (`colr-v0-color-glyph`)
+M34 - Text - `ShouldRender`
+
+Intention: Verifier le vrai glyphe 2 du fichier Skia colr.ttf et ses deux couches CPAL rouge/noire.
+Valide: Valide ColorTextRun avec rasterisation A8, atlas partage et frame preparee WebGPU.
+Ne revendique pas: Ne revendique pas COLRv1, emoji, arabic shaping ou bezier curve glyphs.
+Preuve: Preuve WebGPU offscreen avec reference CPU independante et sortie PNG pour la scene.
 
 ## Candidates amont
 

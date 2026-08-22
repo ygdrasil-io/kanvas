@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 87,
+  "sceneCount": 88,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -16,7 +16,7 @@
           "intention": "Verifier une pile de cartes solides avec ordre de dessin stable.",
           "validates": "Valide Clear, FillRect, alpha borne et paintOrder deterministe.",
           "nonClaims": "Ne revendique pas les rrect, paths, gradients ou textures.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -52,7 +52,7 @@
           "intention": "Montrer le premier routage FillRect avec voie de rollback explicite.",
           "validates": "Valide les lanes legacy, route candidate, rollback et refus de variante.",
           "nonClaims": "Ne revendique pas une activation par defaut ni une migration globale.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -70,7 +70,7 @@
           "intention": "Verifier une lecture smoke des routes produit, legacy et rollback sans activation finale.",
           "validates": "Valide des lanes rectangulaires lisibles pour transition M0/M1 et refus visibles.",
           "nonClaims": "Ne revendique pas activation produit par defaut ni decision release.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -88,7 +88,7 @@
           "intention": "Verifier un panneau arrondi avec clip simple et degrade lineaire.",
           "validates": "Valide FillRRect, Clip et LinearGradientRect dans une scene compacte.",
           "nonClaims": "Ne revendique pas les rayons par coin, tile modes ou transforms complexes.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -124,7 +124,7 @@
           "intention": "Representer une progression de gate release dans un panneau clippe.",
           "validates": "Valide rrect, scissor simple, degrade de progression et marqueur ordonne.",
           "nonClaims": "Ne revendique pas une gate release bloquante ni une mesure de performance.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -160,7 +160,7 @@
           "intention": "Garder une scene simple pour badge et proxy de stroke.",
           "validates": "Valide un FillRRect et un FillRect utilise comme proxy visuel de stroke.",
           "nonClaims": "Ne revendique pas la couverture path native ni les joins/caps.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -232,7 +232,7 @@
           "intention": "Verifier un contenu image fixture-backed dans une zone clippee.",
           "validates": "Valide Clip et BitmapRect avec sampling lineaire dans une grille d'avatars.",
           "nonClaims": "Ne revendique pas un vrai decode image, texture arbitraire ou clip rrect complet.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -250,7 +250,7 @@
           "intention": "Comparer deux swatches bitmap deja decodees.",
           "validates": "Valide BitmapRect nearest et linear avec fixtures de couleur.",
           "nonClaims": "Ne revendique pas codec, mipmap, tile mode ou color management.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -268,7 +268,7 @@
           "intention": "Verifier des thumbnails d'asset deja decodees dans un tray.",
           "validates": "Valide Clear, FillRRect, Clip et deux BitmapRect upload-ready.",
           "nonClaims": "Ne revendique pas l'upload texture arbitraire ni la provenance codec complete.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -286,7 +286,7 @@
           "intention": "Verifier un contact sheet de quatre photos deja decodees.",
           "validates": "Valide un tray rrect clippe et quatre BitmapRect fixture-backed.",
           "nonClaims": "Ne revendique pas codec reel, upload texture arbitraire ou color management.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -340,7 +340,7 @@
           "intention": "Comparer une matrice compacte de fixtures bitmap avec deux politiques de sampling.",
           "validates": "Valide un tray rrect clippe et plusieurs BitmapRect nearest ou linear bien bornes.",
           "nonClaims": "Ne revendique pas mipmap, tile mode, anisotropic ni decode color-managed.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -412,7 +412,7 @@
           "intention": "Verifier une carte shadow bornee materialisee par fixture.",
           "validates": "Valide SaveLayer fixture-backed et FilterNode drop-shadow borne.",
           "nonClaims": "Ne revendique pas saveLayer general ni image-filter DAG arbitraire.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -430,7 +430,7 @@
           "intention": "Verifier deux notifications shadow bornees empilees.",
           "validates": "Valide deux SaveLayer fixture-backed et deux FilterNode drop-shadow.",
           "nonClaims": "Ne revendique pas saveLayer general, blur arbitraire ou filtre DAG complet.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -448,7 +448,7 @@
           "intention": "Verifier un chip photo avec filtre luma-tint borne.",
           "validates": "Valide BitmapRect fixture-backed et FilterNode luma-tint.",
           "nonClaims": "Ne revendique pas image-filter DAG ni color filter general.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -466,7 +466,7 @@
           "intention": "Verifier une carte avatar clippee avec teinte luma.",
           "validates": "Valide Clear, FillRRect, Clip, BitmapRect et FilterNode luma-tint.",
           "nonClaims": "Ne revendique pas DAG filtre general ni sampling image avance.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -592,7 +592,7 @@
           "intention": "Verifier une tuile RuntimeEffect SimpleRT enregistree.",
           "validates": "Valide RuntimeEffectTile registered simple_rt avec uniform gColor.",
           "nonClaims": "Ne revendique pas SkSL dynamique ni runtime effects arbitraires.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -646,7 +646,7 @@
           "intention": "Verifier plusieurs tuiles RuntimeEffect SimpleRT avec une echelle de uniforms visible.",
           "validates": "Valide le descriptor SimpleRT, le layout gColor et la stabilite des tuiles runtime fixture-backed.",
           "nonClaims": "Ne revendique pas SkSL dynamique, SpiralRT ou runtime effects enfants.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -700,7 +700,7 @@
           "intention": "Garder une scene minimale pour une lane blend simple.",
           "validates": "Valide un FillRect borne dans la famille blend/color actuelle.",
           "nonClaims": "Ne revendique pas modes blend avances ni destination-read.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -718,7 +718,7 @@
           "intention": "Verifier trois cartes alpha SrcOver bornees.",
           "validates": "Valide FillRect avec alpha partiel et ordre de peinture stable.",
           "nonClaims": "Ne revendique pas blend modes arbitraires ni color space large.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -754,7 +754,7 @@
           "intention": "Verifier un ruban mesh fixture-backed borne.",
           "validates": "Valide MeshRibbon bounded-ribbon-strip dans le runner actuel.",
           "nonClaims": "Ne revendique pas DrawVertices general ni vertex/index buffer arbitraire.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -790,7 +790,7 @@
           "intention": "Verifier plusieurs rubans mesh bornes avec overlaps lisibles dans un cadre simple.",
           "validates": "Valide un stack de MeshRibbon fixture-backed avec ordre visuel stable et clipping borne.",
           "nonClaims": "Ne revendique pas DrawVertices general ni upload libre de vertex/index buffers.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -808,7 +808,7 @@
           "intention": "Representer une pression cache minimale et stable.",
           "validates": "Valide deux rectangles comme deck de pression cache fixture.",
           "nonClaims": "Ne revendique pas telemetry cache runtime observee.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -898,7 +898,7 @@
           "intention": "Garder une comparaison legacy minimale.",
           "validates": "Valide un proxy rectangulaire pour route legacy courante.",
           "nonClaims": "Ne revendique pas comparaison pixel complete ni retrait legacy.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -970,7 +970,7 @@
           "intention": "Verifier une vue de parite legacy lisible avant toute decision de retirement.",
           "validates": "Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.",
           "nonClaims": "Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -988,7 +988,7 @@
           "intention": "Verifier trois rrects solides avec rayons varies.",
           "validates": "Valide FillRRect avec rayons petits, moyens et grands.",
           "nonClaims": "Ne revendique pas rayons par coin, gradients ou transforms avances.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1006,7 +1006,7 @@
           "intention": "Verifier trois degradees lineaires bornes avec clamp.",
           "validates": "Valide LinearGradientRect horizontal, vertical et diagonal.",
           "nonClaims": "Ne revendique pas repeat, mirror, decal, local matrix ou plus de deux arrets.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1024,7 +1024,7 @@
           "intention": "Verifier un scissor simple avec rectangles bornes.",
           "validates": "Valide Clip device-rect et FillRect ordonnes.",
           "nonClaims": "Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1042,7 +1042,7 @@
           "intention": "Verifier trois degradees radiales avec centres et rayons varies.",
           "validates": "Valide RadialGradientRect avec centres decales et rayons differs.",
           "nonClaims": "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1060,7 +1060,7 @@
           "intention": "Verifier trois degradees angulaires avec angles de depart/fin varies.",
           "validates": "Valide SweepGradientRect avec sweeps 360, 180 et 90 degres.",
           "nonClaims": "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1294,7 +1294,7 @@
           "intention": "Verifier quatre tuiles SimpleRT avec uniforms gColor differents.",
           "validates": "Valide RuntimeEffectTile SimpleRT avec variation d uniforms et route registered descriptor.",
           "nonClaims": "Ne revendique pas compilation SkSL dynamique, SpiralRT ou runtime effects enfants.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1312,7 +1312,7 @@
           "intention": "Verifier une tuile SimpleRT avec reference a un shader enfant.",
           "validates": "Valide RuntimeEffectTile avec label child-effect-tile et descriptor registered simple_rt.",
           "nonClaims": "Ne revendique pas enfant runtime effect actif ni pipeline child compose.",
-          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+          "evidence": "Preuve WebGPU offscreen."
         }
       }
     },
@@ -1565,6 +1565,24 @@
           "validates": "Valide PathFillGradient et TextRun actif en composition.",
           "nonClaims": "Ne revendique pas stencil-cover GPU natif ni activation produit.",
           "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
+        }
+      }
+    },
+    {
+      "sceneId": "colr-v0-color-glyph",
+      "title": "COLRv0 Color Glyph",
+      "description": "Real Skia colr.ttf glyph 2 rendered from its CPAL red and black layers through the prepared WebGPU frame route.",
+      "tags": ["Text"],
+      "kgpuMilestones": ["M34"],
+      "ticketIds": ["KGPU-M34-002"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier le vrai glyphe 2 du fichier Skia colr.ttf et ses deux couches CPAL rouge/noire.",
+          "validates": "Valide ColorTextRun avec rasterisation A8, atlas partage et frame preparee WebGPU.",
+          "nonClaims": "Ne revendique pas COLRv1, emoji, arabic shaping ou bezier curve glyphs.",
+          "evidence": "Preuve WebGPU offscreen avec reference CPU independante et sortie PNG pour la scene."
         }
       }
     }

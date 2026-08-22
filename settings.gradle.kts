@@ -86,26 +86,6 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-// Kadre is not assumed to be available from Maven Central during Kanvas integration.
-// Keep it as an independent source build so Kanvas modules can depend on
-// org.graphiks.kadre:* coordinates without vendoring Kadre modules into this build.
-val kadreSourceBuildHasPublishedModules =
-    file("external/poc-koreos/settings.gradle.kts").takeIf { it.isFile }
-        ?.readText()
-        ?.contains("include(\":kadre\")")
-        ?: false
-
-includeBuild("external/poc-koreos") {
-    if (kadreSourceBuildHasPublishedModules) {
-        dependencySubstitution {
-            substitute(module("org.graphiks.kadre:kadre")).using(project(":kadre"))
-            substitute(module("org.graphiks.kadre:kadre-win32")).using(project(":kadre-win32"))
-            substitute(module("org.graphiks.kadre:kadre-x11")).using(project(":kadre-x11"))
-            substitute(module("org.graphiks.kadre:kadre-wayland")).using(project(":kadre-wayland"))
-        }
-    }
-}
-
 include(":math:scalar")
 include(":math:vector")
 include(":math:matrix")

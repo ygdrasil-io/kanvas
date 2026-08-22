@@ -89,3 +89,4 @@
 | `path-star-gradient` | Path Star Gradient | Path,Gradient | KGPU M26 |  |  | `ShouldRender` |
 | `text-a8-hello` | Text A8 Hello | Text | KGPU M26 |  |  | `ShouldRender` |
 | `gradient-path-and-text` | Gradient Path And Text | Path,Gradient,Text | KGPU M26 |  |  | `ShouldRender` |
+| `colr-v0-color-glyph` | COLRv0 Color Glyph | Text | KGPU M34 | `KGPU-M34-002` |  | `ShouldRender` |

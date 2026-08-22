@@ -1,29 +1,5 @@
-import org.gradle.api.tasks.testing.Test
-
 plugins {
     id("buildsrc.convention.kotlin-jvm")
-}
-
-val kadreWindowLifecycleUnitTest = tasks.register<Test>("kadreWindowLifecycleUnitTest") {
-    group = "verification"
-    description = "Runs only the headless Kadre lifecycle, launcher, and prepared-recorder contracts."
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    filter.includeTestsMatching(
-        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowFrameLifecycleTest",
-    )
-    filter.includeTestsMatching(
-        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.RunGpuRendererSceneKadreMainTest",
-    )
-    filter.includeTestsMatching(
-        "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedSceneFrameRecorderTest",
-    )
-}
-
-val mainSourceSet = sourceSets.main.get()
-val kadreSourceSet = sourceSets.create("kadre") {
-    compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
-    runtimeClasspath += mainSourceSet.runtimeClasspath
 }
 
 dependencies {
@@ -33,11 +9,6 @@ dependencies {
     implementation(project(":kanvas"))
     implementation(libs.wgpu4kToolkit)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
-    "kadreImplementation"("org.graphiks.kadre:kadre:1.0.0")
-    "kadreImplementation"("org.graphiks.kadre:kadre-win32:1.0.0")
-    "kadreImplementation"("org.graphiks.kadre:kadre-x11:1.0.0")
-    "kadreImplementation"("org.graphiks.kadre:kadre-wayland:1.0.0")
 
     runtimeOnly(project(":codec:png"))
 
@@ -54,7 +25,7 @@ sourceSets {
 
 tasks.register<JavaExec>("gpuRendererScenesCatalogReport") {
     group = "verification"
-    description = "Writes the GPU renderer scenes catalog report without WebGPU or Kadre execution."
+    description = "Writes the GPU renderer scenes catalog report without WebGPU execution."
 
     val outputDir = rootProject.layout.projectDirectory.dir("reports/gpu-renderer-scenes/catalog")
 
@@ -179,36 +150,4 @@ tasks.register<JavaExec>("runPerFamilyBenchmark") {
             add("-XstartOnFirstThread")
         }
     })
-}
-
-tasks.register<JavaExec>("runGpuRendererSceneKadre") {
-    group = "verification"
-    description = "Opens one GPU renderer scene in the opt-in Kadre windowed runner."
-
-    val sceneId = providers.gradleProperty("sceneId").orElse("solid-card-stack")
-    val frames = providers.gradleProperty("frames").orElse("180")
-    val outputFile = providers.gradleProperty("sceneSessionOutput")
-        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
-        .orElse(rootProject.layout.projectDirectory.file("reports/gpu-renderer-scenes/windowed/session.json").asFile)
-
-    classpath = kadreSourceSet.runtimeClasspath
-    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.windowed.RunGpuRendererSceneKadreMainKt")
-    args(sceneId.get(), frames.get(), outputFile.get().absolutePath)
-    outputs.file(outputFile)
-    outputs.upToDateWhen { false }
-    jvmArgs(buildList {
-        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
-        add("--enable-native-access=ALL-UNNAMED")
-        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
-            add("-XstartOnFirstThread")
-        }
-    })
-}
-
-tasks.register("kadreFrameLifecycleCheck") {
-    group = "verification"
-    description = "Opt-in: compiles Kadre and runs prepared-window lifecycle checks; requires external/poc-koreos."
-    dependsOn(tasks.named("compileKadreKotlin"))
-    dependsOn(project(":gpu-renderer").tasks.named("gpuWindowFrameLifecycleTest"))
-    dependsOn(kadreWindowLifecycleUnitTest)
 }

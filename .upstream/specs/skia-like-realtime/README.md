@@ -8,8 +8,9 @@ history only if needed.
 This spec pack defines the next Kanvas ambition after the MEP evidence target:
 add missing rendering features, move closer to Skia CPU output, and build a
 measured real-time WebGPU lane. Most early milestones are breadth/fidelity
-work; real-time is exploratory until M67/M68 provide measured frame gates and
-a packaged Kadre demo.
+work; real-time is supported through headless/offscreen evidence. The former
+Kadre demo branch is retired, and its M68-M84 rows and artifacts remain
+historical traceability only.
 
 ## Scope
 
@@ -35,9 +36,9 @@ sprints:
   Kotlin/WGSL implementations.
 - Treat WGSL as the shader implementation target. SkSL wording may appear only
   for Skia API compatibility context; dynamic SkSL compilation is not in scope.
-- Use Kadre from `ygdrasil-io/poc-koreos` for live/native windowing. It is
-  incubating and unpublished, so M65/M68 work may include it as a git
-  submodule rather than waiting for publication.
+- Keep the supported runtime headless/offscreen. Native interactive windowing
+  is retired from the current Kanvas scope; historical native evidence must
+  remain labeled as historical and must not become a build dependency.
 - Treat `ygdrasil-io/wgsl4k` as an active dependency, not a finished black box.
   Ambiguous or surprising WGSL parser/IR/generator behavior must stop the
   Kanvas assumption and become a `wgsl4k` ticket.
@@ -67,6 +68,10 @@ sprints:
 | M87 Registered Runtime Effect Live Editing V2 | `01`, `02`, `05` | Selected SimpleRT live parameter editing, reflected WGSL layout, edited-state CPU/GPU/diff artifacts, and stable arbitrary Skia/SkSL runtime-input or missing-descriptor refusals become PM evidence without claiming broad runtime-effect compatibility or dynamic SkSL compilation. |
 | M88 Realtime Renderer Release Candidate 2 | `04`, `05`, `06` | API/demo surface, gate set, support/refusal matrix, PM script, and release notes are frozen into a reproducible RC2 package without claiming new broad support or readiness movement. |
 
+Native-runtime rows and artifacts in the milestone history are retained for
+traceability only. They are not active implementation requirements or build
+dependencies.
+
 ## Definition Of Done For Any Future Milestone
 
 - The milestone updates this spec pack if behavior or scope changes.
@@ -83,8 +88,8 @@ sprints:
 
 Use these as planning prompts, not blockers:
 
-- first native demo shell: Kadre desktop windowing from
-  `ygdrasil-io/poc-koreos`, consumed as a git submodule while unpublished;
+- future native demo host, if needed, requires a separate architecture decision
+  and must not be introduced as an implicit renderer dependency;
 - frame target for curated PM scenes: 60 FPS strict or 60 FPS target with
   30 FPS warning;
 - first text language/script scope;

@@ -25,24 +25,25 @@ New target readiness is 67.75%, rounded for PM to approximately 70%, after the M
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
-manual sprint estimates. M89 and M90 improve post-RC-MEP PM evidence and
-runtime operability; M91 and M92 assemble a release-candidate scene pack,
-Kadre runtime script, and telemetry provenance report. They do not move
-readiness because they do not add a new counted renderer denominator,
-release-blocking timing gate, broad observed cache counter, or broad Skia
-parity claim.
+manual sprint estimates. The native Kadre windowing route is retired; M68-M92
+native-runtime entries remain historical evidence and are no longer active
+capability claims. The supported runtime evidence is headless/offscreen.
 
 | Area | Weight | Current progress | PM interpretation |
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; M87 adds selected SimpleRT live editing, but broad runtime-effect families, layers, and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. M86 ranks and classifies the selected wave into a burn-down queue with root-cause buckets and remediation targets, but only 37/100 rows are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 90% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, M70-A adds a PM-visible Kadre demo task, M70-B/C confirm normalized native surface success plus a produced wgpu4k offscreen texture readback, M71 drives the selected route from Kadre/AppKit `ControlFlow.Poll`, M72 renders one selected `solid-rect` replay contract in Kadre, M73 adds a bounded typed replay-pack registry with selected scene-id routing, M74 extracts that replay model into closed typed commands, M75 emits deterministic multi-scene replay-pack evidence, M76 maps selected generated dashboard metadata into replay contracts with stable refusals, M77 makes bounded SrcOver partial-alpha replay explicit while refusing unsupported blend modes, M78 adds bounded ClipRect intersect replay evidence while preserving complex clip refusals, M79 adds bounded fixture-backed BitmapRect replay evidence while refusing unsupported bitmap samplers, M80 shares the replay CPU oracle result across native smoke, tests, and evidence, M81 packages native frame artifact capture evidence for PM review, M82 verifies deterministic Kadre input/resize runtime-loop semantics with telemetry, M83 proves one bounded Kanvas display-list scene through the native Kadre/WebGPU route with nonblank readback evidence, and M87 adds selected registered SimpleRT live parameter editing evidence with reflected uniforms. Real OS event injection, broad display-list replay, arbitrary op streams, arbitrary blend modes, broad clip-stack semantics, arbitrary texture/image support, dynamic multi-scene live switching, broad runtime-effect live controls, and window-surface screenshot/readback remain incomplete. |
-| Performance and cache readiness | 15% | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M84 packages `frame.kadre-windowed` warmup/measured native samples as candidate/reporting-only evidence. M85 adds a deterministic selected-scene resource/cache ledger with bounded key-space evidence and resize invalidation proof, but it is not observed WebGPU runtime cache telemetry and is not counted as a cache readiness gate. |
-| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, M73 replay-pack registry evidence, M74 replay-command foundation evidence, M75 multi-scene replay-pack evidence, M76 generated-metadata replay evidence, M77 blend/alpha replay evidence, M78 clip replay evidence, M79 bitmap replay evidence, M80 shared replay oracle evidence, M81 native frame capture evidence, M82 input/resize runtime-loop evidence, M83 bounded display-list native replay evidence, M84 native frame timing candidate evidence, M85 resource/cache evidence, M86 fidelity burn-down evidence, M87 runtime-effect live-editing evidence, M88 RC2 package evidence, M89/M90 MEP-NEXT evidence, and M91/M92 RC assembly evidence when generated. |
+| Real-time runtime | 20% | 90% | M65 provides a reporting-only headless/offscreen runtime smoke lane and M87 adds selected registered SimpleRT live parameter editing evidence with reflected uniforms. The retired native windowing route, real OS event injection, broad display-list replay, arbitrary op streams, arbitrary blend modes, broad clip-stack semantics, arbitrary texture/image support, dynamic multi-scene live switching, broad runtime-effect live controls, and window-surface screenshot/readback are not active capabilities. |
+| Performance and cache readiness | 15% | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. Native window timing is retired and is not a release or readiness gate. M85 evidence remains historical and is not observed WebGPU runtime cache telemetry or a cache readiness gate. |
+| PM/demo operability | 15% | 100% | The supported PM path bundles headless runtime smoke, GM/reference evidence, performance tiering, fidelity burn-down, runtime-effect evidence, RC2 packaging, and MEP-NEXT/RC assembly artifacts when generated. Native Kadre demo and windowed-runtime entries are historical only. |
 
 Weighted PM readiness for the new target: **67.75%**, reported to PM as **approximately 70%**.
 
 Active planning entry points:
+
+The M68-M92 native-runtime rows below are retained as historical evidence
+only. They are not active backlog or capability claims; the supported runtime
+path is headless/offscreen.
 
 - target: [.upstream/target/skia-like-realtime-renderer-target.md](.upstream/target/skia-like-realtime-renderer-target.md)
 - specs: [.upstream/specs/skia-like-realtime/README.md](.upstream/specs/skia-like-realtime/README.md)
@@ -55,7 +56,7 @@ Active planning entry points:
 | M62 | Text & Glyph Rendering V1 | Simple text renders through real font loading with outline/path glyph routes; glyph atlas, fallback-family selection, emoji, and complex shaping remain explicit non-claims. |
 | M63 | Color, Blend & ColorFilter Parity | Bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows render; wide-gamut color-space and advanced blend chains refuse with stable reasons. |
 | M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT without a WGSL descriptor and arbitrary Skia/SkSL runtime shader input refuse with stable reasons because SkSL is compatibility context, not the implementation target. |
-| M65 | Real-Time Scene Runtime | Headless/offscreen runtime smoke exposes 120-frame telemetry, nonblank frame artifacts, invalidation diagnostics, and explicit Kadre-host blocker. |
+| M65 | Real-Time Scene Runtime | Headless/offscreen runtime smoke exposes 120-frame telemetry, nonblank frame artifacts, and invalidation diagnostics; native interactive windowing is retired. |
 | M66 | Skia GM Promotion Wave | 19 cumulative GM/reference rows become generated support/refusal evidence, bringing selected fidelity evidence to 50/100 rows. |
 | M67 | Performance Tiering | `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine fixture are generated and bundled. |
 | M68 | Native Real-Time Demo | Kadre source-build bridge and flagship scene inputs are generated; native windowed launch is blocked until the Kanvas/Kadre host adapter lands. |

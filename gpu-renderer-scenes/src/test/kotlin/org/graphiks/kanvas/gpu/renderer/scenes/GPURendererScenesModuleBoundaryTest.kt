@@ -75,31 +75,31 @@ class GPURendererScenesModuleBoundaryTest {
     }
 
     @Test
-    fun `src main windowed launcher loads Kadre runner only by reflection`() {
-        val launcher = repoPath(
-            "gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/" +
-                "RunGpuRendererSceneKadreMain.kt",
-        ).readText()
+    fun `native Kadre route is absent from build and sources`() {
+        val settings = repoPath("settings.gradle.kts").readText()
+        val gitmodules = repoPath(".gitmodules").readText()
+        val build = repoPath("gpu-renderer-scenes/build.gradle.kts").readText()
 
+        assertFalse("poc-koreos" in settings)
+        assertFalse("org.graphiks.kadre" in settings)
+        assertFalse("poc-koreos" in gitmodules)
+        assertFalse("org.graphiks.kadre" in build)
+        assertFalse("kadreImplementation" in build)
+        assertFalse("compileKadreKotlin" in build)
+        assertFalse("runGpuRendererSceneKadre" in build)
         assertFalse(
-            launcher.lineSequence().any { it.trim().startsWith("import org.graphiks.kadre") },
-            "src/main windowed launcher must not import Kadre directly",
+            Files.exists(repoPath("gpu-renderer-scenes/src/kadre")),
+            "the Kadre source set must be removed",
         )
         assertFalse(
-            "KadreWindowedSceneRunner(" in launcher,
-            "src/main windowed launcher must not instantiate the Kadre runner directly",
-        )
-        assertFalse(
-            "KadreWindowedSceneRunner::class" in launcher,
-            "src/main windowed launcher must not reference the Kadre runner class directly",
-        )
-        assertTrue(launcher.contains("KADRE_RUNNER_CLASS"))
-        assertTrue(
-            launcher.contains(
-                "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowedSceneRunner",
+            Files.exists(
+                repoPath(
+                    "gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/" +
+                        "windowed/RunGpuRendererSceneKadreMain.kt",
+                ),
             ),
+            "the Kadre launcher must be removed",
         )
-        assertTrue(launcher.contains("Class.forName(KADRE_RUNNER_CLASS)"))
     }
 
     @Test
