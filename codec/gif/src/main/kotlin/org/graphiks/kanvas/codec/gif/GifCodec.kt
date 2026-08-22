@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.gif
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
@@ -31,7 +31,7 @@ public class GifCodec private constructor(
         val durationMs: Int,
         val requiredFrame: Int,
         val alphaType: SkAlphaType,
-        val frameRect: SkIRect,
+        val frameRect: RectI32,
         val nextRequiredFrame: Int,
     )
 
@@ -236,7 +236,7 @@ public class GifCodec private constructor(
             }
 
             val pixels = canvas.copyOf()
-            val frameRect = SkIRect.MakeXYWH(left, top, width, height)
+            val frameRect = RectI32.ofOriginSize(left, top, width, height)
 
             val nextRequiredFrame = when (frameGce.disposal) {
                 DISPOSAL_RESTORE_BACKGROUND -> {

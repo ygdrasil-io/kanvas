@@ -6,7 +6,7 @@ import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
-import org.graphiks.math.SkcmsMatrix3x3
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
@@ -24,7 +24,7 @@ class SkColorSpaceCompatTest {
         val callerMatrix = copyMatrix(SkNamedGamut.kSRGB)
         val colorSpace = assertNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, callerMatrix))
 
-        callerMatrix.vals[0][0] = -1f
+        callerMatrix.copy(sx = -1f)
 
         assertMatrixEquals(SkNamedGamut.kSRGB, colorSpace.toXYZD50)
         assertTrue(colorSpace.isSRGB())
@@ -38,7 +38,7 @@ class SkColorSpaceCompatTest {
         val callerMatrix = copyMatrix(expected)
         val colorSpace = assertNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, callerMatrix))
 
-        colorSpace.toXYZD50.vals[0][0] = -1f
+        colorSpace.toXYZD50.copy(sx = -1f)
 
         assertMatrixEquals(expected, colorSpace.toXYZD50)
         assertTrue(colorSpace.isSRGB())
@@ -51,19 +51,15 @@ class SkColorSpaceCompatTest {
         val expected = copyMatrix(SkNamedGamut.kSRGB)
         val exposed = SkColorSpace.makeSRGB().toXYZD50
 
-        try {
-            exposed.vals[0][0] = -1f
+        exposed.copy(sx = -1f)
 
-            assertMatrixEquals(expected, SkColorSpace.makeSRGB().toXYZD50)
-            assertMatrixEquals(expected, SkColorSpace.makeSRGBLinear().toXYZD50)
-            assertMatrixEquals(expected, SkNamedGamut.kSRGB)
-            assertTrue(SkColorSpace.makeSRGB().isSRGB())
-            assertFalse(SkColorSpace.makeSRGB().gammaIsLinear())
-            assertFalse(SkColorSpace.makeSRGBLinear().isSRGB())
-            assertTrue(SkColorSpace.makeSRGBLinear().gammaIsLinear())
-        } finally {
-            restoreMatrix(exposed, expected)
-        }
+        assertMatrixEquals(expected, SkColorSpace.makeSRGB().toXYZD50)
+        assertMatrixEquals(expected, SkColorSpace.makeSRGBLinear().toXYZD50)
+        assertMatrixEquals(expected, SkNamedGamut.kSRGB)
+        assertTrue(SkColorSpace.makeSRGB().isSRGB())
+        assertFalse(SkColorSpace.makeSRGB().gammaIsLinear())
+        assertFalse(SkColorSpace.makeSRGBLinear().isSRGB())
+        assertTrue(SkColorSpace.makeSRGBLinear().gammaIsLinear())
     }
 
     @Test
@@ -177,8 +173,8 @@ class SkColorSpaceCompatTest {
     }
 
     private fun assertMatrixNear(
-        expected: org.graphiks.math.SkcmsMatrix3x3,
-        actual: org.graphiks.math.SkcmsMatrix3x3,
+        expected: Matrix3x3F32,
+        actual: Matrix3x3F32,
     ) {
         for (row in 0 until 3) for (column in 0 until 3) {
             kotlin.test.assertEquals(expected[row, column], actual[row, column], 1f / 65_536f)
@@ -186,23 +182,18 @@ class SkColorSpaceCompatTest {
     }
 
     private fun assertMatrixEquals(
-        expected: SkcmsMatrix3x3,
-        actual: SkcmsMatrix3x3,
+        expected: Matrix3x3F32,
+        actual: Matrix3x3F32,
     ) {
         for (row in 0 until 3) for (column in 0 until 3) {
             kotlin.test.assertEquals(expected[row, column], actual[row, column])
         }
     }
 
-    private fun copyMatrix(matrix: SkcmsMatrix3x3): SkcmsMatrix3x3 = SkcmsMatrix3x3.of(
+    private fun copyMatrix(matrix: Matrix3x3F32): Matrix3x3F32 = Matrix3x3F32.of(
         matrix[0, 0], matrix[0, 1], matrix[0, 2],
         matrix[1, 0], matrix[1, 1], matrix[1, 2],
         matrix[2, 0], matrix[2, 1], matrix[2, 2],
     )
 
-    private fun restoreMatrix(target: SkcmsMatrix3x3, source: SkcmsMatrix3x3) {
-        for (row in 0 until 3) for (column in 0 until 3) {
-            target.vals[row][column] = source[row, column]
-        }
-    }
 }

@@ -8,8 +8,8 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkRect
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectI32
 import org.skia.utils.PixmapUtils
 
 /**
@@ -59,7 +59,7 @@ public class AnimatedImage private constructor(
      * `getInfo()` size with the EXIF rotation applied.
      */
     private val decodeInfo: SkImageInfo,
-    private val cropRect: SkIRect,
+    private val cropRect: RectI32,
     private val postProcess: SkPicture?,
 ) {
 
@@ -184,7 +184,7 @@ public class AnimatedImage private constructor(
      */
     public fun makePictureSnapshot(): SkPicture {
         val recorder = SkPictureRecorder()
-        val bounds = SkRect.MakeWH(
+        val bounds = RectF32.ofSize(
             cropRect.width().toFloat(),
             cropRect.height().toFloat(),
         )
@@ -278,7 +278,7 @@ public class AnimatedImage private constructor(
         public fun Make(
             codec: AndroidCodec,
             info: SkImageInfo,
-            cropRect: SkIRect,
+            cropRect: RectI32,
             postProcess: SkPicture?,
         ): AnimatedImage? {
             if (codec.codec().getFrameCount() <= 0) return null
@@ -305,7 +305,7 @@ public class AnimatedImage private constructor(
             return Make(
                 codec = codec,
                 info = info,
-                cropRect = SkIRect.MakeWH(info.width, info.height),
+                cropRect = RectI32.ofSize(info.width, info.height),
                 postProcess = null,
             )
         }

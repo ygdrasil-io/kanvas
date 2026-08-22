@@ -28,7 +28,7 @@ import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.math.SkColor
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -256,8 +256,12 @@ class GmCanvas(
         inner.clear(color)
     }
 
-    fun clear(color: SkColor) {
+    fun clear(color: Int) {
         clear(Color.fromArgbInt(color))
+    }
+
+    fun clear(color: ColorARGB) {
+        clear(color.toPackedInt())
     }
 
     fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {

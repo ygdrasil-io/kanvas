@@ -1,8 +1,6 @@
 package org.graphiks.kanvas.codec.wbmp
 
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkBitmap
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -25,9 +23,10 @@ public object WbmpEncoder {
             var bitCount = 0
             for (x in 0 until w) {
                 val argb = bitmap.getPixel(x, y)
-                val luma = SkColorGetR(argb) * 299 +
-                    SkColorGetG(argb) * 587 +
-                    SkColorGetB(argb) * 114
+                val color = ColorARGB.fromPackedInt(argb)
+                val luma = color.red * 299 +
+                    color.green * 587 +
+                    color.blue * 114
                 val bit = if (luma > THRESHOLD_TIMES_1000) 1 else 0
                 byte = (byte shl 1) or bit
                 bitCount++

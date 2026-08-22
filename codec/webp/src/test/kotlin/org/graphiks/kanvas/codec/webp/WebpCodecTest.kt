@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.webp
 
-import org.graphiks.math.SkIRect
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -247,7 +247,7 @@ class WebpCodecTest {
         assertFalse(frame.blend)
         assertTrue(frame.disposeToBackground)
         assertEquals(
-            Codec.FrameInfo(Codec.kNoFrame, 45, SkAlphaType.kUnpremul, SkIRect.MakeXYWH(0, 0, 2, 2)),
+            Codec.FrameInfo(Codec.kNoFrame, 45, SkAlphaType.kUnpremul, RectI32.ofOriginSize(0, 0, 2, 2)),
             checkedCodec.getFrameInfo().single(),
         )
     }

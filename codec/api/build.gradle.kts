@@ -5,7 +5,9 @@ plugins {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation(project(":math"))
+    implementation(project(":math:color"))
+    implementation(project(":math:matrix"))
+    api(project(":math:geometry"))
     api(project(":kanvas"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

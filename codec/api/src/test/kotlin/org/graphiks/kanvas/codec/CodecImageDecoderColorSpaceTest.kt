@@ -4,7 +4,7 @@ import org.graphiks.kanvas.image.ImageDecodeResult
 import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.kanvas.types.Gamut
 import org.graphiks.kanvas.types.TransferFunction
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -55,7 +55,7 @@ class CodecImageDecoderColorSpaceTest {
     fun `decoder reuses common refusal for an unrepresentable transfer`() {
         val source = requireNotNull(
             SkColorSpace.makeRGB(
-                SkcmsTransferFunction(
+                ColorTransferFunction.parametric(
                     g = 1.8f,
                     a = 1f,
                     b = 0f,

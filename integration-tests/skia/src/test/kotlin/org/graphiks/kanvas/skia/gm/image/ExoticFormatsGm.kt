@@ -15,12 +15,8 @@ import org.skia.foundation.SkImages
 import org.skia.foundation.SkTextureCompressionType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkBitmap
-import org.graphiks.math.SK_ColorRED
-import org.graphiks.math.SK_ColorBLACK
-import org.graphiks.math.SK_ColorGREEN
-import org.graphiks.math.SK_ColorBLUE
-import org.graphiks.math.SkISize
-import org.graphiks.math.SkColor
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.SizeI32
 
 /** Port of Skia's `gm/exoticformats.cpp`.
  *  Tests compressed texture rendering with exotic formats (BC1, ETC1,
@@ -37,9 +33,9 @@ class ExoticFormatsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(
-            SK_ColorGetR(SK_ColorBLACK) / 255f,
-            SK_ColorGetG(SK_ColorBLACK) / 255f,
-            SK_ColorGetB(SK_ColorBLACK) / 255f,
+            ColorARGB.Black.red / 255f,
+            ColorARGB.Black.green / 255f,
+            ColorARGB.Black.blue / 255f,
         )
 
         val etc1Image = try {
@@ -79,7 +75,7 @@ class ExoticFormatsGm : SkiaGm {
         const val PAD = 4
 
         private fun makePlaceholderCompressedImage(size: Int, compression: SkTextureCompressionType): SkImage? {
-            val dim = SkISize.Make(size, size)
+            val dim = SizeI32.of(size, size)
             val totalSize = SkCompressedDataUtils.SkCompressedDataSize(compression, dim, null, false)
             val bytes = ByteArray(totalSize.toInt())
 
@@ -104,7 +100,12 @@ class ExoticFormatsGm : SkiaGm {
         private fun renderColorBars(w: Int, h: Int): SkBitmap {
             val bm = SkBitmap(w, h, colorType = SkColorType.kRGB_565)
             val barWidth = w / 4
-            val colors = intArrayOf(SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorBLACK)
+            val colors = intArrayOf(
+                ColorARGB.Red.toPackedInt(),
+                ColorARGB.Green.toPackedInt(),
+                ColorARGB.Blue.toPackedInt(),
+                ColorARGB.Black.toPackedInt(),
+            )
             for (y in 0 until h) {
                 for (x in 0 until w) {
                     val index = (x / barWidth).coerceIn(0, colors.lastIndex)
@@ -114,8 +115,5 @@ class ExoticFormatsGm : SkiaGm {
             return bm
         }
 
-        private fun SK_ColorGetR(c: SkColor): Int = (c ushr 16) and 0xFF
-        private fun SK_ColorGetG(c: SkColor): Int = (c ushr 8) and 0xFF
-        private fun SK_ColorGetB(c: SkColor): Int = c and 0xFF
     }
 }

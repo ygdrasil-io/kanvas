@@ -9,7 +9,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.math.SK_ColorGRAY
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -31,9 +31,9 @@ class GmCanvasTest {
         val surface = Surface(width = 10, height = 10)
         val canvas = GmCanvas(surface.canvas(), width = 10, height = 10)
 
-        canvas.clear(SK_ColorGRAY)
+        canvas.clear(ColorARGB.Gray.toPackedInt())
 
-        assertEquals(listOf(DisplayOp.Clear(Color.fromArgbInt(SK_ColorGRAY))), surface.snapshotOps())
+        assertEquals(listOf(DisplayOp.Clear(Color.fromArgbInt(ColorARGB.Gray.toPackedInt()))), surface.snapshotOps())
     }
 
     @Test

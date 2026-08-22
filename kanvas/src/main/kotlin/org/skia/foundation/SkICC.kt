@@ -3,8 +3,8 @@ package org.skia.foundation
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.matrix.Matrix3x3F32
 import java.nio.ByteBuffer
 
 public object SkICC {
@@ -13,8 +13,8 @@ public object SkICC {
 
     @Suppress("FunctionName")
     public fun WriteToICC(
-        transferFn: SkcmsTransferFunction,
-        matrix: SkcmsMatrix3x3,
+        transferFn: ColorTransferFunction.Parametric,
+        matrix: Matrix3x3F32,
     ): ByteArray = IccProfileWriter.writeMatrixTrc(
         ColorProfile(
             colorModel = ColorModel.RGB,

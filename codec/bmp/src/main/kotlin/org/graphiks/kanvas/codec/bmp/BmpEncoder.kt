@@ -1,10 +1,7 @@
 package org.graphiks.kanvas.codec.bmp
 
 import org.skia.foundation.SkBitmap
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
+import org.graphiks.math.color.ColorARGB
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
@@ -70,10 +67,11 @@ public object BmpEncoder {
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val argb = bitmap.getPixel(x, y)
-                out.write(SkColorGetB(argb))
-                out.write(SkColorGetG(argb))
-                out.write(SkColorGetR(argb))
-                if (bpp == 4) out.write(SkColorGetA(argb))
+                val color = ColorARGB.fromPackedInt(argb)
+                out.write(color.blue)
+                out.write(color.green)
+                out.write(color.red)
+                if (bpp == 4) out.write(color.alpha)
             }
             for (i in 0 until pad) out.write(0)
         }
@@ -255,10 +253,11 @@ public object BmpEncoder {
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val argb = bitmap.getPixel(x, y)
-                out.write(SkColorGetB(argb))
-                out.write(SkColorGetG(argb))
-                out.write(SkColorGetR(argb))
-                if (bpp == 4) out.write(SkColorGetA(argb))
+                val color = ColorARGB.fromPackedInt(argb)
+                out.write(color.blue)
+                out.write(color.green)
+                out.write(color.red)
+                if (bpp == 4) out.write(color.alpha)
             }
             for (i in 0 until pad) out.write(0)
         }

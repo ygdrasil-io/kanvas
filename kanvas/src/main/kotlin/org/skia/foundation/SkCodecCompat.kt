@@ -3,17 +3,12 @@ package org.skia.foundation
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
-import org.graphiks.math.SkColor
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-import org.graphiks.math.SkColorSetARGB
-import org.graphiks.math.SkIRect
-import org.graphiks.math.SkISize
-import org.graphiks.math.SkMatrix
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
@@ -97,18 +92,18 @@ public enum class SkEncodedOrigin(public val exifValue: Int) {
 
     public fun swapsWidthHeight(): Boolean = ordinal >= kLeftTop.ordinal
 
-    public fun toMatrix(w: Int, h: Int): SkMatrix {
+    public fun toMatrix(w: Int, h: Int): Matrix3x3F32 {
         val fw = w.toFloat()
         val fh = h.toFloat()
         return when (this) {
-            kTopLeft -> SkMatrix.I()
-            kTopRight -> SkMatrix.MakeAll(-1f, 0f, fw, 0f, 1f, 0f, 0f, 0f, 1f)
-            kBottomRight -> SkMatrix.MakeAll(-1f, 0f, fw, 0f, -1f, fh, 0f, 0f, 1f)
-            kBottomLeft -> SkMatrix.MakeAll(1f, 0f, 0f, 0f, -1f, fh, 0f, 0f, 1f)
-            kLeftTop -> SkMatrix.MakeAll(0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f)
-            kRightTop -> SkMatrix.MakeAll(0f, -1f, fw, 1f, 0f, 0f, 0f, 0f, 1f)
-            kRightBottom -> SkMatrix.MakeAll(0f, -1f, fw, -1f, 0f, fh, 0f, 0f, 1f)
-            kLeftBottom -> SkMatrix.MakeAll(0f, 1f, 0f, -1f, 0f, fh, 0f, 0f, 1f)
+            kTopLeft -> Matrix3x3F32.Identity
+            kTopRight -> Matrix3x3F32.of(-1f, 0f, fw, 0f, 1f, 0f)
+            kBottomRight -> Matrix3x3F32.of(-1f, 0f, fw, 0f, -1f, fh)
+            kBottomLeft -> Matrix3x3F32.of(1f, 0f, 0f, 0f, -1f, fh)
+            kLeftTop -> Matrix3x3F32.of(0f, 1f, 0f, 1f, 0f, 0f)
+            kRightTop -> Matrix3x3F32.of(0f, -1f, fw, 1f, 0f, 0f)
+            kRightBottom -> Matrix3x3F32.of(0f, -1f, fw, -1f, 0f, fh)
+            kLeftBottom -> Matrix3x3F32.of(0f, 1f, 0f, -1f, 0f, fh)
         }
     }
 
@@ -127,8 +122,8 @@ public enum class SkColorSpaceProfileStatus {
 }
 
 public class SkColorSpace private constructor(
-    public val transferFn: SkcmsTransferFunction,
-    toXYZD50: SkcmsMatrix3x3,
+    public val transferFn: ColorTransferFunction.Parametric,
+    toXYZD50: Matrix3x3F32,
     public val colorProfile: ColorProfile,
     originalIccBytes: ByteArray?,
     private val srgb: Boolean,
@@ -138,10 +133,10 @@ public class SkColorSpace private constructor(
     public val profileRefusalCode: String?,
 ) {
     private val originalIccBytes: ByteArray? = originalIccBytes?.copyOf()
-    private val toXYZD50Snapshot: SkcmsMatrix3x3 = toXYZD50.copy()
+    private val toXYZD50Snapshot: Matrix3x3F32 = toXYZD50.copy()
 
     public val iccProfileBytes: ByteArray? get() = originalIccBytes?.copyOf()
-    public val toXYZD50: SkcmsMatrix3x3 get() = toXYZD50Snapshot.copy()
+    public val toXYZD50: Matrix3x3F32 get() = toXYZD50Snapshot.copy()
     public fun isSRGB(): Boolean = srgb
     public fun gammaIsLinear(): Boolean = linear
     public fun gammaCloseToSRGB(): Boolean = srgbTransfer
@@ -204,8 +199,8 @@ public class SkColorSpace private constructor(
             make(profile) ?: makeUnsupportedProfile(profile)
 
         public fun makeRGB(
-            transferFn: SkcmsTransferFunction,
-            toXYZD50: SkcmsMatrix3x3,
+            transferFn: ColorTransferFunction.Parametric,
+            toXYZD50: Matrix3x3F32,
         ): SkColorSpace? = makeMatrixTrc(
             colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
             transferFn = transferFn,
@@ -215,8 +210,8 @@ public class SkColorSpace private constructor(
 
         private fun makeMatrixTrc(
             colorProfile: ColorProfile,
-            transferFn: SkcmsTransferFunction,
-            toXYZD50: SkcmsMatrix3x3,
+            transferFn: ColorTransferFunction.Parametric,
+            toXYZD50: Matrix3x3F32,
             originalIccBytes: ByteArray?,
         ): SkColorSpace {
             val isSrgbGamut = isSrgbMatrix(toXYZD50)
@@ -256,19 +251,19 @@ public class SkColorSpace private constructor(
         }
 
         // Encoding identity is deliberately narrower than the writer's D50 normalization allowance.
-        private fun isSrgbMatrix(matrix: SkcmsMatrix3x3): Boolean =
+        private fun isSrgbMatrix(matrix: Matrix3x3F32): Boolean =
             matricesNear(matrix, SkNamedGamut.kSRGB) || matricesNear(matrix, SERIALIZED_SRGB_GAMUT)
 
-        private fun matricesNear(left: SkcmsMatrix3x3, right: SkcmsMatrix3x3): Boolean {
+        private fun matricesNear(left: Matrix3x3F32, right: Matrix3x3F32): Boolean {
             for (row in 0 until 3) for (column in 0 until 3) {
-                if (abs(left[row, column] - right[row, column]) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
+                if (abs(left.iccGet(row, column) - right.iccGet(row, column)) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
             }
             return true
         }
 
         private fun transferFunctionsNear(
-            left: SkcmsTransferFunction,
-            right: SkcmsTransferFunction,
+            left: ColorTransferFunction.Parametric,
+            right: ColorTransferFunction.Parametric,
         ): Boolean = listOf(
             left.g to right.g,
             left.a to right.a,
@@ -279,7 +274,7 @@ public class SkColorSpace private constructor(
             left.f to right.f,
         ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_TRANSFER_TOLERANCE }
 
-        private val SERIALIZED_SRGB_GAMUT: SkcmsMatrix3x3 by lazy {
+        private val SERIALIZED_SRGB_GAMUT: Matrix3x3F32 by lazy {
             checkNotNull(SkcmsICCProfile.fromColorProfile(ColorProfiles.sRGB()).colorProfile.toXyzD50)
         }
 
@@ -299,8 +294,8 @@ public class SkImageInfo private constructor(
         require(width >= 0 && height >= 0) { "negative dimensions: ${width}x$height" }
     }
 
-    public fun dimensions(): SkISize = SkISize.Make(width, height)
-    public fun bounds(): SkIRect = SkIRect.MakeWH(width, height)
+    public fun dimensions(): SizeI32 = SizeI32.of(width, height)
+    public fun bounds(): RectI32 = RectI32.ofSize(width, height)
     public fun isEmpty(): Boolean = width <= 0 || height <= 0
     public fun isOpaque(): Boolean = alphaType == SkAlphaType.kOpaque
     public fun bytesPerPixel(): Int = colorType.bytesPerPixel
@@ -409,13 +404,14 @@ public class SkBitmap(
         }
     public val pixels: IntArray get() = pixels8888
 
-    public fun eraseColor(c: SkColor) {
+    public fun eraseColor(c: Int) {
         pixels8888.fill(c)
         if (pixelsF16.isNotEmpty()) {
-            val a = SkColorGetA(c) / 255f
-            val r = SkColorGetR(c) / 255f
-            val g = SkColorGetG(c) / 255f
-            val b = SkColorGetB(c) / 255f
+            val color = ColorARGB.fromPackedInt(c)
+            val a = color.alpha / 255f
+            val r = color.red / 255f
+            val g = color.green / 255f
+            val b = color.blue / 255f
             var i = 0
             while (i < pixelsF16.size) {
                 pixelsF16[i] = r * a
@@ -427,24 +423,25 @@ public class SkBitmap(
         }
     }
 
-    public fun getPixel(x: Int, y: Int): SkColor {
+    public fun getPixel(x: Int, y: Int): Int {
         if (x !in 0 until width || y !in 0 until height) return 0
         return pixels8888[y * width + x]
     }
 
-    public fun getPixelAsSrgb(x: Int, y: Int): SkColor = getPixel(x, y)
+    public fun getPixelAsSrgb(x: Int, y: Int): Int = getPixel(x, y)
 
-    public fun setPixel(x: Int, y: Int, c: SkColor) {
+    public fun setPixel(x: Int, y: Int, c: Int) {
         if (x !in 0 until width || y !in 0 until height) return
         pixels8888[y * width + x] = convertForColorType(c)
         if (pixelsF16.isNotEmpty()) {
-            val a = SkColorGetA(c) / 255f
+            val color = ColorARGB.fromPackedInt(c)
+            val a = color.alpha / 255f
             setPixelF16(
                 x = x,
                 y = y,
-                r = (SkColorGetR(c) / 255f) * a,
-                g = (SkColorGetG(c) / 255f) * a,
-                b = (SkColorGetB(c) / 255f) * a,
+                r = (color.red / 255f) * a,
+                g = (color.green / 255f) * a,
+                b = (color.blue / 255f) * a,
                 a = a,
             )
         }
@@ -464,7 +461,7 @@ public class SkBitmap(
         val ir = (r * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
         val ig = (g * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
         val ib = (b * invA * 255f + 0.5f).toInt().coerceIn(0, 255)
-        pixels8888[y * width + x] = convertForColorType(SkColorSetARGB(ia, ir, ig, ib))
+        pixels8888[y * width + x] = convertForColorType(ColorARGB.of(ia, ir, ig, ib).toPackedInt())
     }
 
     public fun getPixelF16(x: Int, y: Int, out: FloatArray): Boolean {
@@ -478,39 +475,40 @@ public class SkBitmap(
         return true
     }
 
-    private fun convertForColorType(c: SkColor): SkColor {
-        val a = SkColorGetA(c)
-        val r = SkColorGetR(c)
-        val g = SkColorGetG(c)
-        val b = SkColorGetB(c)
+    private fun convertForColorType(c: Int): Int {
+        val color = ColorARGB.fromPackedInt(c)
+        val a = color.alpha
+        val r = color.red
+        val g = color.green
+        val b = color.blue
         return when (colorType) {
-            SkColorType.kAlpha_8 -> SkColorSetARGB(a, 0, 0, 0)
+            SkColorType.kAlpha_8 -> ColorARGB.of(a, 0, 0, 0).toPackedInt()
             SkColorType.kGray_8 -> {
                 val l = ((r * 299 + g * 587 + b * 114) / 1000).coerceIn(0, 255)
-                SkColorSetARGB(0xFF, l, l, l)
+                ColorARGB.of(0xFF, l, l, l).toPackedInt()
             }
             SkColorType.kRGB_565 -> {
                 val r5 = (r * 31 + 127) / 255
                 val g6 = (g * 63 + 127) / 255
                 val b5 = (b * 31 + 127) / 255
-                SkColorSetARGB(
+                ColorARGB.of(
                     0xFF,
                     (r5 * 255 + 15) / 31,
                     (g6 * 255 + 31) / 63,
                     (b5 * 255 + 15) / 31,
-                )
+                ).toPackedInt()
             }
             SkColorType.kARGB_4444 -> {
                 val a4 = (a * 15 + 127) / 255
                 val r4 = (r * 15 + 127) / 255
                 val g4 = (g * 15 + 127) / 255
                 val b4 = (b * 15 + 127) / 255
-                SkColorSetARGB(
+                ColorARGB.of(
                     (a4 * 255 + 7) / 15,
                     (r4 * 255 + 7) / 15,
                     (g4 * 255 + 7) / 15,
                     (b4 * 255 + 7) / 15,
-                )
+                ).toPackedInt()
             }
             else -> c
         }
@@ -571,23 +569,23 @@ public class SkPixmap {
     public fun colorType(): SkColorType = info.colorType
     public fun alphaType(): SkAlphaType = info.alphaType
     public fun colorSpace(): SkColorSpace? = info.colorSpace
-    public fun bounds(): SkIRect = SkIRect.MakeWH(width(), height())
+    public fun bounds(): RectI32 = RectI32.ofSize(width(), height())
 
     public fun computeByteSize(): Long =
         if (height() == 0 || width() == 0) 0L
         else (height() - 1).toLong() * rowBytes + width().toLong() * info.bytesPerPixel()
 
-    public fun getColor(x: Int, y: Int): SkColor {
+    public fun getColor(x: Int, y: Int): Int {
         if (x !in 0 until width() || y !in 0 until height()) return 0
         val offset = y * rowBytes + x * info.bytesPerPixel()
         return when (info.colorType) {
             SkColorType.kRGBA_8888,
             SkColorType.kBGRA_8888,
                 -> buffer.getInt(offset)
-            SkColorType.kAlpha_8 -> SkColorSetARGB(buffer.get(offset).toInt() and 0xFF, 0, 0, 0)
+            SkColorType.kAlpha_8 -> ColorARGB.of(buffer.get(offset).toInt() and 0xFF, 0, 0, 0).toPackedInt()
             SkColorType.kGray_8 -> {
                 val l = buffer.get(offset).toInt() and 0xFF
-                SkColorSetARGB(0xFF, l, l, l)
+                ColorARGB.of(0xFF, l, l, l).toPackedInt()
             }
             else -> 0
         }
@@ -600,6 +598,6 @@ public class SkImage(
     public val pixels: IntArray = IntArray(width * height),
     public val colorType: SkColorType = SkColorType.kRGBA_8888,
 ) {
-    public fun peekPixel(x: Int, y: Int): SkColor =
+    public fun peekPixel(x: Int, y: Int): Int =
         if (x in 0 until width && y in 0 until height) pixels[y * width + x] else 0
 }

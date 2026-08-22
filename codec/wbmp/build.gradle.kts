@@ -7,7 +7,7 @@ dependencies {
     implementation(project(":kanvas"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
-    implementation(project(":math"))
+    implementation(project(":math:color"))
 
     testImplementation(project(":codec:test-fixtures"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

@@ -1,6 +1,6 @@
 package org.skia.foundation
 
-import org.graphiks.math.SkColorSetARGB
+import org.graphiks.math.color.ColorARGB
 
 public object SkImages {
     public fun RasterFromCompressedTextureData(
@@ -75,11 +75,11 @@ public object SkImages {
         val p2: Int
         val p3: Int
         if (c0 > c1) {
-            p2 = SkColorSetARGB(255, (2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3)
-            p3 = SkColorSetARGB(255, (r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3)
+            p2 = ColorARGB.of(255, (2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3).toPackedInt()
+            p3 = ColorARGB.of(255, (r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3).toPackedInt()
         } else {
-            p2 = SkColorSetARGB(255, (r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2)
-            p3 = if (honorAlpha) 0 else SkColorSetARGB(255, 0, 0, 0)
+            p2 = ColorARGB.of(255, (r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2).toPackedInt()
+            p3 = if (honorAlpha) 0 else ColorARGB.Black.toPackedInt()
         }
         return intArrayOf(p0, p1, p2, p3)
     }
@@ -91,7 +91,7 @@ public object SkImages {
         val r = (r5 shl 3) or (r5 ushr 2)
         val g = (g6 shl 2) or (g6 ushr 4)
         val b = (b5 shl 3) or (b5 ushr 2)
-        return SkColorSetARGB(255, r, g, b)
+        return ColorARGB.of(255, r, g, b).toPackedInt()
     }
 
     private fun decodeETC2(data: SkData, width: Int, height: Int): SkImage? {
@@ -189,12 +189,12 @@ public object SkImages {
             val baseG = if (subBlock == 0) baseG1 else baseG2
             val baseB = if (subBlock == 0) baseB1 else baseB2
             val mod = ETC2_MODIFIER_TABLES[table][pixelIndices[i]]
-            out[py * w + px] = SkColorSetARGB(
+            out[py * w + px] = ColorARGB.of(
                 255,
                 (baseR + mod).coerceIn(0, 255),
                 (baseG + mod).coerceIn(0, 255),
                 (baseB + mod).coerceIn(0, 255),
-            )
+            ).toPackedInt()
         }
     }
 

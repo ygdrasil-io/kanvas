@@ -86,7 +86,11 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-include(":math")
+include(":math:scalar")
+include(":math:vector")
+include(":math:matrix")
+include(":math:geometry")
+include(":math:color")
 include(":color-management")
 include(":font")
 include(":font:colr")

@@ -3,7 +3,7 @@ package org.graphiks.kanvas.color
 import org.graphiks.kanvas.color.icc.IccTransformPipeline
 import org.graphiks.kanvas.color.hdr.Bt2390ToneMapper
 import org.graphiks.kanvas.color.hdr.ToneMapper
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
 import kotlin.math.pow
 
 public enum class AlphaType {
@@ -173,9 +173,9 @@ public object ColorTransform {
 private class HdrMatrixColorTransform(
     sourceToWorking: FloatArray,
     workingToDestination: FloatArray,
-    private val sourceTransferFunction: SkcmsTransferFunction?,
+    private val sourceTransferFunction: ColorTransferFunction.Parametric?,
     private val sourceHdrTransferFunction: HdrTransferFunction?,
-    private val destinationTransferFunction: SkcmsTransferFunction?,
+    private val destinationTransferFunction: ColorTransferFunction.Parametric?,
     private val destinationHdrTransferFunction: HdrTransferFunction?,
     private val alphaType: AlphaType,
     private val toneMapper: ToneMapper?,
@@ -286,7 +286,7 @@ private class LutEndpointStage(
 
 private class MatrixToPcsStage(
     matrix: FloatArray,
-    private val transferFunction: SkcmsTransferFunction,
+    private val transferFunction: ColorTransferFunction.Parametric,
 ) : EndpointStage {
     private val matrix: FloatArray = matrix.copyOf()
 
@@ -298,7 +298,7 @@ private class MatrixToPcsStage(
 
 private class PcsToMatrixStage(
     inverseMatrix: FloatArray,
-    private val transferFunction: SkcmsTransferFunction,
+    private val transferFunction: ColorTransferFunction.Parametric,
 ) : EndpointStage {
     private val inverseMatrix: FloatArray = inverseMatrix.copyOf()
 
@@ -310,7 +310,7 @@ private class PcsToMatrixStage(
     }
 }
 
-private fun decode(transferFunction: SkcmsTransferFunction, encoded: Float): Float {
+private fun decode(transferFunction: ColorTransferFunction.Parametric, encoded: Float): Float {
     val x = if (encoded.isFinite()) encoded.coerceIn(0f, 1f) else 0f
     val value = if (x >= transferFunction.d) {
         (transferFunction.a * x + transferFunction.b).pow(transferFunction.g) + transferFunction.e
@@ -320,7 +320,7 @@ private fun decode(transferFunction: SkcmsTransferFunction, encoded: Float): Flo
     return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 }
 
-private fun encode(transferFunction: SkcmsTransferFunction, linear: Float): Float {
+private fun encode(transferFunction: ColorTransferFunction.Parametric, linear: Float): Float {
     val y = if (linear.isFinite()) linear.coerceIn(0f, 1f) else 0f
     val boundary = transferFunction.d.coerceIn(0f, 1f)
     val lowerLimit = (transferFunction.c * boundary + transferFunction.f).coerceIn(0f, 1f)

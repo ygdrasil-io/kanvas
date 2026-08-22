@@ -5,8 +5,9 @@ import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.kanvas.color.icc.IccSignature
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
-import org.graphiks.math.SkcmsMatrix3x3
-import org.graphiks.math.SkcmsTransferFunction
+import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.iccGet
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -81,7 +82,7 @@ class ColorTransformContractTest {
 
     @Test
     fun `compiled transforms retain a copy of caller supplied matrix`() {
-        val matrix = SkcmsMatrix3x3.IDENTITY
+        val matrix = Matrix3x3F32.Identity
         val profile = ColorProfile(
             colorModel = ColorModel.RGB,
             toXyzD50 = matrix,
@@ -93,11 +94,12 @@ class ColorTransformContractTest {
             alphaType = AlphaType.UNPREMULTIPLIED,
         ).getOrThrow()
 
-        matrix.vals[0][0] = 0f
+        val modifiedMatrix = matrix.copy(sx = 0f)
+        assertEquals(0f, modifiedMatrix.iccGet(0, 0))
         val pixels = floatArrayOf(0.25f, 0.5f, 0.75f, 0.5f)
         transform.apply(pixels, 1)
 
-        assertEquals(1f, profile.toXyzD50!![0, 0])
+        assertEquals(1f, profile.toXyzD50!!.iccGet(0, 0))
         assertContentEquals(floatArrayOf(0.25f, 0.5f, 0.75f, 0.5f), pixels)
     }
 
@@ -371,8 +373,8 @@ class ColorTransformContractTest {
     fun `compile rejects direct profiles with nonmonotonic transfer functions`() {
         val source = ColorProfile(
             colorModel = ColorModel.RGB,
-            toXyzD50 = SkcmsMatrix3x3.IDENTITY,
-            transferFunction = SkcmsTransferFunction(
+            toXyzD50 = Matrix3x3F32.Identity,
+            transferFunction = ColorTransferFunction.parametric(
                 g = 1f,
                 a = 1f,
                 b = -0.5f,
