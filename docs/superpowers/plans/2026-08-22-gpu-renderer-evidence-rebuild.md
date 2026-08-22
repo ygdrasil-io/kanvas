@@ -704,7 +704,9 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:generateBootstrapGpuEv
   -PsourceCommit=$(rtk git rev-parse HEAD)
 ```
 
-Expected: three verified bundles; two render passes and one exact refusal with submission delta zero. If the adapter is unavailable, the second command must fail after writing `Unavailable` evidence.
+Expected: two verified bundles: one render pass and one exact refusal with
+submission delta zero. If the adapter is unavailable, the second command exits
+non-zero and writes no evidence bundle.
 
 - [ ] Commit the canonical runner and bootstrap gate; do not force-add ignored `reports/gpu-renderer/evidence/correctness/generated/` output:
 

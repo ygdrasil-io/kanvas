@@ -2,12 +2,14 @@ package org.graphiks.kanvas.gpu.evidence.programs
 
 import org.graphiks.kanvas.gpu.evidence.runner.ScenePreparation
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecordingRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecordingResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameResolvedDraw
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectDescriptor
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectExecutor
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -20,7 +22,7 @@ object ProductScenePrograms {
     fun solidRects(
         draws: List<GPUSolidRectFrameResolvedDraw>,
         budgetBytes: Long = 1L shl 30,
-    ): SceneProgram = SceneProgram { context ->
+    ): RoutedSceneProgram = routed("product.solid-rect") { context ->
         when (val recorded = GPUSolidRectFrameRecorder().record(
             GPUSolidRectFrameRecordingRequest(
                 frameId = GPUFrameID(context.frameOrdinal),
@@ -39,14 +41,29 @@ object ProductScenePrograms {
             is GPUSolidRectFrameRecordingResult.Refused -> ScenePreparation.Refused(
                 recorded.diagnostic.code.value,
                 recorded.diagnostic.message,
-                listOf("${recorded.diagnostic.code.value}: ${recorded.diagnostic.message}"),
+                diagnosticLines(recorded.diagnostic),
             )
         }
     }
 
-    fun unregisteredRuntimeEffect(id: GPUCustomRuntimeEffectID): SceneProgram = SceneProgram {
+    fun unregisteredRuntimeEffect(id: GPUCustomRuntimeEffectID): RoutedSceneProgram = routed("product.runtime-effect.custom") {
         val execution = GPUCustomRuntimeEffectExecutor(EmptyCustomRuntimeEffectRegistry).execute(id)
         ScenePreparation.Refused(execution.reason, "Custom runtime effect ${execution.descriptorId} was ${execution.outcome}.", execution.dumpLines())
+    }
+
+    private fun routed(routeId: String, prepare: (org.graphiks.kanvas.gpu.evidence.runner.SceneRecordingContext) -> ScenePreparation): RoutedSceneProgram = object : RoutedSceneProgram {
+        override val routeId = routeId
+        override fun prepare(context: org.graphiks.kanvas.gpu.evidence.runner.SceneRecordingContext) = prepare(context)
+    }
+
+    private fun diagnosticLines(diagnostic: GPUDiagnostic): List<String> = buildList {
+        add("diagnostic.code=${diagnostic.code.value}")
+        add("diagnostic.domain=${diagnostic.domain.name}")
+        add("diagnostic.severity=${diagnostic.severity.name}")
+        add("diagnostic.message=${diagnostic.message}")
+        add("diagnostic.terminal=${diagnostic.isTerminal}")
+        add("diagnostic.retryable=${diagnostic.isRetryable}")
+        diagnostic.facts.toSortedMap().forEach { (key, value) -> add("diagnostic.fact.$key=$value") }
     }
 
     private object EmptyCustomRuntimeEffectRegistry : GPUCustomRuntimeEffectRegistry {

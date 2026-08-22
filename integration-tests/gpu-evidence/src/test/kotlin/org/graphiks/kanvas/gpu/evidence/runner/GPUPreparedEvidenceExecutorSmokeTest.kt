@@ -16,8 +16,8 @@ class GPUPreparedEvidenceExecutorSmokeTest {
         val backend = requireNotNull(GPUBackendRuntimeFactory.createOrNull()) { "GPU backend runtime is unavailable" }
         try {
             val result = GPUPreparedEvidenceExecutor(ProductEvidenceBackendPort(backend), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first())
-            val rendered = assertIs<SceneObservation.Rendered>(result)
-            assertEquals("Succeeded", rendered.route.outcome)
+            val rendered = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
+            assertEquals("rendered", rendered.route.outcome)
             assertEquals("Completed", rendered.route.furthestPhase)
             assertEquals(64 * 64 * 4, rendered.rgba.size)
             assertTrue(rendered.route.structuralCounters.getOrDefault("queue.submit", 0L) > 0L)

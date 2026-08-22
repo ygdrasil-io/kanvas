@@ -9,69 +9,58 @@ import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 
-/** Strict command-line entry point for generated bootstrap correctness evidence. */
-fun main(args: Array<String>) {
-    val request = runCatching { GpuEvidenceCliRequest.parse(args) }.getOrElse { failure ->
-        System.err.println("gpu evidence arguments rejected: ${failure.message}")
-        exitProcess(2)
-    }
-    val backend = GPUBackendRuntimeFactory.createOrNull()
-    if (backend == null) {
-        System.err.println("gpu evidence unavailable: unavailable.gpu.backend: GPU backend runtime could not create a session.")
-        exitProcess(1)
-    }
-    try {
-        val executor = GPUPreparedEvidenceExecutor(ProductEvidenceBackendPort(backend), request.sourceCommit)
-        val selected = request.sceneId?.let { id -> BootstrapEvidenceCatalog.cases.filter { it.descriptor.id.value == id } }
-            ?: BootstrapEvidenceCatalog.cases
-        val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
-        var exitCode = 0
-        selected.forEach { evidenceCase ->
-            when (val observation = executor.execute(evidenceCase)) {
-                is SceneObservation.Unavailable -> {
-                    System.err.println("gpu evidence unavailable: ${observation.stableReasonCode}: ${observation.message}")
-                    exitCode = 1
-                }
-                else -> {
-                    val expected = if (observation is SceneObservation.Rendered) requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) else null
-                    writer.writeGenerated(evidenceCase.descriptor, observation, expected)
-                    val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)
-                    if (verdict !is EvidenceVerdict.Pass) {
-                        System.err.println("gpu evidence ${evidenceCase.descriptor.id.value}: ${(verdict as Any)}")
-                        exitCode = 1
+fun main(args: Array<String>): Unit = exitProcess(GpuEvidenceCliRunner(ProductEvidenceRuntimePort()).run(args))
+
+interface EvidenceRuntimePort { fun open(): EvidenceBackendPort?; fun close(); fun dispose() }
+
+class GpuEvidenceCliRunner(private val runtime: EvidenceRuntimePort) {
+    fun run(args: Array<String>): Int {
+        val request = runCatching { GpuEvidenceCliRequest.parse(args) }.getOrElse { System.err.println("gpu evidence arguments rejected: ${it.message}"); return 2 }
+        val backend = runtime.open()
+        if (backend == null) {
+            try { System.err.println("gpu evidence unavailable: unavailable.gpu.backend: GPU backend runtime could not create a session."); return 1 }
+            finally { runtime.close(); runtime.dispose() }
+        }
+        return try {
+            val executor = GPUPreparedEvidenceExecutor(backend, request.sourceCommit)
+            val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
+            val selected = request.sceneId?.let { id -> BootstrapEvidenceCatalog.cases.filter { it.descriptor.id.value == id } } ?: BootstrapEvidenceCatalog.cases
+            selected.fold(0) { code, evidenceCase ->
+                when (val result = executor.execute(evidenceCase)) {
+                    is EvidenceExecutionResult.ExecutionFailure -> { System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}"); 1 }
+                    is EvidenceExecutionResult.Observed -> when (val observation = result.observation) {
+                        is SceneObservation.Unavailable -> { System.err.println("gpu evidence unavailable: ${observation.stableReasonCode}: ${observation.message}"); 1 }
+                        else -> {
+                            val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
+                            writer.writeGenerated(evidenceCase.descriptor, observation, expected)
+                            if (EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation) is EvidenceVerdict.Pass) code else 1
+                        }
                     }
                 }
             }
-        }
-        if (exitCode != 0) exitProcess(exitCode)
-    } finally {
-        try { backend.close() } finally { GPUBackendRuntimeFactory.dispose() }
+        } catch (failure: Throwable) { System.err.println("gpu evidence failed: ${failure.message}"); 1 }
+        finally { runtime.close(); runtime.dispose() }
     }
+}
+
+private class ProductEvidenceRuntimePort : EvidenceRuntimePort {
+    private var session: GPUBackendSession? = null
+    override fun open(): EvidenceBackendPort? = GPUBackendRuntimeFactory.createOrNull()?.also { session = it }?.let(::ProductEvidenceBackendPort)
+    override fun close() { session?.close(); session = null }
+    override fun dispose() = GPUBackendRuntimeFactory.dispose()
 }
 
 data class GpuEvidenceCliRequest(val repositoryRoot: Path, val sourceCommit: String, val sceneId: String?) {
     companion object {
         private val SHA = Regex("[0-9a-f]{40}")
-
         fun parse(args: Array<String>): GpuEvidenceCliRequest {
-            require(args.isNotEmpty()) { "--repository-root and --source-commit are required" }
-            val values = mutableMapOf<String, String>()
-            var index = 0
-            while (index < args.size) {
-                val flag = args[index]
-                require(flag in setOf("--repository-root", "--source-commit", "--scene")) { "unknown argument: $flag" }
-                require(index + 1 < args.size && !args[index + 1].startsWith("--")) { "missing value for $flag" }
-                require(values.put(flag, args[index + 1]) == null) { "duplicate argument: $flag" }
-                index += 2
-            }
-            val root = Path.of(requireNotNull(values["--repository-root"]) { "missing --repository-root" })
-            require(root.isAbsolute) { "repository root must be absolute" }
-            require(Files.isDirectory(root)) { "repository root must be an existing directory" }
-            val commit = requireNotNull(values["--source-commit"]) { "missing --source-commit" }
-            require(SHA.matches(commit) && commit.any { it != '0' }) { "source commit must be a non-placeholder lowercase 40-hex value" }
-            val scene = values["--scene"]
-            require(scene == null || BootstrapEvidenceCatalog.cases.any { it.descriptor.id.value == scene }) { "unknown scene: $scene" }
+            val values = mutableMapOf<String, String>(); var index = 0
+            while (index < args.size) { val flag = args[index]; require(flag in setOf("--repository-root", "--source-commit", "--scene")); require(index + 1 < args.size && !args[index + 1].startsWith("--")); require(values.put(flag, args[index + 1]) == null); index += 2 }
+            val root = Path.of(requireNotNull(values["--repository-root"])); require(root.isAbsolute && Files.isDirectory(root))
+            val commit = requireNotNull(values["--source-commit"]); require(SHA.matches(commit) && commit.any { it != '0' })
+            val scene = values["--scene"]; require(scene == null || BootstrapEvidenceCatalog.cases.any { it.descriptor.id.value == scene })
             return GpuEvidenceCliRequest(root.toAbsolutePath().normalize(), commit, scene)
         }
     }

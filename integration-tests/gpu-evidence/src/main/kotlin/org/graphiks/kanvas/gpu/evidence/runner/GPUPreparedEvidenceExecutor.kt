@@ -30,11 +30,16 @@ data class EvidenceRecordingRequest(val descriptor: EvidenceSceneDescriptor, val
 
 sealed interface EvidenceProgramPreparation {
     data class Recorded(val routeId: String, val program: PreparedEvidenceProgram, val diagnostics: List<String>) : EvidenceProgramPreparation
-    data class Refused(val stableReasonCode: String, val message: String, val diagnostics: List<String>) : EvidenceProgramPreparation
+    data class Refused(val routeId: String, val stableReasonCode: String, val message: String, val diagnostics: List<String>) : EvidenceProgramPreparation
 }
 
 data class PreparedEvidenceProgram(internal val taskList: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList?, val readbackRequestId: String)
 interface EvidencePreparedFramePort : AutoCloseable { fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame }
+
+sealed interface EvidenceExecutionResult {
+    data class Observed(val observation: SceneObservation) : EvidenceExecutionResult
+    data class ExecutionFailure(val stableReasonCode: String, val message: String, val route: RouteEvidence, val diagnostics: List<String>, val environment: EvidenceEnvironment) : EvidenceExecutionResult
+}
 
 data class EvidenceCompletedFrame(
     val attemptId: String?, val furthestPhase: String?, val outcome: String, val diagnosticCode: String?, val diagnosticMessage: String?,
@@ -53,11 +58,11 @@ class GPUPreparedEvidenceExecutor(
 ) {
     private var nextFrameOrdinal = 1L
 
-    fun execute(evidenceCase: EvidenceCase): SceneObservation {
+    fun execute(evidenceCase: EvidenceCase): EvidenceExecutionResult {
         val environment = environmentOf(backend, sourceCommit)
-        if (backend.capabilities == null) return SceneObservation.Unavailable(
+        if (backend.capabilities == null) return EvidenceExecutionResult.Observed(SceneObservation.Unavailable(
             "unavailable.gpu.capabilities", "GPU backend session did not expose capabilities.", environment,
-        )
+        ))
         val before = backend.telemetry()
         val requestId = "gpu-evidence.${evidenceCase.descriptor.id.value}"
         val prepared = backend.prepare(evidenceCase.program, EvidenceRecordingRequest(evidenceCase.descriptor, nextFrameOrdinal++, requestId))
@@ -67,19 +72,20 @@ class GPUPreparedEvidenceExecutor(
         }
     }
 
-    private fun refusal(prepared: EvidenceProgramPreparation.Refused, before: GPUBackendRuntimeTelemetry, environment: EvidenceEnvironment): SceneObservation.Refused {
+    private fun refusal(prepared: EvidenceProgramPreparation.Refused, before: GPUBackendRuntimeTelemetry, environment: EvidenceEnvironment): EvidenceExecutionResult.Observed {
         val delta = backend.telemetry() - before
-        return SceneObservation.Refused(prepared.stableReasonCode, prepared.message, delta.submissions, RouteEvidence(
-            "product.runtime-effect", null, null, "refused", emptyList(), emptyList(), emptyMap(), delta,
-        ), prepared.diagnostics, environment)
+        return EvidenceExecutionResult.Observed(SceneObservation.Refused(prepared.stableReasonCode, prepared.message, delta.submissions, RouteEvidence(
+            prepared.routeId, null, null, "refused", emptyList(), emptyList(), emptyMap(), delta,
+        ), prepared.diagnostics, environment))
     }
 
-    private fun render(evidenceCase: EvidenceCase, prepared: EvidenceProgramPreparation.Recorded, before: GPUBackendRuntimeTelemetry, environment: EvidenceEnvironment): SceneObservation {
+    private fun render(evidenceCase: EvidenceCase, prepared: EvidenceProgramPreparation.Recorded, before: GPUBackendRuntimeTelemetry, environment: EvidenceEnvironment): EvidenceExecutionResult {
         val descriptor = evidenceCase.descriptor
         val completed = try {
             backend.prepareSceneFrame(descriptor.width, descriptor.height).use { frame -> frame.render(prepared.program) }
         } catch (failure: Throwable) {
-            return SceneObservation.Refused("failed.gpu.prepared-session", failure.message ?: "Prepared scene session failed.", (backend.telemetry() - before).submissions, RouteEvidence(prepared.routeId, null, null, "refused", emptyList(), emptyList(), emptyMap(), backend.telemetry() - before), prepared.diagnostics + failure::class.simpleName.orEmpty(), environment)
+            val delta = backend.telemetry() - before
+            return EvidenceExecutionResult.ExecutionFailure("failed.gpu.prepared-session", failure.message ?: "Prepared scene session failed.", RouteEvidence(prepared.routeId, null, null, "failed", emptyList(), emptyList(), emptyMap(), delta), prepared.diagnostics + failure::class.simpleName.orEmpty(), environment)
         }
         val delta = backend.telemetry() - before
         val route = RouteEvidence(
@@ -95,21 +101,17 @@ class GPUPreparedEvidenceExecutor(
             completed.counters,
             delta,
         )
-        if (completed.outcome != "Succeeded" || completed.readbackRequestId != prepared.program.readbackRequestId || completed.readbackBytes?.size != descriptor.width * descriptor.height * 4) {
-            return SceneObservation.Refused(completed.diagnosticCode ?: "failed.gpu.readback", completed.diagnosticMessage ?: "Prepared scene frame did not produce the requested RGBA readback.", delta.submissions, route, prepared.diagnostics, environment)
-        }
-        if (delta.submissions <= 0L) {
-            return SceneObservation.Refused(
-                "failed.gpu.telemetry.submission_delta",
-                "Prepared scene frame completed without a positive runtime submission delta.",
-                delta.submissions,
-                route.copy(outcome = "refused"),
-                prepared.diagnostics,
-                environment,
-            )
+        if (completed.outcome != "Succeeded" || completed.furthestPhase != "Completed" || completed.readbackRequestId != prepared.program.readbackRequestId || completed.readbackBytes?.size != descriptor.width * descriptor.height * 4 || completed.counters.getOrDefault("queue.submit", 0L) <= 0L || delta.submissions <= 0L) {
+            val message = completed.diagnosticMessage ?: when {
+                completed.furthestPhase != "Completed" -> "Prepared scene frame did not reach Completed."
+                completed.counters.getOrDefault("queue.submit", 0L) <= 0L -> "Prepared scene frame did not record queue.submit."
+                delta.submissions <= 0L -> "Prepared scene frame completed without a positive runtime submission delta."
+                else -> "Prepared scene frame did not produce the requested RGBA readback."
+            }
+            return EvidenceExecutionResult.ExecutionFailure(completed.diagnosticCode ?: "failed.gpu.execution", message, route.copy(outcome = "failed"), prepared.diagnostics, environment)
         }
         val expected = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
-        return SceneObservation.Rendered(completed.readbackBytes, route, prepared.diagnostics, environment, comparator.compare(completed.readbackBytes, expected, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison)))
+        return EvidenceExecutionResult.Observed(SceneObservation.Rendered(completed.readbackBytes, route, prepared.diagnostics, environment, comparator.compare(completed.readbackBytes, expected, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))))
     }
 }
 
@@ -120,11 +122,16 @@ class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : Evide
     override fun telemetry(): GPUBackendRuntimeTelemetry = backend.runtimeTelemetry
 
     override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
-        val capability = capabilities?.product ?: return EvidenceProgramPreparation.Refused("unavailable.gpu.capabilities", "GPU backend session did not expose capabilities.", emptyList())
+        val capability = capabilities?.product ?: return EvidenceProgramPreparation.Refused("product.unknown", "unavailable.gpu.capabilities", "GPU backend session did not expose capabilities.", emptyList())
         val readback = GPUReadbackRequestID(context.readbackRequestId)
         return when (val preparation = program.prepare(SceneRecordingContext(capability, backend.deviceGeneration, GPUFrameTargetRef("target.scene"), GPUPixelBounds(0, 0, context.descriptor.width, context.descriptor.height), context.frameOrdinal, readback))) {
             is ScenePreparation.Recorded -> EvidenceProgramPreparation.Recorded(preparation.routeId, PreparedEvidenceProgram(preparation.taskList, readback.value), preparation.diagnostics)
-            is ScenePreparation.Refused -> EvidenceProgramPreparation.Refused(preparation.stableReasonCode, preparation.message, preparation.diagnostics)
+            is ScenePreparation.Refused -> EvidenceProgramPreparation.Refused(
+                (program as? RoutedSceneProgram)?.routeId ?: error("scene program must carry a product route identity"),
+                preparation.stableReasonCode,
+                preparation.message,
+                preparation.diagnostics,
+            )
         }
     }
 

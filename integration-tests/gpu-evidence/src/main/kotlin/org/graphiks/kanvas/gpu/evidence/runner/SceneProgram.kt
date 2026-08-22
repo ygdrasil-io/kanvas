@@ -47,3 +47,8 @@ sealed interface ScenePreparation {
 fun interface SceneProgram {
     fun prepare(context: SceneRecordingContext): ScenePreparation
 }
+
+/** Product route identity carried through both recorded and refused preparation. */
+interface RoutedSceneProgram : SceneProgram {
+    val routeId: String
+}
