@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.color.hdr
 
 import org.graphiks.kanvas.color.PQ_PEAK_NITS
-import org.graphiks.kanvas.color.pqEotfNits
-import org.graphiks.kanvas.color.pqInverseEotf
+import org.graphiks.math.color.pqEotf
+import org.graphiks.math.color.pqInverseEotf
 import kotlin.math.min
 
 public fun interface ToneMapper {
@@ -38,7 +38,7 @@ private class Bt2390ToneMapperImpl(
         require(targetPeakNits.isFinite() && targetPeakNits > 0.0 && targetPeakNits <= PQ_PEAK_NITS) {
             "targetPeakNits must be finite and in (0, 10000]"
         }
-        maxLum = pqInverseEotf(targetPeakNits)
+        maxLum = pqInverseEotf(targetPeakNits / PQ_PEAK_NITS)
         kneeStart = 1.5 * maxLum - 0.5
         normalizedIdentity = targetPeakNits == PQ_PEAK_NITS
     }
@@ -69,7 +69,7 @@ private class Bt2390ToneMapperImpl(
     private fun mapLuminance(sourceNits: Double): Double {
         val boundedSourceNits = sourceNits.coerceAtMost(PQ_PEAK_NITS)
         if (normalizedIdentity) return boundedSourceNits
-        val e1 = pqInverseEotf(boundedSourceNits)
+        val e1 = pqInverseEotf(boundedSourceNits / PQ_PEAK_NITS)
         val e2 = if (e1 < kneeStart) {
             e1
         } else {
@@ -80,7 +80,7 @@ private class Bt2390ToneMapperImpl(
                 (t3 - 2.0 * t2 + t) * (1.0 - kneeStart) +
                 (-2.0 * t3 + 3.0 * t2) * maxLum
         }
-        return pqEotfNits(e2.coerceIn(0.0, maxLum))
+        return pqEotf(e2.coerceIn(0.0, maxLum)) * PQ_PEAK_NITS
     }
 
     private companion object {

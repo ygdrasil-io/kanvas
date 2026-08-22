@@ -1,28 +1,18 @@
 package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.parametricCurveValidationError
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
-import kotlin.math.abs
-import kotlin.math.pow
+import org.graphiks.math.color.toEncoded
 
 /** A compiled matrix/TRC transform with all profile-dependent state cached. */
 internal class MatrixColorTransform(
-    sourceToXyzD50: FloatArray,
-    destinationFromXyzD50: FloatArray,
+    private val sourceToXyzD50: ColorMatrix3x3F32,
+    private val destinationFromXyzD50: ColorMatrix3x3F32,
     private val sourceTransferFunction: ColorTransferFunction.Parametric,
     private val destinationTransferFunction: ColorTransferFunction.Parametric,
     private val alphaType: AlphaType,
 ) : CompiledRgbPlan {
-    private val sourceToXyzD50 = sourceToXyzD50.copyOf()
-    private val destinationFromXyzD50 = destinationFromXyzD50.copyOf()
-
-    init {
-        require(this.sourceToXyzD50.size == MATRIX_COMPONENTS) { "source matrix must be 3x3" }
-        require(this.destinationFromXyzD50.size == MATRIX_COMPONENTS) { "destination matrix must be 3x3" }
-    }
-
     override fun apply(pixels: FloatArray, offset: Int) {
         val alpha = pixels[offset + ALPHA_OFFSET]
         if (alphaType == AlphaType.PREMULTIPLIED && (!alpha.isFinite() || alpha == 0f)) {
@@ -32,53 +22,31 @@ internal class MatrixColorTransform(
             return
         }
 
-        val sourceRed = decode(
-            sourceTransferFunction,
+        val sourceRed = sourceTransferFunction.toLinear(
             if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset] / alpha else pixels[offset],
         )
-        val sourceGreen = decode(
-            sourceTransferFunction,
+        val sourceGreen = sourceTransferFunction.toLinear(
             if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset + 1] / alpha else pixels[offset + 1],
         )
-        val sourceBlue = decode(
-            sourceTransferFunction,
+        val sourceBlue = sourceTransferFunction.toLinear(
             if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset + 2] / alpha else pixels[offset + 2],
         )
 
-        val xyzX = sourceToXyzD50[0] * sourceRed + sourceToXyzD50[1] * sourceGreen + sourceToXyzD50[2] * sourceBlue
-        val xyzY = sourceToXyzD50[3] * sourceRed + sourceToXyzD50[4] * sourceGreen + sourceToXyzD50[5] * sourceBlue
-        val xyzZ = sourceToXyzD50[6] * sourceRed + sourceToXyzD50[7] * sourceGreen + sourceToXyzD50[8] * sourceBlue
-
-        val destinationRed = destinationFromXyzD50[0] * xyzX + destinationFromXyzD50[1] * xyzY + destinationFromXyzD50[2] * xyzZ
-        val destinationGreen = destinationFromXyzD50[3] * xyzX + destinationFromXyzD50[4] * xyzY + destinationFromXyzD50[5] * xyzZ
-        val destinationBlue = destinationFromXyzD50[6] * xyzX + destinationFromXyzD50[7] * xyzY + destinationFromXyzD50[8] * xyzZ
+        val sourceLinear = floatArrayOf(sourceRed, sourceGreen, sourceBlue)
+        val xyz = FloatArray(RGB_CHANNELS)
+        val destinationLinear = FloatArray(RGB_CHANNELS)
+        sourceToXyzD50.map(sourceLinear, 0, xyz, 0)
+        destinationFromXyzD50.map(xyz, 0, destinationLinear, 0)
 
         val premultiply = if (alphaType == AlphaType.PREMULTIPLIED) alpha else 1f
-        pixels[offset] = clampEncoded(encode(destinationTransferFunction, destinationRed)) * premultiply
-        pixels[offset + 1] = clampEncoded(encode(destinationTransferFunction, destinationGreen)) * premultiply
-        pixels[offset + 2] = clampEncoded(encode(destinationTransferFunction, destinationBlue)) * premultiply
+        pixels[offset] = clampEncoded(destinationTransferFunction.toEncoded(destinationLinear[0])) * premultiply
+        pixels[offset + 1] = clampEncoded(destinationTransferFunction.toEncoded(destinationLinear[1])) * premultiply
+        pixels[offset + 2] = clampEncoded(destinationTransferFunction.toEncoded(destinationLinear[2])) * premultiply
     }
 
     private companion object {
         const val ALPHA_OFFSET = 3
-        const val MATRIX_COMPONENTS = 9
-    }
-}
-
-private fun decode(transferFunction: ColorTransferFunction.Parametric, encoded: Float): Float = if (encoded >= transferFunction.d) {
-    (transferFunction.a * encoded + transferFunction.b).pow(transferFunction.g) + transferFunction.e
-} else {
-    transferFunction.c * encoded + transferFunction.f
-}
-
-private fun encode(transferFunction: ColorTransferFunction.Parametric, linear: Float): Float {
-    val lowerLimit = transferFunction.c * transferFunction.d + transferFunction.f
-    val upperLimit = decode(transferFunction, transferFunction.d)
-    return when {
-        linear < lowerLimit && transferFunction.c > 0f -> (linear - transferFunction.f) / transferFunction.c
-        linear < upperLimit -> transferFunction.d
-        else -> ((linear - transferFunction.e).pow(1f / transferFunction.g) -
-            transferFunction.b) / transferFunction.a
+        const val RGB_CHANNELS = 3
     }
 }
 
@@ -95,36 +63,4 @@ internal fun validTransferFunction(transferFunction: ColorTransferFunction.Param
         transferFunction.f,
     )
     return parametricCurveValidationError(4, parameters) == null
-}
-
-internal fun matrixValues(matrix: Matrix3x3F32): FloatArray = FloatArray(9) { index ->
-    matrix.iccGet(index / 3, index % 3)
-}
-
-internal fun invert3x3(matrix: FloatArray): FloatArray? {
-    val a = matrix[0].toDouble()
-    val b = matrix[1].toDouble()
-    val c = matrix[2].toDouble()
-    val d = matrix[3].toDouble()
-    val e = matrix[4].toDouble()
-    val f = matrix[5].toDouble()
-    val g = matrix[6].toDouble()
-    val h = matrix[7].toDouble()
-    val i = matrix[8].toDouble()
-    val determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-    if (!determinant.isFinite() || determinant == 0.0) return null
-    val inverseDeterminant = 1.0 / determinant
-    val values = doubleArrayOf(
-        (e * i - f * h) * inverseDeterminant,
-        (c * h - b * i) * inverseDeterminant,
-        (b * f - c * e) * inverseDeterminant,
-        (f * g - d * i) * inverseDeterminant,
-        (a * i - c * g) * inverseDeterminant,
-        (c * d - a * f) * inverseDeterminant,
-        (d * h - e * g) * inverseDeterminant,
-        (b * g - a * h) * inverseDeterminant,
-        (a * e - b * d) * inverseDeterminant,
-    )
-    if (values.any { !it.isFinite() || abs(it) > Float.MAX_VALUE.toDouble() }) return null
-    return FloatArray(9) { values[it].toFloat() }
 }

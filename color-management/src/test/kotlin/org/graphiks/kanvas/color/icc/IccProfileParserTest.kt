@@ -2,9 +2,8 @@ package org.graphiks.kanvas.color.icc
 
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -636,9 +635,9 @@ class IccProfileParserTest {
 
         val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
-        assertEquals(0.9642f, profile.toXyzD50!!.iccGet(0, 0), 0f)
-        assertEquals(1f, profile.toXyzD50!!.iccGet(1, 1), 0f)
-        assertEquals(0.8249f, profile.toXyzD50!!.iccGet(2, 2), 0f)
+        assertEquals(0.9642f, profile.toXyzD50!![0, 0], 0f)
+        assertEquals(1f, profile.toXyzD50!![1, 1], 0f)
+        assertEquals(0.8249f, profile.toXyzD50!![2, 2], 0f)
     }
 
     @Test
@@ -674,6 +673,17 @@ class IccProfileParserTest {
             val offset = tagOffset(bytes, signature.value)
             repeat(12) { bytes[offset + 8 + it] = 0 }
         }
+
+        assertFailure("icc.profile.matrix", bytes)
+    }
+
+    @Test
+    fun `rejects finite RGB matrix with dependent columns`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        val redOffset = tagOffset(bytes, IccSignature.R_XYZ.value)
+        val greenOffset = tagOffset(bytes, IccSignature.G_XYZ.value)
+
+        bytes.copyInto(bytes, redOffset + 8, greenOffset + 8, greenOffset + 20)
 
         assertFailure("icc.profile.matrix", bytes)
     }
@@ -1518,9 +1528,9 @@ class IccProfileParserTest {
         assertTrue(differences.all { it <= 7e-5f }, "transfer function differs: $actual")
     }
 
-    private fun assertMatrixNear(expected: Matrix3x3F32, actual: Matrix3x3F32) {
+    private fun assertMatrixNear(expected: ColorMatrix3x3F32, actual: ColorMatrix3x3F32) {
         for (row in 0 until 3) for (column in 0 until 3) {
-            assertEquals(expected.iccGet(row, column), actual.iccGet(row, column), 1f / 65536f, "matrix[$row,$column]")
+            assertEquals(expected[row, column], actual[row, column], 1f / 65536f, "matrix[$row,$column]")
         }
     }
 }

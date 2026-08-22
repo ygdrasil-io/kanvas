@@ -12,7 +12,6 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(project(":math:scalar"))
-                api(project(":math:matrix"))
             }
         }
         commonTest {

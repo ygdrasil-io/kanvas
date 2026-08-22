@@ -9,7 +9,7 @@ import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.kanvas.types.Gamut
 import org.graphiks.kanvas.types.TransferFunction
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -176,7 +176,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `unknown gamut is refused instead of retagged`() {
-        val unknownGamut = Matrix3x3F32.of(
+        val unknownGamut = ColorMatrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -195,9 +195,10 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `nearby unknown gamut is refused instead of retagged as sRGB`() {
-        val unknownGamut = SkNamedGamut.kSRGB.copy(
-            sx = SkNamedGamut.kSRGB.sx + 3f / 65_536f,
-            kx = SkNamedGamut.kSRGB.kx - 3f / 65_536f,
+        val unknownGamut = ColorMatrix3x3F32.of(
+            SkNamedGamut.kSRGB[0, 0] + 3f / 65_536f, SkNamedGamut.kSRGB[0, 1] - 3f / 65_536f, SkNamedGamut.kSRGB[0, 2],
+            SkNamedGamut.kSRGB[1, 0], SkNamedGamut.kSRGB[1, 1], SkNamedGamut.kSRGB[1, 2],
+            SkNamedGamut.kSRGB[2, 0], SkNamedGamut.kSRGB[2, 1], SkNamedGamut.kSRGB[2, 2],
         )
         val source = serializedColorSpace(SkNamedTransferFn.kSRGB, unknownGamut)
 
@@ -214,11 +215,15 @@ class KanvasCodecColorSpaceTest {
     @Test
     fun `named gamut classification is isolated from public matrix mutation`() {
         val publicGamut = SkNamedGamut.kSRGB
-        val originalGamut = publicGamut.copy()
+        val originalGamut = ColorMatrix3x3F32.fromRowMajor(publicGamut.toFloatArray())
         val stableSource = sdrColorSpace(originalGamut)
         assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
 
-        val mutatedSource = sdrColorSpace(publicGamut.copy(sx = publicGamut.sx + 0.25f))
+        val mutatedSource = sdrColorSpace(ColorMatrix3x3F32.of(
+            publicGamut[0, 0] + 0.25f, publicGamut[0, 1], publicGamut[0, 2],
+            publicGamut[1, 0], publicGamut[1, 1], publicGamut[1, 2],
+            publicGamut[2, 0], publicGamut[2, 1], publicGamut[2, 2],
+        ))
 
         val failure = assertThrows<UnsupportedKanvasColorSpaceException> {
             imageInfo(mutatedSource).toKanvasImageInfo()
@@ -238,12 +243,12 @@ class KanvasCodecColorSpaceTest {
         colorSpace = colorSpace,
     )
 
-    private fun sdrColorSpace(gamut: Matrix3x3F32): SkColorSpace =
+    private fun sdrColorSpace(gamut: ColorMatrix3x3F32): SkColorSpace =
         requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, gamut))
 
     private fun serializedColorSpace(
         transferFunction: ColorTransferFunction.Parametric,
-        gamut: Matrix3x3F32,
+        gamut: ColorMatrix3x3F32,
     ): SkColorSpace = requireNotNull(
         SkColorSpace.make(
             requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut))),

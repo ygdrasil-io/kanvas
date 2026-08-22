@@ -4,6 +4,7 @@ import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.ColorTransform
 import org.graphiks.kanvas.color.HdrTransferFunction
 import org.graphiks.kanvas.color.AlphaType
+import org.graphiks.math.color.ColorTransferFunction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -11,6 +12,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CicpColorInfoTest {
+
+    @Test
+    fun `CICP linear transfer uses the canonical signed identity curve`() {
+        val profile = CicpColorInfo(1, 8, 0, true).toColorProfile().getOrThrow()
+
+        assertEquals(ColorTransferFunction.linear, profile.transferFunction)
+        assertEquals(-0.125f, requireNotNull(profile.transferFunction).toLinear(-0.125f), 0f)
+    }
 
     @Test
     fun `png rgb cicp pq rec2020 builds hdr source profile`() {

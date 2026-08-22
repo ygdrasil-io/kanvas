@@ -2,9 +2,8 @@ package org.graphiks.kanvas.color.icc
 
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.round
 
 /**
@@ -138,10 +137,10 @@ public object IccProfileWriter {
         }
     }
 
-    private fun quantizeMatrix(matrix: Matrix3x3F32): IntArray {
+    private fun quantizeMatrix(matrix: ColorMatrix3x3F32): IntArray {
         val fixed = IntArray(9)
         for (row in 0 until 3) for (column in 0 until 3) {
-            fixed[row * 3 + column] = quantizeS15Fixed16(matrix.iccGet(row, column))
+            fixed[row * 3 + column] = quantizeS15Fixed16(matrix[row, column])
         }
         val d50 = intArrayOf(
             quantizeS15Fixed16(D50_X),

@@ -3,9 +3,8 @@ package org.graphiks.kanvas.color.icc
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -113,12 +112,12 @@ class IccProfileWriterTest {
 
     @Test
     fun `quantizes signed fixed values without overflow or non finite coercion`() {
-        val nanMatrix = Matrix3x3F32.of(
+        val nanMatrix = ColorMatrix3x3F32.of(
             Float.NaN, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
         )
-        val overflowMatrix = Matrix3x3F32.of(
+        val overflowMatrix = ColorMatrix3x3F32.of(
             32_768f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -135,7 +134,7 @@ class IccProfileWriterTest {
 
     @Test
     fun `rejects a matrix that becomes singular in ICC fixed point`() {
-        val singularMatrix = Matrix3x3F32.of(
+        val singularMatrix = ColorMatrix3x3F32.of(
             1f, 0f, 0f,
             1f, 0f, 0f,
             0f, 0f, 1f,
@@ -154,7 +153,7 @@ class IccProfileWriterTest {
 
     @Test
     fun `rejects an invertible RGB matrix whose white is not D50`() {
-        val identity = Matrix3x3F32.of(
+        val identity = ColorMatrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0f, 1f,
@@ -171,9 +170,9 @@ class IccProfileWriterTest {
         }
     }
 
-    private fun assertMatrixNear(expected: Matrix3x3F32, actual: Matrix3x3F32) {
+    private fun assertMatrixNear(expected: ColorMatrix3x3F32, actual: ColorMatrix3x3F32) {
         for (row in 0 until 3) for (column in 0 until 3) {
-            assertEquals(expected.iccGet(row, column), actual.iccGet(row, column), WHITE_NORMALIZATION_TOLERANCE)
+            assertEquals(expected[row, column], actual[row, column], WHITE_NORMALIZATION_TOLERANCE)
         }
     }
 

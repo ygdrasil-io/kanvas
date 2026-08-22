@@ -3,8 +3,8 @@ package org.graphiks.kanvas.test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.png.PngEncoder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -282,19 +282,18 @@ object ComparisonUtils {
             1.055 * linear.pow(1.0 / 2.4) - 0.055
         }
 
-    private fun multiply(matrix: Matrix3x3F32, vector: DoubleArray): DoubleArray =
-        DoubleArray(3) { row ->
-            matrix[row, 0].toDouble() * vector[0] +
-                matrix[row, 1].toDouble() * vector[1] +
-                matrix[row, 2].toDouble() * vector[2]
-        }
+    private fun multiply(matrix: ColorMatrix3x3F32, vector: DoubleArray): DoubleArray {
+        val output = FloatArray(3)
+        matrix.map(floatArrayOf(vector[0].toFloat(), vector[1].toFloat(), vector[2].toFloat()), 0, output, 0)
+        return DoubleArray(3) { output[it].toDouble() }
+    }
 
     private fun multiply(matrix: Array<DoubleArray>, vector: DoubleArray): DoubleArray =
         DoubleArray(3) { row ->
             matrix[row][0] * vector[0] + matrix[row][1] * vector[1] + matrix[row][2] * vector[2]
         }
 
-    private fun invert3x3(matrix: Matrix3x3F32): Array<DoubleArray> {
+    private fun invert3x3(matrix: ColorMatrix3x3F32): Array<DoubleArray> {
         val a = matrix[0, 0].toDouble(); val b = matrix[0, 1].toDouble(); val c = matrix[0, 2].toDouble()
         val d = matrix[1, 0].toDouble(); val e = matrix[1, 1].toDouble(); val f = matrix[1, 2].toDouble()
         val g = matrix[2, 0].toDouble(); val h = matrix[2, 1].toDouble(); val i = matrix[2, 2].toDouble()
