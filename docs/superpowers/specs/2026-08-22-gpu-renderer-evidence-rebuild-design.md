@@ -419,18 +419,23 @@ This would reproduce the current semantic and maintenance burden under a new
 package name. Scene intent is inventoried, but inclusion in the new catalog
 requires fresh product evidence.
 
-## Source Of Truth
+## Verification Authority
 
-This design is subordinate to the active architecture targets and GPU renderer
-specifications under:
+Checked-in production code at the evaluated commit is the source of truth for
+implemented behavior. In particular, current command contracts, analysis and
+routing, recording, frame preparation, execution, diagnostics, runtime-effect
+registration, and telemetry are defined by the code under `gpu-renderer/src`.
 
-- `.upstream/target/high-performance-wgsl-pipeline-target.md`;
-- `.upstream/target/skia-like-realtime-renderer-target.md`;
-- `.upstream/specs/skia-like-realtime/README.md`;
-- `.upstream/specs/gpu-renderer/README.md`;
-- `.upstream/specs/gpu-renderer/07-validation-conformance.md`;
-- `.upstream/specs/gpu-renderer/13-performance-telemetry-cache-gates.md`.
+Executable tests and runtime artifacts tied to the same commit verify claims
+about that behavior. A rendering-support claim requires the observed route,
+diagnostics, GPU result, oracle result, comparison statistics, environment, and
+verdict required by this design. A refusal claim requires the observed stable
+diagnostic and proof that no GPU submission or product pixels were produced.
 
-If those sources change route authority, diagnostic taxonomy, registered
-runtime-effect policy, or evidence requirements, they take precedence and this
-design must be updated before implementation continues.
+Documentation may describe intent, constraints, or a future target. It is not
+verification evidence and cannot override observed code behavior, activate a
+route, satisfy a promotion gate, or turn an untested capability into supported
+functionality. When documentation and code disagree, the evidence report must
+record the divergence and describe the code as the current implementation.
+Changing the intended contract then requires a reviewed code change with
+executable verification.
