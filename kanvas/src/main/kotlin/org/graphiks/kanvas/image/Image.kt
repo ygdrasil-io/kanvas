@@ -3,7 +3,7 @@ package org.graphiks.kanvas.image
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 
 enum class ColorType(val bytesPerPixel: Int) {
     RGBA_8888(4),

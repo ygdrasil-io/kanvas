@@ -40,7 +40,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect

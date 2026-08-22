@@ -11,7 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 
 object GPUPreparedSurfaceImageSource {
     fun prepare(image: Image): GPUPreparedImageArtifactResult {

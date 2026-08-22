@@ -8,13 +8,13 @@ import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.isNear
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.abs
 
 public enum class SkColorType(public val bytesPerPixel: Int) {
     kUnknown(0),
@@ -250,27 +250,13 @@ public class SkColorSpace private constructor(
 
         // Encoding identity is deliberately narrower than the writer's D50 normalization allowance.
         private fun isSrgbMatrix(matrix: ColorMatrix3x3F32): Boolean =
-            matricesNear(matrix, SkNamedGamut.kSRGB) || matricesNear(matrix, SERIALIZED_SRGB_GAMUT)
-
-        private fun matricesNear(left: ColorMatrix3x3F32, right: ColorMatrix3x3F32): Boolean {
-            for (row in 0 until 3) for (column in 0 until 3) {
-                if (abs(left[row, column] - right[row, column]) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
-            }
-            return true
-        }
+            matrix.isNear(SkNamedGamut.kSRGB, SRGB_MATRIX_IDENTITY_TOLERANCE) ||
+                matrix.isNear(SERIALIZED_SRGB_GAMUT, SRGB_MATRIX_IDENTITY_TOLERANCE)
 
         private fun transferFunctionsNear(
             left: ColorTransferFunction.Parametric,
             right: ColorTransferFunction.Parametric,
-        ): Boolean = listOf(
-            left.g to right.g,
-            left.a to right.a,
-            left.b to right.b,
-            left.c to right.c,
-            left.d to right.d,
-            left.e to right.e,
-            left.f to right.f,
-        ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_TRANSFER_TOLERANCE }
+        ): Boolean = left.isNear(right, ICC_TRANSFER_TOLERANCE)
 
         private val SERIALIZED_SRGB_GAMUT: ColorMatrix3x3F32 by lazy {
             checkNotNull(SkcmsICCProfile.fromColorProfile(ColorProfiles.sRGB()).colorProfile.toXyzD50)

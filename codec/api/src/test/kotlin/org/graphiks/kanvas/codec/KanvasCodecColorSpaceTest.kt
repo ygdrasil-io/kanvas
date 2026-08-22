@@ -5,9 +5,9 @@ import org.graphiks.kanvas.color.ColorProfileParseResult
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
-import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.kanvas.types.Gamut
-import org.graphiks.kanvas.types.TransferFunction
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
+import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals

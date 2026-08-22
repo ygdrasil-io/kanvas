@@ -1,6 +1,7 @@
 package org.graphiks.math.color
 
 import kotlin.ConsistentCopyVisibility
+import kotlin.math.abs
 import kotlin.math.pow
 
 /**
@@ -96,4 +97,21 @@ public fun ColorTransferFunction.Parametric.toEncoded(linear: Float): Float {
         linear < upperLimit -> d
         else -> ((linear - e).pow(1f / g) - b) / a
     }
+}
+
+/** Returns whether every ICC parametric coefficient differs by at most [tolerance]. */
+public fun ColorTransferFunction.Parametric.isNear(
+    other: ColorTransferFunction.Parametric,
+    tolerance: Float,
+): Boolean {
+    require(tolerance.isFinite() && tolerance >= 0f) { "tolerance must be finite and non-negative" }
+    return listOf(
+        g to other.g,
+        a to other.a,
+        b to other.b,
+        c to other.c,
+        d to other.d,
+        e to other.e,
+        f to other.f,
+    ).all { (left, right) -> abs(left - right) <= tolerance }
 }

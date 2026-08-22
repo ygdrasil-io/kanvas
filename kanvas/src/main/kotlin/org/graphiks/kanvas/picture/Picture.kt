@@ -8,6 +8,9 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
+import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
