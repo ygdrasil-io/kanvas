@@ -678,6 +678,17 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `rejects finite RGB matrix with dependent columns`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        val redOffset = tagOffset(bytes, IccSignature.R_XYZ.value)
+        val greenOffset = tagOffset(bytes, IccSignature.G_XYZ.value)
+
+        bytes.copyInto(bytes, redOffset + 8, greenOffset + 8, greenOffset + 20)
+
+        assertFailure("icc.profile.matrix", bytes)
+    }
+
+    @Test
     fun `rejects unequal RGB transfer curves`() {
         val original = resource("srgb-matrix-trc.icc")
         val bytes = original.copyOf(original.size + 16)

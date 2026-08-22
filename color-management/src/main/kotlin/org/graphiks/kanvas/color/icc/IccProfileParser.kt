@@ -828,32 +828,8 @@ private class Parser(
     private fun roundsToD50(value: Float, expected: Float): Boolean =
         abs(value - expected) < D50_ROUNDING_HALF_UNIT
 
-    private fun isRepresentableMatrix(matrix: ColorMatrix3x3F32): Boolean {
-        val a = matrix[0, 0].toDouble()
-        val b = matrix[0, 1].toDouble()
-        val c = matrix[0, 2].toDouble()
-        val d = matrix[1, 0].toDouble()
-        val e = matrix[1, 1].toDouble()
-        val f = matrix[1, 2].toDouble()
-        val g = matrix[2, 0].toDouble()
-        val h = matrix[2, 1].toDouble()
-        val i = matrix[2, 2].toDouble()
-        val determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-        if (!determinant.isFinite() || determinant == 0.0) return false
-        val inverseDeterminant = 1.0 / determinant
-        val inverseValues = doubleArrayOf(
-            (e * i - f * h) * inverseDeterminant,
-            (c * h - b * i) * inverseDeterminant,
-            (b * f - c * e) * inverseDeterminant,
-            (f * g - d * i) * inverseDeterminant,
-            (a * i - c * g) * inverseDeterminant,
-            (c * d - a * f) * inverseDeterminant,
-            (d * h - e * g) * inverseDeterminant,
-            (b * g - a * h) * inverseDeterminant,
-            (a * e - b * d) * inverseDeterminant,
-        )
-        return inverseValues.all { it.isFinite() && abs(it) <= Float.MAX_VALUE.toDouble() }
-    }
+    private fun isRepresentableMatrix(matrix: ColorMatrix3x3F32): Boolean =
+        matrix.toFloatArray().all { it.isFinite() } && matrix.inverseOrNull() != null
 }
 
 private enum class LutDirection {
