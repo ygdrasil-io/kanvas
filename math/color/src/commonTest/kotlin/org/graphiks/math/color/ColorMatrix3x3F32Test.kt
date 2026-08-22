@@ -110,6 +110,18 @@ class ColorMatrix3x3F32Test {
     }
 
     @Test
+    fun `inverse of a non diagonal matrix composes to identity`() {
+        val matrix = ColorMatrix3x3F32.of(
+            1f, 2f, 3f,
+            0f, 1f, 4f,
+            5f, 6f, 0f,
+        )
+        val inverse = assertNotNull(matrix.inverseOrNull())
+
+        assertContentEquals(ColorMatrix3x3F32.Identity.toFloatArray(), matrix.concat(inverse).toFloatArray())
+    }
+
+    @Test
     fun `inverse rejects singular and overflowing matrices`() {
         assertNull(ColorMatrix3x3F32.of(
             1f, 0f, 0f,
@@ -120,6 +132,15 @@ class ColorMatrix3x3F32Test {
             1e-39f, 0f, 0f,
             0f, 1e-39f, 0f,
             0f, 0f, 1e-39f,
+        ).inverseOrNull())
+    }
+
+    @Test
+    fun `inverse rejects non finite coefficients`() {
+        assertNull(ColorMatrix3x3F32.of(
+            Float.NaN, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
         ).inverseOrNull())
     }
 }
