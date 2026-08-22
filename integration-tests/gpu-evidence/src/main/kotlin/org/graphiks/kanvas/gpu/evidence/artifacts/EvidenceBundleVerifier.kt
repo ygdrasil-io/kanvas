@@ -77,7 +77,7 @@ object EvidenceBundleVerifier {
             route.requiredString("routeId"); route.optionalString("attemptId"); route.optionalString("furthestPhase"); route.requiredString("outcome")
             route["encodedScopeKinds"]?.jsonArray?.forEach { it.jsonPrimitive.asString("encoded scope kind") } ?: error("encodedScopeKinds must be an array")
             route["structuralEvents"]?.jsonArray?.forEach { event -> val e = event.jsonObject; e.requireKeys(setOf("kind", "phase", "label")); e.requiredString("kind"); e.requiredString("phase"); e.optionalString("label") } ?: error("structuralEvents must be an array")
-            route.requiredObject("structuralCounters").forEach { (key, value) -> require(key.isNotBlank()); value.jsonPrimitive.longOrNull ?: error("structural counter must be a long") }
+            route.requiredObject("structuralCounters").forEach { (key, value) -> require(key.isNotBlank()); value.jsonPrimitive.takeUnless { it.isString }?.longOrNull ?: error("structural counter must be a long") }
             val telemetry = route.requiredObject("runtimeTelemetryDelta")
             telemetry.requireKeys(TELEMETRY_FIELDS)
             TELEMETRY_FIELDS.forEach { telemetry.requiredLong(it) }

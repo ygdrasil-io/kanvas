@@ -5,6 +5,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.StandardOpenOption.CREATE_NEW
+import java.nio.file.StandardOpenOption.WRITE
+import java.nio.ByteBuffer
+import java.nio.file.SecureDirectoryStream
 import java.security.MessageDigest
 import java.time.Clock
 import org.graphiks.kanvas.gpu.evidence.catalog.*
@@ -33,6 +37,9 @@ class EvidenceBundleWriter(
         require(SOURCE_COMMIT.matches(sourceCommit)) { "source commit must be a single safe path component" }
         Files.createDirectories(root)
         rootReal = root.toRealPath(NOFOLLOW_LINKS)
+        require(Files.newDirectoryStream(root).use { it is SecureDirectoryStream<*> }) {
+            "repository provider does not offer secure directory handles"
+        }
     }
 
     constructor(repositoryRoot: java.io.File, sourceCommit: String, clock: Clock = Clock.systemUTC()) :
@@ -101,7 +108,7 @@ class EvidenceBundleWriter(
             val oracleIsCheckedIn = descriptor.oracle is OraclePolicy.CheckedInPng
             val skiaBytes = if (oracleIsCheckedIn) {
                 val original = requireNotNull(checkedInPngBytes) { "CheckedInPng requires original PNG bytes" }
-                require(sha256(original) == (descriptor.oracle as OraclePolicy.CheckedInPng).sha256) { "checked-in PNG bytes do not match oracle sha256" }
+                require(sha256(original) == descriptor.oracle.sha256) { "checked-in PNG bytes do not match oracle sha256" }
                 original.copyOf()
             } else null
             files[if (oracleIsCheckedIn) "skia.png" else "cpu.png"] = skiaBytes ?: cpuPng
@@ -165,20 +172,29 @@ class EvidenceBundleWriter(
         require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "evidence destination must be a directory" }
         val backup = Files.createTempDirectory(destination.parent, ".${destination.fileName}.backup-")
         deleteTree(backup)
+        var backupInstalled = false
+        var installSucceeded = false
+        var restoreSucceeded = false
         try {
             try { moveStrategy(destination, backup, true) } catch (_: AtomicMoveNotSupportedException) { moveStrategy(destination, backup, false) }
+            backupInstalled = true
             try {
                 moveStrategy(temp, destination, true)
             } catch (_: AtomicMoveNotSupportedException) {
                 moveStrategy(temp, destination, false)
             }
+            installSucceeded = true
         } catch (failure: Throwable) {
             if (!Files.exists(destination, NOFOLLOW_LINKS) && Files.exists(backup, NOFOLLOW_LINKS)) {
-                runCatching { moveStrategy(backup, destination, true) }.getOrElse { moveStrategy(backup, destination, false) }
+                restoreSucceeded = runCatching { moveStrategy(backup, destination, true); true }.getOrElse {
+                    runCatching { moveStrategy(backup, destination, false); true }.getOrDefault(false)
+                }
             }
             throw failure
         } finally {
-            if (Files.exists(backup, NOFOLLOW_LINKS)) deleteTree(backup)
+            if (installSucceeded || (backupInstalled && restoreSucceeded)) {
+                if (Files.exists(backup, NOFOLLOW_LINKS)) deleteTree(backup)
+            }
         }
     }
 
@@ -189,10 +205,29 @@ class EvidenceBundleWriter(
             if (!failed.startsWith(root)) return@runCatching
             ensureNoSymlinkComponents(failed.parent!!)
             if (Files.exists(failed, NOFOLLOW_LINKS)) return@runCatching
+            secureCreateDirectories(failed.parent!!)
             Files.createDirectory(failed)
-            Files.write(failed.resolve("diagnostics.json"), diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
-            Files.write(failed.resolve("environment.json"), environmentJson(observation.environment))
+            writeNoFollow(failed.resolve("diagnostics.json"), diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
+            writeNoFollow(failed.resolve("environment.json"), environmentJson(observation.environment))
         }
+    }
+
+    private fun secureCreateDirectories(path: Path) {
+        require(path.startsWith(root)) { "path escapes repository root" }
+        var current = root
+        require(Files.newDirectoryStream(current).use { it is SecureDirectoryStream<*> }) { "secure directory handles unavailable" }
+        val relative = root.relativize(path)
+        for (index in 0 until relative.nameCount) {
+            current = current.resolve(relative.getName(index).toString())
+            if (Files.exists(current, NOFOLLOW_LINKS)) {
+                require(!Files.isSymbolicLink(current) && Files.isDirectory(current, NOFOLLOW_LINKS)) { "path component is unsafe" }
+            } else Files.createDirectory(current)
+            require(Files.newDirectoryStream(current).use { it is SecureDirectoryStream<*> }) { "secure directory handles unavailable" }
+        }
+    }
+
+    private fun writeNoFollow(path: Path, bytes: ByteArray) {
+        Files.newByteChannel(path, CREATE_NEW, WRITE, NOFOLLOW_LINKS).use { channel -> channel.write(ByteBuffer.wrap(bytes)) }
     }
 
     private fun ensureNoSymlinkComponents(path: Path) {
