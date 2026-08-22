@@ -48,7 +48,9 @@ public class PngCodec private constructor(
             height = png.height,
             colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
             alphaType = if (isF16) SkAlphaType.kPremul else SkAlphaType.kUnpremul,
-            colorSpace = png.resolvedColorProfile?.let(ImageColorSpace::fromColorProfile) ?: ImageColorSpace.sRGB(),
+            colorSpace = png.resolvedIccProfile?.let(ImageColorSpace::fromIccProfile)
+                ?: png.resolvedColorProfile?.let(ImageColorSpace::fromColorProfile)
+                ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -405,6 +407,7 @@ public class PngCodec private constructor(
                 transparency = if (h.colorType == COLOR_GRAYSCALE || h.colorType == COLOR_RGB) transparency else null,
                 embeddedIccProfile = colors.embeddedIccProfile,
                 resolvedColorProfile = colors.resolvedColorProfile,
+                resolvedIccProfile = colors.resolvedIccProfile,
             )
         }
 
@@ -562,6 +565,7 @@ public class PngCodec private constructor(
                 return ColorResolution(
                     embeddedIccProfile = embeddedIcc,
                     resolvedColorProfile = iccp.value.profile,
+                    resolvedIccProfile = embeddedIcc,
                     diagnostics = emptyList(),
                 )
             }
@@ -759,11 +763,13 @@ public class PngCodec private constructor(
         val transparency: Transparency?,
         val embeddedIccProfile: IccProfile?,
         val resolvedColorProfile: ColorProfile?,
+        val resolvedIccProfile: IccProfile?,
     )
 
     private data class ColorResolution(
         val embeddedIccProfile: IccProfile?,
         val resolvedColorProfile: ColorProfile?,
+        val resolvedIccProfile: IccProfile? = null,
         val diagnostics: List<PngDiagnostic>,
     )
 }

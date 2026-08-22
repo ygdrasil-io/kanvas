@@ -24,21 +24,22 @@ public class ImageColorSpace private constructor(
     public val profileRefusalCode: String?,
 ) {
     public val transferFunction: ColorTransferFunction.Parametric?
-        get() = colorProfile.transferFunction
+        get() = colorProfile.transferFunction.takeIf { isProfileSupported() }
 
     public val toXyzD50: ColorMatrix3x3F32?
-        get() = colorProfile.toXyzD50
+        get() = colorProfile.toXyzD50.takeIf { isProfileSupported() }
 
     public fun isSrgb(): Boolean =
         profileStatus == ImageColorSpaceProfileStatus.SUPPORTED && toColorSpaceOrNull() == ColorSpace.SRGB
 
     public fun isLinear(): Boolean =
-        transferFunction?.isNear(ColorTransferFunction.linear, TRANSFER_TOLERANCE) == true
+        isProfileSupported() && transferFunction?.isNear(ColorTransferFunction.linear, TRANSFER_TOLERANCE) == true
 
     public fun isProfileSupported(): Boolean = profileStatus == ImageColorSpaceProfileStatus.SUPPORTED
 
     /** Returns the named public descriptor when this profile belongs to that subset. */
-    public fun toColorSpaceOrNull(): ColorSpace? = colorProfile.toColorSpaceOrNull()
+    public fun toColorSpaceOrNull(): ColorSpace? =
+        colorProfile.toColorSpaceOrNull().takeIf { isProfileSupported() }
 
     override fun toString(): String = when {
         isSrgb() -> "ImageColorSpace(sRGB)"
@@ -75,9 +76,12 @@ public class ImageColorSpace private constructor(
             ),
         )
 
-        public fun fromColorProfile(
+        public fun fromColorProfile(colorProfile: ColorProfile): ImageColorSpace =
+            fromColorProfile(colorProfile, iccProfile = null)
+
+        private fun fromColorProfile(
             colorProfile: ColorProfile,
-            iccProfile: IccProfile? = null,
+            iccProfile: IccProfile?,
         ): ImageColorSpace {
             val supported = colorProfile.colorModel == ColorModel.RGB &&
                 colorProfile.unsupportedCode == null &&

@@ -889,6 +889,7 @@ class PngCodecTest {
         assertTrue(profile.hasToXyzD50)
         assertEquals(profile.size, profile.bytes.size)
         assertEquals(iccBytes.size, profile.size)
+        assertEquals(profile, codec.getInfo().colorSpace.iccProfile)
         assertFalse(codec.getInfo().colorSpace.isSrgb())
         assertEquals(ImageColorSpaceProfileStatus.SUPPORTED, codec.getInfo().colorSpace.profileStatus)
         for (row in 0 until 3) for (column in 0 until 3) {
