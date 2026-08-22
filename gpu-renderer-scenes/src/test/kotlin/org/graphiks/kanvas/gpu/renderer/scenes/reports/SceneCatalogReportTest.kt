@@ -107,6 +107,8 @@ class SceneCatalogReportTest {
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-001\",\"KGPU-M10-004\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-002\"]"))
         assertTrue(root.resolve("catalog.json").readText().contains("\"ticketIds\": [\"KGPU-M10-003\"]"))
+        assertFalse(root.resolve("catalog.json").readText().contains("Kadre windowed"))
+        assertFalse(root.resolve("catalog.fr.md").readText().contains("Kadre windowed"))
     }
 
     @Test

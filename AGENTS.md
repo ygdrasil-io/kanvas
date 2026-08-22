@@ -36,11 +36,11 @@ compatibility surface that Kanvas does not dynamically compile. Supported
 runtime effects require registered Kanvas descriptors with Kotlin/CPU behavior
 and parser-validated WGSL GPU implementations.
 
-For RC/MEP CI and PM packages, keep headless validation separate from native
-Kadre demo execution. `pipelinePmBundle` and checked-in RC validators must not
-accidentally resolve unpublished Kadre artifacts or require an initialized
-`external/poc-koreos` submodule. Native Kadre demos are opt-in local evidence
-and must document when the submodule is required.
+For RC/MEP CI and PM packages, keep headless validation separate from any
+future native demo execution. `pipelinePmBundle` and checked-in RC validators
+must not resolve unpublished native-windowing artifacts or require a native
+windowing submodule. Native interactive windowing is retired from the current
+Kanvas runtime; historical native evidence must remain labeled as historical.
 
 Hard architecture decisions:
 
@@ -49,8 +49,10 @@ Hard architecture decisions:
 - Keep WebGPU as the GPU backend.
 - Keep `SkRuntimeEffect` as a compatibility facade backed by registered
   Kotlin/WGSL implementations.
-- Use Kadre from `ygdrasil-io/poc-koreos` for live/native windowing work. It
-  is incubating and unpublished, so it may be included as a git submodule.
+- Keep the supported renderer runtime headless/offscreen. Native interactive
+  windowing is out of the current Kanvas scope and must not be reintroduced as
+  an implicit dependency; any future host requires a separately approved
+  architecture decision.
 - Treat `ygdrasil-io/wgsl4k` as evolving. If parser/IR/generator behavior is
   ambiguous or surprising, stop the Kanvas assumption and open a `wgsl4k`
   ticket with minimized evidence instead of adding a hidden workaround.

@@ -99,14 +99,10 @@ def main() -> int:
     require(gate_freeze == standalone_gate_freeze, "gate-freeze.json diverges from rc2-evidence.json")
     required_gates = gate_freeze.get("requiredCorrectnessGates", [])
     require(any(gate.get("name") == "pipelinePmBundle" and gate.get("phase") == "blocking" for gate in required_gates), "pipelinePmBundle must remain a blocking correctness gate")
-    kadre_generation_gate = next((gate for gate in required_gates if gate.get("name") == ":kadre-runtime:pipelineM88ReleaseCandidate2"), None)
-    require(kadre_generation_gate is not None, "Kadre runtime source generation gate is missing")
-    require(kadre_generation_gate.get("phase") == "source-generation-local", "Kadre runtime source generation must stay local/non-CI")
 
     pm_package = evidence.get("pmPackage", {})
     require(pm_package.get("generationCommand") == "rtk ./gradlew --no-daemon pipelinePmBundle", "PM bundle generation must stay headless")
     require(pm_package.get("headlessCiRequiresKadreSubmodule") is False, "Headless PM package must not require Kadre submodule")
-    require("external/poc-koreos" in pm_package.get("nativeKadreDemoSetup", ""), "Native Kadre demo setup command is missing")
 
     non_claims = "\n".join(evidence.get("nonClaims", []))
     require("does not add broad Skia parity" in non_claims, "broad Skia parity non-claim is missing")

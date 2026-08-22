@@ -14,7 +14,13 @@ have generated evidence, stable refusals, PM-visible artifacts, and
 release-blocking performance gates where selected. The next target has two
 tracks: first, increase Skia-like feature breadth and fidelity; second, build a
 measured real-time rendering lane on top of that breadth. Real-time is not
-claimed complete until M67/M68 gates provide measured frame evidence.
+claimed complete until the supported headless/offscreen gates provide measured
+frame evidence.
+
+The native Kadre/windowing branch described by the historical M68-M92 entries
+is retired. The supported runtime path is headless/offscreen; those entries and
+their checked-in artifacts remain traceability evidence only, not active
+backlog or build requirements.
 
 This is not a Ganesh or Graphite port. Kanvas keeps its WebGPU backend,
 Kotlin/WGSL pipeline, explicit fallback diagnostics, generated evidence
@@ -55,9 +61,10 @@ Current strengths:
 - WebGPU remains the intended GPU backend;
 - WGSL parser/generator integration direction is established, but `wgsl4k`
   remains an active dependency and must not be treated as finished;
-- Kadre from `ygdrasil-io/poc-koreos` is the intended incubating windowing
-  host for live demos and can be included as a git submodule while it is not
-  published.
+- The supported runtime evidence is headless/offscreen. The previously
+  explored native Kadre windowing route is retired and its checked-in reports
+  are historical evidence only; a future native host would require a separate
+  architecture decision.
 
 Current gaps:
 

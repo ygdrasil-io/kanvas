@@ -205,7 +205,9 @@ object GPURendererSceneHumanDocs {
                 intention = intention,
                 validates = validates,
                 nonClaims = nonClaims,
-                evidence = evidence,
+                // Keep legacy catalog inputs readable while ensuring current generated evidence
+                // describes only the supported headless/offscreen route.
+                evidence = evidence.replace(" et Kadre windowed", ""),
             ),
         )
 
