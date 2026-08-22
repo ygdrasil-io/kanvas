@@ -38,7 +38,7 @@ public fun CicpColorInfo.toColorProfile(): ColorProfileParseResult {
     val sdrTransfer = when (transfer) {
         TRANSFER_REC709, TRANSFER_REC2020_10, TRANSFER_REC2020_12 ->
             checkNotNull(ColorProfiles.rec2020().transferFunction)
-        TRANSFER_LINEAR -> LINEAR_TRANSFER
+        TRANSFER_LINEAR -> ColorTransferFunction.linear
         TRANSFER_SRGB -> checkNotNull(ColorProfiles.sRGB().transferFunction)
         else -> return failure("cicp.transfer.unsupported")
     }
@@ -64,13 +64,3 @@ private const val TRANSFER_REC2020_10: Int = 14
 private const val TRANSFER_REC2020_12: Int = 15
 private const val TRANSFER_PQ: Int = 16
 private const val TRANSFER_HLG: Int = 18
-
-private val LINEAR_TRANSFER: ColorTransferFunction.Parametric = ColorTransferFunction.parametric(
-    g = 1f,
-    a = 1f,
-    b = 0f,
-    c = 1f,
-    d = 0f,
-    e = 0f,
-    f = 0f,
-)

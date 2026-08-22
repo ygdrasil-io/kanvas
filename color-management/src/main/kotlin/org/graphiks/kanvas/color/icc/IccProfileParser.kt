@@ -3,9 +3,8 @@ package org.graphiks.kanvas.color.icc
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfileParseResult
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.abs
 
 public data class IccParseLimits(
@@ -251,7 +250,7 @@ private class Parser(
         val r = parseXyzTag(rXyz)
         val g = parseXyzTag(gXyz)
         val b = parseXyzTag(bXyz)
-        val matrix = Matrix3x3F32.of(
+        val matrix = ColorMatrix3x3F32.of(
             r[0], g[0], b[0],
             r[1], g[1], b[1],
             r[2], g[2], b[2],
@@ -729,7 +728,7 @@ private class Parser(
             ?: abort("icc.curve.sampled", "Sampled TRCs cannot be represented by the current ColorProfile contract")
         return ColorProfile(
             colorModel = ColorModel.GRAY,
-            toXyzD50 = Matrix3x3F32.of(
+            toXyzD50 = ColorMatrix3x3F32.of(
                 D50_X, 0f, 0f,
                 0f, D50_Y, 0f,
                 0f, 0f, D50_Z,
@@ -829,16 +828,16 @@ private class Parser(
     private fun roundsToD50(value: Float, expected: Float): Boolean =
         abs(value - expected) < D50_ROUNDING_HALF_UNIT
 
-    private fun isRepresentableMatrix(matrix: Matrix3x3F32): Boolean {
-        val a = matrix.iccGet(0, 0).toDouble()
-        val b = matrix.iccGet(0, 1).toDouble()
-        val c = matrix.iccGet(0, 2).toDouble()
-        val d = matrix.iccGet(1, 0).toDouble()
-        val e = matrix.iccGet(1, 1).toDouble()
-        val f = matrix.iccGet(1, 2).toDouble()
-        val g = matrix.iccGet(2, 0).toDouble()
-        val h = matrix.iccGet(2, 1).toDouble()
-        val i = matrix.iccGet(2, 2).toDouble()
+    private fun isRepresentableMatrix(matrix: ColorMatrix3x3F32): Boolean {
+        val a = matrix[0, 0].toDouble()
+        val b = matrix[0, 1].toDouble()
+        val c = matrix[0, 2].toDouble()
+        val d = matrix[1, 0].toDouble()
+        val e = matrix[1, 1].toDouble()
+        val f = matrix[1, 2].toDouble()
+        val g = matrix[2, 0].toDouble()
+        val h = matrix[2, 1].toDouble()
+        val i = matrix[2, 2].toDouble()
         val determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
         if (!determinant.isFinite() || determinant == 0.0) return false
         val inverseDeterminant = 1.0 / determinant

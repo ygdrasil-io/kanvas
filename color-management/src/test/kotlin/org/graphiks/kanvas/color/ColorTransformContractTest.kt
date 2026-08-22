@@ -5,9 +5,8 @@ import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.kanvas.color.icc.IccSignature
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
-import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -15,6 +14,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ColorTransformContractTest {
+
+    @Test
+    fun `profiles reuse canonical transfer presets`() {
+        assertEquals(ColorTransferFunction.sRgb, ColorProfiles.sRGB().transferFunction)
+        assertEquals(ColorTransferFunction.sRgb, ColorProfiles.displayP3().transferFunction)
+        assertEquals(ColorTransferFunction.rec2020, ColorProfiles.rec2020().transferFunction)
+    }
 
     @Test
     fun `compile rejects unsupported source profile`() {
@@ -81,8 +87,8 @@ class ColorTransformContractTest {
     }
 
     @Test
-    fun `compiled transforms retain a copy of caller supplied matrix`() {
-        val matrix = Matrix3x3F32.Identity
+    fun `compiled transforms retain immutable caller supplied matrix`() {
+        val matrix = ColorMatrix3x3F32.Identity
         val profile = ColorProfile(
             colorModel = ColorModel.RGB,
             toXyzD50 = matrix,
@@ -94,12 +100,11 @@ class ColorTransformContractTest {
             alphaType = AlphaType.UNPREMULTIPLIED,
         ).getOrThrow()
 
-        val modifiedMatrix = matrix.copy(sx = 0f)
-        assertEquals(0f, modifiedMatrix.iccGet(0, 0))
         val pixels = floatArrayOf(0.25f, 0.5f, 0.75f, 0.5f)
         transform.apply(pixels, 1)
 
-        assertEquals(1f, profile.toXyzD50!!.iccGet(0, 0))
+        assertEquals(1f, matrix[0, 0])
+        assertEquals(1f, profile.toXyzD50!![0, 0])
         assertContentEquals(floatArrayOf(0.25f, 0.5f, 0.75f, 0.5f), pixels)
     }
 
@@ -286,17 +291,13 @@ class ColorTransformContractTest {
     }
 
     @Test
-    fun `matrix plan retains copies of nonidentity matrices`() {
-        val sourceToXyzD50 = floatArrayOf(
+    fun `matrix plan accepts immutable nonidentity matrices`() {
+        val sourceToXyzD50 = ColorMatrix3x3F32.of(
             0.5f, 0f, 0f,
             0f, 0.5f, 0f,
             0f, 0f, 0.5f,
         )
-        val destinationFromXyzD50 = floatArrayOf(
-            1f, 0f, 0f,
-            0f, 1f, 0f,
-            0f, 0f, 1f,
-        )
+        val destinationFromXyzD50 = ColorMatrix3x3F32.Identity
         val plan = MatrixColorTransform(
             sourceToXyzD50,
             destinationFromXyzD50,
@@ -304,8 +305,6 @@ class ColorTransformContractTest {
             ColorProfiles.sRGB().transferFunction!!,
             AlphaType.UNPREMULTIPLIED,
         )
-        sourceToXyzD50.fill(0f)
-        destinationFromXyzD50.fill(0f)
         val pixel = floatArrayOf(0.5f, 0.2f, 0.1f, 0.7f)
 
         plan.apply(pixel, 0)
@@ -314,6 +313,7 @@ class ColorTransformContractTest {
         assertTrue(pixel[1] > 0f)
         assertTrue(pixel[2] > 0f)
         assertEquals(0.7f, pixel[3], 0f)
+        assertEquals(0.5f, sourceToXyzD50[0, 0])
     }
 
     @Test
@@ -373,7 +373,7 @@ class ColorTransformContractTest {
     fun `compile rejects direct profiles with nonmonotonic transfer functions`() {
         val source = ColorProfile(
             colorModel = ColorModel.RGB,
-            toXyzD50 = Matrix3x3F32.Identity,
+            toXyzD50 = ColorMatrix3x3F32.Identity,
             transferFunction = ColorTransferFunction.parametric(
                 g = 1f,
                 a = 1f,
