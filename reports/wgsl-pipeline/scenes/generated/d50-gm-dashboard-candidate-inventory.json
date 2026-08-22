@@ -8,8 +8,7 @@
     "reports/wgsl-pipeline/scenes/generated/*.json",
     "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
     "build/reports/wgsl-pipeline-skia-gm-inventory-gate/inventory-gate.md",
-    "reports/upstream-rebaseline/",
-    ".upstream/source/map/"
+    "reports/upstream-rebaseline/"
   ],
   "currentCounters": {
     "localMaterializedDashboardRows": 28,

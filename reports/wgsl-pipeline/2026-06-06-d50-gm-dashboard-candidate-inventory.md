@@ -23,7 +23,6 @@ route artifacts exist.
 - `build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json`
 - `build/reports/wgsl-pipeline-skia-gm-inventory-gate/inventory-gate.md`
 - `reports/upstream-rebaseline/`
-- `.upstream/source/map/`
 - `.upstream/target/skia-like-realtime-renderer-target.md`
 - `.upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md`
 

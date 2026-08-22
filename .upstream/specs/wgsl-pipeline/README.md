@@ -28,7 +28,7 @@ produces coverage, the paint pipeline consumes coverage.
 - Geometry handoff:
   `.upstream/specs/geometry-coverage/README.md`
 - Upstream/rebaseline evidence:
-  `reports/upstream-rebaseline/` and `.upstream/source/map/`
+  `reports/upstream-rebaseline/`
 
 Hard constraints:
 

@@ -3,8 +3,7 @@
 Removed migration plans and root upstream snapshots live in Git history only.
 Do not use historical checkboxes or phase labels as active backlog.
 
-Current upstream/rebaseline evidence lives under `reports/upstream-rebaseline/`
-and `.upstream/source/map/`.
+Current upstream/rebaseline evidence lives under `reports/upstream-rebaseline/`.
 
 For the target high-performance WGSL/WebGPU pipeline architecture, read
 `.upstream/target/high-performance-wgsl-pipeline-target.md` before planning

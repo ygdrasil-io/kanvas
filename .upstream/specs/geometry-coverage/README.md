@@ -15,7 +15,7 @@ coverage.
 - Execution method:
   `.upstream/target/linear-agent-methodology.md`
 - Upstream/rebaseline evidence:
-  `reports/upstream-rebaseline/` and `.upstream/source/map/`
+  `reports/upstream-rebaseline/`
 
 Hard constraints:
 

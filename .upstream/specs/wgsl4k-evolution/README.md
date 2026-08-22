@@ -28,9 +28,9 @@ make the remaining dependency gate explicit.
 - GPU renderer WGSL ABI:
   `.upstream/specs/gpu-renderer/11-wgsl-layout-binding-abi.md`
 - Text GPU handoff gate:
-  `.upstream/specs/pure-kotlin-text/tickets/M11-gpu-handoff/KFONT-M11-009-add-wgsl-parser-reflection-validation-for-text-routes.md`
+  `.upstream/specs/pure-kotlin-text/06-gpu-renderer-handoff.md`
 - Registered runtime-effect gate:
-  `.upstream/specs/gpu-renderer/tickets/M7-runtime-effects-color-blend/KGPU-M7-001-add-registered-runtime-effect-descriptor-route.md`
+  `.upstream/specs/gpu-renderer/27-registered-runtime-effects-registry.md`
 
 ## Repository And Submodule Policy
 
@@ -79,11 +79,10 @@ diagnostic, and route-specific evidence.
 |---|---|
 | `01-validation-reflection-contract.md` | Minimal wgsl4k validation, reflection, JSON, and diagnostic contract needed by Kanvas. |
 | `02-contribution-packet.md` | Fixture-first contribution packet for a wgsl4k branch and PR. |
-| `tickets/README.md` | Repo-native ticket catalog for importing, contributing, consuming, and re-evaluating the dependency. |
 
 ## Current Dependency Gates
 
-The initial consumer tickets are:
+The initial consumer gates are:
 
 | Ticket | Gate |
 |---|---|
