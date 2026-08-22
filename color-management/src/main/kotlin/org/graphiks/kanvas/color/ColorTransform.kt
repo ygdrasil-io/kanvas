@@ -179,6 +179,8 @@ private class HdrMatrixColorTransform(
     private val alphaType: AlphaType,
     private val toneMapper: ToneMapper?,
 ) : CompiledRgbPlan {
+    private val destinationUnitEncoder = destinationTransferFunction?.let(::UnitFiniteTransferEncoder)
+
     init {
         require((sourceTransferFunction == null) != (sourceHdrTransferFunction == null)) {
             "source must have exactly one transfer function"
@@ -219,7 +221,7 @@ private class HdrMatrixColorTransform(
         } else {
             repeat(RGB_CHANNELS) { channel ->
                 encoded[channel] = encodeUnitFinite(
-                    checkNotNull(destinationTransferFunction),
+                    checkNotNull(destinationUnitEncoder),
                     clipLinearSdrDestination(destinationLinear[channel]),
                 )
             }
@@ -290,11 +292,13 @@ private class PcsToMatrixStage(
     private val inverseMatrix: ColorMatrix3x3F32,
     private val transferFunction: ColorTransferFunction.Parametric,
 ) : EndpointStage {
+    private val unitEncoder = UnitFiniteTransferEncoder(transferFunction)
+
     override fun apply(input: FloatArray, inputOffset: Int, output: FloatArray) {
         val pcs = floatArrayOf(input[inputOffset], input[inputOffset + 1], input[inputOffset + 2])
         val linear = FloatArray(3)
         inverseMatrix.map(pcs, 0, linear, 0)
-        repeat(3) { channel -> output[channel] = encodeUnitFinite(transferFunction, linear[channel]) }
+        repeat(3) { channel -> output[channel] = encodeUnitFinite(unitEncoder, linear[channel]) }
     }
 }
 
@@ -304,10 +308,43 @@ private fun decodeUnitFinite(transferFunction: ColorTransferFunction.Parametric,
     return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 }
 
-private fun encodeUnitFinite(transferFunction: ColorTransferFunction.Parametric, linear: Float): Float {
-    val y = if (linear.isFinite()) linear.coerceIn(0f, 1f) else 0f
-    val value = transferFunction.toEncoded(y)
-    return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+private fun encodeUnitFinite(encoder: UnitFiniteTransferEncoder, linear: Float): Float = encoder.encode(linear)
+
+private class UnitFiniteTransferEncoder(
+    private val transferFunction: ColorTransferFunction.Parametric,
+) {
+    private val boundary = transferFunction.d.coerceIn(0f, 1f)
+    private val lowerLimit = (transferFunction.c * boundary + transferFunction.f).coerceIn(0f, 1f)
+    private val upperLimit = decodeUnitFinite(transferFunction, boundary)
+    private val unitBoundaryTransfer = ColorTransferFunction.parametric(
+        g = transferFunction.g,
+        a = transferFunction.a,
+        b = transferFunction.b,
+        c = transferFunction.c,
+        d = boundary,
+        e = transferFunction.e,
+        f = transferFunction.f,
+    )
+    private val rawNonlinearFormula = ColorTransferFunction.parametric(
+        g = transferFunction.g,
+        a = transferFunction.a,
+        b = transferFunction.b,
+        c = 0f,
+        d = Float.NaN,
+        e = transferFunction.e,
+        f = 0f,
+    )
+
+    fun encode(linear: Float): Float {
+        val y = if (linear.isFinite()) linear.coerceIn(0f, 1f) else 0f
+        val value = when {
+            y < lowerLimit && transferFunction.c > 0f -> unitBoundaryTransfer.toEncoded(y)
+            y < upperLimit -> boundary
+            // NaN branch parameters force the raw helper's nonlinear formula without duplicating it.
+            else -> rawNonlinearFormula.toEncoded(y.coerceAtLeast(transferFunction.e))
+        }
+        return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+    }
 }
 
 private fun <T : Any> assertNotNull(value: T?): T = checkNotNull(value)

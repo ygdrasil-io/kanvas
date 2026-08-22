@@ -7,6 +7,7 @@ import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
+import org.graphiks.math.color.pqInverseEotf
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -410,6 +411,41 @@ class ColorTransformContractTest {
         assertEquals(0.9596758f, pixel[0], 3e-4f)
         assertEquals(pixel[0], pixel[1], 3e-4f)
         assertEquals(pixel[1], pixel[2], 3e-4f)
+        assertEquals(0.37f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `HDR to SDR destination retains finite curve threshold sanitation`() {
+        val destinationTransfer = ColorTransferFunction.parametric(
+            g = 1f,
+            a = 0.5f,
+            b = 0f,
+            c = 0.25f,
+            d = 2f,
+            e = 0f,
+            f = 0f,
+        )
+        val destinationMatrix = ColorMatrix3x3F32.fromRowMajor(
+            requireNotNull(ColorProfiles.rec2020().toXyzD50).toFloatArray().also { values ->
+                values.indices.forEach { index -> values[index] *= 0.7119884f }
+            },
+        )
+        val destination = ColorProfile(
+            colorModel = ColorModel.RGB,
+            toXyzD50 = destinationMatrix,
+            transferFunction = destinationTransfer,
+        )
+        val transform = ColorTransform.compile(
+            source = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow(),
+            destination = destination,
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val encoded40Nits = pqInverseEotf(0.004).toFloat()
+        val pixel = floatArrayOf(encoded40Nits, encoded40Nits, encoded40Nits, 0.37f)
+
+        transform.apply(pixel, 1)
+
+        repeat(3) { channel -> assertEquals(0.8f, pixel[channel], 2e-5f) }
         assertEquals(0.37f, pixel[3], 0f)
     }
 
