@@ -43,4 +43,21 @@ class ColorSpaceTest {
         )
         assertNull(ColorProfile.unsupported("icc.profile.unsupported").toColorSpaceOrNull())
     }
+
+    @Test
+    fun `classifies LUT profiles without a matrix as profile failures`() {
+        val lutProfile = parseResource("rgb-lut-a2b-b2a.icc")
+
+        assertEquals(
+            ColorSpaceClassification.Unsupported(ColorSpaceClassificationFailure.PROFILE),
+            lutProfile.classifyColorSpace(),
+        )
+    }
+
+    private fun parseResource(name: String): ColorProfile {
+        val stream = checkNotNull(javaClass.classLoader.getResourceAsStream("icc/$name")) {
+            "missing icc/$name"
+        }
+        return stream.use { IccProfileParser.parse(it.readBytes(), IccParseLimits()).getOrThrow() }
+    }
 }

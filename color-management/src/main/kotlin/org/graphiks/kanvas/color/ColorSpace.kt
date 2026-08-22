@@ -41,7 +41,9 @@ public fun ColorProfile.classifyColorSpace(): ColorSpaceClassification {
     if (colorModel != ColorModel.RGB || unsupportedCode != null) {
         return ColorSpaceClassification.Unsupported(ColorSpaceClassificationFailure.PROFILE)
     }
-    val gamut = toXyzD50?.classifyNamedGamut()
+    val matrix = toXyzD50
+        ?: return ColorSpaceClassification.Unsupported(ColorSpaceClassificationFailure.PROFILE)
+    val gamut = matrix.classifyNamedGamut()
         ?: return ColorSpaceClassification.Unsupported(ColorSpaceClassificationFailure.GAMUT)
     val transfer = when (hdrTransferFunction) {
         HdrTransferFunction.PQ -> TransferFunction.PQ
