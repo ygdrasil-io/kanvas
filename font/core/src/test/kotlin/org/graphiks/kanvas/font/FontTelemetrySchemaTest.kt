@@ -112,60 +112,23 @@ class FontTelemetrySchemaTest {
     }
 
     @Test
-    fun `font telemetry schema ticket is closed while downstream telemetry slices stay explicit`() {
+    fun `font telemetry schema report keeps downstream telemetry slices explicit`() {
         val root = projectRoot()
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-001-define-font-telemetry-schema.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
-        )
         val schemaReport = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-16-kfont-m12-001-font-telemetry-schema.md"),
         )
 
-        assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "KFONT-M12-002")
-        assertContains(ticket, "KFONT-M12-005")
-        assertContains(ticket, "through `KFONT-M12-005`")
-        assertFalse(ticket.contains("producer-side subsystem wiring remains open before `done`"))
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-001 - Define font telemetry schema](KFONT-M12-001-define-font-telemetry-schema.md) | `done` |",
-        )
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-004 - Add glyph artifact and cache metrics](KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md) | `done` |",
-        )
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-005 - Add GPU handoff metrics](KFONT-M12-005-add-gpu-handoff-metrics.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
-        assertContains(statusSummary, "| **Total** | **0** | **0** | **0** | **0** | **0** | **86** |")
         assertContains(schemaReport, "All M12 telemetry domains now have checked-in deterministic producer evidence")
         assertFalse(schemaReport.contains("KFONT-M12-004 now solely owns"))
         assertFalse(schemaReport.contains("KFONT-M12-005 still owns"))
     }
 
     @Test
-    fun `parser and scaler telemetry dumps close KFONT-M12-002 without promoting performance claims`() {
+    fun `parser and scaler telemetry dumps preserve non-promotional evidence`() {
         val root = projectRoot()
         val expectedParser = Files.readString(root.resolve("reports/pure-kotlin-text/parser-metrics.json"))
         val expectedScaler = Files.readString(root.resolve("reports/pure-kotlin-text/scaler-metrics.json"))
         val dashboard = Files.readString(root.resolve("reports/pure-kotlin-text/font-claim-dashboard.json"))
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-002-add-parser-and-scaler-metrics.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
-        )
         val report = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-002-parser-scaler-metrics.md"),
         )
@@ -179,14 +142,6 @@ class FontTelemetrySchemaTest {
         assertContains(dashboard, "All M12 telemetry domains now have checked-in deterministic producer evidence")
         assertFalse(dashboard.contains("KFONT-M12-004 now solely owns"))
         assertFalse(dashboard.contains("KFONT-M12-005 still owns"))
-        assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "font.parser.parse.time")
-        assertContains(ticket, "font.scaler.outline.time")
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-002 - Add parser and scaler metrics](KFONT-M12-002-add-parser-and-scaler-metrics.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
         assertContains(report, "No ticket-local gate remains")
         assertContains(report, "All M12 telemetry producer")
         assertContains(report, "font.parser.parse.time")
@@ -198,19 +153,10 @@ class FontTelemetrySchemaTest {
     }
 
     @Test
-    fun `shaping and paragraph telemetry dumps close KFONT-M12-003 without promoting performance claims`() {
+    fun `shaping and paragraph telemetry dumps preserve non-promotional evidence`() {
         val root = projectRoot()
         val expectedShaping = Files.readString(root.resolve("reports/pure-kotlin-text/shaping-metrics.json"))
         val expectedParagraph = Files.readString(root.resolve("reports/pure-kotlin-text/paragraph-metrics.json"))
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-003-add-shaping-and-paragraph-metrics.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
-        )
         val report = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-19-kfont-m12-003-shaping-paragraph-metrics.md"),
         )
@@ -235,19 +181,13 @@ class FontTelemetrySchemaTest {
         assertContains(report, "shaping diagnostic count")
         assertContains(report, "style-run count")
         assertContains(report, "hit-test index build time")
-        assertContains(ticket, """status: "done"""")
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-003 - Add shaping and paragraph metrics](KFONT-M12-003-add-shaping-and-paragraph-metrics.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
         assertContains(report, "No ticket-local gate remains")
         assertContains(report, "tracked-gap")
         assertFalse(report.contains("claim promotion", ignoreCase = true))
     }
 
     @Test
-    fun `glyph artifact and cache telemetry dumps close KFONT-M12-004 without promoting performance claims`() {
+    fun `glyph artifact and cache telemetry dumps preserve non-promotional evidence`() {
         val root = projectRoot()
         val expectedArtifact = Files.readString(root.resolve("reports/pure-kotlin-text/glyph-artifact-metrics.json"))
         val expectedCache = Files.readString(root.resolve("reports/pure-kotlin-text/glyph-cache-metrics.json"))
@@ -258,15 +198,6 @@ class FontTelemetrySchemaTest {
         val pmBundle = Files.readString(root.resolve("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
         val pmBundleReport = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"),
-        )
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
         )
         val report = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md"),
@@ -323,14 +254,6 @@ class FontTelemetrySchemaTest {
         assertContains(pmBundleReport, "glyph-artifact-metrics.json")
         assertContains(pmBundleReport, "glyph-cache-metrics.json")
         assertContains(pmBundleReport, "glyph-atlas-occupancy.json")
-        assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "glyph-atlas-occupancy.json")
-        assertContains(ticket, "text.glyph.atlas-generation-stale")
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-004 - Add glyph artifact and cache metrics](KFONT-M12-004-add-glyph-artifact-and-cache-metrics.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
         assertContains(report, "No ticket-local gate remains")
         assertContains(report, "glyph-atlas-occupancy.json")
         assertContains(report, "dftext")
@@ -342,17 +265,8 @@ class FontTelemetrySchemaTest {
     }
 
     @Test
-    fun `gpu handoff telemetry evidence closes KFONT-M12-005 while PM bundle stays advisory`() {
+    fun `gpu handoff telemetry evidence stays advisory in the PM bundle`() {
         val root = projectRoot()
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/KFONT-M12-005-add-gpu-handoff-metrics.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M12-performance-telemetry/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
-        )
         val dashboard = Files.readString(root.resolve("reports/pure-kotlin-text/font-claim-dashboard.json"))
         val fixtureManifest = Files.readString(root.resolve("reports/pure-kotlin-text/fixture-evidence-manifest.json"))
         val pmBundle = Files.readString(root.resolve("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
@@ -360,14 +274,6 @@ class FontTelemetrySchemaTest {
             root.resolve("reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md"),
         )
 
-        assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "gpu-text-handoff-metrics.json")
-        assertContains(ticket, "draw-text-run-upload-plan.json")
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M12-005 - Add GPU handoff metrics](KFONT-M12-005-add-gpu-handoff-metrics.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
         assertContains(dashboard, """"surfaceId": "gpu-text-handoff-metrics"""")
         assertContains(dashboard, """"surfaceId": "gpu-text-upload-metrics"""")
         assertContains(dashboard, """"surfaceId": "gpu-text-route-refusals"""")

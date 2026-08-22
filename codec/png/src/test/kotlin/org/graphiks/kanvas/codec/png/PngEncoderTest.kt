@@ -11,7 +11,7 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
-import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -167,7 +167,7 @@ class PngEncoderTest {
         val base = SkNamedGamut.kSRGB
         listOf(3, 50, 64).forEach { deltaLsb ->
             val delta = deltaLsb / 65_536f
-            val matrix = Matrix3x3F32.of(
+            val matrix = ColorMatrix3x3F32.of(
                 base[0, 0] + delta, base[0, 1] - delta, base[0, 2],
                 base[1, 0] + delta, base[1, 1] - delta, base[1, 2],
                 base[2, 0] + delta, base[2, 1] - delta, base[2, 2],
@@ -188,7 +188,7 @@ class PngEncoderTest {
         val hdr = CicpColorInfo(primaries = 9, transfer = 16, matrix = 0, fullRange = true)
             .toColorProfile()
             .getOrThrow()
-        val nonSerializableMatrix = Matrix3x3F32.of(
+        val nonSerializableMatrix = ColorMatrix3x3F32.of(
             SkNamedGamut.kSRGB[0, 0] + 0.01f, SkNamedGamut.kSRGB[0, 1], SkNamedGamut.kSRGB[0, 2],
             SkNamedGamut.kSRGB[1, 0], SkNamedGamut.kSRGB[1, 1], SkNamedGamut.kSRGB[1, 2],
             SkNamedGamut.kSRGB[2, 0], SkNamedGamut.kSRGB[2, 1], SkNamedGamut.kSRGB[2, 2],

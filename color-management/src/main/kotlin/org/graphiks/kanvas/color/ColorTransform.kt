@@ -3,8 +3,9 @@ package org.graphiks.kanvas.color
 import org.graphiks.kanvas.color.icc.IccTransformPipeline
 import org.graphiks.kanvas.color.hdr.Bt2390ToneMapper
 import org.graphiks.kanvas.color.hdr.ToneMapper
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import kotlin.math.pow
+import org.graphiks.math.color.toEncoded
 
 public enum class AlphaType {
     OPAQUE,
@@ -79,8 +80,7 @@ public object ColorTransform {
         val sourceMatrix = request.source.toXyzD50
         val destinationMatrix = request.destination.toXyzD50
         if (sourceMatrix != null && destinationMatrix != null) {
-            val sourceValues = matrixValues(sourceMatrix)
-            val destinationInverse = checkNotNull(invert3x3(matrixValues(destinationMatrix)))
+            val destinationInverse = requireNotNull(destinationMatrix.inverseOrNull())
             if (request.source.isHdr || request.destination.isHdr) {
                 val toneMapper = if (request.source.isHdr && !request.destination.isHdr) {
                     Bt2390ToneMapper(targetPeakNits = SDR_REFERENCE_WHITE_NITS.toDouble())
@@ -88,15 +88,15 @@ public object ColorTransform {
                     null
                 }
                 val (sourceToWorking, workingToDestination) = if (toneMapper != null) {
-                    val rec2020ToXyzD50 = matrixValues(checkNotNull(ColorProfiles.rec2020().toXyzD50))
-                    val sourceToRec2020 = if (sourceValues.contentEquals(rec2020ToXyzD50)) {
-                        IDENTITY_3X3
+                    val rec2020ToXyzD50 = requireNotNull(ColorProfiles.rec2020().toXyzD50)
+                    val sourceToRec2020 = if (sourceMatrix == rec2020ToXyzD50) {
+                        ColorMatrix3x3F32.Identity
                     } else {
-                        concat3x3(checkNotNull(invert3x3(rec2020ToXyzD50)), sourceValues)
+                        requireNotNull(rec2020ToXyzD50.inverseOrNull()).concat(sourceMatrix)
                     }
-                    sourceToRec2020 to concat3x3(destinationInverse, rec2020ToXyzD50)
+                    sourceToRec2020 to destinationInverse.concat(rec2020ToXyzD50)
                 } else {
-                    sourceValues to destinationInverse
+                    sourceMatrix to destinationInverse
                 }
                 return ColorTransformCompileResult.Success(
                     CompiledColorTransform(
@@ -118,7 +118,7 @@ public object ColorTransform {
                 CompiledColorTransform(
                     request,
                     MatrixColorTransform(
-                        sourceToXyzD50 = sourceValues,
+                        sourceToXyzD50 = sourceMatrix,
                         destinationFromXyzD50 = destinationInverse,
                         sourceTransferFunction = assertNotNull(request.source.transferFunction),
                         destinationTransferFunction = assertNotNull(request.destination.transferFunction),
@@ -129,11 +129,11 @@ public object ColorTransform {
         }
 
         val sourceStage = request.source.toPcs?.let(::LutEndpointStage) ?: MatrixToPcsStage(
-            matrixValues(assertNotNull(sourceMatrix)),
+            assertNotNull(sourceMatrix),
             assertNotNull(request.source.transferFunction),
         )
         val destinationStage = request.destination.fromPcs?.let(::LutEndpointStage) ?: PcsToMatrixStage(
-            checkNotNull(invert3x3(matrixValues(assertNotNull(destinationMatrix)))),
+            requireNotNull(assertNotNull(destinationMatrix).inverseOrNull()),
             assertNotNull(request.destination.transferFunction),
         )
         return ColorTransformCompileResult.Success(
@@ -156,8 +156,7 @@ public object ColorTransform {
         }
 
         val matrix = profile.toXyzD50 ?: return ColorTransformCompileResult.Failure("color.profile.unsupported")
-        val values = matrixValues(matrix)
-        if (!values.all(Float::isFinite) || invert3x3(values) == null) {
+        if (!matrix.toFloatArray().all(Float::isFinite) || matrix.inverseOrNull() == null) {
             return ColorTransformCompileResult.Failure("color.profile.matrix")
         }
         val transferFunction = profile.transferFunction
@@ -171,8 +170,8 @@ public object ColorTransform {
 }
 
 private class HdrMatrixColorTransform(
-    sourceToWorking: FloatArray,
-    workingToDestination: FloatArray,
+    private val sourceToWorking: ColorMatrix3x3F32,
+    private val workingToDestination: ColorMatrix3x3F32,
     private val sourceTransferFunction: ColorTransferFunction.Parametric?,
     private val sourceHdrTransferFunction: HdrTransferFunction?,
     private val destinationTransferFunction: ColorTransferFunction.Parametric?,
@@ -180,12 +179,9 @@ private class HdrMatrixColorTransform(
     private val alphaType: AlphaType,
     private val toneMapper: ToneMapper?,
 ) : CompiledRgbPlan {
-    private val sourceToWorking: FloatArray = sourceToWorking.copyOf()
-    private val workingToDestination: FloatArray = workingToDestination.copyOf()
+    private val destinationUnitEncoder = destinationTransferFunction?.let(::UnitFiniteTransferEncoder)
 
     init {
-        require(this.sourceToWorking.size == MATRIX_COMPONENTS) { "source matrix must be 3x3" }
-        require(this.workingToDestination.size == MATRIX_COMPONENTS) { "destination matrix must be 3x3" }
         require((sourceTransferFunction == null) != (sourceHdrTransferFunction == null)) {
             "source must have exactly one transfer function"
         }
@@ -208,24 +204,24 @@ private class HdrMatrixColorTransform(
             sourceHdrTransferFunction.decode(unpremultiplied, 0, sourceLinearNits)
         } else {
             repeat(RGB_CHANNELS) { channel ->
-                sourceLinearNits[channel] = decode(checkNotNull(sourceTransferFunction), unpremultiplied[channel]) *
+                sourceLinearNits[channel] = decodeUnitFinite(checkNotNull(sourceTransferFunction), unpremultiplied[channel]) *
                     SDR_REFERENCE_WHITE_NITS
             }
         }
 
         val workingLinear = FloatArray(RGB_CHANNELS)
         val destinationLinear = FloatArray(RGB_CHANNELS)
-        multiply3x3(sourceToWorking, sourceLinearNits, workingLinear)
+        sourceToWorking.map(sourceLinearNits, 0, workingLinear, 0)
         toneMapper?.map(workingLinear, 0)
-        multiply3x3(workingToDestination, workingLinear, destinationLinear)
+        workingToDestination.map(workingLinear, 0, destinationLinear, 0)
 
         val encoded = FloatArray(RGB_CHANNELS)
         if (destinationHdrTransferFunction != null) {
             destinationHdrTransferFunction.encode(destinationLinear, encoded)
         } else {
             repeat(RGB_CHANNELS) { channel ->
-                encoded[channel] = encode(
-                    checkNotNull(destinationTransferFunction),
+                encoded[channel] = encodeUnitFinite(
+                    checkNotNull(destinationUnitEncoder),
                     clipLinearSdrDestination(destinationLinear[channel]),
                 )
             }
@@ -240,8 +236,6 @@ private class HdrMatrixColorTransform(
     private companion object {
         const val RGB_CHANNELS: Int = 3
         const val ALPHA_OFFSET: Int = 3
-        const val MATRIX_COMPONENTS: Int = 9
-
         /** Component clipping is the explicit post-tone-map destination-gamut policy. */
         fun clipLinearSdrDestination(value: Float): Float =
             if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
@@ -285,75 +279,74 @@ private class LutEndpointStage(
 }
 
 private class MatrixToPcsStage(
-    matrix: FloatArray,
+    private val matrix: ColorMatrix3x3F32,
     private val transferFunction: ColorTransferFunction.Parametric,
 ) : EndpointStage {
-    private val matrix: FloatArray = matrix.copyOf()
-
     override fun apply(input: FloatArray, inputOffset: Int, output: FloatArray) {
-        val linear = FloatArray(3) { channel -> decode(transferFunction, input[inputOffset + channel]) }
-        multiply3x3(matrix, linear, output)
+        val linear = FloatArray(3) { channel -> decodeUnitFinite(transferFunction, input[inputOffset + channel]) }
+        matrix.map(linear, 0, output, 0)
     }
 }
 
 private class PcsToMatrixStage(
-    inverseMatrix: FloatArray,
+    private val inverseMatrix: ColorMatrix3x3F32,
     private val transferFunction: ColorTransferFunction.Parametric,
 ) : EndpointStage {
-    private val inverseMatrix: FloatArray = inverseMatrix.copyOf()
+    private val unitEncoder = UnitFiniteTransferEncoder(transferFunction)
 
     override fun apply(input: FloatArray, inputOffset: Int, output: FloatArray) {
         val pcs = floatArrayOf(input[inputOffset], input[inputOffset + 1], input[inputOffset + 2])
         val linear = FloatArray(3)
-        multiply3x3(inverseMatrix, pcs, linear)
-        repeat(3) { channel -> output[channel] = encode(transferFunction, linear[channel]) }
+        inverseMatrix.map(pcs, 0, linear, 0)
+        repeat(3) { channel -> output[channel] = encodeUnitFinite(unitEncoder, linear[channel]) }
     }
 }
 
-private fun decode(transferFunction: ColorTransferFunction.Parametric, encoded: Float): Float {
+private fun decodeUnitFinite(transferFunction: ColorTransferFunction.Parametric, encoded: Float): Float {
     val x = if (encoded.isFinite()) encoded.coerceIn(0f, 1f) else 0f
-    val value = if (x >= transferFunction.d) {
-        (transferFunction.a * x + transferFunction.b).pow(transferFunction.g) + transferFunction.e
-    } else {
-        transferFunction.c * x + transferFunction.f
-    }
+    val value = transferFunction.toLinear(x)
     return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 }
 
-private fun encode(transferFunction: ColorTransferFunction.Parametric, linear: Float): Float {
-    val y = if (linear.isFinite()) linear.coerceIn(0f, 1f) else 0f
-    val boundary = transferFunction.d.coerceIn(0f, 1f)
-    val lowerLimit = (transferFunction.c * boundary + transferFunction.f).coerceIn(0f, 1f)
-    val upperLimit = decode(transferFunction, boundary)
-    val value = when {
-        y < lowerLimit && transferFunction.c > 0f -> (y - transferFunction.f) / transferFunction.c
-        y < upperLimit -> boundary
-        else -> ((y - transferFunction.e).coerceAtLeast(0f).pow(1f / transferFunction.g) -
-            transferFunction.b) / transferFunction.a
-    }
-    return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
-}
+private fun encodeUnitFinite(encoder: UnitFiniteTransferEncoder, linear: Float): Float = encoder.encode(linear)
 
-private fun multiply3x3(matrix: FloatArray, input: FloatArray, output: FloatArray) {
-    repeat(3) { row ->
-        val base = row * 3
-        output[row] = matrix[base] * input[0] + matrix[base + 1] * input[1] + matrix[base + 2] * input[2]
-    }
-}
+private class UnitFiniteTransferEncoder(
+    private val transferFunction: ColorTransferFunction.Parametric,
+) {
+    private val boundary = transferFunction.d.coerceIn(0f, 1f)
+    private val lowerLimit = (transferFunction.c * boundary + transferFunction.f).coerceIn(0f, 1f)
+    private val upperLimit = decodeUnitFinite(transferFunction, boundary)
+    private val unitBoundaryTransfer = ColorTransferFunction.parametric(
+        g = transferFunction.g,
+        a = transferFunction.a,
+        b = transferFunction.b,
+        c = transferFunction.c,
+        d = boundary,
+        e = transferFunction.e,
+        f = transferFunction.f,
+    )
+    private val rawNonlinearFormula = ColorTransferFunction.parametric(
+        g = transferFunction.g,
+        a = transferFunction.a,
+        b = transferFunction.b,
+        c = 0f,
+        d = Float.NaN,
+        e = transferFunction.e,
+        f = 0f,
+    )
 
-private fun concat3x3(left: FloatArray, right: FloatArray): FloatArray = FloatArray(9) { index ->
-    val row = index / 3
-    val column = index % 3
-    left[row * 3] * right[column] +
-        left[row * 3 + 1] * right[3 + column] +
-        left[row * 3 + 2] * right[6 + column]
+    fun encode(linear: Float): Float {
+        val y = if (linear.isFinite()) linear.coerceIn(0f, 1f) else 0f
+        val value = when {
+            y < lowerLimit && transferFunction.c > 0f -> unitBoundaryTransfer.toEncoded(y)
+            y < upperLimit -> boundary
+            // NaN branch parameters force the raw helper's nonlinear formula without duplicating it.
+            else -> rawNonlinearFormula.toEncoded(y.coerceAtLeast(transferFunction.e))
+        }
+        return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+    }
 }
 
 private fun <T : Any> assertNotNull(value: T?): T = checkNotNull(value)
 
 private const val SDR_REFERENCE_WHITE_NITS: Float = 100f
-private val IDENTITY_3X3: FloatArray = floatArrayOf(
-    1f, 0f, 0f,
-    0f, 1f, 0f,
-    0f, 0f, 1f,
-)

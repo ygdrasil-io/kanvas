@@ -26,8 +26,8 @@ class SkICCTest {
     }
 
     private fun assertMatrixNear(
-        expected: org.graphiks.math.matrix.Matrix3x3F32,
-        actual: org.graphiks.math.matrix.Matrix3x3F32,
+        expected: org.graphiks.math.color.ColorMatrix3x3F32,
+        actual: org.graphiks.math.color.ColorMatrix3x3F32,
     ) {
         for (row in 0 until 3) for (column in 0 until 3) {
             assertEquals(expected[row, column], actual[row, column], 1f / 65_536f)
