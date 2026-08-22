@@ -15,16 +15,22 @@ fun main(args: Array<String>): Unit = exitProcess(GpuEvidenceCliRunner(ProductEv
 
 interface EvidenceRuntimePort { fun open(): EvidenceBackendPort?; fun close(); fun dispose() }
 
-class GpuEvidenceCliRunner(private val runtime: EvidenceRuntimePort) {
+class GpuEvidenceCliRunner(
+    private val runtime: EvidenceRuntimePort,
+    private val requestParser: (Array<String>) -> GpuEvidenceCliRequest = GpuEvidenceCliRequest::parse,
+) {
     fun run(args: Array<String>): Int = runResult(args).exitCode
 
     /** Visible to injected contract tests so a primary failure and its cleanup failures remain inspectable. */
     internal fun runResult(args: Array<String>): EvidenceCliRunResult {
-        val request = runCatching { GpuEvidenceCliRequest.parse(args) }.getOrElse {
-            System.err.println("gpu evidence arguments rejected: ${it.message}")
+        val request = try {
+            requestParser(args)
+        } catch (failure: Exception) {
+            System.err.println("gpu evidence arguments rejected: ${failure.message}")
             return EvidenceCliRunResult(2, null)
         }
-        var primary: Throwable? = null
+        var primary: Exception? = null
+        var fatal: Error? = null
         var exitCode = 1
         try {
             val backend = runtime.open()
@@ -48,17 +54,46 @@ class GpuEvidenceCliRunner(private val runtime: EvidenceRuntimePort) {
                     }
                 }
             }
-        } catch (failure: Throwable) { primary = failure; System.err.println("gpu evidence failed: ${failure.message}"); exitCode = 1 }
+        } catch (failure: Exception) {
+            primary = failure
+            System.err.println("gpu evidence failed: ${failure.message}")
+            exitCode = 1
+        } catch (failure: Error) {
+            fatal = failure
+        }
         finally {
             var cleanupFailure: Throwable? = null
-            try { runtime.close() } catch (failure: Throwable) { cleanupFailure = failure }
-            try { runtime.dispose() } catch (failure: Throwable) { if (cleanupFailure == null) cleanupFailure = failure else cleanupFailure.addSuppressed(failure) }
+            try {
+                runtime.close()
+            } catch (failure: Exception) {
+                cleanupFailure = failure
+            } catch (failure: Error) {
+                cleanupFailure = failure
+            }
+            try {
+                runtime.dispose()
+            } catch (failure: Exception) {
+                if (cleanupFailure == null) cleanupFailure = failure else cleanupFailure.addSuppressed(failure)
+            } catch (failure: Error) {
+                if (cleanupFailure == null) cleanupFailure = failure else cleanupFailure.addSuppressed(failure)
+            }
             if (cleanupFailure != null) {
-                if (primary == null) primary = cleanupFailure else primary.addSuppressed(cleanupFailure)
-                System.err.println("gpu evidence cleanup failed: ${cleanupFailure.message}")
-                exitCode = 1
+                when {
+                    fatal != null -> fatal.addSuppressed(cleanupFailure)
+                    cleanupFailure is Error -> {
+                        primary?.let(cleanupFailure::addSuppressed)
+                        fatal = cleanupFailure
+                    }
+                    primary == null -> primary = cleanupFailure as Exception
+                    else -> primary.addSuppressed(cleanupFailure)
+                }
+                if (fatal == null) {
+                    System.err.println("gpu evidence cleanup failed: ${cleanupFailure.message}")
+                    exitCode = 1
+                }
             }
         }
+        fatal?.let { throw it }
         return EvidenceCliRunResult(exitCode, primary)
     }
 }

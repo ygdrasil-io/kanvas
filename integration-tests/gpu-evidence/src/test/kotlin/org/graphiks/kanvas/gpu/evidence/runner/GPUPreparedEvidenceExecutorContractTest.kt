@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.evidence.runner
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.evidence.catalog.BootstrapEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
@@ -45,6 +46,15 @@ class GPUPreparedEvidenceExecutorContractTest {
     @Test fun `incomplete phase and missing structural submit cannot render`() { assertExecutionFailure(FakePort(mutableListOf(), completion = CompletionKind.Incomplete), "Completed"); assertExecutionFailure(FakePort(mutableListOf(), completion = CompletionKind.NoStructuralSubmit), "queue.submit") }
     @Test fun `structural submission without runtime telemetry submission cannot render`() = assertExecutionFailure(FakePort(mutableListOf(), completion = CompletionKind.RuntimeDeltaZero), "runtime submission")
 
+    @Test fun `prepared frame closes before executor propagates fatal Error`() {
+        val port = FakePort(mutableListOf(), completion = CompletionKind.FatalError)
+        val failure = assertFailsWith<LinkageError> {
+            GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first())
+        }
+        assertEquals("fatal frame", failure.message)
+        assertEquals(true, port.events.contains("close-prepared-frame"))
+    }
+
     @Test fun `completed product diagnostic fields are retained in deterministic execution failure diagnostics`() {
         val diagnostic = GPUDiagnostic(GPUDiagnosticCode("failed.test.completion"), GPUDiagnosticDomain.Execution, GPUDiagnosticSeverity.Fatal, "completion failed", mapOf("zeta" to "last", "alpha" to "first"), isTerminal = true, isRetryable = false)
         val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), completion = CompletionKind.Diagnostic, completionDiagnostic = diagnostic), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first()))
@@ -59,7 +69,7 @@ class GPUPreparedEvidenceExecutorContractTest {
         assertEquals(true, port.events.indexOf("close-prepared-frame") < port.events.indexOf("telemetry-after"))
     }
 
-    private enum class CompletionKind { Success, Timeout, Failed, MissingReadback, WrongReadback, Incomplete, NoStructuralSubmit, RuntimeDeltaZero, Diagnostic }
+    private enum class CompletionKind { Success, Timeout, Failed, MissingReadback, WrongReadback, Incomplete, NoStructuralSubmit, RuntimeDeltaZero, Diagnostic, FatalError }
     private class FakePort(val events: MutableList<String>, private val capabilitiesAvailable: Boolean = true, private val completion: CompletionKind = CompletionKind.Success, private val completionDiagnostic: GPUDiagnostic? = null) : EvidenceBackendPort {
         override val capabilities = if (capabilitiesAvailable) EvidenceCapabilities("test") else null
         override val deviceGeneration = 1L
@@ -84,6 +94,7 @@ class GPUPreparedEvidenceExecutorContractTest {
                         CompletionKind.NoStructuralSubmit -> EvidenceCompletedFrame("a", "Completed", "Succeeded", null, null, program.readbackRequestId, ByteArray(width * height * 4), emptyList(), emptyList(), emptyMap())
                         CompletionKind.RuntimeDeltaZero -> EvidenceCompletedFrame("a", "Completed", "Succeeded", null, null, program.readbackRequestId, ByteArray(width * height * 4), emptyList(), emptyList(), mapOf("queue.submit" to 1))
                         CompletionKind.Diagnostic -> EvidenceCompletedFrame("a", "Completed", "Failed", completionDiagnostic?.code?.value, completionDiagnostic?.message, null, null, emptyList(), emptyList(), mapOf("queue.submit" to 1), completionDiagnostic?.let(::completionDiagnosticLines).orEmpty())
+                        CompletionKind.FatalError -> throw LinkageError("fatal frame")
                         CompletionKind.Success -> EvidenceCompletedFrame.succeeded(program.readbackRequestId, ByteArray(width * height * 4))
                     }
                 }

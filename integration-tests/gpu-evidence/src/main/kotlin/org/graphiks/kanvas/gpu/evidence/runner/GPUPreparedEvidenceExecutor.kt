@@ -84,7 +84,7 @@ class GPUPreparedEvidenceExecutor(
         val descriptor = evidenceCase.descriptor
         val completed = try {
             backend.prepareSceneFrame(descriptor.width, descriptor.height).use { frame -> frame.render(prepared.program) }
-        } catch (failure: Throwable) {
+        } catch (failure: Exception) {
             val delta = backend.telemetry() - before
             return EvidenceExecutionResult.ExecutionFailure("failed.gpu.prepared-session", failure.message ?: "Prepared scene session failed.", RouteEvidence(prepared.routeId, null, null, "failed", emptyList(), emptyList(), emptyMap(), delta), prepared.diagnostics + failure::class.simpleName.orEmpty(), environment)
         }
