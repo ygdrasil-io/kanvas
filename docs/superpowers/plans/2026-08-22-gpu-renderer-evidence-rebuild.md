@@ -564,17 +564,16 @@ rtk git commit -m "feat: verify GPU evidence bundles"
 
 ### Contract to establish
 
-The bootstrap catalog has exactly three cases: a product solid rectangle render, registered `SimpleRT` render, and unregistered custom runtime-effect refusal with code `unsupported.runtime_effect.custom_wgsl_not_registered`. Positive cases use product recorders and the canonical `GPUBackendSession.prepareSceneFrameSession` → `GPUPreparedSceneFrameSession.renderFrame` path. The refusal runs the product `GPUCustomRuntimeEffectExecutor` with an empty registry and proves zero runtime submissions. Adapter absence yields `Unavailable` for all three.
+The bootstrap catalog has exactly two cases: a product solid rectangle render and unregistered custom runtime-effect refusal with code `unsupported.runtime_effect.custom_wgsl_not_registered`. Positive rendering uses product recorders and the canonical `GPUBackendSession.prepareSceneFrameSession` → `GPUPreparedSceneFrameSession.renderFrame` path. The refusal runs the product `GPUCustomRuntimeEffectExecutor` with an empty registry and proves zero runtime submissions. The registered `SimpleRT` row is omitted: no checked-in production consumer-backed typed input exists, evidence must not pack registered-uniform ABI bytes, and it must not add a `gpu-renderer` API solely for evidence. Adapter absence yields typed `Unavailable`, writes no correctness bundle, and exits nonzero.
 
 - [ ] Write catalog tests asserting exact IDs, uniqueness, deterministic order, dimensions, expectations, oracle compatibility, and the exact runtime-effect refusal code.
 
 ```kotlin
 @Test
-fun `bootstrap catalog is the approved three case gate`() {
+fun `bootstrap catalog is the approved two case gate`() {
     assertEquals(
         listOf(
             "solid-card-stack",
-            "registered-simple-runtime-effect",
             "custom-runtime-effect-unregistered-refusal",
         ),
         BootstrapEvidenceCatalog.cases.map { it.descriptor.id.value },
@@ -614,7 +613,7 @@ fun interface CpuOracle {
 
 `ReferenceRaster` is validation-only and must never be imported by `:gpu-renderer` or uploaded as a texture fallback. It rasterizes pixel centers into encoded premultiplied RGBA8 and provides `clear`, `fillRect`, and `srcOver` helpers. It is an independent CPU oracle, not a second GPU/product route.
 
-- [ ] Implement the three scene programs using only product APIs:
+- [ ] Implement the two scene programs using only product APIs:
 
 ```kotlin
 object ProductScenePrograms {
@@ -691,7 +690,6 @@ Require `Succeeded`, `Completed`, a `GPUSceneFrameOutput.ReadbackRgba` with the 
 | Scene | Size | Product input | Oracle | Comparison |
 |---|---:|---|---|---|
 | `solid-card-stack` | 64×64 | three opaque `GPUSolidRectFrameResolvedDraw` values | `ReferenceRaster` rect/SrcOver v1 | tolerance 0, similarity 100.0%, policy v1 |
-| `registered-simple-runtime-effect` | 32×32 | product-owned registered-uniform input available when Task 5 starts; no harness ABI packing | `SimpleRTCPUOracle` projected to full target, v1 | tolerance 0, similarity 100.0%, policy v1 |
 | `custom-runtime-effect-unregistered-refusal` | 16×16 | `GPUCustomRuntimeEffectID("gpu-evidence.unregistered")` against empty registry | stable refusal | exact code, zero submissions |
 
 - [ ] Implement `GpuEvidenceCli` arguments as `--repository-root <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative repository root, unknown scene, or duplicate flag. Derive the output internally as `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; callers cannot supply an arbitrary output path. The CLI writes one generated bundle per case and exits nonzero for `Fail` or `Unavailable`.

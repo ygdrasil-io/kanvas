@@ -272,11 +272,13 @@ support claims merely because a Gradle task completed.
 
 ## Initial Catalog
 
-The bootstrap gate contains three scenes before broader coverage is added:
+The bootstrap gate contains two scenes before broader coverage is added. The
+registered runtime-effect positive row is omitted until a production
+consumer-backed typed input exists; the evidence harness must not pack its ABI
+bytes or introduce a renderer API solely for evidence:
 
 1. solid rectangle, `ShouldRender`;
-2. registered `SimpleRT` runtime effect, `ShouldRender`;
-3. unregistered runtime-effect descriptor or arbitrary WGSL,
+2. unregistered runtime-effect descriptor or arbitrary WGSL,
    `ShouldRefuse("unsupported.runtime_effect.custom_wgsl_not_registered")`.
 
 The cutover catalog targets 10 to 12 focused scenes drawn from:
@@ -375,7 +377,7 @@ slices:
 3. build the runner and expectation gate with fake execution tests;
 4. add evidence schemas, writer, verifier, and comparator;
 5. connect the product prepared-frame execution path;
-6. prove the three-scene bootstrap gate;
+6. prove the two-scene bootstrap gate;
 7. grow the catalog to the cutover set and wire the GPU CI lane;
 8. perform the atomic cutover;
 9. add the separate performance lane.
