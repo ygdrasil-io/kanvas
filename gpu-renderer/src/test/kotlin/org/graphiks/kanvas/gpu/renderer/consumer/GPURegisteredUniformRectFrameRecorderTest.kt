@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.consumer
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -13,6 +14,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformProgram
+import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformPayloads
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformColor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
@@ -24,6 +27,37 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class GPURegisteredUniformRectFrameRecorderTest {
+    @Test
+    fun `typed payload records with owned bytes after caller mutation`() {
+        val payload = GPURegisteredUniformPayloads.solidColor(GPUUniformColor(1f, 0f, 0f, 1f))
+        val expectedBytes = payload.bytes
+        val draw = GPURegisteredUniformRectResolvedDraw(
+            commandIdValue = 7,
+            bounds = GPUPixelBounds(0, 0, 8, 8),
+            payload = payload,
+        )
+        val callerBytes = payload.bytes
+        callerBytes[0] = 99
+
+        val result = assertIs<GPURegisteredUniformRectFrameRecordingResult.Recorded>(
+            GPURegisteredUniformRectFrameRecorder().record(
+                GPURegisteredUniformRectFrameRecordingRequest(
+                    frameId = GPUFrameID(22),
+                    recordingId = GPURecordingID("recording.consumer.registered-uniform.typed"),
+                    capabilities = capabilities(),
+                    deviceGeneration = GPUDeviceGenerationID(9),
+                    target = GPUFrameTargetRef("target.consumer.registered-uniform.typed"),
+                    targetBounds = GPUPixelBounds(0, 0, 8, 8),
+                    draws = listOf(draw),
+                ),
+            ),
+        )
+
+        assertEquals(GPURegisteredUniformProgram.SolidColor, result.semantics.single().program)
+        assertContentEquals(expectedBytes, draw.uniformBytes)
+        assertEquals(expectedBytes.map { it.toInt() and 0xff }, result.semantics.single().uniformBytes)
+    }
+
     @Test
     fun `consumer records different registered programs in one immutable prepared batch`() {
         val mutableLinearUniform = ByteArray(GPURegisteredUniformProgram.LinearGradient.uniformByteSize) {
