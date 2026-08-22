@@ -24,7 +24,7 @@ class ColorTransferFunctionTest {
         assertEquals(1f, tf.g)
         assertEquals(1f, tf.a)
         assertEquals(0f, tf.b)
-        assertEquals(0f, tf.c)
+        assertEquals(1f, tf.c)
         assertEquals(0f, tf.d)
         assertEquals(0f, tf.e)
         assertEquals(0f, tf.f)
@@ -95,5 +95,19 @@ class ColorTransferFunctionTest {
         assertEquals(0.05f, tf.d)
         assertEquals(0f, tf.e)
         assertEquals(0f, tf.f)
+    }
+
+    @Test
+    fun `linear preset preserves negative finite values`() {
+        assertEquals(-0.25f, ColorTransferFunction.linear.toLinear(-0.25f), 0f)
+        assertEquals(-0.25f, ColorTransferFunction.linear.toEncoded(-0.25f), 0f)
+    }
+
+    @Test
+    fun `parametric transfer round trips`() {
+        val tf = ColorTransferFunction.sRgb
+        listOf(0f, 0.0031308f, 0.18f, 1f).forEach { linear ->
+            assertEquals(linear, tf.toLinear(tf.toEncoded(linear)), 2e-6f)
+        }
     }
 }
