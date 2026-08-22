@@ -4,10 +4,10 @@ import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.iccGet
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
@@ -123,7 +123,7 @@ public enum class SkColorSpaceProfileStatus {
 
 public class SkColorSpace private constructor(
     public val transferFn: ColorTransferFunction.Parametric,
-    toXYZD50: Matrix3x3F32,
+    toXYZD50: ColorMatrix3x3F32,
     public val colorProfile: ColorProfile,
     originalIccBytes: ByteArray?,
     private val srgb: Boolean,
@@ -133,10 +133,8 @@ public class SkColorSpace private constructor(
     public val profileRefusalCode: String?,
 ) {
     private val originalIccBytes: ByteArray? = originalIccBytes?.copyOf()
-    private val toXYZD50Snapshot: Matrix3x3F32 = toXYZD50.copy()
-
     public val iccProfileBytes: ByteArray? get() = originalIccBytes?.copyOf()
-    public val toXYZD50: Matrix3x3F32 get() = toXYZD50Snapshot.copy()
+    public val toXYZD50: ColorMatrix3x3F32 = toXYZD50
     public fun isSRGB(): Boolean = srgb
     public fun gammaIsLinear(): Boolean = linear
     public fun gammaCloseToSRGB(): Boolean = srgbTransfer
@@ -200,7 +198,7 @@ public class SkColorSpace private constructor(
 
         public fun makeRGB(
             transferFn: ColorTransferFunction.Parametric,
-            toXYZD50: Matrix3x3F32,
+            toXYZD50: ColorMatrix3x3F32,
         ): SkColorSpace? = makeMatrixTrc(
             colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
             transferFn = transferFn,
@@ -211,7 +209,7 @@ public class SkColorSpace private constructor(
         private fun makeMatrixTrc(
             colorProfile: ColorProfile,
             transferFn: ColorTransferFunction.Parametric,
-            toXYZD50: Matrix3x3F32,
+            toXYZD50: ColorMatrix3x3F32,
             originalIccBytes: ByteArray?,
         ): SkColorSpace {
             val isSrgbGamut = isSrgbMatrix(toXYZD50)
@@ -251,12 +249,12 @@ public class SkColorSpace private constructor(
         }
 
         // Encoding identity is deliberately narrower than the writer's D50 normalization allowance.
-        private fun isSrgbMatrix(matrix: Matrix3x3F32): Boolean =
+        private fun isSrgbMatrix(matrix: ColorMatrix3x3F32): Boolean =
             matricesNear(matrix, SkNamedGamut.kSRGB) || matricesNear(matrix, SERIALIZED_SRGB_GAMUT)
 
-        private fun matricesNear(left: Matrix3x3F32, right: Matrix3x3F32): Boolean {
+        private fun matricesNear(left: ColorMatrix3x3F32, right: ColorMatrix3x3F32): Boolean {
             for (row in 0 until 3) for (column in 0 until 3) {
-                if (abs(left.iccGet(row, column) - right.iccGet(row, column)) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
+                if (abs(left[row, column] - right[row, column]) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
             }
             return true
         }
@@ -274,7 +272,7 @@ public class SkColorSpace private constructor(
             left.f to right.f,
         ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_TRANSFER_TOLERANCE }
 
-        private val SERIALIZED_SRGB_GAMUT: Matrix3x3F32 by lazy {
+        private val SERIALIZED_SRGB_GAMUT: ColorMatrix3x3F32 by lazy {
             checkNotNull(SkcmsICCProfile.fromColorProfile(ColorProfiles.sRGB()).colorProfile.toXyzD50)
         }
 
