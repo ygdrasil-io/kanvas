@@ -4,7 +4,7 @@
 
 **Goal:** Replace `:gpu-renderer-scenes` with a small, production-backed `:integration-tests:gpu-evidence` correctness and promotion harness, then remove the legacy renderer and reports in one atomic cutover.
 
-**Architecture:** Build the replacement beside a frozen legacy module. Scene programs construct typed product inputs; production recorders create `GPUTaskList` values; `GPUBackendSession.prepareSceneFrameSession` and `GPUFrameCoordinator` perform all GPU work. A typed expectation gate compares `ShouldRender`/`ShouldRefuse` with observed results and a versioned artifact verifier independently replays that decision from generated evidence. Correctness, promoted evidence, and performance remain separate gates.
+**Architecture:** Build the replacement beside a frozen legacy module. Scene programs construct typed product inputs; production recorders create `GPUTaskList` values; `GPUBackendSession.prepareSceneFrameSession` and `GPUFrameCoordinator` perform all GPU work. A typed expectation gate compares `ShouldRender`/`ShouldRefuse` with observed results and a versioned artifact verifier independently replays that decision from generated evidence. Correctness, promoted evidence, and performance remain separate gates inside the single `reports/gpu-renderer/evidence/` report namespace.
 
 **Tech Stack:** Kotlin/JVM, Gradle Kotlin DSL, JUnit 5, `kotlin.test`, `kotlinx.serialization.json`, `:gpu-renderer`, `:integration-tests:test-utils`, PNG codec runtime, WebGPU through the product runtime only.
 
@@ -24,7 +24,8 @@ The checked-in production code at the evaluated commit is authoritative for impl
 - All rendering is headless/offscreen through `prepareSceneFrameSession`; native windowing and Kadre are out of scope.
 - A product refusal is evidence only when its exact stable code is observed and runtime submission delta is zero.
 - `Unavailable` never passes a correctness or performance promotion gate.
-- Generated output goes under `integration-tests/gpu-evidence/build/reports/`; reviewed snapshots alone go under `reports/gpu-renderer/evidence/`.
+- Every generated, failed, promoted, and performance report goes below `reports/gpu-renderer/evidence/`; no new report is written directly under `reports/gpu-renderer/` or into a module `build/reports/` tree.
+- Correctness uses `reports/gpu-renderer/evidence/correctness/{generated,promoted}/`; performance uses `reports/gpu-renderer/evidence/performance/{generated,promoted}/`.
 - Preserve failure diagnostics and partial generated artifacts; never overwrite a promoted snapshot from a normal render task.
 - Do not add font, codec, path, clip, or text substitutes to grow the initial catalog. Missing product routes stay absent or refuse explicitly.
 - End every task below with its focused verification and a small commit. Do not combine Task 8 (cutover) with Task 9 (performance).
@@ -50,6 +51,7 @@ The checked-in production code at the evaluated commit is authoritative for impl
 **Files:**
 
 - Modify: `settings.gradle.kts`
+- Modify: `.gitignore`
 - Create: `integration-tests/gpu-evidence/build.gradle.kts`
 - Create: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/GpuEvidenceMarker.kt`
 - Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/boundary/GpuEvidenceArchitectureBoundaryTest.kt`
@@ -101,6 +103,13 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*GpuEvid
 Expected: Gradle reports that `:integration-tests:gpu-evidence` does not exist.
 
 - [ ] Add `include(":integration-tests:gpu-evidence")` immediately after the existing integration-test includes, without removing `include(":gpu-renderer-scenes")`.
+
+- [ ] Add only generated evidence subtrees to `.gitignore`; promoted bundles remain trackable:
+
+```gitignore
+/reports/gpu-renderer/evidence/correctness/generated/
+/reports/gpu-renderer/evidence/performance/generated/
+```
 
 - [ ] Create the minimal build file. Do not add `:kanvas`, wgpu4k, coroutines, or the legacy module unless a later product-backed scene proves a concrete need:
 
@@ -178,7 +187,7 @@ Expected: all tests pass, catalog count remains 88, and no WebGPU adapter is req
 - [ ] Commit only this gate:
 
 ```bash
-rtk git add settings.gradle.kts integration-tests/gpu-evidence gpu-renderer-scenes/legacy-cutover-inventory.json gpu-renderer-scenes/src/test
+rtk git add .gitignore settings.gradle.kts integration-tests/gpu-evidence gpu-renderer-scenes/legacy-cutover-inventory.json gpu-renderer-scenes/src/test
 rtk git commit -m "test: freeze legacy GPU scene surface"
 ```
 
@@ -541,7 +550,7 @@ rtk git commit -m "feat: define GPU evidence outcome contracts"
 
 ### Contract to establish
 
-`gpu-evidence-v1` bundles are deterministic, complete, tied to one source commit, and independently verifiable. Render bundles always contain `manifest.json`, `gpu.png`, `cpu.png` or `skia.png`, `diff.png`, `stats.json`, `route.json`, `diagnostics.json`, `environment.json`, and `verdict.json`. Refusal bundles omit images and prove the exact reason plus zero submissions. Normal generation writes only to `build/reports`.
+`gpu-evidence-v1` bundles are deterministic, complete, tied to one source commit, and independently verifiable. Render bundles always contain `manifest.json`, `gpu.png`, `cpu.png` or `skia.png`, `diff.png`, `stats.json`, `route.json`, `diagnostics.json`, `environment.json`, and `verdict.json`. Refusal bundles omit images and prove the exact reason plus zero submissions. Normal correctness generation writes only to `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/<scene-id>/`.
 
 - [ ] Write comparator tests for identical RGBA, one channel inside tolerance, one outside tolerance, mismatched dimensions/byte count, fully transparent pixels, and deterministic diff bytes. Use `ComparisonUtils.compareRgba`; do not create a second SSIM implementation.
 
@@ -615,7 +624,7 @@ data class EvidenceManifest(
 
 - [ ] Implement JSON with `kotlinx.serialization.json` builders and strict parsers. Reject unknown schema versions, missing required keys, wrong primitive types, absolute paths, `..` path traversal, and duplicate logical files. Do not use Markdown as an input or output of the verifier.
 
-- [ ] Implement `EvidenceBundleWriter.writeGenerated` with an injected `java.time.Clock`, a sibling temporary directory, complete file generation, SHA-256 after file close, then an atomic directory move when supported. On failure, retain a directory named from the scene ID and attempt ID with suffix `.failed` containing `diagnostics.json` and `environment.json`; never write under `reports/gpu-renderer/evidence` from this API. Tests inject a fixed clock so identical inputs produce identical JSON and hashes.
+- [ ] Implement `EvidenceBundleWriter.writeGenerated` with an injected `java.time.Clock`, an explicit repository root, and this canonical destination only: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/<scene-id>/`. Write through a sibling temporary directory, close every file, calculate SHA-256, then atomically move when supported. On failure, retain `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/_failed/<scene-id>-<attempt-id>/` with `diagnostics.json` and `environment.json`. Reject traversal, symlinks escaping the root, direct-child writes in `reports/gpu-renderer/` outside `evidence/`, any module `build/reports/` destination, and every path containing `/promoted/`. Tests inject a fixed clock so identical inputs produce identical JSON and hashes.
 
 - [ ] Implement `EvidenceBundleVerifier.verify(directory, expectedSourceCommit)` to recompute every hash and expectation verdict rather than trusting `verdict.json`. Return `Verified(sceneId, verdict)` or `Invalid(sceneId?, errors: List<String>)`. A serialized `Pass` with reconstructed `Fail` is invalid.
 
@@ -782,9 +791,9 @@ Require `Succeeded`, `Completed`, a `GPUSceneFrameOutput.ReadbackRgba` with the 
 | `registered-simple-runtime-effect` | 32×32 | full-target `GPURegisteredUniformPayloads.simpleRuntimeEffect(0.25, 0.50, 0.75, 1.0)` | `SimpleRTCPUOracle` projected to full target, v1 | tolerance 0, similarity 100.0%, policy v1 |
 | `custom-runtime-effect-unregistered-refusal` | 16×16 | `GPUCustomRuntimeEffectID("gpu-evidence.unregistered")` against empty registry | stable refusal | exact code, zero submissions |
 
-- [ ] Implement `GpuEvidenceCli` arguments as `--output <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative output, unknown scene, duplicate flag, or output under `reports/gpu-renderer/evidence`. The CLI writes one generated bundle per case and exits nonzero for `Fail` or `Unavailable`.
+- [ ] Implement `GpuEvidenceCli` arguments as `--repository-root <absolute-dir> --source-commit <40-hex> [--scene <id>]`. Reject a missing/dirty placeholder commit, relative repository root, unknown scene, or duplicate flag. Derive the output internally as `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; callers cannot supply an arbitrary output path. The CLI writes one generated bundle per case and exits nonzero for `Fail` or `Unavailable`.
 
-- [ ] Add `generateBootstrapGpuEvidence` as an opt-in `JavaExec` using the same native JVM flags as the old runner. Require `-PsourceCommit=<40-hex>` and default output to `build/reports/gpu-evidence/bootstrap`; do not run Git from Gradle or Kotlin.
+- [ ] Add `generateBootstrapGpuEvidence` as an opt-in `JavaExec` using the same native JVM flags as the old runner. Require `-PsourceCommit=<40-hex>`, pass the repository root, and write to `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`; do not run Git from Gradle or Kotlin.
 
 - [ ] Run host tests, then the eligible-GPU bootstrap:
 
@@ -796,7 +805,7 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:generateBootstrapGpuEv
 
 Expected: three verified bundles; two render passes and one exact refusal with submission delta zero. If the adapter is unavailable, the second command must fail after writing `Unavailable` evidence.
 
-- [ ] Commit the canonical runner and bootstrap gate; do not commit generated `build/` output:
+- [ ] Commit the canonical runner and bootstrap gate; do not force-add ignored `reports/gpu-renderer/evidence/correctness/generated/` output:
 
 ```bash
 rtk git add integration-tests/gpu-evidence
@@ -894,11 +903,11 @@ rtk git commit -m "feat: establish curated GPU evidence catalog"
 - Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/artifacts/PromoteEvidenceCliTest.kt`
 - Modify: `integration-tests/gpu-evidence/build.gradle.kts`
 - Modify: `build.gradle.kts`
-- Create from reviewed eligible-GPU output: `reports/gpu-renderer/evidence/<scene-id>/` for all eleven catalog rows
+- Create from reviewed eligible-GPU output: `reports/gpu-renderer/evidence/correctness/promoted/<scene-id>/` for all eleven catalog rows
 
 ### Contract to establish
 
-Ordinary `check` runs only host-independent tests. `gpuEvidenceCorrectness` requires an eligible GPU, generates all cases, and rejects `Fail` and `Unavailable`. `gpuEvidenceVerification` reads checked-in snapshots without creating a GPU runtime. `pipelinePmBundle` may depend only on the headless verifier. Promotion and rebaseline require an explicit source commit and review metadata.
+Ordinary `check` runs only host-independent tests. `gpuEvidenceCorrectness` requires an eligible GPU, generates all cases below `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/`, and rejects `Fail` and `Unavailable`. `gpuEvidenceVerification` reads checked-in `correctness/promoted/` snapshots without creating a GPU runtime. `pipelinePmBundle` may depend only on the headless verifier. Promotion and rebaseline require an explicit source commit and review metadata.
 
 - [ ] Write promotion tests in `@TempDir`. Reject unverified input, a source-commit mismatch, an unavailable/failing bundle, missing `--reason`, missing `--reviewer`, an existing destination without `--rebaseline`, and rebaseline without old/new comparison metrics. Assert normal generation APIs cannot target the promoted root.
 
@@ -910,7 +919,7 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*Promote
 
 - [ ] Implement `VerifyEvidenceCli` with arguments `--root`, optional `--source-commit`, and optional `--allow-historical-commit`. It verifies every catalog ID, rejects extra scene directories, prints one line per scene, and exits nonzero on invalid, fail, or unavailable evidence. `--allow-historical-commit` requires all bundles to agree on one internally consistent manifest commit but does not require equality with the checkout; use it only for checked-in historical snapshots and PM packaging, never correctness promotion.
 
-- [ ] Implement `PromoteEvidenceCli` to verify a generated root, copy through a sibling temporary directory, record `promotion.json`, and then atomically replace only verified scene directories. `promotion.json` fields are `schemaVersion = gpu-evidence-promotion-v1`, `sceneId`, `sourceCommit`, `promotedAtUtc`, `reviewer`, `reason`, `rebaseline`, and nullable prior/new comparison summaries. In `--all` mode, verify all eleven sources before changing any destination. The CLI accepts an absolute destination root only when its canonical path is exactly the repository's `reports/gpu-renderer/evidence` path; single-scene mode additionally checks that the destination parent is that root.
+- [ ] Implement `PromoteEvidenceCli` to verify a generated root, copy through a sibling temporary directory, record `promotion.json`, and then atomically replace only verified scene directories. `promotion.json` fields are `schemaVersion = gpu-evidence-promotion-v1`, `sceneId`, `sourceCommit`, `promotedAtUtc`, `reviewer`, `reason`, `rebaseline`, and nullable prior/new comparison summaries. In `--all` mode, verify all eleven sources before changing any destination. The CLI accepts a repository root and derives the two canonical trees itself: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/` and `reports/gpu-renderer/evidence/correctness/promoted/`. It rejects arbitrary source/destination arguments and any canonical path escaping `reports/gpu-renderer/evidence/`.
 
 - [ ] Add module tasks with explicit separation:
 
@@ -923,7 +932,7 @@ tasks.register<JavaExec>("generateGpuEvidence") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.runner.GpuEvidenceCliKt")
     doFirst { require(sourceCommit.isPresent) { "sourceCommit with 40 hexadecimal characters is required" } }
-    args("--output", layout.buildDirectory.dir("reports/gpu-evidence").get().asFile.absolutePath)
+    args("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath)
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
         listOf("--source-commit", sourceCommit.get())
     })
@@ -941,9 +950,15 @@ tasks.register<JavaExec>("verifyGeneratedGpuEvidence") {
     dependsOn("generateGpuEvidence", "classes")
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.VerifyEvidenceCliKt")
-    args("--root", layout.buildDirectory.dir("reports/gpu-evidence").get().asFile.absolutePath)
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
-        listOf("--source-commit", sourceCommit.get())
+        listOf(
+            "--root",
+            rootProject.layout.projectDirectory
+                .dir("reports/gpu-renderer/evidence/correctness/generated/${sourceCommit.get()}")
+                .asFile.absolutePath,
+            "--source-commit",
+            sourceCommit.get(),
+        )
     })
 }
 
@@ -951,7 +966,12 @@ tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
     dependsOn("classes")
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.VerifyEvidenceCliKt")
-    args("--root", rootProject.layout.projectDirectory.dir("reports/gpu-renderer/evidence").asFile.absolutePath)
+    args(
+        "--root",
+        rootProject.layout.projectDirectory
+            .dir("reports/gpu-renderer/evidence/correctness/promoted")
+            .asFile.absolutePath,
+    )
     args("--allow-historical-commit")
 }
 
@@ -966,8 +986,7 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
         require(reviewer.isPresent && reviewer.get().isNotBlank()) { "promotionReviewer is required" }
         require(reason.isPresent && reason.get().isNotBlank()) { "promotionReason is required" }
     }
-    args("--source-root", layout.buildDirectory.dir("reports/gpu-evidence").get().asFile.absolutePath)
-    args("--destination-root", rootProject.layout.projectDirectory.dir("reports/gpu-renderer/evidence").asFile.absolutePath)
+    args("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath)
     args("--all")
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
         listOf(
@@ -1023,7 +1042,7 @@ Before the promotion command, require the task-specific `GPU_EVIDENCE_REVIEWER` 
 - [ ] Commit tasks and reviewed artifacts together so the promoted source commit recorded in manifests remains auditable. If generating artifacts required a prior code commit, record that exact prior commit; do not rewrite it to the promotion commit.
 
 ```bash
-rtk git add build.gradle.kts integration-tests/gpu-evidence reports/gpu-renderer/evidence
+rtk git add build.gradle.kts integration-tests/gpu-evidence reports/gpu-renderer/evidence/correctness/promoted
 rtk git commit -m "build: gate product-backed GPU evidence"
 ```
 
@@ -1035,10 +1054,28 @@ rtk git commit -m "build: gate product-backed GPU evidence"
 
 - Delete: `gpu-renderer-scenes/`
 - Delete: `reports/gpu-renderer-scenes/`
+- Delete: every tracked child of `reports/gpu-renderer/` except `reports/gpu-renderer/evidence/`
+- Delete: `integration-tests/skia-evidence/`
 - Modify: `settings.gradle.kts`
+- Modify: `gpu-renderer/build.gradle.kts`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/GPUAxisAlignedStrokeRectLowererTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/GPUFrameGatePolicyTest.kt`
+- Delete: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/validation/FirstRoutePMEvidenceExport.kt`
+- Delete: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/ReadinessDashboardPMEvidenceExport.kt`
+- Delete: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/ReadinessDashboardContracts.kt`
+- Delete: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/ImageFamilyResourceEvidence.kt`
+- Delete: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/GPURendererReadinessDashboardTest.kt`
+- Delete: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPhase0BaselineReportTest.kt`
+- Delete: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/ImageFamilyResourceEvidenceTest.kt`
+- Delete: `scripts/validate_gpu_renderer_r6_executed_pm_evidence_bundle.py`
+- Delete: `scripts/validate_gpu_renderer_r6_pm_evidence_bundle.py`
+- Delete: `scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py`
+- Delete: `scripts/test_validate_gpu_renderer_r6_executed_pm_evidence_bundle.py`
+- Delete: `scripts/test_validate_gpu_renderer_r6_pm_evidence_bundle.py`
+- Delete: `scripts/test_validate_gpu_renderer_r6_promotion_readiness_boundary.py`
+- Delete: `scripts/validate_gpu_renderer_m9_readiness_pm_evidence_bundle.py`
+- Delete: `scripts/test_validate_gpu_renderer_m9_readiness_pm_evidence_bundle.py`
 - Modify if executable references remain: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedTextRefusalMatrixTest.kt`
 - Modify if executable references remain: `font/gpu-api/src/test/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextRouteRefusalTest.kt`
 - Modify: `integration-tests/gpu-evidence/build.gradle.kts`
@@ -1046,43 +1083,49 @@ rtk git commit -m "build: gate product-backed GPU evidence"
 
 ### Contract to establish
 
-This is one reviewable removal commit. Git history retains the deleted code, reports, freeze tests, and cutover inventory. No archive tree is created. Executable code/build configuration has no dependency on the old module or reports. Dated historical Markdown may still mention old paths as history, but it cannot feed any verifier, activation decision, or support claim.
+This is one reviewable removal commit. Git history retains the deleted code, reports, freeze tests, and cutover inventory. No archive tree is created. `reports/gpu-renderer/evidence/` becomes the sole active GPU renderer report namespace; all dated Markdown, phase-family subtrees, R6/M9 PM bundles, and other legacy material currently placed directly under `reports/gpu-renderer/` are removed. Executable code/build configuration has no dependency on the old module or deleted reports.
 
 - [ ] Before deleting, resolve the exact active references and save the command output in the review notes:
 
 ```bash
 rtk rg -n 'gpu-renderer-scenes|reports/gpu-renderer-scenes|GpuRendererScene' \
   --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
+rtk rg --pcre2 -n 'reports/gpu-renderer/(?!evidence/)' \
+  --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
 rtk ./gradlew --no-daemon gpuEvidenceCorrectness -PsourceCommit=$(rtk git rev-parse HEAD)
 rtk ./gradlew --no-daemon gpuEvidenceVerification
 ```
 
-Expected before deletion: active hits are limited to `settings.gradle.kts`, the legacy module, named boundary/fixture tests above, and temporary compatibility aliases. Both replacement gates pass.
+Expected before deletion: the searches produce a closed inventory of the legacy module, old Phase 6 exporters, R6/M9 PM bundle scripts/tasks, named boundary/fixture tests, and temporary compatibility aliases. Review this inventory before deletion. Both replacement gates pass.
 
-- [ ] Remove `include(":gpu-renderer-scenes")` from `settings.gradle.kts` while retaining `include(":integration-tests:gpu-evidence")`.
+- [ ] Remove `include(":gpu-renderer-scenes")` and `include(":integration-tests:skia-evidence")` from `settings.gradle.kts` while retaining `include(":integration-tests:gpu-evidence")`. The removed Skia-evidence project contains only the retired Phase 6 catch-all report generators.
 
 - [ ] Update `GPURendererPackageBoundaryTest` so it scans `../integration-tests/gpu-evidence/src` and enforces the new forbidden patterns from Task 1. Remove assertions whose only purpose was allowing legacy prepared/direct dual routes.
 
 - [ ] Replace fixture provenance/path literals in `GPUAxisAlignedStrokeRectLowererTest` and `GPUFrameGatePolicyTest` with self-contained test provenance such as `gpu-renderer-test-fixture`; do not point them at a new Markdown report. Update the Kanvas/font tests only if the pre-delete search shows executable file reads or assertions tied to the legacy path.
 
-- [ ] Remove the temporary `generateBootstrapGpuEvidence` alias and all Gradle task references owned solely by the old module. Keep `generateGpuEvidence`, `verifyGeneratedGpuEvidence`, `verifyPromotedGpuEvidence`, and the separate root aggregate tasks.
+- [ ] Remove the temporary `generateBootstrapGpuEvidence` alias and all Gradle task references owned solely by the old module. Retire `gpuRendererR6FirstRoutePmEvidenceBundle`, `gpuRendererM9ReadinessPmEvidenceBundle`, all `generateGpuPhase6*` report tasks, their root delegates/injectors, and the corresponding exporters/validators/tests listed above. Before deleting `ReadinessDashboardContracts.kt`, verify again with `rtk rg -n 'GPURendererReadinessDashboard' gpu-renderer/src/main` that only the listed exporter remains. Keep `generateGpuEvidence`, `verifyGeneratedGpuEvidence`, `verifyPromotedGpuEvidence`, and the separate root aggregate tasks. Make `pipelinePmBundle` depend only on the new headless `gpuEvidenceVerification` for GPU renderer evidence.
 
-- [ ] Delete exactly the two approved trees after confirming their canonical paths are inside the repository:
+- [ ] Delete the legacy scene/report tree and the old `reports/gpu-renderer/` catch-all contents after confirming their canonical paths are inside the repository. The Git exclude pathspec preserves every tracked file below `evidence/`:
 
 ```bash
-rtk git rm -r -- gpu-renderer-scenes reports/gpu-renderer-scenes
+rtk git rm -r -- gpu-renderer-scenes integration-tests/skia-evidence reports/gpu-renderer-scenes
+rtk git rm -r -- 'reports/gpu-renderer/*' ':(exclude)reports/gpu-renderer/evidence/**'
 ```
 
-Do not delete `reports/gpu-renderer/evidence` or any `reports/upstream-rebaseline` material.
+Do not delete `reports/gpu-renderer/evidence/` or any `reports/upstream-rebaseline/` material. Inspect the staged deletion and confirm no path under `reports/gpu-renderer/evidence/` is staged before proceeding.
 
 - [ ] Prove executable references are gone. Historical Markdown hits are allowed only outside build/verifier inputs:
 
 ```bash
 rtk rg -n 'gpu-renderer-scenes|reports/gpu-renderer-scenes|GpuRendererScene' \
   --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
+rtk rg --pcre2 -n 'reports/gpu-renderer/(?!evidence/)' \
+  --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
+rtk ls reports/gpu-renderer
 ```
 
-Expected: no output.
+Expected: both searches produce no output, and the directory listing contains only `evidence/`.
 
 - [ ] Run cutover verification:
 
@@ -1108,7 +1151,7 @@ rtk git diff --check --cached
 - [ ] Commit the atomic cutover:
 
 ```bash
-rtk git add settings.gradle.kts build.gradle.kts gpu-renderer/src/test kanvas/src/test font/gpu-api/src/test integration-tests/gpu-evidence
+rtk git add settings.gradle.kts build.gradle.kts gpu-renderer scripts kanvas/src/test font/gpu-api/src/test integration-tests/gpu-evidence reports/gpu-renderer/evidence
 rtk git commit -m "refactor: replace legacy GPU renderer scenes"
 ```
 
@@ -1134,7 +1177,7 @@ rtk git commit -m "refactor: replace legacy GPU renderer scenes"
 
 ### Contract to establish
 
-Performance uses `gpu-evidence-performance-v1`, its own output directory, runner, and verdict. It never changes correctness results. Software/fallback adapters remain diagnostic-only. Observed and derived counters are labeled distinctly; unavailable backend/driver facts remain explicitly unavailable rather than inferred.
+Performance uses `gpu-evidence-performance-v1`, its own `reports/gpu-renderer/evidence/performance/` subtree, runner, and verdict. It never changes correctness results. Software/fallback adapters remain diagnostic-only. Observed and derived counters are labeled distinctly; unavailable backend/driver facts remain explicitly unavailable rather than inferred.
 
 - [ ] Write product contract tests for structured adapter fields and backward compatibility of `GPUBackendAdapterSummary("summary")`.
 
@@ -1199,7 +1242,7 @@ sealed interface PerformanceVerdict {
 
 - [ ] Sample `GPUBackendRuntimeTelemetry` before and after each phase. Serialize submissions, command buffers, render passes, buffer/texture creation, queue writes, uniform slabs, bind groups, and cache telemetry as `Observed`. Any ratio or delta computed by the harness is `Derived`. Missing values are `Unavailable`; no counter from prose or prior reports is accepted.
 
-- [ ] Write bundles only under `integration-tests/gpu-evidence/build/reports/gpu-evidence-performance/`. Required files are `manifest.json`, `environment.json`, `eligibility.json`, `timings.json`, `telemetry.json`, `diagnostics.json`, and `verdict.json`. `manifest.json` includes `sourceCommit`, scene ID, cold/warmup/measured counts, gate version, and hashes.
+- [ ] Write generated bundles only under `reports/gpu-renderer/evidence/performance/generated/<source-commit>/<scene-id>/`; reviewed performance promotions go only under `reports/gpu-renderer/evidence/performance/promoted/<scene-id>/`. Required files are `manifest.json`, `environment.json`, `eligibility.json`, `timings.json`, `telemetry.json`, `diagnostics.json`, and `verdict.json`. `manifest.json` includes `sourceCommit`, scene ID, cold/warmup/measured counts, gate version, and hashes. Reuse the canonical-path and atomic-write protections from correctness.
 
 - [ ] Add `gpuEvidencePerformance` in the module and root. Require `-PsourceCommit`, keep it out of `check`, `gpuEvidenceCorrectness`, `gpuEvidenceVerification`, and `pipelinePmBundle`:
 
@@ -1260,14 +1303,17 @@ rtk ./gradlew --no-daemon gpuEvidencePerformance \
   -PmeasuredFrames=90
 ```
 
-- [ ] Prove the removed implementation is not active:
+- [ ] Prove the removed implementation and catch-all report namespace are not active:
 
 ```bash
 rtk rg -n 'gpu-renderer-scenes|reports/gpu-renderer-scenes|RectOnlyOffscreenRenderer|UniformPacker' \
   --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
+rtk rg --pcre2 -n 'reports/gpu-renderer/(?!evidence/)' \
+  --glob '*.kt' --glob '*.kts' --glob '*.py' --glob '*.sh' --glob '*.json'
+rtk ls reports/gpu-renderer
 ```
 
-Expected: no output. Dated Markdown history is not used as verification input.
+Expected: both searches produce no output and the directory listing contains only `evidence/`. Deleted dated Markdown remains available only from Git history and is not used as verification input.
 
 - [ ] Confirm every positive scene has GPU/oracle/diff/stats/route/diagnostics/environment/verdict evidence, both refusal scenes have exact codes and zero submissions, no unavailable row was promoted, and performance artifacts have a different schema/root/verdict.
 

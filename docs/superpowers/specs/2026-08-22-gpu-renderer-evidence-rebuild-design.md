@@ -10,7 +10,10 @@ Replace `:gpu-renderer-scenes` with a new, deliberately small
 `:integration-tests:gpu-evidence` module. The replacement is built from
 scratch beside the frozen legacy module, proves a curated correctness set
 through the production GPU renderer, and then removes the legacy module and
-its active reports in one atomic cutover.
+its active reports in one atomic cutover. All new GPU renderer evidence reports
+live under the single `reports/gpu-renderer/evidence/` namespace; the current
+contents scattered directly under `reports/gpu-renderer/` are legacy catch-all
+material and are removed during cutover.
 
 This is option C2: a shadow replacement followed by an atomic cutover. It is
 not a refactor or a source migration. Existing scene intent and neutral assets
@@ -57,6 +60,11 @@ evidence gates pass. At cutover:
 - remove `include(":gpu-renderer-scenes")` from `settings.gradle.kts`;
 - delete the legacy module and its tests;
 - delete `reports/gpu-renderer-scenes/` as active evidence;
+- delete every legacy child of `reports/gpu-renderer/` except the new
+  `reports/gpu-renderer/evidence/` namespace;
+- retire the report-only `:integration-tests:skia-evidence` Phase 6 module and
+  the legacy R6/M9 GPU renderer PM exporters/validators that would recreate the
+  catch-all reports;
 - update active build, CI, documentation, and package-boundary references;
 - retain historical traceability through Git and this decision document,
   rather than an active archive tree.
@@ -209,10 +217,25 @@ serialized evidence bundle.
 
 ### Evidence Writer And Verifier
 
-Normal runs write generated output under
-`integration-tests/gpu-evidence/build/reports/gpu-evidence/`. A deliberately
-promoted snapshot may be copied into
-`reports/gpu-renderer/evidence/<scene-id>/` after review.
+All correctness and performance reports, including generated runs, refusals,
+failures retained for diagnosis, and reviewed promotions, live below one
+root:
+
+```text
+reports/gpu-renderer/evidence/
+  correctness/
+    generated/<source-commit>/<scene-id>/
+    promoted/<scene-id>/
+  performance/
+    generated/<source-commit>/<scene-id>/
+    promoted/<scene-id>/
+```
+
+Generated directories are ignored by Git and may be recreated. A promotion
+copies a verified generated bundle into the matching `promoted/` namespace and
+adds review metadata. A normal run cannot write into a `promoted/` directory.
+No GPU evidence report is written under a module `build/reports/` directory or
+directly into the catch-all `reports/gpu-renderer/` root.
 
 For `ShouldRender`, one bundle contains:
 
@@ -286,8 +309,9 @@ reason, prior metric, new metric, adapter facts, and source commit recorded.
 
 ## Performance Policy
 
-Performance runs use a separate Gradle task, output directory, schema, and
-promotion gate. They never influence correctness verdicts.
+Performance runs use a separate Gradle task, schema, promotion gate, and the
+dedicated `reports/gpu-renderer/evidence/performance/` subtree. They never
+influence correctness verdicts.
 
 A performance bundle records at least:
 
@@ -315,13 +339,19 @@ Cutover is a single reviewable change after all entry gates pass. It removes:
 
 - `gpu-renderer-scenes/`;
 - `reports/gpu-renderer-scenes/`;
+- every existing file and directory directly under `reports/gpu-renderer/`
+  other than `evidence/`;
+- the report-only `integration-tests/skia-evidence/` Phase 6 generator module;
+- legacy R6/M9 PM report exporters, validators, tests, and Gradle tasks;
 - Gradle tasks owned only by that module;
 - package-boundary references that require the old module;
 - active documentation that presents old reports as current evidence.
 
 No source or report tree is moved into an `archive/` directory. Git retains the
 full history. This specification and the cutover commit record why the material
-was removed and where its last revision can be found.
+was removed and where its last revision can be found. After cutover,
+`reports/gpu-renderer/evidence/` is the only active report namespace for the GPU
+renderer.
 
 ## Delivery Slices
 
@@ -361,6 +391,9 @@ Cutover is allowed only when all of the following are true:
   lane;
 - unavailable hardware is reported as unavailable and cannot promote;
 - correctness and performance tasks have separate schemas and gates;
+- every new correctness and performance report is contained below
+  `reports/gpu-renderer/evidence/`;
+- `reports/gpu-renderer/` contains no legacy child beside `evidence/`;
 - active documentation links the replacement evidence rather than legacy
   reports;
 - the full repository build and relevant GPU renderer boundary tests pass
@@ -391,8 +424,10 @@ separate eligible GPU lane and complete artifacts.
 
 ### Report churn
 
-Schemas are versioned and generated outputs stay in `build/` by default. Only
-reviewed promotion bundles enter `reports/gpu-renderer/evidence/`.
+Schemas are versioned. Generated runs stay in the ignored
+`reports/gpu-renderer/evidence/*/generated/` subtrees, while reviewed promotion
+bundles enter the tracked `reports/gpu-renderer/evidence/*/promoted/` subtrees.
+Writers reject any destination outside this namespace.
 
 ### Scope pressure
 
