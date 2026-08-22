@@ -36,7 +36,7 @@ import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Assertions.assertEquals

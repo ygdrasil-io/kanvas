@@ -1,9 +1,9 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.ImageDecodeResult
-import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.kanvas.types.Gamut
-import org.graphiks.kanvas.types.TransferFunction
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
+import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.math.color.ColorTransferFunction
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals

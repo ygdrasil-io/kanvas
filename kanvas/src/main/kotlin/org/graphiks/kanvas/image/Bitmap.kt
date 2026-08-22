@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a

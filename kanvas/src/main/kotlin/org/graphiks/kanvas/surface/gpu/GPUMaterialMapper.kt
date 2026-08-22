@@ -1009,7 +1009,7 @@ private fun Shader.Image.toPreparedImageMaterial(
             GPUMaterialKind.ImageDraw,
         )
     }
-    if (image.colorSpace != org.graphiks.kanvas.types.ColorSpace.SRGB) {
+    if (image.colorSpace != org.graphiks.kanvas.color.ColorSpace.SRGB) {
         return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_SPACE,
             GPUMaterialKind.ImageDraw,

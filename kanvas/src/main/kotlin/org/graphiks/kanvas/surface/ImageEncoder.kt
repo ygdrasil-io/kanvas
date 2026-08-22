@@ -2,7 +2,7 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.AlphaType
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 
 /**
  * Encodes raw pixel data into a compressed image format such as PNG.

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.surface
 
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 
 /**
  * The outcome of a single [Surface.render] invocation.
