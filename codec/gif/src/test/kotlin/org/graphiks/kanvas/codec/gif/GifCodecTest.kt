@@ -52,7 +52,7 @@ class GifCodecTest {
         assertEquals(1, codec.dimensions().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)

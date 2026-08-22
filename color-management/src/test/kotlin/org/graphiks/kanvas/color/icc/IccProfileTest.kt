@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IccProfileTest {
@@ -30,9 +31,11 @@ class IccProfileTest {
 
     @Test
     fun `reports parser failures without a partial ICC profile`() {
-        val failure = assertNotNull(IccProfile.parse(ByteArray(0)).failureOrNull())
+        val result = IccProfile.parse(ByteArray(0))
+        val failure = assertNotNull(result.failureOrNull())
 
         assertEquals("icc.header.size", failure.code)
+        assertNull(result.profileOrNull())
     }
 
     @Test

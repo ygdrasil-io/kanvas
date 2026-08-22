@@ -7,9 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.graphiks.math.color.ColorARGB
 import java.io.ByteArrayOutputStream
 
@@ -266,7 +264,7 @@ class BmpEncoderTest {
     }
 
     private fun createValidIccProfile(): ByteArray {
-        return SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        return IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
     }
 
     private fun decodedCodec(bytes: ByteArray): Codec? {

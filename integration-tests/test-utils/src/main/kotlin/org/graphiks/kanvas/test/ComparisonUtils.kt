@@ -2,14 +2,13 @@ package org.graphiks.kanvas.test
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.png.PngEncoder
+import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
 import java.awt.image.BufferedImage
 import java.io.File
 import java.io.InputStream
@@ -192,7 +191,7 @@ object ComparisonUtils {
 
     private fun rgbaToSkBitmap(rgba: ByteArray, width: Int, height: Int): SkBitmap {
         require(rgba.size == width * height * BYTES_PER_PIXEL) { "RGBA buffer size mismatch" }
-        val bitmap = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val bitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val i = (y * width + x) * BYTES_PER_PIXEL
@@ -216,9 +215,9 @@ object ComparisonUtils {
         return skBitmapToSrgbRgba(natural, sourceColorSpace)
     }
 
-    private fun skBitmapToSrgbRgba(bitmap: SkBitmap, sourceColorSpace: SkColorSpace): ByteArray {
+    private fun skBitmapToSrgbRgba(bitmap: SkBitmap, sourceColorSpace: ImageColorSpace): ByteArray {
         val rgba = ByteArray(bitmap.width * bitmap.height * BYTES_PER_PIXEL)
-        val srgbToXyz = SkNamedGamut.kSRGB
+        val srgbToXyz = requireNotNull(ColorProfiles.sRGB().toXyzD50)
         val xyzToSrgb = invert3x3(srgbToXyz)
         val f16 = FloatArray(4)
         var offset = 0
@@ -255,13 +254,13 @@ object ComparisonUtils {
 
     private fun convertEncodedRgbToSrgb(
         rgb: FloatArray,
-        sourceColorSpace: SkColorSpace,
+        sourceColorSpace: ImageColorSpace,
         xyzToSrgb: Array<DoubleArray>,
     ): DoubleArray {
         val sourceLinear = DoubleArray(3) { i ->
-            decodeTransfer(rgb[i].toDouble(), sourceColorSpace.transferFn)
+            decodeTransfer(rgb[i].toDouble(), requireNotNull(sourceColorSpace.transferFunction))
         }
-        val xyz = multiply(sourceColorSpace.toXYZD50, sourceLinear)
+        val xyz = multiply(requireNotNull(sourceColorSpace.toXyzD50), sourceLinear)
         val srgbLinear = multiply(xyzToSrgb, xyz)
         return DoubleArray(3) { i -> encodeSrgb(srgbLinear[i].coerceIn(0.0, 1.0)) }
     }
@@ -316,17 +315,23 @@ object ComparisonUtils {
         return width to height
     }
 
-    private fun pngIccpColorSpace(data: ByteArray): SkColorSpace? {
+    private fun pngIccpColorSpace(data: ByteArray): ImageColorSpace? {
         val profileName = readPngIccpName(data) ?: return null
         return when {
-            profileName.equals("sRGB", ignoreCase = true) -> SkColorSpace.makeSRGB()
+            profileName.equals("sRGB", ignoreCase = true) -> ImageColorSpace.sRGB()
             profileName.equals("Rec.2020", ignoreCase = true) ||
                 profileName.equals("Rec2020", ignoreCase = true) ||
                 profileName.equals("BT.2020", ignoreCase = true) ->
-                SkColorSpace.makeRGB(REC2020_TRANSFER_FN, SkNamedGamut.kRec2020)
+                ImageColorSpace.fromMatrixTrc(
+                    REC2020_TRANSFER_FN,
+                    requireNotNull(ColorProfiles.rec2020().toXyzD50),
+                )
             profileName.equals("Display P3", ignoreCase = true) ||
                 profileName.equals("DisplayP3", ignoreCase = true) ->
-                SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+                ImageColorSpace.fromMatrixTrc(
+                    requireNotNull(ColorProfiles.displayP3().transferFunction),
+                    requireNotNull(ColorProfiles.displayP3().toXyzD50),
+                )
             else -> null
         }
     }

@@ -7,16 +7,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 
 class JpegMetadataTest {
 
     @Test
     fun `reassembles reordered ICC APP2 segments`() {
-        val icc = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val icc = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val splitAt = icc.size / 2
         val document = documentWith(
             iccSegment(index = 2, count = 2, payload = icc.copyOfRange(splitAt, icc.size)),

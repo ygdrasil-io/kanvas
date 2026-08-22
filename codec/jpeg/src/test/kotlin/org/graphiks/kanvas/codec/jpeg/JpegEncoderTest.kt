@@ -8,13 +8,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.skcmsParse
+import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
 
 class JpegEncoderTest {
@@ -158,8 +156,8 @@ class JpegEncoderTest {
 
     @Test
     fun `non-sRGB JPEG writes ICC APP2 chunks`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
-        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
+        val colorSpace = ImageColorSpace.fromIccProfile(IccProfile.parse(iccBytes).getOrThrow())
         val src = SkBitmap(8, 8, colorSpace)
         for (y in 0 until 8) for (x in 0 until 8) {
             src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8) or 0x7F
@@ -199,7 +197,7 @@ class JpegEncoderTest {
     }
 
     private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {
-        val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val b = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
             b.pixels[y * width + x] = color
         }
@@ -207,7 +205,7 @@ class JpegEncoderTest {
     }
 
     private fun makeGradient(width: Int, height: Int): SkBitmap {
-        val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val b = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
             val r = (x * 255 / maxOf(1, width - 1)).coerceIn(0, 255)
             val g = (y * 255 / maxOf(1, height - 1)).coerceIn(0, 255)

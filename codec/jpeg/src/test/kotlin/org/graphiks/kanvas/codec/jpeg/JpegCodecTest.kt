@@ -12,13 +12,11 @@ import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkColorSpaceProfileStatus
+import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.SkICC
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -72,7 +70,7 @@ class JpegCodecTest {
         assertEquals(8, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -401,7 +399,7 @@ class JpegCodecTest {
 
     @Test
     fun `APP2 ICC chunks are reassembled and parsed`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val splitAt = iccBytes.size / 2
         val codec = JpegCodec.Decoder.make(
             withAppSegments(
@@ -416,10 +414,14 @@ class JpegCodecTest {
         assertNotNull(profile)
         assertEquals(iccBytes.size, profile!!.size)
         assertTrue(profile.hasTrc)
-        assertTrue(profile.hasToXYZD50)
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
-        assertEquals(SkNamedGamut.kDisplayP3[0, 0], codec.getInfo().colorSpace.toXYZD50[0, 0], 64f / 65_536f)
+        assertTrue(profile.hasToXyzD50)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.SUPPORTED, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)[0, 0],
+            requireNotNull(codec.getInfo().colorSpace.toXyzD50)[0, 0],
+            64f / 65_536f,
+        )
         val (_, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
     }
@@ -435,8 +437,8 @@ class JpegCodecTest {
         )!!
 
         assertNotNull(codec.getICCProfile())
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
@@ -1404,7 +1406,7 @@ class JpegCodecTest {
     }
 
     private fun grayProfileBytes(): ByteArray {
-        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val bytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         iccWriteU32(bytes, 16, iccSignature("GRAY"))
         repeat(iccReadU32(bytes, 128)) { index ->
             val entry = 132 + index * 12

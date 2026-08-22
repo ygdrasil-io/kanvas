@@ -2,13 +2,13 @@ package org.graphiks.kanvas.codec
 
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
 import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkImageInfo
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -76,12 +76,10 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
 
     /**
      * Mirrors `AndroidCodec::getICCProfile()`. The upstream returns a
-     * raw `skcms_ICCProfile*` ; the Kotlin port surfaces the parsed
-     * [SkColorSpace] from [getInfo] for ergonomic parity with the rest
-     * of Kanvas (callers that need the raw profile can reach
-     * through `codec().getICCProfile()`).
+     * raw `skcms_ICCProfile*`; the Kotlin port returns immutable embedded ICC
+     * provenance directly.
      */
-    public fun getICCProfile(): SkColorSpace? = codec.getInfo().colorSpace
+    public fun getICCProfile(): IccProfile? = codec.getICCProfile()
 
     /** Mirrors `AndroidCodec::getEncodedFormat()`. */
     public fun getEncodedFormat(): SkEncodedImageFormat = codec.getEncodedFormat()

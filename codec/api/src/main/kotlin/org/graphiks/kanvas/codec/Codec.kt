@@ -5,9 +5,9 @@ import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.color.icc.IccProfile
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
-import org.skia.foundation.skcms.SkcmsICCProfile
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.ServiceLoader
@@ -99,7 +99,7 @@ public abstract class Codec protected constructor() {
      * colour space from non-ICC container metadata without exposing a
      * fabricated ICC profile here.
      */
-    public abstract fun getICCProfile(): SkcmsICCProfile?
+    public abstract fun getICCProfile(): IccProfile?
 
     /**
      * The EXIF Orientation tag carried by the encoded stream — i.e. how

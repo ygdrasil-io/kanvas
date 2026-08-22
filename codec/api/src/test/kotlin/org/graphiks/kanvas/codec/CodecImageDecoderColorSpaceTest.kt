@@ -1,31 +1,30 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.ImageDecodeResult
+import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.math.color.ColorTransferFunction
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkICC
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
+import org.graphiks.kanvas.color.icc.IccProfile
 
 class CodecImageDecoderColorSpaceTest {
     @Test
     fun `decoder preserves Display P3 tag without transforming RGBA samples`() {
         val source = requireNotNull(
-            SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+            ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)),
         )
 
         val result = decodeWith(source)
@@ -38,10 +37,13 @@ class CodecImageDecoderColorSpaceTest {
 
     @Test
     fun `decoder preserves serialized sRGB tag without transforming RGBA samples`() {
-        val profile = requireNotNull(
-            skcmsParse(SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)),
-        )
-        val source = requireNotNull(SkColorSpace.make(profile))
+        val profile = IccProfile.parse(
+            IccProfileWriter.writeMatrixTrc(
+                requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction),
+                requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50),
+            ),
+        ).getOrThrow()
+        val source = ImageColorSpace.fromIccProfile(profile)
 
         val result = decodeWith(source)
 
@@ -54,7 +56,7 @@ class CodecImageDecoderColorSpaceTest {
     @Test
     fun `decoder reuses common refusal for an unrepresentable transfer`() {
         val source = requireNotNull(
-            SkColorSpace.makeRGB(
+            ImageColorSpace.fromMatrixTrc(
                 ColorTransferFunction.parametric(
                     g = 1.8f,
                     a = 1f,
@@ -64,7 +66,7 @@ class CodecImageDecoderColorSpaceTest {
                     e = 0f,
                     f = 0f,
                 ),
-                SkNamedGamut.kDisplayP3,
+                requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50),
             ),
         )
 
@@ -76,7 +78,18 @@ class CodecImageDecoderColorSpaceTest {
         )
     }
 
-    private fun decodeWith(colorSpace: SkColorSpace): ImageDecodeResult {
+    @Test
+    fun `codec exposes an immutable native ICC profile`() {
+        val embedded = IccProfile.fromMatrixTrc(ColorProfiles.displayP3())
+        val codec = FakeCodec(ImageColorSpace.sRGB(), embedded)
+        val expected = requireNotNull(codec.getICCProfile()).bytes
+
+        codec.getICCProfile()!!.bytes[0] = 0
+
+        assertArrayEquals(expected, codec.getICCProfile()!!.bytes)
+    }
+
+    private fun decodeWith(colorSpace: ImageColorSpace): ImageDecodeResult {
         val data = "kanvas-color-space-test".toByteArray()
         val decoder = object : Codec.Decoder {
             override val name: String = TEST_DECODER_NAME
@@ -92,7 +105,8 @@ class CodecImageDecoderColorSpaceTest {
     }
 
     private class FakeCodec(
-        private val colorSpace: SkColorSpace,
+        private val colorSpace: ImageColorSpace,
+        private val iccProfile: IccProfile? = null,
     ) : Codec() {
         override fun getInfo(): SkImageInfo = SkImageInfo.Make(
             width = 1,
@@ -104,7 +118,7 @@ class CodecImageDecoderColorSpaceTest {
 
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
 
-        override fun getICCProfile(): SkcmsICCProfile? = null
+        override fun getICCProfile(): IccProfile? = iccProfile
 
         override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
             dst.pixels8888[0] = SAMPLE_ARGB

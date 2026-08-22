@@ -64,6 +64,8 @@ public sealed interface IccProfileParseResult {
     }
 
     public fun failureOrNull(): Failure? = this as? Failure
+
+    public fun profileOrNull(): IccProfile? = (this as? Success)?.profile
 }
 
 private const val TAG_COUNT_OFFSET: Int = 128

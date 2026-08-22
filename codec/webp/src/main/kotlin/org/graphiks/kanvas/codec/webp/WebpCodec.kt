@@ -3,14 +3,13 @@ package org.graphiks.kanvas.codec.webp
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.color.icc.IccProfile
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
 
 /**
  * Pure Kotlin WebP metadata codec.
@@ -32,7 +31,7 @@ public class WebpCodec internal constructor(
             height = metadata.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
-            colorSpace = metadata.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+            colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -40,7 +39,7 @@ public class WebpCodec internal constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kWEBP
 
-    override fun getICCProfile(): SkcmsICCProfile? = metadata.iccProfile
+    override fun getICCProfile(): IccProfile? = metadata.iccProfile
 
     override fun getFrameCount(): Int = metadata.animation?.frames?.size ?: 1
 
@@ -169,7 +168,7 @@ internal data class WebpMetadata(
     val flags: WebpVp8xFlags = WebpVp8xFlags(),
     val payloadOffset: Int = -1,
     val payloadSize: Int = 0,
-    val iccProfile: SkcmsICCProfile? = null,
+    val iccProfile: IccProfile? = null,
     val exifData: ByteArray? = null,
     val xmpData: ByteArray? = null,
     val alphaChunk: WebpAlphaChunk? = null,
@@ -253,7 +252,7 @@ private fun decodeAnimationFramePixels(frame: WebpAnimationFrame): AnimationFram
         width = frame.width,
         height = frame.height,
         colorType = SkColorType.kRGBA_8888,
-        colorSpace = SkColorSpace.makeSRGB(),
+        colorSpace = ImageColorSpace.sRGB(),
     )
     return when (codec.getPixels(info, bitmap)) {
         Codec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap.pixels8888.copyOf())
@@ -330,7 +329,7 @@ private fun parseMetadata(data: ByteArray): WebpMetadata? {
     var animationBackgroundColor: Int? = null
     var animationLoopCount: Int = 0
     val animationFrames = ArrayList<WebpAnimationFrame>()
-    var iccProfile: SkcmsICCProfile? = null
+    var iccProfile: IccProfile? = null
     var exifData: ByteArray? = null
     var xmpData: ByteArray? = null
     var alphaChunk: WebpAlphaChunk? = null
@@ -530,10 +529,10 @@ private fun parseAlphaChunk(
     )
 }
 
-private fun parseIccProfile(data: ByteArray, offset: Int, size: Int): SkcmsICCProfile? {
+private fun parseIccProfile(data: ByteArray, offset: Int, size: Int): IccProfile? {
     if (size <= 0 || offset < 0 || offset + size > data.size) return null
     return try {
-        skcmsParse(data.copyOfRange(offset, offset + size))
+        IccProfile.parse(data.copyOfRange(offset, offset + size)).profileOrNull()
     } catch (_: Throwable) {
         null
     }

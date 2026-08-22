@@ -4,11 +4,11 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 
 /** Static pure-Kotlin JPEG 2000 dispatcher owner for the bounded raw J2K profile. */
 public class Jpeg2000Codec private constructor(
@@ -19,14 +19,14 @@ public class Jpeg2000Codec private constructor(
         height = document.frame.height,
         colorType = SkColorType.kRGBA_8888,
         alphaType = SkAlphaType.kUnpremul,
-        colorSpace = SkColorSpace.makeSRGB(),
+        colorSpace = ImageColorSpace.sRGB(),
     )
 
     override fun getInfo(): SkImageInfo = info
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG2000
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): IccProfile? = null
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height || dst.colorType != info.colorType) {

@@ -4,12 +4,12 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 import org.skia.utils.PixmapUtils
 import kotlin.math.roundToInt
 
@@ -33,7 +33,7 @@ public class JpegCodec private constructor(
             height = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.width else jpeg.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = jpeg.metadata.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+            colorSpace = jpeg.metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -41,7 +41,7 @@ public class JpegCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
 
-    override fun getICCProfile(): SkcmsICCProfile? = jpeg.metadata.iccProfile
+    override fun getICCProfile(): IccProfile? = jpeg.metadata.iccProfile
 
     override fun getOrigin(): SkEncodedOrigin = jpeg.metadata.origin
 
@@ -248,7 +248,7 @@ private class JpegHierarchyCodec(
             height = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.width else hierarchy.definition.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = metadata.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+            colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -256,7 +256,7 @@ private class JpegHierarchyCodec(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
 
-    override fun getICCProfile(): SkcmsICCProfile? = metadata.iccProfile
+    override fun getICCProfile(): IccProfile? = metadata.iccProfile
 
     override fun getOrigin(): SkEncodedOrigin = metadata.origin
 
