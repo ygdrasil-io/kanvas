@@ -14,7 +14,6 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
-import org.graphiks.kanvas.test.ComparisonUtils
 
 class EvidenceBundleRound1RegressionTest {
     @Test fun `verifier reproduces render expectation refusal reason`() {
@@ -45,8 +44,8 @@ class EvidenceBundleRound1RegressionTest {
     }
 
     @Test fun `checked in oracle uses skia and preserves provenance`() {
-        val descriptor = renderDescriptor(OraclePolicy.CheckedInPng("oracle.png", pngHash(PIXEL), "release-reference"))
-        val path = bundle(descriptor, renderedObservation(), expected = PIXEL)
+        val descriptor = renderDescriptor(OraclePolicy.CheckedInPng("oracle.png", sha256(ORIGINAL), "release-reference"))
+        val path = bundle(descriptor, renderedObservation(), expected = PIXEL, checkedInBytes = ORIGINAL)
         assertTrue(Files.exists(path.resolve("skia.png")))
         assertFalse(Files.exists(path.resolve("cpu.png")))
         assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
@@ -95,8 +94,8 @@ class EvidenceBundleRound1RegressionTest {
         names.forEach { name -> assertEquals(Files.readAllBytes(first.resolve(name)).toList(), Files.readAllBytes(second.resolve(name)).toList(), name) }
     }
 
-    private fun bundle(descriptor: EvidenceSceneDescriptor, observation: SceneObservation, expected: ByteArray? = null): Path =
-        EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(descriptor, observation, expected ?: PIXEL, "attempt")
+    private fun bundle(descriptor: EvidenceSceneDescriptor, observation: SceneObservation, expected: ByteArray? = null, checkedInBytes: ByteArray? = null): Path =
+        EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(descriptor, observation, expected ?: PIXEL, "attempt", checkedInPngBytes = checkedInBytes)
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
     private fun renderedObservation() = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
@@ -104,10 +103,7 @@ class EvidenceBundleRound1RegressionTest {
     private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
     private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", null, null, null, true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
-    private fun pngHash(rgba: ByteArray): String {
-        val file = Files.createTempFile("oracle", ".png").toFile()
-        return try { ComparisonUtils.saveRgbaAsPng(rgba, 1, 1, file); MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) } } finally { file.delete() }
-    }
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     private fun refreshHash(path: Path, name: String) {
         val manifest = path.resolve("manifest.json")
         val hash = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path.resolve(name))).joinToString("") { "%02x".format(it) }
@@ -120,6 +116,7 @@ class EvidenceBundleRound1RegressionTest {
     companion object {
         private const val COMMIT = "abc123"
         private val PIXEL = byteArrayOf(1, 2, 3, 4)
+        private val ORIGINAL = byteArrayOf(1, 2, 3, 4, 5, 6)
         private val FIXED_CLOCK = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)
     }
 }

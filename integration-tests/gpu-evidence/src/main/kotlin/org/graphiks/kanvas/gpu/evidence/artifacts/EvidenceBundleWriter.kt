@@ -22,6 +22,9 @@ class EvidenceBundleWriter(
     repositoryRoot: Path,
     private val sourceCommit: String,
     private val clock: Clock = Clock.systemUTC(),
+    private val moveStrategy: (Path, Path, Boolean) -> Unit = { source, destination, atomic ->
+        if (atomic) Files.move(source, destination, ATOMIC_MOVE) else Files.move(source, destination)
+    },
 ) {
     private val root = repositoryRoot.toAbsolutePath().normalize()
     private val rootReal: Path
@@ -40,6 +43,7 @@ class EvidenceBundleWriter(
         observation: SceneObservation,
         expectedRgba: ByteArray? = null,
         attemptId: String = observation.routeAttemptId() ?: "attempt-1",
+        checkedInPngBytes: ByteArray? = null,
     ): Path {
         require(SAFE_COMPONENT.matches(attemptId)) { "attempt id must be a single safe path component" }
         require(observation !is SceneObservation.Unavailable) { "unavailable observations cannot produce bundles" }
@@ -49,7 +53,7 @@ class EvidenceBundleWriter(
         return try {
             temp = siblingTemp(destination)
             Files.createDirectories(temp)
-            writeBundle(temp, descriptor, observation, expectedRgba, attemptId)
+            writeBundle(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
             moveIntoPlace(temp, destination)
             temp = null
             destination
@@ -77,6 +81,7 @@ class EvidenceBundleWriter(
         observation: SceneObservation,
         expectedRgba: ByteArray?,
         attemptId: String,
+        checkedInPngBytes: ByteArray?,
     ) {
         val files = linkedMapOf<String, ByteArray>()
         val rendered = observation as? SceneObservation.Rendered
@@ -94,7 +99,12 @@ class EvidenceBundleWriter(
             val diff = rendered.comparison.diffRgba
             val policy = descriptor.comparison
             val oracleIsCheckedIn = descriptor.oracle is OraclePolicy.CheckedInPng
-            files[if (oracleIsCheckedIn) "skia.png" else "cpu.png"] = cpuPng
+            val skiaBytes = if (oracleIsCheckedIn) {
+                val original = requireNotNull(checkedInPngBytes) { "CheckedInPng requires original PNG bytes" }
+                require(sha256(original) == (descriptor.oracle as OraclePolicy.CheckedInPng).sha256) { "checked-in PNG bytes do not match oracle sha256" }
+                original.copyOf()
+            } else null
+            files[if (oracleIsCheckedIn) "skia.png" else "cpu.png"] = skiaBytes ?: cpuPng
             files["gpu.png"] = gpuPng
             files["diff.png"] = pngBytes(diff, descriptor.width, descriptor.height)
             files["stats.json"] = EvidenceStats(
@@ -147,8 +157,8 @@ class EvidenceBundleWriter(
     private fun moveIntoPlace(temp: Path, destination: Path) {
         require(!Files.isSymbolicLink(destination)) { "evidence destination cannot be a symlink" }
         if (!Files.exists(destination, NOFOLLOW_LINKS)) {
-            try { Files.move(temp, destination, ATOMIC_MOVE) } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temp, destination)
+            try { moveStrategy(temp, destination, true) } catch (_: AtomicMoveNotSupportedException) {
+                moveStrategy(temp, destination, false)
             }
             return
         }
@@ -156,15 +166,15 @@ class EvidenceBundleWriter(
         val backup = Files.createTempDirectory(destination.parent, ".${destination.fileName}.backup-")
         deleteTree(backup)
         try {
-            Files.move(destination, backup, ATOMIC_MOVE)
+            try { moveStrategy(destination, backup, true) } catch (_: AtomicMoveNotSupportedException) { moveStrategy(destination, backup, false) }
             try {
-                Files.move(temp, destination, ATOMIC_MOVE)
+                moveStrategy(temp, destination, true)
             } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temp, destination)
+                moveStrategy(temp, destination, false)
             }
         } catch (failure: Throwable) {
             if (!Files.exists(destination, NOFOLLOW_LINKS) && Files.exists(backup, NOFOLLOW_LINKS)) {
-                runCatching { Files.move(backup, destination, ATOMIC_MOVE) }.getOrElse { Files.move(backup, destination) }
+                runCatching { moveStrategy(backup, destination, true) }.getOrElse { moveStrategy(backup, destination, false) }
             }
             throw failure
         } finally {
@@ -178,7 +188,8 @@ class EvidenceBundleWriter(
                 .resolve("_failed").resolve("${descriptor.id.value}-$attemptId").normalize()
             if (!failed.startsWith(root)) return@runCatching
             ensureNoSymlinkComponents(failed.parent!!)
-            Files.createDirectories(failed)
+            if (Files.exists(failed, NOFOLLOW_LINKS)) return@runCatching
+            Files.createDirectory(failed)
             Files.write(failed.resolve("diagnostics.json"), diagnosticsJson(observation, attemptId, failure.message ?: failure::class.simpleName.orEmpty()))
             Files.write(failed.resolve("environment.json"), environmentJson(observation.environment))
         }
@@ -220,7 +231,7 @@ class EvidenceBundleWriter(
     private fun diagnosticsJson(observation: SceneObservation, attemptId: String, extra: String? = null): ByteArray = buildJsonObject {
         put("attemptId", attemptId); put("diagnostics", buildJsonArray { observation.diagnostics().forEach(::add) })
         put("stableReasonCode", (observation as? SceneObservation.Refused)?.stableReasonCode)
-        put("message", (observation as? SceneObservation.Refused)?.message); put("submissionDelta", (observation as? SceneObservation.Refused)?.submissionDelta ?: 0L)
+        put("message", (observation as? SceneObservation.Refused)?.message); put("submissionDelta", when (observation) { is SceneObservation.Rendered -> observation.route.runtimeTelemetryDelta.submissions; is SceneObservation.Refused -> observation.submissionDelta; is SceneObservation.Unavailable -> 0L })
         if (extra != null) put("writeFailure", extra)
     }.canonicalBytes()
 

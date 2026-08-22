@@ -166,12 +166,12 @@ object EvidenceBundleVerifier {
     private fun JsonObject.optionalNullableBoolean(key: String): Boolean? {
         val value = this[key] ?: error("missing $key")
         if (value is JsonNull) return null
-        return value.jsonPrimitive.booleanOrNull ?: error("$key must be a boolean or null")
+        return value.jsonPrimitive.takeUnless { it.isString }?.booleanOrNull ?: error("$key must be a boolean or null")
     }
     private fun JsonObject.optionalNullableLong(key: String): Long? {
         val value = this[key] ?: error("missing $key")
         if (value is JsonNull) return null
-        return value.jsonPrimitive.longOrNull ?: error("$key must be a long or null")
+        return value.jsonPrimitive.takeUnless { it.isString }?.longOrNull ?: error("$key must be a long or null")
     }
     private fun JsonPrimitive.asString(label: String): String = require(isString && contentOrNull != null) { "$label must be a string" }.let { content }
     private fun isSafeFileName(name: String): Boolean = name.isNotBlank() && !name.startsWith('/') && !name.contains("\\") && !name.split('/').any { it == ".." || it.isBlank() } && name == Path.of(name).fileName.toString()
@@ -190,7 +190,8 @@ object EvidenceBundleVerifier {
                     var next = index
                     while (next < text.length && text[next].isWhitespace()) next++
                     if (next < text.length && text[next] == ':' && objects.isNotEmpty()) {
-                        val key = text.substring(start + 1, index - 1)
+                        val rawKey = text.substring(start, index)
+                        val key = runCatching { EvidenceJson.parseToJsonElement(rawKey).jsonPrimitive.content }.getOrElse { rawKey }
                         require(objects.last().add(key)) { "duplicate JSON key: $key" }
                     }
                 }
