@@ -55,7 +55,6 @@ The new target starts at approximately 25%.
 - `reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md`
 - `reports/wgsl-pipeline/performance/m59-performance-release-gate.json`
 - `reports/wgsl-pipeline/scenes/`
-- `.upstream/source/map/`
 - `.upstream/specs/wgsl-pipeline/`
 - `.upstream/specs/geometry-coverage/`
 - `.upstream/specs/font/`

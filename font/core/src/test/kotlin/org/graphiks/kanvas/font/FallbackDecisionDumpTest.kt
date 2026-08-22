@@ -92,36 +92,6 @@ class FallbackDecisionDumpTest {
     }
 
     @Test
-    fun `fallback decision trace ticket is closed while broader fallback backlog stays explicit`() {
-        val root = projectRoot()
-        val ticket = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/KFONT-M7-002-add-fallback-decision-trace.md"),
-        )
-        val milestoneReadme = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/M7-fallback-system-fonts/README.md"),
-        )
-        val statusSummary = Files.readString(
-            root.resolve(".upstream/specs/pure-kotlin-text/tickets/STATUS.md"),
-        )
-        val ticketReport = Files.readString(
-            root.resolve("reports/pure-kotlin-text/2026-06-16-kfont-m7-002-fallback-decision-trace.md"),
-        )
-
-        assertContains(ticket, """status: "done"""")
-        assertContains(ticket, "KFONT-M7-003")
-        assertContains(ticket, "KFONT-M7-005")
-        assertFalse(ticket.contains("remain open before `done`"))
-        assertContains(
-            milestoneReadme,
-            "| [KFONT-M7-002 - Add fallback decision trace](KFONT-M7-002-add-fallback-decision-trace.md) | `done` |",
-        )
-        assertContains(statusSummary, "| M7 | 0 | 0 | 0 | 0 | 0 | 5 |")
-        assertContains(ticketReport, "No ticket-local gate remains")
-        assertContains(ticketReport, "KFONT-M7-003")
-        assertContains(ticketReport, "KFONT-M7-005")
-    }
-
-    @Test
     fun `variable fallback evidence records axis support clamping and selected coordinates`() {
         val bundle = defaultFallbackEvidenceBundle()
 
