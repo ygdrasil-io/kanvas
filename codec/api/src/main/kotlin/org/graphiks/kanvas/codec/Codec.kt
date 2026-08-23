@@ -273,7 +273,7 @@ public abstract class Codec protected constructor() {
 
         /**
          * Read [stream] to completion and dispatch to [MakeFromData].
-         * Mirrors `Codec::MakeFromStream(std::unique_ptr<SkStream>, …)`
+         * Mirrors the upstream `Codec::MakeFromStream` entry point.
          * ; the Kotlin port reads the whole stream eagerly because the
          * D3.1 facade does not yet support incremental decoding.
          *

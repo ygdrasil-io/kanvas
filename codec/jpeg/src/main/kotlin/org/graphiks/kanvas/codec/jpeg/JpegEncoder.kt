@@ -7,7 +7,6 @@ import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import kotlin.math.ceil
@@ -106,19 +105,14 @@ public object JpegEncoder {
         }
     }
 
-    public fun encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
-        return encode(stream, bitmap, options)
+        return encode(dst, bitmap, options)
     }
 
     public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
         return encode(bitmap, options)
-    }
-
-    public fun encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        val bytes = encode(src, options) ?: return false
-        return stream.write(bytes, bytes.size)
     }
 
     private object encoderSupport {
