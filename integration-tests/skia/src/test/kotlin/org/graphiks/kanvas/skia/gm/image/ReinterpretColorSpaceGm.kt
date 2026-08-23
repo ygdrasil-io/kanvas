@@ -5,10 +5,10 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.kanvas.types.Gamut
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.TransferFunction
+import org.graphiks.kanvas.color.TransferFunction
 
 /**
  * Port of Skia's `gm/makecolorspace.cpp::reinterpretcolorspace`

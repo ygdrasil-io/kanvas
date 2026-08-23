@@ -41,7 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -425,7 +425,7 @@ class GPUMaskBlurDispatchTest {
 
     @Test
     fun `zero scale determinant fill blur refuses before mask reconstruction`() {
-        val transform = Matrix33.scale(0f, 1f).toGPUTransformFacts()
+        val transform = Matrix3x3F32.scaling(0f, 1f).toGPUTransformFacts()
         assertEquals(GPUTransformType.Affine, transform.type)
 
         assertAffineDeterminantBlurRefused(
@@ -445,7 +445,7 @@ class GPUMaskBlurDispatchTest {
 
     @Test
     fun `zero affine determinant stroke blur refuses before mask reconstruction`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             1f, 2f, 0f,
             0.5f, 1f, 0f,
         ).toGPUTransformFacts()
@@ -463,7 +463,7 @@ class GPUMaskBlurDispatchTest {
 
     @Test
     fun `non finite affine determinant blur keeps the canonical refusal`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             Float.MAX_VALUE, Float.MAX_VALUE, 0f,
             Float.MAX_VALUE, Float.MAX_VALUE, 0f,
         ).toGPUTransformFacts()
@@ -486,7 +486,7 @@ class GPUMaskBlurDispatchTest {
 
     @Test
     fun `one ulp nonzero affine determinant remains admitted`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             1f, 1f, 0f,
             1f, 1.0000001f, 0f,
         ).toGPUTransformFacts()

@@ -5,8 +5,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/filterindiabox.cpp`.
@@ -25,7 +26,7 @@ class FilterIndiaBoxGm : SkiaGm {
     private var fImage: Image? = null
     private var fW = 200
     private var fH = 55
-    private val fMatrix = arrayOf(Matrix33.identity(), Matrix33.identity())
+    private val fMatrix = arrayOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity)
 
     override fun onOnceBeforeDraw(canvas: GmCanvas) {
         val bytes = loadResource("images/box.gif")
@@ -41,8 +42,8 @@ class FilterIndiaBoxGm : SkiaGm {
         val cy = fH / 2f
         val vertScale = 30.0f / 55.0f
         val horizScale = 150.0f / 200.0f
-        fMatrix[0] = Matrix33.scale(horizScale, vertScale)
-        fMatrix[1] = Matrix33.rotate(30f) * Matrix33.scale(horizScale, vertScale)
+        fMatrix[0] = Matrix3x3F32.scaling(horizScale, vertScale)
+        fMatrix[1] = Matrix3x3F32.rotation(30f) * Matrix3x3F32.scaling(horizScale, vertScale)
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
@@ -56,10 +57,10 @@ class FilterIndiaBoxGm : SkiaGm {
         }
     }
 
-    private fun computeSize(w: Float, h: Float, mat: Matrix33): Pair<Float, Float> {
+    private fun computeSize(w: Float, h: Float, mat: Matrix3x3F32): Pair<Float, Float> {
         val corners = listOf(
-            mat * Point(0f, 0f), mat * Point(w, 0f),
-            mat * Point(w, h), mat * Point(0f, h),
+            mat.mapPoint(Point(0f, 0f)), mat.mapPoint(Point(w, 0f)),
+            mat.mapPoint(Point(w, h)), mat.mapPoint(Point(0f, h)),
         )
         val minX = corners.minOf { it.x }
         val minY = corners.minOf { it.y }
@@ -68,14 +69,14 @@ class FilterIndiaBoxGm : SkiaGm {
         return (maxX - minX) to (maxY - minY)
     }
 
-    private fun drawRow(canvas: GmCanvas, mat: Matrix33, dx: Float) {
+    private fun drawRow(canvas: GmCanvas, mat: Matrix3x3F32, dx: Float) {
         drawCell(canvas, mat, 0f * dx)
         drawCell(canvas, mat, 1f * dx)
         drawCell(canvas, mat, 2f * dx)
         drawCell(canvas, mat, 3f * dx)
     }
 
-    private fun drawCell(canvas: GmCanvas, mat: Matrix33, dx: Float) {
+    private fun drawCell(canvas: GmCanvas, mat: Matrix3x3F32, dx: Float) {
         val image = fImage ?: return
         canvas.save()
         canvas.translate(dx, 0f)

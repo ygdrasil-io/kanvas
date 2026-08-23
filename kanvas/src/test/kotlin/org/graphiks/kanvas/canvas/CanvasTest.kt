@@ -9,6 +9,7 @@ import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -25,8 +26,8 @@ class CanvasTest {
     @Test fun `Canvas records drawRect`() { val b = TestBuffer(); Canvas(b).drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(1, b.count()) }
     @Test fun `Canvas save does not emit EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.save(); c.drawRect(Rect.fromLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().none { it is DisplayOp.EndLayer }) }
     @Test fun `Canvas saveLayer emits EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.saveLayer(); c.drawRect(Rect.fromLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().any { it is DisplayOp.EndLayer }) }
-    @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.transX); assertEquals(20f, c.matrix.transY) }
-    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.transX) }
+    @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.tx); assertEquals(20f, c.matrix.ty) }
+    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
     @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(Rect.fromLTRB(0f,0f,50f,50f)); assertEquals(Rect.fromLTRB(0f,0f,50f,50f), c.localClipBounds) }
     @Test
     fun `clip geometry is frozen when captured not when a later draw occurs`() {
@@ -111,7 +112,7 @@ class CanvasTest {
         assertEquals(2, assertIs<ClipStack.Complex>(draws[0].clip).ops.size)
     }
 
-    @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix33.identity(), c.matrix) }
+    @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }
 
     @Test
     fun `empty CFF glyph completes text expansion without recording a draw`() {

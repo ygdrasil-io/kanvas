@@ -14,6 +14,18 @@ import kotlin.test.assertTrue
 
 class IccProfileWriterTest {
     @Test
+    fun `writes Matrix TRC profiles from native matrix and transfer inputs`() {
+        val transfer = checkNotNull(ColorProfiles.displayP3().transferFunction)
+        val matrix = checkNotNull(ColorProfiles.displayP3().toXyzD50)
+
+        val bytes = IccProfileWriter.writeMatrixTrc(transfer, matrix)
+        val parsed = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+
+        assertMatrixNear(matrix, checkNotNull(parsed.toXyzD50))
+        assertTransferFunctionNear(transfer, checkNotNull(parsed.transferFunction))
+    }
+
+    @Test
     fun `writes valid ICC v4 matrix trc profiles for supported RGB spaces`() {
         val profiles = listOf(
             ColorProfiles.sRGB(),

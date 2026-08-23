@@ -34,7 +34,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
@@ -48,7 +48,7 @@ class GPUPreparedTextBlurTest {
             blurred(
                 BlurStyle.NORMAL,
                 0.5f,
-                transform = Matrix33.scale(2f, 1f),
+                transform = Matrix3x3F32.scaling(2f, 1f),
             ),
         )
 
@@ -331,7 +331,7 @@ class GPUPreparedTextBlurTest {
     private fun blurred(
         style: BlurStyle,
         sigma: Float,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): DisplayOp.DrawText = text(
         Paint.fill(Color.WHITE).copy(maskFilter = MaskFilter.Blur(style, sigma)),
         transform,
@@ -339,7 +339,7 @@ class GPUPreparedTextBlurTest {
 
     private fun text(
         paint: Paint,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -43,7 +43,7 @@ class HairlinesSquarecapGm : SkiaGm {
         data class PathDef(val path: Path, val first: Pair<Float, Float>, val last: Pair<Float, Float>)
 
         fun makeOffset(builder: Path, dx: Float, dy: Float): Path =
-            builder.transform(Matrix33.translate(dx, dy))
+            builder.transform(Matrix3x3F32.translation(dx, dy))
 
         val lineBase = Path { moveTo(0f, 0f); lineTo(0f, 5f); lineTo(5f, 5f); lineTo(5f, 0f) }
         val quadBase = Path { moveTo(0f, 0f); quadTo(15f, 5f, 0f, 10f) }

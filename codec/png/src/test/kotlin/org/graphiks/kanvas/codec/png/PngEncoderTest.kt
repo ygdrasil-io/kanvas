@@ -14,16 +14,12 @@ import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkICC
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPixmap
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
-import org.skia.foundation.stream.SkWStream
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -100,8 +96,8 @@ class PngEncoderTest {
 
     @Test
     fun `encode with bitmap color space writes iCCP chunk and round-trips`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
-        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
+        val colorSpace = ImageColorSpace.fromIccProfile(IccProfile.parse(iccBytes).getOrThrow())
         val src = SkBitmap(4, 4, colorSpace)
         for (y in 0 until 4) for (x in 0 until 4) {
             src.pixels[y * 4 + x] = (0xFF shl 24) or ((x * 85) shl 16) or ((y * 85) shl 8)
@@ -153,8 +149,8 @@ class PngEncoderTest {
 
     @Test
     fun `non-sRGB bitmap writes iCCP not sRGB`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
-        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
+        val colorSpace = ImageColorSpace.fromIccProfile(IccProfile.parse(iccBytes).getOrThrow())
         val src = SkBitmap(4, 4, colorSpace)
         for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
         val bytes = PngEncoder.encode(src)!!
@@ -164,7 +160,7 @@ class PngEncoderTest {
 
     @Test
     fun `D50 preserving gamut three through sixty four LSB from sRGB writes iCCP`() {
-        val base = SkNamedGamut.kSRGB
+        val base = requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)
         listOf(3, 50, 64).forEach { deltaLsb ->
             val delta = deltaLsb / 65_536f
             val matrix = ColorMatrix3x3F32.of(
@@ -172,11 +168,11 @@ class PngEncoderTest {
                 base[1, 0] + delta, base[1, 1] - delta, base[1, 2],
                 base[2, 0] + delta, base[2, 1] - delta, base[2, 2],
             )
-            val colorSpace = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, matrix)!!
+            val colorSpace = ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), matrix)!!
             val src = SkBitmap(4, 4, colorSpace)
             for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
 
-            assertFalse(colorSpace.isSRGB(), "delta=$deltaLsb LSB")
+            assertFalse(colorSpace.isSrgb(), "delta=$deltaLsb LSB")
             val bytes = PngEncoder.encode(src)!!
             assertTrue(findChunk(bytes, 0x69434350), "delta=$deltaLsb LSB must write iCCP")
             assertFalse(findChunk(bytes, 0x73524742), "delta=$deltaLsb LSB must not write sRGB")
@@ -189,16 +185,14 @@ class PngEncoderTest {
             .toColorProfile()
             .getOrThrow()
         val nonSerializableMatrix = ColorMatrix3x3F32.of(
-            SkNamedGamut.kSRGB[0, 0] + 0.01f, SkNamedGamut.kSRGB[0, 1], SkNamedGamut.kSRGB[0, 2],
-            SkNamedGamut.kSRGB[1, 0], SkNamedGamut.kSRGB[1, 1], SkNamedGamut.kSRGB[1, 2],
-            SkNamedGamut.kSRGB[2, 0], SkNamedGamut.kSRGB[2, 1], SkNamedGamut.kSRGB[2, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 0] + 0.01f, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 1], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 0], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 1], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 0], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 1], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 2],
         )
         val refusedColorSpaces = listOf(
-            SkColorSpace.makeProfileAware(SkcmsICCProfile.fromColorProfile(hdr)),
-            SkColorSpace.makeProfileAware(
-                SkcmsICCProfile.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
-            ),
-            SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, nonSerializableMatrix)!!,
+            ImageColorSpace.fromColorProfile(hdr),
+            ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
+            ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), nonSerializableMatrix)!!,
         )
 
         refusedColorSpaces.forEach { colorSpace ->
@@ -212,8 +206,8 @@ class PngEncoderTest {
     }
 
     @Test
-    fun `SkPixmap overload preserves serializable color space`() {
-        val colorSpace = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)!!
+    fun `SkPixmap OutputStream overload preserves serializable color space`() {
+        val colorSpace = ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))!!
         val info = SkImageInfo.Make(
             width = 1,
             height = 1,
@@ -224,17 +218,18 @@ class PngEncoderTest {
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
         val pixmap = SkPixmap(info, pixels, 4)
 
-        val bytes = PngEncoder.encode(pixmap)!!
+        val output = ByteArrayOutputStream()
+
+        assertTrue(PngEncoder.encode(output, pixmap))
+        val bytes = output.toByteArray()
 
         assertTrue(findChunk(bytes, 0x69434350), "Display-P3 pixmap must write iCCP")
         assertFalse(findChunk(bytes, 0x73524742), "Display-P3 pixmap must not be retagged sRGB")
     }
 
     @Test
-    fun `refusal propagates through SkWStream and SkPixmap overloads without output`() {
-        val unsupported = SkColorSpace.makeProfileAware(
-            SkcmsICCProfile.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
-        )
+    fun `refusal propagates through OutputStream and SkPixmap overloads without output`() {
+        val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported"))
         val bitmap = SkBitmap(1, 1, unsupported).also { it.pixels[0] = 0xFF336699.toInt() }
         val info = SkImageInfo.Make(
             width = 1,
@@ -245,14 +240,14 @@ class PngEncoderTest {
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
         val pixmap = SkPixmap(info, pixels, 4)
-        val bitmapStream = RecordingWStream()
-        val pixmapStream = RecordingWStream()
+        val bitmapOutput = ByteArrayOutputStream()
+        val pixmapOutput = ByteArrayOutputStream()
 
-        assertFalse(PngEncoder.encode(bitmapStream, bitmap))
-        assertEquals(0L, bitmapStream.bytesWritten())
+        assertFalse(PngEncoder.encode(bitmapOutput, bitmap))
+        assertEquals(0, bitmapOutput.size())
         assertNull(PngEncoder.encode(pixmap))
-        assertFalse(PngEncoder.encode(pixmapStream, pixmap))
-        assertEquals(0L, pixmapStream.bytesWritten())
+        assertFalse(PngEncoder.encode(pixmapOutput, pixmap))
+        assertEquals(0, pixmapOutput.size())
     }
 
     @Test
@@ -366,17 +361,6 @@ class PngEncoderTest {
             pos += 12 + len
         }
         error("chunk not found: ${type.toString(16)}")
-    }
-
-    private class RecordingWStream : SkWStream() {
-        private val output = ByteArrayOutputStream()
-
-        override fun write(buffer: ByteArray, size: Int): Boolean {
-            output.write(buffer, 0, size)
-            return true
-        }
-
-        override fun bytesWritten(): Long = output.size().toLong()
     }
 
     private fun decodePng(bytes: ByteArray): SkBitmap {

@@ -5,9 +5,9 @@ import org.graphiks.kanvas.color.ColorProfileParseResult
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
-import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.kanvas.types.Gamut
-import org.graphiks.kanvas.types.TransferFunction
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
+import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,50 +15,47 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkICC
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
+import org.graphiks.kanvas.color.icc.IccProfile
 
 class KanvasCodecColorSpaceTest {
     @Test
     fun `sRGB source tag is preserved`() {
-        val result = imageInfo(SkColorSpace.makeSRGB()).toKanvasImageInfo()
+        val result = imageInfo(ImageColorSpace.sRGB()).toKanvasImageInfo()
 
         assertEquals(ColorSpace.SRGB, result.colorSpace)
     }
 
     @Test
     fun `sRGB bitmap tag and samples are preserved`() {
-        assertBitmapTagAndSamples(SkColorSpace.makeSRGB(), ColorSpace.SRGB)
+        assertBitmapTagAndSamples(ImageColorSpace.sRGB(), ColorSpace.SRGB)
     }
 
     @Test
     fun `linear sRGB source tag is preserved`() {
-        val result = imageInfo(SkColorSpace.makeSRGBLinear()).toKanvasImageInfo()
+        val result = imageInfo(ImageColorSpace.linearSrgb()).toKanvasImageInfo()
 
         assertEquals(ColorSpace.LINEAR_SRGB, result.colorSpace)
     }
 
     @Test
     fun `linear sRGB bitmap tag and samples are preserved`() {
-        assertBitmapTagAndSamples(SkColorSpace.makeSRGBLinear(), ColorSpace.LINEAR_SRGB)
+        assertBitmapTagAndSamples(ImageColorSpace.linearSrgb(), ColorSpace.LINEAR_SRGB)
     }
 
     @Test
     fun `Display P3 source tag is preserved`() {
-        val result = imageInfo(sdrColorSpace(SkNamedGamut.kDisplayP3)).toKanvasImageInfo()
+        val result = imageInfo(sdrColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))).toKanvasImageInfo()
 
         assertEquals(ColorSpace.DISPLAY_P3, result.colorSpace)
     }
 
     @Test
     fun `serialized Display P3 source tag is preserved`() {
-        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val source = serializedColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
 
         val result = imageInfo(source).toKanvasImageInfo()
 
@@ -67,7 +64,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `serialized sRGB source tag is preserved`() {
-        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val source = serializedColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
 
         val result = imageInfo(source).toKanvasImageInfo()
 
@@ -76,7 +73,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `serialized linear sRGB source tag is preserved`() {
-        val source = serializedColorSpace(SkNamedTransferFn.kLinear, SkNamedGamut.kSRGB)
+        val source = serializedColorSpace(org.graphiks.math.color.ColorTransferFunction.linear, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
 
         val result = imageInfo(source).toKanvasImageInfo()
 
@@ -85,7 +82,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `serialized Rec2020 source with sRGB transfer is preserved`() {
-        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kRec2020)
+        val source = serializedColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.rec2020().toXyzD50))
 
         val result = imageInfo(source).toKanvasImageInfo()
 
@@ -95,7 +92,7 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `serialized Rec2020 source with linear transfer is preserved`() {
-        val source = serializedColorSpace(SkNamedTransferFn.kLinear, SkNamedGamut.kRec2020)
+        val source = serializedColorSpace(org.graphiks.math.color.ColorTransferFunction.linear, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.rec2020().toXyzD50))
 
         val result = imageInfo(source).toKanvasImageInfo()
 
@@ -105,12 +102,12 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `Display P3 bitmap tag and samples are preserved`() {
-        assertBitmapTagAndSamples(sdrColorSpace(SkNamedGamut.kDisplayP3), ColorSpace.DISPLAY_P3)
+        assertBitmapTagAndSamples(sdrColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)), ColorSpace.DISPLAY_P3)
     }
 
     @Test
     fun `Rec2020 source with sRGB SDR transfer is preserved`() {
-        val result = imageInfo(sdrColorSpace(SkNamedGamut.kRec2020)).toKanvasImageInfo()
+        val result = imageInfo(sdrColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.rec2020().toXyzD50))).toKanvasImageInfo()
 
         assertEquals(TransferFunction.SRGB, result.colorSpace.transferFunction)
         assertEquals(Gamut.REC2020, result.colorSpace.gamut)
@@ -119,9 +116,9 @@ class KanvasCodecColorSpaceTest {
     @Test
     fun `Rec2020 source with unrepresentable BT2020 SDR transfer is refused`() {
         val source = requireNotNull(
-            SkColorSpace.makeRGB(
+            ImageColorSpace.fromMatrixTrc(
                 requireNotNull(ColorProfiles.rec2020().transferFunction),
-                SkNamedGamut.kRec2020,
+                requireNotNull(org.graphiks.kanvas.color.ColorProfiles.rec2020().toXyzD50),
             ),
         )
 
@@ -130,7 +127,7 @@ class KanvasCodecColorSpaceTest {
         }
 
         assertEquals(
-            "Unsupported SkColorSpace for Kanvas conversion: transfer",
+            "Unsupported ImageColorSpace for Kanvas conversion: transfer",
             failure.message,
         )
     }
@@ -162,14 +159,14 @@ class KanvasCodecColorSpaceTest {
             e = 0f,
             f = 0f,
         )
-        val source = requireNotNull(SkColorSpace.makeRGB(unknownTransfer, SkNamedGamut.kDisplayP3))
+        val source = requireNotNull(ImageColorSpace.fromMatrixTrc(unknownTransfer, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)))
 
         val failure = assertThrows<IllegalArgumentException> {
             imageInfo(source).toKanvasImageInfo()
         }
 
         assertEquals(
-            "Unsupported SkColorSpace for Kanvas conversion: transfer",
+            "Unsupported ImageColorSpace for Kanvas conversion: transfer",
             failure.message,
         )
     }
@@ -181,14 +178,14 @@ class KanvasCodecColorSpaceTest {
             0f, 1f, 0f,
             0f, 0f, 1f,
         )
-        val source = requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, unknownGamut))
+        val source = requireNotNull(ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), unknownGamut))
 
         val failure = assertThrows<IllegalArgumentException> {
             imageInfo(source).toKanvasImageInfo()
         }
 
         assertEquals(
-            "Unsupported SkColorSpace for Kanvas conversion: gamut",
+            "Unsupported ImageColorSpace for Kanvas conversion: gamut",
             failure.message,
         )
     }
@@ -196,25 +193,25 @@ class KanvasCodecColorSpaceTest {
     @Test
     fun `nearby unknown gamut is refused instead of retagged as sRGB`() {
         val unknownGamut = ColorMatrix3x3F32.of(
-            SkNamedGamut.kSRGB[0, 0] + 3f / 65_536f, SkNamedGamut.kSRGB[0, 1] - 3f / 65_536f, SkNamedGamut.kSRGB[0, 2],
-            SkNamedGamut.kSRGB[1, 0], SkNamedGamut.kSRGB[1, 1], SkNamedGamut.kSRGB[1, 2],
-            SkNamedGamut.kSRGB[2, 0], SkNamedGamut.kSRGB[2, 1], SkNamedGamut.kSRGB[2, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 0] + 3f / 65_536f, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 1] - 3f / 65_536f, requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[0, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 0], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 1], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[1, 2],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 0], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 1], requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)[2, 2],
         )
-        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, unknownGamut)
+        val source = serializedColorSpace(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), unknownGamut)
 
         val failure = assertThrows<IllegalArgumentException> {
             imageInfo(source).toKanvasImageInfo()
         }
 
         assertEquals(
-            "Unsupported SkColorSpace for Kanvas conversion: gamut",
+            "Unsupported ImageColorSpace for Kanvas conversion: gamut",
             failure.message,
         )
     }
 
     @Test
     fun `named gamut classification is isolated from public matrix mutation`() {
-        val publicGamut = SkNamedGamut.kSRGB
+        val publicGamut = requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50)
         val originalGamut = ColorMatrix3x3F32.fromRowMajor(publicGamut.toFloatArray())
         val stableSource = sdrColorSpace(originalGamut)
         assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
@@ -235,7 +232,7 @@ class KanvasCodecColorSpaceTest {
         assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
     }
 
-    private fun imageInfo(colorSpace: SkColorSpace): SkImageInfo = SkImageInfo.Make(
+    private fun imageInfo(colorSpace: ImageColorSpace): SkImageInfo = SkImageInfo.Make(
         width = 1,
         height = 1,
         colorType = SkColorType.kRGBA_8888,
@@ -243,23 +240,20 @@ class KanvasCodecColorSpaceTest {
         colorSpace = colorSpace,
     )
 
-    private fun sdrColorSpace(gamut: ColorMatrix3x3F32): SkColorSpace =
-        requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, gamut))
+    private fun sdrColorSpace(gamut: ColorMatrix3x3F32): ImageColorSpace =
+        requireNotNull(ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), gamut))
 
     private fun serializedColorSpace(
         transferFunction: ColorTransferFunction.Parametric,
         gamut: ColorMatrix3x3F32,
-    ): SkColorSpace = requireNotNull(
-        SkColorSpace.make(
-            requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut))),
-        ),
+    ): ImageColorSpace = ImageColorSpace.fromIccProfile(
+        IccProfile.parse(IccProfileWriter.writeMatrixTrc(transferFunction, gamut)).getOrThrow(),
     )
 
-    private fun hdrColorSpace(transfer: Int): SkColorSpace = SkColorSpace.makeProfileAware(
-        SkcmsICCProfile.fromColorProfile(cicpProfile(transfer)),
-    )
+    private fun hdrColorSpace(transfer: Int): ImageColorSpace =
+        ImageColorSpace.fromColorProfile(cicpProfile(transfer))
 
-    private fun assertBitmapTagAndSamples(sourceColorSpace: SkColorSpace, expectedColorSpace: ColorSpace) {
+    private fun assertBitmapTagAndSamples(sourceColorSpace: ImageColorSpace, expectedColorSpace: ColorSpace) {
         val source = SkBitmap(width = 1, height = 1, colorSpace = sourceColorSpace)
         source.pixels8888[0] = SAMPLE_ARGB
 

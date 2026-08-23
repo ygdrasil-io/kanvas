@@ -13,6 +13,7 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * A immediate-mode style 2D drawing surface that records drawing operations into
@@ -23,7 +24,7 @@ import org.graphiks.kanvas.paint.BlendMode
  * the internal buffer for subsequent rendering by a pipeline consumer.
  */
 class Canvas internal constructor(private val buffer: DisplayListBuffer) {
-    private var currentTransform = Matrix33.identity()
+    private var currentTransform = Matrix3x3F32.Identity
     /** Clip exposed to Canvas queries such as [quickReject] and [localClipBounds]. */
     private var currentClip: ClipStack = ClipStack.WideOpen
     /** Clip recorded on child DisplayOps; an outer saveLayer clip is deferred to its restore. */
@@ -31,7 +32,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     private var saveStack = mutableListOf<Pair<CanvasState, Boolean>>() // (state, isLayer)
 
     /** The current transform matrix. */
-    val matrix: Matrix33 get() = currentTransform
+    val matrix: Matrix3x3F32 get() = currentTransform
 
     /** The number of states on the save stack. */
     val saveCount: Int get() = saveStack.size
@@ -262,7 +263,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Batch-draw sprites from [atlas] texture. */
-    fun drawAtlas(atlas: Image, transforms: List<Matrix33>, texRects: List<Rect>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
+    fun drawAtlas(atlas: Image, transforms: List<Matrix3x3F32>, texRects: List<Rect>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
         buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentRecordedClip))
     }
 
@@ -332,10 +333,10 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Pre-concatenate a translation by (x, y) into the current transform. */
-    fun translate(x: Float, y: Float) { concat(Matrix33.translate(x, y)) }
+    fun translate(x: Float, y: Float) { concat(Matrix3x3F32.translation(x, y)) }
 
     /** Pre-concatenate a scale by (sx, sy) into the current transform. */
-    fun scale(sx: Float, sy: Float) { concat(Matrix33.scale(sx, sy)) }
+    fun scale(sx: Float, sy: Float) { concat(Matrix3x3F32.scaling(sx, sy)) }
 
     /**
      * Pre-concatenate a rotation of [degrees] about an optional pivot point (px, py).
@@ -343,31 +344,31 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * When the pivot is omitted the rotation is about the origin.
      */
     fun rotate(degrees: Float, px: Float = 0f, py: Float = 0f) {
-        if (px == 0f && py == 0f) { concat(Matrix33.rotate(degrees)) }
-        else { translate(px, py); concat(Matrix33.rotate(degrees)); translate(-px, -py) }
+        if (px == 0f && py == 0f) { concat(Matrix3x3F32.rotation(degrees)) }
+        else { translate(px, py); concat(Matrix3x3F32.rotation(degrees)); translate(-px, -py) }
     }
 
     /** Pre-concatenate a skew by (sx, sy) into the current transform. */
-    fun skew(sx: Float, sy: Float) { concat(Matrix33.skew(sx, sy)) }
+    fun skew(sx: Float, sy: Float) { concat(Matrix3x3F32.skewing(sx, sy)) }
 
     /**
      * Pre-concatenate [matrix] with the current transform.
      *
      * The new transform becomes `currentTransform * matrix`.
      */
-    fun concat(matrix: Matrix33) {
+    fun concat(matrix: Matrix3x3F32) {
         currentTransform = currentTransform * matrix
         buffer.append(DisplayOp.SetTransform(currentTransform))
     }
 
     /** Replace the current transform with [matrix]. */
-    fun setMatrix(matrix: Matrix33) {
+    fun setMatrix(matrix: Matrix3x3F32) {
         currentTransform = matrix
         buffer.append(DisplayOp.SetTransform(currentTransform))
     }
 
     /** Reset the current transform to the identity matrix. */
-    fun resetMatrix() { setMatrix(Matrix33.identity()) }
+    fun resetMatrix() { setMatrix(Matrix3x3F32.Identity) }
 
     /**
      * Intersect the current clip with an axis-aligned rectangle.
@@ -406,18 +407,18 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     private fun captureClipRect(rect: Rect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
-        currentTransform.isAxisAlignedAffine() ->
+        currentTransform.isScaleTranslate() ->
             ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
-        currentTransform.isAffine() ->
+        !currentTransform.hasPerspective() ->
             ClipStackOp.PathOp(Path().addRect(rect).transform(currentTransform), op, antiAlias)
         else ->
             ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
 
     private fun captureClipRRect(rrect: RRect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
-        currentTransform.isAxisAlignedAffine() ->
+        currentTransform.isScaleTranslate() ->
             ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
-        currentTransform.isAffine() ->
+        !currentTransform.hasPerspective() ->
             ClipStackOp.PathOp(Path().addRRect(rrect).transform(currentTransform), op, antiAlias)
         else ->
             ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
@@ -425,10 +426,10 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
         ClipStackOp.PathOp(
-            if (currentTransform.isAffine()) path.transform(currentTransform) else path,
+            if (!currentTransform.hasPerspective()) path.transform(currentTransform) else path,
             op,
             antiAlias,
-            perspectiveCaptureRefusal = !currentTransform.isAffine(),
+            perspectiveCaptureRefusal = currentTransform.hasPerspective(),
         )
 
     private fun appendClip(
@@ -448,7 +449,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     private data class CanvasState(
-        val transform: Matrix33,
+        val transform: Matrix3x3F32,
         val clip: ClipStack,
         val recordedClip: ClipStack,
     )

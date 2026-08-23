@@ -10,7 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Immutable font-source snapshot retained by a prepared text draw. */
 @ConsistentCopyVisibility
@@ -83,7 +83,7 @@ data class GPUPreparedTextRepresentationPolicy private constructor(
  * The affine transform `A = draw.transform` remains exact, including its
  * translation. Let `L = linear2x2(draw.transform)` be only A's linear part.
  * This glyph's strike stores the raster-density matrix
- * `D = diag(hypot(L.col0), hypot(L.col1))` in `scaleX/scaleY`, the device
+ * `D = diag(hypot(L.col0), hypot(L.col1))` in `sx/sy`, the device
  * anchor `A * (origin + glyphPosition)`, and the exact raw-bit identity of L
  * in `transformBucket`. Its raster phase is
  * `phase = (strikeKey.subpixelX, strikeKey.subpixelY)`.
@@ -131,7 +131,7 @@ class GPUPreparedTextDraw private constructor(
     val glyphs: List<GPUPreparedGlyphInput>,
     val originX: Float,
     val originY: Float,
-    val transform: Matrix33,
+    val transform: Matrix3x3F32,
     val clipContentKey: String,
     clip: ClipStack,
     paint: Paint,
@@ -177,7 +177,7 @@ class GPUPreparedTextDraw private constructor(
             glyphs: Collection<GPUPreparedGlyphInput>,
             originX: Float,
             originY: Float,
-            transform: Matrix33,
+            transform: Matrix3x3F32,
             clipContentKey: String,
             clip: ClipStack,
             paint: Paint,
@@ -198,9 +198,9 @@ class GPUPreparedTextDraw private constructor(
             glyphs = immutablePreparedTextList(glyphs),
             originX = originX,
             originY = originY,
-            transform = Matrix33.makeAll(
-                transform.scaleX, transform.skewX, transform.transX,
-                transform.skewY, transform.scaleY, transform.transY,
+            transform = Matrix3x3F32.of(
+                transform.sx, transform.kx, transform.tx,
+                transform.ky, transform.sy, transform.ty,
                 transform.persp0, transform.persp1, transform.persp2,
             ),
             clipContentKey = clipContentKey,

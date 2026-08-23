@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -37,30 +37,30 @@ class Poly2PolyGm : SkiaGm {
         // Translate (1 point)
         canvas.save()
         canvas.translate(10f, 10f)
-        doDraw(canvas, font, paint, Matrix33.translate(5f, 5f))
+        doDraw(canvas, font, paint, Matrix3x3F32.translation(5f, 5f))
         canvas.restore()
 
         // Rotate/uniform-scale (2 points)
         canvas.save()
         canvas.translate(160f, 10f)
-        doDraw(canvas, font, paint, Matrix33.makeAll(1f, 0f, 32f, 0f, 1f, 32f))
+        doDraw(canvas, font, paint, Matrix3x3F32.of(1f, 0f, 32f, 0f, 1f, 32f))
         canvas.restore()
 
         // Rotate/skew (3 points)
         canvas.save()
         canvas.translate(10f, 110f)
-        doDraw(canvas, font, paint, Matrix33.makeAll(1f, 0.5f, 0f, 0f, 1f, 0f))
+        doDraw(canvas, font, paint, Matrix3x3F32.of(1f, 0.5f, 0f, 0f, 1f, 0f))
         canvas.restore()
 
         // Perspective (4 points)
         canvas.save()
         canvas.translate(160f, 110f)
-        val perspective = Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+        val perspective = Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
         doDraw(canvas, font, paint, perspective)
         canvas.restore()
     }
 
-    private fun doDraw(canvas: GmCanvas, font: Font, paint: Paint, mx: Matrix33) {
+    private fun doDraw(canvas: GmCanvas, font: Font, paint: Paint, mx: Matrix3x3F32) {
         canvas.save()
         canvas.concat(mx)
 

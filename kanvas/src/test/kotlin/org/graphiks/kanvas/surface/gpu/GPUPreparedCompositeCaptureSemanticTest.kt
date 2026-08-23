@@ -15,7 +15,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
@@ -29,7 +29,7 @@ import kotlin.test.assertNotEquals
 
 class GPUPreparedCompositeCaptureSemanticTest {
 
-    private val identity = Matrix33.identity()
+    private val identity = Matrix3x3F32.Identity
     private val open = ClipStack.WideOpen
     private val black = Paint(color = Color.BLACK)
     private val red = Paint(color = Color.RED)
@@ -50,8 +50,8 @@ class GPUPreparedCompositeCaptureSemanticTest {
         val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
 
         assertNotEquals(
-            readyIdentity(DisplayOp.DrawRect(rect, black, Matrix33.translate(1f, 0f), open)),
-            readyIdentity(DisplayOp.DrawRect(rect, black, Matrix33.translate(2f, 0f), open)),
+            readyIdentity(DisplayOp.DrawRect(rect, black, Matrix3x3F32.translation(1f, 0f), open)),
+            readyIdentity(DisplayOp.DrawRect(rect, black, Matrix3x3F32.translation(2f, 0f), open)),
         )
     }
 
@@ -142,7 +142,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
                 DisplayOp.DrawRect(
                     rect = Rect.fromLTRB(0f, 0f, 5f, 5f),
                     paint = black,
-                    transform = Matrix33.translate(2f, 0f),
+                    transform = Matrix3x3F32.translation(2f, 0f),
                     clip = ClipStack.DeviceRect(Rect.fromLTRB(2f, 0f, 10f, 10f)),
                 ),
             ),
@@ -153,7 +153,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
                     DisplayOp.DrawPicture(
                         picture = picture,
                         paint = null,
-                        transform = Matrix33.translate(3f, 0f),
+                        transform = Matrix3x3F32.translation(3f, 0f),
                         clip = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 8f, 8f)),
                     ),
                 ),

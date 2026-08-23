@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 

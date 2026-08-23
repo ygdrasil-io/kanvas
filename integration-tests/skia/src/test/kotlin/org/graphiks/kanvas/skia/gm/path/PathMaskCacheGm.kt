@@ -7,8 +7,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -47,14 +48,14 @@ class PathMaskCacheGm : SkiaGm {
         for ((pathIdx, path) in listOf(curvePath, circleRectPath).withIndex()) {
             val srcBounds = pathBounds[pathIdx]
 
-            var ty = drawPathSet(canvas, path, srcBounds, Matrix33.identity())
+            var ty = drawPathSet(canvas, path, srcBounds, Matrix3x3F32.Identity)
             canvas.translate(0f, ty)
 
-            val nonUniformScale = Matrix33.scale(0.5f, 2f)
+            val nonUniformScale = Matrix3x3F32.scaling(0.5f, 2f)
             ty = drawPathSet(canvas, path, srcBounds, nonUniformScale)
             canvas.translate(0f, ty)
 
-            ty = drawPathSet(canvas, path, srcBounds, Matrix33.rotate(60f))
+            ty = drawPathSet(canvas, path, srcBounds, Matrix3x3F32.rotation(60f))
             canvas.translate(0f, ty)
         }
     }
@@ -70,17 +71,17 @@ class PathMaskCacheGm : SkiaGm {
         return path
     }
 
-    private fun mappedBounds(srcBounds: Rect, m: Matrix33): Rect {
-        val bl = m * Point(srcBounds.left, srcBounds.top)
-        val br = m * Point(srcBounds.right, srcBounds.top)
-        val tl = m * Point(srcBounds.left, srcBounds.bottom)
-        val tr = m * Point(srcBounds.right, srcBounds.bottom)
+    private fun mappedBounds(srcBounds: Rect, m: Matrix3x3F32): Rect {
+        val bl = m.mapPoint(Point(srcBounds.left, srcBounds.top))
+        val br = m.mapPoint(Point(srcBounds.right, srcBounds.top))
+        val tl = m.mapPoint(Point(srcBounds.left, srcBounds.bottom))
+        val tr = m.mapPoint(Point(srcBounds.right, srcBounds.bottom))
         val xs = listOf(bl.x, br.x, tl.x, tr.x)
         val ys = listOf(bl.y, br.y, tl.y, tr.y)
         return Rect(floor(xs.min()), floor(ys.min()), ceil(xs.max()), ceil(ys.max()))
     }
 
-    private fun drawPathSet(c: GmCanvas, path: Path, srcBounds: Rect, m: Matrix33): Float {
+    private fun drawPathSet(c: GmCanvas, path: Path, srcBounds: Rect, m: Matrix3x3F32): Float {
         val pad = 5f
         val paint = Paint(antiAlias = true)
         val bounds = mappedBounds(srcBounds, m)

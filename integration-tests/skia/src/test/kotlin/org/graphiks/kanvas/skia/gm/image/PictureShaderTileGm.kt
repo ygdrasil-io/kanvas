@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -100,8 +100,8 @@ class PictureShaderTileGm : SkiaGm {
                 t.w * kPictureSize, t.h * kPictureSize,
             )
             val localMatrix =
-                Matrix33.translate(t.offsetX * kPictureSize, t.offsetY * kPictureSize) *
-                    Matrix33.scale(kFillSize / (2f * kPictureSize), kFillSize / (2f * kPictureSize))
+                Matrix3x3F32.translation(t.offsetX * kPictureSize, t.offsetY * kPictureSize) *
+                    Matrix3x3F32.scaling(kFillSize / (2f * kPictureSize), kFillSize / (2f * kPictureSize))
 
             var pictureRef = picture
             var tileRect: Rect? = tile

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/badpaint.cpp`.
@@ -31,7 +31,7 @@ class BadPaintGm : SkiaGm {
 
         val emptyPixels = ByteArray(4)
         val emptyImage = Image.fromPixels(1, 1, emptyPixels, ColorType.RGBA_8888)
-        val badMatrix = Matrix33.scale(0f, 0f)
+        val badMatrix = Matrix3x3F32.scaling(0f, 0f)
 
         val bluePixels = ByteArray(10 * 10 * 4)
         for (i in 0 until 10 * 10) {

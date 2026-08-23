@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -38,9 +38,9 @@ class VerticesBatchingGm : SkiaGm {
     private fun drawBatching(canvas: GmCanvas) {
         val indices = listOf(4, 0, 1, 2, 5, 8, 7, 6, 3, 0)
         val matrices = listOf(
-            Matrix33.identity(),
-            Matrix33.translate(0f, 40f),
-            Matrix33.translate(0f, 80f) * Matrix33.scale(1.2f, 0.8f) * Matrix33.rotate(45f),
+            Matrix3x3F32.Identity,
+            Matrix3x3F32.translation(0f, 40f),
+            Matrix3x3F32.translation(0f, 80f) * Matrix3x3F32.scaling(1.2f, 0.8f) * Matrix3x3F32.rotation(45f),
         )
 
         val shader = Shader.LinearGradient(

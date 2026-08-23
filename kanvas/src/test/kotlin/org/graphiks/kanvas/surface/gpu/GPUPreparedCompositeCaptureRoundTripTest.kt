@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import kotlin.test.Test
@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 
 class GPUPreparedCompositeCaptureRoundTripTest {
 
-    private val identity33 = Matrix33.identity()
+    private val identity33 = Matrix3x3F32.Identity
     private val opaqueBlack = Color.fromArgb(255, 0, 0, 0)
     private val opaqueWhite = Color.fromArgb(255, 255, 255, 255)
     private val halfAlphaRed = Color.fromArgb(128, 255, 0, 0)

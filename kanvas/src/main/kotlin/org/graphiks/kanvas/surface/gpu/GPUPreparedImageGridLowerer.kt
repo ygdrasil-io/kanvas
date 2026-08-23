@@ -17,10 +17,10 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.isAffine
 
 data class GPUPreparedImageLoweringContext(
     val provenance: GPUFrameProvenance,
@@ -392,7 +392,7 @@ internal object GPUPreparedImageGridLowerer {
     private fun validateCommon(
         imageWidth: Int,
         imageHeight: Int,
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         dst: Rect,
         context: GPUPreparedImageLoweringContext,
         geometryCode: String,
@@ -420,19 +420,19 @@ internal object GPUPreparedImageGridLowerer {
         if (!dst.isFiniteRect() || dst.isEmpty) {
             return refused(geometryCode, -1, "invalid_destination")
         }
-        if (!transform.isAffine()) {
+        if (transform.hasPerspective()) {
             return refused(
                 GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
                 -1,
                 "perspective_transform",
             )
         }
-        if (!transform.scaleX.isFinite() ||
-            !transform.skewX.isFinite() ||
-            !transform.transX.isFinite() ||
-            !transform.skewY.isFinite() ||
-            !transform.scaleY.isFinite() ||
-            !transform.transY.isFinite()
+        if (!transform.sx.isFinite() ||
+            !transform.kx.isFinite() ||
+            !transform.tx.isFinite() ||
+            !transform.ky.isFinite() ||
+            !transform.sy.isFinite() ||
+            !transform.ty.isFinite()
         ) {
             return refused(
                 GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
@@ -441,7 +441,7 @@ internal object GPUPreparedImageGridLowerer {
             )
         }
         val determinant =
-            transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+            transform.sx * transform.sy - transform.kx * transform.ky
         if (!determinant.isFinite() || determinant == 0f) {
             return refused(
                 GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
@@ -545,14 +545,14 @@ internal object GPUPreparedImageGridLowerer {
     private fun Rect.isFiniteRect(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
 
-    private fun ImageCell.hasFiniteTransformedCorners(transform: Matrix33): Boolean =
+    private fun ImageCell.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =
         listOf(
             Point(dst.left, dst.top),
             Point(dst.right, dst.top),
             Point(dst.right, dst.bottom),
             Point(dst.left, dst.bottom),
         ).all { point ->
-            val transformed = transform * point
+            val transformed = transform.mapPoint(point)
             transformed.x.isFinite() && transformed.y.isFinite()
         }
 

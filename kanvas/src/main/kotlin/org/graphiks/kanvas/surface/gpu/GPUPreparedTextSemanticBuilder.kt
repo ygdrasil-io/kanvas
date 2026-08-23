@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 internal sealed interface GPUPreparedTextSemanticGatherResult {
     data class Gathered(
@@ -220,24 +220,24 @@ internal object GPUPreparedTextSemanticBuilder {
  * Device quads and atlas coordinates are deliberately absent: neither is a
  * coordinate-transform authority.
  */
-private fun Matrix33.preparedTextDeviceToLocal(): GPUPreparedTextDeviceToLocalAffine? {
+private fun Matrix3x3F32.preparedTextDeviceToLocal(): GPUPreparedTextDeviceToLocalAffine? {
     if (
         persp0 != 0f ||
         persp1 != 0f ||
         persp2 != 1f ||
-        listOf(scaleX, skewX, transX, skewY, scaleY, transY).any { !it.isFinite() }
+        listOf(sx, kx, tx, ky, sy, ty).any { !it.isFinite() }
     ) {
         return null
     }
-    val determinant = scaleX * scaleY - skewX * skewY
+    val determinant = sx * sy - kx * ky
     if (!determinant.isFinite() || determinant == 0f) return null
     val coefficients = floatArrayOf(
-        scaleY / determinant,
-        -skewX / determinant,
-        (skewX * transY - scaleY * transX) / determinant,
-        -skewY / determinant,
-        scaleX / determinant,
-        (skewY * transX - scaleX * transY) / determinant,
+        sy / determinant,
+        -kx / determinant,
+        (kx * ty - sy * tx) / determinant,
+        -ky / determinant,
+        sx / determinant,
+        (ky * tx - sx * ty) / determinant,
     )
     if (coefficients.any { !it.isFinite() }) return null
     return GPUPreparedTextDeviceToLocalAffine(

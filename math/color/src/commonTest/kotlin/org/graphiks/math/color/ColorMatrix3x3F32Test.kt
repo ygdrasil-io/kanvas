@@ -3,9 +3,11 @@ package org.graphiks.math.color
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ColorMatrix3x3F32Test {
     @Test
@@ -142,5 +144,33 @@ class ColorMatrix3x3F32Test {
             0f, 1f, 0f,
             0f, 0f, 1f,
         ).inverseOrNull())
+    }
+
+    @Test
+    fun `near comparison requires every coefficient to be within the supplied tolerance`() {
+        val canonical = ColorMatrix3x3F32.of(
+            1f, 2f, 3f,
+            4f, 5f, 6f,
+            7f, 8f, 9f,
+        )
+        val withinTolerance = ColorMatrix3x3F32.of(
+            1f, 2f, 3f,
+            4f, 5f, 6f,
+            7f, 8f, 9.0005f,
+        )
+        val outsideTolerance = ColorMatrix3x3F32.of(
+            1f, 2f, 3f,
+            4f, 5f, 6f,
+            7f, 8f, 9.002f,
+        )
+        val nonFinite = ColorMatrix3x3F32.of(
+            1f, 2f, 3f,
+            4f, 5f, 6f,
+            7f, 8f, Float.NaN,
+        )
+
+        assertTrue(canonical.isNear(withinTolerance, tolerance = 0.001f))
+        assertFalse(canonical.isNear(outsideTolerance, tolerance = 0.001f))
+        assertFalse(canonical.isNear(nonFinite, tolerance = 0.001f))
     }
 }

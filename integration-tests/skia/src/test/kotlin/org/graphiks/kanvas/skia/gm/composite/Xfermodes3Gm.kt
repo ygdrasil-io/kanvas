@@ -17,7 +17,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -129,7 +129,7 @@ class Xfermodes3Gm : SkiaGm {
         val image = bg.makeImageSnapshot()
         return Shader.WithLocalMatrix(
             Shader.Image(image, TileMode.REPEAT, TileMode.REPEAT),
-            Matrix33.scale(kCheckSize.toFloat(), kCheckSize.toFloat()),
+            Matrix3x3F32.scaling(kCheckSize.toFloat(), kCheckSize.toFloat()),
         )
     }
 

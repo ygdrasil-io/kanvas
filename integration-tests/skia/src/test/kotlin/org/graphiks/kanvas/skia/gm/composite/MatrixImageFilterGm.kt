@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -29,7 +29,7 @@ class MatrixImageFilterGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val checker = makeCheckerboard()
-        val matrix = Matrix33.skew(0.5f, 0.2f)
+        val matrix = Matrix3x3F32.skewing(0.5f, 0.2f)
         val srcRect = Rect.fromXYWH(0f, 0f, 96f, 96f)
         val margin = 10f
 

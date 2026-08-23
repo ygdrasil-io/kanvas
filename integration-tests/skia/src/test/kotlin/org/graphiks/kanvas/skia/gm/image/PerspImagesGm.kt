@@ -7,12 +7,12 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
  * Port of Skia's `gm/perspimages.cpp::PerspImages` (1150x1280).
- * Exercises drawImage/drawImageRect under perspective Matrix33 transforms
+ * Exercises drawImage/drawImageRect under perspective Matrix3x3F32 transforms
  * with anti-alias toggles and sampling modes. This is a simplified port —
  * the reference was GPU-captured, so similarity on raster is expected low.
  * @see https://github.com/google/skia/blob/main/gm/perspimages.cpp
@@ -34,21 +34,21 @@ class PerspImagesGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (fImages.isEmpty()) return
 
-        val m0 = Matrix33.makeAll(
+        val m0 = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, 0.005f, 1f,
         )
 
-        var m1 = Matrix33.makeAll(
+        var m1 = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0.007f, -0.005f, 1f,
         )
-        m1 = Matrix33.skew(0.2f, -0.1f) * m1
-        m1 = Matrix33.rotate(-65f) * m1
-        m1 = Matrix33.scale(1.2f, 0.8f) * m1
-        m1 = m1 * Matrix33.translate(0f, 60f)
+        m1 = Matrix3x3F32.skewing(0.2f, -0.1f) * m1
+        m1 = Matrix3x3F32.rotation(-65f) * m1
+        m1 = Matrix3x3F32.scaling(1.2f, 0.8f) * m1
+        m1 = m1 * Matrix3x3F32.translation(0f, 60f)
 
         val matrices = listOf(m0, m1)
 

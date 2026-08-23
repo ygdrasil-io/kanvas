@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -35,43 +35,43 @@ class CircularArcStrokeMatrixGm : SkiaGm {
         val kStart = 89f
         val kSweep = 180f / kotlin.math.PI.toFloat()
 
-        val baseMatrices = mutableListOf<Matrix33>()
+        val baseMatrices = mutableListOf<Matrix3x3F32>()
 
         val rotateAroundCenter = { deg: Float ->
-            Matrix33.translate(kRadius, kRadius) *
-                Matrix33.rotate(deg) *
-                Matrix33.translate(-kRadius, -kRadius)
+            Matrix3x3F32.translation(kRadius, kRadius) *
+                Matrix3x3F32.rotation(deg) *
+                Matrix3x3F32.translation(-kRadius, -kRadius)
         }
 
         baseMatrices.add(rotateAroundCenter(45f))
-        baseMatrices.add(Matrix33.identity())
+        baseMatrices.add(Matrix3x3F32.Identity)
 
         baseMatrices.add(
-            Matrix33.translate(2f * kRadius, 0f) * Matrix33.scale(-1f, 1f)
+            Matrix3x3F32.translation(2f * kRadius, 0f) * Matrix3x3F32.scaling(-1f, 1f)
         )
         baseMatrices.add(
-            Matrix33.translate(0f, 2f * kRadius) * Matrix33.scale(1f, -1f)
+            Matrix3x3F32.translation(0f, 2f * kRadius) * Matrix3x3F32.scaling(1f, -1f)
         )
         baseMatrices.add(
-            Matrix33.translate(0f, 2f * kRadius) * Matrix33.scale(1f, -1f)
+            Matrix3x3F32.translation(0f, 2f * kRadius) * Matrix3x3F32.scaling(1f, -1f)
         )
         baseMatrices.add(
-            Matrix33.translate(2f * kRadius, 2f * kRadius) *
-                Matrix33.scale(1f, -1f) * Matrix33.rotate(90f)
+            Matrix3x3F32.translation(2f * kRadius, 2f * kRadius) *
+                Matrix3x3F32.scaling(1f, -1f) * Matrix3x3F32.rotation(90f)
         )
         baseMatrices.add(
-            Matrix33.translate(2f * kRadius, 0f) * Matrix33.rotate(90f)
+            Matrix3x3F32.translation(2f * kRadius, 0f) * Matrix3x3F32.rotation(90f)
         )
         baseMatrices.add(
-            Matrix33.rotate(45f) * Matrix33.scale(1f, -1f) * Matrix33.rotate(-45f)
+            Matrix3x3F32.rotation(45f) * Matrix3x3F32.scaling(1f, -1f) * Matrix3x3F32.rotation(-45f)
         )
         baseMatrices.add(
-            Matrix33.translate(0f, 2f * kRadius) * Matrix33.rotate(-90f)
+            Matrix3x3F32.translation(0f, 2f * kRadius) * Matrix3x3F32.rotation(-90f)
         )
 
         val baseMatrixCnt = baseMatrices.size
 
-        val matrices = mutableListOf<Matrix33>()
+        val matrices = mutableListOf<Matrix3x3F32>()
         matrices.addAll(baseMatrices)
 
         val tinyCW = rotateAroundCenter(0.001f)

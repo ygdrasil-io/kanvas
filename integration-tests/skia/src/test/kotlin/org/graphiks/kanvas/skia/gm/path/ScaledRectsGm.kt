@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -46,13 +46,13 @@ class ScaledRectsGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun makeMatrix(a: Float, b: Float, c: Float, d: Float): Matrix33 {
+    private fun makeMatrix(a: Float, b: Float, c: Float, d: Float): Matrix3x3F32 {
         // [a, b, 0; c, d, 0; 0, 0, 1] = scale(d, ?) * skew(...)
         // Decompose: scale(diag) then skew
         val sx = a
         val sy = d
         val kx = b / sx
         val ky = c / sy
-        return Matrix33.scale(sx, sy) * Matrix33.skew(kx, ky)
+        return Matrix3x3F32.scaling(sx, sy) * Matrix3x3F32.skewing(kx, ky)
     }
 }

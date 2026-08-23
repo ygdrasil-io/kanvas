@@ -46,7 +46,7 @@ import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
@@ -241,12 +241,12 @@ class GPUPreparedSurfaceProductRouterTest {
         val triangle = verticesTriangle()
         val paint = Paint.fill(Color.RED).copy(antiAlias = false)
         val operations = listOf(
-            DisplayOp.DrawVertices(triangle, paint, Matrix33.identity(), ClipStack.WideOpen),
+            DisplayOp.DrawVertices(triangle, paint, Matrix3x3F32.Identity, ClipStack.WideOpen),
             DisplayOp.DrawMesh(
                 Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
                 paint,
                 null,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
         )
@@ -284,14 +284,14 @@ class GPUPreparedSurfaceProductRouterTest {
         val verticesOp = DisplayOp.DrawVertices(
             vertices = triangle,
             paint = paint,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val meshOp = DisplayOp.DrawMesh(
             mesh = Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
             paint = paint,
             blendMode = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -317,7 +317,7 @@ class GPUPreparedSurfaceProductRouterTest {
                         listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
                     ),
                     paint = paint,
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                 ),
             ) to GPUPreparedVerticesRefusalCodes.NonFinite,
@@ -338,7 +338,7 @@ class GPUPreparedSurfaceProductRouterTest {
                     ),
                     paint = paint,
                     blendMode = null,
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                 ),
             ) to GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
@@ -368,7 +368,7 @@ class GPUPreparedSurfaceProductRouterTest {
         val accepted = DisplayOp.DrawVertices(
             vertices = verticesTriangle(),
             paint = Paint.fill(Color.RED).copy(antiAlias = false),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val acceptedPlan = GPUFramePathApiInventory.plan(
@@ -389,7 +389,7 @@ class GPUPreparedSurfaceProductRouterTest {
                 listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
             ),
             paint = Paint.fill(Color.RED).copy(antiAlias = false),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val refusedPlan = GPUFramePathApiInventory.plan(
@@ -418,7 +418,7 @@ class GPUPreparedSurfaceProductRouterTest {
                 DisplayOp.DrawVertices(
                     vertices = verticesTriangle(),
                     paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                 ),
                 rect(),
@@ -590,7 +590,7 @@ class GPUPreparedSurfaceProductRouterTest {
     private fun rect() = DisplayOp.DrawRect(
         RECT,
         Paint.fill(Color.RED).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
@@ -720,7 +720,7 @@ internal fun preparedProductImageOperations(
             Rect.fromLTRB(0f, 0f, 4f, 4f),
             Rect.fromLTRB(0f, 0f, 4f, 4f),
             paint,
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             clip,
         ) to 1,
         DisplayOp.DrawImageNine(
@@ -728,7 +728,7 @@ internal fun preparedProductImageOperations(
             Rect.fromLTRB(1f, 1f, 3f, 3f),
             Rect.fromLTRB(0f, 0f, 8f, 8f),
             paint,
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             clip,
         ) to 9,
         DisplayOp.DrawImageLattice(
@@ -736,17 +736,17 @@ internal fun preparedProductImageOperations(
             Lattice(listOf(2), listOf(2)),
             Rect.fromLTRB(0f, 0f, 8f, 8f),
             paint,
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             clip,
         ) to 4,
         DisplayOp.DrawAtlas(
             image,
-            listOf(Matrix33.identity()),
+            listOf(Matrix3x3F32.Identity),
             listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
             listOf(Color.WHITE),
             BlendMode.SRC_OVER,
             paint ?: Paint.fill(Color.WHITE),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             clip,
         ) to 1,
     )

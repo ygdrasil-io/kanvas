@@ -28,7 +28,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.pipeline.ClipOp
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -44,7 +44,7 @@ class GPUImageFilterDispatchTest {
             src = Rect(0f, 0f, 4f, 4f),
             dst = Rect(20f, 30f, 24f, 34f),
             paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.Complex(
                 listOf(
                     ClipStackOp.RectOp(Rect(8f, 8f, 40f, 48f), ClipOp.INTERSECT),
@@ -113,7 +113,7 @@ class GPUImageFilterDispatchTest {
         src = Rect(0f, 0f, 4f, 4f),
         dst = Rect(20f, 30f, 24f, 34f),
         paint = Paint(),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     ).toImageRectCommand(
         GPUDrawCommandID(1),

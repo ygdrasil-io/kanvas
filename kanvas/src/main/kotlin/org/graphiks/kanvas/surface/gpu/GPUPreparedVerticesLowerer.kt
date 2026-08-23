@@ -32,14 +32,14 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesPackingResul
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.blueByte
 import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.types.redByte
 import org.graphiks.kanvas.surface.RenderConfig
 
@@ -252,7 +252,7 @@ object GPUPreparedVerticesLowerer {
     private fun lowerVertices(
         vertices: Vertices,
         paint: org.graphiks.kanvas.paint.Paint,
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         clip: org.graphiks.kanvas.canvas.ClipStack,
         operationKind: GPUPreparedVerticesOperationKind,
         operationIndex: Int,
@@ -368,9 +368,9 @@ private fun snapshotClip(source: org.graphiks.kanvas.canvas.ClipStack): org.grap
     null
 }
 
-private fun Matrix33.snapshotForPreparedVertices(): Matrix33 = Matrix33.makeAll(
-    scaleX, skewX, transX,
-    skewY, scaleY, transY,
+private fun Matrix3x3F32.snapshotForPreparedVertices(): Matrix3x3F32 = Matrix3x3F32.of(
+    sx, kx, tx,
+    ky, sy, ty,
     persp0, persp1, persp2,
 )
 
@@ -458,10 +458,10 @@ private fun packingLimits(capabilities: GPUCapabilities): GPUPreparedVerticesPac
     )
 }
 
-private fun transformFailure(transform: Matrix33): String? = when {
-    listOf(transform.scaleX, transform.skewX, transform.transX, transform.skewY, transform.scaleY,
-        transform.transY, transform.persp0, transform.persp1, transform.persp2).any { !it.isFinite() } -> "non_finite"
-    !transform.isAffine() -> "perspective"
+private fun transformFailure(transform: Matrix3x3F32): String? = when {
+    listOf(transform.sx, transform.kx, transform.tx, transform.ky, transform.sy,
+        transform.ty, transform.persp0, transform.persp1, transform.persp2).any { !it.isFinite() } -> "non_finite"
+    transform.hasPerspective() -> "perspective"
     else -> null
 }
 
@@ -687,13 +687,13 @@ private fun prepareClip(
 }
 
 private fun org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
-    .transformConservatively(transform: Matrix33): GPUBounds? {
+    .transformConservatively(transform: Matrix3x3F32): GPUBounds? {
     val corners = listOf(
         org.graphiks.kanvas.types.Point(left, top),
         org.graphiks.kanvas.types.Point(right, top),
         org.graphiks.kanvas.types.Point(right, bottom),
         org.graphiks.kanvas.types.Point(left, bottom),
-    ).map(transform::times)
+    ).map(transform::mapPoint)
     if (corners.any { !it.x.isFinite() || !it.y.isFinite() }) return null
     return GPUBounds(
         corners.minOf { it.x }, corners.minOf { it.y }, corners.maxOf { it.x }, corners.maxOf { it.y },

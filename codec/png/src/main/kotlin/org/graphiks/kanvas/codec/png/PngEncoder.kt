@@ -1,12 +1,10 @@
 package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.color.ColorModel
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpaceProfileStatus
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkICC
 import org.skia.foundation.SkPixmap
-import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
@@ -56,19 +54,14 @@ public object PngEncoder {
         }
     }
 
-    public fun encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
-        return encode(stream, bitmap, options)
+        return encode(dst, bitmap, options)
     }
 
     public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
         return encode(bitmap, options)
-    }
-
-    public fun encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        val bytes = encode(src, options) ?: return false
-        return stream.write(bytes, bytes.size)
     }
 
     private data class PreparedEncoding(
@@ -79,16 +72,14 @@ public object PngEncoder {
     private fun prepareEncoding(src: SkBitmap, options: Options): PreparedEncoding? {
         val colorSpace = src.colorSpace
         val profile = colorSpace.colorProfile
-        if (colorSpace.profileStatus != SkColorSpaceProfileStatus.kSupported ||
+        if (!colorSpace.isProfileSupported() ||
             profile.colorModel != ColorModel.RGB ||
             profile.isHdr ||
             !profile.hasMatrixTrc
         ) {
             return null
         }
-        val transferFn = profile.transferFunction ?: return null
-        val matrix = profile.toXyzD50 ?: return null
-        val iccProfileData = if (colorSpace.isSRGB()) null else SkICC.WriteToICC(transferFn, matrix)
+        val iccProfileData = if (colorSpace.isSrgb()) null else IccProfileWriter.writeMatrixTrc(profile)
         val textChunks = options.comments.chunked(2).map { (keyword, text) -> textChunk(keyword, text) }
         return PreparedEncoding(textChunks, iccProfileData)
     }
@@ -97,7 +88,7 @@ public object PngEncoder {
         dst.write(PNG_SIGNATURE)
         writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height, options))
         prepared.textChunks.forEach { writeChunk(dst, TYPE_TEXT, it) }
-        if (src.colorSpace.isSRGB()) {
+        if (src.colorSpace.isSrgb()) {
             writeChunk(dst, TYPE_SRGB, byteArrayOf(0))
             val gammaBytes = ByteArray(4)
             writeU32BE(gammaBytes, 0, 45455)

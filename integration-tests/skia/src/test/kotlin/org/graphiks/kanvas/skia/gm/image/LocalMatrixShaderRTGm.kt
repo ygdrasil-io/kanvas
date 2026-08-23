@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -45,7 +45,7 @@ class LocalMatrixShaderRTGm : SkiaGm {
         canvas.save()
         canvas.translate(0f, fh)
         val cx = fw / 2f; val cy = fh / 2f
-        val lm = Matrix33.translate(cx, cy) * Matrix33.rotate(90f) * Matrix33.translate(-cx, -cy)
+        val lm = Matrix3x3F32.translation(cx, cy) * Matrix3x3F32.rotation(90f) * Matrix3x3F32.translation(-cx, -cy)
         val localImgShader = Shader.WithLocalMatrix(imgShader, lm)
         canvas.drawRect(r, Paint(shader = localImgShader))
         canvas.restore()

@@ -5,11 +5,11 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
  * Pure Kotlin GIF87a/GIF89a decoder.
@@ -41,7 +41,7 @@ public class GifCodec private constructor(
             height = canvasHeight,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
@@ -49,7 +49,7 @@ public class GifCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kGIF
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): IccProfile? = null
 
     override fun getFrameCount(): Int = frames.size
 

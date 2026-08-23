@@ -58,7 +58,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
@@ -113,8 +113,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val operation = DisplayOp.DrawAtlas(
             atlas = atlas,
             transforms = listOf(
-                Matrix33.translate(2f, 3f),
-                Matrix33.translate(12f, 5f) * Matrix33.skew(0.25f, 0f),
+                Matrix3x3F32.translation(2f, 3f),
+                Matrix3x3F32.translation(12f, 5f) * Matrix3x3F32.skewing(0.25f, 0f),
             ),
             texRects = listOf(
                 Rect.fromLTRB(0f, 0f, 2f, 2f),
@@ -123,7 +123,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             colors = listOf(Color.RED, Color.fromArgb(128, 0, 128, 0)),
             blendMode = BlendMode.MODULATE,
             paint = Paint.fill(Color.fromArgb(192, 255, 255, 255)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -165,8 +165,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val operation = DisplayOp.DrawAtlas(
             atlas = atlas,
             transforms = listOf(
-                Matrix33.translate(2f, 3f),
-                Matrix33.translate(12f, 5f),
+                Matrix3x3F32.translation(2f, 3f),
+                Matrix3x3F32.translation(12f, 5f),
             ),
             texRects = listOf(
                 Rect.fromLTRB(0f, 0f, 2f, 2f),
@@ -175,7 +175,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             colors = listOf(Color.RED, Color.GREEN),
             blendMode = BlendMode.SRC,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(
                 rect = Rect.fromLTRB(4f, 6f, 14f, 15f),
                 antiAlias = false,
@@ -205,12 +205,12 @@ class GPUPreparedSurfaceFrameBuilderTest {
     fun `prepared atlas clamps target scissor and refuses invalid bounds before tasks`() {
         fun atlasWithClip(rect: Rect) = DisplayOp.DrawAtlas(
             atlas = atlasImage("builder-atlas-scissor-total"),
-            transforms = listOf(Matrix33.translate(2f, 3f)),
+            transforms = listOf(Matrix3x3F32.translation(2f, 3f)),
             texRects = listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
             colors = listOf(Color.RED),
             blendMode = BlendMode.SRC,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(rect, antiAlias = false),
         )
 
@@ -258,7 +258,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             center = Rect.fromLTRB(2f, 2f, 4f, 4f),
             dst = Rect.fromLTRB(2f, 3f, 26f, 21f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -291,7 +291,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             center = Rect.fromLTRB(2f, 2f, 4f, 4f),
             dst = Rect.fromLTRB(2f, 3f, 26f, 21f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(
                 Rect.fromLTRB(6f, 7f, 18f, 16f),
                 antiAlias = false,
@@ -341,7 +341,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
             dst = Rect.fromLTRB(2f, 4f, 26f, 12f),
             paint = Paint.fill(Color.fromArgb(128, 30, 40, 50)).copy(antiAlias = false),
-            transform = Matrix33.translate(1f, 2f),
+            transform = Matrix3x3F32.translation(1f, 2f),
             clip = ClipStack.WideOpen,
             sampling = SamplingOptions.NEAREST,
         )
@@ -393,7 +393,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
             dst = Rect.fromLTRB(2f, 4f, 18f, 12f),
             paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -417,7 +417,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val operation = DisplayOp.DrawRect(
             RECT,
             Paint.fill(Color.RED).copy(antiAlias = false),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
 
@@ -446,7 +446,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 DisplayOp.DrawRRect(
                     RRect(RECT, radius = 2f),
                     Paint.fill(nonPrimary).copy(antiAlias = true),
-                    Matrix33.identity(),
+                    Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
             "clip-aa" to
@@ -509,7 +509,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                     DisplayOp.DrawPath(
                         triangle(),
                         Paint.fill(nonPrimary).copy(antiAlias = true),
-                        Matrix33.identity(),
+                        Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
                     ),
                 )),
@@ -530,7 +530,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     @Test
     fun `rect src over with state events preserves exact frame envelope ids provenance and counts`() {
         val operations = listOf(
-            DisplayOp.SetTransform(Matrix33.translate(2f, 3f)),
+            DisplayOp.SetTransform(Matrix3x3F32.translation(2f, 3f)),
             DisplayOp.SetClip(ClipStack.WideOpen),
             DisplayOp.Annotation(
                 RECT,
@@ -582,7 +582,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val clippedPath = DisplayOp.DrawPath(
             path,
             Paint.fill(Color.BLUE).copy(antiAlias = false),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 20f, 18f), antiAlias = false),
         )
         val request = request(listOf(clippedPath), capabilities = capabilities(pathPrepared = false))
@@ -609,7 +609,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             DisplayOp.DrawPath(
                 triangle(),
                 Paint.fill(Color.GREEN).copy(antiAlias = false),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             rect(Rect.fromLTRB(20f, 12f, 28f, 20f), Color.BLUE),
@@ -664,7 +664,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 PointMode.LINES,
                 listOf(Point(2f, 2f), Point(12f, 2f)),
                 Paint.stroke(Color.RED, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ))) to "unsupported.geometry.path_key_nondeterministic",
             request(listOf(rect().copy(clip = complexClip)), capabilities = capabilities(boundedClip = false)) to
@@ -1110,14 +1110,14 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 ),
             ) to GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
             base.copy(
-                transform = Matrix33.makeAll(
+                transform = Matrix3x3F32.of(
                     1f, 0f, 0f,
                     0f, 1f, 0f,
                     0.001f, 0f, 1f,
                 ),
             ) to GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
             base.copy(
-                transform = Matrix33.makeAll(
+                transform = Matrix3x3F32.of(
                     0f, 0f, 0f,
                     0f, 0f, 0f,
                 ),
@@ -1226,7 +1226,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = null,
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 
@@ -1297,7 +1297,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     ): DisplayOp.DrawRect = DisplayOp.DrawRect(
         bounds,
         Paint.fill(color).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
@@ -1307,7 +1307,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
         ),
         paint = Paint.fill(Color.RED),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

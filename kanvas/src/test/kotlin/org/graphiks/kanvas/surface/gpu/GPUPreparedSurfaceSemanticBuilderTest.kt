@@ -24,7 +24,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceSemanticBuilderTest {
@@ -145,7 +145,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
                 Rect.fromLTRB(0f, 0f, 3f, 1f),
                 Rect.fromLTRB(4f, 2f, 10f, 6f),
                 null,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             rect(12f),
@@ -166,7 +166,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
     private fun rect(left: Float) = DisplayOp.DrawRect(
         Rect.fromLTRB(left, 1f, left + 6f, 7f),
         Paint.fill(Color.RED).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 

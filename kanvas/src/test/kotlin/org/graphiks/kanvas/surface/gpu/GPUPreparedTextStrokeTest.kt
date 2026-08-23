@@ -24,7 +24,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -213,7 +213,7 @@ class GPUPreparedTextStrokeTest {
         val first = preparedPaths(style)
         val repeated = preparedPaths(style)
         val wider = preparedPaths(style.copy(strokeWidth = 3f))
-        val scaled = preparedPaths(style, transform = Matrix33.scale(2f, 2f))
+        val scaled = preparedPaths(style, transform = Matrix3x3F32.scaling(2f, 2f))
 
         assertEquals(first.map { path -> path.pathKey }, repeated.map { path -> path.pathKey })
         assertNotEquals(first.map { path -> path.pathKey }, wider.map { path -> path.pathKey })
@@ -242,7 +242,7 @@ class GPUPreparedTextStrokeTest {
     fun `stroke inventory identity seals exact transform clip material blend and mask filter`() {
         fun inventoryHash(
             paint: Paint = Paint.stroke(Color.RED, 2f),
-            transform: Matrix33 = Matrix33.translate(1f, 2f),
+            transform: Matrix3x3F32 = Matrix3x3F32.translation(1f, 2f),
             clip: ClipStack = ClipStack.DeviceRect(
                 Rect.fromLTRB(1f, 2f, 40f, 50f),
                 antiAlias = false,
@@ -251,8 +251,8 @@ class GPUPreparedTextStrokeTest {
             prepare(listOf(text(paint = paint, transform = transform, clip = clip))),
         ).inventory.contentSha256
 
-        val transformOne = inventoryHash(transform = Matrix33.translate(1f, 2f))
-        val transformTwo = inventoryHash(transform = Matrix33.translate(1f, 3f))
+        val transformOne = inventoryHash(transform = Matrix3x3F32.translation(1f, 2f))
+        val transformTwo = inventoryHash(transform = Matrix3x3F32.translation(1f, 3f))
         val clipOne = inventoryHash()
         val clipTwo = inventoryHash(
             clip = ClipStack.DeviceRect(
@@ -288,7 +288,7 @@ class GPUPreparedTextStrokeTest {
 
     private fun preparedPaths(
         paint: Paint,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): List<NormalizedDrawCommand.FillPath> {
         val ready = assertIs<GPUPreparedTextFramePreparation.Ready>(
             prepare(listOf(text(paint, transform = transform))),
@@ -321,7 +321,7 @@ class GPUPreparedTextStrokeTest {
 
     private fun text(
         paint: Paint,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         clip: ClipStack = ClipStack.WideOpen,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(

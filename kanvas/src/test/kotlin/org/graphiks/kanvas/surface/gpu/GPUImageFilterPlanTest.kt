@@ -20,7 +20,7 @@ import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
@@ -38,7 +38,7 @@ class GPUImageFilterPlanTest {
     fun `draw image maps unsupported filters to stable refusal`(
         paint: Paint,
         expectedCode: String,
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         dst: Rect,
         clip: ClipStack,
         targetSize: Int,
@@ -96,7 +96,7 @@ class GPUImageFilterPlanTest {
     private fun imageOp(
         paint: Paint,
         clip: ClipStack = ClipStack.WideOpen,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         dst: Rect = Rect(10f, 10f, 14f, 14f),
     ): DisplayOp.DrawImage = DisplayOp.DrawImage(
         image = Image.fromPixels(
@@ -118,12 +118,12 @@ class GPUImageFilterPlanTest {
     companion object {
         @JvmStatic
         fun unsupportedImageFilters(): Stream<Arguments> {
-            val identity = Matrix33.identity()
+            val identity = Matrix3x3F32.Identity
             val defaultDst = Rect(10f, 10f, 14f, 14f)
             fun case(
                 paint: Paint,
                 code: String,
-                transform: Matrix33 = identity,
+                transform: Matrix3x3F32 = identity,
                 dst: Rect = defaultDst,
                 clip: ClipStack = ClipStack.WideOpen,
                 targetSize: Int = 64,
@@ -178,7 +178,7 @@ class GPUImageFilterPlanTest {
                     case(
                         Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.REPEAT)),
                         "unsupported.image-filter.blur.tile-mode",
-                        transform = Matrix33.translate(1f, 1f),
+                        transform = Matrix3x3F32.translation(1f, 1f),
                     ),
                     case(
                         Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.MIRROR)),
@@ -198,7 +198,7 @@ class GPUImageFilterPlanTest {
                     case(
                         Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
                         "unsupported.image-filter.blur.transform",
-                        transform = Matrix33.translate(1f, 1f),
+                        transform = Matrix3x3F32.translation(1f, 1f),
                     ),
                 ),
                 nonBlurFilters.stream().map { filter ->

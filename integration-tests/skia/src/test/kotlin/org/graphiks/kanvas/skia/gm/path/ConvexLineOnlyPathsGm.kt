@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.cos
 import kotlin.math.sin
@@ -186,7 +186,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
             close()
         }.also { it.fillType = FillType.EVEN_ODD }
         canvas.save()
-        canvas.concat(Matrix33.translate(79.1197586f, 300f) * Matrix33.scale(0.0893210843f, 0.0893210843f))
+        canvas.concat(Matrix3x3F32.translation(79.1197586f, 300f) * Matrix3x3F32.scaling(0.0893210843f, 0.0893210843f))
         canvas.drawPath(p3, p)
         canvas.restore()
     }

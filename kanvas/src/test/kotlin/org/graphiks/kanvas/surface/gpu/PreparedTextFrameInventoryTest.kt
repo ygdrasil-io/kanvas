@@ -24,7 +24,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Named
@@ -216,7 +216,7 @@ class PreparedTextFrameInventoryTest {
         val operation = operation(
             glyphIds = listOf(spaceGlyph),
             positions = listOf(Point(0f, 0f)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             typeface = typeface,
         )
         val lowered = assertIs<GPUPreparedTextLowering.Ready>(
@@ -269,7 +269,7 @@ class PreparedTextFrameInventoryTest {
 
     @Test
     fun `scale already present in mask density is not applied twice`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             2f, 0f, 10f,
             0f, 3f, 20f,
         )
@@ -289,7 +289,7 @@ class PreparedTextFrameInventoryTest {
     @Test
     fun `rotation maps all four mask corners through the linear residual`() {
         val ready = inventoryForAffine(
-            Matrix33.makeAll(
+            Matrix3x3F32.of(
                 0f, -1f, 10f,
                 1f, 0f, 20f,
             ),
@@ -309,16 +309,16 @@ class PreparedTextFrameInventoryTest {
 
     @Test
     fun `skew maps all four corners through L times inverse D`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             1f, 0.5f, 0f,
             0.25f, 1f, 0f,
         )
         val ready = inventoryForAffine(transform, position = Point(0f, 0f))
-        val scaleX = sqrt(1f + 0.25f * 0.25f)
-        val scaleY = sqrt(0.5f * 0.5f + 1f)
+        val sx = sqrt(1f + 0.25f * 0.25f)
+        val sy = sqrt(0.5f * 0.5f + 1f)
         fun mapped(qx: Float, qy: Float): Pair<Float, Float> =
-            (qx / scaleX + 0.5f * qy / scaleY) to
-                (0.25f * qx / scaleX + qy / scaleY)
+            (qx / sx + 0.5f * qy / sy) to
+                (0.25f * qx / sx + qy / sy)
 
         val corners = listOf(
             mapped(2f, 3f),
@@ -332,7 +332,7 @@ class PreparedTextFrameInventoryTest {
     @Test
     fun `fractional mask phase is removed before residual placement`() {
         val ready = inventoryForAffine(
-            Matrix33.translate(10.25f, 20.5f),
+            Matrix3x3F32.translation(10.25f, 20.5f),
             position = Point(0f, 0f),
         )
 
@@ -350,7 +350,7 @@ class PreparedTextFrameInventoryTest {
     @Test
     fun `translation is applied exactly once`() {
         val ready = inventoryForAffine(
-            Matrix33.translate(10f, 20f),
+            Matrix3x3F32.translation(10f, 20f),
             position = Point(0f, 0f),
         )
 
@@ -398,7 +398,7 @@ class PreparedTextFrameInventoryTest {
         val transformChanged = draw(
             2,
             listOf(glyph(4)),
-            transform = Matrix33.skew(0.25f, 0f),
+            transform = Matrix3x3F32.skewing(0.25f, 0f),
         )
 
         val ready = assertIs<PreparedTextFrameInventoryResult.Ready>(
@@ -462,7 +462,7 @@ class PreparedTextFrameInventoryTest {
                 operation = operation(
                     glyphIds = listOf(2),
                     positions = listOf(Point(8f, 32f)),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     typeface = typeface,
                 ),
                 operationIndex = 4,
@@ -518,7 +518,7 @@ class PreparedTextFrameInventoryTest {
                 operation(
                     glyphIds = listOf(2),
                     positions = listOf(Point(0f, 0f)),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     typeface = typeface,
                 ),
                 0,
@@ -568,7 +568,7 @@ class PreparedTextFrameInventoryTest {
                 operation(
                     glyphIds = listOf(baseGlyphId),
                     positions = listOf(Point(0f, 0f)),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     typeface = typeface,
                 ),
                 0,
@@ -1420,16 +1420,16 @@ class PreparedTextFrameInventoryTest {
 
     @Test
     fun `reflection uses signed L with positive strike density`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             -1f, 0.5f, 10f,
             0.25f, 1f, 20f,
         )
         val ready = inventoryForAffine(transform, position = Point(0f, 0f))
-        val scaleX = sqrt(1f + 0.25f * 0.25f)
-        val scaleY = sqrt(0.5f * 0.5f + 1f)
+        val sx = sqrt(1f + 0.25f * 0.25f)
+        val sy = sqrt(0.5f * 0.5f + 1f)
         fun mapped(qx: Float, qy: Float): Pair<Float, Float> =
-            (10f - qx / scaleX + 0.5f * qy / scaleY) to
-                (20f + 0.25f * qx / scaleX + qy / scaleY)
+            (10f - qx / sx + 0.5f * qy / sy) to
+                (20f + 0.25f * qx / sx + qy / sy)
         val expected = listOf(
             mapped(2f, 3f),
             mapped(6f, 3f),
@@ -1462,7 +1462,7 @@ class PreparedTextFrameInventoryTest {
     }
 
     private fun inventoryForAffine(
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         position: Point,
     ): PreparedTextFrameInventory {
         val operation = operation(
@@ -1503,7 +1503,7 @@ class PreparedTextFrameInventoryTest {
                 operation(
                     glyphIds = List(glyphCount) { 2 },
                     positions = List(glyphCount) { index -> Point(index * 12f, 0f) },
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     typeface = typeface,
                 ),
                 9,
@@ -1626,7 +1626,7 @@ class PreparedTextFrameInventoryTest {
         operationIndex: Int,
         glyphs: List<GPUPreparedGlyphInput>,
         faceIndex: Int = 0,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         paint: Paint = Paint.fill(Color.RED),
         clip: ClipStack = ClipStack.WideOpen,
     ): GPUPreparedTextDraw {
@@ -1673,7 +1673,7 @@ class PreparedTextFrameInventoryTest {
         operationIndex = operationIndex,
         glyphs = glyphs,
         faceIndex = 0,
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         paint = Paint.fill(Color.RED),
     )
 
@@ -1683,7 +1683,7 @@ class PreparedTextFrameInventoryTest {
                 operation(
                     glyphIds = listOf(5),
                     positions = listOf(Point(0f, 0f)),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                 ),
                 0,
                 target(),
@@ -1702,7 +1702,7 @@ class PreparedTextFrameInventoryTest {
     private fun operation(
         glyphIds: List<Int>,
         positions: List<Point>,
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         typeface: org.graphiks.kanvas.text.FontTypeface = liberationTypeface(),
         paint: Paint = Paint.fill(Color.RED),
         clip: ClipStack = ClipStack.WideOpen,

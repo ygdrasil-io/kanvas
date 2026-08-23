@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkImageInfo
@@ -228,7 +228,7 @@ class JpegSequentialEncodeTest {
             assertNull(JpegEncoder.encode(source))
         }
         val oversizedPixmap = SkPixmap(
-            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, SkColorSpace.makeSRGB()),
+            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, ImageColorSpace.sRGB()),
             ByteBuffer.allocate(65_536 * 4),
             65_536 * 4,
         )
@@ -265,7 +265,7 @@ class JpegSequentialEncodeTest {
 
     private fun redAt(bytes: ByteArray): Int = (decode(bytes).getPixel(0, 0) ushr 16) and 0xFF
 
-    private fun flat(width: Int, height: Int, color: Int): SkBitmap = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888).also { bitmap ->
+    private fun flat(width: Int, height: Int, color: Int): SkBitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888).also { bitmap ->
         bitmap.pixels.fill(color)
     }
 

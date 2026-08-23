@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.types.ColorSpace
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -75,11 +75,11 @@ class ImageMetadataTest {
         assertEquals(EncodedOrigin.TOP_LEFT, EncodedOrigin.fromExifValue(99))
 
         val matrix = EncodedOrigin.RIGHT_TOP.toMatrix(10, 20)
-        assertEquals(0f, matrix.scaleX)
-        assertEquals(-1f, matrix.skewX)
-        assertEquals(10f, matrix.transX)
-        assertEquals(1f, matrix.skewY)
-        assertEquals(0f, matrix.scaleY)
-        assertEquals(0f, matrix.transY)
+        assertEquals(0f, matrix.sx)
+        assertEquals(-1f, matrix.kx)
+        assertEquals(10f, matrix.tx)
+        assertEquals(1f, matrix.ky)
+        assertEquals(0f, matrix.sy)
+        assertEquals(0f, matrix.ty)
     }
 }

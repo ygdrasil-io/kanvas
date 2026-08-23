@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.geometry
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -83,7 +84,7 @@ class PathTest {
             arcTo(10f, 10f, 45f, largeArc = false, sweep = true, x = 0f, y = 10f)
         }
 
-        val transformed = path.transform(Matrix33.scale(2f, 1f))
+        val transformed = path.transform(Matrix3x3F32.scaling(2f, 1f))
         val points = transformed.points()
 
         assertEquals(Point(20f, 0f), points[0])
@@ -103,7 +104,7 @@ class PathTest {
             arcTo(radius, radius, 0f, largeArc = false, sweep = true, x = 0f, y = radius)
         }
 
-        val transformed = path.transform(Matrix33.skew(1f, 0f))
+        val transformed = path.transform(Matrix3x3F32.skewing(1f, 0f))
         val points = transformed.points()
 
         assertEquals(0.000809f, points[1].x, 0.000001f)
@@ -119,7 +120,7 @@ class PathTest {
             arcTo(5f, 8f, 15f, largeArc = true, sweep = true, x = 4f, y = 6f)
         }
 
-        val transformed = path.transform(Matrix33.scale(-1f, 1f))
+        val transformed = path.transform(Matrix3x3F32.scaling(-1f, 1f))
         val points = transformed.points()
 
         assertEquals(Point(-5f, 0f), points[0])

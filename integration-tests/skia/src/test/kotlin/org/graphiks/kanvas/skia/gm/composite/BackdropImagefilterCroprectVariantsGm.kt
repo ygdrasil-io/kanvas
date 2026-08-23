@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -42,7 +42,7 @@ class BackdropImagefilterCroprectPerspGm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
-        val persp = Matrix33.makeAll(
+        val persp = Matrix3x3F32.of(
             1f, 8f / 25f, 0f,
             0f, 1f, 0f,
             0f, 0.001f, 1f,

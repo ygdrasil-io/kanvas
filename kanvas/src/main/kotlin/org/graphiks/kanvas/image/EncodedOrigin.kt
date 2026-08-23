@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 enum class EncodedOrigin(val exifValue: Int) {
     TOP_LEFT(1),
@@ -15,18 +15,18 @@ enum class EncodedOrigin(val exifValue: Int) {
 
     fun swapsWidthHeight(): Boolean = ordinal >= LEFT_TOP.ordinal
 
-    fun toMatrix(width: Int, height: Int): Matrix33 {
+    fun toMatrix(width: Int, height: Int): Matrix3x3F32 {
         val w = width.toFloat()
         val h = height.toFloat()
         return when (this) {
-            TOP_LEFT -> Matrix33.identity()
-            TOP_RIGHT -> Matrix33.makeAll(-1f, 0f, w, 0f, 1f, 0f, 0f, 0f, 1f)
-            BOTTOM_RIGHT -> Matrix33.makeAll(-1f, 0f, w, 0f, -1f, h, 0f, 0f, 1f)
-            BOTTOM_LEFT -> Matrix33.makeAll(1f, 0f, 0f, 0f, -1f, h, 0f, 0f, 1f)
-            LEFT_TOP -> Matrix33.makeAll(0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f)
-            RIGHT_TOP -> Matrix33.makeAll(0f, -1f, w, 1f, 0f, 0f, 0f, 0f, 1f)
-            RIGHT_BOTTOM -> Matrix33.makeAll(0f, -1f, w, -1f, 0f, h, 0f, 0f, 1f)
-            LEFT_BOTTOM -> Matrix33.makeAll(0f, 1f, 0f, -1f, 0f, h, 0f, 0f, 1f)
+            TOP_LEFT -> Matrix3x3F32.Identity
+            TOP_RIGHT -> Matrix3x3F32.of(-1f, 0f, w, 0f, 1f, 0f, 0f, 0f, 1f)
+            BOTTOM_RIGHT -> Matrix3x3F32.of(-1f, 0f, w, 0f, -1f, h, 0f, 0f, 1f)
+            BOTTOM_LEFT -> Matrix3x3F32.of(1f, 0f, 0f, 0f, -1f, h, 0f, 0f, 1f)
+            LEFT_TOP -> Matrix3x3F32.of(0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f)
+            RIGHT_TOP -> Matrix3x3F32.of(0f, -1f, w, 1f, 0f, 0f, 0f, 0f, 1f)
+            RIGHT_BOTTOM -> Matrix3x3F32.of(0f, -1f, w, -1f, 0f, h, 0f, 0f, 1f)
+            LEFT_BOTTOM -> Matrix3x3F32.of(0f, 1f, 0f, -1f, 0f, h, 0f, 0f, 1f)
         }
     }
 

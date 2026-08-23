@@ -36,7 +36,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
@@ -100,7 +100,7 @@ class GPUAlphaImageMaterialTest {
             src = Rect(0f, 0f, 2f, 1f),
             dst = Rect(0f, 0f, 2f, 1f),
             paint = paint,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -127,7 +127,7 @@ class GPUAlphaImageMaterialTest {
             paint = Paint.fill(Color.RED).copy(
                 shader = Shader.Image(preparedAlphaImage, sampling = SamplingOptions.NEAREST),
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val inventory = GPUFramePathApiInventory.plan(
@@ -151,7 +151,7 @@ class GPUAlphaImageMaterialTest {
             src = Rect(0f, 0f, 2f, 1f),
             dst = Rect(0f, 0f, 2f, 1f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -176,7 +176,7 @@ class GPUAlphaImageMaterialTest {
             src = Rect(0f, 0f, 1f, 1f),
             dst = Rect(0f, 0f, 4f, 4f),
             paint = paint,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -202,7 +202,7 @@ class GPUAlphaImageMaterialTest {
         val op = DisplayOp.DrawRect(
             rect = Rect(0f, 0f, 2f, 1f),
             paint = Paint(shader = Shader.Image(alphaImage)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val command = op.toNormalizedCommand(
@@ -228,14 +228,14 @@ class GPUAlphaImageMaterialTest {
                             GradientStop(1f, Color.BLUE),
                         ),
                     ),
-                    matrix = Matrix33.makeAll(
+                    matrix = Matrix3x3F32.of(
                         1f, 0f, 0f,
                         0f, Float.NaN, 0f,
                         0f, 0f, 1f,
                     ),
                 ),
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         ).toNormalizedCommand(
             GPUDrawCommandID(17),
@@ -273,7 +273,7 @@ class GPUAlphaImageMaterialTest {
             src = Rect(1f, 0f, 2f, 1f),
             dst = Rect(4f, 5f, 8f, 7f),
             paint = paint,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(Rect(5f, 5f, 7f, 7f)),
         )
         val command = op.toImageRectCommand(
@@ -383,7 +383,7 @@ class GPUAlphaImageMaterialTest {
         val op = DisplayOp.DrawPath(
             path = path,
             paint = paint,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val vertices = listOf(2f, 3f, 6f, 3f, 6f, 5f, 2f, 5f)
@@ -442,7 +442,7 @@ class GPUAlphaImageMaterialTest {
         val command = DisplayOp.DrawPath(
             path = path,
             paint = Paint.fill(Color.RED),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         ).toNormalizedCommand(
             GPUDrawCommandID(15),
@@ -485,7 +485,7 @@ class GPUAlphaImageMaterialTest {
         val command = DisplayOp.DrawPath(
             path = Path().addRect(Rect(2f, 2f, 6f, 5f)),
             paint = Paint.fill(Color.RED),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         ).toNormalizedCommand(
             GPUDrawCommandID(16),
@@ -523,7 +523,7 @@ class GPUAlphaImageMaterialTest {
         val op = DisplayOp.DrawPath(
             path = Path().addRect(Rect(2f, 3f, 6f, 5f)),
             paint = Paint(shader = Shader.Image(image)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val command = op.toNormalizedCommand(
@@ -565,7 +565,7 @@ class GPUAlphaImageMaterialTest {
         src = Rect(0f, 0f, 2f, 1f),
         dst = Rect(0f, 0f, 2f, 1f),
         paint = Paint(),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     ).toImageRectCommand(
         GPUDrawCommandID(14),

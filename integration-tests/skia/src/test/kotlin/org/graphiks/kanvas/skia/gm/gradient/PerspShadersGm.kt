@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -48,7 +48,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
         ),
         tileMode = TileMode.CLAMP,
     )
-    private val perspMatrix = Matrix33.makeAll(
+    private val perspMatrix = Matrix3x3F32.of(
         1f, 0f, 0f,
         0f, 1f, 0f,
         1f / 50f, 0f, 1f,

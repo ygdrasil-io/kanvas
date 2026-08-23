@@ -10,7 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
@@ -42,7 +42,7 @@ class GPUPreparedSurfaceLifetimeStressTest {
                     DisplayOp.DrawRect(
                         Rect(0f, 0f, width.toFloat(), height.toFloat()),
                         Paint.fill(Color.RED),
-                        Matrix33.identity(),
+                        Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
                     ),
                 ),

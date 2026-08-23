@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawLine
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 open class GiantBitmapGm(
     private val mode: TileMode,
@@ -42,10 +42,10 @@ open class GiantBitmapGm(
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val m = if (doRotate) {
-            Matrix33.skew(1f, 0f)
+            Matrix3x3F32.skewing(1f, 0f)
         } else {
             val scale = 11f / 12f
-            Matrix33.scale(scale, scale)
+            Matrix3x3F32.scaling(scale, scale)
         }
 
         val paint = Paint(

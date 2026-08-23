@@ -53,7 +53,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.PreparedTextOutline
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.uuid.Uuid
 
 data class PreparedTextFrameInventoryLimits(
@@ -1487,20 +1487,20 @@ private fun deviceQuad(
     mask: A8GlyphMask,
 ): List<Float> {
     val glyph = draw.glyphs[glyphIndex]
-    val scaleX = glyph.strikeKey.scaleX
-    val scaleY = glyph.strikeKey.scaleY
-    require(scaleX.isFinite() && scaleX > 0f && scaleY.isFinite() && scaleY > 0f)
+    val sx = glyph.strikeKey.scaleX
+    val sy = glyph.strikeKey.scaleY
+    require(sx.isFinite() && sx > 0f && sy.isFinite() && sy > 0f)
     val transform = draw.transform
-    val residual00 = transform.scaleX / scaleX
-    val residual01 = transform.skewX / scaleY
-    val residual10 = transform.skewY / scaleX
-    val residual11 = transform.scaleY / scaleY
+    val residual00 = transform.sx / sx
+    val residual01 = transform.kx / sy
+    val residual10 = transform.ky / sx
+    val residual11 = transform.sy / sy
     val effectiveX = draw.originX + glyph.positionX
     val effectiveY = draw.originY + glyph.positionY
     val anchorX =
-        transform.scaleX * effectiveX + transform.skewX * effectiveY + transform.transX
+        transform.sx * effectiveX + transform.kx * effectiveY + transform.tx
     val anchorY =
-        transform.skewY * effectiveX + transform.scaleY * effectiveY + transform.transY
+        transform.ky * effectiveX + transform.sy * effectiveY + transform.ty
     val phaseX = glyph.strikeKey.subpixelX
     val phaseY = glyph.strikeKey.subpixelY
     fun map(qx: Float, qy: Float): Pair<Float, Float> {
@@ -1524,10 +1524,10 @@ private fun deviceQuad(
     ).flatMap { (x, y) -> listOf(x, y) }
 }
 
-private fun transformClass(transform: Matrix33): String = when {
-    transform.skewX != 0f || transform.skewY != 0f -> "affine"
-    transform.scaleX != 1f || transform.scaleY != 1f -> "scale"
-    transform.transX != 0f || transform.transY != 0f -> "translate"
+private fun transformClass(transform: Matrix3x3F32): String = when {
+    transform.kx != 0f || transform.ky != 0f -> "affine"
+    transform.sx != 1f || transform.sy != 1f -> "scale"
+    transform.tx != 0f || transform.ty != 0f -> "translate"
     else -> "identity"
 }
 
@@ -1615,12 +1615,12 @@ private fun GPUPreparedTextStrokePath.exactInventoryIdentity(): String {
     }
 
     val transform = draw.transform
-    encoder.float("transform.scaleX", transform.scaleX)
-    encoder.float("transform.skewX", transform.skewX)
-    encoder.float("transform.transX", transform.transX)
-    encoder.float("transform.skewY", transform.skewY)
-    encoder.float("transform.scaleY", transform.scaleY)
-    encoder.float("transform.transY", transform.transY)
+    encoder.float("transform.sx", transform.sx)
+    encoder.float("transform.kx", transform.kx)
+    encoder.float("transform.tx", transform.tx)
+    encoder.float("transform.ky", transform.ky)
+    encoder.float("transform.sy", transform.sy)
+    encoder.float("transform.ty", transform.ty)
     encoder.float("transform.persp0", transform.persp0)
     encoder.float("transform.persp1", transform.persp1)
     encoder.float("transform.persp2", transform.persp2)

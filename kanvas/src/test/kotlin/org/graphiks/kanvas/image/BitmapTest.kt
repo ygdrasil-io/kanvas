@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -132,7 +132,7 @@ class BitmapTest {
     fun `makeShader returns correct wrapping`() {
         val bmp = Bitmap(2, 2)
         bmp.eraseColor(Color.RED)
-        val shader = bmp.makeShader(TileMode.REPEAT, TileMode.MIRROR, SamplingOptions.LINEAR, Matrix33.identity())
+        val shader = bmp.makeShader(TileMode.REPEAT, TileMode.MIRROR, SamplingOptions.LINEAR, Matrix3x3F32.Identity)
         val wrapped = shader as org.graphiks.kanvas.paint.Shader.WithLocalMatrix
         val inner = wrapped.shader as org.graphiks.kanvas.paint.Shader.Image
         assertEquals(TileMode.REPEAT, inner.tileModeX)

@@ -47,28 +47,4 @@ class FoundationTypesTest {
         assertNull(l.flags)
     }
 
-    @Test
-    fun `ColorSpace SRGB`() {
-        assertEquals("sRGB", ColorSpace.SRGB.name)
-        assertEquals(TransferFunction.SRGB, ColorSpace.SRGB.transferFunction)
-        assertEquals(Gamut.SRGB, ColorSpace.SRGB.gamut)
-    }
-
-    @Test
-    fun `ColorSpace DISPLAY_P3`() {
-        assertEquals("Display P3", ColorSpace.DISPLAY_P3.name)
-        assertEquals(Gamut.DISPLAY_P3, ColorSpace.DISPLAY_P3.gamut)
-    }
-
-    @Test
-    fun `TransferFunction enum`() {
-        assertEquals(4, TransferFunction.entries.size)
-        assertTrue(TransferFunction.entries.containsAll(listOf(TransferFunction.SRGB, TransferFunction.LINEAR, TransferFunction.PQ, TransferFunction.HLG)))
-    }
-
-    @Test
-    fun `Gamut enum`() {
-        assertEquals(3, Gamut.entries.size)
-        assertTrue(Gamut.entries.containsAll(listOf(Gamut.SRGB, Gamut.DISPLAY_P3, Gamut.REC2020)))
-    }
 }

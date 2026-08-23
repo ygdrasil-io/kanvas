@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class ImageShaderGm : SkiaGm {
@@ -85,7 +85,7 @@ class ImageShaderGm : SkiaGm {
             tileModeY = TileMode.REPEAT,
             sampling = SamplingOptions.NEAREST,
         )
-        val shader = Shader.WithLocalMatrix(baseShader, Matrix33.translate(-50f, -50f))
+        val shader = Shader.WithLocalMatrix(baseShader, Matrix3x3F32.translation(-50f, -50f))
         val paint = Paint(antiAlias = true, shader = shader)
         canvas.drawCircle(50f, 50f, 50f, paint)
         canvas.restore()

@@ -3,6 +3,7 @@ package org.graphiks.math.color
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ColorTransferFunctionTest {
@@ -109,5 +110,41 @@ class ColorTransferFunctionTest {
         listOf(0f, 0.0031308f, 0.18f, 1f).forEach { linear ->
             assertEquals(linear, tf.toLinear(tf.toEncoded(linear)), 2e-6f)
         }
+    }
+
+    @Test
+    fun `near comparison requires every parametric coefficient to be within the supplied tolerance`() {
+        val canonical = ColorTransferFunction.sRgb
+        val withinTolerance = ColorTransferFunction.parametric(
+            g = canonical.g,
+            a = canonical.a,
+            b = canonical.b,
+            c = canonical.c,
+            d = canonical.d,
+            e = canonical.e,
+            f = 0.0005f,
+        )
+        val outsideTolerance = ColorTransferFunction.parametric(
+            g = canonical.g,
+            a = canonical.a,
+            b = canonical.b,
+            c = canonical.c,
+            d = canonical.d,
+            e = canonical.e,
+            f = 0.002f,
+        )
+        val nonFinite = ColorTransferFunction.parametric(
+            g = canonical.g,
+            a = canonical.a,
+            b = canonical.b,
+            c = canonical.c,
+            d = canonical.d,
+            e = canonical.e,
+            f = Float.NaN,
+        )
+
+        assertTrue(canonical.isNear(withinTolerance, tolerance = 0.001f))
+        assertFalse(canonical.isNear(outsideTolerance, tolerance = 0.001f))
+        assertFalse(canonical.isNear(nonFinite, tolerance = 0.001f))
     }
 }

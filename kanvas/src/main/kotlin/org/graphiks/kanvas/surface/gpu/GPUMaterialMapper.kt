@@ -37,7 +37,7 @@ import org.graphiks.kanvas.pipeline.UniformValue
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.r
 import kotlin.math.pow
 
@@ -701,24 +701,24 @@ private fun ColorSpaceInterpolation.toDescriptorInterpolation(): String = when (
     ColorSpaceInterpolation.OKLCH -> "oklch"
 }
 
-private fun Matrix33.toDescriptorValues(): List<Float> = listOf(
-    scaleX, skewX, transX,
-    skewY, scaleY, transY,
+private fun Matrix3x3F32.toDescriptorValues(): List<Float> = listOf(
+    sx, kx, tx,
+    ky, sy, ty,
     persp0, persp1, persp2,
 )
 
-private fun List<Float>.toMatrix33(): Matrix33 {
+private fun List<Float>.toMatrix33(): Matrix3x3F32 {
     require(size == 9) { "Gradient local matrix must contain nine values" }
-    return Matrix33.makeAll(
+    return Matrix3x3F32.of(
         this[0], this[1], this[2],
         this[3], this[4], this[5],
         this[6], this[7], this[8],
     )
 }
 
-private fun Matrix33.hasFiniteValues(): Boolean = toDescriptorValues().all(Float::isFinite)
+private fun Matrix3x3F32.hasFiniteValues(): Boolean = toDescriptorValues().all(Float::isFinite)
 
-private fun List<Float>.composeGradientLocalMatrix(matrix: Matrix33): List<Float>? {
+private fun List<Float>.composeGradientLocalMatrix(matrix: Matrix3x3F32): List<Float>? {
     if (size != 9 || any { !it.isFinite() } || !matrix.hasFiniteValues()) return null
     return (toMatrix33() * matrix).toDescriptorValues().takeIf { values ->
         values.all(Float::isFinite)
@@ -732,7 +732,7 @@ private fun GPUMaterialDescriptor.invalidGradientLocalMatrix(): GPUMaterialDescr
         source = this,
     )
 
-private fun GPUMaterialDescriptor.withGradientLocalMatrix(matrix: Matrix33): GPUMaterialDescriptor =
+private fun GPUMaterialDescriptor.withGradientLocalMatrix(matrix: Matrix3x3F32): GPUMaterialDescriptor =
     when (this) {
         is GPUMaterialDescriptor.RadialGradient ->
             localMatrix.composeGradientLocalMatrix(matrix)?.let { composed ->
@@ -1009,7 +1009,7 @@ private fun Shader.Image.toPreparedImageMaterial(
             GPUMaterialKind.ImageDraw,
         )
     }
-    if (image.colorSpace != org.graphiks.kanvas.types.ColorSpace.SRGB) {
+    if (image.colorSpace != org.graphiks.kanvas.color.ColorSpace.SRGB) {
         return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_SPACE,
             GPUMaterialKind.ImageDraw,
@@ -1644,12 +1644,12 @@ private fun UniformBlock.toGPUUniformValues(): Map<String, GPURuntimeEffectUnifo
             is UniformValue.M3 ->
                 GPURuntimeEffectUniformValue.Matrix3x3(
                     listOf(
-                        value.m.scaleX,
-                        value.m.skewX,
-                        value.m.transX,
-                        value.m.skewY,
-                        value.m.scaleY,
-                        value.m.transY,
+                        value.m.sx,
+                        value.m.kx,
+                        value.m.tx,
+                        value.m.ky,
+                        value.m.sy,
+                        value.m.ty,
                         value.m.persp0,
                         value.m.persp1,
                         value.m.persp2,

@@ -2,9 +2,10 @@ package org.graphiks.kanvas.geometry
 
 import org.graphiks.kanvas.dsl.PathScope
 import org.graphiks.kanvas.types.Line
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.PI
@@ -419,11 +420,11 @@ class Path internal constructor() {
     }
 
     fun transform(tx: Float, ty: Float, sx: Float, sy: Float): Path {
-        val m = Matrix33.translate(tx, ty) * Matrix33.scale(sx, sy)
+        val m = Matrix3x3F32.translation(tx, ty) * Matrix3x3F32.scaling(sx, sy)
         return transform(m)
     }
 
-    fun transform(matrix: Matrix33): Path {
+    fun transform(matrix: Matrix3x3F32): Path {
         val result = Path()
         result.fillType = fillType
         var pi = 0
@@ -431,18 +432,18 @@ class Path internal constructor() {
             result.verbs.add(verb)
             when (verb) {
                 PathVerb.MOVE, PathVerb.LINE -> {
-                    result.points.add(matrix * points[pi])
+                    result.points.add(matrix.mapPoint(points[pi]))
                     pi++
                 }
                 PathVerb.QUAD -> {
-                    result.points.add(matrix * points[pi])
-                    result.points.add(matrix * points[pi + 1])
+                    result.points.add(matrix.mapPoint(points[pi]))
+                    result.points.add(matrix.mapPoint(points[pi + 1]))
                     pi += 2
                 }
                 PathVerb.CUBIC -> {
-                    result.points.add(matrix * points[pi])
-                    result.points.add(matrix * points[pi + 1])
-                    result.points.add(matrix * points[pi + 2])
+                    result.points.add(matrix.mapPoint(points[pi]))
+                    result.points.add(matrix.mapPoint(points[pi + 1]))
+                    result.points.add(matrix.mapPoint(points[pi + 2]))
                     pi += 3
                 }
                 PathVerb.ARC_TO -> {
@@ -459,7 +460,7 @@ class Path internal constructor() {
                     result.points.add(Point(transformedArc.rx, transformedArc.ry))
                     result.points.add(Point(transformedArc.xAxisRotation, rotationAndLargeArc.y))
                     result.points.add(Point(transformedArc.sweepFlag, 0f))
-                    result.points.add(matrix * endpoint)
+                    result.points.add(matrix.mapPoint(endpoint))
                     pi += 4
                 }
                 PathVerb.CLOSE -> {}
@@ -479,7 +480,7 @@ class Path internal constructor() {
         radius: Point,
         xAxisRotation: Float,
         sweep: Point,
-        matrix: Matrix33,
+        matrix: Matrix3x3F32,
     ): TransformedArcMetadata {
         val angle = xAxisRotation.toDouble() * PI / 180.0
         val cosAngle = cos(angle)
@@ -490,10 +491,10 @@ class Path internal constructor() {
         val xAxisY = sinAngle * rx
         val yAxisX = -sinAngle * ry
         val yAxisY = cosAngle * ry
-        val transformedXAxisX = matrix.scaleX * xAxisX + matrix.skewX * xAxisY
-        val transformedXAxisY = matrix.skewY * xAxisX + matrix.scaleY * xAxisY
-        val transformedYAxisX = matrix.scaleX * yAxisX + matrix.skewX * yAxisY
-        val transformedYAxisY = matrix.skewY * yAxisX + matrix.scaleY * yAxisY
+        val transformedXAxisX = matrix.sx * xAxisX + matrix.kx * xAxisY
+        val transformedXAxisY = matrix.ky * xAxisX + matrix.sy * xAxisY
+        val transformedYAxisX = matrix.sx * yAxisX + matrix.kx * yAxisY
+        val transformedYAxisY = matrix.ky * yAxisX + matrix.sy * yAxisY
 
         val xAxisLengthSquared = transformedXAxisX * transformedXAxisX + transformedXAxisY * transformedXAxisY
         val yAxisLengthSquared = transformedYAxisX * transformedYAxisX + transformedYAxisY * transformedYAxisY
@@ -524,7 +525,7 @@ class Path internal constructor() {
             }
             Triple(sqrt(major), sqrt(minor), transformedRotation)
         }
-        val determinant = matrix.scaleX * matrix.scaleY - matrix.skewX * matrix.skewY
+        val determinant = matrix.sx * matrix.sy - matrix.kx * matrix.ky
         val sweepFlag = if (determinant < 0f) {
             if (sweep.x > 0f) 0f else 1f
         } else {

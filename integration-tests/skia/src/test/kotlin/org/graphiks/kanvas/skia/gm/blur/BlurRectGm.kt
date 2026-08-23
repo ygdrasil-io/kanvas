@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -97,7 +97,7 @@ class BlurRectGm : SkiaGm {
         val cx = rect.center.x
         val cy = rect.center.y
         val skewed = donut.transform(
-            Matrix33.translate(cx, cy) * Matrix33.skew(0.35f, 0f) * Matrix33.translate(-cx, -cy),
+            Matrix3x3F32.translation(cx, cy) * Matrix3x3F32.skewing(0.35f, 0f) * Matrix3x3F32.translation(-cx, -cy),
         )
         canvas.drawPath(skewed, paint)
     }

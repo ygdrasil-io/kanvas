@@ -11,8 +11,9 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sqrt
 
@@ -52,16 +53,16 @@ class DrawImageSetGm : SkiaGm {
             }
         }
 
-        val matrices = arrayOfNulls<Matrix33>(4)
-        matrices[0] = Matrix33.translate(d / 3f, 0f) * Matrix33.rotate(30f)
-        matrices[1] = Matrix33.translate(d, 50f) * Matrix33.makeAll(
+        val matrices = arrayOfNulls<Matrix3x3F32>(4)
+        matrices[0] = Matrix3x3F32.translation(d / 3f, 0f) * Matrix3x3F32.rotation(30f)
+        matrices[1] = Matrix3x3F32.translation(d, 50f) * Matrix3x3F32.of(
             1f, 0f, 0f, 0f, 1f, 0f, 0.0008f, 0f, 1f,
         )
-        matrices[2] = Matrix33.translate(d, 2.6f * d) *
-            Matrix33.scale(0.6f, 1.05f) *
-            Matrix33.skew(0.5f, -1.15f) *
-            Matrix33.rotate(-60f)
-        matrices[3] = Matrix33.translate(100f, d) * Matrix33.makeAll(
+        matrices[2] = Matrix3x3F32.translation(d, 2.6f * d) *
+            Matrix3x3F32.scaling(0.6f, 1.05f) *
+            Matrix3x3F32.skewing(0.5f, -1.15f) *
+            Matrix3x3F32.rotation(-60f)
+        matrices[3] = Matrix3x3F32.translation(100f, d) * Matrix3x3F32.of(
             -1f, 0f, mw, 0f, -0.5f, nh * 0.5f, 0f, 0f, 1f,
         )
 
@@ -71,13 +72,13 @@ class DrawImageSetGm : SkiaGm {
                 val redPaint = Paint(color = Color.RED, antiAlias = true, strokeWidth = 0f)
 
                 for (x in 1 until kM) {
-                    val p1 = mat * Point(x * kTileW.toFloat(), 0f)
-                    val p2 = mat * Point(x * kTileW.toFloat(), nh)
+                    val p1 = mat.mapPoint(Point(x * kTileW.toFloat(), 0f))
+                    val p2 = mat.mapPoint(Point(x * kTileW.toFloat(), nh))
                     canvas.drawLine(p1.x, p1.y, p2.x, p2.y, redPaint)
                 }
                 for (y in 1 until kN) {
-                    val p1 = mat * Point(0f, y * kTileH.toFloat())
-                    val p2 = mat * Point(mw, y * kTileH.toFloat())
+                    val p1 = mat.mapPoint(Point(0f, y * kTileH.toFloat()))
+                    val p2 = mat.mapPoint(Point(mw, y * kTileH.toFloat()))
                     canvas.drawLine(p1.x, p1.y, p2.x, p2.y, redPaint)
                 }
 

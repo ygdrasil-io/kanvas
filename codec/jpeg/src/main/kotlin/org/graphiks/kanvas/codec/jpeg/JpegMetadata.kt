@@ -1,9 +1,8 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.color.icc.IccProfile
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
 
 /** Controls how a future JPEG rewriter handles known metadata segments. */
 public enum class JpegMetadataPolicy {
@@ -21,7 +20,7 @@ internal data class JpegJfifMetadata(
 )
 
 internal data class JpegMetadata(
-    val iccProfile: SkcmsICCProfile?,
+    val iccProfile: IccProfile?,
     val origin: SkEncodedOrigin,
     val jfif: JpegJfifMetadata?,
     val adobeTransform: Int?,
@@ -164,7 +163,7 @@ internal class JpegMetadataReader(
         iccChunks += chunk
     }
 
-    private fun readIccProfile(): SkcmsICCProfile? {
+    private fun readIccProfile(): IccProfile? {
         val expectedCount = iccCount ?: return null
         val offset = requireNotNull(iccOffset)
         if (iccChunks.size != expectedCount || iccChunks.map(IccChunk::index).toSet().size != expectedCount) {
@@ -184,7 +183,7 @@ internal class JpegMetadataReader(
             destination += chunk.size
         }
         val profile = try {
-            skcmsParse(bytes)
+            IccProfile.parse(bytes).profileOrNull()
         } catch (_: Throwable) {
             null
         }

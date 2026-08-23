@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
@@ -42,12 +42,12 @@ class RtifDistortGm : SkiaGm {
         val colPositions = listOf(0f, 250f)
         val rowPositions = listOf(0f, 250f, 500f)
         val transforms = listOf(
-            Matrix33.identity(),
-            Matrix33.scale(0.5f, 0.5f),
-            Matrix33.rotate(45f),
-            Matrix33.scale(0.5f, 0.5f) * Matrix33.rotate(45f),
-            Matrix33.skew(-0.5f, 0f),
-            Matrix33.makeAll(1f, 0f, 0.0015f, 0f, 1f, -0.0015f, 0f, 0f, 1f),
+            Matrix3x3F32.Identity,
+            Matrix3x3F32.scaling(0.5f, 0.5f),
+            Matrix3x3F32.rotation(45f),
+            Matrix3x3F32.scaling(0.5f, 0.5f) * Matrix3x3F32.rotation(45f),
+            Matrix3x3F32.skewing(-0.5f, 0f),
+            Matrix3x3F32.of(1f, 0f, 0.0015f, 0f, 1f, -0.0015f, 0f, 0f, 1f),
         )
         var idx = 0
         for (row in rowPositions) for (col in colPositions) {
@@ -58,7 +58,7 @@ class RtifDistortGm : SkiaGm {
     }
 
     private fun drawLayer(
-        canvas: GmCanvas, tx: Float, ty: Float, m: Matrix33,
+        canvas: GmCanvas, tx: Float, ty: Float, m: Matrix3x3F32,
         clip: Rect, filterPaint: Paint,
     ) {
         canvas.save()

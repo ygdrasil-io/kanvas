@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -67,12 +67,12 @@ class CompositorGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun configureMatrices(): List<Matrix33> {
-        val identity = Matrix33.identity()
-val ts = Matrix33.translate(5.5f, 20.25f) * Matrix33.scale(0.9f, 0.7f)
-val rotate = Matrix33.rotate(20f) * Matrix33.translate(15f, -20f)
-val skew = Matrix33.skew(0.5f, 0.25f) * Matrix33.translate(-30f, 0f)
-        val perspectiveStub = Matrix33.identity()
+    private fun configureMatrices(): List<Matrix3x3F32> {
+        val identity = Matrix3x3F32.Identity
+val ts = Matrix3x3F32.translation(5.5f, 20.25f) * Matrix3x3F32.scaling(0.9f, 0.7f)
+val rotate = Matrix3x3F32.rotation(20f) * Matrix3x3F32.translation(15f, -20f)
+val skew = Matrix3x3F32.skewing(0.5f, 0.25f) * Matrix3x3F32.translation(-30f, 0f)
+        val perspectiveStub = Matrix3x3F32.Identity
         return listOf(identity, ts, rotate, skew, perspectiveStub)
     }
 

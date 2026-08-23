@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -51,10 +51,10 @@ class GradientsLocalPerspectiveGm : SkiaGm {
         canvas.translate(20f, 20f)
         for ((i, gd) in gradDatas.withIndex()) {
             canvas.save()
-            val perspective = Matrix33.makeAll(
+            val perspective = Matrix3x3F32.of(
                 sx = 1f, kx = (i + 1).toFloat() / 10f, tx = 0f,
                 ky = 0f, sy = 1f, ty = 0f,
-                p0 = 0f, p1 = (i + 1).toFloat() / 500f, p2 = 1f,
+                persp0 = 0f, persp1 = (i + 1).toFloat() / 500f, persp2 = 1f,
             )
             for (j in 0 until 5) {
                 val shader: Shader? = when (j) {

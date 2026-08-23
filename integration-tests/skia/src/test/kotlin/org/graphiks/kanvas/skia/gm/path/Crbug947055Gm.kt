@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -33,7 +33,7 @@ class Crbug947055Gm : SkiaGm {
         )
         canvas.drawRect(Rect.fromXYWH(19f, 7f, 180f, 10f), paint)
 
-        canvas.concat(Matrix33.makeAll(
+        canvas.concat(Matrix3x3F32.of(
             1f, 2.4520f, 19f,
             0f, 0.3528f, 9.5f,
             0f, 0.0225f, 1f,

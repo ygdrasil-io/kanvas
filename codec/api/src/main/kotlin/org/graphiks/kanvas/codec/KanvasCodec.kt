@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.codec
 
-import org.graphiks.kanvas.color.ColorProfile
-import org.graphiks.kanvas.color.cicp.CicpColorInfo
-import org.graphiks.kanvas.color.cicp.toColorProfile
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.ColorSpaceClassification
+import org.graphiks.kanvas.color.ColorSpaceClassificationFailure
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.color.classifyColorSpace
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
@@ -10,23 +12,12 @@ import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.ColorSpace
-import org.graphiks.kanvas.types.Gamut
-import org.graphiks.kanvas.types.TransferFunction
-import org.graphiks.math.color.ColorTransferFunction
-import org.graphiks.math.color.ColorMatrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.skcmsParse
-import kotlin.math.abs
 
 public fun Codec.getKanvasInfo(): ImageInfo = getInfo().toKanvasImageInfo()
 
@@ -114,111 +105,17 @@ public fun SkEncodedOrigin.toKanvasEncodedOrigin(): EncodedOrigin = when (this) 
 
 internal class UnsupportedKanvasColorSpaceException(
     public val reason: String,
-) : IllegalArgumentException("Unsupported SkColorSpace for Kanvas conversion: $reason")
+) : IllegalArgumentException("Unsupported ImageColorSpace for Kanvas conversion: $reason")
 
-internal fun SkColorSpace.toKanvasColorSpace(): ColorSpace {
-    if (colorProfile.isHdr) {
-        return HDR_COLOR_SPACES.firstOrNull { (profile, _) -> profile == colorProfile }?.second
-            ?: throw UnsupportedKanvasColorSpaceException("hdr")
+internal fun ImageColorSpace.toKanvasColorSpace(): ColorSpace {
+    return when (val classification = colorProfile.classifyColorSpace()) {
+        is ColorSpaceClassification.Supported -> classification.colorSpace
+        is ColorSpaceClassification.Unsupported -> throw UnsupportedKanvasColorSpaceException(
+            when (classification.reason) {
+                ColorSpaceClassificationFailure.PROFILE -> profileRefusalCode ?: "profile"
+                ColorSpaceClassificationFailure.GAMUT -> "gamut"
+                ColorSpaceClassificationFailure.TRANSFER -> "transfer"
+            },
+        )
     }
-    if (!isProfileSupported()) {
-        throw UnsupportedKanvasColorSpaceException(profileRefusalCode ?: "profile")
-    }
-
-    val gamut = toXYZD50.classifyNamedGamut()
-        ?: throw UnsupportedKanvasColorSpaceException("gamut")
-    val transferFunction = when {
-        transferFn.isNear(SkNamedTransferFn.kSRGB) -> TransferFunction.SRGB
-        transferFn.isNear(SkNamedTransferFn.kLinear) -> TransferFunction.LINEAR
-        else -> throw UnsupportedKanvasColorSpaceException("transfer")
-    }
-    return knownColorSpace(transferFunction, gamut)
 }
-
-private val HDR_COLOR_SPACES: List<Pair<ColorProfile, ColorSpace>> by lazy {
-    listOf(
-        cicpProfile(primaries = 1, transfer = 16) to knownColorSpace(TransferFunction.PQ, Gamut.SRGB),
-        cicpProfile(primaries = 12, transfer = 16) to knownColorSpace(TransferFunction.PQ, Gamut.DISPLAY_P3),
-        cicpProfile(primaries = 9, transfer = 16) to knownColorSpace(TransferFunction.PQ, Gamut.REC2020),
-        cicpProfile(primaries = 9, transfer = 18) to knownColorSpace(TransferFunction.HLG, Gamut.REC2020),
-    )
-}
-
-private fun cicpProfile(primaries: Int, transfer: Int): ColorProfile =
-    CicpColorInfo(
-        primaries = primaries,
-        transfer = transfer,
-        matrix = 0,
-        fullRange = true,
-    ).toColorProfile().getOrThrow()
-
-private fun knownColorSpace(transferFunction: TransferFunction, gamut: Gamut): ColorSpace = when {
-    transferFunction == TransferFunction.SRGB && gamut == Gamut.SRGB -> ColorSpace.SRGB
-    transferFunction == TransferFunction.SRGB && gamut == Gamut.DISPLAY_P3 -> ColorSpace.DISPLAY_P3
-    transferFunction == TransferFunction.LINEAR && gamut == Gamut.SRGB -> ColorSpace.LINEAR_SRGB
-    else -> ColorSpace(
-        name = when (transferFunction) {
-            TransferFunction.SRGB -> gamut.displayName
-            TransferFunction.LINEAR -> "Linear ${gamut.displayName}"
-            TransferFunction.PQ -> "${gamut.displayName} PQ"
-            TransferFunction.HLG -> "${gamut.displayName} HLG"
-        },
-        transferFunction = transferFunction,
-        gamut = gamut,
-    )
-}
-
-private val Gamut.displayName: String
-    get() = when (this) {
-        Gamut.SRGB -> "sRGB"
-        Gamut.DISPLAY_P3 -> "Display P3"
-        Gamut.REC2020 -> "Rec.2020"
-    }
-
-private val NAMED_GAMUTS: List<Pair<List<ColorMatrix3x3F32>, Gamut>> by lazy {
-    listOf(
-        allowedGamutMatrices(SkNamedGamut.kSRGB) to Gamut.SRGB,
-        allowedGamutMatrices(SkNamedGamut.kDisplayP3) to Gamut.DISPLAY_P3,
-        allowedGamutMatrices(SkNamedGamut.kRec2020) to Gamut.REC2020,
-    )
-}
-
-private fun ColorMatrix3x3F32.classifyNamedGamut(): Gamut? =
-    NAMED_GAMUTS.firstOrNull { (matrices, _) ->
-        matrices.any { matrix -> isNear(matrix, GAMUT_CLASSIFICATION_TOLERANCE) }
-    }?.second
-
-private fun allowedGamutMatrices(canonical: ColorMatrix3x3F32): List<ColorMatrix3x3F32> {
-    return listOf(
-        canonical,
-        serializedGamutMatrix(SkNamedTransferFn.kSRGB, canonical),
-        serializedGamutMatrix(SkNamedTransferFn.kLinear, canonical),
-    )
-}
-
-private fun serializedGamutMatrix(
-    transferFunction: ColorTransferFunction.Parametric,
-    gamut: ColorMatrix3x3F32,
-): ColorMatrix3x3F32 = requireNotNull(
-    SkColorSpace.make(requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut)))),
-).toXYZD50
-
-private fun ColorMatrix3x3F32.isNear(other: ColorMatrix3x3F32, tolerance: Float): Boolean {
-    for (row in 0 until 3) for (column in 0 until 3) {
-        if (abs(this[row, column] - other[row, column]) > tolerance) return false
-    }
-    return true
-}
-
-private fun ColorTransferFunction.Parametric.isNear(other: ColorTransferFunction.Parametric): Boolean = listOf(
-    g to other.g,
-    a to other.a,
-    b to other.b,
-    c to other.c,
-    d to other.d,
-    e to other.e,
-    f to other.f,
-).all { (left, right) -> abs(left - right) <= TRANSFER_FUNCTION_TOLERANCE }
-
-private const val GAMUT_CLASSIFICATION_TOLERANCE: Float = 2f / 65_536f
-private const val TRANSFER_FUNCTION_TOLERANCE: Float = 2f / 65_536f

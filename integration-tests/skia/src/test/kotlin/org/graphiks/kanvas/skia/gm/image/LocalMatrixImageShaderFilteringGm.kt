@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -29,7 +29,7 @@ class LocalMatrixImageShaderFilteringGm : SkiaGm {
         val bytes = this::class.java.classLoader?.getResourceAsStream("images/mandrill_128.png")?.readBytes()
         if (bytes == null) return
         val image = org.graphiks.kanvas.image.Image.decode(bytes)
-        val m = Matrix33.scale(2f, 2f)
+        val m = Matrix3x3F32.scaling(2f, 2f)
         val shader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.Cubic.Mitchell)
         val localShader = Shader.WithLocalMatrix(shader, m)
         val paint = Paint(shader = localShader)

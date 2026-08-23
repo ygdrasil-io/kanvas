@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -38,7 +38,7 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
         initImages()
 
         val mode = BlendMode.DST_OVER
-        val lm = Matrix33.translate(0f, SQUARE_LENGTH * 0.5f)
+        val lm = Matrix3x3F32.translation(0f, SQUARE_LENGTH * 0.5f)
 
         val colorBmShader = Shader.Image(colorImage, TileMode.REPEAT, TileMode.REPEAT)
         val a8BmShader = Shader.Image(alpha8Image, TileMode.REPEAT, TileMode.REPEAT)

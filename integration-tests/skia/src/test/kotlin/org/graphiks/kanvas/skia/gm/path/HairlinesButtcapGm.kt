@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -40,68 +40,68 @@ class HairlinesButtcapGm : SkiaGm {
             // first row - on-pixel, open
             drawPath(
                 Path { moveTo(0f, 5f); lineTo(5f, 5f); lineTo(5f, 0f) }
-                    .transform(Matrix33.translate(5f, 5f)),
+                    .transform(Matrix3x3F32.translation(5f, 5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); quadTo(15f, 5f, 0f, 10f) }
-                    .transform(Matrix33.translate(20f, 5f)),
+                    .transform(Matrix3x3F32.translation(20f, 5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); cubicTo(-5f, 0f, -5f, 5f, 0f, 10f) }
-                    .transform(Matrix33.translate(40f, 5f)),
+                    .transform(Matrix3x3F32.translation(40f, 5f)),
                 paint,
             )
 
             // second row - off-pixel, open
             drawPath(
                 Path { moveTo(0f, 5f); lineTo(5f, 5f); lineTo(5f, 0f) }
-                    .transform(Matrix33.translate(5.5f, 20.5f)),
+                    .transform(Matrix3x3F32.translation(5.5f, 20.5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); quadTo(15f, 5f, 0f, 10f) }
-                    .transform(Matrix33.translate(20.5f, 20.5f)),
+                    .transform(Matrix3x3F32.translation(20.5f, 20.5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); cubicTo(-5f, 0f, -5f, 5f, 0f, 10f) }
-                    .transform(Matrix33.translate(40.5f, 20.5f)),
+                    .transform(Matrix3x3F32.translation(40.5f, 20.5f)),
                 paint,
             )
 
             // third row - on-pixel, closed
             drawPath(
                 Path { moveTo(0f, 5f); lineTo(5f, 5f); lineTo(5f, 0f); close() }
-                    .transform(Matrix33.translate(5f, 35f)),
+                    .transform(Matrix3x3F32.translation(5f, 35f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); quadTo(15f, 5f, 0f, 10f); close() }
-                    .transform(Matrix33.translate(20f, 35f)),
+                    .transform(Matrix3x3F32.translation(20f, 35f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); cubicTo(-5f, 0f, -5f, 5f, 0f, 10f); close() }
-                    .transform(Matrix33.translate(40f, 35f)),
+                    .transform(Matrix3x3F32.translation(40f, 35f)),
                 paint,
             )
 
             // fourth row - off-pixel, closed
             drawPath(
                 Path { moveTo(0f, 5f); lineTo(5f, 5f); lineTo(5f, 0f); close() }
-                    .transform(Matrix33.translate(5.5f, 50.5f)),
+                    .transform(Matrix3x3F32.translation(5.5f, 50.5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); quadTo(15f, 5f, 0f, 10f); close() }
-                    .transform(Matrix33.translate(20.5f, 50.5f)),
+                    .transform(Matrix3x3F32.translation(20.5f, 50.5f)),
                 paint,
             )
             drawPath(
                 Path { moveTo(0f, 0f); cubicTo(-5f, 0f, -5f, 5f, 0f, 10f); close() }
-                    .transform(Matrix33.translate(40.5f, 50.5f)),
+                    .transform(Matrix3x3F32.translation(40.5f, 50.5f)),
                 paint,
             )
         }

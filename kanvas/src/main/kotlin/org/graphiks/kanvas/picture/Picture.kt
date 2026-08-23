@@ -8,9 +8,13 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.Gamut
+import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.ceil
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
@@ -132,7 +136,7 @@ class Picture internal constructor(
         tileY: TileMode = TileMode.CLAMP,
         sampling: SamplingOptions = SamplingOptions.NEAREST,
         tile: Rect = cullRect,
-        matrix: Matrix33? = null,
+        matrix: Matrix3x3F32? = null,
     ): Shader {
         val w = maxOf(1, ceil(tile.width).toInt())
         val h = maxOf(1, ceil(tile.height).toInt())
@@ -308,9 +312,9 @@ private class Writer {
     }
     fun cornerRadii(c: CornerRadii) { float(c.x); float(c.y) }
 
-    fun matrix33(m: Matrix33) {
-        float(m.scaleX); float(m.skewX); float(m.transX)
-        float(m.skewY); float(m.scaleY); float(m.transY)
+    fun matrix33(m: Matrix3x3F32) {
+        float(m.sx); float(m.kx); float(m.tx)
+        float(m.ky); float(m.sy); float(m.ty)
         float(m.persp0); float(m.persp1); float(m.persp2)
     }
 
@@ -808,9 +812,14 @@ private class Reader(private val data: ByteArray) {
     }
     fun cornerRadii(): CornerRadii = CornerRadii(float(), float())
 
-    fun matrix33(): Matrix33 {
+    fun matrix33(): Matrix3x3F32 {
         val floats = FloatArray(9) { float() }
-        return createMatrix33(floats) ?: run { valid = false; Matrix33.identity() }
+        if (!valid) return Matrix3x3F32.Identity
+        return Matrix3x3F32.of(
+            floats[0], floats[1], floats[2],
+            floats[3], floats[4], floats[5],
+            floats[6], floats[7], floats[8],
+        )
     }
 
     fun rrect(): RRect {
@@ -1284,17 +1293,6 @@ private fun decodePicture(data: ByteArray): Picture? {
     }
     return Picture(cullRect, ops)
 }
-
-// ---- Workarounds for types with private constructors -----------------------
-// These reflection accesses are guarded: if any fail (e.g., due to JDK module
-// restrictions or constructor changes), deserialization returns null rather
-// than throwing at runtime.
-
-private fun createMatrix33(values: FloatArray): Matrix33? = try {
-    val constructor = Matrix33::class.java.getDeclaredConstructor(FloatArray::class.java)
-    constructor.isAccessible = true
-    constructor.newInstance(values)
-} catch (_: Exception) { null }
 
 private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock? = try {
     val constructor = UniformBlock::class.java.getDeclaredConstructor(Map::class.java)

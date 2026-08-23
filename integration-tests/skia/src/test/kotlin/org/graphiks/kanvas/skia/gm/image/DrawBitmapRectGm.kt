@@ -17,7 +17,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -124,11 +124,11 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
                 val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
                 val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
                 var rect = Rect.fromXYWH(0f, 0f, wF, hF)
-                var mat = Matrix33.identity()
+                var mat = Matrix3x3F32.Identity
                 for (i in 0 until 4) {
                     drawRect(rect, Paint(shader = Shader.WithLocalMatrix(Shader.RadialGradient(pt, radius, stops, TileMode.REPEAT), mat)))
                     rect = Rect(rect.left + wF / 8f, rect.top + hF / 8f, rect.right - wF / 8f, rect.bottom - hF / 8f)
-                    mat = Matrix33.scale(0.25f, 0.25f) * mat
+                    mat = Matrix3x3F32.scaling(0.25f, 0.25f) * mat
                 }
             }
             val image = surface.makeImageSnapshot()

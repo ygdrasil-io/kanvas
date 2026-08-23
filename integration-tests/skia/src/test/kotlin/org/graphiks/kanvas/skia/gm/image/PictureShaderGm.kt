@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 abstract class PictureShaderBaseGm(
@@ -56,19 +56,19 @@ abstract class PictureShaderBaseGm(
         drawSceneColumn(canvas, sceneSize * 4.8f, 0f, 2f, 1f, 0)
         drawSceneColumn(canvas, sceneSize * 9.6f, 0f, 2f, 2f, 0)
 
-        var ctm = Matrix33.scale(-1f, -1f) * Matrix33.translate(sceneSize * 2.1f, sceneSize * 13.8f)
-        var localMatrix = Matrix33.scale(2f, 2f)
+        var ctm = Matrix3x3F32.scaling(-1f, -1f) * Matrix3x3F32.translation(sceneSize * 2.1f, sceneSize * 13.8f)
+        var localMatrix = Matrix3x3F32.scaling(2f, 2f)
         drawScene(canvas, ctm, localMatrix, 0)
 
-        ctm = Matrix33.translate(sceneSize * 2.4f, sceneSize * 12.8f)
-        localMatrix = Matrix33.scale(-1f, -1f)
+        ctm = Matrix3x3F32.translation(sceneSize * 2.4f, sceneSize * 12.8f)
+        localMatrix = Matrix3x3F32.scaling(-1f, -1f)
         drawScene(canvas, ctm, localMatrix, 0)
 
-        ctm = Matrix33.scale(2f, 2f) * Matrix33.translate(sceneSize * 4.8f, sceneSize * 12.3f)
+        ctm = Matrix3x3F32.scaling(2f, 2f) * Matrix3x3F32.translation(sceneSize * 4.8f, sceneSize * 12.3f)
         drawScene(canvas, ctm, localMatrix, 0)
 
-        ctm = Matrix33.scale(-2f, -2f) * Matrix33.translate(sceneSize * 13.8f, sceneSize * 14.3f)
-        localMatrix = Matrix33.scale(-2f, -2f) * Matrix33.rotate(45f) * Matrix33.translate(tileSize / 4f, tileSize / 4f)
+        ctm = Matrix3x3F32.scaling(-2f, -2f) * Matrix3x3F32.translation(sceneSize * 13.8f, sceneSize * 14.3f)
+        localMatrix = Matrix3x3F32.scaling(-2f, -2f) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(tileSize / 4f, tileSize / 4f)
         drawScene(canvas, ctm, localMatrix, 0)
     }
 
@@ -80,19 +80,19 @@ abstract class PictureShaderBaseGm(
         localScale: Float,
         tileMode: Int,
     ) {
-        val rows: Array<Pair<Float, () -> Matrix33>> = arrayOf(
-            0f to { Matrix33.scale(localScale, localScale) },
+        val rows: Array<Pair<Float, () -> Matrix3x3F32>> = arrayOf(
+            0f to { Matrix3x3F32.scaling(localScale, localScale) },
             1.2f to {
-                Matrix33.scale(localScale, localScale) * Matrix33.translate(tileSize / 4f, tileSize / 4f)
+                Matrix3x3F32.scaling(localScale, localScale) * Matrix3x3F32.translation(tileSize / 4f, tileSize / 4f)
             },
-            2.4f to { Matrix33.scale(localScale, localScale) * Matrix33.rotate(45f) },
-            3.6f to { Matrix33.scale(localScale, localScale) * Matrix33.skew(1f, 0f) },
+            2.4f to { Matrix3x3F32.scaling(localScale, localScale) * Matrix3x3F32.rotation(45f) },
+            3.6f to { Matrix3x3F32.scaling(localScale, localScale) * Matrix3x3F32.skewing(1f, 0f) },
             4.8f to {
-                Matrix33.scale(localScale, localScale) * Matrix33.rotate(45f) * Matrix33.translate(tileSize / 4f, tileSize / 4f)
+                Matrix3x3F32.scaling(localScale, localScale) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(tileSize / 4f, tileSize / 4f)
             },
         )
         for ((yMul, lmBuilder) in rows) {
-            val ctm = Matrix33.scale(scale, scale) * Matrix33.translate(x, y + sceneSize * yMul * scale)
+            val ctm = Matrix3x3F32.scaling(scale, scale) * Matrix3x3F32.translation(x, y + sceneSize * yMul * scale)
             drawScene(canvas, ctm, lmBuilder(), tileMode)
         }
     }
@@ -110,7 +110,7 @@ abstract class PictureShaderBaseGm(
         canvas.drawPath(Path { moveTo(tileSize * 1f / 3f, tileSize / 2f); lineTo(tileSize * 2f / 3f, tileSize / 2f) }, paint)
     }
 
-    private fun drawScene(canvas: GmCanvas, matrix: Matrix33, localMatrix: Matrix33, tileMode: Int) {
+    private fun drawScene(canvas: GmCanvas, matrix: Matrix3x3F32, localMatrix: Matrix3x3F32, tileMode: Int) {
         val tile = kTileConfigs[tileMode]
         val ltGray = Color.fromRGBA(0.827f, 0.827f, 0.827f)
         val fillPaint = Paint(color = ltGray)
@@ -129,7 +129,7 @@ abstract class PictureShaderBaseGm(
         }
 
         // Picture shader half (left column).
-        val baseLm: Matrix33? = if (useLocalMatrixWrapper) null else localMatrix
+        val baseLm: Matrix3x3F32? = if (useLocalMatrixWrapper) null else localMatrix
         val pictureBaseShader: Shader = picture!!.asShader(
             tileX = tile.tmx, tileY = tile.tmy,
             sampling = SamplingOptions.NEAREST,

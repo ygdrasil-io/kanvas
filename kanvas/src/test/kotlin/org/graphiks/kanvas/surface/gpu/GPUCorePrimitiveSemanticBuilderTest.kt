@@ -26,7 +26,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -315,7 +315,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
             DisplayOp.DrawRect(
                 Rect.fromLTRB(2f, 3f, 12f, 11f),
                 paint,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
         ),

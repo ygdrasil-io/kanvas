@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
@@ -34,7 +34,7 @@ class CompareAtlasVerticesGm : SkiaGm {
 
         val tex = Rect.fromXYWH(0f, 0f, 128f, 128f)
         val atlas = makeTestImage()
-        val identity = Matrix33.identity()
+        val identity = Matrix3x3F32.Identity
         val colorList = listOf(Color.fromRGBA(0.53f, 0.27f, 0.53f, 0.53f))
 
         val modes = listOf(BlendMode.SRC_OVER, BlendMode.PLUS)

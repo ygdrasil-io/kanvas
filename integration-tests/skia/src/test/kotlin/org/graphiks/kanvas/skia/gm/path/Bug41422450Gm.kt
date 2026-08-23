@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.cos
 import kotlin.math.sin
@@ -27,7 +27,7 @@ class Bug41422450Gm : SkiaGm {
     override val height = 473
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val mat = Matrix33.makeAll(
+        val mat = Matrix3x3F32.of(
             1f, 0.000113059919f, -2321738f,
             -0.00000139566271f, 0.0123444516f, -353f,
         )

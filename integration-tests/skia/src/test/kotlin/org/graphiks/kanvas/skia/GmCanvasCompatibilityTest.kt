@@ -7,7 +7,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,7 +26,7 @@ class GmCanvasCompatibilityTest {
                 DisplayOp.DrawColor(
                     color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 1f),
                     mode = BlendMode.SRC,
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
             ),

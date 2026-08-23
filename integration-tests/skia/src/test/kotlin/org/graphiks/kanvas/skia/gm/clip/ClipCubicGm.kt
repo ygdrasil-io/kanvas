@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
  * Two pairs of "vertical cubic curve" + "horizontal cubic curve":
  *  - The horizontal variant is built by 90°-rotating the vertical one around
  *    `(W/2, H/2)` via [Path.transform], exercising the new
- *    rotation-around-pivot path of [Matrix33].
+ *    rotation-around-pivot path of [Matrix3x3F32].
  *  - Each pair is drawn twice — once unclipped and once with a `clipRect`
  *    that crops the middle half — so the rasterizer's clip-edge arithmetic
  *    is visible on a curve.
@@ -45,9 +45,9 @@ class ClipCubicGm : SkiaGm {
     }
 
     private val hPath: Path by lazy {
-        val pivot = Matrix33.translate(W / 2f, H / 2f) *
-            Matrix33.rotate(90f) *
-            Matrix33.translate(-W / 2f, -H / 2f)
+        val pivot = Matrix3x3F32.translation(W / 2f, H / 2f) *
+            Matrix3x3F32.rotation(90f) *
+            Matrix3x3F32.translation(-W / 2f, -H / 2f)
         vPath.transform(pivot)
     }
 

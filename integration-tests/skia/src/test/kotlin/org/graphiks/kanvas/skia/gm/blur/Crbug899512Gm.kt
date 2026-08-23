@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -27,7 +27,7 @@ class Crbug899512Gm : SkiaGm {
     override val height = 520
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val matrix = Matrix33.translate(220f, 0f) * Matrix33.scale(-1f, 1f)
+        val matrix = Matrix3x3F32.translation(220f, 0f) * Matrix3x3F32.scaling(-1f, 1f)
         canvas.concat(matrix)
         val paint = Paint(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 6.2735f),

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -58,7 +58,7 @@ class ShaderText3Gm : SkiaGm {
         canvas.scale(2f, 2f)
         canvas.translate(0f, 0.75f * kPointSize)
 
-        val localMatrix = Matrix33.translate(5f, 5f) * Matrix33.rotate(20f) * Matrix33.scale(1.15f, 0.85f)
+        val localMatrix = Matrix3x3F32.translation(5f, 5f) * Matrix3x3F32.rotation(20f) * Matrix3x3F32.scaling(1.15f, 0.85f)
 
         canvas.save()
         var i = 0

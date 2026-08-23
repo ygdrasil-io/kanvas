@@ -115,3 +115,14 @@ public class ColorMatrix3x3F32 private constructor(private val values: FloatArra
         }
     }
 }
+
+/** Returns whether every coefficient differs from [other] by at most [tolerance]. */
+public fun ColorMatrix3x3F32.isNear(other: ColorMatrix3x3F32, tolerance: Float): Boolean {
+    require(tolerance.isFinite() && tolerance >= 0f) { "tolerance must be finite and non-negative" }
+    for (row in 0 until 3) for (column in 0 until 3) {
+        val left = this[row, column]
+        val right = other[row, column]
+        if (!left.isFinite() || !right.isFinite() || abs(left - right) > tolerance) return false
+    }
+    return true
+}
