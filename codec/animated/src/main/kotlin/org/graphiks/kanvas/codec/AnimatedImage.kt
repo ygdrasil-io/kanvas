@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.EncodedOrigin
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.Surface
@@ -274,6 +276,12 @@ public class AnimatedImage private constructor(
          *  Picture postProcess)`.
          *
          * Returns `null` if [codec] is empty (zero frames). The
+         * canonical headless [Surface] used for [postProcess] currently
+         * preserves only [ColorType.RGBA_8888] / [AlphaType.PREMUL] /
+         * [ImageColorSpace.sRGB] output; a post-process request with any
+         * other metadata is refused rather than retagged. Calls without a
+         * post-process preserve the supplied [ImageInfo] metadata unchanged.
+         *
          * caller surrenders ownership of [codec] in upstream — Kotlin
          * has no `unique_ptr` so we just hold the reference ;
          * subsequent calls on the original [AndroidCodec] will
@@ -286,6 +294,7 @@ public class AnimatedImage private constructor(
             postProcess: Picture?,
         ): AnimatedImage? {
             if (codec.codec().getFrameCount() <= 0) return null
+            if (postProcess != null && !supportsPostProcess(info)) return null
             return AnimatedImage(
                 codec = codec,
                 origin = codec.codec().getOrigin(),
@@ -325,5 +334,10 @@ public class AnimatedImage private constructor(
 
         private fun copyBitmap(source: Bitmap): Bitmap =
             Bitmap(source.info).also { source.pixels.copyInto(it.pixels) }
+
+        private fun supportsPostProcess(info: ImageInfo): Boolean =
+            info.colorType == ColorType.RGBA_8888 &&
+                info.alphaType == AlphaType.PREMUL &&
+                info.colorSpace === ImageColorSpace.sRGB()
     }
 }
