@@ -74,7 +74,7 @@ object GpuEvidenceCatalog {
                 EvidenceSceneId("translucent-card-overlap"), "Translucent card overlap", "Two partially transparent product SolidRect cards exercise premultiplied SrcOver overlap.",
                 64, 64, 1L, setOf("solid-rect", "translucent", "prepared-session"), EvidenceExpectation.ShouldRender,
                 OraclePolicy.GeneratedCpu("reference-raster-translucent-src-over", 1),
-                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from premultiplied SrcOver rectangles."), emptySet(),
+                ComparisonPolicy(1, 100.0, 1, "Hardware capture on Apple M2 Max showed rgba8unorm nearest quantization versus ReferenceRaster.srcOver integer truncation: RGB deltas are bounded to 1, alpha remains exact; delta 2 remains a failure."), emptySet(),
             ),
             program = ProductScenePrograms.solidRects(
                 listOf(
