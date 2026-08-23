@@ -23,24 +23,6 @@ class Line2F64Test {
     }
 
     @Test
-    fun `pathops distance preserves historical underflow formula`() {
-        val from = Point2F64(0.0, 0.0)
-        val to = Point2F64(1e-200, -1e-200)
-
-        kotlin.test.assertEquals(0.0, from.pathOpsDistanceTo(to))
-        kotlin.test.assertTrue(from.distanceTo(to) > 0.0)
-    }
-
-    @Test
-    fun `pathops distance preserves historical overflow formula`() {
-        val from = Point2F64(0.0, 0.0)
-        val to = Point2F64(1e200, -1e200)
-
-        kotlin.test.assertEquals(Double.POSITIVE_INFINITY, from.pathOpsDistanceTo(to))
-        kotlin.test.assertTrue(from.distanceTo(to).isFinite())
-    }
-
-    @Test
     fun `nearPoint preserves pathops distance underflow behavior end to end`() {
         val line = Line2F64(
             arrayOf(Point2F64(0.0, 0.0), Point2F64(1e-150, 0.0)),

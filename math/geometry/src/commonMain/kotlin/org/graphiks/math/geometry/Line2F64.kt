@@ -89,7 +89,7 @@ public class Line2F64(source: Array<Point2F64>) {
         if (denom == 0.0) return 0.0
         var t = numer / denom
         val realPt: Point2F64 = ptAtT(t)
-        val dist = realPt.pathOpsDistanceTo(xy)
+        val dist = pathOpsDistanceTo(realPt, xy)
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
@@ -112,7 +112,7 @@ public class Line2F64(source: Array<Point2F64>) {
         val numer = len.dot(ab0)
         val t = numer / denom
         val realPt: Point2F64 = ptAtT(t)
-        val dist = realPt.pathOpsDistanceTo(xy)
+        val dist = pathOpsDistanceTo(realPt, xy)
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
@@ -179,4 +179,11 @@ public class Line2F64(source: Array<Point2F64>) {
             return t
         }
     }
+}
+
+/** Retains the raw PathOps distance formula used by the near-point predicates. */
+private fun pathOpsDistanceTo(from: Point2F64, to: Point2F64): Double {
+    val dx = from.x - to.x
+    val dy = from.y - to.y
+    return sqrt(dx * dx + dy * dy)
 }
