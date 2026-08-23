@@ -92,7 +92,7 @@ class CodecAllKotlinRealImageTest {
 
         val hasTransparentPixel = (0 until checkedBitmap.height).any { y ->
             (0 until checkedBitmap.width).any { x ->
-                ((checkedBitmap.getPixel(x, y) ushr 24) and 0xFF) < 255
+                ((checkedBitmap.getArgb(x, y) ushr 24) and 0xFF) < 255
             }
         }
         assertEquals(fixture.hasAlpha, hasTransparentPixel, "${fixture.path} alpha/opacity expectation")

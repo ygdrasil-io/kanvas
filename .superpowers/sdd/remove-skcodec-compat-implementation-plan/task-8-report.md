@@ -99,3 +99,18 @@ Commit message: `refactor(codec): remove SkCodecCompat`.
 10/10 — the requested compatibility implementation is physically absent,
 all in-scope source scans are clean, the complete declared codec matrix
 passes, and no generated score file is included.
+
+## Review correction — DONE
+
+- Replaced the remaining alpha probe expression
+  `checkedBitmap.getPixel(x, y) ushr 24` with
+  `checkedBitmap.getArgb(x, y) ushr 24`. `Bitmap.getPixel` returns `Color`,
+  whereas `getArgb` is the canonical packed-integer API required by this
+  bitwise assertion.
+- PASS — the full declared codec matrix was rerun after the correction:
+  `BUILD SUCCESSFUL` (117 actionable tasks: 5 executed, 112 up-to-date).
+- PASS — static scans confirm no `Bitmap.getPixel(... ) ushr` expression and
+  no `org.skia.foundation` import remain. The orphaned real-image test is
+  still not a Gradle project, as documented above.
+- PASS — `rtk git diff --check` is clean; the pre-existing score-file change
+  remains unstaged and excluded.
