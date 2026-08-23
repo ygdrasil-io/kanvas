@@ -49,6 +49,7 @@ plugins {
 
 include(":math:scalar")
 include(":math:geometry-codegen")
+include(":math:geometry-benchmarks")
 include(":math:vector")
 include(":math:matrix")
 include(":math:geometry")
