@@ -89,7 +89,7 @@ class GradientCpuOracle private constructor(
             val sweep = endAngle - startAngle
             return GradientCpuOracle(drawBounds, stops) { x, y ->
                 if (sweep <= 0f) 0f else {
-                    val normalizedAngle = (atan2(-(y - center.y), x - center.x) / (2.0 * PI)).let { if (it < 0.0) it + 1.0 else it }
+                    val normalizedAngle = (atan2(y - center.y, x - center.x) / (2.0 * PI)).let { if (it < 0.0) it + 1.0 else it }
                     ((normalizedAngle - startAngle / 360.0) * 360.0 / sweep).toFloat()
                 }
             }

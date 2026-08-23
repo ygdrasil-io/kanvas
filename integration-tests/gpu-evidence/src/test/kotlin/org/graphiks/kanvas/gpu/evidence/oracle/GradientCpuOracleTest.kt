@@ -39,18 +39,19 @@ class GradientCpuOracleTest {
     }
 
     @Test
-    fun `sweep gradient uses clockwise screen coordinates and clamps the requested angle span`() {
+    fun `sweep gradient uses clockwise screen coordinates and clamps outside the requested angle span`() {
         val pixels = GradientCpuOracle.sweep(
             drawBounds = Rect.fromLTRB(0f, 0f, 5f, 5f),
             center = Point(2.5f, 2.5f),
-            startAngle = 45f,
-            endAngle = 135f,
+            startAngle = 0f,
+            endAngle = 180f,
             stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
         ).render(5, 5)
 
         assertPixel(pixels, 5, 3, 2, intArrayOf(255, 0, 0, 255))
-        assertPixel(pixels, 5, 2, 1, intArrayOf(128, 0, 128, 255))
+        assertPixel(pixels, 5, 2, 3, intArrayOf(128, 0, 128, 255))
         assertPixel(pixels, 5, 1, 2, intArrayOf(0, 0, 255, 255))
+        assertPixel(pixels, 5, 2, 1, intArrayOf(0, 0, 255, 255))
     }
 
     @Test
