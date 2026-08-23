@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -26,7 +26,7 @@ class ImageMetadataTest {
             height = 4,
             colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
-            colorSpace = ColorSpace.SRGB,
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(SizeI32.of(3, 4), info.dimensions())
@@ -42,19 +42,19 @@ class ImageMetadataTest {
     @Test
     fun `ImageInfo convenience factories pick Kanvas defaults`() {
         assertEquals(
-            ImageInfo(2, 3, ColorType.RGBA_8888, AlphaType.UNPREMUL, ColorSpace.SRGB),
+            ImageInfo(2, 3, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
             ImageInfo.makeN32(2, 3),
         )
         assertEquals(
-            ImageInfo(2, 3, ColorType.RGBA_8888, AlphaType.PREMUL, ColorSpace.SRGB),
+            ImageInfo(2, 3, ColorType.RGBA_8888, AlphaType.PREMUL, ImageColorSpace.sRGB()),
             ImageInfo.makeN32Premul(2, 3),
         )
         assertEquals(
-            ImageInfo(2, 3, ColorType.RGB_565, AlphaType.OPAQUE, ColorSpace.SRGB),
+            ImageInfo(2, 3, ColorType.RGB_565, AlphaType.OPAQUE, ImageColorSpace.sRGB()),
             ImageInfo.makeRgb565(2, 3),
         )
         assertEquals(
-            ImageInfo(2, 3, ColorType.GRAY_8, AlphaType.OPAQUE, ColorSpace.SRGB),
+            ImageInfo(2, 3, ColorType.GRAY_8, AlphaType.OPAQUE, ImageColorSpace.sRGB()),
             ImageInfo.makeGray8(2, 3),
         )
     }
@@ -65,6 +65,15 @@ class ImageMetadataTest {
         assertEquals(EncodedImageFormat.JPEG, EncodedImageFormat.valueOf("JPEG"))
         assertEquals(EncodedImageFormat.AVIF, EncodedImageFormat.valueOf("AVIF"))
         assertEquals(EncodedImageFormat.JPEGXL, EncodedImageFormat.valueOf("JPEGXL"))
+    }
+
+    @Test
+    fun `ColorType catalog exposes concrete formats and capabilities`() {
+        assertEquals(28, ColorType.entries.size)
+        assertFalse(ColorType.UNKNOWN.isConcrete())
+        assertEquals(8, ColorType.RGBA_F16_NORM.bytesPerPixel)
+        assertFalse(ColorType.RGBA_1010102.capabilities().allocatable)
+        assertTrue(ColorType.RGBA_8888.capabilities().cpuReadableWritable)
     }
 
     @Test

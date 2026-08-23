@@ -93,6 +93,7 @@ class Bitmap(
                     pa,
                 )
             }
+            else -> throw UnsupportedOperationException("unsupported color type: $colorType")
         }
     }
 
@@ -155,6 +156,7 @@ class Bitmap(
                 pixels[index] = (p and 0xFF).toByte()
                 pixels[index + 1] = ((p ushr 8) and 0xFF).toByte()
             }
+            else -> throw UnsupportedOperationException("unsupported color type: $colorType")
         }
     }
 
@@ -241,6 +243,7 @@ class Bitmap(
                     pixels[i] = pl; pixels[i + 1] = ph; i += 2
                 }
             }
+            else -> throw UnsupportedOperationException("unsupported color type: $colorType")
         }
     }
 
