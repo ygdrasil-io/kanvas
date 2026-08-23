@@ -2,16 +2,12 @@ package org.graphiks.kanvas.gpu.evidence.performance
 
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
-import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
-import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceBackendPort
-import org.graphiks.kanvas.gpu.evidence.runner.EvidenceExecutionResult
-import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgramPreparation
-import org.graphiks.kanvas.gpu.evidence.runner.EvidenceRecordingRequest
-import org.graphiks.kanvas.gpu.evidence.runner.EvidencePreparedFramePort
-import org.graphiks.kanvas.gpu.evidence.runner.PreparedEvidenceProgram
-import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
+import org.graphiks.kanvas.gpu.evidence.runner.KanvasSurfaceRenderSession
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.surface.RenderResult
 
 fun interface MonotonicClock { fun nanoTime(): Long }
 
@@ -22,27 +18,31 @@ class GpuEvidencePerformanceRunner(
     private val clock: MonotonicClock = MonotonicClock { System.nanoTime() },
     private val comparator: EvidenceComparator = EvidenceComparator(),
 ) {
-    private var frameOrdinal = 1L
-
     fun run(evidenceCase: EvidenceCase): PerformanceRun {
         require(evidenceCase.descriptor.expectation == EvidenceExpectation.ShouldRender) { "performance measures renderable scenes only" }
-        val program = evidenceCase.program as? SceneProgram
-            ?: return PerformanceRun(
-                sourceCommit,
-                evidenceCase.descriptor.id.value,
-                config,
-                PerformanceVerdict.Unavailable("performance requires a prepared scene program"),
-                environment(),
-                PerformanceVerdict.Unavailable("performance requires a prepared scene program"),
-            )
+        val program = evidenceCase.program as? KanvasSurfaceProgram
+            ?: return unavailable(evidenceCase, "performance requires a Kanvas Surface program")
         val environment = environment()
-        val adapterSummary = backend.adapter?.let { org.graphiks.kanvas.gpu.renderer.execution.GPUBackendAdapterSummary(it.summary ?: "", it.vendor, it.device, it.architecture, it.description, it.isFallbackAdapter) }
+        val adapterSummary = backend.adapter?.let {
+            org.graphiks.kanvas.gpu.renderer.execution.GPUBackendAdapterSummary(
+                it.summary ?: "", it.vendor, it.device, it.architecture, it.description, it.isFallbackAdapter,
+            )
+        }
         val eligibility = PerformanceEligibility.evaluate(adapterSummary)
-        if (eligibility !is PerformanceVerdict.EligibleMeasurement) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, eligibility, environment, eligibility, diagnostics = listOf("measurement skipped: ${eligibility.reason}"))
-        if (backend.capabilities == null) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, PerformanceVerdict.Unavailable("GPU capabilities unavailable"), environment, eligibility)
+        if (eligibility !is PerformanceVerdict.EligibleMeasurement) {
+            return PerformanceRun(
+                sourceCommit, evidenceCase.descriptor.id.value, config, eligibility, environment, eligibility,
+                diagnostics = listOf("measurement skipped: ${eligibility.reason}"),
+            )
+        }
+        if (backend.capabilities == null) {
+            return PerformanceRun(
+                sourceCommit, evidenceCase.descriptor.id.value, config,
+                PerformanceVerdict.Unavailable("GPU capabilities unavailable"), environment, eligibility,
+            )
+        }
+
         val before = backend.telemetry()
-        val prepared = backend.prepare(program, EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, "gpu-performance.${evidenceCase.descriptor.id.value}"))
-        if (prepared !is EvidenceProgramPreparation.Recorded) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, PerformanceVerdict.Failed("scene preparation refused"), environment, eligibility, diagnostics = prepared.diagnostics())
         val samples = mutableListOf<Long>()
         var coldNanos: Long? = null
         val diagnostics = mutableListOf<String>()
@@ -50,62 +50,152 @@ class GpuEvidencePerformanceRunner(
         var warmupSnapshot = PerformanceTelemetrySnapshot.empty()
         var measuredSnapshot = PerformanceTelemetrySnapshot.empty()
         try {
-            backend.prepareSceneFrame(evidenceCase.descriptor.width, evidenceCase.descriptor.height).use { frame ->
-                val coldBefore = backend.telemetry()
-                val coldStart = clock.nanoTime(); val cold = frame.render(prepared.program); coldNanos = elapsed(coldStart)
-                val coldAfter = backend.telemetry()
-                coldSnapshot = snapshot(coldBefore, coldAfter)
-                validateCold(cold, prepared.program, evidenceCase, diagnostics)
-                val completionPrepared = backend.prepare(
-                    program,
-                    EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, "gpu-evidence.performance.completion-only"),
-                )
-                if (completionPrepared !is EvidenceProgramPreparation.Recorded) {
-                    diagnostics += "completion-only scene preparation refused"
-                }
-                val completionProgram = (completionPrepared as? EvidenceProgramPreparation.Recorded)?.program
-                val warmupBefore = backend.telemetry()
-                if (completionProgram != null) repeat(config.warmupFrames) { validateCompletion(frame.renderCompletionOnly(completionProgram), diagnostics) }
-                val warmupAfter = backend.telemetry()
-                warmupSnapshot = snapshot(warmupBefore, warmupAfter)
-                val measuredBefore = backend.telemetry()
-                if (completionProgram != null) repeat(config.measuredFrames) {
-                    val start = clock.nanoTime(); val completion = frame.renderCompletionOnly(completionProgram); val elapsed = elapsed(start); validateCompletion(completion, diagnostics); samples += elapsed
-                }
-                val measuredAfter = backend.telemetry()
-                measuredSnapshot = snapshot(measuredBefore, measuredAfter)
+            val session = program.openSession(evidenceCase.descriptor.width, evidenceCase.descriptor.height)
+
+            val coldBefore = backend.telemetry()
+            val coldStart = clock.nanoTime()
+            val cold = render(session, evidenceCase, diagnostics)
+            coldNanos = elapsed(coldStart)
+            val coldAfter = backend.telemetry()
+            coldSnapshot = snapshot(coldBefore, coldAfter)
+            validateCold(cold, evidenceCase, diagnostics)
+
+            val warmupBefore = backend.telemetry()
+            repeat(config.warmupFrames) { render(session, evidenceCase, diagnostics) }
+            val warmupAfter = backend.telemetry()
+            warmupSnapshot = snapshot(warmupBefore, warmupAfter)
+
+            val measuredBefore = backend.telemetry()
+            repeat(config.measuredFrames) {
+                val start = clock.nanoTime()
+                render(session, evidenceCase, diagnostics)
+                samples += elapsed(start)
             }
+            val measuredAfter = backend.telemetry()
+            measuredSnapshot = snapshot(measuredBefore, measuredAfter)
         } catch (failure: Throwable) {
             diagnostics += "${failure::class.simpleName}: ${failure.message ?: "performance execution failed"}"
-            return finish(evidenceCase, environment, eligibility, before, samples, coldNanos, diagnostics, PerformanceVerdict.Failed(diagnostics.last()), coldSnapshot, warmupSnapshot, measuredSnapshot)
+            return finish(
+                evidenceCase, environment, eligibility, before, samples, coldNanos, diagnostics,
+                PerformanceVerdict.Failed(diagnostics.last()), coldSnapshot, warmupSnapshot, measuredSnapshot,
+            )
         }
-        val verdict = if (diagnostics.isEmpty() && samples.size == config.measuredFrames) eligibility else PerformanceVerdict.Failed(diagnostics.firstOrNull() ?: "measured frame count mismatch")
-        return finish(evidenceCase, environment, eligibility, before, samples, coldNanos, diagnostics, verdict, coldSnapshot, warmupSnapshot, measuredSnapshot)
+
+        validateSubmissionDelta(coldSnapshot, 1L, "cold", diagnostics)
+        validateSubmissionDelta(warmupSnapshot, config.warmupFrames.toLong(), "warmup", diagnostics)
+        validateSubmissionDelta(measuredSnapshot, config.measuredFrames.toLong(), "measured", diagnostics)
+        val total = snapshot(before, backend.telemetry())
+        validateSubmissionDelta(total, 1L + config.warmupFrames + config.measuredFrames, "total", diagnostics)
+        val verdict = if (diagnostics.isEmpty() && samples.size == config.measuredFrames) {
+            eligibility
+        } else {
+            PerformanceVerdict.Failed(diagnostics.firstOrNull() ?: "measured frame count mismatch")
+        }
+        return finish(
+            evidenceCase, environment, eligibility, before, samples, coldNanos, diagnostics, verdict,
+            coldSnapshot, warmupSnapshot, measuredSnapshot,
+        )
     }
 
-    private fun finish(case_: EvidenceCase, environment: PerformanceEnvironment, eligibility: PerformanceVerdict, before: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry, samples: List<Long>, cold: Long?, diagnostics: List<String>, verdict: PerformanceVerdict, coldSnapshot: PerformanceTelemetrySnapshot, warmupSnapshot: PerformanceTelemetrySnapshot, measuredSnapshot: PerformanceTelemetrySnapshot): PerformanceRun {
+    private fun unavailable(evidenceCase: EvidenceCase, reason: String): PerformanceRun {
+        val environment = environment()
+        val verdict = PerformanceVerdict.Unavailable(reason)
+        return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, verdict, environment, verdict)
+    }
+
+    private fun render(
+        session: KanvasSurfaceRenderSession,
+        evidenceCase: EvidenceCase,
+        diagnostics: MutableList<String>,
+    ): RenderResult {
+        val before = backend.telemetry()
+        val result = session.render()
+        val after = backend.telemetry()
+        validateRender(result, evidenceCase, before, after, diagnostics)
+        return result
+    }
+
+    private fun validateRender(
+        result: RenderResult,
+        evidenceCase: EvidenceCase,
+        before: GPUBackendRuntimeTelemetry,
+        after: GPUBackendRuntimeTelemetry,
+        diagnostics: MutableList<String>,
+    ) {
+        val descriptor = evidenceCase.descriptor
+        when {
+            result.width != descriptor.width || result.height != descriptor.height ->
+                diagnostics += "Surface render dimensions did not match the evidence descriptor"
+            result.pixels.size != descriptor.width * descriptor.height * 4 ->
+                diagnostics += "Surface render did not produce descriptor-sized RGBA pixels"
+            result.stats.drawCallCount <= 0 -> diagnostics += "Surface render did not report draw work"
+            result.stats.pipelineCount <= 0 -> diagnostics += "Surface render did not report pipeline work"
+            after.submissions - before.submissions != 1L ->
+                diagnostics += "Surface render did not produce exactly one runtime submission"
+        }
+    }
+
+    private fun validateCold(result: RenderResult, evidenceCase: EvidenceCase, diagnostics: MutableList<String>) {
+        val descriptor = evidenceCase.descriptor
+        if (result.pixels.size != descriptor.width * descriptor.height * 4) return
+        val expected = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
+        val comparison = comparator.compare(
+            result.pixels.toByteArray(), expected, descriptor.width, descriptor.height,
+            requireNotNull(descriptor.comparison),
+        )
+        if (!comparison.passed) diagnostics += "cold validation CPU oracle comparison failed"
+    }
+
+    private fun validateSubmissionDelta(
+        snapshot: PerformanceTelemetrySnapshot,
+        expected: Long,
+        phase: String,
+        diagnostics: MutableList<String>,
+    ) {
+        if (snapshot.delta["submissions"]?.value != expected) {
+            diagnostics += "$phase Surface telemetry submissions must equal $expected"
+        }
+    }
+
+    private fun finish(
+        case_: EvidenceCase,
+        environment: PerformanceEnvironment,
+        eligibility: PerformanceVerdict,
+        before: GPUBackendRuntimeTelemetry,
+        samples: List<Long>,
+        cold: Long?,
+        diagnostics: List<String>,
+        verdict: PerformanceVerdict,
+        coldSnapshot: PerformanceTelemetrySnapshot,
+        warmupSnapshot: PerformanceTelemetrySnapshot,
+        measuredSnapshot: PerformanceTelemetrySnapshot,
+    ): PerformanceRun {
         val after = backend.telemetry()
         val total = snapshot(before, after)
-        return PerformanceRun(sourceCommit, case_.descriptor.id.value, config, verdict, environment, eligibility, cold, samples.takeIf { it.isNotEmpty() }?.let(FrameTimingSummary::fromSamples), samples, PerformanceTelemetry(coldSnapshot, warmupSnapshot, measuredSnapshot, total), diagnostics)
+        return PerformanceRun(
+            sourceCommit, case_.descriptor.id.value, config, verdict, environment, eligibility, cold,
+            samples.takeIf { it.isNotEmpty() }?.let(FrameTimingSummary::fromSamples), samples,
+            PerformanceTelemetry(coldSnapshot, warmupSnapshot, measuredSnapshot, total), diagnostics,
+        )
     }
 
-    private fun snapshot(before: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry, after: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry): PerformanceTelemetrySnapshot {
-        val b = before.toPerformanceCounters(); val a = after.toPerformanceCounters(); val keys = (b.keys + a.keys).toSortedSet()
+    private fun snapshot(
+        before: GPUBackendRuntimeTelemetry,
+        after: GPUBackendRuntimeTelemetry,
+    ): PerformanceTelemetrySnapshot {
+        val b = before.toPerformanceCounters()
+        val a = after.toPerformanceCounters()
+        val keys = (b.keys + a.keys).toSortedSet()
         val beforeMetrics = keys.associateWith { key -> PerformanceMetric(b[key] ?: 0L, MetricSource.Observed) }
         val afterMetrics = keys.associateWith { key -> PerformanceMetric(a[key] ?: 0L, MetricSource.Observed) }
         val delta = keys.associateWith { key -> PerformanceMetric((a[key] ?: 0L) - (b[key] ?: 0L), MetricSource.Derived) }
         return PerformanceTelemetrySnapshot(beforeMetrics, afterMetrics, delta)
     }
-    private fun validateCold(result: org.graphiks.kanvas.gpu.evidence.runner.EvidenceCompletedFrame, program: PreparedEvidenceProgram, case_: EvidenceCase, diagnostics: MutableList<String>) {
-        if (result.outcome != "Succeeded" || result.furthestPhase != "Completed" || result.readbackRequestId != program.readbackRequestId || result.readbackBytes?.size != case_.descriptor.width * case_.descriptor.height * 4 || result.counters["queue.submit"] ?: 0L <= 0L) diagnostics += "cold validation did not reach terminal completion with readback"
-        val expected = requireNotNull(case_.oracle).render(case_.descriptor.width, case_.descriptor.height)
-        if (result.readbackBytes != null) {
-            val comparison = comparator.compare(result.readbackBytes, expected, case_.descriptor.width, case_.descriptor.height, requireNotNull(case_.descriptor.comparison))
-            if (!comparison.passed) diagnostics += "cold validation CPU oracle comparison failed"
-        }
-    }
-    private fun validateCompletion(result: org.graphiks.kanvas.gpu.evidence.runner.EvidenceCompletedFrame, diagnostics: MutableList<String>) { if (result.outcome != "Succeeded" || result.furthestPhase != "Completed") diagnostics += "measured frame did not reach terminal completion" }
+
     private fun elapsed(start: Long) = (clock.nanoTime() - start).coerceAtLeast(0L)
-    private fun environment() = PerformanceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), backend.adapter, backend.deviceGeneration)
-    private fun EvidenceProgramPreparation.diagnostics() = when (this) { is EvidenceProgramPreparation.Refused -> diagnostics; is EvidenceProgramPreparation.Recorded -> diagnostics }
+
+    private fun environment() = PerformanceEnvironment(
+        sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"),
+        System.getProperty("os.arch"), System.getProperty("java.version"), backend.adapter, backend.deviceGeneration,
+    )
 }

@@ -18,7 +18,7 @@ class GpuEvidencePerformanceCli(private val runtime: PerformanceRuntime, private
         val backend = runtime.open() ?: run { System.err.println("gpu evidence performance unavailable: GPU backend could not create a session"); runtime.close(); runtime.dispose(); return 1 }
         return try {
             val writer = PerformanceBundleWriter(request.repositoryRoot, request.sourceCommit)
-            val selected = GpuEvidenceCatalog.cases.filter { it.descriptor.expectation is org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation.ShouldRender }.let { cases -> request.sceneId?.let { id -> cases.filter { it.descriptor.id.value == id } } ?: cases }
+            val selected = GpuEvidenceCatalog.renderCases.let { cases -> request.sceneId?.let { id -> cases.filter { it.descriptor.id.value == id } } ?: cases }
             var code = 0
             selected.forEach { scene ->
                 val result = GpuEvidencePerformanceRunner(backend, request.sourceCommit, request.config).run(scene)
@@ -56,7 +56,7 @@ data class PerformanceRequest(val repositoryRoot: Path, val sourceCommit: String
             require(warmup == 10 && measured == 90) { "warmupFrames and measuredFrames must be exactly 10 and 90" }
             val config = PerformanceConfig(warmupFrames = warmup, measuredFrames = measured)
             val scene = values["--scene"]
-            require(scene == null || GpuEvidenceCatalog.cases.any { it.descriptor.id.value == scene && it.descriptor.expectation is org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation.ShouldRender }) { "scene must identify a ShouldRender case" }
+            require(scene == null || GpuEvidenceCatalog.renderCases.any { it.descriptor.id.value == scene }) { "scene must identify a render case" }
             return PerformanceRequest(root.toAbsolutePath().normalize(), commit, config, scene)
         }
     }
