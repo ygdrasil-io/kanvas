@@ -6,6 +6,11 @@ import kotlin.Boolean
 import kotlin.Float
 import kotlin.math.abs
 
+/**
+ * A mutable 3D vector.
+ *
+ * Use [hasSameComponentsAs] to compare coordinates; equality remains identity-based.
+ */
 public class MutableVector3F32(
   public var x: Float,
   public var y: Float,
@@ -29,6 +34,9 @@ public class MutableVector3F32(
     z *= scalar
   }
 
+  /**
+   * Normalizes this vector in place and reports whether normalization succeeded.
+   */
   public fun normalizeInPlace(): Boolean {
     val length = Vector3F32(x, y, z).length()
     if (!length.isFinite() || abs(length) <= 1e-7f) {
@@ -40,9 +48,18 @@ public class MutableVector3F32(
     return true
   }
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: MutableVector3F32): Boolean = x == other.x && y == other.y && z == other.z
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: Vector3F32): Boolean = x == other.x && y == other.y && z == other.z
 
+  /**
+   * Returns an independent immutable copy of this vector.
+   */
   public fun toImmutable(): Vector3F32 = Vector3F32(x, y, z)
 }

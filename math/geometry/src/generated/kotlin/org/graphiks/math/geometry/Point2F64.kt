@@ -11,16 +11,33 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector2F64
 
+/**
+ * A 2D point in affine space.
+ *
+ * Add or subtract a vector to translate this point; subtract two points to obtain a vector.
+ */
 public class Point2F64(
   public val x: Double,
   public val y: Double,
 ) {
+  /**
+   * Returns this point translated by [delta].
+   */
   public operator fun plus(delta: Vector2F64): Point2F64 = Point2F64(x + delta.x, y + delta.y)
 
+  /**
+   * Returns this point translated by the opposite of [delta].
+   */
   public operator fun minus(delta: Vector2F64): Point2F64 = Point2F64(x - delta.x, y - delta.y)
 
+  /**
+   * Returns the vector from [other] to this point.
+   */
   public operator fun minus(other: Point2F64): Vector2F64 = Vector2F64(x - other.x, y - other.y)
 
+  /**
+   * Returns the Euclidean distance to [other] using scaled intermediates.
+   */
   public fun distanceTo(other: Point2F64): Double {
     val deltaX = x - other.x
     val deltaY = y - other.y
@@ -39,6 +56,9 @@ public class Point2F64(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY)
   }
 
+  /**
+   * Returns the midpoint between this point and [other] without overflowing finite inputs.
+   */
   public fun midpointTo(other: Point2F64): Point2F64 = Point2F64(
   if ((x < 0.0) == (other.x < 0.0)) x + (other.x - x) * 0.5 else x * 0.5 + other.x * 0.5,
   if ((y < 0.0) == (other.y < 0.0)) y + (other.y - y) * 0.5 else y * 0.5 + other.y * 0.5,
@@ -46,6 +66,9 @@ public class Point2F64(
 
   public fun isFinite(): Boolean = x.isFinite() && y.isFinite()
 
+  /**
+   * Returns an independent mutable copy.
+   */
   public fun toMutable(): MutablePoint2F64 = MutablePoint2F64(x, y)
 
   public override fun equals(other: Any?): Boolean = other is Point2F64 && x.toBits() == other.x.toBits() && y.toBits() == other.y.toBits()

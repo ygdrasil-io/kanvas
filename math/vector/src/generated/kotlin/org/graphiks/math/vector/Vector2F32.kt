@@ -10,6 +10,11 @@ import kotlin.String
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+/**
+ * A 2D displacement or direction in a vector space.
+ *
+ * Unlike a point, a vector supports vector addition and scalar scaling.
+ */
 public class Vector2F32(
   public val x: Float,
   public val y: Float,
@@ -46,6 +51,9 @@ public class Vector2F32(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY)
   }
 
+  /**
+   * Returns a unit vector. Returns [Zero] when the length is non-finite or near zero.
+   */
   public fun normalized(): Vector2F32 {
     val length = length()
     if (!length.isFinite() || abs(length) <= 1e-7f) {
@@ -58,6 +66,9 @@ public class Vector2F32(
 
   public fun isZero(): Boolean = abs(x) <= 1e-7f && abs(y) <= 1e-7f
 
+  /**
+   * Returns an independent mutable copy.
+   */
   public fun toMutable(): MutableVector2F32 = MutableVector2F32(x, y)
 
   public override fun equals(other: Any?): Boolean = other is Vector2F32 && x.toBits() == other.x.toBits() && y.toBits() == other.y.toBits()

@@ -17,6 +17,11 @@ import org.graphiks.math.scalar.saturatingNegateI32
 import org.graphiks.math.scalar.saturatingSubtractI32
 import org.graphiks.math.scalar.saturatingSubtractI64
 
+/**
+ * A 2D displacement or direction in a vector space.
+ *
+ * Unlike a point, a vector supports vector addition and scalar scaling.
+ */
 public class Vector2I32(
   public val x: Int,
   public val y: Int,

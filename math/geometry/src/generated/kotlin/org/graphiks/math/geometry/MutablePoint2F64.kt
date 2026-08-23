@@ -6,6 +6,11 @@ import kotlin.Boolean
 import kotlin.Double
 import org.graphiks.math.vector.Vector2F64
 
+/**
+ * A mutable 2D point in affine space.
+ *
+ * Use [hasSameComponentsAs] to compare coordinates; equality remains identity-based.
+ */
 public class MutablePoint2F64(
   public var x: Double,
   public var y: Double,
@@ -15,9 +20,18 @@ public class MutablePoint2F64(
     y += delta.y
   }
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: Point2F64): Boolean = x == other.x && y == other.y
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: MutablePoint2F64): Boolean = x == other.x && y == other.y
 
+  /**
+   * Returns an independent immutable copy of this point.
+   */
   public fun toImmutable(): Point2F64 = Point2F64(x, y)
 }

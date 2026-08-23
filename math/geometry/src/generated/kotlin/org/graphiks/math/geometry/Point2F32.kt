@@ -11,16 +11,33 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector2F32
 
+/**
+ * A 2D point in affine space.
+ *
+ * Add or subtract a vector to translate this point; subtract two points to obtain a vector.
+ */
 public class Point2F32(
   public val x: Float,
   public val y: Float,
 ) {
+  /**
+   * Returns this point translated by [delta].
+   */
   public operator fun plus(delta: Vector2F32): Point2F32 = Point2F32(x + delta.x, y + delta.y)
 
+  /**
+   * Returns this point translated by the opposite of [delta].
+   */
   public operator fun minus(delta: Vector2F32): Point2F32 = Point2F32(x - delta.x, y - delta.y)
 
+  /**
+   * Returns the vector from [other] to this point.
+   */
   public operator fun minus(other: Point2F32): Vector2F32 = Vector2F32(x - other.x, y - other.y)
 
+  /**
+   * Returns the Euclidean distance to [other] using scaled intermediates.
+   */
   public fun distanceTo(other: Point2F32): Float {
     val deltaX = x - other.x
     val deltaY = y - other.y
@@ -39,6 +56,9 @@ public class Point2F32(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY)
   }
 
+  /**
+   * Returns the midpoint between this point and [other] without overflowing finite inputs.
+   */
   public fun midpointTo(other: Point2F32): Point2F32 = Point2F32(
   ((x.toDouble() + other.x.toDouble()) * 0.5).toFloat(),
   ((y.toDouble() + other.y.toDouble()) * 0.5).toFloat(),
@@ -46,6 +66,9 @@ public class Point2F32(
 
   public fun isFinite(): Boolean = x.isFinite() && y.isFinite()
 
+  /**
+   * Returns an independent mutable copy.
+   */
   public fun toMutable(): MutablePoint2F32 = MutablePoint2F32(x, y)
 
   public override fun equals(other: Any?): Boolean = other is Point2F32 && x.toBits() == other.x.toBits() && y.toBits() == other.y.toBits()

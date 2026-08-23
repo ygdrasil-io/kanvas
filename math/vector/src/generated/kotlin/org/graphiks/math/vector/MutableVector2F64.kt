@@ -6,6 +6,11 @@ import kotlin.Boolean
 import kotlin.Double
 import kotlin.math.abs
 
+/**
+ * A mutable 2D vector.
+ *
+ * Use [hasSameComponentsAs] to compare coordinates; equality remains identity-based.
+ */
 public class MutableVector2F64(
   public var x: Double,
   public var y: Double,
@@ -25,6 +30,9 @@ public class MutableVector2F64(
     y *= scalar
   }
 
+  /**
+   * Normalizes this vector in place and reports whether normalization succeeded.
+   */
   public fun normalizeInPlace(): Boolean {
     val length = Vector2F64(x, y).length()
     if (!length.isFinite() || abs(length) <= 1e-12) {
@@ -35,9 +43,18 @@ public class MutableVector2F64(
     return true
   }
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: MutableVector2F64): Boolean = x == other.x && y == other.y
 
+  /**
+   * Compares coordinates without changing identity-based equality.
+   */
   public fun hasSameComponentsAs(other: Vector2F64): Boolean = x == other.x && y == other.y
 
+  /**
+   * Returns an independent immutable copy of this vector.
+   */
   public fun toImmutable(): Vector2F64 = Vector2F64(x, y)
 }

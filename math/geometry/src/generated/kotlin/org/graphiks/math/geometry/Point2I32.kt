@@ -10,14 +10,28 @@ import org.graphiks.math.scalar.saturatingAddI32
 import org.graphiks.math.scalar.saturatingSubtractI32
 import org.graphiks.math.vector.Vector2I32
 
+/**
+ * A 2D point in affine space.
+ *
+ * Add or subtract a vector to translate this point; subtract two points to obtain a vector.
+ */
 public class Point2I32(
   public val x: Int,
   public val y: Int,
 ) {
+  /**
+   * Returns this point translated by [delta].
+   */
   public operator fun plus(delta: Vector2I32): Point2I32 = Point2I32(saturatingAddI32(x, delta.x), saturatingAddI32(y, delta.y))
 
+  /**
+   * Returns this point translated by the opposite of [delta].
+   */
   public operator fun minus(delta: Vector2I32): Point2I32 = Point2I32(saturatingSubtractI32(x, delta.x), saturatingSubtractI32(y, delta.y))
 
+  /**
+   * Returns the vector from [other] to this point.
+   */
   public operator fun minus(other: Point2I32): Vector2I32 = Vector2I32(saturatingSubtractI32(x, other.x), saturatingSubtractI32(y, other.y))
 
   public override fun equals(other: Any?): Boolean = other is Point2I32 && x == other.x && y == other.y

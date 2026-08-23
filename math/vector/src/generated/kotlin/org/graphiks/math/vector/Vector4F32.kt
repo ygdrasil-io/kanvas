@@ -10,6 +10,11 @@ import kotlin.String
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+/**
+ * A 4D displacement or direction in a vector space.
+ *
+ * Unlike a point, a vector supports vector addition and scalar scaling.
+ */
 public class Vector4F32(
   public val x: Float,
   public val y: Float,
@@ -48,6 +53,9 @@ public class Vector4F32(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ + scaledW * scaledW)
   }
 
+  /**
+   * Returns a unit vector. Returns [Zero] when the length is non-finite or near zero.
+   */
   public fun normalized(): Vector4F32 {
     val length = length()
     if (!length.isFinite() || abs(length) <= 1e-7f) {

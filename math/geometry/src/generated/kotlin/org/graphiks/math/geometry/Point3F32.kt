@@ -11,17 +11,34 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector3F32
 
+/**
+ * A 3D point in affine space.
+ *
+ * Add or subtract a vector to translate this point; subtract two points to obtain a vector.
+ */
 public class Point3F32(
   public val x: Float,
   public val y: Float,
   public val z: Float,
 ) {
+  /**
+   * Returns this point translated by [delta].
+   */
   public operator fun plus(delta: Vector3F32): Point3F32 = Point3F32(x + delta.x, y + delta.y, z + delta.z)
 
+  /**
+   * Returns this point translated by the opposite of [delta].
+   */
   public operator fun minus(delta: Vector3F32): Point3F32 = Point3F32(x - delta.x, y - delta.y, z - delta.z)
 
+  /**
+   * Returns the vector from [other] to this point.
+   */
   public operator fun minus(other: Point3F32): Vector3F32 = Vector3F32(x - other.x, y - other.y, z - other.z)
 
+  /**
+   * Returns the Euclidean distance to [other] using scaled intermediates.
+   */
   public fun distanceTo(other: Point3F32): Float {
     val deltaX = x - other.x
     val deltaY = y - other.y
@@ -42,6 +59,9 @@ public class Point3F32(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ)
   }
 
+  /**
+   * Returns the midpoint between this point and [other] without overflowing finite inputs.
+   */
   public fun midpointTo(other: Point3F32): Point3F32 = Point3F32(
   ((x.toDouble() + other.x.toDouble()) * 0.5).toFloat(),
   ((y.toDouble() + other.y.toDouble()) * 0.5).toFloat(),

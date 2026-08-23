@@ -43,6 +43,7 @@ internal object KotlinEmitter {
         val vector = TypeSpec.classBuilder(model.typeName)
             .addModifiers(KModifier.PUBLIC)
             .primaryConstructor(constructor)
+            .addKdoc(immutableTypeKdoc(model))
             .apply {
                 model.components.forEach { component ->
                     addProperty(
@@ -125,6 +126,7 @@ internal object KotlinEmitter {
         val mutable = TypeSpec.classBuilder(model.mutableTypeName)
             .addModifiers(KModifier.PUBLIC)
             .primaryConstructor(constructor)
+            .addKdoc(mutableTypeKdoc(model))
             .apply {
                 model.components.forEach { component ->
                     addProperty(
@@ -169,6 +171,7 @@ internal object KotlinEmitter {
                     FunSpec.builder("toImmutable")
                         .addModifiers(KModifier.PUBLIC)
                         .returns(immutableType)
+                        .addKdoc("Returns an independent immutable copy of this vector.\n")
                         .addStatement(
                             "return %T(${model.components.joinToString()})",
                             immutableType,
@@ -197,6 +200,7 @@ internal object KotlinEmitter {
         val point = TypeSpec.classBuilder(model.typeName)
             .addModifiers(KModifier.PUBLIC)
             .primaryConstructor(constructor)
+            .addKdoc(immutableTypeKdoc(model))
             .apply {
                 model.components.forEach { component ->
                     addProperty(
@@ -314,6 +318,7 @@ internal object KotlinEmitter {
         val mutable = TypeSpec.classBuilder(model.mutableTypeName)
             .addModifiers(KModifier.PUBLIC)
             .primaryConstructor(constructor)
+            .addKdoc(mutableTypeKdoc(model))
             .apply {
                 model.components.forEach { component ->
                     addProperty(
@@ -339,6 +344,7 @@ internal object KotlinEmitter {
                     FunSpec.builder("toImmutable")
                         .addModifiers(KModifier.PUBLIC)
                         .returns(immutableType)
+                        .addKdoc("Returns an independent immutable copy of this point.\n")
                         .addStatement(
                             "return %T(${model.components.joinToString()})",
                             immutableType,
@@ -394,6 +400,13 @@ internal object KotlinEmitter {
             .addModifiers(KModifier.PUBLIC, KModifier.OPERATOR)
             .addParameter(parameterName, vectorType)
             .returns(pointType)
+            .addKdoc(
+                if (name == "plus") {
+                    "Returns this point translated by [${parameterName}].\n"
+                } else {
+                    "Returns this point translated by the opposite of [${parameterName}].\n"
+                },
+            )
             .addStatement("return %T(${expressions.joinToString()})", pointType)
             .build()
     }
@@ -406,6 +419,7 @@ internal object KotlinEmitter {
         .addModifiers(KModifier.PUBLIC, KModifier.OPERATOR)
         .addParameter("other", pointType)
         .returns(vectorType)
+        .addKdoc("Returns the vector from [other] to this point.\n")
         .addStatement(
             "return %T(${minusExpressions(model).joinToString()})",
             vectorType,
@@ -424,6 +438,7 @@ internal object KotlinEmitter {
             .addModifiers(KModifier.PUBLIC)
             .addParameter("other", pointType)
             .returns(returnType)
+            .addKdoc("Returns the Euclidean distance to [other] using scaled intermediates.\n")
             .apply {
                 model.components.forEach { component ->
                     addStatement("val delta${component.uppercase()} = $component - other.$component")
@@ -475,6 +490,7 @@ internal object KotlinEmitter {
             .addModifiers(KModifier.PUBLIC)
             .addParameter("other", pointType)
             .returns(pointType)
+            .addKdoc("Returns the midpoint between this point and [other] without overflowing finite inputs.\n")
             .addCode("return %T(\n$components,\n)\n", pointType)
             .build()
     }
@@ -665,6 +681,7 @@ internal object KotlinEmitter {
         return FunSpec.builder("normalized")
             .addModifiers(KModifier.PUBLIC)
             .returns(type)
+            .addKdoc("Returns a unit vector. Returns [Zero] when the length is non-finite or near zero.\n")
             .addStatement("val length = length()")
             .beginControlFlow("if (!length.isFinite() || abs(length) <= ${model.epsilonLiteral()})")
             .addStatement("return Zero")
@@ -702,6 +719,7 @@ internal object KotlinEmitter {
         FunSpec.builder("toMutable")
             .addModifiers(KModifier.PUBLIC)
             .returns(ClassName(model.packageName, model.mutableTypeName))
+            .addKdoc("Returns an independent mutable copy.\n")
             .addStatement(
                 "return %T(${model.components.joinToString()})",
                 ClassName(model.packageName, model.mutableTypeName),
@@ -792,6 +810,7 @@ internal object KotlinEmitter {
     ): FunSpec = FunSpec.builder("normalizeInPlace")
         .addModifiers(KModifier.PUBLIC)
         .returns(ClassName("kotlin", "Boolean"))
+        .addKdoc("Normalizes this vector in place and reports whether normalization succeeded.\n")
         .addStatement(
             "val length = %T(${model.components.joinToString()}).length()",
             immutableType,
@@ -812,10 +831,31 @@ internal object KotlinEmitter {
         .addModifiers(KModifier.PUBLIC)
         .addParameter("other", otherType)
         .returns(ClassName("kotlin", "Boolean"))
+        .addKdoc("Compares coordinates without changing identity-based equality.\n")
         .addStatement(
             "return ${model.components.joinToString(" && ") { "$it == other.$it" }}",
         )
         .build()
+
+    private fun immutableTypeKdoc(model: SemanticPrimitiveModel): String = when (model.spec.semantic) {
+        Semantic.POINT ->
+            "A ${model.spec.dimension}D point in affine space.\n\n" +
+                "Add or subtract a vector to translate this point; subtract two points to obtain a vector.\n"
+
+        Semantic.VECTOR ->
+            "A ${model.spec.dimension}D displacement or direction in a vector space.\n\n" +
+                "Unlike a point, a vector supports vector addition and scalar scaling.\n"
+    }
+
+    private fun mutableTypeKdoc(model: SemanticPrimitiveModel): String = when (model.spec.semantic) {
+        Semantic.POINT ->
+            "A mutable ${model.spec.dimension}D point in affine space.\n\n" +
+                "Use [hasSameComponentsAs] to compare coordinates; equality remains identity-based.\n"
+
+        Semantic.VECTOR ->
+            "A mutable ${model.spec.dimension}D vector.\n\n" +
+                "Use [hasSameComponentsAs] to compare coordinates; equality remains identity-based.\n"
+    }
 
     private fun ScalarSpec.typeName(): TypeName = ClassName("kotlin", kotlinType)
 
