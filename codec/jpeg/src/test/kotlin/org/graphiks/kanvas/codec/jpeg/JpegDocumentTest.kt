@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import java.io.InputStream
 
 class JpegDocumentTest {
@@ -123,7 +123,7 @@ class JpegDocumentTest {
                 exifOrientationSegment(6),
             ),
         ).document!!
-        assertEquals(SkEncodedOrigin.kRightTop, document.metadata.origin)
+        assertEquals(EncodedOrigin.RIGHT_TOP, document.metadata.origin)
 
         val exif = document.segments.single { it.marker == 0xE1 }
         document.ownedSourceForTesting()[exif.range.first + EXIF_ORIENTATION_VALUE_OFFSET] = 1

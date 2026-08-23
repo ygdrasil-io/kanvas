@@ -5,18 +5,12 @@ import org.graphiks.kanvas.color.ColorSpaceClassification
 import org.graphiks.kanvas.color.ColorSpaceClassificationFailure
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.classifyColorSpace
-import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
-import org.graphiks.kanvas.image.EncodedImageFormat
-import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.types.Color
-import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkImageInfo
 
 public fun Codec.getKanvasInfo(): ImageInfo = getInfo().toKanvasImageInfo()
@@ -50,7 +44,7 @@ public fun SkImageInfo.toKanvasImageInfo(): ImageInfo =
         width = width,
         height = height,
         colorType = colorType.toKanvasColorType(),
-        alphaType = alphaType.toKanvasAlphaType(),
+        alphaType = alphaType,
         colorSpace = colorSpace.toKanvasColorSpace(),
     )
 
@@ -65,42 +59,6 @@ public fun SkColorType.toKanvasColorType(): ColorType = when (this) {
     SkColorType.kRGB_565 -> ColorType.RGB_565
     SkColorType.kARGB_4444 -> ColorType.ARGB_4444
     else -> error("Unsupported SkColorType for Kanvas conversion: $this")
-}
-
-public fun SkAlphaType.toKanvasAlphaType(): AlphaType = when (this) {
-    SkAlphaType.kUnknown -> AlphaType.UNKNOWN
-    SkAlphaType.kOpaque -> AlphaType.OPAQUE
-    SkAlphaType.kPremul -> AlphaType.PREMUL
-    SkAlphaType.kUnpremul -> AlphaType.UNPREMUL
-}
-
-public fun SkEncodedImageFormat.toKanvasEncodedImageFormat(): EncodedImageFormat = when (this) {
-    SkEncodedImageFormat.kBMP -> EncodedImageFormat.BMP
-    SkEncodedImageFormat.kGIF -> EncodedImageFormat.GIF
-    SkEncodedImageFormat.kICO -> EncodedImageFormat.ICO
-    SkEncodedImageFormat.kJPEG -> EncodedImageFormat.JPEG
-    SkEncodedImageFormat.kJPEG2000 -> EncodedImageFormat.JPEG2000
-    SkEncodedImageFormat.kPNG -> EncodedImageFormat.PNG
-    SkEncodedImageFormat.kWBMP -> EncodedImageFormat.WBMP
-    SkEncodedImageFormat.kWEBP -> EncodedImageFormat.WEBP
-    SkEncodedImageFormat.kPKM -> EncodedImageFormat.PKM
-    SkEncodedImageFormat.kKTX -> EncodedImageFormat.KTX
-    SkEncodedImageFormat.kASTC -> EncodedImageFormat.ASTC
-    SkEncodedImageFormat.kDNG -> EncodedImageFormat.DNG
-    SkEncodedImageFormat.kHEIF -> EncodedImageFormat.HEIF
-    SkEncodedImageFormat.kAVIF -> EncodedImageFormat.AVIF
-    SkEncodedImageFormat.kJPEGXL -> EncodedImageFormat.JPEGXL
-}
-
-public fun SkEncodedOrigin.toKanvasEncodedOrigin(): EncodedOrigin = when (this) {
-    SkEncodedOrigin.kTopLeft -> EncodedOrigin.TOP_LEFT
-    SkEncodedOrigin.kTopRight -> EncodedOrigin.TOP_RIGHT
-    SkEncodedOrigin.kBottomRight -> EncodedOrigin.BOTTOM_RIGHT
-    SkEncodedOrigin.kBottomLeft -> EncodedOrigin.BOTTOM_LEFT
-    SkEncodedOrigin.kLeftTop -> EncodedOrigin.LEFT_TOP
-    SkEncodedOrigin.kRightTop -> EncodedOrigin.RIGHT_TOP
-    SkEncodedOrigin.kRightBottom -> EncodedOrigin.RIGHT_BOTTOM
-    SkEncodedOrigin.kLeftBottom -> EncodedOrigin.LEFT_BOTTOM
 }
 
 internal class UnsupportedKanvasColorSpaceException(

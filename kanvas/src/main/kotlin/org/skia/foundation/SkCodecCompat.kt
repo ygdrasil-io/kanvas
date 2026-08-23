@@ -1,10 +1,10 @@
 package org.skia.foundation
 
 import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
-import org.graphiks.math.matrix.Matrix3x3F32
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -42,77 +42,11 @@ public enum class SkColorType(public val bytesPerPixel: Int) {
     public fun isValid(): Boolean = this != kUnknown
 }
 
-public enum class SkAlphaType {
-    kUnknown,
-    kOpaque,
-    kPremul,
-    kUnpremul,
-    ;
-
-    public fun isOpaque(): Boolean = this == kOpaque
-    public fun isValid(): Boolean = this != kUnknown
-}
-
-public enum class SkEncodedImageFormat {
-    kBMP,
-    kGIF,
-    kICO,
-    kJPEG,
-    kJPEG2000,
-    kPNG,
-    kWBMP,
-    kWEBP,
-    kPKM,
-    kKTX,
-    kASTC,
-    kDNG,
-    kHEIF,
-    kAVIF,
-    kJPEGXL,
-}
-
-public enum class SkEncodedOrigin(public val exifValue: Int) {
-    kTopLeft(1),
-    kTopRight(2),
-    kBottomRight(3),
-    kBottomLeft(4),
-    kLeftTop(5),
-    kRightTop(6),
-    kRightBottom(7),
-    kLeftBottom(8),
-    ;
-
-    public fun swapsWidthHeight(): Boolean = ordinal >= kLeftTop.ordinal
-
-    public fun toMatrix(w: Int, h: Int): Matrix3x3F32 {
-        val fw = w.toFloat()
-        val fh = h.toFloat()
-        return when (this) {
-            kTopLeft -> Matrix3x3F32.Identity
-            kTopRight -> Matrix3x3F32.of(-1f, 0f, fw, 0f, 1f, 0f)
-            kBottomRight -> Matrix3x3F32.of(-1f, 0f, fw, 0f, -1f, fh)
-            kBottomLeft -> Matrix3x3F32.of(1f, 0f, 0f, 0f, -1f, fh)
-            kLeftTop -> Matrix3x3F32.of(0f, 1f, 0f, 1f, 0f, 0f)
-            kRightTop -> Matrix3x3F32.of(0f, -1f, fw, 1f, 0f, 0f)
-            kRightBottom -> Matrix3x3F32.of(0f, -1f, fw, -1f, 0f, fh)
-            kLeftBottom -> Matrix3x3F32.of(0f, 1f, 0f, -1f, 0f, fh)
-        }
-    }
-
-    public companion object {
-        public val kDefault: SkEncodedOrigin = kTopLeft
-        public val kLast: SkEncodedOrigin = kLeftBottom
-
-        public fun fromExifValue(v: Int): SkEncodedOrigin =
-            entries.firstOrNull { it.exifValue == v } ?: kDefault
-    }
-}
-
 public class SkImageInfo private constructor(
     public val width: Int,
     public val height: Int,
     public val colorType: SkColorType,
-    public val alphaType: SkAlphaType,
+    public val alphaType: AlphaType,
     public val colorSpace: ImageColorSpace,
 ) {
     init {
@@ -122,14 +56,14 @@ public class SkImageInfo private constructor(
     public fun dimensions(): SizeI32 = SizeI32.of(width, height)
     public fun bounds(): RectI32 = RectI32.ofSize(width, height)
     public fun isEmpty(): Boolean = width <= 0 || height <= 0
-    public fun isOpaque(): Boolean = alphaType == SkAlphaType.kOpaque
+    public fun isOpaque(): Boolean = alphaType == AlphaType.OPAQUE
     public fun bytesPerPixel(): Int = colorType.bytesPerPixel
     public fun minRowBytes(): Int = width * bytesPerPixel()
     public fun makeWH(newW: Int, newH: Int): SkImageInfo =
         SkImageInfo(newW, newH, colorType, alphaType, colorSpace)
     public fun makeColorType(ct: SkColorType): SkImageInfo =
         SkImageInfo(width, height, ct, alphaType, colorSpace)
-    public fun makeAlphaType(at: SkAlphaType): SkImageInfo =
+    public fun makeAlphaType(at: AlphaType): SkImageInfo =
         SkImageInfo(width, height, colorType, at, colorSpace)
     public fun makeColorSpace(cs: ImageColorSpace): SkImageInfo =
         SkImageInfo(width, height, colorType, alphaType, cs)
@@ -158,14 +92,14 @@ public class SkImageInfo private constructor(
             width: Int,
             height: Int,
             colorType: SkColorType = SkColorType.kRGBA_8888,
-            alphaType: SkAlphaType = defaultAlphaTypeFor(colorType),
+            alphaType: AlphaType = defaultAlphaTypeFor(colorType),
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): SkImageInfo = SkImageInfo(width, height, colorType, alphaType, colorSpace)
 
         public fun MakeN32(
             width: Int,
             height: Int,
-            alphaType: SkAlphaType = SkAlphaType.kUnpremul,
+            alphaType: AlphaType = AlphaType.UNPREMUL,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): SkImageInfo = Make(width, height, SkColorType.kRGBA_8888, alphaType, colorSpace)
 
@@ -173,43 +107,43 @@ public class SkImageInfo private constructor(
             width: Int,
             height: Int,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-        ): SkImageInfo = Make(width, height, SkColorType.kRGBA_8888, SkAlphaType.kPremul, colorSpace)
+        ): SkImageInfo = Make(width, height, SkColorType.kRGBA_8888, AlphaType.PREMUL, colorSpace)
 
         public fun MakeA8(
             width: Int,
             height: Int,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-        ): SkImageInfo = Make(width, height, SkColorType.kAlpha_8, SkAlphaType.kPremul, colorSpace)
+        ): SkImageInfo = Make(width, height, SkColorType.kAlpha_8, AlphaType.PREMUL, colorSpace)
 
         public fun Make4444(
             width: Int,
             height: Int,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-        ): SkImageInfo = Make(width, height, SkColorType.kARGB_4444, SkAlphaType.kPremul, colorSpace)
+        ): SkImageInfo = Make(width, height, SkColorType.kARGB_4444, AlphaType.PREMUL, colorSpace)
 
         public fun MakeRGB565(
             width: Int,
             height: Int,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-        ): SkImageInfo = Make(width, height, SkColorType.kRGB_565, SkAlphaType.kOpaque, colorSpace)
+        ): SkImageInfo = Make(width, height, SkColorType.kRGB_565, AlphaType.OPAQUE, colorSpace)
 
         public fun MakeGray8(
             width: Int,
             height: Int,
             colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-        ): SkImageInfo = Make(width, height, SkColorType.kGray_8, SkAlphaType.kOpaque, colorSpace)
+        ): SkImageInfo = Make(width, height, SkColorType.kGray_8, AlphaType.OPAQUE, colorSpace)
 
-        private fun defaultAlphaTypeFor(ct: SkColorType): SkAlphaType = when (ct) {
+        private fun defaultAlphaTypeFor(ct: SkColorType): AlphaType = when (ct) {
             SkColorType.kRGB_565,
             SkColorType.kGray_8,
-                -> SkAlphaType.kOpaque
+                -> AlphaType.OPAQUE
             SkColorType.kRGBA_F16,
             SkColorType.kRGBA_F16Norm,
             SkColorType.kAlpha_8,
             SkColorType.kARGB_4444,
-                -> SkAlphaType.kPremul
-            SkColorType.kUnknown -> SkAlphaType.kUnknown
-            else -> SkAlphaType.kUnpremul
+                -> AlphaType.PREMUL
+            SkColorType.kUnknown -> AlphaType.UNKNOWN
+            else -> AlphaType.UNPREMUL
         }
     }
 }
@@ -362,7 +296,7 @@ public class SkData private constructor(private val bytes: ByteArray) {
 }
 
 public class SkPixmap {
-    private var info: SkImageInfo = SkImageInfo.Make(0, 0, SkColorType.kUnknown, SkAlphaType.kUnknown)
+    private var info: SkImageInfo = SkImageInfo.Make(0, 0, SkColorType.kUnknown, AlphaType.UNKNOWN)
     private var buffer: ByteBuffer = ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN)
     private var rowBytes: Int = 0
 
@@ -372,7 +306,7 @@ public class SkPixmap {
     }
 
     public fun reset() {
-        info = SkImageInfo.Make(0, 0, SkColorType.kUnknown, SkAlphaType.kUnknown)
+        info = SkImageInfo.Make(0, 0, SkColorType.kUnknown, AlphaType.UNKNOWN)
         buffer = ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN)
         rowBytes = 0
     }
@@ -392,7 +326,7 @@ public class SkPixmap {
     public fun width(): Int = info.width
     public fun height(): Int = info.height
     public fun colorType(): SkColorType = info.colorType
-    public fun alphaType(): SkAlphaType = info.alphaType
+    public fun alphaType(): AlphaType = info.alphaType
     public fun colorSpace(): ImageColorSpace? = info.colorSpace
     public fun bounds(): RectI32 = RectI32.ofSize(width(), height())
 

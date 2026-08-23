@@ -13,7 +13,7 @@ import org.graphiks.math.color.ColorMatrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
@@ -236,7 +236,7 @@ class KanvasCodecColorSpaceTest {
         width = 1,
         height = 1,
         colorType = SkColorType.kRGBA_8888,
-        alphaType = SkAlphaType.kUnpremul,
+        alphaType = AlphaType.UNPREMUL,
         colorSpace = colorSpace,
     )
 

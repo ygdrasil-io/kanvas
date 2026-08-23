@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.jpeg
 
 import java.io.ByteArrayOutputStream
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 
 /** A geometric JPEG transform that may be executed without re-encoding pixels. */
 public sealed interface JpegTransform {
@@ -50,7 +50,7 @@ internal fun transcodeJpegDocument(
     ) {
         return transformDiagnostic(frameSegment.offset, "jpeg.transform.process.unsupported")
     }
-    if (document.metadata.origin != SkEncodedOrigin.kTopLeft) {
+    if (document.metadata.origin != EncodedOrigin.TOP_LEFT) {
         return transformDiagnostic(frameSegment.offset, "jpeg.transform.orientation.unsupported")
     }
     if (document.segments.count { it.marker == TRANSFORM_MARKER_SOS } != 1) {

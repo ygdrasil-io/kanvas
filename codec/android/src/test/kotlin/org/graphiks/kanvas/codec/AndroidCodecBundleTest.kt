@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import java.nio.ByteBuffer
@@ -19,7 +19,7 @@ class AndroidCodecBundleTest {
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
 
         assertNotNull(codec)
-        assertEquals(SkEncodedImageFormat.kPNG, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.PNG, codec!!.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
     }
@@ -51,7 +51,7 @@ class AndroidCodecBundleTest {
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.simpleGrayscaleJpeg(width = 16, height = 16))!!
         val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(4, 4, 16, 16), sampleSize = 4)
 
-        assertEquals(SkEncodedImageFormat.kJPEG, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.JPEG, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = 0xFF808080.toInt())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 2, y = 2, color = 0xFF808080.toInt())
     }
@@ -63,7 +63,7 @@ class AndroidCodecBundleTest {
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.indexedGif(indexes, palette))!!
         val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(1, 1, 4, 4), sampleSize = 2)
 
-        assertEquals(SkEncodedImageFormat.kGIF, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.GIF, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = palette[indexes[1][1]])
     }
 
@@ -73,7 +73,7 @@ class AndroidCodecBundleTest {
         val codec = AndroidCodec.MakeFromData(CodecTestFixtures.rgbBmp(rows))!!
         val pixels = decodeSampledRgba(codec, subset = RectI32.ofLTRB(1, 1, 4, 4), sampleSize = 2)
 
-        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.BMP, codec.getEncodedFormat())
         assertRgba(pixels.buffer, pixels.rowBytes, x = 0, y = 0, color = rows[1][1])
     }
 
@@ -122,7 +122,7 @@ class AndroidCodecBundleTest {
             width = 5,
             height = 5,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
         )
         val rowBytes = info.minRowBytes()
 
@@ -198,7 +198,7 @@ class AndroidCodecBundleTest {
         private val decodeResult: Codec.Result = Codec.Result.kSuccess,
     ) : Codec() {
         override fun getInfo(): SkImageInfo = info
-        override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
+        override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.PNG
         override fun getICCProfile(): IccProfile? = null
 
         override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {

@@ -9,12 +9,12 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedImageFormat
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
 import java.io.ByteArrayOutputStream
@@ -65,11 +65,11 @@ class JpegCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec is JpegCodec)
-        assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.JPEG, codec!!.getEncodedFormat())
         assertEquals(8, codec.getInfo().width)
         assertEquals(8, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
@@ -114,7 +114,7 @@ class JpegCodecTest {
             width = 8,
             height = 8,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
@@ -131,7 +131,7 @@ class JpegCodecTest {
             width = 8,
             height = 8,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
@@ -148,7 +148,7 @@ class JpegCodecTest {
             width = 8,
             height = 8,
             colorType = SkColorType.kRGB_565,
-            alphaType = SkAlphaType.kOpaque,
+            alphaType = AlphaType.OPAQUE,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
@@ -317,7 +317,7 @@ class JpegCodecTest {
         )
 
         assertNotNull(codec)
-        assertEquals(SkEncodedOrigin.kRightTop, codec!!.getOrigin())
+        assertEquals(EncodedOrigin.RIGHT_TOP, codec!!.getOrigin())
         assertEquals(6, codec.getInfo().width)
         assertEquals(8, codec.getInfo().height)
     }
@@ -332,7 +332,7 @@ class JpegCodecTest {
         )
 
         assertNotNull(codec)
-        assertEquals(SkEncodedOrigin.kLeftBottom, codec!!.getOrigin())
+        assertEquals(EncodedOrigin.LEFT_BOTTOM, codec!!.getOrigin())
         assertEquals(5, codec.getInfo().width)
         assertEquals(9, codec.getInfo().height)
     }
@@ -342,14 +342,14 @@ class JpegCodecTest {
         val width = 16
         val height = 16
         val cases = listOf(
-            1 to SkEncodedOrigin.kTopLeft,
-            2 to SkEncodedOrigin.kTopRight,
-            3 to SkEncodedOrigin.kBottomRight,
-            4 to SkEncodedOrigin.kBottomLeft,
-            5 to SkEncodedOrigin.kLeftTop,
-            6 to SkEncodedOrigin.kRightTop,
-            7 to SkEncodedOrigin.kRightBottom,
-            8 to SkEncodedOrigin.kLeftBottom,
+            1 to EncodedOrigin.TOP_LEFT,
+            2 to EncodedOrigin.TOP_RIGHT,
+            3 to EncodedOrigin.BOTTOM_RIGHT,
+            4 to EncodedOrigin.BOTTOM_LEFT,
+            5 to EncodedOrigin.LEFT_TOP,
+            6 to EncodedOrigin.RIGHT_TOP,
+            7 to EncodedOrigin.RIGHT_BOTTOM,
+            8 to EncodedOrigin.LEFT_BOTTOM,
         )
 
         for ((exifValue, origin) in cases) {
@@ -474,7 +474,7 @@ class JpegCodecTest {
         val codec = JpegCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
 
         assertNotNull(codec)
-        assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.JPEG, codec!!.getEncodedFormat())
         assertEquals(11, codec.getInfo().width)
         assertEquals(7, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
@@ -1298,20 +1298,20 @@ class JpegCodecTest {
     }
 
     private fun sourcePixelForOrientedDestination(
-        origin: SkEncodedOrigin,
+        origin: EncodedOrigin,
         dx: Int,
         dy: Int,
         width: Int,
         height: Int,
     ): Pair<Int, Int> = when (origin) {
-        SkEncodedOrigin.kTopLeft -> dx to dy
-        SkEncodedOrigin.kTopRight -> width - 1 - dx to dy
-        SkEncodedOrigin.kBottomRight -> width - 1 - dx to height - 1 - dy
-        SkEncodedOrigin.kBottomLeft -> dx to height - 1 - dy
-        SkEncodedOrigin.kLeftTop -> dy to dx
-        SkEncodedOrigin.kRightTop -> dy to height - 1 - dx
-        SkEncodedOrigin.kRightBottom -> width - 1 - dy to height - 1 - dx
-        SkEncodedOrigin.kLeftBottom -> width - 1 - dy to dx
+        EncodedOrigin.TOP_LEFT -> dx to dy
+        EncodedOrigin.TOP_RIGHT -> width - 1 - dx to dy
+        EncodedOrigin.BOTTOM_RIGHT -> width - 1 - dx to height - 1 - dy
+        EncodedOrigin.BOTTOM_LEFT -> dx to height - 1 - dy
+        EncodedOrigin.LEFT_TOP -> dy to dx
+        EncodedOrigin.RIGHT_TOP -> dy to height - 1 - dx
+        EncodedOrigin.RIGHT_BOTTOM -> width - 1 - dy to height - 1 - dx
+        EncodedOrigin.LEFT_BOTTOM -> width - 1 - dy to dx
     }
 
     private fun entropyForZeroBlocks(blockCount: Int): ByteArray {

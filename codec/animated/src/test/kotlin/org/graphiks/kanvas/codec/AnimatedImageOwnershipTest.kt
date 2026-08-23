@@ -4,10 +4,10 @@ import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -73,11 +73,11 @@ class AnimatedImageOwnershipTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
         )
 
         override fun getInfo(): SkImageInfo = info
-        override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kGIF
+        override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.GIF
         override fun getICCProfile(): IccProfile? = null
         override fun getFrameCount(): Int = frames.size
 

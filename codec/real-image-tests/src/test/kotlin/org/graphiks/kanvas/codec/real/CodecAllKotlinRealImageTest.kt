@@ -12,10 +12,10 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedImageFormat
+import org.graphiks.kanvas.image.EncodedOrigin
 import java.util.ServiceLoader
 import java.util.stream.Stream
 
@@ -124,13 +124,13 @@ class CodecAllKotlinRealImageTest {
     data class RealImageFixture(
         val name: String,
         val path: String,
-        val format: SkEncodedImageFormat,
+        val format: EncodedImageFormat,
         val width: Int,
         val height: Int,
         val frameCount: Int = 1,
         val hasAlpha: Boolean,
         val expectedResult: Codec.Result = Codec.Result.kSuccess,
-        val origin: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
+        val origin: EncodedOrigin = EncodedOrigin.TOP_LEFT,
         val hasICCProfile: Boolean? = null,
         val frameInfo: List<FrameInfoExpectation> = emptyList(),
         val pixelProbes: List<PixelProbe>,
@@ -151,7 +151,7 @@ class CodecAllKotlinRealImageTest {
         val index: Int,
         val requiredFrame: Int? = null,
         val durationMs: Int? = null,
-        val alphaType: SkAlphaType? = null,
+        val alphaType: AlphaType? = null,
         val frameRect: RectI32? = null,
     )
 
@@ -192,7 +192,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png rgb mandrill_64",
                 path = "/codec-real-images/png/mandrill_64.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 64,
                 height = 64,
                 hasAlpha = false,
@@ -202,7 +202,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png rgb mandrill_128 icc",
                 path = "/codec-real-images/png/mandrill_128_icc.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 128,
                 height = 128,
                 hasAlpha = false,
@@ -212,7 +212,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png rgba color_wheel",
                 path = "/codec-real-images/png/color_wheel.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 128,
                 height = 128,
                 hasAlpha = true,
@@ -222,7 +222,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png rgba ducky icc",
                 path = "/codec-real-images/png/ducky_rgba_icc.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 489,
                 height = 537,
                 hasAlpha = true,
@@ -232,7 +232,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png grayscale 8 bpc",
                 path = "/codec-real-images/png/grayscale_8.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 3,
                 height = 2,
                 hasAlpha = false,
@@ -246,7 +246,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png palette with transparency",
                 path = "/codec-real-images/png/palette_alpha.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 3,
                 height = 2,
                 hasAlpha = true,
@@ -260,7 +260,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png grayscale 16 bpc",
                 path = "/codec-real-images/png/grayscale_16.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 2,
                 height = 2,
                 hasAlpha = false,
@@ -273,7 +273,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png libpng pngsuite icon",
                 path = "/codec-real-images/libpng/pngsuite2.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 48,
                 height = 48,
                 hasAlpha = false,
@@ -283,7 +283,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png imagemagick rose",
                 path = "/codec-real-images/imagemagick/rose.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 70,
                 height = 46,
                 hasAlpha = false,
@@ -293,7 +293,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "png gimp graphics by gimp",
                 path = "/codec-real-images/gimp/gfx_by_gimp.png",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 90,
                 height = 36,
                 hasAlpha = true,
@@ -303,7 +303,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg baseline dog",
                 path = "/codec-real-images/jpeg/dog.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 180,
                 height = 180,
                 hasAlpha = false,
@@ -312,7 +312,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg baseline icc ducky",
                 path = "/codec-real-images/jpeg/ducky_icc_exif.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 489,
                 height = 537,
                 hasAlpha = false,
@@ -322,7 +322,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg baseline 4_2_0 color wheel",
                 path = "/codec-real-images/jpeg/color_wheel_420.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 128,
                 height = 128,
                 hasAlpha = false,
@@ -331,7 +331,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg baseline 4_4_4 mandrill",
                 path = "/codec-real-images/jpeg/mandrill_h1v1_444.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 512,
                 height = 512,
                 hasAlpha = false,
@@ -340,7 +340,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg progressive grayscale",
                 path = "/codec-real-images/jpeg/grayscale_progressive.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 128,
                 height = 128,
                 hasAlpha = false,
@@ -352,7 +352,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg progressive grayscale legacy",
                 path = "/codec-real-images/jpeg/grayscale_progressive_legacy.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 128,
                 height = 128,
                 hasAlpha = false,
@@ -364,7 +364,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg device camera motorola moto e6 play",
                 path = "/codec-real-images/camera/motorola_moto_e6_play.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 256,
                 height = 166,
                 hasAlpha = false,
@@ -374,7 +374,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "jpeg browser canvas screenshot",
                 path = "/codec-real-images/browser/canvas_checker.jpg",
-                format = SkEncodedImageFormat.kJPEG,
+                format = EncodedImageFormat.JPEG,
                 width = 24,
                 height = 16,
                 hasAlpha = false,
@@ -385,7 +385,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "gif static box",
                 path = "/codec-real-images/gif/box.gif",
-                format = SkEncodedImageFormat.kGIF,
+                format = EncodedImageFormat.GIF,
                 width = 200,
                 height = 55,
                 hasAlpha = false,
@@ -402,7 +402,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "gif multi-frame test640x479",
                 path = "/codec-real-images/gif/test640x479.gif",
-                format = SkEncodedImageFormat.kGIF,
+                format = EncodedImageFormat.GIF,
                 width = 640,
                 height = 479,
                 frameCount = 4,
@@ -422,7 +422,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "gif disposal methods 3x1",
                 path = "/codec-real-images/gif/disposal_methods_3x1.gif",
-                format = SkEncodedImageFormat.kGIF,
+                format = EncodedImageFormat.GIF,
                 width = 3,
                 height = 1,
                 frameCount = 5,
@@ -457,7 +457,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "bmp bottom-up 24 bpp",
                 path = "/codec-real-images/bmp/bottom_up_24.bmp",
-                format = SkEncodedImageFormat.kBMP,
+                format = EncodedImageFormat.BMP,
                 width = 3,
                 height = 2,
                 hasAlpha = false,
@@ -470,7 +470,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "bmp top-down 32 bpp alpha",
                 path = "/codec-real-images/bmp/top_down_32_alpha.bmp",
-                format = SkEncodedImageFormat.kBMP,
+                format = EncodedImageFormat.BMP,
                 width = 2,
                 height = 2,
                 hasAlpha = true,
@@ -482,7 +482,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "bmp indexed palette 8 bpp",
                 path = "/codec-real-images/bmp/palette_8.bmp",
-                format = SkEncodedImageFormat.kBMP,
+                format = EncodedImageFormat.BMP,
                 width = 4,
                 height = 2,
                 hasAlpha = false,
@@ -495,7 +495,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "wbmp type0 checker 3x2",
                 path = "/codec-real-images/wbmp/type0_3x2.wbmp",
-                format = SkEncodedImageFormat.kWBMP,
+                format = EncodedImageFormat.WBMP,
                 width = 3,
                 height = 2,
                 hasAlpha = false,
@@ -508,7 +508,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "ico embedded png",
                 path = "/codec-real-images/ico/embedded_png.ico",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 3,
                 height = 2,
                 hasAlpha = true,
@@ -517,7 +517,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "ico embedded bmp",
                 path = "/codec-real-images/ico/embedded_bmp.ico",
-                format = SkEncodedImageFormat.kBMP,
+                format = EncodedImageFormat.BMP,
                 width = 2,
                 height = 2,
                 hasAlpha = true,
@@ -526,7 +526,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "ico largest entry prefers bmp",
                 path = "/codec-real-images/ico/largest_entry_prefers_bmp.ico",
-                format = SkEncodedImageFormat.kBMP,
+                format = EncodedImageFormat.BMP,
                 width = 3,
                 height = 2,
                 hasAlpha = false,
@@ -535,7 +535,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "ico tie prefers png",
                 path = "/codec-real-images/ico/tie_prefers_png.ico",
-                format = SkEncodedImageFormat.kPNG,
+                format = EncodedImageFormat.PNG,
                 width = 2,
                 height = 2,
                 hasAlpha = false,
@@ -544,7 +544,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "webp vp8l lossless still",
                 path = "/codec-real-images/webp/vp8l_lossless_2x1.webp",
-                format = SkEncodedImageFormat.kWEBP,
+                format = EncodedImageFormat.WEBP,
                 width = 2,
                 height = 1,
                 hasAlpha = true,
@@ -556,7 +556,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "webp vp8 lossy supported still",
                 path = "/codec-real-images/webp/vp8_lossy_gray_2x2.webp",
-                format = SkEncodedImageFormat.kWEBP,
+                format = EncodedImageFormat.WEBP,
                 width = 2,
                 height = 2,
                 hasAlpha = false,
@@ -565,7 +565,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "webp animated vp8l blend dispose",
                 path = "/codec-real-images/webp/animated_vp8l_blend_dispose_4x1.webp",
-                format = SkEncodedImageFormat.kWEBP,
+                format = EncodedImageFormat.WEBP,
                 width = 4,
                 height = 1,
                 frameCount = 3,
@@ -575,21 +575,21 @@ class CodecAllKotlinRealImageTest {
                         index = 0,
                         requiredFrame = Codec.kNoFrame,
                         durationMs = 10,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(0, 0, 4, 1),
                     ),
                     FrameInfoExpectation(
                         index = 1,
                         requiredFrame = 0,
                         durationMs = 20,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(0, 0, 4, 1),
                     ),
                     FrameInfoExpectation(
                         index = 2,
                         requiredFrame = 1,
                         durationMs = 30,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(2, 0, 2, 1),
                     ),
                 ),
@@ -622,7 +622,7 @@ class CodecAllKotlinRealImageTest {
             RealImageFixture(
                 name = "webp vp8x animated stoplight",
                 path = "/codec-real-images/webp/stoplight.webp",
-                format = SkEncodedImageFormat.kWEBP,
+                format = EncodedImageFormat.WEBP,
                 width = 11,
                 height = 29,
                 frameCount = 3,
@@ -632,21 +632,21 @@ class CodecAllKotlinRealImageTest {
                         index = 0,
                         requiredFrame = Codec.kNoFrame,
                         durationMs = 1000,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(0, 0, 11, 29),
                     ),
                     FrameInfoExpectation(
                         index = 1,
                         requiredFrame = 0,
                         durationMs = 500,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(2, 10, 7, 17),
                     ),
                     FrameInfoExpectation(
                         index = 2,
                         requiredFrame = 1,
                         durationMs = 1000,
-                        alphaType = SkAlphaType.kUnpremul,
+                        alphaType = AlphaType.UNPREMUL,
                         frameRect = RectI32.ofOriginSize(2, 2, 7, 16),
                     ),
                 ),
@@ -690,21 +690,21 @@ class CodecAllKotlinRealImageTest {
 
         private fun jpegOrientationFixtures(): List<RealImageFixture> {
             val origins = listOf(
-                SkEncodedOrigin.kTopLeft,
-                SkEncodedOrigin.kTopRight,
-                SkEncodedOrigin.kBottomRight,
-                SkEncodedOrigin.kBottomLeft,
-                SkEncodedOrigin.kLeftTop,
-                SkEncodedOrigin.kRightTop,
-                SkEncodedOrigin.kRightBottom,
-                SkEncodedOrigin.kLeftBottom,
+                EncodedOrigin.TOP_LEFT,
+                EncodedOrigin.TOP_RIGHT,
+                EncodedOrigin.BOTTOM_RIGHT,
+                EncodedOrigin.BOTTOM_LEFT,
+                EncodedOrigin.LEFT_TOP,
+                EncodedOrigin.RIGHT_TOP,
+                EncodedOrigin.RIGHT_BOTTOM,
+                EncodedOrigin.LEFT_BOTTOM,
             )
             return origins.mapIndexed { index, origin ->
                 val exifValue = index + 1
                 RealImageFixture(
                     name = "jpeg exif orientation $exifValue",
                     path = "/codec-real-images/jpeg/orientation/${exifValue}_444.jpg",
-                    format = SkEncodedImageFormat.kJPEG,
+                    format = EncodedImageFormat.JPEG,
                     width = 100,
                     height = 80,
                     hasAlpha = false,

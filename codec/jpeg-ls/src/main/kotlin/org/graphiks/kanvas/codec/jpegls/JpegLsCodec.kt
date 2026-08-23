@@ -2,11 +2,11 @@ package org.graphiks.kanvas.codec.jpegls
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -18,12 +18,12 @@ public class JpegLsCodec private constructor(
         width = document.width,
         height = document.height,
         colorType = SkColorType.kRGBA_8888,
-        alphaType = SkAlphaType.kUnpremul,
+        alphaType = AlphaType.UNPREMUL,
         colorSpace = ImageColorSpace.sRGB(),
     )
 
     override fun getInfo(): SkImageInfo = info
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG
     override fun getICCProfile(): IccProfile? = null
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
@@ -31,7 +31,7 @@ public class JpegLsCodec private constructor(
             info.width != this.info.width ||
             info.height != this.info.height ||
             info.colorType != SkColorType.kRGBA_8888 ||
-            info.alphaType != SkAlphaType.kUnpremul ||
+            info.alphaType != AlphaType.UNPREMUL ||
             info.colorSpace !== this.info.colorSpace
         ) {
             return Result.kInvalidConversion

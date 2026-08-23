@@ -2,11 +2,11 @@ package org.graphiks.kanvas.codec.jpeg2000
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -18,13 +18,13 @@ public class Jpeg2000Codec private constructor(
         width = document.frame.width,
         height = document.frame.height,
         colorType = SkColorType.kRGBA_8888,
-        alphaType = SkAlphaType.kUnpremul,
+        alphaType = AlphaType.UNPREMUL,
         colorSpace = ImageColorSpace.sRGB(),
     )
 
     override fun getInfo(): SkImageInfo = info
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG2000
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG2000
 
     override fun getICCProfile(): IccProfile? = null
 
@@ -34,7 +34,7 @@ public class Jpeg2000Codec private constructor(
         }
         if (
             info.width != this.info.width || info.height != this.info.height ||
-            info.colorType != SkColorType.kRGBA_8888 || info.alphaType != SkAlphaType.kUnpremul
+            info.colorType != SkColorType.kRGBA_8888 || info.alphaType != AlphaType.UNPREMUL
         ) {
             return Result.kInvalidConversion
         }

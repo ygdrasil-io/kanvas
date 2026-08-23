@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import java.util.ServiceLoader
 
 class GifCodecTest {
@@ -46,12 +46,12 @@ class GifCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec is GifCodec)
-        assertEquals(SkEncodedImageFormat.kGIF, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.GIF, codec!!.getEncodedFormat())
         assertEquals(1, codec.getFrameCount())
         assertEquals(1, codec.dimensions().width)
         assertEquals(1, codec.dimensions().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()

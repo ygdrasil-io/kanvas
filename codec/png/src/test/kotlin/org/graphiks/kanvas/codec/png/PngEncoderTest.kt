@@ -12,7 +12,7 @@ import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.cicp.CicpColorInfo
 import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.math.color.ColorMatrix3x3F32
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
@@ -212,7 +212,7 @@ class PngEncoderTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = colorSpace,
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
@@ -235,7 +235,7 @@ class PngEncoderTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = unsupported,
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())

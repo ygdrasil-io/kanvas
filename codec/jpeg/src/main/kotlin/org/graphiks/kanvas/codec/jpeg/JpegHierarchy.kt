@@ -3,7 +3,7 @@ package org.graphiks.kanvas.codec.jpeg
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.skia.utils.PixmapUtils
 import java.io.ByteArrayOutputStream
@@ -562,12 +562,12 @@ internal fun decodeJpegHierarchy(
             width = if (source.metadata.origin.swapsWidthHeight()) samples.height else samples.width,
             height = if (source.metadata.origin.swapsWidthHeight()) samples.width else samples.height,
             colorType = request.colorType,
-            alphaType = source.metadata.origin.let { org.skia.foundation.SkAlphaType.kUnpremul },
+            alphaType = source.metadata.origin.let { org.graphiks.kanvas.image.AlphaType.UNPREMUL },
             colorSpace = request.colorSpace ?: source.metadata.iccProfile?.let(org.graphiks.kanvas.color.ImageColorSpace::fromIccProfile)
                 ?: org.graphiks.kanvas.color.ImageColorSpace.sRGB(),
         )
         val bitmap = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
-        val raw = if (source.metadata.origin == SkEncodedOrigin.kTopLeft) bitmap else {
+        val raw = if (source.metadata.origin == EncodedOrigin.TOP_LEFT) bitmap else {
             SkBitmap(samples.width, samples.height, info.colorSpace, info.colorType)
         }
         val write = writeHierarchyPixels(raw, samples, colorModel)
