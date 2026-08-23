@@ -12,13 +12,18 @@ data class PerformanceConfig(
     val gateVersion: Int = 1,
 ) {
     init {
-        require(warmupFrames >= 0) { "warmupFrames must be non-negative" }
-        require(measuredFrames > 0) { "measuredFrames must be positive" }
-        require(gateVersion > 0) { "gateVersion must be positive" }
+        require(warmupFrames == 10) { "warmupFrames must be exactly 10" }
+        require(measuredFrames == 90) { "measuredFrames must be exactly 90" }
+        require(gateVersion == 1) { "gateVersion must be exactly 1" }
     }
 }
 
 enum class MetricSource { Observed, Derived, Unavailable }
+
+internal val PERFORMANCE_COUNTER_KEYS = setOf(
+    "submissions", "commandBuffers", "renderPasses", "buffersCreated", "texturesCreated",
+    "queueWrites", "uniformSlabsCreated", "bindGroupsCreated", "cache.execution",
+)
 
 data class FrameTimingSummary(
     val sampleCount: Int,
@@ -62,11 +67,27 @@ data class PerformanceMetric(
     }
 }
 
-data class PerformanceTelemetry(
+data class PerformanceTelemetrySnapshot(
     val before: Map<String, PerformanceMetric>,
     val after: Map<String, PerformanceMetric>,
     val delta: Map<String, PerformanceMetric>,
-)
+) {
+    companion object { fun empty() = PerformanceTelemetrySnapshot(emptyMap(), emptyMap(), emptyMap()) }
+}
+
+data class PerformanceTelemetry(
+    val cold: PerformanceTelemetrySnapshot,
+    val warmup: PerformanceTelemetrySnapshot,
+    val measured: PerformanceTelemetrySnapshot,
+    val total: PerformanceTelemetrySnapshot? = null,
+) {
+    constructor(before: Map<String, PerformanceMetric>, after: Map<String, PerformanceMetric>, delta: Map<String, PerformanceMetric>) :
+        this(PerformanceTelemetrySnapshot(before, after, delta), PerformanceTelemetrySnapshot(before, after, delta), PerformanceTelemetrySnapshot(before, after, delta))
+
+    companion object {
+        val Empty = PerformanceTelemetry(PerformanceTelemetrySnapshot(emptyMap(), emptyMap(), emptyMap()), PerformanceTelemetrySnapshot(emptyMap(), emptyMap(), emptyMap()), PerformanceTelemetrySnapshot(emptyMap(), emptyMap(), emptyMap()))
+    }
+}
 
 data class PerformanceEnvironment(
     val sourceCommit: String,
@@ -88,7 +109,7 @@ data class PerformanceRun(
     val coldReadbackNanos: Long? = null,
     val timings: FrameTimingSummary? = null,
     val timingSamplesNanos: List<Long> = emptyList(),
-    val telemetry: PerformanceTelemetry = PerformanceTelemetry(emptyMap(), emptyMap(), emptyMap()),
+    val telemetry: PerformanceTelemetry = PerformanceTelemetry.Empty,
     val diagnostics: List<String> = emptyList(),
 ) {
     init {
@@ -104,12 +125,20 @@ data class PerformanceRun(
             sceneId = "solid-card-stack",
             config = PerformanceConfig(),
             verdict = PerformanceVerdict.EligibleMeasurement("hardware adapter"),
-            environment = PerformanceEnvironment(sourceCommit, "test", "1", "test", "test", null, 1L),
+            environment = PerformanceEnvironment(sourceCommit, "test", "1", "test", "test", EvidenceAdapter("Apple GPU", "Apple", "M2 Max", "Apple", "fixture", false), 1L),
             coldReadbackNanos = 10L,
             timings = FrameTimingSummary.fromSamples(List(90) { 100L + it }),
             timingSamplesNanos = List(90) { 100L + it },
+            telemetry = PerformanceTelemetry(telemetryFixture(1L), telemetryFixture(10L), telemetryFixture(90L), telemetryFixture(101L)),
         )
     }
+}
+
+private fun telemetryFixture(delta: Long): PerformanceTelemetrySnapshot {
+    val before = PERFORMANCE_COUNTER_KEYS.associateWith { PerformanceMetric(0L, MetricSource.Observed) }
+    val after = PERFORMANCE_COUNTER_KEYS.associateWith { PerformanceMetric(delta, MetricSource.Observed) }
+    val changes = PERFORMANCE_COUNTER_KEYS.associateWith { PerformanceMetric(delta, MetricSource.Derived) }
+    return PerformanceTelemetrySnapshot(before, after, changes)
 }
 
 internal fun GPUBackendRuntimeTelemetry.toPerformanceCounters(): Map<String, Long> = linkedMapOf(

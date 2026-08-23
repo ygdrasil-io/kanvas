@@ -26,6 +26,13 @@ class PerformanceBundleWriter internal constructor(
     repositoryRoot: Path,
     private val sourceCommit: String,
     private val clock: Clock = Clock.systemUTC(),
+    private val moveStrategy: (Path, Path) -> Unit = { from, to ->
+        try {
+            Files.move(from, to, ATOMIC_MOVE)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(from, to)
+        }
+    },
 ) {
     private val root = repositoryRoot.toAbsolutePath().normalize()
     private val rootReal: Path
@@ -51,19 +58,25 @@ class PerformanceBundleWriter internal constructor(
             Files.createDirectory(staging)
             val files = content(run)
             files.forEach { (name, bytes) -> Files.write(staging.resolve(name), bytes) }
-            val verification = PerformanceBundleVerifier.verify(staging, sourceCommit)
+            val verification = PerformanceBundleVerifier.verifyStaging(staging, sourceCommit)
             require(verification is PerformanceBundleVerification.Verified) {
                 "performance bundle failed independent verification: ${(verification as PerformanceBundleVerification.Invalid).errors.joinToString("; ")}"
             }
+            var backup: Path? = null
             if (Files.exists(destination, NOFOLLOW_LINKS)) {
                 require(!Files.isSymbolicLink(destination) && Files.isDirectory(destination, NOFOLLOW_LINKS)) { "destination must be a directory" }
-                deleteTree(destination)
+                backup = Files.createTempDirectory(stagingParent, ".${destination.fileName}.backup-")
+                deleteTree(backup)
+                moveStrategy(destination, backup)
             }
             try {
-                Files.move(staging, destination, ATOMIC_MOVE)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(staging, destination)
+                moveStrategy(staging, destination)
+            } catch (failure: Exception) {
+                if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                if (backup != null && Files.exists(backup, NOFOLLOW_LINKS)) moveStrategy(backup, destination)
+                throw failure
             }
+            if (backup != null) deleteTree(backup)
             destination
         } finally {
             deleteTree(stagingRoot)
@@ -111,8 +124,19 @@ class PerformanceBundleWriter internal constructor(
         put("samples", buildJsonArray { run.timingSamplesNanos.forEach { value -> add(JsonPrimitive(value)) } })
         put("summary", run.timings?.let { buildJsonObject { put("sampleCount", it.sampleCount); put("p50Nanos", it.p50Nanos); put("p95Nanos", it.p95Nanos); put("source", it.source.name) } } ?: JsonNull)
     }
-    private fun telemetry(run: PerformanceRun) = buildJsonObject { put("before", metricMap(run.telemetry.before)); put("after", metricMap(run.telemetry.after)); put("delta", metricMap(run.telemetry.delta)) }
-    private fun metricMap(map: Map<String, PerformanceMetric>) = buildJsonObject { map.toSortedMap().forEach { (key, value) -> put(key, buildJsonObject { put("value", value.value); put("source", value.source.name); put("reason", value.reason) }) } }
+    private fun telemetry(run: PerformanceRun) = buildJsonObject {
+        put("cold", phaseTelemetry(run.telemetry.cold)); put("warmup", phaseTelemetry(run.telemetry.warmup)); put("measured", phaseTelemetry(run.telemetry.measured))
+        run.telemetry.total?.let { put("total", phaseTelemetry(it)) }
+    }
+    private fun phaseTelemetry(phase: PerformanceTelemetrySnapshot) = buildJsonObject { put("before", metricMap(phase.before)); put("after", metricMap(phase.after)); put("delta", metricMap(phase.delta)) }
+    private fun metricMap(map: Map<String, PerformanceMetric>) = buildJsonObject {
+        val values = if (map.isEmpty()) PERFORMANCE_COUNTER_KEYS.associateWith {
+            PerformanceMetric(null, MetricSource.Unavailable, "telemetry unavailable")
+        } else map
+        values.toSortedMap().forEach { (key, value) ->
+            put(key, buildJsonObject { put("value", value.value); put("source", value.source.name); put("reason", value.reason) })
+        }
+    }
     private fun unavailableAdapterFact(value: String?, reason: String) = if (value == null) buildJsonObject { put("value", null); put("source", MetricSource.Unavailable.name); put("reason", reason) } else buildJsonObject { put("value", value); put("source", MetricSource.Observed.name); put("reason", null) }
     private fun verdict(verdict: PerformanceVerdict) = buildJsonObject { put("kind", kind(verdict)); put("reason", verdict.reason) }
     private fun kind(verdict: PerformanceVerdict) = when (verdict) { is PerformanceVerdict.EligibleMeasurement -> "EligibleMeasurement"; is PerformanceVerdict.DiagnosticOnly -> "DiagnosticOnly"; is PerformanceVerdict.Unavailable -> "Unavailable"; is PerformanceVerdict.Failed -> "Failed" }
@@ -131,9 +155,19 @@ sealed interface PerformanceBundleVerification {
 @OptIn(ExperimentalSerializationApi::class)
 object PerformanceBundleVerifier {
     private val required = setOf("manifest.json", "environment.json", "eligibility.json", "timings.json", "telemetry.json", "diagnostics.json", "verdict.json")
-    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = false }
+    private val json = PerformanceJson
 
     fun verify(bundle: Path, sourceCommit: String): PerformanceBundleVerification {
+        return runCatching { verifyInternal(bundle, sourceCommit, allowStaging = false) }
+            .getOrElse { PerformanceBundleVerification.Invalid(listOf("bundle is invalid: ${it.message ?: it::class.simpleName}")) }
+    }
+
+    internal fun verifyStaging(bundle: Path, sourceCommit: String): PerformanceBundleVerification {
+        return runCatching { verifyInternal(bundle, sourceCommit, allowStaging = true) }
+            .getOrElse { PerformanceBundleVerification.Invalid(listOf("bundle is invalid: ${it.message ?: it::class.simpleName}")) }
+    }
+
+    private fun verifyInternal(bundle: Path, sourceCommit: String, allowStaging: Boolean): PerformanceBundleVerification {
         val errors = mutableListOf<String>()
         if (!sourceCommit.matches(Regex("[0-9a-f]{40}"))) errors += "invalid source commit"
         if (!Files.isDirectory(bundle, NOFOLLOW_LINKS) || Files.isSymbolicLink(bundle)) return PerformanceBundleVerification.Invalid(listOf("bundle is not a directory"))
@@ -143,42 +177,131 @@ object PerformanceBundleVerifier {
             val child = bundle.resolve(name)
             if (Files.isSymbolicLink(child) || !Files.isRegularFile(child, NOFOLLOW_LINKS)) errors += "required entry is not a regular file: $name"
         }
-        val manifest = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("manifest.json"))).jsonObject }.getOrElse { return PerformanceBundleVerification.Invalid(listOf("manifest is invalid")) }
+        val manifest = parseObject(bundle.resolve("manifest.json"), "manifest", errors) ?: return PerformanceBundleVerification.Invalid(errors)
+        requireKeys(manifest, setOf("schema", "sourceCommit", "sceneId", "coldFrames", "warmupFrames", "measuredFrames", "gateVersion", "generatedAtUtc", "hashes"), "manifest", errors)
         if (manifest["schema"]?.jsonPrimitive?.content != GPU_EVIDENCE_PERFORMANCE_SCHEMA) errors += "schema mismatch"
-        if (manifest["sourceCommit"]?.jsonPrimitive?.content != sourceCommit) errors += "source commit mismatch"
+        if (manifest["sourceCommit"]?.jsonPrimitive?.content != sourceCommit || (!allowStaging && bundle.parent?.fileName?.toString() != sourceCommit)) errors += "source commit mismatch"
+        if (manifest["sceneId"]?.jsonPrimitive?.content != bundle.fileName.toString()) errors += "scene mismatch"
+        if (!allowStaging) {
+            val absolute = bundle.toAbsolutePath().normalize()
+            val tail = (0 until absolute.nameCount).map { absolute.getName(it).toString() }.takeLast(7)
+            if (tail != listOf("reports", "gpu-renderer", "evidence", "performance", "generated", sourceCommit, bundle.fileName.toString())) errors += "non-canonical bundle path"
+        }
+        if (manifest["coldFrames"]?.jsonPrimitive?.content != "1" || manifest["warmupFrames"]?.jsonPrimitive?.content != "10" || manifest["measuredFrames"]?.jsonPrimitive?.content != "90" || manifest["gateVersion"]?.jsonPrimitive?.content != "1") errors += "manifest counts or gate mismatch"
         val hashes = manifest["hashes"]?.jsonObject ?: run { errors += "hashes missing"; JsonObject(emptyMap()) }
-        required.filter { it != "manifest.json" }.forEach { name -> if (hashes[name]?.jsonPrimitive?.content != sha256(Files.readAllBytes(bundle.resolve(name)))) errors += "hash mismatch: $name" }
-        val eligibility = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("eligibility.json"))).jsonObject }.getOrElse { errors += "eligibility is invalid"; null }
-        val verdict = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("verdict.json"))).jsonObject }.getOrElse { errors += "verdict is invalid"; null }
+        if (hashes.keys != required.filter { it != "manifest.json" }.toSet()) errors += "hash key set mismatch"
+        required.filter { it != "manifest.json" }.forEach { name ->
+            val actual = runCatching { sha256(Files.readAllBytes(bundle.resolve(name))) }.getOrNull()
+            if (hashes[name]?.jsonPrimitive?.content != actual) errors += "hash mismatch: $name"
+        }
+        parseObject(bundle.resolve("environment.json"), "environment", errors)?.let { environment ->
+            requireKeys(environment, setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "adapter"), "environment", errors)
+            if (environment["sourceCommit"]?.jsonPrimitive?.content != sourceCommit) errors += "environment source commit mismatch"
+            val adapterElement = environment["adapter"]
+            if (adapterElement is JsonObject) {
+                requireKeys(adapterElement, setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter", "backend", "driver"), "adapter", errors)
+                verifyUnavailableRecord(adapterElement["backend"], "adapter backend", errors)
+                verifyUnavailableRecord(adapterElement["driver"], "adapter driver", errors)
+            } else if (adapterElement !is JsonNull) {
+                errors += "adapter is invalid"
+            }
+        }
+        val eligibility = parseObject(bundle.resolve("eligibility.json"), "eligibility", errors)
+        val verdict = parseObject(bundle.resolve("verdict.json"), "verdict", errors)
+        eligibility?.let { requireKeys(it, setOf("kind", "reason"), "eligibility", errors) }
+        verdict?.let { requireKeys(it, setOf("kind", "reason"), "verdict", errors) }
         val eligibilityKind = eligibility?.get("kind")?.jsonPrimitive?.content
         val verdictKind = verdict?.get("kind")?.jsonPrimitive?.content
-        if (eligibilityKind == null || verdictKind == null) errors += "eligibility/verdict kind missing"
+        val eligibilityKinds = setOf("EligibleMeasurement", "DiagnosticOnly", "Unavailable")
+        val verdictKinds = eligibilityKinds + "Failed"
+        if (eligibilityKind !in eligibilityKinds || verdictKind !in verdictKinds) errors += "eligibility/verdict kind unknown"
+        if (eligibilityKind == "EligibleMeasurement") {
+            val adapter = (parseObject(bundle.resolve("environment.json"), "environment", mutableListOf())?.get("adapter") as? JsonObject)
+            if (adapter == null) errors += "eligible measurement requires adapter identity"
+            else {
+                val identity = listOf("summary", "vendor", "device", "architecture", "description").any { !adapter[it]?.jsonPrimitive?.contentOrNull.isNullOrBlank() }
+                if (!identity) errors += "eligible measurement adapter identity missing"
+                if (adapter["isFallbackAdapter"]?.jsonPrimitive?.content != "false") errors += "eligible measurement cannot use fallback adapter"
+            }
+        }
         if (eligibility != null && verdict != null) {
             val reasonsMatch = eligibility["reason"]?.jsonPrimitive?.content == verdict["reason"]?.jsonPrimitive?.content
             val allowedFailure = verdictKind == "Failed"
-            if ((!allowedFailure && eligibilityKind != verdictKind) || (!allowedFailure && !reasonsMatch)) errors += "verdict does not match eligibility"
+            if ((allowedFailure && eligibilityKind != "EligibleMeasurement") || (!allowedFailure && eligibilityKind != verdictKind) || (!allowedFailure && !reasonsMatch)) errors += "verdict does not match eligibility"
         }
-        val timings = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("timings.json"))).jsonObject }.getOrElse { errors += "timings are invalid"; null }
+        val timings = parseObject(bundle.resolve("timings.json"), "timings", errors)
         if (timings != null) {
+            requireKeys(timings, setOf("coldReadbackNanos", "warmupFrames", "measuredFrames", "samples", "summary"), "timings", errors)
+            if (timings["warmupFrames"]?.jsonPrimitive?.content != "10" || timings["measuredFrames"]?.jsonPrimitive?.content != "90") errors += "timing config mismatch"
             val measured = timings["measuredFrames"]?.jsonPrimitive?.content?.toIntOrNull()
             val samples = timings["samples"]?.jsonArray
             if (measured == null || samples == null || samples.any { it !is JsonPrimitive || it.jsonPrimitive.isString || it.jsonPrimitive.content.toLongOrNull() == null }) errors += "timings provenance is invalid"
-            else if (samples.size != measured && verdictKind != "Failed") errors += "timing sample count mismatch"
-        }
-        val telemetry = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("telemetry.json"))).jsonObject }.getOrElse { errors += "telemetry is invalid"; null }
-        telemetry?.values?.forEach { phase ->
-            if (phase !is kotlinx.serialization.json.JsonObject) errors += "telemetry phase is invalid"
-            else phase.values.forEach { metric ->
-                val record = metric as? kotlinx.serialization.json.JsonObject
-                val source = record?.get("source")?.jsonPrimitive?.content
-                val value = record?.get("value")?.jsonPrimitive
-                val reason = record?.get("reason")?.jsonPrimitive?.contentOrNull
-                if (source !in setOf("Observed", "Derived", "Unavailable")) errors += "telemetry metric source is invalid"
-                if (source == "Unavailable" && reason.isNullOrBlank()) errors += "unavailable metric reason missing"
-                if (source != "Unavailable" && (value == null || value.isString || value.content.toLongOrNull() == null || value.content.toLong() < 0L)) errors += "available metric value is invalid"
+            else if (eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed" && samples.size != measured) errors += "timing sample count mismatch"
+            else if (eligibilityKind != "EligibleMeasurement" && samples.isNotEmpty()) errors += "diagnostic timing samples must be empty"
+            else if (samples != null && samples.size > measured) errors += "timing sample count exceeds configured count"
+            timings["summary"]?.let { summaryElement ->
+                if (summaryElement is JsonObject) {
+                    requireKeys(summaryElement, setOf("sampleCount", "p50Nanos", "p95Nanos", "source"), "timing summary", errors)
+                    val values = samples.orEmpty().mapNotNull { it.jsonPrimitive.content.toLongOrNull() }
+                    if (summaryElement["source"]?.jsonPrimitive?.content != MetricSource.Observed.name) errors += "timing summary provenance is invalid"
+                    if (values.isNotEmpty()) {
+                        val expected = FrameTimingSummary.fromSamples(values)
+                        if (summaryElement["sampleCount"]?.jsonPrimitive?.content != expected.sampleCount.toString() || summaryElement["p50Nanos"]?.jsonPrimitive?.content != expected.p50Nanos.toString() || summaryElement["p95Nanos"]?.jsonPrimitive?.content != expected.p95Nanos.toString() || summaryElement["source"]?.jsonPrimitive?.content != expected.source.name) errors += "timing summary does not match samples"
+                    }
+                } else if (summaryElement !is kotlinx.serialization.json.JsonNull) errors += "timing summary is invalid"
+                else if (samples != null && samples.isNotEmpty()) errors += "timing summary missing for samples"
             }
         }
+        parseObject(bundle.resolve("telemetry.json"), "telemetry", errors)?.let { telemetry ->
+            val phaseNames = setOf("cold", "warmup", "measured", "total")
+            if (!telemetry.keys.all { it in phaseNames } || !setOf("cold", "warmup", "measured").all { it in telemetry.keys }) errors += "telemetry phase key set mismatch"
+            telemetry.forEach { (phaseName, phaseElement) -> if (phaseElement is JsonObject) verifyPhase(phaseName, phaseElement, errors) else errors += "telemetry phase is invalid" }
+            if (eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed") {
+                mapOf("cold" to 1L, "warmup" to 10L, "measured" to 90L).forEach { (phaseName, expected) ->
+                    val submissions = (telemetry[phaseName] as? JsonObject)?.get("delta")?.jsonObject?.get("submissions")?.jsonObject
+                    if (submissions?.get("source")?.jsonPrimitive?.content != MetricSource.Derived.name || submissions["value"]?.jsonPrimitive?.content?.toLongOrNull() != expected) errors += "$phaseName submissions provenance mismatch"
+                }
+            }
+        }
+        parseObject(bundle.resolve("diagnostics.json"), "diagnostics", errors)?.let { diagnostics ->
+            requireKeys(diagnostics, setOf("diagnostics"), "diagnostics", errors)
+            val values = diagnostics["diagnostics"] as? kotlinx.serialization.json.JsonArray
+            if (values == null || values.any { it !is JsonPrimitive || !it.jsonPrimitive.isString }) errors += "diagnostics values invalid"
+        }
         return if (errors.isEmpty()) PerformanceBundleVerification.Verified else PerformanceBundleVerification.Invalid(errors)
+    }
+    private fun parseObject(path: Path, label: String, errors: MutableList<String>): JsonObject? = runCatching {
+        if (!Files.isRegularFile(path, NOFOLLOW_LINKS)) error("missing")
+        val raw = Files.readString(path)
+        val object_ = json.parseToJsonElement(raw).jsonObject
+        if (raw != json.encodeToString(JsonObject.serializer(), object_)) error("non-canonical")
+        object_
+    }.getOrElse { errors += "$label is invalid"; null }
+    private fun requireKeys(object_: JsonObject, expected: Set<String>, label: String, errors: MutableList<String>) { if (object_.keys != expected) errors += "$label key set mismatch" }
+    private fun verifyUnavailableRecord(element: kotlinx.serialization.json.JsonElement?, label: String, errors: MutableList<String>) {
+        val record = element as? JsonObject
+        if (record == null) { errors += "$label record invalid"; return }
+        requireKeys(record, setOf("value", "source", "reason"), label, errors)
+        if (record["value"] !is JsonNull || record["source"]?.jsonPrimitive?.content != MetricSource.Unavailable.name || record["reason"]?.jsonPrimitive?.contentOrNull.isNullOrBlank()) errors += "$label provenance invalid"
+    }
+    private fun verifyPhase(name: String, phase: JsonObject, errors: MutableList<String>) {
+        requireKeys(phase, setOf("before", "after", "delta"), "$name telemetry", errors)
+        val before = phase["before"]?.jsonObject ?: run { errors += "$name before invalid"; return }
+        val after = phase["after"]?.jsonObject ?: run { errors += "$name after invalid"; return }
+        val delta = phase["delta"]?.jsonObject ?: run { errors += "$name delta invalid"; return }
+        if (before.keys != PERFORMANCE_COUNTER_KEYS || after.keys != PERFORMANCE_COUNTER_KEYS || delta.keys != PERFORMANCE_COUNTER_KEYS) errors += "$name metric key sets mismatch"
+        before.keys.forEach { key ->
+            val b = before[key]?.jsonObject; val a = after[key]?.jsonObject; val d = delta[key]?.jsonObject
+            val bs = b?.get("source")?.jsonPrimitive?.content; val as_ = a?.get("source")?.jsonPrimitive?.content; val ds = d?.get("source")?.jsonPrimitive?.content
+            if (b == null || a == null || d == null || b.keys != setOf("value", "source", "reason") || a.keys != b.keys || d.keys != b.keys) errors += "$name metric record invalid: $key"
+            if (bs !in setOf("Observed", "Unavailable") || as_ !in setOf("Observed", "Unavailable") || ds !in setOf("Derived", "Unavailable")) errors += "$name metric source invalid: $key"
+            val bv = b?.get("value")?.jsonPrimitive?.content?.toLongOrNull(); val av = a?.get("value")?.jsonPrimitive?.content?.toLongOrNull(); val dv = d?.get("value")?.jsonPrimitive?.content?.toLongOrNull()
+            if (bs != "Unavailable" && bv == null || as_ != "Unavailable" && av == null || ds != "Unavailable" && dv == null) errors += "$name metric value invalid: $key"
+            if (ds == "Derived" && bv != null && av != null && dv != av - bv) errors += "$name metric delta mismatch: $key"
+            if (bs == "Unavailable" && b?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank() || as_ == "Unavailable" && a?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank() || ds == "Unavailable" && d?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank()) errors += "$name unavailable metric reason missing: $key"
+            if (bs == "Unavailable" && b?.get("value") !is JsonNull || as_ == "Unavailable" && a?.get("value") !is JsonNull || ds == "Unavailable" && d?.get("value") !is JsonNull) errors += "$name unavailable metric value must be null: $key"
+            if (bs != "Unavailable" && b?.get("reason") !is JsonNull || as_ != "Unavailable" && a?.get("reason") !is JsonNull || ds != "Unavailable" && d?.get("reason") !is JsonNull) errors += "$name available metric reason must be null: $key"
+        }
     }
     private fun sha256(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
 }

@@ -53,7 +53,7 @@ tasks.register<JavaExec>("gpuEvidencePerformance") {
     if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs("-XstartOnFirstThread")
     doFirst {
         require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
-        require(warmupFrames.get().toInt() >= 0 && measuredFrames.get().toInt() > 0) { "warmupFrames must be non-negative and measuredFrames positive" }
+        require(warmupFrames.get().toInt() == 10 && measuredFrames.get().toInt() == 90) { "warmupFrames and measuredFrames must be exactly 10 and 90" }
     }
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get(), "--warmup-frames", warmupFrames.get(), "--measured-frames", measuredFrames.get()) })
     outputs.upToDateWhen { false }

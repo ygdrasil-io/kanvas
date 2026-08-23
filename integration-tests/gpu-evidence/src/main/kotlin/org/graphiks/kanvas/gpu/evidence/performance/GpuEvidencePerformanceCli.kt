@@ -23,7 +23,10 @@ class GpuEvidencePerformanceCli(private val runtime: PerformanceRuntime, private
             selected.forEach { scene ->
                 val result = GpuEvidencePerformanceRunner(backend, request.sourceCommit, request.config).run(scene)
                 writer.writeGenerated(result)
-                println("${scene.descriptor.id.value}: ${result.verdict::class.simpleName} samples=${result.timingSamplesNanos.size} submissions=${result.telemetry.delta["submissions"]?.value ?: "unavailable"}")
+                val coldSubmissions = result.telemetry.cold.delta["submissions"]?.value ?: "unavailable"
+                val warmupSubmissions = result.telemetry.warmup.delta["submissions"]?.value ?: "unavailable"
+                val measuredSubmissions = result.telemetry.measured.delta["submissions"]?.value ?: "unavailable"
+                println("${scene.descriptor.id.value}: ${result.verdict::class.simpleName} samples=${result.timingSamplesNanos.size} submissions=$coldSubmissions/$warmupSubmissions/$measuredSubmissions")
                 if (result.verdict is PerformanceVerdict.Failed || result.verdict is PerformanceVerdict.Unavailable) code = 1
             }
             code
@@ -48,8 +51,12 @@ data class PerformanceRequest(val repositoryRoot: Path, val sourceCommit: String
             while (index < args.size) { val key = args[index]; require(key in setOf("--repository-root", "--source-commit", "--warmup-frames", "--measured-frames", "--scene")); require(index + 1 < args.size); require(values.put(key, args[index + 1]) == null); index += 2 }
             val root = Path.of(requireNotNull(values["--repository-root"])); require(root.isAbsolute && Files.isDirectory(root))
             val commit = requireNotNull(values["--source-commit"]); require(commit.matches(Regex("[0-9a-f]{40}")))
-            val config = PerformanceConfig(values["--warmup-frames"]?.toInt() ?: 10, values["--measured-frames"]?.toInt() ?: 90)
-            val scene = values["--scene"]; require(scene == null || GpuEvidenceCatalog.cases.any { it.descriptor.id.value == scene })
+            val warmup = values["--warmup-frames"]?.toInt() ?: 10
+            val measured = values["--measured-frames"]?.toInt() ?: 90
+            require(warmup == 10 && measured == 90) { "warmupFrames and measuredFrames must be exactly 10 and 90" }
+            val config = PerformanceConfig(warmupFrames = warmup, measuredFrames = measured)
+            val scene = values["--scene"]
+            require(scene == null || GpuEvidenceCatalog.cases.any { it.descriptor.id.value == scene && it.descriptor.expectation is org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation.ShouldRender }) { "scene must identify a ShouldRender case" }
             return PerformanceRequest(root.toAbsolutePath().normalize(), commit, config, scene)
         }
     }
