@@ -1,9 +1,12 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
@@ -49,7 +52,9 @@ class VerifyEvidenceCliTest {
         Files.move(manifest, backup)
         Files.createSymbolicLink(manifest, backup)
 
-        assertTrue(VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit")) != 0)
+        val stderr = ByteArrayOutputStream()
+        assertTrue(VerifyEvidenceCliRunner(stderr = PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit")) != 0)
+        assertTrue(stderr.toString().contains("manifest must be a regular non-symlink file"))
     }
 
     @Test
@@ -82,14 +87,19 @@ class VerifyEvidenceCliTest {
     fun `coherent unavailable bundle is rejected by the verifier gate`() {
         writeAll(COMMIT)
         val scene = generatedRoot().resolve("custom-runtime-effect-unregistered-refusal")
-        replaceAndRefresh(scene, "manifest.json", "\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\"")
         replaceAndRefresh(scene, "route.json", "\"outcome\":\"refused\"", "\"outcome\":\"unavailable\"")
         replaceAndRefresh(scene, "environment.json", "\"available\":true", "\"available\":false")
         replaceAndRefresh(scene, "verdict.json", "\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\"")
         replaceAndRefresh(scene, "verdict.json", "\"verdictKind\":\"pass\"", "\"verdictKind\":\"unavailable\"")
         replaceAndRefresh(scene, "verdict.json", "\"reason\":\"exact refusal before submission\"", "\"reason\":\"scene unavailable: unsupported.runtime_effect.custom_wgsl_not_registered\"")
+        val manifest = scene.resolve("manifest.json")
+        Files.writeString(manifest, Files.readString(manifest).replace("\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\""))
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
 
-        assertTrue(verify(COMMIT) != 0)
+        assertTrue(VerifyEvidenceCliRunner(PrintStream(stdout), PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--source-commit", COMMIT)) != 0)
+        assertTrue(stdout.toString().contains("custom-runtime-effect-unregistered-refusal: unavailable"))
+        assertFalse(stderr.toString().contains("invalid JSON"))
     }
 
     private fun verify(commit: String) = VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--source-commit", commit))

@@ -90,12 +90,19 @@ private fun defaultPromotionMove(source: Path, destination: Path, atomic: Boolea
     }
 }
 
+private fun defaultPromotionCleanup(path: Path) {
+    if (!Files.exists(path, NOFOLLOW_LINKS)) return
+    if (Files.isDirectory(path, NOFOLLOW_LINKS)) Files.list(path).use { stream -> stream.forEach(::defaultPromotionCleanup) }
+    Files.deleteIfExists(path)
+}
+
 class PromoteEvidenceCliRunner internal constructor(
     private val stdout: PrintStream = System.out,
     private val stderr: PrintStream = System.err,
     private val clock: Clock = Clock.systemUTC(),
     private val moveStrategy: (Path, Path, Boolean) -> Unit = ::defaultPromotionMove,
     private val beforeStagedVerification: (Path) -> Unit = {},
+    private val cleanupStrategy: (Path) -> Unit = ::defaultPromotionCleanup,
 ) {
     fun run(args: Array<String>): Int {
         val request = try {
@@ -109,6 +116,9 @@ class PromoteEvidenceCliRunner internal constructor(
             0
         } catch (failure: Exception) {
             stderr.println("gpu evidence promotion rejected: ${failure.message}")
+            failure.suppressed.forEach { detail ->
+                stderr.println("gpu evidence promotion detail: ${detail.message}")
+            }
             1
         }
     }
@@ -130,6 +140,7 @@ class PromoteEvidenceCliRunner internal constructor(
         Files.createDirectories(roots.promoted.parent)
         val staged = Files.createTempDirectory(roots.promoted.parent, ".promoted.staged-")
         var swapped = false
+        var primaryFailure: Throwable? = null
         try {
             sceneIds.forEach { sceneId ->
                 val source = roots.generated.resolve(sceneId)
@@ -143,8 +154,21 @@ class PromoteEvidenceCliRunner internal constructor(
             }
             swapCatalogRoot(staged, roots.promoted)
             swapped = true
+        } catch (failure: Throwable) {
+            primaryFailure = failure
+            throw failure
         } finally {
-            if (!swapped) deleteTree(staged)
+            if (!swapped) {
+                try {
+                    cleanupStrategy(staged)
+                } catch (cleanupFailure: Throwable) {
+                    if (primaryFailure != null) {
+                        primaryFailure.addSuppressed(cleanupFailure)
+                    } else {
+                        throw cleanupFailure
+                    }
+                }
+            }
         }
         stdout.println("promoted ${sceneIds.size} GPU evidence scenes from ${request.sourceCommit}")
     }
@@ -221,6 +245,7 @@ class PromoteEvidenceCliRunner internal constructor(
                     restored = true
                 } catch (restoreFailure: Throwable) {
                     failure.addSuppressed(restoreFailure)
+                    stderr.println("promotion rollback failed; backup retained at $backup")
                 }
             }
             throw failure

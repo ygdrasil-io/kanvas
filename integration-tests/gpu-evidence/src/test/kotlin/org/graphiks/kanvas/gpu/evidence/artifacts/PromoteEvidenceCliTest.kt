@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.io.IOException
@@ -51,6 +53,33 @@ class PromoteEvidenceCliTest {
         val failed = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
         assertTrue(failed != 0)
         assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
+    }
+
+    @Test
+    fun `promotion rejects a coherent fail bundle without mutating the destination`() {
+        writeAllBundles(repository, COMMIT)
+        val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
+        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", null, null, null, true)
+        val route = RouteEvidence("fail-route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+        val pixels = ByteArray(descriptor.width * descriptor.height * 4)
+        EvidenceBundleWriter(repository, COMMIT).writeGenerated(
+            descriptor,
+            SceneObservation.Rendered(
+                pixels,
+                route,
+                emptyList(),
+                environment,
+                ImageComparison(false, 0.0, descriptor.width * descriptor.height, 255, 1.0, ByteArray(pixels.size), 1),
+            ),
+            pixels,
+        )
+        val stderr = ByteArrayOutputStream()
+
+        val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+        assertTrue(stderr.toString().contains("generated evidence failed independent verification"))
     }
 
     @Test
@@ -138,7 +167,9 @@ class PromoteEvidenceCliTest {
         val before = snapshot(promotedRoot(repository))
         writeAllBundles(repository, COMMIT)
         var moves = 0
+        val stderr = ByteArrayOutputStream()
         val result = PromoteEvidenceCliRunner(
+            stderr = PrintStream(stderr),
             moveStrategy = { source, destination, _ ->
                 moves++
                 if (moves == 2 || moves == 3) throw IOException("injected swap and restore failure")
@@ -153,6 +184,23 @@ class PromoteEvidenceCliTest {
         }
         assertTrue(backup != null)
         assertEquals(before, snapshot(requireNotNull(backup).resolve("promoted")))
+        assertTrue(stderr.toString().contains(requireNotNull(backup).toString()))
+    }
+
+    @Test
+    fun `promotion preserves the primary swap failure when staged cleanup also fails`() {
+        writeAllBundles(repository, COMMIT)
+        val stderr = ByteArrayOutputStream()
+
+        val result = PromoteEvidenceCliRunner(
+            stderr = PrintStream(stderr),
+            moveStrategy = { _, _, _ -> throw IOException("primary swap failure") },
+            cleanupStrategy = { throw IOException("staged cleanup failure") },
+        ).run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
+        assertTrue(stderr.toString().contains("primary swap failure"))
+        assertTrue(stderr.toString().contains("staged cleanup failure"))
     }
 
     @Test
