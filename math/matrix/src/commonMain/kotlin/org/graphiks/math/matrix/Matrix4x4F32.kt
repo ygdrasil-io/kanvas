@@ -771,7 +771,6 @@ public class Matrix4x4F32 {
     // ─── equals / hashCode / toString ──────────────────────────────────
 
     override fun equals(other: Any?): Boolean {
-        if (this === other) return true
         if (other !is Matrix4x4F32) return false
         for (i in 0..15) {
             if (fMat[i] != other.fMat[i]) return false

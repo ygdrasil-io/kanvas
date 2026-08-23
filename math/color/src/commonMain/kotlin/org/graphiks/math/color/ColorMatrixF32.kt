@@ -189,7 +189,7 @@ public class ColorMatrixF32 {
 
         private fun setConcatInto(result: FloatArray, outer: FloatArray, inner: FloatArray) {
             val tmp = FloatArray(20)
-            val target: FloatArray = if (result === outer || result === inner) tmp else result
+            val target: FloatArray = if (result === outer || result === inner) tmp else result // identity-ok: mutable array aliasing
 
             var index = 0
             var j = 0
@@ -210,7 +210,7 @@ public class ColorMatrixF32 {
                 j += 5
             }
 
-            if (target !== result) {
+            if (target !== result) { // identity-ok: mutable array aliasing
                 tmp.copyInto(result)
             }
         }

@@ -120,7 +120,6 @@ public class Line2F64(source: Array<Point2F64>) {
     }
 
     override fun equals(other: Any?): Boolean {
-        if (this === other) return true
         if (other !is Line2F64) return false
         return pts[0] == other.pts[0] && pts[1] == other.pts[1]
     }

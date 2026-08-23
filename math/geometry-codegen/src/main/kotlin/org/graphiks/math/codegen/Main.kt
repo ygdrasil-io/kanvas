@@ -3,7 +3,7 @@ package org.graphiks.math.codegen
 import java.nio.file.Path
 
 public fun main(args: Array<String>) {
-    require(args.size == 2) { "usage: geometry-codegen <generate|verify> <repo-root>" }
+    require(args.size == 2) { "usage: geometry-codegen <generate|verify|verify-identity> <repo-root>" }
     val repoRoot = Path.of(args[1]).toAbsolutePath().normalize()
     when (args[0]) {
         "generate" -> GeneratedSourceSynchronizer.generate(
@@ -12,7 +12,20 @@ public fun main(args: Array<String>) {
         )
 
         "verify" -> verify(repoRoot)
+        "verify-identity" -> verifyIdentityUsage(repoRoot)
         else -> error("unknown geometry-codegen mode: ${args[0]}")
+    }
+}
+
+private fun verifyIdentityUsage(repoRoot: Path) {
+    val violations = IdentityUsageVerifier.verify(repoRoot)
+    check(violations.isEmpty()) {
+        violations.joinToString(
+            prefix = "forbidden math identity usage:\n",
+            separator = "\n",
+        ) { violation ->
+            "${violation.path}:${violation.line}: ${violation.expression}"
+        }
     }
 }
 

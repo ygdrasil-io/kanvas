@@ -6,6 +6,10 @@ plugins {
 dependencies {
     implementation(libs.kotlinPoet)
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinCompilerEmbeddable)
+    testImplementation(project(":math:vector"))
+    testImplementation(project(":math:geometry"))
+    testImplementation(project(":math:matrix"))
 }
 
 application {
@@ -20,9 +24,18 @@ tasks.register<JavaExec>("generateMathPrimitives") {
     args("generate", rootProject.layout.projectDirectory.asFile.absolutePath)
 }
 
+val verifyMathPrimitiveIdentityUsage = tasks.register<JavaExec>("verifyMathPrimitiveIdentityUsage") {
+    group = "verification"
+    description = "Rejects unjustified reference-identity use in math Kotlin sources."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set(application.mainClass)
+    args("verify-identity", rootProject.layout.projectDirectory.asFile.absolutePath)
+}
+
 tasks.register<JavaExec>("verifyMathPrimitivesGenerated") {
     group = "verification"
     description = "Verifies deterministic semantic math primitive generation and checked-in sources."
+    dependsOn(verifyMathPrimitiveIdentityUsage)
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set(application.mainClass)
     args("verify", rootProject.layout.projectDirectory.asFile.absolutePath)
