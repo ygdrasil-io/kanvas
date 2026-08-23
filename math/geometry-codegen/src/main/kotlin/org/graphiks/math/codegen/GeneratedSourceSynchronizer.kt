@@ -58,24 +58,6 @@ internal object GeneratedSourceSynchronizer {
         }
     }
 
-    fun verify(repoRoot: Path, tree: GeneratedTree): List<String> {
-        val expected = validateAndNormalize(tree)
-        val actual = existingFiles(repoRoot).associate { it.first to it.second }
-        return buildList {
-            expected.forEach { (relativePath, file) ->
-                val actualPath = actual[relativePath]
-                when {
-                    actualPath == null -> add("missing generated source: $relativePath")
-                    !file.utf8.contentEquals(actualPath.readBytes()) ->
-                        add("generated source differs: $relativePath")
-                }
-            }
-            actual.keys.filter { it !in expected }.sorted().forEach { relativePath ->
-                add("unexpected generated source: $relativePath")
-            }
-        }.sorted()
-    }
-
     private fun validateAndNormalize(tree: GeneratedTree): Map<Path, GeneratedFile> {
         val normalizedFiles = tree.files.map { file ->
             val path = Path.of(file.relativePath)

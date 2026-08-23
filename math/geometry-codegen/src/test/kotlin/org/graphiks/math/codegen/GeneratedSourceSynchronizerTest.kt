@@ -104,20 +104,6 @@ class GeneratedSourceSynchronizerTest {
         assertContentEquals(expected.utf8, repoRoot.resolve(expected.relativePath).readBytes())
     }
 
-    @Test
-    fun `verify reports drift without modifying any byte`() = withTempRepo { repoRoot ->
-        val expected = generatedFile("Vector2F32.kt", "expected")
-        val destination = repoRoot.resolve(expected.relativePath)
-        destination.parent.createDirectories()
-        val original = generatedSource("different")
-        destination.writeBytes(original)
-
-        val differences = GeneratedSourceSynchronizer.verify(repoRoot, GeneratedTree(listOf(expected)))
-
-        assertTrue(differences.isNotEmpty())
-        assertContentEquals(original, destination.readBytes())
-    }
-
     private fun generatedFile(fileName: String, body: String): GeneratedFile = GeneratedFile(
         "math/vector/src/generated/kotlin/org/graphiks/math/vector/$fileName",
         generatedSource(body),

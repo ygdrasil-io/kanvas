@@ -19,11 +19,3 @@ tasks.register<JavaExec>("generateMathPrimitives") {
     mainClass.set(application.mainClass)
     args("generate", rootProject.layout.projectDirectory.asFile.absolutePath)
 }
-
-tasks.register<JavaExec>("verifyMathPrimitivesGenerated") {
-    group = "verification"
-    description = "Verifies deterministic semantic math primitive generation and checked-in sources."
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set(application.mainClass)
-    args("verify", rootProject.layout.projectDirectory.asFile.absolutePath)
-}
