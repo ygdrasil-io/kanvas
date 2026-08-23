@@ -1,0 +1,161 @@
+package org.graphiks.kanvas.gpu.evidence.artifacts
+
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.boolean
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneId
+import org.graphiks.kanvas.gpu.evidence.catalog.ImageComparison
+import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
+import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
+import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.junit.jupiter.api.io.TempDir
+
+class PromoteEvidenceCliTest {
+    @TempDir
+    lateinit var repository: Path
+
+    @Test
+    fun `promotion rejects a generated root that is not independently verified`() {
+        val commit = COMMIT
+        val generated = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$commit")
+        Files.createDirectories(generated.resolve("solid-card-stack"))
+
+        val result = PromoteEvidenceCliRunner().run(args(repository, commit))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
+    }
+
+    @Test
+    fun `promotion rejects source commit mismatch and failed or unavailable bundles`() {
+        writeAllBundles(repository, COMMIT)
+        val mismatch = PromoteEvidenceCliRunner().run(args(repository, OTHER_COMMIT))
+        assertTrue(mismatch != 0)
+        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
+
+        val failedManifest = generatedRoot(repository).resolve("solid-card-stack/manifest.json")
+        Files.writeString(failedManifest, Files.readString(failedManifest).replace("\"observedOutcome\":\"rendered\"", "\"observedOutcome\":\"unavailable\""))
+        val failed = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+        assertTrue(failed != 0)
+        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
+    }
+
+    @Test
+    fun `promotion requires reviewer and reason metadata`() {
+        writeAllBundles(repository, COMMIT)
+
+        assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "")) != 0)
+        assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reason = "")) != 0)
+    }
+
+    @Test
+    fun `promotion rejects existing destination without rebaseline and requires comparison metrics`() {
+        writeAllBundles(repository, COMMIT)
+        val destination = promotedRoot(repository).resolve("solid-card-stack")
+        Files.createDirectories(destination)
+        Files.writeString(destination.resolve("sentinel"), "keep")
+
+        val withoutRebaseline = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+        assertTrue(withoutRebaseline != 0)
+        assertTrue(Files.exists(destination.resolve("sentinel")))
+
+        val withoutMetrics = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true))
+        assertTrue(withoutMetrics != 0)
+        assertTrue(Files.exists(destination.resolve("sentinel")))
+    }
+
+    @Test
+    fun `promotion verifies every current catalog source before replacing destinations`() {
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial"))
+
+        assertEquals(0, result)
+        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+        val metadata = Files.readString(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
+        val json = EvidenceJson.parseToJsonElement(metadata).jsonObject
+        assertEquals("gpu-evidence-promotion-v1", json["schemaVersion"]!!.jsonPrimitive.content)
+        assertEquals(COMMIT, json["sourceCommit"]!!.jsonPrimitive.content)
+        assertEquals("reviewer", json["reviewer"]!!.jsonPrimitive.content)
+        assertEquals("initial", json["reason"]!!.jsonPrimitive.content)
+        assertEquals(false, json["rebaseline"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `rebaseline replaces existing scenes only with old and new comparison summaries`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=99.9"),
+        )
+
+        assertEquals(0, result)
+        val json = EvidenceJson.parseToJsonElement(Files.readString(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))).jsonObject
+        assertEquals(true, json["rebaseline"]!!.jsonPrimitive.boolean)
+        assertEquals("old=100.0", json["priorComparison"]!!.jsonPrimitive.content)
+        assertEquals("new=99.9", json["newComparison"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `generation writer cannot write into canonical promoted tree`() {
+        val promoted = promotedRoot(repository)
+        assertFailsWith<IllegalArgumentException> {
+            writeAllBundles(promoted, COMMIT)
+        }
+    }
+
+    private fun args(
+        root: Path,
+        commit: String,
+        reviewer: String = "reviewer",
+        reason: String = "reason",
+        rebaseline: Boolean = false,
+    ): Array<String> = buildList {
+        add("--repository-root"); add(root.toString())
+        add("--source-commit"); add(commit)
+        add("--all")
+        add("--reviewer"); add(reviewer)
+        add("--reason"); add(reason)
+        if (rebaseline) add("--rebaseline")
+    }.toTypedArray()
+
+    private fun writeAllBundles(root: Path, commit: String) {
+        val writer = EvidenceBundleWriter(root, commit)
+        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
+            val descriptor = evidenceCase.descriptor
+            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", null, null, null, true)
+            val route = RouteEvidence("test-route", "attempt", "complete", if (descriptor.expectation is EvidenceExpectation.ShouldRender) "rendered" else "refused", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+            val observation = when (descriptor.expectation) {
+                EvidenceExpectation.ShouldRender -> {
+                    val pixels = ByteArray(descriptor.width * descriptor.height * 4) { (it and 0xff).toByte() }
+                    SceneObservation.Rendered(pixels, route, emptyList(), environment, ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(pixels.size), 1))
+                }
+                is EvidenceExpectation.ShouldRefuse -> SceneObservation.Refused(descriptor.expectation.stableReasonCode, "test refusal", 0, route, emptyList(), environment)
+            }
+            writer.writeGenerated(descriptor, observation, if (observation is SceneObservation.Rendered) observation.rgba else null)
+        }
+    }
+
+    private fun generatedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
+    private fun promotedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/promoted")
+    private fun sceneDirectories(root: Path): Set<String> = if (!Files.exists(root)) emptySet() else Files.list(root).use { it.filter(Files::isDirectory).map { path -> path.fileName.toString() }.toList().toSet() }
+
+    companion object {
+        private const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
+        private const val OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
+    }
+}

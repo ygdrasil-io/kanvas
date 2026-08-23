@@ -55,7 +55,8 @@ object EvidenceBundleVerifier {
             val expected = if (observed == "rendered") {
                 if (oracleKind == "checked-in-png") CHECKED_IN_RENDER_FILES else RENDER_FILES
             } else if (observed == "refused") REFUSAL_FILES else error("unknown observedOutcome")
-            require(actual == expected) { "file set mismatch: expected=$expected actual=$actual" }
+            require(actual == expected || actual == expected + "promotion.json") { "file set mismatch: expected=$expected actual=$actual" }
+            if ("promotion.json" in actual) verifyPromotion(directory, sceneId, sourceCommit)
             require(hashes.keys == expected - "manifest.json") { "manifest file hashes are incomplete" }
             hashes.forEach { (name, expectedHash) -> require(expectedHash == sha256(Files.readAllBytes(directory.resolve(name)))) { "hash mismatch for $name" } }
             if (oracleKind == "checked-in-png") {
@@ -173,6 +174,23 @@ object EvidenceBundleVerifier {
         if (value is JsonNull) return null
         return value.jsonPrimitive.takeUnless { it.isString }?.longOrNull ?: error("$key must be a long or null")
     }
+    private fun verifyPromotion(directory: Path, sceneId: String, sourceCommit: String) {
+        val promotion = readObject(directory.resolve("promotion.json"), "promotion")
+        promotion.requireKeys(setOf("schemaVersion", "sceneId", "sourceCommit", "promotedAtUtc", "reviewer", "reason", "rebaseline", "priorComparison", "newComparison"))
+        require(promotion.requiredString("schemaVersion") == GPU_EVIDENCE_PROMOTION_SCHEMA) { "unsupported promotion schemaVersion" }
+        require(promotion.requiredString("sceneId") == sceneId) { "promotion sceneId mismatch" }
+        require(promotion.requiredString("sourceCommit") == sourceCommit) { "promotion sourceCommit mismatch" }
+        promotion.requiredString("promotedAtUtc")
+        require(promotion.requiredString("reviewer").isNotBlank()) { "promotion reviewer must not be blank" }
+        require(promotion.requiredString("reason").isNotBlank()) { "promotion reason must not be blank" }
+        val rebaseline = promotion.requiredBoolean("rebaseline")
+        val prior = promotion["priorComparison"]
+        val next = promotion["newComparison"]
+        require((prior is JsonNull) == (next is JsonNull)) { "promotion comparison summaries must be paired" }
+        if (rebaseline) require(prior !is JsonNull && next !is JsonNull) { "rebaseline requires old/new comparison summaries" }
+        if (prior != null && prior !is JsonNull) require(prior is JsonPrimitive && prior.isString && prior.content.isNotBlank()) { "priorComparison must be a nonblank string or null" }
+        if (next != null && next !is JsonNull) require(next is JsonPrimitive && next.isString && next.content.isNotBlank()) { "newComparison must be a nonblank string or null" }
+    }
     private fun JsonPrimitive.asString(label: String): String = require(isString && contentOrNull != null) { "$label must be a string" }.let { content }
     private fun isSafeFileName(name: String): Boolean = name.isNotBlank() && !name.startsWith('/') && !name.contains("\\") && !name.split('/').any { it == ".." || it.isBlank() } && name == Path.of(name).fileName.toString()
     private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
@@ -208,3 +226,5 @@ object EvidenceBundleVerifier {
     private val REFUSAL_FILES = setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
     private val TELEMETRY_FIELDS = setOf("renderPasses", "offscreenPasses", "windowPasses", "submissions", "commandBuffers", "buffersCreated", "texturesCreated", "intermediateTexturesCreated", "coverageMasksDestroyed", "destinationCopies", "destinationReadbackSnapshots", "msaaTargets", "msaaResolves", "bindGroupsCreated", "samplersCreated", "queueWrites", "uniformSlabsCreated", "uniformSlabBytesAllocated", "uniformSlabFallbacks", "passBatchPlans", "passBatchesAccepted", "passBatchCuts", "passBatchPackets")
 }
+
+const val GPU_EVIDENCE_PROMOTION_SCHEMA = "gpu-evidence-promotion-v1"
