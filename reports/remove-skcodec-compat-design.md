@@ -92,22 +92,24 @@ renderer qu’un profil ICC inconnu est sRGB.
 est un sentinelle de métadonnées vide, jamais un format décodable ou
 encodable. Les 27 autres entrées sont toutes des objectifs de support à terme.
 
-| Horizon | Entrées |
+| Statut | Entrées |
 |---|---|
-| P0 — migration et support codec existant | `ALPHA_8`, `RGB_565`, `ARGB_4444`, `RGBA_8888`, `BGRA_8888`, `GRAY_8`, `RGBA_F16`, `RGBA_F16_NORM` |
-| P1 — 8 bits et composants | `RGB_888X`, `SRGBA_8888`, `R8_UNORM`, `R8G8_UNORM` |
-| P2 — packed 10 bits | `RGBA_1010102`, `BGRA_1010102`, `RGB_101010X`, `BGR_101010X`, `BGR_101010X_XR`, `BGRA_10101010_XR`, `RGBA_10X6` |
-| P3 — float et 16 bits | `RGB_F16F16F16X`, `RGBA_F32`, `A16_FLOAT`, `R16G16_FLOAT`, `A16_UNORM`, `R16_UNORM`, `R16G16_UNORM`, `R16G16B16A16_UNORM` |
+| Support de migration | `ALPHA_8`, `RGB_565`, `ARGB_4444`, `RGBA_8888`, `BGRA_8888`, `GRAY_8`, `RGBA_F16`, `RGBA_F16_NORM` |
+| Catalogue différé — 8 bits et composants | `RGB_888X`, `SRGBA_8888`, `R8_UNORM`, `R8G8_UNORM` |
+| Catalogue différé — packed 10 bits | `RGBA_1010102`, `BGRA_1010102`, `RGB_101010X`, `BGR_101010X`, `BGR_101010X_XR`, `BGRA_10101010_XR`, `RGBA_10X6` |
+| Catalogue différé — float et 16 bits | `RGB_F16F16F16X`, `RGBA_F32`, `A16_FLOAT`, `R16G16_FLOAT`, `A16_UNORM`, `R16_UNORM`, `R16G16_UNORM`, `R16G16B16A16_UNORM` |
 | Sentinelle | `UNKNOWN` |
 
 `RGBA_F16` et `RGBA_F16_NORM` restent distincts. Leur plage et leur contrat
 de normalisation ne sont pas masqués par une conversion vers un format F16
 unique.
 
-Un registre central associe chaque format à ses capacités : allocation,
-lecture/écriture CPU, décodage, encodage et route GPU. L’enum peut donc
-énumérer tout le catalogue dès P0, tout en gardant les routes P1–P3 non
-livrées explicitement indisponibles. Pour toute capacité absente :
+Le catalogue central dans `image` associe chaque format à ses capacités
+d’allocation et de lecture/écriture CPU. Chaque codec concret déclare ensuite
+ses propres formats de décodage et d’encodage, et la route GPU déclare les
+siens : le module `:kanvas` ne dépend donc pas des implémentations codec.
+L’enum peut énumérer tout le catalogue dès la migration, tout en gardant les
+formats différés explicitement indisponibles. Pour toute capacité absente :
 
 * `Codec.getPixels` retourne `Codec.Result.kInvalidConversion` ;
 * un encodeur retourne son refus documenté sans produire d’octets ;
@@ -115,8 +117,8 @@ livrées explicitement indisponibles. Pour toute capacité absente :
   refusent avec le diagnostic Kanvas de format non supporté ;
 * aucune route ne convertit implicitement vers `RGBA_8888`.
 
-Chaque format passe de P1/P2/P3 à « supporté » seulement lorsque ses cinq
-capacités sont renseignées pour les routes réellement promises. Le support
+Un format différé devient « supporté » seulement lorsque ses capacités mémoire
+et CPU, puis chaque route codec ou GPU promise, sont renseignées. Le support
 codec, CPU et GPU reste donc mesurable séparément.
 
 ## Migration des API et du flux de données
@@ -147,9 +149,10 @@ ByteArray encodé → Codec → ImageInfo + Bitmap/Pixmap → Image rendable
 ## Découpage d’implémentation
 
 1. Introduire le catalogue complet, le registre de capacités, `ImageInfo`
-   enrichi, `Bitmap` fondé sur `ImageInfo` et `Pixmap`. Livrer P0 uniquement.
+   enrichi, `Bitmap` fondé sur `ImageInfo` et `Pixmap`. Livrer uniquement le
+   support de migration.
 2. Changer les signatures publiques de `Codec` et migrer les codecs de
-   décodage P0.
+   décodage couverts par le support de migration.
 3. Migrer encodeurs, orientation/pixmap utilities, WebP et les conversions
    vers l’image rendable.
 4. Nettoyer les modules non inclus, fixtures et intégrations Skia afin qu’ils
@@ -157,9 +160,9 @@ ByteArray encodé → Codec → ImageInfo + Bitmap/Pixmap → Image rendable
 5. Supprimer `SkCodecCompat.kt`, `KanvasCodec.kt` et tous les imports
    `org.skia.foundation` liés au codec.
 
-Chaque étape est committée séparément. Les ajouts P1, P2 et P3 sont des
-travaux ultérieurs : ils activent une capacité existante plutôt que de changer
-à nouveau l’API.
+Chaque étape est committée séparément. Les formats différés sont des travaux
+ultérieurs : ils activent une capacité existante plutôt que de changer à
+nouveau l’API.
 
 ## Validation et critères d’acceptation
 
@@ -178,7 +181,7 @@ travaux ultérieurs : ils activent une capacité existante plutôt que de change
 
 ## Hors périmètre
 
-* Ajouter les implémentations P1, P2 ou P3 dans ce changement initial.
+* Ajouter les implémentations des formats différés dans ce changement initial.
 * Introduire un compilateur SkSL, Ganesh ou Graphite.
 * Ajouter une compatibilité source ou binaire pour les anciens types `Sk*`.
 * Ajouter une nouvelle suite de tests de régression distincte.
