@@ -907,14 +907,16 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `transformBoundsScaleTranslate fast path matches transformBounds`() {
+    fun `transformBoundsScaleTranslate applies literal scale and translation coefficients`() {
         val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val r = RectF32.ofLTRB(0f, 0f, 10f, 10f)
-        // The general transformBounds goes through the scale-translate fast path
-        // when isScaleTranslate; verify the explicit call agrees.
-        val fast = m.transformBoundsScaleTranslate(r)
-        val general = m.transformBounds(r)
-        assertTrue(fast.contentEqualsLTRB(general))
+
+        val transformed = m.transformBoundsScaleTranslate(r)
+
+        assertEquals(10f, transformed.left)
+        assertEquals(21f, transformed.top)
+        assertEquals(30f, transformed.right)
+        assertEquals(51f, transformed.bottom)
     }
 
     @Test
