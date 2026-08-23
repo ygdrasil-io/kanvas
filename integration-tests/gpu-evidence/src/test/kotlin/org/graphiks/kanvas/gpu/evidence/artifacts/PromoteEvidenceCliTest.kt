@@ -63,8 +63,10 @@ class PromoteEvidenceCliTest {
         writeAllBundles(repository, COMMIT)
         val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
         val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-        val route = RouteEvidence("fail-route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+        val route = RouteEvidence("fail-route", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
+        val oracle = requireNotNull(GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(descriptor.width, descriptor.height)
+        val comparison = EvidenceComparator().compare(pixels, oracle, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
         EvidenceBundleWriter(repository, COMMIT).writeGenerated(
             descriptor,
             SceneObservation.Rendered(
@@ -72,9 +74,9 @@ class PromoteEvidenceCliTest {
                 route,
                 emptyList(),
                 environment,
-                ImageComparison(false, 0.0, descriptor.width * descriptor.height, 255, 1.0, ByteArray(pixels.size), 1),
+                comparison,
             ),
-            pixels,
+            oracle,
         )
         val stderr = ByteArrayOutputStream()
 

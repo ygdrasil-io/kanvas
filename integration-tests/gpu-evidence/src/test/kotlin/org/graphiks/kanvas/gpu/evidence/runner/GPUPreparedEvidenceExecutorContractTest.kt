@@ -45,7 +45,7 @@ class GPUPreparedEvidenceExecutorContractTest {
         val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
         val root = temporaryRoot.resolve("adapter-bundle")
-        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first().descriptor, observation, requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height))
+        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first(), observation, requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height))
         val environment = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("environment.json"))).jsonObject
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals("fake-adapter", adapter["summary"]!!.jsonPrimitive.content)

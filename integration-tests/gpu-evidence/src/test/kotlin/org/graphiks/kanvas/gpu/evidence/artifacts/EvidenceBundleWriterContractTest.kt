@@ -71,6 +71,13 @@ class EvidenceBundleWriterContractTest {
         assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, COMMIT))
     }
 
+    @Test fun `descriptor writer requires an external render oracle`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        kotlin.test.assertFailsWith<IllegalArgumentException> {
+            EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), attemptId = "attempt")
+        }
+    }
+
     @Test fun `checked in writer preserves original differently encoded png bytes`() {
         val originalFile = Files.createTempFile("checked-in-oracle", ".png").toFile()
         ComparisonUtils.saveRgbaAsPng(byteArrayOf(1, 2, 3, 4), 1, 1, originalFile)
@@ -92,10 +99,10 @@ class EvidenceBundleWriterContractTest {
         refreshHash(second, "environment.json")
         assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(second, COMMIT))
         val third = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
-        replace(third.resolve("route.json"), "\"submissions\":0", "\"submissions\":\"0\"")
+        replace(third.resolve("route.json"), "\"submissions\":1", "\"submissions\":\"1\"")
         refreshHash(third, "route.json")
         assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(third, COMMIT))
-        val adapterObservation = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment().copy(adapter = EvidenceAdapter("s", "v", "d", "a", "description", false)), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
+        val adapterObservation = SceneObservation.Rendered(PIXEL, route("rendered", 1), emptyList(), environment().copy(adapter = EvidenceAdapter("s", "v", "d", "a", "description", false)), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
         val fourth = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), adapterObservation, PIXEL, "attempt")
         replace(fourth.resolve("environment.json"), "\"isFallbackAdapter\":false", "\"isFallbackAdapter\":\"false\"")
         refreshHash(fourth, "environment.json")
@@ -120,7 +127,8 @@ class EvidenceBundleWriterContractTest {
         val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK)
         val original = writer.writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
 
-        val replacement = writer.writeGenerated(renderDescriptor(), rendered(), byteArrayOf(9, 8, 7, 6), "attempt-2")
+        val replacementPixels = byteArrayOf(9, 8, 7, 6)
+        val replacement = writer.writeGenerated(renderDescriptor(), rendered(replacementPixels), replacementPixels, "attempt-2")
 
         assertTrue(original == replacement)
         assertTrue(Files.readString(replacement.resolve("route.json")).contains("\"attemptId\":\"attempt-2\""))
@@ -128,8 +136,8 @@ class EvidenceBundleWriterContractTest {
     }
 
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
-    private fun rendered() = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
-    private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
+    private fun rendered(pixels: ByteArray = PIXEL) = SceneObservation.Rendered(pixels, route("rendered", 1), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
+    private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", if (submissions > 0L) "Completed" else null, outcome, emptyList(), emptyList(), if (submissions > 0L) mapOf("queue.submit" to submissions) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
     private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
     private fun refreshHash(path: Path, name: String) { val manifest = path.resolve("manifest.json"); val hash = sha256(Files.readAllBytes(path.resolve(name))); val text = Files.readString(manifest); val key = "\"$name\":\""; val start = text.indexOf(key) + key.length; val end = text.indexOf('"', start); Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end)) }

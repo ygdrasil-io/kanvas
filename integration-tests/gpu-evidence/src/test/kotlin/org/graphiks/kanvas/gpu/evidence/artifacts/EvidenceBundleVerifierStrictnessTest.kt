@@ -23,9 +23,18 @@ class EvidenceBundleVerifierStrictnessTest {
         assertEquals(EvidenceVerdict.Fail("scene refused: unsupported.example"), verified.verdict)
     }
 
+    @Test fun `public verification expectation always binds route and pixels`() {
+        val descriptor = renderDescriptor()
+        val path = bundle(descriptor, renderedObservation())
+        replaceAndRefresh(path, "route.json", "\"routeId\":\"route\"", "\"routeId\":\"forged-route\"")
+        val expectation = EvidenceVerificationExpectation(COMMIT, descriptor, PIXEL, null, "route")
+        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, expectation))
+    }
+
     @Test fun `verifier reproduces refusal expectation rendered reason`() {
-        val path = bundle(refusalDescriptor(), renderedObservation())
-        assertIs<EvidenceBundleVerification.Invalid>(strict(path, refusalDescriptor()))
+        val path = bundle(renderDescriptor(), renderedObservation())
+        val refusal = refusalDescriptor().copy(id = EvidenceSceneId("render-scene"))
+        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation(COMMIT, refusal, null, null, "route")))
     }
 
     @Test fun `verifier rejects contradictory stats after manifest hash is refreshed`() {
@@ -207,7 +216,7 @@ class EvidenceBundleVerifierStrictnessTest {
         EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(descriptor, observation, expected ?: PIXEL, "attempt", checkedInPngBytes = checkedInBytes)
     private fun strict(path: Path, descriptor: EvidenceSceneDescriptor, expected: ByteArray? = if (descriptor.expectation is EvidenceExpectation.ShouldRender) PIXEL else null, checkedIn: ByteArray? = null) = EvidenceBundleVerifier.verify(
         path,
-        EvidenceVerificationExpectation.fromDescriptor(descriptor, COMMIT, expected, checkedIn, "route", verifyPixels = true),
+        EvidenceVerificationExpectation(COMMIT, descriptor, expected, checkedIn, "route"),
     )
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())

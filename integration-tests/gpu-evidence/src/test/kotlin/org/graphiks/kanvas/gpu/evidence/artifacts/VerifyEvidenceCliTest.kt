@@ -68,7 +68,8 @@ class VerifyEvidenceCliTest {
             val route = RouteEvidence("product.solid-rect", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
         val otherRoot = Files.createTempDirectory("other-evidence")
-        EvidenceBundleWriter(otherRoot, OTHER_COMMIT).writeGenerated(descriptor, SceneObservation.Rendered(pixels, route, emptyList(), env, ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(pixels.size), 1)), pixels)
+        val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
+        EvidenceBundleWriter(otherRoot, OTHER_COMMIT).writeGenerated(descriptor, SceneObservation.Rendered(pixels, route, emptyList(), env, comparison), pixels)
         val manifest = generatedRoot().resolve("solid-card-stack/manifest.json")
         Files.writeString(manifest, Files.readString(manifest).replace(COMMIT, OTHER_COMMIT))
         assertTrue(verify(COMMIT) != 0)
@@ -78,10 +79,12 @@ class VerifyEvidenceCliTest {
         val failedEnvironment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
         val failedRoute = RouteEvidence("product.solid-rect", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val failedPixels = ByteArray(failedDescriptor.width * failedDescriptor.height * 4)
+        val failedOracle = requireNotNull(GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(failedDescriptor.width, failedDescriptor.height)
+        val failedComparison = EvidenceComparator().compare(failedPixels, failedOracle, failedDescriptor.width, failedDescriptor.height, requireNotNull(failedDescriptor.comparison))
         EvidenceBundleWriter(repository, COMMIT).writeGenerated(
             failedDescriptor,
-            SceneObservation.Rendered(failedPixels, failedRoute, emptyList(), failedEnvironment, ImageComparison(false, 0.0, failedDescriptor.width * failedDescriptor.height, 255, 1.0, ByteArray(failedPixels.size), 1)),
-            failedPixels,
+            SceneObservation.Rendered(failedPixels, failedRoute, emptyList(), failedEnvironment, failedComparison),
+            failedOracle,
         )
         assertTrue(verify(COMMIT) != 0)
     }

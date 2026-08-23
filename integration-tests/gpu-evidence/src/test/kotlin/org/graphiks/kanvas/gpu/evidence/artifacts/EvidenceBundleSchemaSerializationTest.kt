@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.catalog.StructuralEventEvidence
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.test.ComparisonUtils
 
 class EvidenceBundleSchemaSerializationTest {
     @Test fun `writer serializes every v1 field with its complete value`() {
@@ -46,11 +47,11 @@ class EvidenceBundleSchemaSerializationTest {
             route = RouteEvidence(
                 routeId = "route-id",
                 attemptId = "attempt-9",
-                furthestPhase = "submitted",
+                furthestPhase = "Completed",
                 outcome = "rendered",
                 encodedScopeKinds = listOf("clip", "layer"),
                 structuralEvents = listOf(StructuralEventEvidence("draw", "record", "first-draw")),
-                structuralCounters = mapOf("draws" to 3L, "clips" to 2L),
+                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 1L),
                 runtimeTelemetryDelta = telemetry,
             ),
             diagnostics = listOf("diagnostic-a", "diagnostic-b"),
@@ -100,12 +101,12 @@ class EvidenceBundleSchemaSerializationTest {
 
         val route = json(path, "route.json")
         assertEquals(setOf("routeId", "attemptId", "furthestPhase", "outcome", "encodedScopeKinds", "structuralEvents", "structuralCounters", "runtimeTelemetryDelta"), route.keys)
-        assertEquals("route-id", route.string("routeId")); assertEquals("attempt-9", route.string("attemptId")); assertEquals("submitted", route.string("furthestPhase")); assertEquals("rendered", route.string("outcome"))
+        assertEquals("route-id", route.string("routeId")); assertEquals("attempt-9", route.string("attemptId")); assertEquals("Completed", route.string("furthestPhase")); assertEquals("rendered", route.string("outcome"))
         assertEquals(listOf("clip", "layer"), route["encodedScopeKinds"]!!.jsonArray.map { it.jsonPrimitive.content })
         val event = route["structuralEvents"]!!.jsonArray.single().jsonObject
         assertEquals(setOf("kind", "phase", "label"), event.keys); assertEquals("draw", event.string("kind")); assertEquals("record", event.string("phase")); assertEquals("first-draw", event.string("label"))
         val counters = route["structuralCounters"]!!.jsonObject
-        assertEquals(mapOf("clips" to 2L, "draws" to 3L), counters.mapValues { it.value.jsonPrimitive.long })
+        assertEquals(mapOf("clips" to 2L, "draws" to 3L, "queue.submit" to 1L), counters.mapValues { it.value.jsonPrimitive.long })
         val telemetryJson = route["runtimeTelemetryDelta"]!!.jsonObject
         assertEquals(TELEMETRY, telemetryJson.mapValues { it.value.jsonPrimitive.long })
 
@@ -134,7 +135,11 @@ class EvidenceBundleSchemaSerializationTest {
     companion object {
         private const val COMMIT = "abc123"
         private val PIXELS = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
-        private val ORACLE_PNG = byteArrayOf(42, 43, 44, 45)
+        private val ORACLE_PNG = run {
+            val file = Files.createTempFile("gpu-evidence-oracle", ".png").toFile()
+            ComparisonUtils.saveRgbaAsPng(PIXELS, 2, 1, file)
+            file.readBytes().also { file.delete() }
+        }
         private val FIXED_CLOCK = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)
         private val TELEMETRY = linkedMapOf(
             "renderPasses" to 1L, "offscreenPasses" to 2L, "windowPasses" to 3L, "submissions" to 4L, "commandBuffers" to 5L,

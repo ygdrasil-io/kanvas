@@ -13,8 +13,6 @@ data class EvidenceVerificationExpectation(
     val expectedRgba: ByteArray? = null,
     val checkedInPngBytes: ByteArray? = null,
     val expectedRouteId: String,
-    val enforceRouteEvidence: Boolean = false,
-    val verifyPixels: Boolean = true,
 ) {
     init {
         require(expectedRouteId.isNotBlank()) { "expected route id must not be blank" }
@@ -39,16 +37,6 @@ data class EvidenceVerificationExpectation(
             checkedInPngBytes = checkedInPngBytes,
             expectedRouteId = (evidenceCase.program as? RoutedSceneProgram)?.routeId
                 ?: error("catalog scene program must carry a route id"),
-            enforceRouteEvidence = true,
         )
-
-        internal fun fromDescriptor(
-            descriptor: EvidenceSceneDescriptor,
-            sourceCommit: String,
-            expectedRgba: ByteArray?,
-            checkedInPngBytes: ByteArray?,
-            expectedRouteId: String,
-            verifyPixels: Boolean = false,
-        ) = EvidenceVerificationExpectation(sourceCommit, descriptor, expectedRgba, checkedInPngBytes, expectedRouteId, verifyPixels, verifyPixels)
     }
 }

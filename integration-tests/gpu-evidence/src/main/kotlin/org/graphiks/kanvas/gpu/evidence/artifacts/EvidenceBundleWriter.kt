@@ -43,13 +43,13 @@ class EvidenceBundleWriter internal constructor(
     constructor(repositoryRoot: java.io.File, sourceCommit: String, clock: Clock = Clock.systemUTC()) :
         this(repositoryRoot.toPath(), sourceCommit, clock)
 
-    fun writeGenerated(
+    internal fun writeGeneratedStrict(
         descriptor: EvidenceSceneDescriptor,
         observation: SceneObservation,
-        expectedRgba: ByteArray? = null,
+        expectedRgba: ByteArray?,
         attemptId: String = observation.routeAttemptId() ?: "attempt-1",
         checkedInPngBytes: ByteArray? = null,
-        expectedRouteId: String? = null,
+        expectedRouteId: String,
     ): Path {
         require(SAFE_COMPONENT.matches(attemptId)) { "attempt id must be a single safe path component" }
         require(observation !is SceneObservation.Unavailable) { "unavailable observations cannot produce bundles" }
@@ -64,14 +64,7 @@ class EvidenceBundleWriter internal constructor(
             writeBundle(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
             val verification = EvidenceBundleVerifier.verify(
                 temp,
-                EvidenceVerificationExpectation.fromDescriptor(
-                    descriptor = descriptor,
-                    sourceCommit = sourceCommit,
-                    expectedRgba = expectedRgba ?: (observation as? SceneObservation.Rendered)?.rgba,
-                    checkedInPngBytes = checkedInPngBytes,
-                    expectedRouteId = expectedRouteId ?: observation.route().routeId,
-                    verifyPixels = expectedRouteId != null,
-                ),
+                EvidenceVerificationExpectation(sourceCommit, descriptor, expectedRgba, checkedInPngBytes, expectedRouteId),
             )
             require(verification is EvidenceBundleVerification.Verified) {
                 val errors = (verification as EvidenceBundleVerification.Invalid).errors.joinToString("; ")
@@ -102,7 +95,7 @@ class EvidenceBundleWriter internal constructor(
         expectedRgba: ByteArray? = null,
         attemptId: String = observation.routeAttemptId() ?: "attempt-1",
         checkedInPngBytes: ByteArray? = null,
-    ): Path = writeGenerated(
+    ): Path = writeGeneratedStrict(
         descriptor = evidenceCase.descriptor,
         observation = observation,
         expectedRgba = expectedRgba,

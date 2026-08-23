@@ -30,5 +30,5 @@ fun verifyFixtureIntegrity(directory: Path, expectedSourceCommit: String): Evide
     val route = EvidenceJson.parseToJsonElement(Files.readString(directory.resolve("route.json"))).jsonObject["routeId"]!!.jsonPrimitive.content
     val expected = if (expectation == "render" && oracleKind == "generated-cpu") ComparisonUtils.loadPngAsSrgbRgba(directory.resolve("cpu.png").toFile()) else null
     val checkedIn = if (oracleKind == "checked-in-png") Files.readAllBytes(directory.resolve("skia.png")) else null
-    return EvidenceBundleVerifier.verify(directory, EvidenceVerificationExpectation.fromDescriptor(descriptor, expectedSourceCommit, expected, checkedIn, route))
+    return EvidenceBundleVerifier.verify(directory, EvidenceVerificationExpectation(expectedSourceCommit, descriptor, expected, checkedIn, route))
 }

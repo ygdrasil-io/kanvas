@@ -19,8 +19,8 @@ class EvidenceBundleTamperTest {
     @Test fun `changing refusal reason is invalid`() = assertRefusalInvalid { replace(it.resolve("diagnostics.json"), "unsupported.example", "changed.reason") }
     @Test fun `setting refusal submission delta to one is invalid`() = assertRefusalInvalid { replace(it.resolve("diagnostics.json"), "\"submissionDelta\":0", "\"submissionDelta\":1") }
 
-    private fun assertRenderInvalid(tamper: (Path) -> Unit) { val descriptor = renderDescriptor(); val path = renderBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromDescriptor(descriptor, "abc123", PIXEL, null, "route"))) }
-    private fun assertRefusalInvalid(tamper: (Path) -> Unit) { val descriptor = refusalDescriptor(); val path = refusalBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromDescriptor(descriptor, "abc123", null, null, "route"))) }
+    private fun assertRenderInvalid(tamper: (Path) -> Unit) { val descriptor = renderDescriptor(); val path = renderBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation("abc123", descriptor, PIXEL, null, "route"))) }
+    private fun assertRefusalInvalid(tamper: (Path) -> Unit) { val descriptor = refusalDescriptor(); val path = refusalBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation("abc123", descriptor, null, null, "route"))) }
     private fun renderDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("oracle", 1), ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
     private val PIXEL = byteArrayOf(1, 2, 3, 4)
@@ -36,5 +36,5 @@ class EvidenceBundleTamperTest {
     }
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
     private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-    private fun route(outcome: String = "rendered") = RouteEvidence("route", null, null, outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+    private fun route(outcome: String = "rendered") = RouteEvidence("route", "attempt", if (outcome == "rendered") "Completed" else null, outcome, emptyList(), emptyList(), if (outcome == "rendered") mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (outcome == "rendered") 1L else 0L))
 }
