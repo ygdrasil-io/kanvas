@@ -10,9 +10,6 @@ public enum class SkTextureCompressionType {
     kBC1_RGBA8_UNORM,
 }
 
-public val SkTextureCompressionType.kETC1_RGB8_UNORM: SkTextureCompressionType
-    get() = SkTextureCompressionType.kETC2_RGB8_UNORM
-
 public object SkCompressedDataUtils {
     public fun SkCompressedDataSize(
         compression: SkTextureCompressionType,
@@ -49,18 +46,6 @@ public object SkCompressedDataUtils {
         }
         return total
     }
-
-    public fun SkCompressedBlockWidth(compression: SkTextureCompressionType): Int =
-        when (compression) {
-            SkTextureCompressionType.kBC1_RGB8_UNORM,
-            SkTextureCompressionType.kBC1_RGBA8_UNORM,
-            SkTextureCompressionType.kETC2_RGB8_UNORM,
-                -> 4
-            SkTextureCompressionType.kNone -> 0
-        }
-
-    public fun SkCompressedBlockHeight(compression: SkTextureCompressionType): Int =
-        SkCompressedBlockWidth(compression)
 
     public fun Etc1EncodeImage(
         srcBitmap: SkBitmap,
