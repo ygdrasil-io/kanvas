@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
@@ -108,7 +108,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
         canvas.translate(x, 0f)
         val paint = Paint(colorFilter = if (useCF) cf else null)
         canvas.drawAtlas(
-            atlas, listOf(Matrix33.identity()), listOf(tex),
+            atlas, listOf(Matrix3x3F32.Identity), listOf(tex),
             colors = listOf(Color.WHITE), blendMode = BlendMode.MODULATE, paint = paint,
         )
         canvas.restore()

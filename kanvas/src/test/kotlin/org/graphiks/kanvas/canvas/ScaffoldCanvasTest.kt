@@ -4,6 +4,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -173,7 +174,7 @@ class ScaffoldCanvasTest {
     fun `drawAtlas emits DrawAtlas op`() {
         val (canvas, buffer) = testCanvas()
         val atlas = dummyImage()
-        val transforms = listOf(Matrix33.identity(), Matrix33.translate(100f, 0f))
+        val transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(100f, 0f))
         val texRects = listOf(Rect.fromLTRB(0f, 0f, 50f, 50f), Rect.fromLTRB(50f, 0f, 100f, 50f))
         canvas.drawAtlas(atlas, transforms, texRects)
         val op = buffer.ops().first() as DisplayOp.DrawAtlas
@@ -195,7 +196,7 @@ class ScaffoldCanvasTest {
     fun `drawAtlas with colors and blendMode emits op`() {
         val (canvas, buffer) = testCanvas()
         val atlas = dummyImage()
-        val transforms = listOf(Matrix33.identity())
+        val transforms = listOf(Matrix3x3F32.Identity)
         val texRects = listOf(Rect.fromLTRB(0f, 0f, 50f, 50f))
         val colors = listOf(Color.RED)
         canvas.drawAtlas(atlas, transforms, texRects, colors, BlendMode.SRC_IN)

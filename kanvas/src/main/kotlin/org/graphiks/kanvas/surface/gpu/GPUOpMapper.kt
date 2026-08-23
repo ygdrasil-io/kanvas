@@ -79,14 +79,13 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Matrix33
-import org.graphiks.kanvas.types.isAffine
-import org.graphiks.kanvas.types.isAxisAlignedAffine
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.mapAxisAligned
 import org.graphiks.kanvas.types.mapAxisAlignedRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.a
@@ -1048,8 +1047,8 @@ private fun DisplayOp.toPathBudgetPlaceholder(
 private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
     val transform = transformOrIdentity()
     val transformValues = listOf(
-        transform.scaleX, transform.skewX, transform.transX,
-        transform.skewY, transform.scaleY, transform.transY,
+        transform.sx, transform.kx, transform.tx,
+        transform.ky, transform.sy, transform.ty,
         transform.persp0, transform.persp1, transform.persp2,
     )
     if (!transformValues.all(Float::isFinite)) {
@@ -1058,13 +1057,13 @@ private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefus
             mapOf("operation" to coreSourceOperation()),
         )
     }
-    if (!transform.isAffine()) {
+    if (transform.hasPerspective()) {
         return GPUCorePrimitiveGeometryRefusal(
             "unsupported.core_primitive.geometry.non_affine_transform",
             mapOf("operation" to coreSourceOperation()),
         )
     }
-    if (this is DisplayOp.DrawRRect && (transform.skewX != 0f || transform.skewY != 0f)) {
+    if (this is DisplayOp.DrawRRect && (transform.kx != 0f || transform.ky != 0f)) {
         return GPUCorePrimitiveGeometryRefusal(
             "unsupported.core_primitive.rrect.non_axis_aligned_transform",
             mapOf("operation" to coreSourceOperation()),
@@ -1604,12 +1603,12 @@ private fun GPUBounds.outset(amount: Float): GPUBounds = if (amount == 0f) {
     GPUBounds(left - amount, top - amount, right + amount, bottom + amount)
 }
 
-private fun GPUBounds.mappedBy(matrix: Matrix33): GPUBounds {
+private fun GPUBounds.mappedBy(matrix: Matrix3x3F32): GPUBounds {
     val corners = listOf(
-        matrix * Point(left, top),
-        matrix * Point(right, top),
-        matrix * Point(right, bottom),
-        matrix * Point(left, bottom),
+        matrix.mapPoint(Point(left, top)),
+        matrix.mapPoint(Point(right, top)),
+        matrix.mapPoint(Point(right, bottom)),
+        matrix.mapPoint(Point(left, bottom)),
     )
     return GPUBounds(
         left = corners.minOf(Point::x),
@@ -1626,16 +1625,16 @@ private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
     bottom = ceil(bottom).coerceIn(0f, target.height.toFloat()),
 )
 
-private fun DisplayOp.transformOrIdentity(): Matrix33 = when (this) {
-    is DisplayOp.DrawColor -> Matrix33.identity()
+private fun DisplayOp.transformOrIdentity(): Matrix3x3F32 = when (this) {
+    is DisplayOp.DrawColor -> Matrix3x3F32.Identity
     is DisplayOp.DrawPoint -> transform
     is DisplayOp.DrawPoints -> transform
     is DisplayOp.DrawRect -> transform
     is DisplayOp.DrawRRect -> transform
     is DisplayOp.DrawDRRect -> transform
     is DisplayOp.DrawPath -> transform
-    is DisplayOp.Clear -> Matrix33.identity()
-    else -> Matrix33.identity()
+    is DisplayOp.Clear -> Matrix3x3F32.Identity
+    else -> Matrix3x3F32.Identity
 }
 
 private fun DisplayOp.pathVerbCount(): Int = when (this) {
@@ -1913,16 +1912,16 @@ internal fun GPUBlendMode.canonicalFixedFunctionState(
 ): GPUFixedFunctionBlendState? =
     (canonicalBlendPlan(coverage = coverage) as? GPUBlendPlan.FixedFunctionBlend)?.state
 
-internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
-    if (!isAffine()) return GPUTransformFacts.perspective()
-    if (this == Matrix33.identity()) return GPUTransformFacts.identity()
+internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
+    if (hasPerspective()) return GPUTransformFacts.perspective()
+    if (this == Matrix3x3F32.Identity) return GPUTransformFacts.identity()
     return GPUTransformFacts.affine(
-        scaleX = this.scaleX,
-        skewX = this.skewX,
-        skewY = this.skewY,
-        scaleY = this.scaleY,
-        translateX = this.transX,
-        translateY = this.transY,
+        scaleX = this.sx,
+        skewX = this.kx,
+        skewY = this.ky,
+        scaleY = this.sy,
+        translateX = this.tx,
+        translateY = this.ty,
     )
 }
 
@@ -2389,7 +2388,7 @@ internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
 // drawing op that carries a transform field. Used for picture replay.
 // ────────────────────────────────────────────────────────────────────────────
 
-internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {
+internal fun DisplayOp.withCombinedTransform(outer: Matrix3x3F32): DisplayOp = when (this) {
     is DisplayOp.DrawRect -> copy(transform = outer * transform)
     is DisplayOp.DrawRRect -> copy(transform = outer * transform)
     is DisplayOp.DrawPath -> copyPreservingSourceOperation(transform = outer * transform)
@@ -2423,7 +2422,7 @@ internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when 
  * same clip/S/G route it would have used if it had been recorded directly on the canvas.
  */
 internal fun DisplayOp.withPictureReplayState(
-    outerTransform: Matrix33,
+    outerTransform: Matrix3x3F32,
     enclosingClip: ClipStack,
 ): DisplayOp {
     val replayClip = enclosingClip.intersectWith(clipForPictureReplay(this)?.transformForPictureReplay(outerTransform))
@@ -2472,7 +2471,7 @@ private fun clipForPictureReplay(operation: DisplayOp): ClipStack? = when (opera
     else -> null
 }
 
-private fun ClipStack?.transformForPictureReplay(matrix: Matrix33): ClipStack? = this?.let { clip ->
+private fun ClipStack?.transformForPictureReplay(matrix: Matrix3x3F32): ClipStack? = this?.let { clip ->
     when (clip) {
         ClipStack.WideOpen -> ClipStack.WideOpen
         is ClipStack.DeviceRect -> clip.rectForPictureReplay(matrix, clip.antiAlias)
@@ -2502,9 +2501,9 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
     return ClipStack.DeviceRect(intersection, antiAlias)
 }
 
-private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix33, antiAlias: Boolean): ClipStack = when {
-    matrix.isAxisAlignedAffine() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
-    matrix.isAffine() -> ClipStack.Complex(
+private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix3x3F32, antiAlias: Boolean): ClipStack = when {
+    matrix.isScaleTranslate() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
+    !matrix.hasPerspective() -> ClipStack.Complex(
         listOf(ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias)),
     )
     else -> ClipStack.Complex(
@@ -2512,19 +2511,19 @@ private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix33, antiAlia
     )
 }
 
-private fun ClipStackOp.transformForPictureReplay(matrix: Matrix33): ClipStackOp = when (this) {
+private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipStackOp = when (this) {
     is ClipStackOp.RectOp -> when {
-        matrix.isAxisAlignedAffine() -> copy(rect = matrix.mapAxisAlignedRect(rect))
-        matrix.isAffine() -> ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
+        matrix.isScaleTranslate() -> copy(rect = matrix.mapAxisAlignedRect(rect))
+        !matrix.hasPerspective() -> ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
         else -> ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
     is ClipStackOp.RRectOp -> when {
-        matrix.isAxisAlignedAffine() -> copy(rrect = rrect.mapAxisAligned(matrix))
-        matrix.isAffine() -> ClipStackOp.PathOp(Path().addRRect(rrect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
+        matrix.isScaleTranslate() -> copy(rrect = rrect.mapAxisAligned(matrix))
+        !matrix.hasPerspective() -> ClipStackOp.PathOp(Path().addRRect(rrect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
         else -> ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
     is ClipStackOp.PathOp -> copy(
-        path = if (matrix.isAffine()) path.transform(matrix) else path,
-        perspectiveCaptureRefusal = perspectiveCaptureRefusal || !matrix.isAffine(),
+        path = if (!matrix.hasPerspective()) path.transform(matrix) else path,
+        perspectiveCaptureRefusal = perspectiveCaptureRefusal || matrix.hasPerspective(),
     )
 }

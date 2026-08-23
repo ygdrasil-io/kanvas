@@ -24,7 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -155,7 +155,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
                     DisplayOp.DrawPicture(
                         picture = picture,
                         paint = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                     DisplayOp.EndLayer,
@@ -189,7 +189,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
                     DisplayOp.DrawPicture(
                         picture = picture,
                         paint = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                     DisplayOp.EndLayer,
@@ -239,7 +239,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
                     DisplayOp.DrawPicture(
                         picture = picture,
                         paint = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -326,7 +326,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     private fun rect(): DisplayOp.DrawRect = DisplayOp.DrawRect(
         Rect.fromLTRB(2f, 3f, 12f, 11f),
         Paint.fill(Color.RED).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 }

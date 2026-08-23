@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -34,7 +34,7 @@ class LocalmatrixOrderGm : SkiaGm {
         canvas.drawColor(0.2f, 0.2f, 0.6f, 1f)
 
         val mandrillShader = Shader.Image(mandrill, TileMode.REPEAT, TileMode.REPEAT)
-        val rotM = Matrix33.translate(128f, 128f) * Matrix33.rotate(45f) * Matrix33.translate(-128f, -128f)
+        val rotM = Matrix3x3F32.translation(128f, 128f) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(-128f, -128f)
         val rotatedMandrill = Shader.WithLocalMatrix(mandrillShader, rotM)
 
         val gradShader = Shader.RadialGradient(
@@ -45,15 +45,15 @@ class LocalmatrixOrderGm : SkiaGm {
             ),
             tileMode = TileMode.REPEAT,
         )
-        val scaleM = Matrix33.scale(2f, 2f)
+        val scaleM = Matrix3x3F32.scaling(2f, 2f)
         val scaledGrad = Shader.WithLocalMatrix(gradShader, scaleM)
         val rotGrad = Shader.WithLocalMatrix(
             scaledGrad,
-            Matrix33.translate(128f, 128f) * Matrix33.rotate(45f) * Matrix33.translate(-128f, -128f),
+            Matrix3x3F32.translation(128f, 128f) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(-128f, -128f),
         )
 
         val blend = Shader.Blend(BlendMode.MODULATE, rotatedMandrill, rotGrad)
-        val center = Matrix33.translate(250f, 250f) * Matrix33.rotate(30f) * Matrix33.translate(-250f, -250f)
+        val center = Matrix3x3F32.translation(250f, 250f) * Matrix3x3F32.rotation(30f) * Matrix3x3F32.translation(-250f, -250f)
         val finalShader = Shader.WithLocalMatrix(blend, center)
         canvas.drawRect(Rect(0f, 0f, 500f, 500f), Paint(shader = finalShader))
     }

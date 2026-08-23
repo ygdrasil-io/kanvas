@@ -22,7 +22,7 @@ import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.text.TextBlob
@@ -450,7 +450,7 @@ class GPUClipCoverageContractsTest {
         val command = DisplayOp.DrawRect(
             rect = Rect.fromLTRB(2f, 3f, 10f, 11f),
             paint = Paint.fill(Color.RED),
-            transform = Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
+            transform = Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
             clip = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false),
         ).toNormalizedCommand(cmdId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(0), target = target())
 
@@ -462,7 +462,7 @@ class GPUClipCoverageContractsTest {
     fun `perspective clip remains refused after reset matrix`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
-        canvas.setMatrix(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
+        canvas.setMatrix(Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
         canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         canvas.resetMatrix()
         canvas.clipRect(Rect.fromLTRB(3f, 4f, 9f, 10f), antiAlias = false)
@@ -482,7 +482,7 @@ class GPUClipCoverageContractsTest {
     @Test
     fun `common perspective guard refuses rect image and text after reset matrix`() {
         val clip = perspectiveClipAfterReset()
-        val transform = Matrix33.identity()
+        val transform = Matrix3x3F32.Identity
         val operations = listOf<DisplayOp>(
             DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED), transform, clip),
             DisplayOp.DrawImage(
@@ -626,7 +626,7 @@ class GPUClipCoverageContractsTest {
     private fun perspectiveClipAfterReset(): ClipStack {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
-        canvas.setMatrix(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
+        canvas.setMatrix(Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
         canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         canvas.resetMatrix()
         return buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip

@@ -27,7 +27,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
@@ -40,8 +40,8 @@ class GPUPreparedVerticesSemanticBuilderTest {
         val inventory = plan(
             listOf(
                 rect(),
-                vertices(Color.RED, Matrix33.identity()),
-                vertices(Color.BLUE, Matrix33.translate(3f, 4f)),
+                vertices(Color.RED, Matrix3x3F32.Identity),
+                vertices(Color.BLUE, Matrix3x3F32.translation(3f, 4f)),
             ),
         )
 
@@ -671,20 +671,20 @@ class GPUPreparedVerticesSemanticBuilderTest {
     private fun rect() = DisplayOp.DrawRect(
         Rect.fromLTRB(1f, 1f, 7f, 7f),
         Paint.fill(Color.GREEN).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
     private fun rrect() = DisplayOp.DrawRRect(
         RRect(Rect.fromLTRB(1f, 1f, 7f, 7f), radius = 1f),
         Paint.fill(Color.GREEN).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
     private fun vertices(
         color: Color,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ) = DisplayOp.DrawVertices(
         Vertices(
             VertexMode.TRIANGLES,

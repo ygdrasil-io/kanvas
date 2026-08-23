@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -65,7 +65,7 @@ class ClipShaderSimpleGm : SkiaGm {
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_IN))
 
         // Second clip: image shader at 1/5 scale, tiled
-        val scale = Matrix33.scale(1.0f / 5, 1.0f / 5)
+        val scale = Matrix3x3F32.scaling(1.0f / 5, 1.0f / 5)
         val scaledShader = Shader.WithLocalMatrix(
             Shader.Image(img, TileMode.REPEAT, TileMode.REPEAT, SamplingOptions.LINEAR),
             scale,

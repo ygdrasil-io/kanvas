@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.geometry.Path
@@ -56,7 +56,7 @@ class ShaderPathGm : SkiaGm {
         var i = 0
         for (tm0 in tileModes) {
             for (tm1 in tileModes) {
-                val localM = Matrix33.translate(5f, 5f) * Matrix33.rotate(20f) * Matrix33.scale(1.15f, 0.85f)
+                val localM = Matrix3x3F32.translation(5f, 5f) * Matrix3x3F32.rotation(20f) * Matrix3x3F32.scaling(1.15f, 0.85f)
                 val shader = Shader.WithLocalMatrix(Shader.Image(bmp, tm0, tm1), localM)
                 val fillPaint = Paint(antiAlias = true, shader = shader)
                 canvas.drawPath(path, fillPaint)

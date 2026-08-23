@@ -56,7 +56,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
@@ -183,7 +183,7 @@ class GPUPreparedTextLowererTest {
                     tileMode = TileMode.CLAMP,
                 ),
             ),
-            transform = Matrix33.skew(0.2f, 0f),
+            transform = Matrix3x3F32.skewing(0.2f, 0f),
             clip = ClipStack.Complex(clipOps),
         )
 
@@ -837,7 +837,7 @@ class GPUPreparedTextLowererTest {
 
     @Test
     fun `strike key uses the fully transformed device anchor and affine basis`() {
-        val translation = Matrix33.translate(0.375f, 0.625f)
+        val translation = Matrix3x3F32.translation(0.375f, 0.625f)
         val translated = assertIs<GPUPreparedTextLowering.Ready>(
             lower(validOperation().copy(transform = translation)),
         ).draw.glyphs.single().strikeKey
@@ -846,7 +846,7 @@ class GPUPreparedTextLowererTest {
         assertEquals(1f, translated.scaleX)
         assertEquals(1f, translated.scaleY)
 
-        val scaledTransform = Matrix33.makeAll(
+        val scaledTransform = Matrix3x3F32.of(
             2f, 0f, 0.125f,
             0f, 3f, 0.375f,
         )
@@ -862,13 +862,13 @@ class GPUPreparedTextLowererTest {
 
     @Test
     fun `rotation and skew produce stable exact and distinct strike identities`() {
-        fun strike(transform: Matrix33) = assertIs<GPUPreparedTextLowering.Ready>(
+        fun strike(transform: Matrix3x3F32) = assertIs<GPUPreparedTextLowering.Ready>(
             lower(validOperation().copy(transform = transform)),
         ).draw.glyphs.single().strikeKey
 
-        val rotation = Matrix33.rotate(15f)
-        val skew = Matrix33.skew(0.2f, 0f)
-        val closeSkew = Matrix33.skew(Float.fromBits(0.2f.toRawBits() + 1), 0f)
+        val rotation = Matrix3x3F32.rotation(15f)
+        val skew = Matrix3x3F32.skewing(0.2f, 0f)
+        val closeSkew = Matrix3x3F32.skewing(Float.fromBits(0.2f.toRawBits() + 1), 0f)
         val firstRotation = strike(rotation)
         val secondRotation = strike(rotation)
         val skewed = strike(skew)
@@ -996,7 +996,7 @@ class GPUPreparedTextLowererTest {
         val operation = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(Rect.fromLTRB(1f, 2f, 5f, 8f)),
             paint = Paint.fill(Color.BLACK),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
             sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
         )
@@ -1037,7 +1037,7 @@ class GPUPreparedTextLowererTest {
         x = 1f,
         y = 2f,
         paint = Paint.fill(Color.RED),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

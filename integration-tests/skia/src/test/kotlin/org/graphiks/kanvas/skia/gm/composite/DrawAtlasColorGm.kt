@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/drawatlascolor.cpp`.
@@ -36,7 +36,7 @@ class DrawAtlasColorGm : SkiaGm {
         val numModes = gModes.size
         val numColors = gColors.size
         val transforms = List(numColors) { i ->
-            Matrix33.translate(kPad.toFloat(), i * (target.width + kPad))
+            Matrix3x3F32.translation(kPad.toFloat(), i * (target.width + kPad))
         }
         val texRects = List(numColors) { target }
         val quadColors = gColors.toList()

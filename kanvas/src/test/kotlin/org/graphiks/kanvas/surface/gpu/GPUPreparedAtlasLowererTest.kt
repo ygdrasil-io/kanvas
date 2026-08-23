@@ -34,7 +34,8 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.params.ParameterizedTest
@@ -46,11 +47,11 @@ class GPUPreparedAtlasLowererTest {
     @Test
     fun `array and color lengths refuse transactionally before any sprite`() {
         val transformMismatch = atlasOperation(
-            transforms = listOf(Matrix33.identity()),
+            transforms = listOf(Matrix3x3F32.Identity),
             texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
         )
         val colorMismatch = atlasOperation(
-            transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+            transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
             texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
             colors = listOf(Color.RED),
         )
@@ -77,7 +78,7 @@ class GPUPreparedAtlasLowererTest {
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), invalid),
                         colors = listOf(Color.RED, Color.GREEN),
                     ),
@@ -95,14 +96,14 @@ class GPUPreparedAtlasLowererTest {
     @Test
     fun `identity translation scale rotation reflection and skew preserve four corners UVs and order`() {
         val spriteTransforms = listOf(
-            Matrix33.identity(),
-            Matrix33.translate(7f, 11f),
-            Matrix33.scale(2f, 3f),
-            Matrix33.rotate(90f),
-            Matrix33.makeAll(-1f, 0f, 0f, 0f, 1f, 0f),
-            Matrix33.skew(0.5f, 0.25f),
+            Matrix3x3F32.Identity,
+            Matrix3x3F32.translation(7f, 11f),
+            Matrix3x3F32.scaling(2f, 3f),
+            Matrix3x3F32.rotation(90f),
+            Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.skewing(0.5f, 0.25f),
         )
-        val outer = Matrix33.translate(3f, 5f) * Matrix33.scale(2f, 2f)
+        val outer = Matrix3x3F32.translation(3f, 5f) * Matrix3x3F32.scaling(2f, 2f)
         val rects = listOf(
             quadrant(0, 0),
             quadrant(1, 0),
@@ -135,7 +136,7 @@ class GPUPreparedAtlasLowererTest {
                 Point(rect.right, rect.top),
                 Point(rect.right, rect.bottom),
                 Point(rect.left, rect.bottom),
-            ).map(combined::times).map { it.x to it.y }
+            ).map(combined::mapPoint).map { it.x to it.y }
             val geometry = requireNotNull(command.preparedImage).geometry
             assertEquals(expectedPositions, geometry.vertices.map { it.x to it.y }, "positions $index")
             assertEquals(
@@ -148,7 +149,7 @@ class GPUPreparedAtlasLowererTest {
                 geometry.vertices.map { it.u to it.v },
                 "UVs $index",
             )
-            val expectedClass = if (combined.skewX == 0f && combined.skewY == 0f) {
+            val expectedClass = if (combined.kx == 0f && combined.ky == 0f) {
                 GPUPreparedImageGeometryClass.Rect
             } else {
                 GPUPreparedImageGeometryClass.Quad
@@ -160,7 +161,7 @@ class GPUPreparedAtlasLowererTest {
     @Test
     fun `skewed sprite remains a quad and is never substituted by its bounding box`() {
         val rect = quadrant(0, 0)
-        val transform = Matrix33.makeAll(1f, 0.75f, 4f, 0.25f, 1f, 6f)
+        val transform = Matrix3x3F32.of(1f, 0.75f, 4f, 0.25f, 1f, 6f)
         val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
@@ -186,18 +187,18 @@ class GPUPreparedAtlasLowererTest {
 
     @Test
     fun `perspective singular and later invalid transforms refuse the entire atlas`() {
-        val perspective = Matrix33.makeAll(
+        val perspective = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0.01f, 0f, 1f,
         )
-        val singular = Matrix33.makeAll(1f, 2f, 0f, 2f, 4f, 0f)
+        val singular = Matrix3x3F32.of(1f, 2f, 0f, 2f, 4f, 0f)
 
         listOf(perspective, singular).forEach { invalid ->
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity(), invalid),
+                        transforms = listOf(Matrix3x3F32.Identity, invalid),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                         colors = listOf(Color.RED, Color.GREEN),
                     ),
@@ -217,7 +218,7 @@ class GPUPreparedAtlasLowererTest {
         val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
-                    transforms = listOf(Matrix33.identity(), Matrix33.translate(8f, 0f)),
+                    transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(8f, 0f)),
                     texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                     colors = colors,
                     paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)),
@@ -260,7 +261,7 @@ class GPUPreparedAtlasLowererTest {
             val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity()),
+                        transforms = listOf(Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0)),
                         colors = listOf(Color.RED),
                         blendMode = mode,
@@ -277,7 +278,7 @@ class GPUPreparedAtlasLowererTest {
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                         colors = listOf(Color.RED, Color.GREEN),
                         blendMode = mode,
@@ -306,7 +307,7 @@ class GPUPreparedAtlasLowererTest {
         val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
-                    transforms = listOf(Matrix33.identity()),
+                    transforms = listOf(Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0)),
                     colors = listOf(Color.fromArgb(128, 255, 64, 0)),
                     blendMode = BlendMode.MODULATE,
@@ -356,7 +357,7 @@ class GPUPreparedAtlasLowererTest {
         val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
-                    transforms = listOf(Matrix33.identity()),
+                    transforms = listOf(Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0)),
                     clip = ClipStack.DeviceRect(
                         Rect.fromLTRB(-4f, 3f, 70f, 37f),
@@ -389,7 +390,7 @@ class GPUPreparedAtlasLowererTest {
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity()),
+                        transforms = listOf(Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0)),
                         clip = ClipStack.DeviceRect(rect, antiAlias = false),
                     ),
@@ -416,7 +417,7 @@ class GPUPreparedAtlasLowererTest {
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity(), Matrix33.translate(8f, 0f)),
+                        transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(8f, 0f)),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                         colors = listOf(Color.RED, Color.GREEN),
                         clip = clip,
@@ -444,7 +445,7 @@ class GPUPreparedAtlasLowererTest {
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
                 GPUPreparedAtlasLowerer.lower(
                     atlasOperation(
-                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                         colors = listOf(Color.RED, Color.GREEN),
                         paint = paint,
@@ -468,7 +469,7 @@ class GPUPreparedAtlasLowererTest {
         val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
-                    transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                    transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                     colors = listOf(Color.RED, Color.GREEN),
                     paint = paint,
@@ -491,12 +492,12 @@ class GPUPreparedAtlasLowererTest {
     }
 
     private fun atlasOperation(
-        transforms: List<Matrix33>,
+        transforms: List<Matrix3x3F32>,
         texRects: List<Rect>,
         colors: List<Color>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint? = null,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         clip: ClipStack = ClipStack.WideOpen,
     ) = DisplayOp.DrawAtlas(
         atlas = atlasImage(),

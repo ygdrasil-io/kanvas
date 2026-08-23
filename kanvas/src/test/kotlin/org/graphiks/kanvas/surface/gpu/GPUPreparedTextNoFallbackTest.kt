@@ -16,7 +16,7 @@ import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -24,7 +24,7 @@ class GPUPreparedTextNoFallbackTest {
     @Test
     fun `accepted text success crosses prepared execution seam and never calls legacy`() {
         val operations = listOf(
-            DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
+            DisplayOp.SetTransform(Matrix3x3F32.translation(1f, 2f)),
             DisplayOp.Annotation(RECT, "state", "before-text"),
             text(),
         )
@@ -123,7 +123,7 @@ class GPUPreparedTextNoFallbackTest {
         0f,
         0f,
         paint,
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 

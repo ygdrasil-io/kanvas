@@ -26,7 +26,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -301,7 +301,7 @@ internal object GPUPreparedCompositeCapturer {
                 state = GPUPreparedCompositeScopeState(
                     bounds = null,
                     paint = null,
-                    transform = Matrix33.identity().toSnapshot(-1),
+                    transform = Matrix3x3F32.Identity.toSnapshot(-1),
                     clip = GPUPreparedClipSnapshot.WideOpen,
                 ),
             )
@@ -696,14 +696,14 @@ internal object GPUPreparedCompositeCapturer {
             return GPUPreparedPointSnapshot(x.toRawBits(), y.toRawBits())
         }
 
-        private fun Matrix33.toSnapshot(operationIndex: Int): GPUPreparedMatrixSnapshot {
+        private fun Matrix3x3F32.toSnapshot(operationIndex: Int): GPUPreparedMatrixSnapshot {
             val values = listOf(
-                scaleX,
-                skewX,
-                transX,
-                skewY,
-                scaleY,
-                transY,
+                sx,
+                kx,
+                tx,
+                ky,
+                sy,
+                ty,
                 persp0,
                 persp1,
                 persp2,
@@ -716,12 +716,12 @@ internal object GPUPreparedCompositeCapturer {
                 )
             }
             return GPUPreparedMatrixSnapshot(
-                scaleX.toRawBits(),
-                skewX.toRawBits(),
-                transX.toRawBits(),
-                skewY.toRawBits(),
-                scaleY.toRawBits(),
-                transY.toRawBits(),
+                sx.toRawBits(),
+                kx.toRawBits(),
+                tx.toRawBits(),
+                ky.toRawBits(),
+                sy.toRawBits(),
+                ty.toRawBits(),
                 persp0.toRawBits(),
                 persp1.toRawBits(),
                 persp2.toRawBits(),
@@ -823,7 +823,7 @@ internal object GPUPreparedCompositeCapturer {
     )
 
     private data class PictureReplayState(
-        val transform: Matrix33,
+        val transform: Matrix3x3F32,
         val enclosingClip: ClipStack,
     )
 }

@@ -17,7 +17,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 
 class GPUPreparedTextPixelTest {
@@ -307,7 +307,7 @@ class GPUPreparedTextPixelTest {
         x = x.toFloat(),
         y = baselineY.toFloat(),
         paint = Paint.fill(color),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 }

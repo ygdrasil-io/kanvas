@@ -53,7 +53,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -91,7 +91,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val rect = DisplayOp.DrawRect(
             Rect.fromLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.WHITE),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val emptyText = textOperation().copy(
@@ -258,7 +258,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val rect = DisplayOp.DrawRect(
             Rect.fromLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.RED),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val noOpText = textOperation().copy(
@@ -307,7 +307,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val rect = DisplayOp.DrawRect(
             Rect.fromLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.WHITE),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val culledText = textOperation().copy(
@@ -432,14 +432,14 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             DisplayOp.DrawRect(
                 rect = Rect.fromLTRB(0f, 0f, 8f, 8f),
                 paint = Paint.fill(Color.RED).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
             textOperation().copy(clip = clip),
             DisplayOp.DrawRect(
                 rect = Rect.fromLTRB(32f, 32f, 40f, 40f),
                 paint = Paint.fill(Color.BLUE).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
         )
@@ -640,7 +640,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             x = 4f,
             y = 24f,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -837,7 +837,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             DisplayOp.DrawColor(
                 Color.BLUE,
                 BlendMode.SRC_OVER,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             textOperation(fontSize = 28f),
@@ -896,7 +896,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             DisplayOp.DrawColor(
                 Color.BLUE,
                 BlendMode.SRC_OVER,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.Annotation(
@@ -908,7 +908,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             DisplayOp.DrawColor(
                 Color.RED,
                 BlendMode.SRC_OVER,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
         )
@@ -953,7 +953,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         x = 4f,
         y = 24f,
         paint = Paint.fill(Color.WHITE),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 
@@ -1034,7 +1034,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             x = 0f,
             y = 0f,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
     }
@@ -1058,7 +1058,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             src = Rect.fromLTRB(0f, 0f, 2f, 2f),
             dst = Rect.fromLTRB(40f, 4f, 48f, 12f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
     }

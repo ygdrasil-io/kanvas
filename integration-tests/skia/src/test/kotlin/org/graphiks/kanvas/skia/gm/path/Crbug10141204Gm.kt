@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -28,7 +28,7 @@ class Crbug10141204Gm : SkiaGm {
         val extraZoom = exp(-2.3).toFloat()
         canvas.scale(extraZoom, extraZoom)
         canvas.scale(2f, 2f)
-        canvas.concat(Matrix33.makeAll(
+        canvas.concat(Matrix3x3F32.of(
             -0.0005550860255665798f, -0.0030798374421905717f, -0.014111959825129805f,
             -0.07569627776417084f, 232.00000000000017f, 39.999999999999936f,
             0f, 0f, 1f,

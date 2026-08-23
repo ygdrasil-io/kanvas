@@ -21,8 +21,9 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSaveLayerFrameHandling
@@ -840,26 +841,26 @@ private fun layerDeviceBounds(
     localBounds: GPUPreparedRectSnapshot,
     targetBounds: GPUPixelBounds,
 ): GPUPixelBounds {
-    val matrix = Matrix33.makeAll(
+    val matrix = Matrix3x3F32.of(
         sx = Float.fromBits(state.transform.scaleXBits),
         kx = Float.fromBits(state.transform.skewXBits),
         tx = Float.fromBits(state.transform.transXBits),
         ky = Float.fromBits(state.transform.skewYBits),
         sy = Float.fromBits(state.transform.scaleYBits),
         ty = Float.fromBits(state.transform.transYBits),
-        p0 = Float.fromBits(state.transform.persp0Bits),
-        p1 = Float.fromBits(state.transform.persp1Bits),
-        p2 = Float.fromBits(state.transform.persp2Bits),
+        persp0 = Float.fromBits(state.transform.persp0Bits),
+        persp1 = Float.fromBits(state.transform.persp1Bits),
+        persp2 = Float.fromBits(state.transform.persp2Bits),
     )
     val left = Float.fromBits(localBounds.leftBits)
     val top = Float.fromBits(localBounds.topBits)
     val right = Float.fromBits(localBounds.rightBits)
     val bottom = Float.fromBits(localBounds.bottomBits)
     val corners = listOf(
-        matrix * Point(left, top),
-        matrix * Point(right, top),
-        matrix * Point(right, bottom),
-        matrix * Point(left, bottom),
+        matrix.mapPoint(Point(left, top)),
+        matrix.mapPoint(Point(right, top)),
+        matrix.mapPoint(Point(right, bottom)),
+        matrix.mapPoint(Point(left, bottom)),
     )
     val mappedLeft = kotlin.math.floor(corners.minOf { it.x })
     val mappedTop = kotlin.math.floor(corners.minOf { it.y })

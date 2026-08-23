@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -37,7 +37,7 @@ class Crbug224618Gm : SkiaGm {
         val cubeImage = makeCubeTexture()
 
         // CSS-style perspective: [1,0,0; 0,1,0; 0,-1/radius,1]
-        val persp = Matrix33.makeAll(
+        val persp = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0f, -1f / radius, 1f,
@@ -59,7 +59,7 @@ class Crbug224618Gm : SkiaGm {
             val xOff = radius * kotlin.math.cos(Math.toRadians(angle.toDouble())).toFloat()
             val yOff = radius * kotlin.math.sin(Math.toRadians(angle.toDouble())).toFloat() * 0.3f
 
-            val mat = persp * Matrix33.translate(xOff + radius, yOff + radius)
+            val mat = persp * Matrix3x3F32.translation(xOff + radius, yOff + radius)
 
             canvas.save()
             canvas.concat(mat)

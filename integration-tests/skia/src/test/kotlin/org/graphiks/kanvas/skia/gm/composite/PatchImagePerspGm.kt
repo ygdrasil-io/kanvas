@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 
 /**
@@ -36,7 +36,7 @@ import org.graphiks.kanvas.types.Point
  * }
  * ```
  *
- * The perspective matrix is constructed via `Matrix33.makeAll` with
+ * The perspective matrix is constructed via `Matrix3x3F32.makeAll` with
  * `persp0 = 0.00001f` at row 2, column 0 (index 6 in row-major order).
  *
  * **Out of scope** : `draw_control_points` (see [PatchPrimitiveGm]).
@@ -83,7 +83,7 @@ class PatchImagePerspGm : SkiaGm {
                 val h = image.height.toFloat()
                 val tex = listOf(Point(0f, 0f), Point(w, 0f), Point(w, h), Point(0f, h))
                 val baseShader = image.makeShader(TileMode.CLAMP, TileMode.CLAMP)
-                val perspMatrix = Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.00001f, 0f, 1f)
+                val perspMatrix = Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.00001f, 0f, 1f)
                 val shader = Shader.WithLocalMatrix(baseShader, perspMatrix)
                 return shader to tex
             }

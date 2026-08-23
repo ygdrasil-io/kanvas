@@ -6,7 +6,7 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 
 class GPUPreparedCompositeCaptureTest {
 
-    private val identity33 = Matrix33.identity()
+    private val identity33 = Matrix3x3F32.Identity
 
     @Test
     fun `unmatched restore refuses without partial expansion`() {

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 open class ClippedBitmapShadersBase(
@@ -35,7 +35,7 @@ open class ClippedBitmapShadersBase(
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bmp = createBitmap()
-        val s = Matrix33.translate(SLIDE_SIZE / 2f, SLIDE_SIZE / 2f) * Matrix33.scale(8f, 8f)
+        val s = Matrix3x3F32.translation(SLIDE_SIZE / 2f, SLIDE_SIZE / 2f) * Matrix3x3F32.scaling(8f, 8f)
         val shader = Shader.WithLocalMatrix(Shader.Image(bmp, mode, mode), s)
         val paint = Paint(shader = shader)
 

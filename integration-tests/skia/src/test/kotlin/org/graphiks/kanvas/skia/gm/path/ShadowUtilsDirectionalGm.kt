@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.pow
@@ -69,7 +69,7 @@ class ShadowUtilsDirectionalGm : SkiaGm {
         // Row 4 - perspective
         for (i in 0 until 3) {
             canvas.save()
-            val mat = Matrix33.makeAll(
+            val mat = Matrix3x3F32.of(
                 1f, 0f, 0f,
                 0f, 1f, 0f,
                 0.005f, 0f, 1.005f,

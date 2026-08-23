@@ -34,7 +34,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Point
@@ -574,12 +574,12 @@ class GPUClipCoverageSurfaceTest {
             ),
         )
         val ops = listOf(
-            DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix33.identity(), clip),
-            DisplayOp.DrawRRect(RRect(Rect(20f, 2f, 28f, 10f), radius = 2f), Paint.fill(Color.RED), Matrix33.identity(), clip),
+            DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
+            DisplayOp.DrawRRect(RRect(Rect(20f, 2f, 28f, 10f), radius = 2f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
             DisplayOp.DrawPath(
                 Path { moveTo(2f, 22f); lineTo(10f, 22f); lineTo(6f, 30f); close() },
                 Paint.fill(Color.RED),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 clip,
             ),
             DisplayOp.DrawImage(
@@ -587,7 +587,7 @@ class GPUClipCoverageSurfaceTest {
                 Rect(0f, 0f, 1f, 1f),
                 Rect(22f, 22f, 30f, 30f),
                 Paint(),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 clip,
             ),
         )
@@ -626,7 +626,7 @@ class GPUClipCoverageSurfaceTest {
                 x = 0f,
                 y = 0f,
                 paint = Paint.fill(Color.RED),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
             DisplayOp.DrawVertices(
@@ -636,7 +636,7 @@ class GPUClipCoverageSurfaceTest {
                     texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
                 ),
                 paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(image)),
-                transform = Matrix33.translate(20f, 20f),
+                transform = Matrix3x3F32.translation(20f, 20f),
                 clip = clip,
             ),
         )
@@ -668,13 +668,13 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                        DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                        DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                         DisplayOp.DrawText(
                             blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
                             x = 0f,
                             y = 0f,
                             paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
-                            transform = Matrix33.identity(),
+                            transform = Matrix3x3F32.Identity,
                             clip = clip,
                         ),
                 ),
@@ -698,11 +698,11 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = vertices,
                         paint = advancedBlackImagePaint(),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = clip,
                     ),
                 ),
@@ -726,12 +726,12 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
                         paint = advancedBlackImagePaint(),
                         blendMode = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = clip,
                     ),
                 ),
@@ -760,13 +760,13 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawText(
                         blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
                         x = 0f,
                         y = 0f,
                         paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = clip,
                     ),
                 ),
@@ -789,11 +789,11 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = texturedScissorTriangle(),
                         paint = advancedBlackImagePaint(),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = clip,
                     ),
                 ),
@@ -817,12 +817,12 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
                         paint = advancedBlackImagePaint(),
                         blendMode = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = clip,
                     ),
                 ),
@@ -856,7 +856,7 @@ class GPUClipCoverageSurfaceTest {
                         0f,
                         0f,
                         Paint.stroke(Color.RED, 1f),
-                        Matrix33.identity(),
+                        Matrix3x3F32.Identity,
                         complexFullClip(),
                     ),
                 ),
@@ -884,7 +884,7 @@ class GPUClipCoverageSurfaceTest {
                         PointMode.POINTS,
                         listOf(Point(4f, 4f), Point(20f, 4f)),
                         Paint.fill(Color.RED),
-                        Matrix33.identity(),
+                        Matrix3x3F32.Identity,
                         complexFullClip(),
                     ),
                 ),
@@ -913,7 +913,7 @@ class GPUClipCoverageSurfaceTest {
                             Rect(1f, 1f, 2f, 2f),
                             Rect(2f, 2f, 14f, 14f),
                             null,
-                            Matrix33.identity(),
+                            Matrix3x3F32.Identity,
                             complexFullClip(),
                         ),
                     ),
@@ -937,12 +937,12 @@ class GPUClipCoverageSurfaceTest {
                     listOf(
                         DisplayOp.DrawAtlas(
                             atlas = image,
-                            transforms = listOf(Matrix33.translate(2f, 20f), Matrix33.translate(18f, 20f)),
+                            transforms = listOf(Matrix3x3F32.translation(2f, 20f), Matrix3x3F32.translation(18f, 20f)),
                             texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
                             colors = null,
                             blendMode = BlendMode.SRC_OVER,
                             paint = null,
-                            transform = Matrix33.identity(),
+                            transform = Matrix3x3F32.Identity,
                             clip = complexFullClip(),
                         ),
                     ),
@@ -973,7 +973,7 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawMesh(mesh, Paint.fill(Color.RED), null, Matrix33.identity(), clip),
+                    DisplayOp.DrawMesh(mesh, Paint.fill(Color.RED), null, Matrix3x3F32.Identity, clip),
                 ),
                 width = 16,
                 height = 16,
@@ -995,18 +995,18 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val child = Picture(
             Rect(0f, 0f, 8f, 8f),
-            listOf(DisplayOp.DrawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+            listOf(DisplayOp.DrawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         val outerClip = complexFullClip()
         val painted = Picture(
             Rect(0f, 0f, 8f, 8f),
-            listOf(DisplayOp.DrawPicture(child, Paint.stroke(Color.RED, 1f), Matrix33.identity(), ClipStack.WideOpen)),
+            listOf(DisplayOp.DrawPicture(child, Paint.stroke(Color.RED, 1f), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         // The painted picture frame is a documented prepared-route refusal: the composite
         // capture refuses clip snapshots inside layer scopes.
         val paintFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderViaGpu(
-                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(painted, null, Matrix33.identity(), outerClip))),
+                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(painted, null, Matrix3x3F32.Identity, outerClip))),
                 32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT,
             )
         }
@@ -1014,11 +1014,11 @@ class GPUClipCoverageSurfaceTest {
 
         val clipped = Picture(
             Rect(0f, 0f, 8f, 8f),
-            listOf(DisplayOp.DrawPicture(child, null, Matrix33.identity(), outerClip)),
+            listOf(DisplayOp.DrawPicture(child, null, Matrix3x3F32.Identity, outerClip)),
         )
         val clippedFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderViaGpu(
-                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(clipped, null, Matrix33.identity(), outerClip))),
+                StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(clipped, null, Matrix3x3F32.Identity, outerClip))),
                 32, 32, PixelFormat.RGBA8, RenderConfig.DEFAULT,
             )
         }
@@ -1034,12 +1034,12 @@ class GPUClipCoverageSurfaceTest {
             texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
         )
         val operations = listOf(
-            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
             DisplayOp.DrawMesh(
                 Mesh(vertices, bounds = Rect(2f, 2f, 8f, 8f)),
                 Paint.fill(Color.WHITE),
                 null,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
         )
@@ -1084,7 +1084,7 @@ class GPUClipCoverageSurfaceTest {
                         DisplayOp.DrawVertices(
                             Vertices(VertexMode.TRIANGLES, triangle, texCoords = uvs),
                             paint,
-                            Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
+                            Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
                             clip,
                         ),
                     ),
@@ -1104,7 +1104,7 @@ class GPUClipCoverageSurfaceTest {
                         DisplayOp.DrawVertices(
                             Vertices(VertexMode.TRIANGLE_STRIP, triangle, texCoords = uvs),
                             paint,
-                            Matrix33.identity(),
+                            Matrix3x3F32.Identity,
                             clip,
                         ),
                     ),
@@ -1134,7 +1134,7 @@ class GPUClipCoverageSurfaceTest {
 
         val result = renderViaGpu(
             StaticDisplayListBuffer(
-                listOf(DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen)),
+                listOf(DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen)),
             ),
             16,
             16,
@@ -1170,7 +1170,7 @@ class GPUClipCoverageSurfaceTest {
                         DisplayOp.DrawVertices(
                             vertices,
                             Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel())),
-                            Matrix33.identity(),
+                            Matrix3x3F32.Identity,
                             clip,
                         ),
                     ),
@@ -1232,7 +1232,7 @@ class GPUClipCoverageSurfaceTest {
                             0f,
                             0f,
                             Paint.stroke(Color.RED, 1f),
-                            Matrix33.identity(),
+                            Matrix3x3F32.Identity,
                             clip,
                         ),
                 ),
@@ -1265,7 +1265,7 @@ class GPUClipCoverageSurfaceTest {
                         0f,
                         0f,
                         Paint.fill(Color.RED),
-                        Matrix33.identity(),
+                        Matrix3x3F32.Identity,
                         clip,
                     ),
                 ),
@@ -1291,7 +1291,7 @@ class GPUClipCoverageSurfaceTest {
                 DisplayOp.DrawRect(
                     Rect(2f, 2f, 14f, 14f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
-                    Matrix33.identity(),
+                    Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
             ),
@@ -1301,7 +1301,7 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderViaGpu(
                 buffer = StaticDisplayListBuffer(
-                    listOf(DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip)),
+                    listOf(DisplayOp.DrawPicture(picture, null, Matrix3x3F32.Identity, clip)),
                 ),
                 width = 16,
                 height = 16,
@@ -1328,37 +1328,37 @@ class GPUClipCoverageSurfaceTest {
         )
         val picture = Picture(
             Rect(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+            listOf(DisplayOp.DrawRect(Rect(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         val ops = listOf(
-            DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(3f, 3f), Point(6f, 6f)), Paint.fill(Color.RED), Matrix33.identity(), clip),
+            DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(3f, 3f), Point(6f, 6f)), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
             DisplayOp.DrawDRRect(
                 RRect(Rect(2f, 20f, 10f, 28f), radius = 1f),
                 RRect(Rect(4f, 22f, 8f, 26f), radius = 1f),
                 Paint.fill(Color.RED),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 clip,
             ),
-            DisplayOp.DrawImageNine(image, Rect(1f, 1f, 2f, 2f), Rect(12f, 2f, 22f, 12f), null, Matrix33.identity(), clip),
+            DisplayOp.DrawImageNine(image, Rect(1f, 1f, 2f, 2f), Rect(12f, 2f, 22f, 12f), null, Matrix3x3F32.Identity, clip),
             DisplayOp.DrawImageLattice(
                 image,
                 Lattice(xDivs = listOf(1, 2), yDivs = listOf(1, 2)),
                 Rect(12f, 14f, 22f, 24f),
                 null,
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 clip,
             ),
             DisplayOp.DrawAtlas(
                 atlas = image,
-                transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                 texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
                 colors = null,
                 blendMode = BlendMode.SRC_OVER,
                 paint = null,
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
-            DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip),
+            DisplayOp.DrawPicture(picture, null, Matrix3x3F32.Identity, clip),
         )
         // The DrawPicture inside the complex-clip frame is a documented prepared-route
         // refusal (unsupported.composite.operation): the composite capture admits only core
@@ -1615,7 +1615,7 @@ class GPUClipCoverageSurfaceTest {
 
     private fun renderPictureWithClip(picture: Picture, paint: Paint?, clip: ClipStack) = renderViaGpu(
         StaticDisplayListBuffer(
-            listOf(DisplayOp.DrawPicture(picture, paint, Matrix33.identity(), clip)),
+            listOf(DisplayOp.DrawPicture(picture, paint, Matrix3x3F32.Identity, clip)),
         ),
         16,
         16,

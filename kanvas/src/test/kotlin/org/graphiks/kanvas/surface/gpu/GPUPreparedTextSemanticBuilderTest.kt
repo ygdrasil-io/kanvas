@@ -24,7 +24,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 
 class GPUPreparedTextSemanticBuilderTest {
@@ -107,7 +107,7 @@ class GPUPreparedTextSemanticBuilderTest {
 
     @Test
     fun `A8 semantic snapshots the exact inverse of the subrun Surface transform`() {
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             1.25f, 0.125f, 2f,
             -0.0625f, 1.5f, 1f,
         )
@@ -124,16 +124,16 @@ class GPUPreparedTextSemanticBuilderTest {
             gathered.semanticsByCommandId.getValue(0),
         )
         val determinant =
-            transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+            transform.sx * transform.sy - transform.kx * transform.ky
         val expectedInverse = listOf(
-            transform.scaleY / determinant,
-            -transform.skewX / determinant,
-            (transform.skewX * transform.transY -
-                transform.scaleY * transform.transX) / determinant,
-            -transform.skewY / determinant,
-            transform.scaleX / determinant,
-            (transform.skewY * transform.transX -
-                transform.scaleX * transform.transY) / determinant,
+            transform.sy / determinant,
+            -transform.kx / determinant,
+            (transform.kx * transform.ty -
+                transform.sy * transform.tx) / determinant,
+            -transform.ky / determinant,
+            transform.sx / determinant,
+            (transform.ky * transform.tx -
+                transform.sx * transform.ty) / determinant,
         )
 
         assertEquals(
@@ -443,7 +443,7 @@ class GPUPreparedTextSemanticBuilderTest {
     }
 
     private fun textOperation(
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(
@@ -464,7 +464,7 @@ class GPUPreparedTextSemanticBuilderTest {
     )
 
     private fun preparedA8(
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): GPUPreparedTextFramePreparation.Ready =
         assertIs<GPUPreparedTextFramePreparation.Ready>(
             GPUPreparedTextFramePreparer.prepare(
@@ -507,7 +507,7 @@ class GPUPreparedTextSemanticBuilderTest {
             x = 0f,
             y = 0f,
             paint = Paint.fill(paintColor),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
     }
@@ -580,7 +580,7 @@ class GPUPreparedTextSemanticBuilderTest {
             x = 0f,
             y = 0f,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
     }

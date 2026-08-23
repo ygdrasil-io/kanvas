@@ -34,7 +34,7 @@ import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -61,7 +61,7 @@ class GPUPreparedSurfaceProductEntryTest {
             src = Rect.fromLTRB(0f, 0f, 1f, 1f),
             dst = Rect.fromLTRB(0f, 0f, 4f, 4f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         val harness = PreparedProductExecutionHarness(width = 8, height = 8)
@@ -320,7 +320,7 @@ class GPUPreparedSurfaceProductEntryTest {
     private fun rect() = DisplayOp.DrawRect(
         RECT,
         Paint.fill(Color.RED).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 

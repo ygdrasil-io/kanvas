@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -58,15 +58,15 @@ class RoundRectGm : SkiaGm {
             { _ -> Paint(antiAlias = true, style = PaintStyle.STROKE_AND_FILL, strokeWidth = 3f) },
         )
 
-        val matrices: List<Matrix33> = listOf(
-            Matrix33.identity(),
-            Matrix33.scale(3f, 2f),
-            Matrix33.scale(2f, 2f),
-            Matrix33.scale(1f, 2f),
-            Matrix33.scale(4f, 1f),
-            Matrix33.rotate(90f),
-            Matrix33.skew(2f, 3f),
-            Matrix33.rotate(60f),
+        val matrices: List<Matrix3x3F32> = listOf(
+            Matrix3x3F32.Identity,
+            Matrix3x3F32.scaling(3f, 2f),
+            Matrix3x3F32.scaling(2f, 2f),
+            Matrix3x3F32.scaling(1f, 2f),
+            Matrix3x3F32.scaling(4f, 1f),
+            Matrix3x3F32.rotation(90f),
+            Matrix3x3F32.skewing(2f, 3f),
+            Matrix3x3F32.rotation(60f),
         )
 
         var testCount = 0

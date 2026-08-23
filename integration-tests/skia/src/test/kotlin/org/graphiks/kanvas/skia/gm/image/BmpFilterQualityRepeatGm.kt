@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -61,10 +61,10 @@ class BmpFilterQualityRepeatGm : SkiaGm {
         return Image.fromPixels(40, 40, pixels, sourceId = "checkerboard")
     }
 
-    private fun drawAll(canvas: GmCanvas, bmp: Image, scaleX: Float) {
+    private fun drawAll(canvas: GmCanvas, bmp: Image, sx: Float) {
         val rect = Rect.fromLTRB(20f, 60f, 220f, 210f)
-        val lm = Matrix33.makeAll(
-            scaleX, 0f, 423f,
+        val lm = Matrix3x3F32.of(
+            sx, 0f, 423f,
             0f, 1f, 330f,
         )
         val textPaint = Paint()

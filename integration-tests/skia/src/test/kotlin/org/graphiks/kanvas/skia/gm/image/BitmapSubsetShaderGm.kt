@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/subsetshader.cpp`.
@@ -36,7 +36,7 @@ class BitmapSubsetShaderGm : SkiaGm {
         val leftBitmap = src.extractSubset(left)
         val rightBitmap = src.extractSubset(right)
 
-        val matrix = Matrix33.scale(0.75f, 0.75f) * Matrix33.rotate(30f)
+        val matrix = Matrix3x3F32.scaling(0.75f, 0.75f) * Matrix3x3F32.rotation(30f)
         val tm = TileMode.REPEAT
 
         canvas.drawRect(

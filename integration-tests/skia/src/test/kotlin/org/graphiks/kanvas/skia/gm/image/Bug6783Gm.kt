@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/bug6783.cpp`.
@@ -34,7 +34,7 @@ class Bug6783Gm : SkiaGm {
         val img = surf.makeImageSnapshot()
         val shader = Shader.WithLocalMatrix(
             img.makeShader(TileMode.REPEAT, TileMode.CLAMP),
-            Matrix33.translate(25f, 214f) * Matrix33.scale(2f, 2f) * Matrix33.skew(0.5f, 0.5f),
+            Matrix3x3F32.translation(25f, 214f) * Matrix3x3F32.scaling(2f, 2f) * Matrix3x3F32.skewing(0.5f, 0.5f),
         )
         canvas.drawRect(Rect(0f, 0f, 500f, 500f), Paint(shader = shader))
     }

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 
 class GPUPreparedCompositeCaptureFinalTest {
 
-    private val id33 = Matrix33.identity()
+    private val id33 = Matrix3x3F32.Identity
     private val black = Paint(color = Color.fromArgb(255, 0, 0, 0))
     private val red = Paint(color = Color.fromArgb(255, 255, 0, 0))
 

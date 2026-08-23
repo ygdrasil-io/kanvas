@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -58,7 +58,7 @@ class PerlinNoiseLocalMatrixGm : SkiaGm {
         // Row 3: shader local-matrix 2x (should match row 2)
         canvas.translate(0f, h * 2f + 10f)
 
-        val lm = Matrix33.scale(2f, 2f)
+        val lm = Matrix3x3F32.scaling(2f, 2f)
         val lmPaint = Paint(shader = Shader.WithLocalMatrix(baseShader, lm))
         r = Rect.fromXYWH(0f, 0f, w * 2f, h * 2f)
 

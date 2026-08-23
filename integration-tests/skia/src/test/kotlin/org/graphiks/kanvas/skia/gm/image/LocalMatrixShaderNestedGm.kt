@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -35,8 +35,8 @@ class LocalMatrixShaderNestedGm : SkiaGm {
         val fw = image.width.toFloat()
         val fh = image.height.toFloat()
 
-        val outer = Matrix33.scale(2f, 2f)
-        val inner = Matrix33.translate(20f, 20f)
+        val outer = Matrix3x3F32.scaling(2f, 2f)
+        val inner = Matrix3x3F32.translation(20f, 20f)
 
         val rect = Rect(0f, 0f, fw * 2f + 40f, fh * 2f + 40f)
         val border = Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 1f)

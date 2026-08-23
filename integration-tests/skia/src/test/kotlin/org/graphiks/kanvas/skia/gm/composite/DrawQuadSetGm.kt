@@ -9,8 +9,9 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
 
 private const val kTileWidth = 40f
@@ -82,11 +83,11 @@ class DrawQuadSetGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val m0 = Matrix33.identity()
-val m1 = Matrix33.translate(5.5f, 20.25f) * Matrix33.scale(0.9f, 0.7f)
-val m2 = Matrix33.rotate(20f) * Matrix33.translate(15f, -20f)
-val m3 = Matrix33.skew(0.5f, 0.25f)
-val m4 = Matrix33.identity()
+        val m0 = Matrix3x3F32.Identity
+val m1 = Matrix3x3F32.translation(5.5f, 20.25f) * Matrix3x3F32.scaling(0.9f, 0.7f)
+val m2 = Matrix3x3F32.rotation(20f) * Matrix3x3F32.translation(15f, -20f)
+val m3 = Matrix3x3F32.skewing(0.5f, 0.25f)
+val m4 = Matrix3x3F32.Identity
 
         val rowMatrices = arrayOf(m0, m1, m2, m3, m4)
         val matrixNames = arrayOf("Identity", "T+S", "Rotate", "Skew", "Perspective")
@@ -122,16 +123,16 @@ val m4 = Matrix33.identity()
         }
     }
 
-    private fun drawTileBoundaries(canvas: GmCanvas, local: Matrix33) {
+    private fun drawTileBoundaries(canvas: GmCanvas, local: Matrix3x3F32) {
         val paint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
         for (x in 1 until kColCount) {
-            val p1 = local * Point(x * kTileWidth, 0f)
-            val p2 = local * Point(x * kTileWidth, kRowCount * kTileHeight)
+            val p1 = local.mapPoint(Point(x * kTileWidth, 0f))
+            val p2 = local.mapPoint(Point(x * kTileWidth, kRowCount * kTileHeight))
             canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint)
         }
         for (y in 1 until kRowCount) {
-            val p1 = local * Point(0f, y * kTileHeight)
-            val p2 = local * Point(kColCount * kTileWidth, y * kTileHeight)
+            val p1 = local.mapPoint(Point(0f, y * kTileHeight))
+            val p2 = local.mapPoint(Point(kColCount * kTileWidth, y * kTileHeight))
             canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint)
         }
     }

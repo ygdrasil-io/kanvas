@@ -15,7 +15,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -87,7 +87,7 @@ class GPUPreparedTextFilterBoundaryTest {
         x = 8f,
         y = 24f,
         paint = paint,
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 }

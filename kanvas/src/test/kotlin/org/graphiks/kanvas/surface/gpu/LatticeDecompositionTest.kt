@@ -8,7 +8,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -36,7 +36,7 @@ class LatticeDecompositionTest {
             ),
             dst = Rect.fromXYWH(100f, 100f, 200f, 200f),
             paint = Paint(),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -92,7 +92,7 @@ class LatticeDecompositionTest {
             ),
             dst = Rect.fromLTRB(0f, 0f, 60f, 40f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 

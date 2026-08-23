@@ -37,7 +37,7 @@ import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
@@ -205,7 +205,7 @@ class GPUMaterialMapperTest {
 
     @Test
     fun `prepared gradient local matrix wrappers refuse until the route consumes matrix facts`() {
-        val matrix = Matrix33.makeAll(
+        val matrix = Matrix3x3F32.of(
             1.5f, 0.25f, 3f,
             -0.5f, 0.75f, 4f,
             0.01f, 0.02f, 1f,
@@ -233,12 +233,12 @@ class GPUMaterialMapperTest {
 
     @Test
     fun `prepared nested non commutative gradient matrices remain a stable local matrix refusal`() {
-        val inner = Matrix33.makeAll(
+        val inner = Matrix3x3F32.of(
             2f, 1f, 3f,
             0f, 1f, 4f,
             0f, 0f, 1f,
         )
-        val outer = Matrix33.makeAll(
+        val outer = Matrix3x3F32.of(
             1f, 0f, 5f,
             1f, 1f, 0f,
             0f, 0f, 1f,
@@ -292,12 +292,12 @@ class GPUMaterialMapperTest {
 
     @Test
     fun `legacy nested gradient matrices preserve non commutative multiplication order`() {
-        val inner = Matrix33.makeAll(
+        val inner = Matrix3x3F32.of(
             2f, 1f, 3f,
             0f, 1f, 4f,
             0f, 0f, 1f,
         )
-        val outer = Matrix33.makeAll(
+        val outer = Matrix3x3F32.of(
             1f, 0f, 5f,
             1f, 1f, 0f,
             0f, 0f, 1f,
@@ -362,7 +362,7 @@ class GPUMaterialMapperTest {
                         radius = 30f,
                         stops = threeGradientStops(),
                     ),
-                    Matrix33.makeAll(
+                    Matrix3x3F32.of(
                         1f, 0f, 0f,
                         0f, Float.NaN, 0f,
                         0f, 0f, 1f,
@@ -377,7 +377,7 @@ class GPUMaterialMapperTest {
 
     @Test
     fun `legacy invalid radial and sweep matrices return typed refusals without throwing`() {
-        val invalidMatrix = Matrix33.makeAll(
+        val invalidMatrix = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, Float.NaN, 0f,
             0f, 0f, 1f,
@@ -411,7 +411,7 @@ class GPUMaterialMapperTest {
         )
 
         val localMatrixDescriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
-            Paint(shader = Shader.WithLocalMatrix(nonSrgb, Matrix33.identity()))
+            Paint(shader = Shader.WithLocalMatrix(nonSrgb, Matrix3x3F32.Identity))
                 .toPreparedMaterialMapping()
                 .descriptor,
         )
@@ -460,7 +460,7 @@ class GPUMaterialMapperTest {
                             center = Point(10f, 20f),
                             stops = threeGradientStops(),
                         ),
-                        Matrix33.translate(3f, 4f),
+                        Matrix3x3F32.translation(3f, 4f),
                     ),
                     filter = ColorFilter.Matrix(
                         floatArrayOf(
@@ -705,7 +705,7 @@ class GPUMaterialMapperTest {
                 shader = gradient.copy(interpolation = ColorSpaceInterpolation.LINEAR),
             ) to GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
             Paint(
-                shader = Shader.WithLocalMatrix(solid, Matrix33.identity()),
+                shader = Shader.WithLocalMatrix(solid, Matrix3x3F32.Identity),
             ) to GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
             Paint(
                 shader = Shader.WithWorkingColorSpace(solid, ColorSpaceInterpolation.OKLAB),
@@ -898,7 +898,7 @@ class GPUMaterialMapperTest {
             Paint(
                 shader = Shader.WithLocalMatrix(
                     Shader.SolidColor(Color.RED),
-                    Matrix33.identity(),
+                    Matrix3x3F32.Identity,
                 ),
                 colorFilter = filter,
             ).toPreparedMaterialMapping().descriptor,
@@ -1581,7 +1581,7 @@ class GPUMaterialMapperTest {
             Paint(
                 shader = Shader.WithLocalMatrix(
                     Shader.SolidColor(Color.RED),
-                    Matrix33.identity(),
+                    Matrix3x3F32.Identity,
                 ),
             ).toMaterial(),
         )

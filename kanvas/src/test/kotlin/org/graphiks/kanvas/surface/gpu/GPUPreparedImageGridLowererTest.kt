@@ -31,14 +31,14 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedImageGridLowererTest {
     @Test
     fun `nine emits row ordered affine cells with one default linear artifact authority`() {
         val image = imageNine()
-        val transform = Matrix33.makeAll(
+        val transform = Matrix3x3F32.of(
             1f, 0.5f, 3f,
             0.25f, 1f, 4f,
         )
@@ -86,7 +86,7 @@ class GPUPreparedImageGridLowererTest {
             center = Rect.fromLTRB(2f, 2f, 4f, 4f),
             dst = Rect.fromLTRB(0f, 0f, 2f, 2f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -114,7 +114,7 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(xDivs = divisions, yDivs = divisions),
             dst = Rect.fromLTRB(0f, 0f, 64f, 64f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
             sampling = SamplingOptions.NEAREST,
         )
@@ -152,7 +152,7 @@ class GPUPreparedImageGridLowererTest {
             paint = Paint.fill(Color.fromArgb(128, 20, 30, 40)).copy(
                 antiAlias = false,
             ),
-            transform = Matrix33.translate(2f, 3f),
+            transform = Matrix3x3F32.translation(2f, 3f),
             clip = ClipStack.WideOpen,
             sampling = SamplingOptions.NEAREST,
         )
@@ -195,7 +195,7 @@ class GPUPreparedImageGridLowererTest {
                 blendMode = BlendMode.PLUS,
                 antiAlias = false,
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -221,7 +221,7 @@ class GPUPreparedImageGridLowererTest {
             ),
             dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
             paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -251,7 +251,7 @@ class GPUPreparedImageGridLowererTest {
                 blender = Blender.Mode(BlendMode.PLUS),
                 antiAlias = false,
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -278,7 +278,7 @@ class GPUPreparedImageGridLowererTest {
                 blender = Blender.Arithmetic(0f, 1f, 0f, 0f),
                 antiAlias = false,
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -307,7 +307,7 @@ class GPUPreparedImageGridLowererTest {
             ),
             dst = Rect.fromLTRB(0f, 0f, 18f, 6f),
             paint = null,
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -334,7 +334,7 @@ class GPUPreparedImageGridLowererTest {
                 blendMode = BlendMode.MULTIPLY,
                 antiAlias = false,
             ),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
 
@@ -353,7 +353,7 @@ class GPUPreparedImageGridLowererTest {
             Rect.fromLTRB(2f, 2f, 4f, 4f),
             Rect.fromLTRB(0f, 0f, 12f, 12f),
             null,
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val invalidNine = validNine.copy(center = Rect.fromLTRB(4f, 2f, 2f, 4f))
@@ -388,7 +388,7 @@ class GPUPreparedImageGridLowererTest {
             Lattice(xDivs = listOf(2), yDivs = emptyList()),
             Rect.fromLTRB(0f, 0f, 12f, 6f),
             null,
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         assertEquals(
@@ -453,7 +453,7 @@ class GPUPreparedImageGridLowererTest {
             assertIs<GPUPreparedImageGridLowering.Refused>(
                 GPUPreparedImageGridLowerer.lowerLattice(
                     baseLattice.copy(
-                        transform = Matrix33.makeAll(
+                        transform = Matrix3x3F32.of(
                             1f, 0f, 0f,
                             0f, 1f, 0f,
                             0.01f, 0f, 1f,

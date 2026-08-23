@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/spritebitmap.cpp` (draw-image-rect filter variant).
@@ -31,7 +31,7 @@ class DrawimagerectFilterGm : SkiaGm {
         canvas.translate(60f, 0f)
         canvas.drawImageRect(img, Rect(0f, 0f, 50f, 50f), Rect(0.5f, 0.5f, 50.5f, 50.5f))
         canvas.translate(60f, 0f)
-        val lm = Matrix33.translate(0.5f, 0.5f)
+        val lm = Matrix3x3F32.translation(0.5f, 0.5f)
         val shader = Shader.WithLocalMatrix(img.makeShader(TileMode.CLAMP, TileMode.CLAMP), lm)
         canvas.drawRect(Rect(0f, 0f, 50f, 50f), Paint(shader = shader))
     }

@@ -14,8 +14,9 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.r
@@ -99,9 +100,9 @@ class DstReadShuffleGm : SkiaGm {
                         Point(50f, 0f), Point(0f, 0f), Point(0f, 0f),
                         Point(0f, 0f), Point(0f, 0f),
                     )
-                    val rot = Matrix33.rotate(360f / 5f)
+                    val rot = Matrix3x3F32.rotation(360f / 5f)
                     for (i in 1 until 5) {
-                        val dst = rot * Point(pts[i - 1].x - 50f, pts[i - 1].y - 70f)
+                        val dst = rot.mapPoint(Point(pts[i - 1].x - 50f, pts[i - 1].y - 70f))
                         pts[i] = Point(50f + dst.x, 70f + dst.y)
                     }
                     fConcavePath = Path {

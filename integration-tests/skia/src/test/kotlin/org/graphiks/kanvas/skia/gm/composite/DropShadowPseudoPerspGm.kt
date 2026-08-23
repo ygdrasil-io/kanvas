@@ -9,14 +9,14 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 /**
  * Port of Skia's `gm/dropshadowimagefilter.cpp` `DEF_SIMPLE_GM(dropshadow_pseudopersp, ...)` (155 × 155).
  * Exercises drop-shadow image filter under a perspective-like canvas matrix.
- * **Adaptation**: Upstream uses [SkM44] (4×4 projective). Kanvas uses [Matrix33] (3×3 projective).
+ * **Adaptation**: Upstream uses [SkM44] (4×4 projective). Kanvas uses [Matrix3x3F32] (3×3 projective).
  * The 4×4 Z-computation is not replicated.
  * @see https://github.com/google/skia/blob/main/gm/dropshadowimagefilter.cpp
  */
@@ -31,9 +31,9 @@ class DropShadowPseudoPerspGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0.75f, 0.75f, 0.75f, 1f)
 
-        canvas.concat(Matrix33.makeAll(0.5f, 0f, -75f, 0f, 0.5f, -30f))
+        canvas.concat(Matrix3x3F32.of(0.5f, 0f, -75f, 0f, 0.5f, -30f))
 
-        canvas.concat(Matrix33.makeAll(
+        canvas.concat(Matrix3x3F32.of(
             0.623f, 0f, 134.8f,
             0f, 0.623f, 45.1f,
             0f, 0f, 1f,
@@ -49,13 +49,13 @@ class DropShadowPseudoPerspGm : SkiaGm {
 
         val rrect = RRect(Rect(-250f, -250f, 250f, 250f), CornerRadii(45f, 45f))
 
-        canvas.concat(Matrix33.makeAll(0.83f, 0f, 250f, 0f, 0.83f, 250f))
+        canvas.concat(Matrix3x3F32.of(0.83f, 0f, 250f, 0f, 0.83f, 250f))
 
         val rrectPaint = Paint(color = Color.WHITE, antiAlias = true)
         canvas.drawRRect(rrect, rrectPaint)
         canvas.restore()
 
-        canvas.concat(Matrix33.makeAll(0.83f, 0f, 250f, 0f, 0.83f, 250f))
+        canvas.concat(Matrix3x3F32.of(0.83f, 0f, 250f, 0f, 0.83f, 250f))
 
         val strokePaint = Paint(
             color = Color.BLACK,

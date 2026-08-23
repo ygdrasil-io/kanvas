@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -39,7 +39,7 @@ class ColorCubeRTGm : SkiaGm {
         val childShader = Shader.Image(img, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
         val lutShader = Shader.WithLocalMatrix(
             Shader.Image(lutImg, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST),
-            Matrix33.identity(),
+            Matrix3x3F32.Identity,
         )
 
         val uniforms = UniformBlock {

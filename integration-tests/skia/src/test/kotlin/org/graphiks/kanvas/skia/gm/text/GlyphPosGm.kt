@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -54,13 +54,13 @@ abstract class GlyphPosGm(
         canvas.translate(0f, 80f)
         canvas.save()
         canvas.scale(3f, 3f)
-        canvas.concat(Matrix33.makeAll(1f, 8f / 25f, 0f, 2f / 25f, 1f, 0f))
+        canvas.concat(Matrix3x3F32.of(1f, 8f / 25f, 0f, 2f / 25f, 1f, 0f))
         drawTestCase(canvas, 1f, drawRef = false)
         canvas.restore()
 
         canvas.translate(0f, 80f)
         canvas.save()
-        canvas.concat(Matrix33.makeAll(
+        canvas.concat(Matrix3x3F32.of(
             1f, 8f / 25f, 0f,
             2f / 25f, 1f, 0f,
             -1f / 340f, 0f, 1f,

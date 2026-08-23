@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -35,9 +35,9 @@ class BitmapShaderGm : SkiaGm {
         repeat(2) { index ->
             canvas.save()
             val localMatrix = if (index == 0) {
-                Matrix33.identity()
+                Matrix3x3F32.Identity
             } else {
-                Matrix33.makeAll(1.5f, 0f, 2f, 0f, 1.5f, 2f)
+                Matrix3x3F32.of(1.5f, 0f, 2f, 0f, 1.5f, 2f)
             }
 
             val imageShader = image.makeShader().withLocalMatrix(localMatrix)
@@ -92,6 +92,6 @@ class BitmapShaderGm : SkiaGm {
         }
     }
 
-    private fun Shader.Image.withLocalMatrix(matrix: Matrix33): Shader =
-        if (matrix == Matrix33.identity()) this else Shader.WithLocalMatrix(this, matrix)
+    private fun Shader.Image.withLocalMatrix(matrix: Matrix3x3F32): Shader =
+        if (matrix == Matrix3x3F32.Identity) this else Shader.WithLocalMatrix(this, matrix)
 }

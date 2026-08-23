@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
@@ -39,9 +39,9 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
             canvas.save()
             for (j in makerFns.indices) {
                 val localMatrix = if (i == 3) {
-                    Matrix33.translate(25f, 25f) * Matrix33.scale(0.5f, 0.5f)
+                    Matrix3x3F32.translation(25f, 25f) * Matrix3x3F32.scaling(0.5f, 0.5f)
                 } else {
-                    Matrix33.identity()
+                    Matrix3x3F32.Identity
                 }
                 val shader = makerFns[j](pts, gradData[i], localMatrix)
                 if (shader != null) {
@@ -62,7 +62,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
 
     private fun midpoint(a: Float, b: Float): Float = (a + b) * 0.5f
 
-    private fun make2ConicalOutside(pts: Array<Point>, data: GradData, lm: Matrix33): Shader? {
+    private fun make2ConicalOutside(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
         val r0 = (pts[1].x - pts[0].x) / 10f
         val r1 = (pts[1].x - pts[0].x) / 3f
         val c0 = Point(pts[0].x + r0, pts[0].y + r0)
@@ -77,7 +77,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
         )
     }
 
-    private fun make2ConicalOutsideFlip(pts: Array<Point>, data: GradData, lm: Matrix33): Shader? {
+    private fun make2ConicalOutsideFlip(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
         val r0 = (pts[1].x - pts[0].x) / 10f
         val r1 = (pts[1].x - pts[0].x) / 3f
         val c0 = Point(pts[0].x + r0, pts[0].y + r0)
@@ -92,7 +92,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
         )
     }
 
-    private fun make2ConicalZeroRadOutside(pts: Array<Point>, data: GradData, lm: Matrix33): Shader? {
+    private fun make2ConicalZeroRadOutside(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
         val r0 = 0f
         val r1 = (pts[1].x - pts[0].x) / 3f
         val c0 = Point(pts[0].x + r0, pts[0].y + r0)
@@ -107,7 +107,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
         )
     }
 
-    private fun make2ConicalZeroRadFlipOutside(pts: Array<Point>, data: GradData, lm: Matrix33): Shader? {
+    private fun make2ConicalZeroRadFlipOutside(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
         val r0 = 0f
         val r1 = (pts[1].x - pts[0].x) / 3f
         val c0 = Point(pts[0].x + r0, pts[0].y + r0)
@@ -122,7 +122,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
         )
     }
 
-    private fun make2ConicalOutsideStrip(pts: Array<Point>, data: GradData, lm: Matrix33): Shader? {
+    private fun make2ConicalOutsideStrip(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
         val r = (pts[1].x - pts[0].x) / 3f
         val c0 = Point(pts[0].x, pts[0].y)
         val c1 = Point(pts[1].x, pts[1].y)
@@ -136,7 +136,7 @@ class ConicalGradients2ptOutsideGm : SkiaGm {
         )
     }
 
-    private val makerFns: List<(Array<Point>, GradData, Matrix33) -> Shader?> = listOf(
+    private val makerFns: List<(Array<Point>, GradData, Matrix3x3F32) -> Shader?> = listOf(
         ::make2ConicalOutside, ::make2ConicalOutsideFlip,
         ::make2ConicalZeroRadOutside, ::make2ConicalZeroRadFlipOutside,
         ::make2ConicalOutsideStrip,

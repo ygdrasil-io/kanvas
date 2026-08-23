@@ -51,7 +51,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.wgsl.parser.Lowerer
@@ -64,7 +64,7 @@ class GPUPreparedTextExecutableFixtureTest {
             GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
             "task13-material-matrix",
         )
-        val affine = Matrix33.makeAll(1f, 0.25f, 3f, -0.125f, 1f, 5f)
+        val affine = Matrix3x3F32.of(1f, 0.25f, 3f, -0.125f, 1f, 5f)
         val scissor = ClipStack.DeviceRect(
             Rect.fromLTRB(2f, 3f, 29f, 31f),
             antiAlias = false,
@@ -652,7 +652,7 @@ class GPUPreparedTextExecutableFixtureTest {
         typeface: FontTypeface,
         glyphIds: List<Int>,
         paint: Paint,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         clip: ClipStack = ClipStack.WideOpen,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         TextBlob(

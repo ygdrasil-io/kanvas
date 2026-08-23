@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class PictureShaderPerspGm : SkiaGm {
@@ -44,7 +44,7 @@ class PictureShaderPerspGm : SkiaGm {
         val picture = fPicture ?: return
 
         // Perspective-like skew transform (approximation of SkM44 perspective).
-        val skew = Matrix33.makeAll(
+        val skew = Matrix3x3F32.of(
             2f, 0f, 0f,
             0f, 2f, 0f,
             0.001f, 0.003f, 1f,

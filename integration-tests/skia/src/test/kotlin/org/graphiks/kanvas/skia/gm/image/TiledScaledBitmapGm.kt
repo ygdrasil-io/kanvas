@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawCircle
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/tiledscaledbitmap.cpp`.
@@ -31,7 +31,7 @@ class TiledScaledBitmapGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(antiAlias = true)
 
-        val mat = Matrix33.scale(121f / 360f, 93f / 288f) * Matrix33.translate(-72f, -72f)
+        val mat = Matrix3x3F32.scaling(121f / 360f, 93f / 288f) * Matrix3x3F32.translation(-72f, -72f)
         val shader = Shader.WithLocalMatrix(
             Shader.Image(fBitmap, TileMode.REPEAT, TileMode.REPEAT), mat,
         )

@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -28,8 +28,8 @@ import org.graphiks.kanvas.types.Vertices
 class PreparedVerticesFrameInventoryTest {
     @Test
     fun `identical immutable geometry deduplicates while draw state and source order remain distinct`() {
-        val first = draw(operationIndex = 4, transform = Matrix33.translate(2f, 3f), color = Color.RED)
-        val second = draw(operationIndex = 9, transform = Matrix33.translate(8f, 5f), color = Color.BLUE)
+        val first = draw(operationIndex = 4, transform = Matrix3x3F32.translation(2f, 3f), color = Color.RED)
+        val second = draw(operationIndex = 9, transform = Matrix3x3F32.translation(8f, 5f), color = Color.BLUE)
 
         val inventory = buildReady(listOf(first, second))
 
@@ -383,7 +383,7 @@ class PreparedVerticesFrameInventoryTest {
 
     private fun draw(
         operationIndex: Int,
-        transform: Matrix33 = Matrix33.identity(),
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         color: Color = Color.WHITE,
         positions: List<Point> = points(),
         colors: List<Color>? = null,

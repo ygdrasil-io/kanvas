@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Port of Skia's `gm/persptext.cpp` PerspTextGM minimal variant.
@@ -51,12 +51,12 @@ class PerspTextMinimalGm : SkiaGm {
                     PerspMode.Y -> step * 0.0025f / kSteps / kMinimalFactor
                     PerspMode.XY -> step * -0.00125f / kSteps / kMinimalFactor
                 }
-                val persp = Matrix33.makeAll(
+                val persp = Matrix3x3F32.of(
                     1f, 0f, 0f,
                     0f, 1f, 0f,
                     persp0, persp1, 1f,
                 )
-                val centered = Matrix33.translate(x, y) * persp * Matrix33.translate(-x, -y)
+                val centered = Matrix3x3F32.translation(x, y) * persp * Matrix3x3F32.translation(-x, -y)
                 canvas.save()
                 canvas.concat(centered)
                 canvas.drawString(text, x, y, font, Paint(antiAlias = true, color = Color.BLACK))

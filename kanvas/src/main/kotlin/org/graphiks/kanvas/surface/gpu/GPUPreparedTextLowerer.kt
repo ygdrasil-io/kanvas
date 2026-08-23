@@ -36,8 +36,9 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 
 private const val PREPARED_TEXT_MATERIAL_DICTIONARY_VERSION =
     "material-dictionary:prepared-material:v1"
@@ -222,8 +223,8 @@ object GPUPreparedTextLowerer {
             )
         }
         val determinant =
-            operation.transform.scaleX * operation.transform.scaleY -
-                operation.transform.skewX * operation.transform.skewY
+            operation.transform.sx * operation.transform.sy -
+                operation.transform.kx * operation.transform.ky
         if (!determinant.isFinite()) {
             return refused(
                 GPUTextRefusalCodes.TRANSFORM_NONFINITE,
@@ -239,12 +240,12 @@ object GPUPreparedTextLowerer {
             )
         }
         val affineScaleX = sqrt(
-            operation.transform.scaleX.toDouble() * operation.transform.scaleX.toDouble() +
-                operation.transform.skewY.toDouble() * operation.transform.skewY.toDouble(),
+            operation.transform.sx.toDouble() * operation.transform.sx.toDouble() +
+                operation.transform.ky.toDouble() * operation.transform.ky.toDouble(),
         ).toFloat()
         val affineScaleY = sqrt(
-            operation.transform.skewX.toDouble() * operation.transform.skewX.toDouble() +
-                operation.transform.scaleY.toDouble() * operation.transform.scaleY.toDouble(),
+            operation.transform.kx.toDouble() * operation.transform.kx.toDouble() +
+                operation.transform.sy.toDouble() * operation.transform.sy.toDouble(),
         ).toFloat()
         if (
             !affineScaleX.isFinite() || affineScaleX <= 0f ||
@@ -316,7 +317,7 @@ object GPUPreparedTextLowerer {
                     "Effective glyph positions must remain finite after applying the text origin",
                 )
             }
-            val deviceAnchor = operation.transform * Point(effectiveX, effectiveY)
+            val deviceAnchor = operation.transform.mapPoint(Point(effectiveX, effectiveY))
             if (!deviceAnchor.x.isFinite() || !deviceAnchor.y.isFinite()) {
                 return refused(
                     GPUTextRefusalCodes.POSITION_NONFINITE,
@@ -728,24 +729,24 @@ private fun validateAndSnapshotPreparedTextClip(
     }
 }
 
-private fun Matrix33.valuesForPreparedText(): List<Float> = listOf(
-    scaleX, skewX, transX,
-    skewY, scaleY, transY,
+private fun Matrix3x3F32.valuesForPreparedText(): List<Float> = listOf(
+    sx, kx, tx,
+    ky, sy, ty,
     persp0, persp1, persp2,
 )
 
 private fun fractionalPreparedTextPosition(value: Double): Float =
     (value - floor(value)).toFloat()
 
-private fun Matrix33.preparedTextLinearTransformBucket(): String =
-    "affine.linear.v1:" + listOf(scaleX, skewX, skewY, scaleY)
+private fun Matrix3x3F32.preparedTextLinearTransformBucket(): String =
+    "affine.linear.v1:" + listOf(sx, kx, ky, sy)
         .joinToString(separator = ":") { value ->
             Integer.toUnsignedString(value.toRawBits(), 16).padStart(8, '0')
         }
 
-private fun Matrix33.snapshotForPreparedText(): Matrix33 = Matrix33.makeAll(
-    scaleX, skewX, transX,
-    skewY, scaleY, transY,
+private fun Matrix3x3F32.snapshotForPreparedText(): Matrix3x3F32 = Matrix3x3F32.of(
+    sx, kx, tx,
+    ky, sy, ty,
     persp0, persp1, persp2,
 )
 

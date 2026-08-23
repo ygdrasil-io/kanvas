@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
@@ -110,7 +110,7 @@ class Skbug257Gm : SkiaGm {
             }
         }
         val image = surface.makeImageSnapshot()
-        val matrix = Matrix33.scale(0.75f, 0.75f) * Matrix33.rotate(30f)
+        val matrix = Matrix3x3F32.scaling(0.75f, 0.75f) * Matrix3x3F32.rotation(30f)
         return Shader.WithLocalMatrix(Shader.Image(image, TileMode.REPEAT, TileMode.REPEAT), matrix)
     }
 

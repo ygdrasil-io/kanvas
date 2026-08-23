@@ -10,7 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** The public operation semantic retained by one handle-free prepared vertices draw. */
@@ -74,7 +74,7 @@ class GPUPreparedVerticesDraw private constructor(
     val artifact: GPUPreparedVerticesUploadArtifact,
     val operationKind: GPUPreparedVerticesOperationKind,
     val material: GPUPreparedMaterialProgram,
-    val transform: Matrix33,
+    val transform: Matrix3x3F32,
     clip: ClipStack,
     val clipSnapshot: GPUPreparedVerticesClipSnapshot,
     val finalBlend: GPUBlendFacts,
@@ -116,7 +116,7 @@ class GPUPreparedVerticesDraw private constructor(
             artifact: GPUPreparedVerticesUploadArtifact,
             operationKind: GPUPreparedVerticesOperationKind,
             material: GPUPreparedMaterialProgram,
-            transform: Matrix33,
+            transform: Matrix3x3F32,
             clip: ClipStack,
             clipSnapshot: GPUPreparedVerticesClipSnapshot,
             finalBlend: GPUBlendFacts,
@@ -135,9 +135,9 @@ class GPUPreparedVerticesDraw private constructor(
             artifact = artifact,
             operationKind = operationKind,
             material = material,
-            transform = Matrix33.makeAll(
-                transform.scaleX, transform.skewX, transform.transX,
-                transform.skewY, transform.scaleY, transform.transY,
+            transform = Matrix3x3F32.of(
+                transform.sx, transform.kx, transform.tx,
+                transform.ky, transform.sy, transform.ty,
                 transform.persp0, transform.persp1, transform.persp2,
             ),
             clip = clip,

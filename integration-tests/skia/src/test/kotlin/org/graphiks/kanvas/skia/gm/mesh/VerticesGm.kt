@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -75,7 +75,7 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
             tileMode = TileMode.MIRROR,
         )
         if (shaderScale == 1f) base
-        else Shader.WithLocalMatrix(Shader.WithLocalMatrix(base, Matrix33.translate(-10f, 0f)), Matrix33.translate(10f, 0f))
+        else Shader.WithLocalMatrix(Shader.WithLocalMatrix(base, Matrix3x3F32.translation(-10f, 0f)), Matrix3x3F32.translation(10f, 0f))
     }
 
     private val shader2: Shader = Shader.SolidColor(Color.BLUE)

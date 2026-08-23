@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -37,7 +37,7 @@ class CoordClampShaderGm : SkiaGm {
         val drawRect = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
         val cx = image.width.toFloat() / 2f
         val cy = image.height.toFloat() / 2f
-        val rotate = Matrix33.translate(cx, cy) * Matrix33.rotate(45f) * Matrix33.translate(-cx, -cy)
+        val rotate = Matrix3x3F32.translation(cx, cy) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(-cx, -cy)
         val clampRect = Rect(drawRect.left + 20f, drawRect.top + 40f, drawRect.right - 20f, drawRect.bottom - 40f)
 
         canvas.translate(10f, 10f)
@@ -73,7 +73,7 @@ class CoordClampShaderGm : SkiaGm {
             SamplingOptions.LINEAR,
             SamplingOptions.Cubic.Mitchell,
         )
-        val scale03 = Matrix33.scale(0.3f, 1f)
+        val scale03 = Matrix3x3F32.scaling(0.3f, 1f)
         for (sampler in samplers) {
             val s = image.makeShader(TileMode.MIRROR, TileMode.MIRROR, sampler)
             canvas.drawRect(drawRect, Paint(shader = Shader.CoordClamp(Shader.WithLocalMatrix(s, scale03), clampRect)))

@@ -18,7 +18,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
@@ -35,7 +35,7 @@ class PictureTest {
         val path = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
             paint = Paint.fill(Color.RED),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
             sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
         )
@@ -63,7 +63,7 @@ class PictureTest {
                 DisplayOp.DrawPath.withSourceOperation(
                     path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
                     paint = Paint.fill(Color.RED),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                     sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
                 ),
@@ -86,7 +86,7 @@ class PictureTest {
                 DisplayOp.DrawRect(
                     rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
                     paint = Paint.fill(Color.BLUE),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                 ),
             ),
@@ -101,7 +101,7 @@ class PictureTest {
             DisplayOp.DrawRect(
                 rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
                 paint = Paint.fill(Color.BLUE),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
             restored.ops.single(),
@@ -116,7 +116,7 @@ class PictureTest {
                 DisplayOp.DrawPath.withSourceOperation(
                     path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
                     paint = Paint.fill(Color.RED),
-                    transform = Matrix33.identity(),
+                    transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                     sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
                 ),

@@ -32,7 +32,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceImagePixelTest {
@@ -92,7 +92,7 @@ class GPUPreparedSurfaceImagePixelTest {
             DisplayOp.DrawRect(
                 rect = Rect.fromLTRB(60f, 28f, 64f, 32f),
                 paint = Paint.fill(Color.RED).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
             drawImage(rgba, Rect.fromLTRB(0f, 0f, 2f, 2f), SamplingOptions.NEAREST),
@@ -109,7 +109,7 @@ class GPUPreparedSurfaceImagePixelTest {
                 center = Rect.fromLTRB(2f, 2f, 4f, 4f),
                 dst = Rect.fromLTRB(0f, 4f, 18f, 22f),
                 paint = null,
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
             DisplayOp.DrawImageLattice(
@@ -120,17 +120,17 @@ class GPUPreparedSurfaceImagePixelTest {
                 ),
                 dst = Rect.fromLTRB(20f, 4f, 38f, 10f),
                 paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
                 sampling = SamplingOptions.NEAREST,
             ),
             DisplayOp.DrawAtlas(
                 atlas = atlas,
                 transforms = listOf(
-                    Matrix33.translate(42f, 4f),
-                    Matrix33.translate(43f, 4f),
-                    Matrix33.translate(42f, 6f),
-                    Matrix33.translate(43f, 6f),
+                    Matrix3x3F32.translation(42f, 4f),
+                    Matrix3x3F32.translation(43f, 4f),
+                    Matrix3x3F32.translation(42f, 6f),
+                    Matrix3x3F32.translation(43f, 6f),
                 ),
                 texRects = listOf(
                     quadrant(0, 0),
@@ -141,7 +141,7 @@ class GPUPreparedSurfaceImagePixelTest {
                 colors = listOf(Color.BLUE, Color.RED, Color.GREEN, Color.WHITE),
                 blendMode = BlendMode.SRC,
                 paint = Paint.fill(Color.WHITE),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
         )
@@ -315,7 +315,7 @@ class GPUPreparedSurfaceImagePixelTest {
         src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = paint.copy(shader = Shader.Image(image, sampling = sampling)),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

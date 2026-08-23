@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.max
@@ -50,11 +50,11 @@ class DrawImageSetRectToRectGm : SkiaGm {
         }
 
         val matrices = arrayOf(
-            Matrix33.identity(),
-            Matrix33.translate(kW / 2f, kH / 2f) * Matrix33.rotate(90f) * Matrix33.translate(-kW / 2f, -kH / 2f),
-            Matrix33.scale(2f, 0.5f),
-            Matrix33.translate(kW, kH) * Matrix33.scale(-1f, -1f),
-            Matrix33.scale(2f, 0.5f) * (Matrix33.translate(kW / 2f, kH / 2f) * Matrix33.rotate(90f) * Matrix33.translate(-kW / 2f, -kH / 2f)) * Matrix33.translate(0f, kH) * Matrix33.scale(1f, -1f),
+            Matrix3x3F32.Identity,
+            Matrix3x3F32.translation(kW / 2f, kH / 2f) * Matrix3x3F32.rotation(90f) * Matrix3x3F32.translation(-kW / 2f, -kH / 2f),
+            Matrix3x3F32.scaling(2f, 0.5f),
+            Matrix3x3F32.translation(kW, kH) * Matrix3x3F32.scaling(-1f, -1f),
+            Matrix3x3F32.scaling(2f, 0.5f) * (Matrix3x3F32.translation(kW / 2f, kH / 2f) * Matrix3x3F32.rotation(90f) * Matrix3x3F32.translation(-kW / 2f, -kH / 2f)) * Matrix3x3F32.translation(0f, kH) * Matrix3x3F32.scaling(1f, -1f),
         )
 
         val kTranslate = max(kW, kH) * 2f + 10f
@@ -78,16 +78,16 @@ class DrawImageSetRectToRectGm : SkiaGm {
 
         canvas.translate(0f, -2f * kTranslate)
 
-        for (scaleX in floatArrayOf(2f, 0.5f)) {
-            val scaleY = if (scaleX > 1f) 0.5f else 2f
+        for (sx in floatArrayOf(2f, 0.5f)) {
+            val sy = if (sx > 1f) 0.5f else 2f
             canvas.save()
             for (m in matrices.indices) {
                 canvas.save()
                 canvas.concat(matrices[m])
                 for ((ti, tile) in tiles.withIndex()) {
                     val sd = Rect(
-                        tile.dst.left * scaleX, tile.dst.top * scaleY,
-                        tile.dst.right * scaleX, tile.dst.bottom * scaleY,
+                        tile.dst.left * sx, tile.dst.top * sy,
+                        tile.dst.right * sx, tile.dst.bottom * sy,
                     )
                     val alpha = if (ti % 3 == 0) 0.4f else 1f
                     canvas.drawImageRect(backingImage, tile.src, sd,
