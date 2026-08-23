@@ -41,6 +41,24 @@ val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
     outputs.upToDateWhen { false }
 }
 
+val warmupFrames = providers.gradleProperty("warmupFrames").orElse("10")
+val measuredFrames = providers.gradleProperty("measuredFrames").orElse("90")
+tasks.register<JavaExec>("gpuEvidencePerformance") {
+    group = "verification"
+    description = "Captures independent hardware-eligible GPU performance evidence."
+    dependsOn(tasks.named("classes"))
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.evidence.performance.GpuEvidencePerformanceCliKt")
+    jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
+    if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs("-XstartOnFirstThread")
+    doFirst {
+        require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
+        require(warmupFrames.get().toInt() >= 0 && measuredFrames.get().toInt() > 0) { "warmupFrames must be non-negative and measuredFrames positive" }
+    }
+    argumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get(), "--warmup-frames", warmupFrames.get(), "--measured-frames", measuredFrames.get()) })
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("generateBootstrapGpuEvidence") {
     group = "verification"
     description = "Temporary alias for generateGpuEvidence; removed by Task 8."

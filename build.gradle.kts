@@ -3900,6 +3900,12 @@ tasks.register("gpuEvidenceCorrectness") {
     dependsOn(":integration-tests:gpu-evidence:verifyGeneratedGpuEvidence")
 }
 
+tasks.register("gpuEvidencePerformance") {
+    group = "verification"
+    description = "Captures independent hardware-eligible GPU performance evidence."
+    dependsOn(":integration-tests:gpu-evidence:gpuEvidencePerformance")
+}
+
 tasks.register("gpuEvidenceVerification") {
     group = "verification"
     description = "Runs host-independent GPU evidence tests and verifies checked-in promoted snapshots."

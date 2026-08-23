@@ -37,6 +37,9 @@ class GPUPreparedEvidenceExecutorContractTest {
     @Test fun `product adapter identity reaches runner environment and verified bundle`() {
         val product = ProductEvidenceBackendPort(AdapterSession())
         assertEquals("fake-adapter", assertNotNull(product.adapter).summary)
+        assertEquals("vendor", product.adapter?.vendor)
+        assertEquals("device", product.adapter?.device)
+        assertEquals(false, product.adapter?.isFallbackAdapter)
         val result = GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), adapter = product.adapter), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
         val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
@@ -45,11 +48,11 @@ class GPUPreparedEvidenceExecutorContractTest {
         val environment = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("environment.json"))).jsonObject
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals("fake-adapter", adapter["summary"]!!.jsonPrimitive.content)
-        assertIs<JsonNull>(adapter["vendor"])
-        assertIs<JsonNull>(adapter["device"])
-        assertIs<JsonNull>(adapter["architecture"])
-        assertIs<JsonNull>(adapter["description"])
-        assertIs<JsonNull>(adapter["isFallbackAdapter"])
+        assertEquals("vendor", adapter["vendor"]!!.jsonPrimitive.content)
+        assertEquals("device", adapter["device"]!!.jsonPrimitive.content)
+        assertEquals("architecture", adapter["architecture"]!!.jsonPrimitive.content)
+        assertEquals("description", adapter["description"]!!.jsonPrimitive.content)
+        assertEquals("false", adapter["isFallbackAdapter"]!!.jsonPrimitive.content)
         assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "a".repeat(40)))
     }
 
@@ -145,7 +148,7 @@ class GPUPreparedEvidenceExecutorContractTest {
     }
 
     private class AdapterSession : GPUBackendSession {
-        override val adapterInfo = GPUBackendAdapterSummary("fake-adapter")
+        override val adapterInfo = GPUBackendAdapterSummary("fake-adapter", "vendor", "device", "architecture", "description", false)
         override val deviceGeneration = GPUDeviceGenerationID(1)
         override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget = error("not used")
         override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession = error("not used")

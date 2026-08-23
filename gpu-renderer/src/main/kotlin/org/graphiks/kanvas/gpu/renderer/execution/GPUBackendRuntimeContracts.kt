@@ -71,6 +71,13 @@ data class GPUClearColor(
 /** Summarizes the active adapter without exposing backend-native handles. */
 data class GPUBackendAdapterSummary(
     val summary: String,
+    val vendor: String? = null,
+    val device: String? = null,
+    val architecture: String? = null,
+    val description: String? = null,
+    val isFallbackAdapter: Boolean? = null,
+    val backend: String? = null,
+    val driver: String? = null,
 )
 
 /** Aggregated passive counters for a GPU backend session. */

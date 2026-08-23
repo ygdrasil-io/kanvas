@@ -37,7 +37,10 @@ sealed interface EvidenceProgramPreparation {
 }
 
 data class PreparedEvidenceProgram(internal val taskList: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList?, val readbackRequestId: String)
-interface EvidencePreparedFramePort : AutoCloseable { fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame }
+interface EvidencePreparedFramePort : AutoCloseable {
+    fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame
+    fun renderCompletionOnly(program: PreparedEvidenceProgram): EvidenceCompletedFrame = render(program)
+}
 
 sealed interface EvidenceExecutionResult {
     data class Observed(val observation: SceneObservation) : EvidenceExecutionResult
@@ -122,7 +125,9 @@ class GPUPreparedEvidenceExecutor(
 /** Real adapter around the existing product [GPUBackendSession] and prepared session APIs. */
 class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : EvidenceBackendPort {
     override val capabilities: EvidenceCapabilities? = backend.capabilities?.let { EvidenceCapabilities(it.implementation.implementationName, it) }
-    override val adapter: EvidenceAdapter? = backend.adapterInfo?.let { EvidenceAdapter(it.summary, null, null, null, null, null) }
+    override val adapter: EvidenceAdapter? = backend.adapterInfo?.let {
+        EvidenceAdapter(it.summary, it.vendor, it.device, it.architecture, it.description, it.isFallbackAdapter)
+    }
     override val deviceGeneration: Long get() = backend.deviceGeneration.value
     override fun telemetry(): GPUBackendRuntimeTelemetry = backend.runtimeTelemetry
 
@@ -145,6 +150,10 @@ class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : Evide
     private class ProductPreparedFramePort(private val frame: GPUPreparedSceneFrameSession) : EvidencePreparedFramePort {
         override fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
             val result = frame.renderFrame(requireNotNull(program.taskList), GPUSceneFrameOutputRequest.ReadbackRgba(GPUReadbackRequestID(program.readbackRequestId))).completion.toCompletableFuture().get(30, TimeUnit.SECONDS)
+            return result.toEvidenceCompletedFrame()
+        }
+        override fun renderCompletionOnly(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
+            val result = frame.renderFrame(requireNotNull(program.taskList), GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly).completion.toCompletableFuture().get(30, TimeUnit.SECONDS)
             return result.toEvidenceCompletedFrame()
         }
         override fun close() = frame.close()
