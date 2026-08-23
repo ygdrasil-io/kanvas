@@ -1,0 +1,1 @@
+{"schemaVersion":"gpu-evidence-promotion-v1","sceneId":"aggregate-memory-budget-refusal","sourceCommit":"32819ee72da7ea5bd2073c3b762a1ddcec69e325","promotedAtUtc":"2026-08-23T03:03:00.018257Z","reviewer":"Codex gpt-5.6-sol /root/task_7_artifact_review","reason":"initial-product-backed-gpu-evidence","rebaseline":false,"priorComparison":null,"newComparison":null}

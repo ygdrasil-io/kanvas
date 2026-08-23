@@ -1,0 +1,1 @@
+{"expectation":"refuse:unsupported.frame_memory.aggregate_budget_exceeded","observedOutcome":"refused","verdictKind":"pass","reason":"exact refusal before submission"}
