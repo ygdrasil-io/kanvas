@@ -1,11 +1,11 @@
 package org.graphiks.kanvas.codec
 
-import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ImageInfo
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * A concrete image generator backed by an [Codec] — mirrors
@@ -25,14 +25,19 @@ public class CodecImageGenerator private constructor(
 
     public fun getPixels(info: ImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
         if (info.width <= 0 || info.height <= 0 || rowBytes < info.minRowBytes()) return false
-        if (info.width != this.info.width || info.height != this.info.height || info.colorSpace != this.info.colorSpace) return false
+        if (info.width != this.info.width || info.height != this.info.height) return false
         if (info.colorType != ColorType.RGBA_8888) return false
-        val bm = Bitmap(codec.getInfo().makeColorType(ColorType.RGBA_8888))
-        val res = codec.getPixels(bm.info, bm)
+        if (info.alphaType != this.info.alphaType || info.colorSpace !== this.info.colorSpace) return false
+        val requiredBytes = (info.height - 1).toLong() * rowBytes.toLong() + info.minRowBytes().toLong()
+        if (pixels.remaining().toLong() < requiredBytes) return false
+
+        val bm = Bitmap(info)
+        val res = codec.getPixels(info, bm)
         if (res != Codec.Result.kSuccess) return false
         // Pack the 32-bit pixels into the destination ByteBuffer in
         // RGBA byte order (matches the buffer layout the upstream
         // generator's [getPixels] consumers expect).
+        val output = pixels.slice().order(ByteOrder.LITTLE_ENDIAN)
         val width = info.width
         val height = info.height
         for (y in 0 until height) {
@@ -44,10 +49,10 @@ public class CodecImageGenerator private constructor(
                 val g = (c ushr 8) and 0xFF
                 val b = c and 0xFF
                 val off = rowOff + x * 4
-                pixels.put(off, r.toByte())
-                pixels.put(off + 1, g.toByte())
-                pixels.put(off + 2, b.toByte())
-                pixels.put(off + 3, a.toByte())
+                output.put(off, r.toByte())
+                output.put(off + 1, g.toByte())
+                output.put(off + 2, b.toByte())
+                output.put(off + 3, a.toByte())
             }
         }
         return true
@@ -92,7 +97,7 @@ public object ImageGeneratorImages {
         val info = generator.info
         if (info.isEmpty()) return null
         val target = info.makeColorType(ColorType.RGBA_8888)
-            .makeAlphaType(AlphaType.UNPREMUL)
+            .makeAlphaType(info.alphaType)
         val rowBytes = target.minRowBytes()
         val bytes = ByteBuffer
             .allocate(rowBytes * target.height)

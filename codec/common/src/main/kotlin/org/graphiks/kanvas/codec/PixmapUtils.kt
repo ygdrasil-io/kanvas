@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.Bitmap
-import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.image.capabilities
@@ -21,13 +20,7 @@ public object PixmapUtils {
             return false
         }
 
-        val f16 = if (src.colorType == ColorType.RGBA_F16_NORM ||
-            src.colorType == ColorType.RGBA_F16
-        ) {
-            FloatArray(4)
-        } else {
-            null
-        }
+        val bytesPerPixel = src.colorType.bytesPerPixel
         for (sy in 0 until src.height) {
             for (sx in 0 until src.width) {
                 val (dx, dy) = when (origin) {
@@ -40,12 +33,9 @@ public object PixmapUtils {
                     EncodedOrigin.RIGHT_BOTTOM -> src.height - 1 - sy to src.width - 1 - sx
                     EncodedOrigin.LEFT_BOTTOM -> sy to src.width - 1 - sx
                 }
-                if (f16 != null) {
-                    check(src.getPremulRgbaF16(sx, sy, checkNotNull(f16)))
-                    dst.setPremulRgbaF16(dx, dy, f16[0], f16[1], f16[2], f16[3])
-                } else {
-                    dst.setArgb(dx, dy, src.getArgb(sx, sy))
-                }
+                val srcOffset = (sy * src.width + sx) * bytesPerPixel
+                val dstOffset = (dy * dst.width + dx) * bytesPerPixel
+                src.pixels.copyInto(dst.pixels, dstOffset, srcOffset, srcOffset + bytesPerPixel)
             }
         }
         return true

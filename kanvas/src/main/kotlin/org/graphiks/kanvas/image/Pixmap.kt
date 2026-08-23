@@ -40,6 +40,11 @@ class Pixmap(
 
     fun computeByteSize(): Long = info.computeByteSize(rowBytes)
 
+    /**
+     * Returns `0` when [x] or [y] is out of bounds. For an in-bounds pixel,
+     * throws [UnsupportedOperationException] when this color type has no
+     * CPU-readable Kanvas representation.
+     */
     fun getArgb(x: Int, y: Int): Int {
         if (x !in 0 until width() || y !in 0 until height()) return 0
         if (!info.colorType.capabilities().cpuReadableWritable) {

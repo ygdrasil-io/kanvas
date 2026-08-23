@@ -152,17 +152,19 @@ class AnimatedImageOwnershipTest {
     @Test
     fun `without post process retains F16 pixels through scaling`() {
         val codec = RecordingAnimatedCodec(
-            frames = listOf(0xFF204060.toInt()),
+            frames = listOf(RED),
             delaysMs = listOf(40),
             width = 2,
-            height = 2,
-            colorType = ColorType.RGBA_F16_NORM,
+            height = 1,
+            origin = EncodedOrigin.TOP_RIGHT,
+            colorType = ColorType.RGBA_F16,
             alphaType = AlphaType.PREMUL,
+            f16Pixel = floatArrayOf(1.5f, 0.25f, 2f, 0.5f),
         )
         val animated = requireNotNull(
             AnimatedImage.Make(
                 AndroidCodec.MakeFromCodec(codec),
-                ImageInfo.make(1, 1, ColorType.RGBA_F16_NORM, AlphaType.PREMUL),
+                ImageInfo.make(1, 1, ColorType.RGBA_F16, AlphaType.PREMUL),
                 RectI32.ofSize(1, 1),
                 postProcess = null,
             ),
@@ -170,13 +172,13 @@ class AnimatedImageOwnershipTest {
         val frame = animated.getCurrentFrame()
         val components = FloatArray(4)
 
-        assertEquals(ColorType.RGBA_F16_NORM, frame.colorType)
+        assertEquals(ColorType.RGBA_F16, frame.colorType)
         assertEquals(AlphaType.PREMUL, frame.alphaType)
         assertTrue(frame.getPremulRgbaF16(0, 0, components))
-        assertEquals(0.125f, components[0], 0.001f)
+        assertEquals(1.5f, components[0], 0.001f)
         assertEquals(0.25f, components[1], 0.001f)
-        assertEquals(0.375f, components[2], 0.001f)
-        assertEquals(1f, components[3], 0.001f)
+        assertEquals(2f, components[2], 0.001f)
+        assertEquals(0.5f, components[3], 0.001f)
     }
 
     @Test
@@ -189,6 +191,7 @@ class AnimatedImageOwnershipTest {
             origin = EncodedOrigin.TOP_RIGHT,
             colorType = ColorType.RGB_565,
             alphaType = AlphaType.OPAQUE,
+            rawPixels = byteArrayOf(0x00, 0x08, 0x00, 0x08),
         )
         val animated = requireNotNull(
             AnimatedImage.Make(
@@ -202,8 +205,49 @@ class AnimatedImageOwnershipTest {
 
         assertEquals(ColorType.RGB_565, frame.colorType)
         assertEquals(AlphaType.OPAQUE, frame.alphaType)
-        assertEquals(RED, frame.getArgb(0, 0))
-        assertEquals(RED, frame.getArgb(1, 0))
+        assertEquals(0, frame.pixels[0].toInt() and 0xFF)
+        assertEquals(8, frame.pixels[1].toInt() and 0xFF)
+        assertEquals(0, frame.pixels[2].toInt() and 0xFF)
+        assertEquals(8, frame.pixels[3].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `without post process retains exact ARGB 4444 pixels through orientation`() {
+        val codec = RecordingAnimatedCodec(
+            frames = listOf(RED),
+            delaysMs = listOf(40),
+            width = 2,
+            height = 1,
+            origin = EncodedOrigin.TOP_RIGHT,
+            colorType = ColorType.ARGB_4444,
+            alphaType = AlphaType.PREMUL,
+            rawPixels = byteArrayOf(0x5A, 0xB4.toByte(), 0x5A, 0xB4.toByte()),
+        )
+        val animated = requireNotNull(
+            AnimatedImage.Make(
+                AndroidCodec.MakeFromCodec(codec),
+                ImageInfo.make(2, 1, ColorType.ARGB_4444, AlphaType.PREMUL),
+                RectI32.ofSize(2, 1),
+                postProcess = null,
+            ),
+        )
+
+        assertEquals(listOf(0x5A, 0xB4, 0x5A, 0xB4), animated.getCurrentFrame().pixels.map { it.toInt() and 0xFF })
+    }
+
+    @Test
+    fun `factory rejects metadata conversion before decoding`() {
+        val codec = RecordingAnimatedCodec(frames = listOf(RED), delaysMs = listOf(40))
+
+        assertNull(
+            AnimatedImage.Make(
+                AndroidCodec.MakeFromCodec(codec),
+                ImageInfo.make(1, 1, ColorType.RGB_565, AlphaType.OPAQUE),
+                RectI32.ofSize(1, 1),
+                postProcess = null,
+            ),
+        )
+        assertEquals(emptyList<Int>(), codec.decodedFrameIndexes)
     }
 
     private fun supportedNonClassifiableIccColorSpace(): ImageColorSpace =
@@ -262,6 +306,8 @@ class AnimatedImageOwnershipTest {
         private val colorType: ColorType = ColorType.RGBA_8888,
         private val alphaType: AlphaType = AlphaType.UNPREMUL,
         private val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
+        private val rawPixels: ByteArray? = null,
+        private val f16Pixel: FloatArray? = null,
     ) : Codec() {
         val decodedFrameIndexes = mutableListOf<Int>()
         val decodedOptions = mutableListOf<Options>()
@@ -297,8 +343,14 @@ class AnimatedImageOwnershipTest {
             }
             decodedOptions += opts
             decodedFrameIndexes += opts.frameIndex
-            for (y in 0 until height) for (x in 0 until width) {
-                dst.setArgb(x, y, frames[opts.frameIndex])
+            when {
+                rawPixels != null -> rawPixels.copyInto(dst.pixels)
+                f16Pixel != null -> for (y in 0 until height) for (x in 0 until width) {
+                    dst.setPremulRgbaF16(x, y, f16Pixel[0], f16Pixel[1], f16Pixel[2], f16Pixel[3])
+                }
+                else -> for (y in 0 until height) for (x in 0 until width) {
+                    dst.setArgb(x, y, frames[opts.frameIndex])
+                }
             }
             return Result.kSuccess
         }

@@ -155,3 +155,46 @@ but no corresponding projects in `settings.gradle.kts`; their updated
 existing tests are therefore statically validated rather than executable in
 this worktree. This is the pre-existing package-boundary condition already
 recorded for Task 7, not a result of this correction.
+
+## Final re-review correction — DONE
+
+### Findings resolved
+
+1. `PixmapUtils.orient` and the no-postprocess `AnimatedImage` crop/scale
+   route now copy each canonical pixel's raw `bytesPerPixel`; neither route
+   converts through `getArgb`/`setArgb` or `getPixel`/`setPixel`. The
+   destination/source metadata must match exactly before this copy occurs.
+   `AnimatedImage.Make` now rejects a requested color type, alpha type, or
+   `ImageColorSpace` different from `codec.getInfo()`; only geometry may
+   change. The existing orphaned animated tests cover the non-maximal
+   RGB_565 raw value, exact ARGB_4444 bytes, and HDR RGBA_F16 components
+   greater than one through orientation/scale.
+2. `CodecImageGenerator.getPixels` validates dimensions, `RGBA_8888`, alpha,
+   color-space identity, row bytes, and the `ByteBuffer` remaining capacity
+   using `Long` arithmetic before decode. Writes target a little-endian
+   `slice()` beginning at the input buffer's current position, so every
+   refusal leaves the supplied buffer unchanged. `DeferredFromGenerator`
+   now preserves the generator image alpha type instead of forcing
+   `UNPREMUL`.
+3. `Pixmap.getArgb` KDoc now explicitly distinguishes the out-of-bounds
+   `0` sentinel from an in-bounds inactive-format
+   `UnsupportedOperationException` diagnostic.
+
+### Final validation
+
+- PASS — `rtk ./gradlew :kanvas:test --tests
+  org.graphiks.kanvas.image.PixmapTest :codec:common:compileKotlin`:
+  `BUILD SUCCESSFUL`; all 7 `PixmapTest` tests passed.
+- PASS — the declared full codec matrix was rerun after these corrections:
+  `BUILD SUCCESSFUL` (117 actionable tasks: 18 executed, 99 up-to-date).
+- PASS — static copy scan in `PixmapUtils` and `AnimatedImage` contains no
+  pixel conversion accessor; the only `getPixels` results are codec decode
+  calls. Generator source statically contains `remaining().toLong()`,
+  `slice().order(ByteOrder.LITTLE_ENDIAN)`, and alpha propagation.
+- The `codec:animated` and `codec:image-generator` directories have no
+  projects included by `settings.gradle.kts`, so their existing/extended
+  tests cannot be registered by this root Gradle build. This is the same
+  pre-existing orphaned-module condition recorded above; the changed sources
+  were compiled where included (`codec:common`) and statically checked.
+- PASS — final `rtk git diff --check` is clean. The pre-existing score-file
+  modification remains unedited and un-staged.

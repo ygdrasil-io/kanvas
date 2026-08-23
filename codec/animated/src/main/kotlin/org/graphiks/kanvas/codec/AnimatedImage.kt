@@ -222,11 +222,14 @@ public class AnimatedImage private constructor(
         //    Nearest-neighbour scale + crop into `displayFrame` pixels.
         val sx = oriented.width.toFloat() / decodeInfo.width.toFloat()
         val sy = oriented.height.toFloat() / decodeInfo.height.toFloat()
+        val bytesPerPixel = displayFrame.colorType.bytesPerPixel
         for (dy in 0 until displayFrame.height) {
             val srcY = ((cropRect.top + dy) * sy).toInt().coerceIn(0, oriented.height - 1)
             for (dx in 0 until displayFrame.width) {
                 val srcX = ((cropRect.left + dx) * sx).toInt().coerceIn(0, oriented.width - 1)
-                displayFrame.setPixel(dx, dy, oriented.getPixel(srcX, srcY))
+                val srcOffset = (srcY * oriented.width + srcX) * bytesPerPixel
+                val dstOffset = (dy * displayFrame.width + dx) * bytesPerPixel
+                oriented.pixels.copyInto(displayFrame.pixels, dstOffset, srcOffset, srcOffset + bytesPerPixel)
             }
         }
 
@@ -294,6 +297,13 @@ public class AnimatedImage private constructor(
             postProcess: Picture?,
         ): AnimatedImage? {
             if (codec.codec().getFrameCount() <= 0) return null
+            val sourceInfo = codec.codec().getInfo()
+            if (info.colorType != sourceInfo.colorType ||
+                info.alphaType != sourceInfo.alphaType ||
+                info.colorSpace !== sourceInfo.colorSpace
+            ) {
+                return null
+            }
             if (postProcess != null && !supportsPostProcess(info)) return null
             return AnimatedImage(
                 codec = codec,
