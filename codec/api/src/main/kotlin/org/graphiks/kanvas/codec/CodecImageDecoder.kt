@@ -38,6 +38,7 @@ public class CodecImageDecoder : ImageDecoder {
                 sourceId = "codec:${codec.getEncodedFormat().name}:${contentHash(data)}",
                 pixels = bitmap.pixels.copyOf(),
                 colorSpace = colorSpace,
+                alphaType = bitmap.alphaType,
             ),
         )
     }

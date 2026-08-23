@@ -54,6 +54,14 @@ class CodecImageDecoderColorSpaceTest {
     }
 
     @Test
+    fun `decoder preserves premultiplied alpha metadata for canonical RGBA samples`() {
+        val result = decodeWith(ImageColorSpace.sRGB(), alphaType = AlphaType.PREMUL)
+
+        assertTrue(result is ImageDecodeResult.Success)
+        assertEquals(AlphaType.PREMUL, (result as ImageDecodeResult.Success).image.alphaType)
+    }
+
+    @Test
     fun `decoder reuses common refusal for an unrepresentable transfer`() {
         val source = requireNotNull(
             ImageColorSpace.fromMatrixTrc(
@@ -128,12 +136,15 @@ class CodecImageDecoderColorSpaceTest {
         assertEquals(null, bitmap)
     }
 
-    private fun decodeWith(colorSpace: ImageColorSpace): ImageDecodeResult {
+    private fun decodeWith(
+        colorSpace: ImageColorSpace,
+        alphaType: AlphaType = AlphaType.UNPREMUL,
+    ): ImageDecodeResult {
         val data = "kanvas-color-space-test".toByteArray()
         val decoder = object : Codec.Decoder {
             override val name: String = TEST_DECODER_NAME
             override fun matches(data: ByteArray): Boolean = data.contentEquals(TEST_DATA)
-            override fun make(data: ByteArray): Codec = FakeCodec(colorSpace)
+            override fun make(data: ByteArray): Codec = FakeCodec(colorSpace, alphaType = alphaType)
         }
         Codec.Decoders.register(decoder)
         return try {
@@ -147,12 +158,13 @@ class CodecImageDecoderColorSpaceTest {
         private val colorSpace: ImageColorSpace,
         private val iccProfile: IccProfile? = null,
         private val colorType: ColorType = ColorType.RGBA_8888,
+        private val alphaType: AlphaType = AlphaType.UNPREMUL,
     ) : Codec() {
         override fun getInfo(): ImageInfo = ImageInfo.make(
             width = 1,
             height = 1,
             colorType = colorType,
-            alphaType = AlphaType.UNPREMUL,
+            alphaType = alphaType,
             colorSpace = colorSpace,
         )
 
