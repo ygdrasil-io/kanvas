@@ -504,7 +504,7 @@ public class Matrix4x4F32 {
      * Apply this matrix to a 2D point, treating it as `(x, y, 0, 1)`
      * with a homogeneous divide on the result. If the bottom row is
      * `[0, 0, 0, 1]` this returns the affine drop of the M44 to its
-     * 2D action (matches `asM33().mapXY`).
+     * 2D action (matches `asM33().transform(Point2F32(...))`).
      */
     public fun mapPoint(p: Vector2F32): Vector2F32 {
         val r = map(p.x, p.y, 0f, 1f)

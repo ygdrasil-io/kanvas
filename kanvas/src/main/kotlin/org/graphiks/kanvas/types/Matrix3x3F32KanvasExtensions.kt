@@ -1,11 +1,12 @@
 package org.graphiks.kanvas.types
 
 import kotlin.math.abs
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 fun Matrix3x3F32.mapPoint(point: Point): Point {
-    val (x, y) = mapXY(point.x, point.y)
-    return Point(x, y)
+    val transformed = transform(Point2F32(point.x, point.y))
+    return Point(transformed.x, transformed.y)
 }
 
 /** Maps an axis-aligned rectangle under a scale-plus-translation transform. */

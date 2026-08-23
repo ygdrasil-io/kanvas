@@ -8,6 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.Test
 import kotlin.math.PI
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.vector.Vector4F32
@@ -201,7 +202,7 @@ class Matrix4x4F32Test {
         val m44 = Matrix4x4F32(sk2D)
         val p = Vector2F32(4f, 8f)
         val viaM44 = m44.mapPoint(p)
-        val viaMatrix = sk2D.mapXY(p)
+        val viaMatrix = sk2D.transform(Point2F32(p.x, p.y))
         assertEquals(viaMatrix.x, viaM44.x, 1e-5f)
         assertEquals(viaMatrix.y, viaM44.y, 1e-5f)
     }
