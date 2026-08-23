@@ -670,7 +670,7 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `bulk vector transforms preserve destination slots and reject perspective once`() {
+    fun `bulk vector transforms preserve destination slots`() {
         val source = arrayOf(Vector2F32(2f, 3f), Vector2F32(-1f, 4f))
         val first = MutableVector2F32(-1f, -1f)
         val second = MutableVector2F32(-1f, -1f)
@@ -689,10 +689,35 @@ class Matrix3x3F32Test {
         assertEquals(18f, second.x)
         assertEquals(25f, second.y)
 
-        val projective = Matrix3x3F32.perspective(0.25f, 0f)
-        assertFailsWith<IllegalArgumentException> {
-            projective.transformVectors(emptyArray(), emptyArray(), count = 0)
+    }
+
+    @Test
+    fun `transformVectors rejects projective matrix when count is zero`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            Matrix3x3F32.perspective(0.25f, 0f).transformVectors(
+                emptyArray(),
+                emptyArray(),
+                count = 0,
+            )
         }
+
+        assertEquals("transform(vector) requires an affine Matrix3x3F32", failure.message)
+    }
+
+    @Test
+    fun `transformVectors accepts affine zero count without mutation`() {
+        val source = arrayOf(Vector2F32(2f, 3f))
+        val slot = MutableVector2F32(-7f, -11f)
+        val destination = arrayOf(slot)
+
+        Matrix3x3F32.of(
+            2f, 5f, 11f,
+            3f, 7f, 13f,
+        ).transformVectors(source, destination, count = 0)
+
+        assertTrue(slot === destination[0])
+        assertEquals(-7f, slot.x)
+        assertEquals(-11f, slot.y)
     }
 
     @Test
