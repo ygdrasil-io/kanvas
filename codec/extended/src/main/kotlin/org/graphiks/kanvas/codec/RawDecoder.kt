@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkData
 import java.io.InputStream
 
 /**
@@ -26,12 +25,6 @@ import java.io.InputStream
  * unrelated data.
  */
 public object RawDecoder {
-
-    /**
-     * Stubbed RAW decode. Always returns `null`. See class kdoc for
-     * the R-suivi.28 follow-up that wires up libraw / dng_sdk.
-     */
-    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed RAW decode. Always returns `null`. See class kdoc for

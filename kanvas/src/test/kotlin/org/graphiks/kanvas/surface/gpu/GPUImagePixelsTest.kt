@@ -12,7 +12,7 @@ class GPUImagePixelsTest {
         val bitmap = Bitmap(128, 128, ColorType.RGB_565)
         bitmap.eraseColor(Color.RED)
 
-        val rgba = bitmap.toImage().expandToRgbaForGpu()
+        val rgba = requireNotNull(bitmap.toImageOrNull()).expandToRgbaForGpu()
 
         assertEquals(128 * 128 * 4, rgba.size)
         assertEquals(255, rgba[0].toInt() and 0xFF)
@@ -26,7 +26,7 @@ class GPUImagePixelsTest {
         val bitmap = Bitmap(1, 1, ColorType.GRAY_8)
         bitmap.setPixel(0, 0, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
 
-        val rgba = bitmap.toImage().expandToRgbaForGpu()
+        val rgba = requireNotNull(bitmap.toImageOrNull()).expandToRgbaForGpu()
 
         assertEquals(4, rgba.size)
         assertEquals(rgba[0], rgba[1])

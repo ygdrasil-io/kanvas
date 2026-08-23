@@ -12,10 +12,10 @@ import org.junit.jupiter.api.assertThrows
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
@@ -72,7 +72,7 @@ class WebpCodecTest {
         assertEquals(EncodedImageFormat.WEBP, codec.getEncodedFormat())
         assertEquals(321, codec.getInfo().width)
         assertEquals(123, codec.getInfo().height)
-        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+        assertEquals(ColorType.RGBA_8888, codec.getInfo().colorType)
         assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
         assertTrue(codec.metadata.flags.icc)
@@ -203,12 +203,7 @@ class WebpCodecTest {
         assertEquals(2, alpha.preprocessing)
         assertEquals(4, alpha.payloadSize)
 
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
 
@@ -280,18 +275,13 @@ class WebpCodecTest {
                 ),
             ),
         )!!
-        val dst = SkBitmap(
-            width = 4,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 0)))
-        assertArrayEquals(IntArray(4) { red }, dst.pixels8888)
+        assertArgbPixels(IntArray(4) { red }, dst)
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1)))
-        assertArrayEquals(intArrayOf(transparent, transparent, blue, blue), dst.pixels8888)
+        assertArgbPixels(intArrayOf(transparent, transparent, blue, blue), dst)
     }
 
     @Test
@@ -1684,12 +1674,7 @@ class WebpCodecTest {
     @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
         val codec = WebpCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
@@ -1699,12 +1684,7 @@ class WebpCodecTest {
         val codec = WebpCodec.Decoder.make(
             riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = byteArrayOf(0x00))),
         )!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
@@ -1712,15 +1692,10 @@ class WebpCodecTest {
     @Test
     fun `decodes supported VP8 lossy non B_PRED keyframe pixels`() {
         val codec = WebpCodec.Decoder.make(vp8SupportedNonBPredWebp(width = 2, height = 2))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
-        assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
+        assertArgbPixels(IntArray(4) { argb(128, 128, 128) }, dst)
     }
 
     @Test
@@ -1734,23 +1709,18 @@ class WebpCodecTest {
                 vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
             ),
         )!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
-        assertArrayEquals(
+        assertArgbPixels(
             intArrayOf(
                 argb(0, 128, 128, 128),
                 argb(64, 128, 128, 128),
                 argb(128, 128, 128, 128),
                 argb(255, 128, 128, 128),
             ),
-            dst.pixels8888,
+            dst,
         )
     }
 
@@ -1771,12 +1741,7 @@ class WebpCodecTest {
                     vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
                 ),
             )!!
-            val dst = SkBitmap(
-                width = 2,
-                height = 2,
-                colorType = SkColorType.kRGBA_8888,
-                colorSpace = ImageColorSpace.sRGB(),
-            )
+            val dst = Bitmap(codec.getInfo())
 
             assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
         }
@@ -1799,12 +1764,7 @@ class WebpCodecTest {
                     vp8ChunkWithPartitions(width = 2, height = 2, vp8FirstPartition(), ByteArray(64)),
                 ),
             )!!
-            val dst = SkBitmap(
-                width = 2,
-                height = 2,
-                colorType = SkColorType.kRGBA_8888,
-                colorSpace = ImageColorSpace.sRGB(),
-            )
+            val dst = Bitmap(codec.getInfo())
 
             assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
         }
@@ -1851,15 +1811,10 @@ class WebpCodecTest {
                 ),
             ),
         )!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
-        assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
+        assertArgbPixels(IntArray(4) { argb(128, 128, 128) }, dst)
     }
 
     @Test
@@ -1867,12 +1822,7 @@ class WebpCodecTest {
         val codec = WebpCodec.Decoder.make(
             riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = vp8FirstPartition(filterLevel = 1))),
         )!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
@@ -1890,12 +1840,7 @@ class WebpCodecTest {
                 ),
             ),
         )!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
     }
@@ -1982,12 +1927,7 @@ class WebpCodecTest {
             ),
         )
         val codec = WebpCodec.Decoder.make(data) as WebpCodec
-        val dst = SkBitmap(
-            width = 2,
-            height = 2,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Vp8LossyBitstreamLayoutDecodeResult.Invalid, decodeVp8LossyBitstreamLayout(data, codec.metadata))
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
@@ -2000,16 +1940,11 @@ class WebpCodecTest {
             argb(0x80, 0x44, 0x66, 0x77),
         )
         val codec = WebpCodec.Decoder.make(vp8lLiteralWebp(width = 2, height = 1, expected))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
-            val actual = dst.getPixel(x, 0)
+            val actual = dst.getArgb(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
             assertEquals(red(expected[x]), red(actual))
             assertEquals(green(expected[x]), green(actual))
@@ -2024,16 +1959,11 @@ class WebpCodecTest {
             argb(0x00, 0x00, 0x00, 0x00),
         )
         val codec = WebpCodec.Decoder.make(vp8lNormalSingleSymbolWebp(width = 2, height = 1))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
-            val actual = dst.getPixel(x, 0)
+            val actual = dst.getArgb(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
             assertEquals(red(expected[x]), red(actual))
             assertEquals(green(expected[x]), green(actual))
@@ -2049,16 +1979,11 @@ class WebpCodecTest {
             argb(0xFF, 0x11, 0x25, 0x33),
         )
         val codec = WebpCodec.Decoder.make(vp8lCopyLengthWebp(width = 3, height = 1))!!
-        val dst = SkBitmap(
-            width = 3,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
-            val actual = dst.getPixel(x, 0)
+            val actual = dst.getArgb(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
             assertEquals(red(expected[x]), red(actual))
             assertEquals(green(expected[x]), green(actual))
@@ -2073,16 +1998,11 @@ class WebpCodecTest {
             argb(0xFF, 0x31, 0x42, 0x53),
         )
         val codec = WebpCodec.Decoder.make(vp8lColorCacheWebp(width = 2, height = 1, expected[0]))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
-            val actual = dst.getPixel(x, 0)
+            val actual = dst.getArgb(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
             assertEquals(red(expected[x]), red(actual))
             assertEquals(green(expected[x]), green(actual))
@@ -2097,16 +2017,11 @@ class WebpCodecTest {
             argb(0x80, 0x04, 0xFE, 0x13),
         )
         val codec = WebpCodec.Decoder.make(vp8lSubtractGreenWebp(width = 2, height = 1, expected))!!
-        val dst = SkBitmap(
-            width = 2,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
-            val actual = dst.getPixel(x, 0)
+            val actual = dst.getArgb(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
             assertEquals(red(expected[x]), red(actual))
             assertEquals(green(expected[x]), green(actual))
@@ -2317,12 +2232,7 @@ class WebpCodecTest {
     @Test
     fun `VP8L pixel decode rejects invalid color cache size`() {
         val codec = WebpCodec.Decoder.make(vp8lInvalidColorCacheWebp(width = 1, height = 1))!!
-        val dst = SkBitmap(
-            width = 1,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
@@ -2330,12 +2240,7 @@ class WebpCodecTest {
     @Test
     fun `VP8L pixel decode rejects truncated normal Huffman code`() {
         val codec = WebpCodec.Decoder.make(vp8lNormalHuffmanWebp(width = 1, height = 1))!!
-        val dst = SkBitmap(
-            width = 1,
-            height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
@@ -2928,18 +2833,13 @@ class WebpCodecTest {
     )
 
     private fun assertWebpPixels(codec: Codec, width: Int, height: Int, expected: IntArray) {
-        val dst = SkBitmap(
-            width = width,
-            height = height,
-            colorType = SkColorType.kRGBA_8888,
-            colorSpace = ImageColorSpace.sRGB(),
-        )
+        val dst = Bitmap(codec.getInfo())
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val expectedPixel = expected[y * width + x]
-                val actual = dst.getPixel(x, y)
+                val actual = dst.getArgb(x, y)
                 assertEquals(alpha(expectedPixel), alpha(actual))
                 assertEquals(red(expectedPixel), red(actual))
                 assertEquals(green(expectedPixel), green(actual))
@@ -3235,5 +3135,13 @@ class WebpCodecTest {
             currentByte = 0
             bitCount = 0
         }
+    }
+}
+
+private fun assertArgbPixels(expected: IntArray, bitmap: Bitmap) {
+    assertEquals(expected.size, bitmap.width * bitmap.height)
+    for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+        val index = y * bitmap.width + x
+        assertEquals(expected[index], bitmap.getArgb(x, y), "x=$x y=$y")
     }
 }

@@ -3,11 +3,11 @@ package org.graphiks.kanvas.codec.wbmp
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
@@ -22,32 +22,30 @@ public class WbmpCodec internal constructor(
     private val height: Int,
 ) : Codec() {
 
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = width,
             height = height,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.WBMP
 
     override fun getICCProfile(): IccProfile? = null
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
-        if (dst.width != info.width || dst.height != info.height) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
-        if (info.colorType != SkColorType.kRGBA_8888) {
-            return Result.kInvalidConversion
-        }
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) return Result.kInvalidScale
+        if (
+            info.colorType != ColorType.RGBA_8888 ||
+            info.alphaType != cachedInfo.alphaType ||
+            info.colorSpace !== cachedInfo.colorSpace
+        ) return Result.kInvalidConversion
+        if (dst.info != info) return Result.kInvalidParameters
 
         val rowBytes = (width + 7) / 8
         val required = pixelOffset + rowBytes * height
@@ -58,7 +56,7 @@ public class WbmpCodec internal constructor(
             for (x in 0 until width) {
                 val packed = bytes[row + x / 8].toInt() and 0xFF
                 val bit = (packed ushr (7 - (x and 7))) and 1
-                dst.setPixel(x, y, if (bit == 1) WHITE else BLACK)
+                dst.setArgb(x, y, if (bit == 1) WHITE else BLACK)
             }
         }
         return Result.kSuccess

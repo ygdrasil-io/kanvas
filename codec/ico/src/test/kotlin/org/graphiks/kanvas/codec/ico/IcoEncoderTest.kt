@@ -3,16 +3,35 @@ package org.graphiks.kanvas.codec.ico
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 import java.io.ByteArrayOutputStream
 
 class IcoEncoderTest {
 
     @Test
+    fun `unsupported source color type is refused without writing to stream`() {
+        val dst = ByteArrayOutputStream().also { it.write(0x2A) }
+
+        assertFalse(IcoEncoder.encode(dst, Bitmap(1, 1, ColorType.RGB_565)))
+        assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
+    }
+
+    @Test
+    fun `premultiplied RGBA source is refused without writing to stream`() {
+        val dst = ByteArrayOutputStream().also { it.write(0x2A) }
+
+        assertFalse(IcoEncoder.encode(dst, premulBitmap()))
+        assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
+    }
+
+    @Test
     fun `encode single 32x32 entry round-trips through ICO decoder`() {
-        val bitmap = SkBitmap(32, 32)
+        val bitmap = Bitmap(32, 32)
         for (y in 0 until 32) for (x in 0 until 32) {
-            bitmap.pixels[y * 32 + x] = (0xFF shl 24) or ((x * 8) shl 16) or ((y * 8) shl 8)
+            bitmap.setArgb(x, y, (0xFF shl 24) or ((x * 8) shl 16) or ((y * 8) shl 8))
         }
         val bytes = IcoEncoder.encode(bitmap)!!
         // Verify starts with ICO magic (00 00 01 00 for ICO with 1 entry)
@@ -33,13 +52,12 @@ class IcoEncoderTest {
 
     @Test
     fun `encode degenerate bitmap returns null`() {
-        assertNull(IcoEncoder.encode(SkBitmap(0, 0)))
+        assertNull(IcoEncoder.encode(Bitmap(0, 0)))
     }
 
     @Test
     fun `encode to OutputStream matches direct encode`() {
-        val bitmap = SkBitmap(16, 16)
-        for (i in 0 until 256) bitmap.pixels[i] = 0xFF808080.toInt()
+        val bitmap = bitmap(16, 16, 0xFF808080.toInt())
         val viaData = IcoEncoder.encode(bitmap)!!
         val baos = ByteArrayOutputStream()
         assertTrue(IcoEncoder.encode(baos, bitmap))
@@ -48,10 +66,8 @@ class IcoEncoderTest {
 
     @Test
     fun `encode multi-image ICO round-trips`() {
-        val bm1 = SkBitmap(16, 16)
-        for (i in 0 until 256) bm1.pixels[i] = 0xFFFF0000.toInt()
-        val bm2 = SkBitmap(32, 32)
-        for (i in 0 until 1024) bm2.pixels[i] = 0xFF00FF00.toInt()
+        val bm1 = bitmap(16, 16, 0xFFFF0000.toInt())
+        val bm2 = bitmap(32, 32, 0xFF00FF00.toInt())
         val entries = listOf(
             IcoEncoder.Entry(bm1),
             IcoEncoder.Entry(bm2),
@@ -72,10 +88,8 @@ class IcoEncoderTest {
 
     @Test
     fun `encode multi-image ICO with BMP payload round-trips`() {
-        val bm1 = SkBitmap(8, 8)
-        for (i in 0 until 64) bm1.pixels[i] = 0xFF0000FF.toInt()
-        val bm2 = SkBitmap(16, 16)
-        for (i in 0 until 256) bm2.pixels[i] = 0xFFFF0000.toInt()
+        val bm1 = bitmap(8, 8, 0xFF0000FF.toInt())
+        val bm2 = bitmap(16, 16, 0xFFFF0000.toInt())
         val entries = listOf(
             IcoEncoder.Entry(bm1, IcoEncoder.PayloadFormat.PNG),
             IcoEncoder.Entry(bm2, IcoEncoder.PayloadFormat.BMP),
@@ -91,8 +105,7 @@ class IcoEncoderTest {
 
     @Test
     fun `dimensions 0 in ICO directory mean 256`() {
-        val bitmap = SkBitmap(256, 256)
-        for (i in 0 until 65536) bitmap.pixels[i] = 0xFF808080.toInt()
+        val bitmap = bitmap(256, 256, 0xFF808080.toInt())
         val bytes = IcoEncoder.encode(bitmap)!!
         // Directory entry for 256 → width byte = 0, height byte = 0
         val dirWidth = bytes[6].toInt() and 0xFF
@@ -103,4 +116,12 @@ class IcoEncoderTest {
 
     private fun readU16LE(buf: ByteArray, off: Int): Int =
         (buf[off].toInt() and 0xFF) or ((buf[off + 1].toInt() and 0xFF) shl 8)
+
+    private fun bitmap(width: Int, height: Int, argb: Int): Bitmap = Bitmap(width, height).also { bitmap ->
+        for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, argb)
+    }
+
+    private fun premulBitmap(): Bitmap = Bitmap(
+        ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.PREMUL),
+    )
 }

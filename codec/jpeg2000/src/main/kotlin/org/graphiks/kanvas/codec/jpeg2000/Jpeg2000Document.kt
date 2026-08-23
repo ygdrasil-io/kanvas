@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.jpeg2000
 
 import java.util.Collections
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 
 /** Resource ceilings applied before a JPEG 2000 codestream is materialized. */
 public data class Jpeg2000Limits(
@@ -44,7 +44,7 @@ public data class Jpeg2000OpenResult(
 
 /** Result of a decode operation. No fallback decoder is attempted after ownership. */
 public data class Jpeg2000DecodeResult(
-    val bitmap: SkBitmap?,
+    val bitmap: Bitmap?,
     val diagnostic: Jpeg2000Diagnostic?,
 )
 

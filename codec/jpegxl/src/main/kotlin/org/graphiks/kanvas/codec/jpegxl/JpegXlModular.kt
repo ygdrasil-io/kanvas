@@ -1,7 +1,11 @@
 package org.graphiks.kanvas.codec.jpegxl
 
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
 
 /**
  * Bounded implementation scaffold for the first JPEG XL Modular profile.
@@ -31,7 +35,15 @@ internal fun decodeNarrowJpegXlModular(
     val globalReader = JxlBits(source, toc.sections.first().start, toc.sections.first().endExclusive)
     val global = readJxlGlobalModular(globalReader, frame, header)
     val groupSections = if (header.groupCount == 1) null else acGroupSections(toc, header)
-    val bitmap = SkBitmap(frame.width, frame.height)
+    val bitmap = Bitmap(
+        ImageInfo.make(
+            frame.width,
+            frame.height,
+            ColorType.RGBA_8888,
+            AlphaType.UNPREMUL,
+            ImageColorSpace.sRGB(),
+        ),
+    )
     val groupColumns = ceilDiv(frame.width, header.groupDimension)
     for (groupId in 0 until header.groupCount) {
         val groupOffset = groupSections?.get(groupId)?.start ?: toc.sections.first().start
@@ -74,7 +86,6 @@ internal fun decodeNarrowJpegXlModular(
         }
         for (y in 0 until groupHeight) {
             val sourceRow = y * groupWidth
-            val destinationRow = (groupY + y) * frame.width + groupX
             for (x in 0 until groupWidth) {
                 val sampleIndex = sourceRow + x
                 val red = samples[0][sampleIndex]
@@ -85,8 +96,9 @@ internal fun decodeNarrowJpegXlModular(
                         JpegXlDiagnostic("jpegxl.modular.sample.bit-depth", groupOffset.toLong()),
                     )
                 }
-                bitmap.pixels8888[destinationRow + x] =
+                bitmap.setArgb(groupX + x, groupY + y,
                     0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue
+                )
             }
         }
     }

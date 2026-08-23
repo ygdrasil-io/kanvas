@@ -1,11 +1,10 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkData
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.math.color.ColorARGB
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.kanvas.color.icc.IccProfile
@@ -31,8 +30,7 @@ import java.nio.ByteOrder
  *
  * **R3 scope.** The heavy lifting is delegated to [Codec] :
  * `getAndroidPixels` decodes the full frame, then post-processes the
- * result via [org.skia.foundation.SkPixmap.scalePixels] /
- * [org.skia.foundation.SkPixmap.extractSubset]. Upstream's "smart
+ * result through explicit Kanvas [Bitmap] pixel access. Upstream's "smart
  * sample-size picker" — which round-trips through libjpeg's DCT scaling
  * etc. — is **R-suivi** ; the Kotlin port simply rounds power-of-2 up
  * to the largest value still smaller than the source dimension and
@@ -72,7 +70,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
     public fun codec(): Codec = codec
 
     /** Mirrors `AndroidCodec::getInfo()`. */
-    public fun getInfo(): SkImageInfo = codec.getInfo()
+    public fun getInfo(): ImageInfo = codec.getInfo()
 
     /**
      * Mirrors `AndroidCodec::getICCProfile()`. The upstream returns a
@@ -169,7 +167,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      *
      * **R3 simplification :** the codec can crop arbitrary axis-aligned
      * rects (the actual decode reads the full frame and a post-decode
-     * subset is taken via [org.skia.foundation.SkPixmap.extractSubset]).
+     * subset is taken from the decoded Kanvas bitmap).
      * The returned rect is the input clamped to `[0, 0, w, h]`.
      */
     public fun getSupportedSubset(desiredSubset: RectI32): RectI32? {
@@ -198,7 +196,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
     }
 
     /**
-     * Mirrors `Codec::Result AndroidCodec::getAndroidPixels(const SkImageInfo&, void*, size_t, const AndroidOptions*)`.
+     * Mirrors `Codec::Result AndroidCodec::getAndroidPixels(const ImageInfo&, void*, size_t, const AndroidOptions*)`.
      *
      * **R-suivi.34 implementation.** Decodes the full frame via the
      * wrapped [Codec.getPixels], then post-processes :
@@ -209,7 +207,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      *     output dimensions match [getSampledSubsetDimensions] (or
      *     [getSampledDimensions] when no subset is set).
      *  3. **Write** to the caller's [pixels] [ByteBuffer], honouring
-     *     [rowBytes] and the colour types Kanvas' [SkBitmap] knows
+     *     [rowBytes] and the colour types Kanvas' [Bitmap] knows
      *     how to read (8888 / BGRA / 565 / 4444 / Alpha-8 / Gray-8).
      *
      * The caller's [info] must match the **post-sampling** size : its
@@ -224,22 +222,23 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      *    Int we keep internally.
      *  - **kAlpha_8 / kGray_8** : 1 byte per pixel.
      *  - **kRGB_565 / kARGB_4444** : 2 bytes per pixel, little-endian on
-     *    the wire (`SkImageInfo::minRowBytes` accounts for this).
+     *    the wire (`ImageInfo.minRowBytes` accounts for this).
      *  - **kRGBA_F16Norm** : not supported on this path — Android never
      *    asks for F16 (see [AndroidCodec] kdoc). Returns
      *    [Codec.Result.kInvalidConversion].
      */
     public fun getAndroidPixels(
-        info: SkImageInfo,
+        info: ImageInfo,
         pixels: ByteBuffer,
         rowBytes: Int,
         options: AndroidOptions = AndroidOptions(),
     ): Codec.Result {
         if (info.width <= 0 || info.height <= 0) return Codec.Result.kInvalidParameters
-        if (rowBytes < info.minRowBytes()) return Codec.Result.kInvalidParameters
+        if (rowBytes.toLong() < info.minRowBytesLong()) return Codec.Result.kInvalidParameters
         if (options.sampleSize < 1) return Codec.Result.kInvalidParameters
         val bpp = info.bytesPerPixel()
-        val requiredBytes = (info.height - 1).toLong() * rowBytes + info.width.toLong() * bpp
+        val requiredBytes = info.computeByteSizeOrNull(rowBytes.toLong())
+            ?: return Codec.Result.kInvalidParameters
         if (pixels.limit().toLong() < requiredBytes) return Codec.Result.kInvalidParameters
         val srcInfo = codec.getInfo()
         if (srcInfo.width <= 0 || srcInfo.height <= 0) return Codec.Result.kInvalidInput
@@ -247,9 +246,10 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
         // F16 isn't carried on this path — the Android pipeline never
         // requests it, and the byte-encoding contract above doesn't
         // cover the float layout.
-        if (info.colorType == SkColorType.kRGBA_F16Norm) {
+        if (info.colorType == ColorType.RGBA_F16 || info.colorType == ColorType.RGBA_F16_NORM) {
             return Codec.Result.kInvalidConversion
         }
+        if (info.colorType !in SUPPORTED_WIRE_COLOR_TYPES) return Codec.Result.kInvalidConversion
 
         // 1) Clamp the requested subset to source bounds (matches
         //    upstream's "best-effort crop" — if the rect lies fully
@@ -277,12 +277,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
         //    decode happens at the source's natural colour type — we
         //    only convert at write-back time so the codec can pick its
         //    fast path.
-        val fullBitmap = SkBitmap(
-            width = srcInfo.width,
-            height = srcInfo.height,
-            colorSpace = srcInfo.colorSpace,
-            colorType = srcInfo.colorType,
-        )
+        val fullBitmap = Bitmap(srcInfo)
         val decodeResult = codec.getPixels(srcInfo, fullBitmap)
         if (decodeResult != Codec.Result.kSuccess) return decodeResult
 
@@ -296,7 +291,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
             val rowStart = dy * rowBytes
             for (dx in 0 until info.width) {
                 val sx = subset.left + dx * s
-                val c = fullBitmap.getPixel(sx, sy)
+                val c = fullBitmap.getArgb(sx, sy)
                 writePixelToBuffer(view, rowStart + dx * bpp, info.colorType, c)
             }
         }
@@ -304,7 +299,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
     }
 
     /**
-     * Write a single [SkColor] value into [buf] at byte offset [off],
+     * Write a single ARGB value into [buf] at byte offset [off],
      * encoded for the wire-format dictated by [colorType]. Mirrors
      * the per-pixel `Store` lambda upstream's `SkSwizzler` would emit
      * for the same destination type.
@@ -312,28 +307,28 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
     private fun writePixelToBuffer(
         buf: ByteBuffer,
         off: Int,
-        colorType: SkColorType,
+        colorType: ColorType,
         c: Int,
     ) {
         val color = ColorARGB.fromPackedInt(c)
         when (colorType) {
-            SkColorType.kRGBA_8888 -> {
+            ColorType.RGBA_8888 -> {
                 // Wire order : R G B A.
                 buf.put(off, color.red.toByte())
                 buf.put(off + 1, color.green.toByte())
                 buf.put(off + 2, color.blue.toByte())
                 buf.put(off + 3, color.alpha.toByte())
             }
-            SkColorType.kBGRA_8888 -> {
+            ColorType.BGRA_8888 -> {
                 // Wire order : B G R A.
                 buf.put(off, color.blue.toByte())
                 buf.put(off + 1, color.green.toByte())
                 buf.put(off + 2, color.red.toByte())
                 buf.put(off + 3, color.alpha.toByte())
             }
-            SkColorType.kAlpha_8 -> buf.put(off, color.alpha.toByte())
-            SkColorType.kGray_8 -> {
-                // Rec.601 luminance — matches SkBitmap.setPixel's
+            ColorType.ALPHA_8 -> buf.put(off, color.alpha.toByte())
+            ColorType.GRAY_8 -> {
+                // Rec.601 luminance — matches Kanvas Bitmap quantisation.
                 // quantisation for kGray_8.
                 val r = color.red
                 val g = color.green
@@ -341,7 +336,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
                 val l = ((r * 77 + g * 150 + b * 29) shr 8).coerceIn(0, 255)
                 buf.put(off, l.toByte())
             }
-            SkColorType.kRGB_565 -> {
+            ColorType.RGB_565 -> {
                 val r5 = (color.red * 31 + 127) / 255
                 val g6 = (color.green * 63 + 127) / 255
                 val b5 = (color.blue * 31 + 127) / 255
@@ -350,24 +345,20 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
                 buf.put(off, (packed and 0xFF).toByte())
                 buf.put(off + 1, ((packed ushr 8) and 0xFF).toByte())
             }
-            SkColorType.kARGB_4444 -> {
-                // Premul ARGB 4-bit-per-channel, packed RGBA in upstream's
-                // `kARGB_4444_SkColorType` wire layout : R<<12 | G<<8 | B<<4 | A.
+            ColorType.ARGB_4444 -> {
+                // Premul ARGB 4-bit-per-channel, packed A R G B in the
+                // canonical ARGB_4444 wire layout: A<<12 | R<<8 | G<<4 | B.
                 val a = color.alpha / 255f
                 fun q(v: Int): Int = (((v / 255f) * a) * 15f + 0.5f).toInt().coerceIn(0, 15)
                 val rN = q(color.red)
                 val gN = q(color.green)
                 val bN = q(color.blue)
                 val aN = (a * 15f + 0.5f).toInt().coerceIn(0, 15)
-                val packed = (rN shl 12) or (gN shl 8) or (bN shl 4) or aN
+                val packed = (aN shl 12) or (rN shl 8) or (gN shl 4) or bN
                 buf.put(off, (packed and 0xFF).toByte())
                 buf.put(off + 1, ((packed ushr 8) and 0xFF).toByte())
             }
-            else -> {
-                // Unknown / unsupported colour types : no-op. Caller
-                // already filtered F16 at the entry guard, so the only
-                // way to land here is a future enum addition.
-            }
+            else -> error("unsupported Android wire color type: $colorType")
         }
     }
 
@@ -396,7 +387,13 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
         public fun MakeFromData(data: ByteArray): AndroidCodec? =
             Codec.MakeFromData(data)?.let(::MakeFromCodec)
 
-        /** [SkData] overload — mirrors the `sk_sp<const SkData>` upstream factory. */
-        public fun MakeFromData(data: SkData): AndroidCodec? = MakeFromData(data.toByteArray())
+        private val SUPPORTED_WIRE_COLOR_TYPES = setOf(
+            ColorType.RGBA_8888,
+            ColorType.BGRA_8888,
+            ColorType.ALPHA_8,
+            ColorType.GRAY_8,
+            ColorType.RGB_565,
+            ColorType.ARGB_4444,
+        )
     }
 }

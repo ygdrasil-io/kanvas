@@ -1,9 +1,9 @@
 package org.skia.codec
 
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
 
 class SkAnimCodecPlayer(
     private val codec: Codec,
@@ -20,20 +20,15 @@ class SkAnimCodecPlayer(
 
     fun getFrameAsImage(): Image? {
         if (frameDurations.isEmpty()) return null
-        val info = codec.getInfo().makeColorType(SkColorType.kRGBA_8888)
-        val bitmap = SkBitmap(
-            width = info.width,
-            height = info.height,
-            colorSpace = info.colorSpace,
-            colorType = info.colorType,
-        )
+        val info = codec.getInfo().makeColorType(ColorType.RGBA_8888)
+        val bitmap = Bitmap(info)
         val result = codec.getPixels(
             info = info,
             dst = bitmap,
             opts = Codec.Options(frameIndex = currentFrameIndex),
         )
         if (result != Codec.Result.kSuccess) return null
-        return bitmap.toImage()
+        return bitmap.toImageOrNull()
     }
 
     fun seek(ms: Int): Boolean {
@@ -67,22 +62,5 @@ class SkAnimCodecPlayer(
         } else {
             frame.coerceIn(0, frameDurations.lastIndex)
         }
-    }
-
-    private fun SkBitmap.toImage(): Image {
-        val rgba = ByteArray(width * height * 4)
-        var di = 0
-        for (pixel in pixels8888) {
-            val a = (pixel ushr 24) and 0xFF
-            val r = (pixel ushr 16) and 0xFF
-            val g = (pixel ushr 8) and 0xFF
-            val b = pixel and 0xFF
-            rgba[di] = b.toByte()
-            rgba[di + 1] = g.toByte()
-            rgba[di + 2] = r.toByte()
-            rgba[di + 3] = a.toByte()
-            di += 4
-        }
-        return Image.fromPixels(width, height, rgba)
     }
 }

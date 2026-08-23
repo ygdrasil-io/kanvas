@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import java.io.ByteArrayOutputStream
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -7,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.function.ThrowingSupplier
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import kotlin.math.roundToInt
 
 class JpegProgressiveDecodeTest {
@@ -21,8 +23,8 @@ class JpegProgressiveDecodeTest {
 
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getPixel(0, 0))
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getPixel(15, 7))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getArgb(0, 0))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getArgb(15, 7))
     }
 
     @Test
@@ -48,8 +50,8 @@ class JpegProgressiveDecodeTest {
 
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getPixel(0, 0))
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getPixel(15, 7))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getArgb(0, 0))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getArgb(15, 7))
     }
 
     @Test
@@ -66,8 +68,8 @@ class JpegProgressiveDecodeTest {
 
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getPixel(0, 0))
-        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getPixel(16, 7))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getArgb(0, 0))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getArgb(16, 7))
     }
 
     @Test
@@ -80,7 +82,7 @@ class JpegProgressiveDecodeTest {
 
     private fun assertProgressiveDiagnostic(fault: ProgressiveFault, expected: String) {
         val document = JpegDocument.open(progressiveColorJpeg(fault = fault)).document!!
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals(expected, result.diagnostic?.code, fault.name)
     }

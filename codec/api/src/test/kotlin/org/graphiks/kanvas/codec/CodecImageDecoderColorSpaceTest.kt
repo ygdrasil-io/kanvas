@@ -12,13 +12,13 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
+import org.graphiks.kanvas.image.ImageInfo
 
 class CodecImageDecoderColorSpaceTest {
     @Test
@@ -51,6 +51,14 @@ class CodecImageDecoderColorSpaceTest {
         val image = (result as ImageDecodeResult.Success).image
         assertEquals(ColorSpace.SRGB, image.colorSpace)
         assertArrayEquals(byteArrayOf(0x12, 0x34, 0x56, 0x7F), image.pixels)
+    }
+
+    @Test
+    fun `decoder preserves premultiplied alpha metadata for canonical RGBA samples`() {
+        val result = decodeWith(ImageColorSpace.sRGB(), alphaType = AlphaType.PREMUL)
+
+        assertTrue(result is ImageDecodeResult.Success)
+        assertEquals(AlphaType.PREMUL, (result as ImageDecodeResult.Success).image.alphaType)
     }
 
     @Test
@@ -89,12 +97,47 @@ class CodecImageDecoderColorSpaceTest {
         assertArrayEquals(expected, codec.getICCProfile()!!.bytes)
     }
 
-    private fun decodeWith(colorSpace: ImageColorSpace): ImageDecodeResult {
+    @Test
+    fun `decoder refuses a non canonical RGBA bitmap instead of reinterpreting it`() {
+        val decoder = object : Codec.Decoder {
+            override val name: String = TEST_DECODER_NAME
+            override fun matches(data: ByteArray): Boolean = data.contentEquals(TEST_DATA)
+            override fun make(data: ByteArray): Codec = FakeCodec(
+                colorSpace = ImageColorSpace.sRGB(),
+                colorType = ColorType.BGRA_8888,
+            )
+        }
+        Codec.Decoders.register(decoder)
+
+        val result = try {
+            CodecImageDecoder().decode(TEST_DATA)
+        } finally {
+            Codec.Decoders.unregister(TEST_DECODER_NAME)
+        }
+
+        assertEquals(ImageDecodeResult.Failure("codec.decode-failed:kInvalidConversion"), result)
+    }
+
+    @Test
+    fun `getImage refuses an unavailable output conversion`() {
+        val (bitmap, result) = FakeCodec(
+            colorSpace = ImageColorSpace.sRGB(),
+            colorType = ColorType.R8_UNORM,
+        ).getImage()
+
+        assertEquals(Codec.Result.kInvalidConversion, result)
+        assertEquals(null, bitmap)
+    }
+
+    private fun decodeWith(
+        colorSpace: ImageColorSpace,
+        alphaType: AlphaType = AlphaType.UNPREMUL,
+    ): ImageDecodeResult {
         val data = "kanvas-color-space-test".toByteArray()
         val decoder = object : Codec.Decoder {
             override val name: String = TEST_DECODER_NAME
             override fun matches(data: ByteArray): Boolean = data.contentEquals(TEST_DATA)
-            override fun make(data: ByteArray): Codec = FakeCodec(colorSpace)
+            override fun make(data: ByteArray): Codec = FakeCodec(colorSpace, alphaType = alphaType)
         }
         Codec.Decoders.register(decoder)
         return try {
@@ -107,12 +150,14 @@ class CodecImageDecoderColorSpaceTest {
     private class FakeCodec(
         private val colorSpace: ImageColorSpace,
         private val iccProfile: IccProfile? = null,
+        private val colorType: ColorType = ColorType.RGBA_8888,
+        private val alphaType: AlphaType = AlphaType.UNPREMUL,
     ) : Codec() {
-        override fun getInfo(): SkImageInfo = SkImageInfo.Make(
+        override fun getInfo(): ImageInfo = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGBA_8888,
-            alphaType = AlphaType.UNPREMUL,
+            colorType = colorType,
+            alphaType = alphaType,
             colorSpace = colorSpace,
         )
 
@@ -120,8 +165,8 @@ class CodecImageDecoderColorSpaceTest {
 
         override fun getICCProfile(): IccProfile? = iccProfile
 
-        override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
-            dst.pixels8888[0] = SAMPLE_ARGB
+        override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
+            dst.setArgb(0, 0, SAMPLE_ARGB)
             return Result.kSuccess
         }
     }

@@ -3,17 +3,36 @@ package org.graphiks.kanvas.codec.gif
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 import java.io.ByteArrayOutputStream
 
 class GifEncoderTest {
 
     @Test
+    fun `unsupported source color type is refused without writing to stream`() {
+        val dst = ByteArrayOutputStream().also { it.write(0x2A) }
+
+        assertFalse(GifEncoder.encode(dst, Bitmap(1, 1, ColorType.RGB_565)))
+        assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
+    }
+
+    @Test
+    fun `premultiplied RGBA source is refused without writing to stream`() {
+        val dst = ByteArrayOutputStream().also { it.write(0x2A) }
+
+        assertFalse(GifEncoder.encode(dst, premulBitmap()))
+        assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
+    }
+
+    @Test
     fun `encode single-frame GIF round-trips through decoder`() {
-        val src = SkBitmap(4, 4)
+        val src = Bitmap(4, 4)
         for (y in 0 until 4) for (x in 0 until 4) {
             val r = if ((x + y) and 1 == 0) 0xFF else 0x00
-            src.pixels[y * 4 + x] = (0xFF shl 24) or (r shl 16)
+            src.setArgb(x, y, (0xFF shl 24) or (r shl 16))
         }
         val bytes = GifEncoder.encode(src)!!
         assertTrue(bytes.size >= 6)
@@ -31,13 +50,12 @@ class GifEncoderTest {
 
     @Test
     fun `encode degenerate bitmap returns null`() {
-        assertNull(GifEncoder.encode(SkBitmap(0, 0)))
+        assertNull(GifEncoder.encode(Bitmap(0, 0)))
     }
 
     @Test
     fun `encode to OutputStream matches direct encode`() {
-        val src = SkBitmap(4, 4)
-        for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+        val src = bitmap(4, 4, 0xFF808080.toInt())
         val viaData = GifEncoder.encode(src)!!
         val baos = ByteArrayOutputStream()
         assertTrue(GifEncoder.encode(baos, src))
@@ -46,8 +64,7 @@ class GifEncoderTest {
 
     @Test
     fun `encode with loop count writes Netscape extension`() {
-        val src = SkBitmap(2, 2)
-        for (i in 0 until 4) src.pixels[i] = 0xFF0000FF.toInt()
+        val src = bitmap(2, 2, 0xFF0000FF.toInt())
         val bytes = GifEncoder.encode(src, GifEncoder.Options(loopCount = 5))!!
         assertTrue(bytes.size > 0)
         val codec = Codec.MakeFromData(bytes)
@@ -59,10 +76,8 @@ class GifEncoderTest {
 
     @Test
     fun `multi-frame animated GIF round-trips frame count`() {
-        val frame1 = SkBitmap(8, 8)
-        for (i in 0 until 64) frame1.pixels[i] = 0xFFFF0000.toInt()
-        val frame2 = SkBitmap(8, 8)
-        for (i in 0 until 64) frame2.pixels[i] = 0xFF00FF00.toInt()
+        val frame1 = bitmap(8, 8, 0xFFFF0000.toInt())
+        val frame2 = bitmap(8, 8, 0xFF00FF00.toInt())
         val frames = listOf(
             GifEncoder.Frame(frame1, delayCs = 50),
             GifEncoder.Frame(frame2, delayCs = 100),
@@ -75,8 +90,7 @@ class GifEncoderTest {
 
     @Test
     fun `multi-frame GIF carries loop count`() {
-        val bm = SkBitmap(4, 4)
-        for (i in 0 until 16) bm.pixels[i] = 0xFF0000FF.toInt()
+        val bm = bitmap(4, 4, 0xFF0000FF.toInt())
         val frames = listOf(GifEncoder.Frame(bm, delayCs = 50))
         val bytes = GifEncoder.encode(bm, GifEncoder.Options(frames = frames, loopCount = -1))!!
         val codec = Codec.MakeFromData(bytes)
@@ -86,10 +100,8 @@ class GifEncoderTest {
 
     @Test
     fun `multi-frame GIF frame delays round-trip`() {
-        val bm1 = SkBitmap(8, 8)
-        for (i in 0 until 64) bm1.pixels[i] = 0xFFFF0000.toInt()
-        val bm2 = SkBitmap(8, 8)
-        for (i in 0 until 64) bm2.pixels[i] = 0xFF00FF00.toInt()
+        val bm1 = bitmap(8, 8, 0xFFFF0000.toInt())
+        val bm2 = bitmap(8, 8, 0xFF00FF00.toInt())
         val frames = listOf(
             GifEncoder.Frame(bm1, delayCs = 5),
             GifEncoder.Frame(bm2, delayCs = 15, disposal = GifEncoder.DISPOSAL_BACKGROUND),
@@ -105,10 +117,8 @@ class GifEncoderTest {
 
     @Test
     fun `multi-frame GIF round-trips decoded pixels for all frames`() {
-        val bm1 = SkBitmap(4, 4)
-        for (i in 0 until 16) bm1.pixels[i] = 0xFFFF0000.toInt()
-        val bm2 = SkBitmap(4, 4)
-        for (i in 0 until 16) bm2.pixels[i] = 0xFF00FF00.toInt()
+        val bm1 = bitmap(4, 4, 0xFFFF0000.toInt())
+        val bm2 = bitmap(4, 4, 0xFF00FF00.toInt())
         val frames = listOf(
             GifEncoder.Frame(bm1, delayCs = 50),
             GifEncoder.Frame(bm2, delayCs = 50, disposal = GifEncoder.DISPOSAL_NONE),
@@ -119,15 +129,14 @@ class GifEncoderTest {
         val (bm1dec, r1) = codec!!.getImage()
         assertNotNull(bm1dec)
         assertEquals(Codec.Result.kSuccess, r1)
-        val dst = SkBitmap(4, 4)
+        val dst = Bitmap(codec.getInfo())
         val r2 = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1, priorFrame = 0))
         assertEquals(Codec.Result.kSuccess, r2)
     }
 
     @Test
     fun `single-frame GIF still works with null frames`() {
-        val bm = SkBitmap(4, 4)
-        for (i in 0 until 16) bm.pixels[i] = 0xFF808080.toInt()
+        val bm = bitmap(4, 4, 0xFF808080.toInt())
         val bytes = GifEncoder.encode(bm)!!
         val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec)
@@ -135,4 +144,11 @@ class GifEncoderTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(4, decoded!!.width)
     }
+    private fun bitmap(width: Int, height: Int, argb: Int): Bitmap = Bitmap(width, height).also { bitmap ->
+        for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, argb)
+    }
+
+    private fun premulBitmap(): Bitmap = Bitmap(
+        ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.PREMUL),
+    )
 }

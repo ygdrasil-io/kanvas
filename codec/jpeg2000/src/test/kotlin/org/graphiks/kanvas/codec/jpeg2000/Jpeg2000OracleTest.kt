@@ -69,8 +69,8 @@ class Jpeg2000OracleTest {
         val bitmap = requireNotNull(decoded.bitmap) { "fixture=$JP2_FIXTURE_ID" }
         assertEquals(5, bitmap.width, "fixture=$JP2_FIXTURE_ID")
         assertEquals(5, bitmap.height, "fixture=$JP2_FIXTURE_ID")
-        val kanvasPixels = ByteArray(bitmap.pixels8888.size) { index ->
-            val pixel = bitmap.pixels8888[index]
+        val kanvasPixels = ByteArray(bitmap.width * bitmap.height) { index ->
+            val pixel = bitmap.getArgb(index % bitmap.width, index / bitmap.width)
             val sample = pixel and 0xFF
             assertEquals(0xFF, pixel ushr 24, "fixture=$JP2_FIXTURE_ID pixel=$index alpha")
             assertEquals(sample, (pixel ushr 16) and 0xFF, "fixture=$JP2_FIXTURE_ID pixel=$index red")

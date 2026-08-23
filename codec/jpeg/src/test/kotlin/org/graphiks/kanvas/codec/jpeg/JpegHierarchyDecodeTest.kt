@@ -1,4 +1,9 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -8,7 +13,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 
 /**
  * Differential DHP/EXP fixtures and pixel oracles are documented beside their binary resources.
@@ -17,6 +22,39 @@ import org.skia.foundation.SkColorType
  * reference implementation, exact commands, commit, licence, and SHA-256 provenance.
  */
 class JpegHierarchyDecodeTest {
+
+    @Test
+    fun `hierarchy codec classifies destination contract refusals`() {
+        val codec = requireNotNull(Codec.MakeFromData(fixture("sof5-huffman-sequential-exp11.jpg")))
+        val sourceInfo = codec.getInfo()
+
+        val scaled = sourceInfo.makeWH(sourceInfo.width + 1, sourceInfo.height)
+        assertEquals(Codec.Result.kInvalidScale, codec.getPixels(scaled, Bitmap(scaled)))
+
+        val wrongAlpha = sourceInfo.makeAlphaType(AlphaType.PREMUL)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(wrongAlpha, Bitmap(wrongAlpha)))
+
+        val nonIdenticalColorSpace = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("test.nonidentical"))
+        val wrongColorSpace = sourceInfo.makeColorSpace(nonIdenticalColorSpace)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(wrongColorSpace, Bitmap(wrongColorSpace)))
+    }
+
+    @Test
+    fun `hierarchy document refuses color space retagging and keeps F16 premultiplied`() {
+        val document = requireNotNull(JpegDocument.open(fixture("sof5-huffman-sequential-exp11.jpg")).document)
+
+        val f16 = document.decode(JpegDecodeRequest(ColorType.RGBA_F16_NORM, null))
+        assertNull(f16.diagnostic)
+        assertEquals(AlphaType.PREMUL, requireNotNull(f16.bitmap).alphaType)
+
+        val retagged = document.decode(
+            JpegDecodeRequest(
+                ColorType.RGBA_8888,
+                ImageColorSpace.fromColorProfile(ColorProfile.unsupported("test.retag")),
+            ),
+        )
+        assertEquals(Codec.Result.kInvalidConversion, retagged.diagnostic?.result)
+    }
 
     @Test
     fun `DHP frames expose immutable references and EXP expansion`() {
@@ -50,7 +88,7 @@ class JpegHierarchyDecodeTest {
             val document = JpegDocument.open(fixture(case.jpeg)).document
             assertNotNull(document, case.jpeg)
             val resolvedDocument = document!!
-            val actual = resolvedDocument.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            val actual = resolvedDocument.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
             assertEquals(null, actual.diagnostic, case.jpeg)
 
             assertNotNull(actual.bitmap, case.jpeg)
@@ -60,7 +98,7 @@ class JpegHierarchyDecodeTest {
             assertEquals(expected.height, bitmap.height, case.jpeg)
             for (y in 0 until expected.height) {
                 for (x in 0 until expected.width) {
-                    val actualSample = (bitmap.getPixel(x, y) ushr 16) and 0xFF
+                    val actualSample = (bitmap.getArgb(x, y) ushr 16) and 0xFF
                     val error = kotlin.math.abs(expected.sample(x, y) - actualSample)
                     assertTrue(
                         error <= case.maxError,
@@ -79,10 +117,10 @@ class JpegHierarchyDecodeTest {
         val samples = decodeJpegHierarchy(requireNotNull(document.hierarchy))
         assertEquals(256, samples.planes.single()[8], "IDCT rounding plus the exact residual")
 
-        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(null, decoded.diagnostic)
         assertNotNull(decoded.bitmap)
-        assertEquals(255, (decoded.bitmap!!.getPixel(0, 1) ushr 16) and 0xFF)
+        assertEquals(255, (decoded.bitmap!!.getArgb(0, 1) ushr 16) and 0xFF)
     }
 
     @Test
@@ -181,7 +219,7 @@ class JpegHierarchyDecodeTest {
 
     private fun assertHierarchyDiagnostic(data: ByteArray, expected: String) {
         val document = requireNotNull(JpegDocument.open(data).document)
-        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(expected, decoded.diagnostic?.code)
         assertNull(Codec.MakeFromData(data), "a malformed hierarchy must not decode only its base frame")
     }

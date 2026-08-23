@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import java.io.ByteArrayOutputStream
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -6,10 +8,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import kotlin.math.roundToInt
 
 class JpegSequentialDecodeTest {
@@ -198,14 +198,14 @@ class JpegSequentialDecodeTest {
                 components = listOf(FixtureComponent(1, 0x11, 2_049)),
             ),
         )!!
-        val info = SkImageInfo.Make(
+        val info = ImageInfo.make(
             width = 8,
             height = 8,
-            colorType = SkColorType.kRGBA_F16Norm,
+            colorType = ColorType.RGBA_F16_NORM,
             alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
-        val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)
+        val bitmap = Bitmap(info)
 
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, codec.getPixels(info, bitmap))
         val pixel = FloatArray(4)
@@ -227,14 +227,14 @@ class JpegSequentialDecodeTest {
                 ),
             ),
         )!!
-        val info = SkImageInfo.Make(
+        val info = ImageInfo.make(
             width = 8,
             height = 8,
-            colorType = SkColorType.kRGBA_F16Norm,
+            colorType = ColorType.RGBA_F16_NORM,
             alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
-        val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)
+        val bitmap = Bitmap(info)
 
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, codec.getPixels(info, bitmap))
         val pixel = FloatArray(4)
@@ -281,7 +281,7 @@ class JpegSequentialDecodeTest {
         assertNotNull(codec, label)
         val (bitmap, result) = codec!!.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result, label)
-        assertEquals(expected, bitmap!!.getPixel(x, y), label)
+        assertEquals(expected, bitmap!!.getArgb(x, y), label)
     }
 
     private fun sequentialJpeg(

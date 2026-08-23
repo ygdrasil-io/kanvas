@@ -1,11 +1,14 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.image.Bitmap
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 
 class JpegArithmeticDecodeTest {
 
@@ -43,8 +46,8 @@ class JpegArithmeticDecodeTest {
 
             assertEquals(Codec.Result.kSuccess, result, name)
             assertNotNull(bitmap, name)
-            assertEquals(0xFF6090C0.toInt(), bitmap!!.getPixel(0, 0), name)
-            assertEquals(0xFF6090C0.toInt(), bitmap.getPixel(7, 7), name)
+            assertEquals(0xFF6090C0.toInt(), bitmap!!.getArgb(0, 0), name)
+            assertEquals(0xFF6090C0.toInt(), bitmap.getArgb(7, 7), name)
         }
     }
 
@@ -68,8 +71,8 @@ class JpegArithmeticDecodeTest {
 
             assertEquals(Codec.Result.kSuccess, result, name)
             assertNotNull(bitmap, name)
-            assertEquals(0xFF202020.toInt(), bitmap!!.getPixel(0, 0), name)
-            assertEquals(0xFFC0C0C0.toInt(), bitmap.getPixel(15, 7), name)
+            assertEquals(0xFF202020.toInt(), bitmap!!.getArgb(0, 0), name)
+            assertEquals(0xFFC0C0C0.toInt(), bitmap.getArgb(15, 7), name)
         }
     }
 
@@ -83,9 +86,9 @@ class JpegArithmeticDecodeTest {
 
             assertEquals(Codec.Result.kSuccess, result, name)
             assertNotNull(bitmap, name)
-            assertEquals(0xFF202020.toInt(), bitmap!!.getPixel(0, 0), name)
-            assertEquals(0xFF808080.toInt(), bitmap.getPixel(8, 0), name)
-            assertEquals(0xFFC0C0C0.toInt(), bitmap.getPixel(23, 7), name)
+            assertEquals(0xFF202020.toInt(), bitmap!!.getArgb(0, 0), name)
+            assertEquals(0xFF808080.toInt(), bitmap.getArgb(8, 0), name)
+            assertEquals(0xFFC0C0C0.toInt(), bitmap.getArgb(23, 7), name)
         }
     }
 
@@ -99,8 +102,8 @@ class JpegArithmeticDecodeTest {
 
             assertEquals(Codec.Result.kSuccess, result, name)
             assertNotNull(bitmap, name)
-            assertEquals(0xFF202020.toInt(), bitmap!!.getPixel(0, 0), name)
-            assertEquals(0xFFC0C0C0.toInt(), bitmap.getPixel(15, 7), name)
+            assertEquals(0xFF202020.toInt(), bitmap!!.getArgb(0, 0), name)
+            assertEquals(0xFFC0C0C0.toInt(), bitmap.getArgb(15, 7), name)
         }
     }
 
@@ -147,7 +150,7 @@ class JpegArithmeticDecodeTest {
         malformed[restart + 1] = 0xD1.toByte()
         val document = JpegDocument.open(malformed).document!!
 
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals("jpeg.arithmetic.restart.marker", result.diagnostic?.code)
         assertEquals(Codec.Result.kErrorInInput, result.diagnostic?.result)
@@ -161,7 +164,7 @@ class JpegArithmeticDecodeTest {
         malformed[secondRestart + 1] = 0xD0.toByte()
         val document = JpegDocument.open(malformed).document!!
 
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals("jpeg.arithmetic.restart.marker", result.diagnostic?.code)
         assertEquals(Codec.Result.kErrorInInput, result.diagnostic?.result)
@@ -176,7 +179,7 @@ class JpegArithmeticDecodeTest {
         sof11[sos + 8] = 0
         val document = JpegDocument.open(sof11).document!!
 
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals("jpeg.arithmetic.lossless.unsupported", result.diagnostic?.code)
         assertEquals(Codec.Result.kErrorInInput, result.diagnostic?.result)
@@ -185,7 +188,7 @@ class JpegArithmeticDecodeTest {
     private fun resource(name: String): ByteArray =
         checkNotNull(javaClass.getResourceAsStream("/jpeg-arithmetic/$name")) { name }.readBytes()
 
-    private fun assertGrayscaleGradient(bitmap: org.skia.foundation.SkBitmap) {
+    private fun assertGrayscaleGradient(bitmap: Bitmap) {
         val expected = intArrayOf(
             0, 32, 96, 160,
             16, 64, 128, 193,
@@ -199,7 +202,7 @@ class JpegArithmeticDecodeTest {
                 val value = expected[y * 4 + x]
                 assertEquals(
                     (0xFF shl 24) or (value shl 16) or (value shl 8) or value,
-                    bitmap.getPixel(x, y),
+                    bitmap.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }

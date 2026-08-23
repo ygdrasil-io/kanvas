@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.codec.webp
 
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkData
-import org.skia.foundation.SkImage
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.color.ColorSpace
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
@@ -30,29 +32,25 @@ public object WebpEncoder {
     private val defaultOptions = Options()
 
     @Volatile
-    private var customEncoder: ((SkBitmap, Options) -> ByteArray?)? = null
+    private var customEncoder: ((Bitmap, Options) -> ByteArray?)? = null
 
-    public fun custom(callback: ((SkBitmap, Options) -> ByteArray?)?) {
+    public fun custom(callback: ((Bitmap, Options) -> ByteArray?)?) {
         customEncoder = callback
     }
 
-    public fun encode(image: SkImage, options: Options = defaultOptions): ByteArray? {
-        val argb = IntArray(image.width * image.height)
-        for (y in 0 until image.height) {
-            for (x in 0 until image.width) {
-                argb[y * image.width + x] = image.peekPixel(x, y)
-            }
-        }
-        return encodeArgb(argb, image.width, image.height, options)
+    public fun encode(image: Image, options: Options = defaultOptions): ByteArray? {
+        if (image.colorSpace != ColorSpace.SRGB) return null
+        return runCatching { Bitmap.fromImage(image) }.getOrNull()?.let { encode(it, options) }
     }
 
-    public fun encode(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(bitmap: Bitmap, options: Options = defaultOptions): ByteArray? {
+        if (!canEncode(bitmap)) return null
         val custom = customEncoder
         if (custom != null) return custom(bitmap, options)
         val argb = IntArray(bitmap.width * bitmap.height)
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
-                argb[y * bitmap.width + x] = bitmap.getPixel(x, y)
+                argb[y * bitmap.width + x] = bitmap.getArgb(x, y)
             }
         }
         return encodeArgbDispatch(argb, bitmap.width, bitmap.height, options)
@@ -60,7 +58,7 @@ public object WebpEncoder {
 
     public fun encode(
         dst: OutputStream,
-        bitmap: SkBitmap,
+        bitmap: Bitmap,
         options: Options = defaultOptions,
     ): Boolean {
         val bytes = encode(bitmap, options) ?: return false
@@ -72,23 +70,8 @@ public object WebpEncoder {
         }
     }
 
-    public fun encodeAsData(image: SkImage, options: Options = defaultOptions): SkData? =
-        encode(image, options)?.let { SkData.MakeWithCopy(it) }
-
-    private fun encodeArgb(
-        argb: IntArray,
-        width: Int,
-        height: Int,
-        options: Options,
-    ): ByteArray? {
-        val custom = customEncoder
-        if (custom != null) {
-            val bm = SkBitmap(width, height)
-            System.arraycopy(argb, 0, bm.pixels, 0, argb.size)
-            return custom(bm, options)
-        }
-        return encodeArgbDispatch(argb, width, height, options)
-    }
+    public fun encodeAsData(image: Image, options: Options = defaultOptions): ByteArray? =
+        encode(image, options)?.copyOf()
 
     private fun encodeArgbDispatch(
         argb: IntArray,
@@ -104,7 +87,7 @@ public object WebpEncoder {
         }
     }
 
-    public fun requireLossy(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray {
+    public fun requireLossy(bitmap: Bitmap, options: Options = defaultOptions): ByteArray {
         require(options.compression == Compression.kLossy) {
             "requireLossy() must be called with options.compression = kLossy, got ${options.compression}"
         }
@@ -113,6 +96,10 @@ public object WebpEncoder {
                 "register an encoder via WebpEncoder.custom(...) to override.",
         )
     }
+
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }
 
 // =====================================================================

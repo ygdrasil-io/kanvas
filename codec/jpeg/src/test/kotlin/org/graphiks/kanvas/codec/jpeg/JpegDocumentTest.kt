@@ -1,11 +1,13 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
 import java.io.InputStream
 
@@ -128,7 +130,7 @@ class JpegDocumentTest {
         val exif = document.segments.single { it.marker == 0xE1 }
         document.ownedSourceForTesting()[exif.range.first + EXIF_ORIENTATION_VALUE_OFFSET] = 1
 
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals(null, result.diagnostic)
         assertEquals(8, result.bitmap!!.width)

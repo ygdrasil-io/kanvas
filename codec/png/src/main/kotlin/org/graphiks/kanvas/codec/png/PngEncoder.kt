@@ -2,9 +2,11 @@ package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkPixmap
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.image.Pixmap
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
@@ -38,14 +40,15 @@ public object PngEncoder {
 
     private val defaultOptions = Options()
 
-    public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(src: Bitmap, options: Options = defaultOptions): ByteArray? {
         val baos = ByteArrayOutputStream()
         return if (encode(baos, src, options)) baos.toByteArray() else null
     }
 
-    public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: Bitmap, options: Options = defaultOptions): Boolean {
         return try {
             if (src.width <= 0 || src.height <= 0) return false
+            if (!canEncode(src.info)) return false
             val prepared = prepareEncoding(src, options) ?: return false
             writePng(dst, src, options, prepared)
             true
@@ -54,12 +57,12 @@ public object PngEncoder {
         }
     }
 
-    public fun encode(dst: OutputStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: Pixmap, options: Options = defaultOptions): Boolean {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
         return encode(dst, bitmap, options)
     }
 
-    public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(src: Pixmap, options: Options = defaultOptions): ByteArray? {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
         return encode(bitmap, options)
     }
@@ -69,7 +72,7 @@ public object PngEncoder {
         val iccProfileData: ByteArray?,
     )
 
-    private fun prepareEncoding(src: SkBitmap, options: Options): PreparedEncoding? {
+    private fun prepareEncoding(src: Bitmap, options: Options): PreparedEncoding? {
         val colorSpace = src.colorSpace
         val profile = colorSpace.colorProfile
         if (!colorSpace.isProfileSupported() ||
@@ -84,7 +87,7 @@ public object PngEncoder {
         return PreparedEncoding(textChunks, iccProfileData)
     }
 
-    private fun writePng(dst: OutputStream, src: SkBitmap, options: Options, prepared: PreparedEncoding) {
+    private fun writePng(dst: OutputStream, src: Bitmap, options: Options, prepared: PreparedEncoding) {
         dst.write(PNG_SIGNATURE)
         writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height, options))
         prepared.textChunks.forEach { writeChunk(dst, TYPE_TEXT, it) }
@@ -162,7 +165,7 @@ public object PngEncoder {
             character.code.toByte()
         }
 
-    private fun filteredRgbaRows(src: SkBitmap, filterFlags: Int): ByteArray {
+    private fun filteredRgbaRows(src: Bitmap, filterFlags: Int): ByteArray {
         val allowedFilters = allowedFilters(filterFlags)
         val rowBytes = src.width * RGBA_BYTES_PER_PIXEL
         val out = ByteArray((rowBytes + 1) * src.height)
@@ -195,11 +198,11 @@ public object PngEncoder {
         return filters.toIntArray()
     }
 
-    private fun rgbaRow(src: SkBitmap, y: Int): ByteArray {
+    private fun rgbaRow(src: Bitmap, y: Int): ByteArray {
         val row = ByteArray(src.width * RGBA_BYTES_PER_PIXEL)
         var offset = 0
         for (x in 0 until src.width) {
-            val argb = src.getPixelAsSrgb(x, y)
+            val argb = src.getArgb(x, y)
             row[offset++] = ((argb ushr 16) and 0xFF).toByte()
             row[offset++] = ((argb ushr 8) and 0xFF).toByte()
             row[offset++] = (argb and 0xFF).toByte()
@@ -349,7 +352,7 @@ public object PngEncoder {
         intArrayOf(0, 1, 1, 2),
     )
 
-    private fun adam7Rows(src: SkBitmap, w: Int, h: Int, filterFlags: Int): ByteArray {
+    private fun adam7Rows(src: Bitmap, w: Int, h: Int, filterFlags: Int): ByteArray {
         val allowedFilters = allowedFilters(filterFlags)
         val bpp = RGBA_BYTES_PER_PIXEL
         val allRows = ByteArrayOutputStream()
@@ -368,7 +371,7 @@ public object PngEncoder {
                 var off = 0
                 for (px in 0 until passW) {
                     val x = xStart + px * xStep
-                    val argb = src.getPixelAsSrgb(x, y)
+                    val argb = src.getArgb(x, y)
                     current[off++] = ((argb ushr 16) and 0xFF).toByte()
                     current[off++] = ((argb ushr 8) and 0xFF).toByte()
                     current[off++] = (argb and 0xFF).toByte()
@@ -385,19 +388,22 @@ public object PngEncoder {
     }
 
     private object encoderSupport {
-        fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
+        fun pixmapToBitmap(src: Pixmap): Bitmap? {
             if (src.width() <= 0 || src.height() <= 0) return null
-            if (src.colorType() == SkColorType.kUnknown) return null
-            val colorSpace = src.colorSpace() ?: return null
-            val bitmap = SkBitmap(src.width(), src.height(), colorSpace, SkColorType.kRGBA_8888)
+            if (!canEncode(src.info)) return null
+            val bitmap = Bitmap(src.info)
             for (y in 0 until src.height()) {
                 for (x in 0 until src.width()) {
-                    bitmap.pixels[y * src.width() + x] = src.getColor(x, y)
+                    bitmap.setArgb(x, y, src.getArgb(x, y))
                 }
             }
             return bitmap
         }
     }
+
+    private fun canEncode(info: ImageInfo): Boolean =
+        info.colorType == ColorType.RGBA_8888 &&
+            info.alphaType in setOf(AlphaType.UNPREMUL, AlphaType.OPAQUE)
 
     private val SPACE: Byte = 0x20
     private val NUL: Byte = 0x00

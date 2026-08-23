@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkImage
+import org.graphiks.kanvas.image.Image
 import java.io.InputStream
 
 /**
@@ -34,7 +34,7 @@ public object VideoDecoder {
         )
 
     /**
-     * Mirrors `VideoDecoder::MakeFromData(sk_sp<SkData>)` — same
+     * Mirrors the data-backed decoder factory — same
      * fate as [MakeFromStream].
      */
     @Suppress("FunctionName")
@@ -57,11 +57,11 @@ public object VideoDecoder {
 public class VideoDecoderInstance internal constructor() {
 
     /**
-     * Mirrors `sk_sp<SkImage> VideoDecoder::nextImage()` — pulls
+     * Mirrors the next-frame operation — pulls
      * the next decoded frame, or returns `null` at end-of-stream.
      * Always throws.
      */
-    public fun nextFrame(): SkImage? = throw NotImplementedError(
+    public fun nextFrame(): Image? = throw NotImplementedError(
         "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI.",
     )
 

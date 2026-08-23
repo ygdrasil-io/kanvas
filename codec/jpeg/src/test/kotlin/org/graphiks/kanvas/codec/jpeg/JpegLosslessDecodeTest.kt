@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import java.io.ByteArrayOutputStream
 import org.graphiks.kanvas.codec.Codec
@@ -6,10 +8,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 
 class JpegLosslessDecodeTest {
 
@@ -69,14 +69,14 @@ class JpegLosslessDecodeTest {
         )
         val codec = JpegCodec.Decoder.make(sixteenBit)
         assertNotNull(codec)
-        val info = SkImageInfo.Make(
+        val info = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGBA_F16Norm,
+            colorType = ColorType.RGBA_F16_NORM,
             alphaType = AlphaType.PREMUL,
             colorSpace = codec!!.getInfo().colorSpace,
         )
-        val bitmap = SkBitmap(1, 1, info.colorSpace, info.colorType)
+        val bitmap = Bitmap(info)
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(info, bitmap))
         val pixel = FloatArray(4)
@@ -126,7 +126,7 @@ class JpegLosslessDecodeTest {
         )
         val document = JpegDocument.open(data).document!!
 
-        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val result = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
         assertEquals("jpeg.lossless.sample.range", result.diagnostic?.code)
     }
@@ -142,7 +142,7 @@ class JpegLosslessDecodeTest {
         assertNotNull(codec, label)
         val (bitmap, result) = codec!!.getImage()
         assertEquals(Codec.Result.kSuccess, result, label)
-        assertEquals(expected, bitmap!!.getPixel(x, y), label)
+        assertEquals(expected, bitmap!!.getArgb(x, y), label)
     }
 
     private fun losslessJpeg(

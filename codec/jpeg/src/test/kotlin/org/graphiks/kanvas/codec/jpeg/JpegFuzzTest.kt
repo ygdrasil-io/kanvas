@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -7,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.function.ThrowingSupplier
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import java.util.Random
 
 /**
@@ -41,7 +43,7 @@ class JpegFuzzTest {
             assertTrue(opened.document != null || opened.diagnostic != null, name)
             opened.document?.let { document ->
                 val decoded = assertDoesNotThrow(
-                    ThrowingSupplier { document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null)) },
+                    ThrowingSupplier { document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null)) },
                     name,
                 )
                 assertDecodeOutcome(decoded, name)

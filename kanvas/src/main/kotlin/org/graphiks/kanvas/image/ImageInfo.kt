@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 
@@ -8,8 +8,8 @@ data class ImageInfo(
     val width: Int,
     val height: Int,
     val colorType: ColorType = ColorType.RGBA_8888,
-    val alphaType: AlphaType = defaultAlphaTypeFor(colorType),
-    val colorSpace: ColorSpace = ColorSpace.SRGB,
+    val alphaType: AlphaType = colorType.defaultAlphaType(),
+    val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
 ) {
     init {
         require(width >= 0 && height >= 0) { "negative dimensions: ${width}x$height" }
@@ -25,7 +25,48 @@ data class ImageInfo(
 
     fun bytesPerPixel(): Int = colorType.bytesPerPixel
 
-    fun minRowBytes(): Int = width * bytesPerPixel()
+    /**
+     * Returns the minimum row stride without narrowing to an allocation-sized
+     * [Int]. Callers that own an [Int]-sized buffer must check its range before
+     * allocation.
+     */
+    fun minRowBytesLong(): Long = Math.multiplyExact(width.toLong(), bytesPerPixel().toLong())
+
+    /**
+     * Returns the minimum row stride for APIs whose stride is an [Int].
+     *
+     * @throws IllegalArgumentException when the stride cannot be represented
+     * by those APIs.
+     */
+    fun minRowBytes(): Int {
+        val rowBytes = minRowBytesLong()
+        require(rowBytes <= Int.MAX_VALUE.toLong()) {
+            "minimum row bytes exceed Int range: $rowBytes"
+        }
+        return rowBytes.toInt()
+    }
+
+    /** Computes the checked byte size of a strided image. */
+    fun computeByteSize(rowBytes: Long): Long {
+        if (isEmpty()) return 0L
+        val minRowBytes = minRowBytesLong()
+        require(rowBytes >= minRowBytes) {
+            "rowBytes=$rowBytes < minRowBytes=$minRowBytes"
+        }
+        return Math.addExact(
+            Math.multiplyExact((height - 1).toLong(), rowBytes),
+            minRowBytes,
+        )
+    }
+
+    /** Returns null rather than throwing when [rowBytes] or the total overflows. */
+    fun computeByteSizeOrNull(rowBytes: Long): Long? = try {
+        computeByteSize(rowBytes)
+    } catch (_: ArithmeticException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
+    }
 
     fun makeWH(newWidth: Int, newHeight: Int): ImageInfo =
         copy(width = newWidth, height = newHeight)
@@ -36,7 +77,7 @@ data class ImageInfo(
     fun makeAlphaType(newAlphaType: AlphaType): ImageInfo =
         copy(alphaType = newAlphaType)
 
-    fun makeColorSpace(newColorSpace: ColorSpace): ImageInfo =
+    fun makeColorSpace(newColorSpace: ImageColorSpace): ImageInfo =
         copy(colorSpace = newColorSpace)
 
     companion object {
@@ -44,58 +85,45 @@ data class ImageInfo(
             width: Int,
             height: Int,
             colorType: ColorType = ColorType.RGBA_8888,
-            alphaType: AlphaType = defaultAlphaTypeFor(colorType),
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            alphaType: AlphaType = colorType.defaultAlphaType(),
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = ImageInfo(width, height, colorType, alphaType, colorSpace)
 
         fun makeN32(
             width: Int,
             height: Int,
             alphaType: AlphaType = AlphaType.UNPREMUL,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.RGBA_8888, alphaType, colorSpace)
 
         fun makeN32Premul(
             width: Int,
             height: Int,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.RGBA_8888, AlphaType.PREMUL, colorSpace)
 
         fun makeA8(
             width: Int,
             height: Int,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.ALPHA_8, AlphaType.PREMUL, colorSpace)
 
         fun make4444(
             width: Int,
             height: Int,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.ARGB_4444, AlphaType.PREMUL, colorSpace)
 
         fun makeRgb565(
             width: Int,
             height: Int,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.RGB_565, AlphaType.OPAQUE, colorSpace)
 
         fun makeGray8(
             width: Int,
             height: Int,
-            colorSpace: ColorSpace = ColorSpace.SRGB,
+            colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
         ): ImageInfo = make(width, height, ColorType.GRAY_8, AlphaType.OPAQUE, colorSpace)
     }
-}
-
-private fun defaultAlphaTypeFor(colorType: ColorType): AlphaType = when (colorType) {
-    ColorType.RGBA_8888,
-    ColorType.BGRA_8888,
-        -> AlphaType.UNPREMUL
-    ColorType.RGBA_F16,
-    ColorType.ALPHA_8,
-    ColorType.ARGB_4444,
-        -> AlphaType.PREMUL
-    ColorType.RGB_565,
-    ColorType.GRAY_8,
-        -> AlphaType.OPAQUE
 }

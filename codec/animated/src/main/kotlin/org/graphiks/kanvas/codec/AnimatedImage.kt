@@ -1,16 +1,16 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.core.SkCanvas
-import org.skia.core.SkPicture
-import org.skia.core.SkPictureRecorder
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImage
-import org.skia.foundation.SkImageInfo
-import org.graphiks.math.geometry.RectF32
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.geometry.RectI32
-import org.skia.utils.PixmapUtils
+import org.graphiks.kanvas.types.Rect
 
 /**
  * Mirrors Skia's
@@ -58,9 +58,9 @@ public class AnimatedImage private constructor(
      * caller's `requestedInfo` if supplied, defaults to the codec's
      * `getInfo()` size with the EXIF rotation applied.
      */
-    private val decodeInfo: SkImageInfo,
+    private val decodeInfo: ImageInfo,
     private val cropRect: RectI32,
-    private val postProcess: SkPicture?,
+    private val postProcess: Picture?,
 ) {
 
     private val frameCount: Int = codec.codec().getFrameCount()
@@ -68,26 +68,16 @@ public class AnimatedImage private constructor(
 
     /**
      * Current frame buffer — re-decoded in place by [decodeNextFrame].
-     * Sized to match the codec's source [SkImageInfo] (pre-orientation).
+     * Sized to match the codec's source [ImageInfo] (pre-orientation).
      */
-    private val rawFrame: SkBitmap = SkBitmap(
-        width = codec.codec().getInfo().width,
-        height = codec.codec().getInfo().height,
-        colorSpace = codec.codec().getInfo().colorSpace,
-        colorType = SkColorType.kRGBA_8888,
-    )
+    private val rawFrame: Bitmap = Bitmap(codec.codec().getInfo())
 
     /**
      * Post-orientation, post-scale frame buffer — what
      * [getCurrentFrame] / [makePictureSnapshot] expose, sized to
      * [decodeInfo] (the caller's requested logical dimensions).
      */
-    private val displayFrame: SkBitmap = SkBitmap(
-        width = decodeInfo.width,
-        height = decodeInfo.height,
-        colorSpace = decodeInfo.colorSpace,
-        colorType = SkColorType.kRGBA_8888,
-    )
+    private var displayFrame: Bitmap = Bitmap(decodeInfo)
 
     private var currentFrameIndex: Int = -1
     private var currentDuration: Int = 0
@@ -145,9 +135,11 @@ public class AnimatedImage private constructor(
     /**
      * Mirrors `AnimatedImage::getCurrentFrame()`. Returns the
      * post-orientation, post-crop, post-postProcess pixels of the
-     * current frame as a fresh [SkImage] snapshot.
+     * current frame as a fresh [Bitmap] snapshot. Its [ImageInfo.colorSpace]
+     * stays attached to the pixels until a caller explicitly projects it to
+     * a renderable image through [Bitmap.toImageOrNull].
      */
-    public fun getCurrentFrame(): SkImage = displayFrame.asImage()
+    public fun getCurrentFrame(): Bitmap = copyBitmap(displayFrame)
 
     /**
      * Mirrors `AnimatedImage::currentFrameDuration()`. Returns the
@@ -179,17 +171,22 @@ public class AnimatedImage private constructor(
     /**
      * Mirrors upstream's `AnimatedImage::makePictureSnapshot()`
      * (post-R-final.5 surface). Captures the current frame's draw call
-     * into an [SkPicture] sized to the post-crop bounds — useful for
+     * into a [Picture] sized to the post-crop bounds — useful for
      * GMs that compare raster vs picture playback paths.
      */
-    public fun makePictureSnapshot(): SkPicture {
-        val recorder = SkPictureRecorder()
-        val bounds = RectF32.ofSize(
+    public fun makePictureSnapshot(): Picture {
+        val recorder = PictureRecorder()
+        val bounds = Rect.fromXYWH(
+            0f,
+            0f,
             cropRect.width().toFloat(),
             cropRect.height().toFloat(),
         )
         val canvas = recorder.beginRecording(bounds)
-        canvas.drawImage(getCurrentFrame(), 0f, 0f)
+        val image = requireNotNull(displayFrame.toImageOrNull()) {
+            "unsupported image color profile: ${displayFrame.colorSpace.profileRefusalCode}"
+        }
+        canvas.drawImage(image, bounds)
         return recorder.finishRecordingAsPicture()
     }
 
@@ -216,12 +213,8 @@ public class AnimatedImage private constructor(
         val oriented = if (origin == EncodedOrigin.TOP_LEFT) {
             rawFrame
         } else {
-            SkBitmap(
-                width = orientedW,
-                height = orientedH,
-                colorSpace = rawFrame.colorSpace,
-                colorType = rawFrame.colorType,
-            ).also { PixmapUtils.Orient(it, rawFrame, origin) }
+            Bitmap(ImageInfo.make(orientedW, orientedH, rawFrame.colorType, rawFrame.alphaType, rawFrame.colorSpace))
+                .also { check(PixmapUtils.orient(it, rawFrame, origin)) }
         }
 
         // 2) Scale + crop : the GM may pass a `decodeInfo` smaller than
@@ -229,23 +222,39 @@ public class AnimatedImage private constructor(
         //    Nearest-neighbour scale + crop into `displayFrame` pixels.
         val sx = oriented.width.toFloat() / decodeInfo.width.toFloat()
         val sy = oriented.height.toFloat() / decodeInfo.height.toFloat()
+        val bytesPerPixel = displayFrame.colorType.bytesPerPixel
         for (dy in 0 until displayFrame.height) {
             val srcY = ((cropRect.top + dy) * sy).toInt().coerceIn(0, oriented.height - 1)
             for (dx in 0 until displayFrame.width) {
                 val srcX = ((cropRect.left + dx) * sx).toInt().coerceIn(0, oriented.width - 1)
-                displayFrame.setPixel(dx, dy, oriented.getPixel(srcX, srcY))
+                val srcOffset = (srcY * oriented.width + srcX) * bytesPerPixel
+                val dstOffset = (dy * displayFrame.width + dx) * bytesPerPixel
+                oriented.pixels.copyInto(displayFrame.pixels, dstOffset, srcOffset, srcOffset + bytesPerPixel)
             }
         }
 
-        // 3) postProcess Picture (per upstream — drawn over the cropped
-        //    frame, typically to add a rounded-rect mask).
-        if (postProcess != null) {
-            val canvas = SkCanvas(displayFrame)
-            postProcess.playback(canvas)
-        }
+        // 3) Compose the optional picture over the display frame using the
+        // same headless canonical surface that produces image snapshots.
+        applyPostProcess()
 
         currentFrameIndex = index
         currentDuration = frameInfo.getOrNull(index)?.durationMs ?: 0
+    }
+
+    private fun applyPostProcess() {
+        val picture = postProcess ?: return
+        val frame = displayFrame
+        val bounds = Rect.fromXYWH(0f, 0f, frame.width.toFloat(), frame.height.toFloat())
+        val image = requireNotNull(frame.toImageOrNull()) {
+            "unsupported image color profile: ${frame.colorSpace.profileRefusalCode}"
+        }
+        val composed = Surface(frame.width, frame.height).apply {
+            canvas {
+                drawImage(image, bounds)
+                drawPicture(picture)
+            }
+        }.makeImageSnapshot()
+        displayFrame = Bitmap.fromImage(composed)
     }
 
     public companion object {
@@ -266,10 +275,16 @@ public class AnimatedImage private constructor(
         /**
          * Mirrors upstream's
          * `AnimatedImage::Make(std::unique_ptr<AndroidCodec>,
-         *  const SkImageInfo& info, SkIRect cropRect,
-         *  sk_sp<SkPicture> postProcess)`.
+         *  const ImageInfo& info, SkIRect cropRect,
+         *  Picture postProcess)`.
          *
          * Returns `null` if [codec] is empty (zero frames). The
+         * canonical headless [Surface] used for [postProcess] currently
+         * preserves only [ColorType.RGBA_8888] / [AlphaType.PREMUL] /
+         * [ImageColorSpace.sRGB] output; a post-process request with any
+         * other metadata is refused rather than retagged. Calls without a
+         * post-process preserve the supplied [ImageInfo] metadata unchanged.
+         *
          * caller surrenders ownership of [codec] in upstream — Kotlin
          * has no `unique_ptr` so we just hold the reference ;
          * subsequent calls on the original [AndroidCodec] will
@@ -277,11 +292,19 @@ public class AnimatedImage private constructor(
          */
         public fun Make(
             codec: AndroidCodec,
-            info: SkImageInfo,
+            info: ImageInfo,
             cropRect: RectI32,
-            postProcess: SkPicture?,
+            postProcess: Picture?,
         ): AnimatedImage? {
             if (codec.codec().getFrameCount() <= 0) return null
+            val sourceInfo = codec.codec().getInfo()
+            if (info.colorType != sourceInfo.colorType ||
+                info.alphaType != sourceInfo.alphaType ||
+                info.colorSpace !== sourceInfo.colorSpace
+            ) {
+                return null
+            }
+            if (postProcess != null && !supportsPostProcess(info)) return null
             return AnimatedImage(
                 codec = codec,
                 origin = codec.codec().getOrigin(),
@@ -294,7 +317,7 @@ public class AnimatedImage private constructor(
         /**
          * Convenience overload mirroring the upstream "no scaling, no
          * crop, no post-process" factory. The decode info defaults to
-         * the codec's natural [SkImageInfo] with EXIF orientation
+         * the codec's natural [ImageInfo] with EXIF orientation
          * applied (i.e. swapped width/height for a 90° rotation), and
          * the crop rect spans the full frame.
          */
@@ -318,5 +341,13 @@ public class AnimatedImage private constructor(
          */
         public fun MakeFromCodec(codec: Codec): AnimatedImage? =
             Make(AndroidCodec.MakeFromCodec(codec))
+
+        private fun copyBitmap(source: Bitmap): Bitmap =
+            Bitmap(source.info).also { source.pixels.copyInto(it.pixels) }
+
+        private fun supportsPostProcess(info: ImageInfo): Boolean =
+            info.colorType == ColorType.RGBA_8888 &&
+                info.alphaType == AlphaType.PREMUL &&
+                info.colorSpace === ImageColorSpace.sRGB()
     }
 }

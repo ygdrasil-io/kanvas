@@ -2,15 +2,15 @@ package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.codec.PixmapUtils
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
-import org.skia.utils.PixmapUtils
 import kotlin.math.roundToInt
 
 /**
@@ -27,17 +27,17 @@ public class JpegCodec private constructor(
 
     private var lastDecodeDiagnosticCode: String? = null
 
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.height else jpeg.width,
             height = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.width else jpeg.height,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = jpeg.metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG
 
@@ -45,10 +45,11 @@ public class JpegCodec private constructor(
 
     override fun getOrigin(): EncodedOrigin = jpeg.metadata.origin
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
         lastDecodeDiagnosticCode = null
-        if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
-        if (dst.colorType != info.colorType) return Result.kInvalidParameters
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) return Result.kInvalidScale
+        if (info.alphaType != expectedAlphaType(info.colorType) || info.colorSpace !== cachedInfo.colorSpace) return Result.kInvalidConversion
+        if (dst.info != info) return Result.kInvalidParameters
         if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
             val samples = when (jpeg.coding) {
@@ -67,7 +68,7 @@ public class JpegCodec private constructor(
             }
             DecodedPixels(
                 rgba8888 = composePixels(samples, jpeg.colorModel()),
-                rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
+                rgbaF16 = if (info.colorType == ColorType.RGBA_F16_NORM) {
                     composeF16Pixels(samples, jpeg.colorModel())
                 } else {
                     null
@@ -88,30 +89,33 @@ public class JpegCodec private constructor(
         if (jpeg.metadata.origin == EncodedOrigin.TOP_LEFT) {
             return writeDecodedPixels(dst, pixels)
         }
-        val raw = SkBitmap(
-            width = jpeg.width,
-            height = jpeg.height,
-            colorSpace = info.colorSpace,
-            colorType = info.colorType,
-        )
+        val raw = Bitmap(info.makeWH(jpeg.width, jpeg.height))
         val copyResult = writeDecodedPixels(raw, pixels)
         if (copyResult != Result.kSuccess) return copyResult
-        if (!PixmapUtils.Orient(dst, raw, jpeg.metadata.origin)) return Result.kInvalidParameters
+        if (!PixmapUtils.orient(dst, raw, jpeg.metadata.origin)) return Result.kInvalidParameters
         return Result.kSuccess
     }
 
     private fun lastDecodeDiagnosticCode(): String? = lastDecodeDiagnosticCode
 
-    private fun canDecodeTo(colorType: SkColorType): Boolean =
-        colorType == SkColorType.kRGBA_8888 || colorType == SkColorType.kRGBA_F16Norm
+    private fun canDecodeTo(colorType: ColorType): Boolean =
+        colorType == ColorType.RGBA_8888 || colorType == ColorType.RGBA_F16_NORM
 
-    private fun writeDecodedPixels(dst: SkBitmap, pixels: DecodedPixels): Result {
+    private fun expectedAlphaType(colorType: ColorType): AlphaType = when (colorType) {
+        ColorType.RGBA_8888 -> cachedInfo.alphaType
+        ColorType.RGBA_F16_NORM -> AlphaType.PREMUL
+        else -> AlphaType.UNKNOWN
+    }
+
+    private fun writeDecodedPixels(dst: Bitmap, pixels: DecodedPixels): Result {
         return when (dst.colorType) {
-            SkColorType.kRGBA_8888 -> {
-                System.arraycopy(pixels.rgba8888, 0, dst.pixels8888, 0, pixels.rgba8888.size)
+            ColorType.RGBA_8888 -> {
+                for (y in 0 until dst.height) for (x in 0 until dst.width) {
+                    dst.setArgb(x, y, pixels.rgba8888[y * dst.width + x])
+                }
                 Result.kSuccess
             }
-            SkColorType.kRGBA_F16Norm -> {
+            ColorType.RGBA_F16_NORM -> {
                 for (y in 0 until dst.height) {
                     for (x in 0 until dst.width) {
                         val index = y * dst.width + x
@@ -121,7 +125,7 @@ public class JpegCodec private constructor(
                         val r = f16?.get(index * 4) ?: ((color ushr 16) and 0xFF) / 255f
                         val g = f16?.get(index * 4 + 1) ?: ((color ushr 8) and 0xFF) / 255f
                         val b = f16?.get(index * 4 + 2) ?: (color and 0xFF) / 255f
-                        dst.setPixelF16(x, y, r * a, g * a, b * a, a)
+                        dst.setPremulRgbaF16(x, y, r * a, g * a, b * a, a)
                     }
                 }
                 Result.kSuccess
@@ -190,19 +194,14 @@ public class JpegCodec private constructor(
                 ),
             )
             val sourceInfo = codec.getInfo()
-            val info = SkImageInfo.Make(
+            val info = ImageInfo.make(
                 width = sourceInfo.width,
                 height = sourceInfo.height,
                 colorType = request.colorType,
-                alphaType = sourceInfo.alphaType,
+                alphaType = if (request.colorType == ColorType.RGBA_F16_NORM) AlphaType.PREMUL else sourceInfo.alphaType,
                 colorSpace = request.colorSpace ?: sourceInfo.colorSpace,
             )
-            val bitmap = SkBitmap(
-                width = info.width,
-                height = info.height,
-                colorSpace = info.colorSpace,
-                colorType = info.colorType,
-            )
+            val bitmap = Bitmap(info)
             val result = codec.getPixels(info, bitmap)
             return if (result == Codec.Result.kSuccess) {
                 JpegDecodeResult(bitmap, null)
@@ -242,17 +241,17 @@ private class JpegHierarchyCodec(
 ) : Codec() {
     private val hierarchy = hierarchy
     private val metadata = document.metadata
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.height else hierarchy.definition.width,
             height = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.width else hierarchy.definition.height,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
-            colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
+            colorSpace = document.decodedColorSpace,
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG
 
@@ -260,18 +259,20 @@ private class JpegHierarchyCodec(
 
     override fun getOrigin(): EncodedOrigin = metadata.origin
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Codec.Result {
-        if (dst.width != info.width || dst.height != info.height || dst.colorType != info.colorType) {
-            return Codec.Result.kInvalidParameters
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Codec.Result {
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) {
+            return Codec.Result.kInvalidScale
         }
         if (
-            info.width != cachedInfo.width ||
-            info.height != cachedInfo.height ||
-            info.alphaType != AlphaType.UNPREMUL
+            info.alphaType != (if (info.colorType == ColorType.RGBA_F16_NORM) AlphaType.PREMUL else AlphaType.UNPREMUL) ||
+            info.colorSpace !== cachedInfo.colorSpace
         ) {
+            return Codec.Result.kInvalidConversion
+        }
+        if (dst.info != info) {
             return Codec.Result.kInvalidParameters
         }
-        if (info.colorType !in setOf(SkColorType.kRGBA_8888, SkColorType.kRGBA_F16Norm)) {
+        if (info.colorType !in setOf(ColorType.RGBA_8888, ColorType.RGBA_F16_NORM)) {
             return Codec.Result.kInvalidConversion
         }
         val decoded = document.decode(JpegDecodeRequest(info.colorType, info.colorSpace))
@@ -284,8 +285,16 @@ private class JpegHierarchyCodec(
             return Codec.Result.kInternalError
         }
         when (info.colorType) {
-            SkColorType.kRGBA_8888 -> System.arraycopy(source.pixels8888, 0, dst.pixels8888, 0, source.pixels8888.size)
-            SkColorType.kRGBA_F16Norm -> System.arraycopy(source.pixelsF16, 0, dst.pixelsF16, 0, source.pixelsF16.size)
+            ColorType.RGBA_8888 -> for (y in 0 until dst.height) for (x in 0 until dst.width) {
+                dst.setArgb(x, y, source.getArgb(x, y))
+            }
+            ColorType.RGBA_F16_NORM -> {
+                val rgba = FloatArray(4)
+                for (y in 0 until dst.height) for (x in 0 until dst.width) {
+                    check(source.getPremulRgbaF16(x, y, rgba))
+                    dst.setPremulRgbaF16(x, y, rgba[0], rgba[1], rgba[2], rgba[3])
+                }
+            }
             else -> return Codec.Result.kInvalidConversion
         }
         return Codec.Result.kSuccess

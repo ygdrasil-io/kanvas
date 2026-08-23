@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -50,7 +52,7 @@ class JpegPerformanceEvidenceTest {
     private fun measure(case: PerformanceCase): PerformanceEvidence {
         val document = requireNotNull(JpegDocument.open(case.bytes).document) { case.name }
         fun decodeOnce(): Pair<Int, Int> {
-            val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
             assertNull(decoded.diagnostic, case.name)
             val bitmap = requireNotNull(decoded.bitmap) { case.name }
             return bitmap.width to bitmap.height

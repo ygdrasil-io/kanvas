@@ -1,19 +1,21 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
-import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.skia.foundation.SkImageInfo
-import org.skia.foundation.SkPixmap
+import org.graphiks.kanvas.image.Pixmap
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
@@ -24,11 +26,11 @@ class JpegEncoderTest {
 
     @Test
     fun `encode round-trip through JPEG decoder preserves RGB`() {
-        val src = SkBitmap(8, 8)
+        val src = Bitmap(8, 8)
         for (y in 0 until 8) for (x in 0 until 8) {
             val r = (x * 32).coerceIn(0, 255)
             val g = (y * 32).coerceIn(0, 255)
-            src.pixels[y * 8 + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x80
+            src[y * 8 + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x80
         }
         val bytes = JpegEncoder.encode(src)!!
         val decoded = decodeJpeg(bytes)
@@ -38,13 +40,13 @@ class JpegEncoderTest {
 
     @Test
     fun `encode degenerate bitmap returns null`() {
-        assertNull(JpegEncoder.encode(SkBitmap(0, 0)))
+        assertNull(JpegEncoder.encode(Bitmap(0, 0)))
     }
 
     @Test
     fun `OutputStream overload matches direct encode`() {
-        val src = SkBitmap(4, 4)
-        for (i in 0 until 16) src.pixels[i] = 0xFF404040.toInt()
+        val src = Bitmap(4, 4)
+        for (i in 0 until 16) src[i] = 0xFF404040.toInt()
         val viaData = JpegEncoder.encode(src)!!
         val baos = ByteArrayOutputStream()
         assertTrue(JpegEncoder.encode(baos, src))
@@ -52,16 +54,16 @@ class JpegEncoderTest {
     }
 
     @Test
-    fun `SkPixmap OutputStream overload matches direct encode`() {
-        val info = SkImageInfo.Make(
+    fun `Pixmap OutputStream overload matches direct encode`() {
+        val info = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
-        val pixmap = SkPixmap(info, pixels, 4)
+        val pixmap = Pixmap(info, pixels, 4)
         val direct = JpegEncoder.encode(pixmap)!!
         val output = ByteArrayOutputStream()
 
@@ -70,9 +72,53 @@ class JpegEncoderTest {
     }
 
     @Test
+    fun `F16 Bitmap and Pixmap overloads refuse without output`() {
+        val info = ImageInfo.make(1, 1, ColorType.RGBA_F16_NORM, AlphaType.PREMUL, ImageColorSpace.sRGB())
+        val bitmap = Bitmap(info).also { it.setPremulRgbaF16(0, 0, 0.25f, 0.125f, 0.375f, 0.5f) }
+        val pixmap = Pixmap(info, ByteBuffer.allocate(info.minRowBytes()), info.minRowBytes())
+        val bitmapOutput = ByteArrayOutputStream()
+        val pixmapOutput = ByteArrayOutputStream()
+
+        assertNull(JpegEncoder.encode(bitmap))
+        assertFalse(JpegEncoder.encode(bitmapOutput, bitmap))
+        assertEquals(0, bitmapOutput.size())
+        assertNull(JpegEncoder.encode(pixmap))
+        assertFalse(JpegEncoder.encode(pixmapOutput, pixmap))
+        assertEquals(0, pixmapOutput.size())
+    }
+
+    @Test
+    fun `premultiplied and unknown alpha Bitmap and Pixmap inputs refuse without output`() {
+        listOf(AlphaType.PREMUL, AlphaType.UNKNOWN).forEach { alphaType ->
+            val info = ImageInfo.make(1, 1, ColorType.RGBA_8888, alphaType, ImageColorSpace.sRGB())
+            val bitmap = Bitmap(info)
+            val pixmap = Pixmap(info, ByteBuffer.allocate(info.minRowBytes()), info.minRowBytes())
+            val bitmapOutput = ByteArrayOutputStream()
+            val pixmapOutput = ByteArrayOutputStream()
+
+            assertNull(JpegEncoder.encode(bitmap), alphaType.name)
+            assertFalse(JpegEncoder.encode(bitmapOutput, bitmap), alphaType.name)
+            assertEquals(0, bitmapOutput.size(), alphaType.name)
+            assertNull(JpegEncoder.encode(pixmap), alphaType.name)
+            assertFalse(JpegEncoder.encode(pixmapOutput, pixmap), alphaType.name)
+            assertEquals(0, pixmapOutput.size(), alphaType.name)
+        }
+    }
+
+    @Test
+    fun `non serializable ICC leaves OutputStream empty`() {
+        val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported"))
+        val bitmap = Bitmap(ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, unsupported))
+        val output = ByteArrayOutputStream()
+
+        assertFalse(JpegEncoder.encode(output, bitmap))
+        assertEquals(0, output.size())
+    }
+
+    @Test
     fun `quality 0 and 100 both produce valid JPEG`() {
-        val src = SkBitmap(4, 4)
-        for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+        val src = Bitmap(4, 4)
+        for (i in 0 until 16) src[i] = 0xFF808080.toInt()
         assertNotNull(JpegEncoder.encode(src, JpegEncoder.Options(quality = 0)))
         assertNotNull(JpegEncoder.encode(src, JpegEncoder.Options(quality = 100)))
     }
@@ -97,7 +143,7 @@ class JpegEncoderTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         for (y in 0 until 16) for (x in 0 until 16) {
-            val px = decoded!!.getPixel(x, y)
+            val px = decoded!!.getArgb(x, y)
             val r = (px ushr 16) and 0xFF
             val g = (px ushr 8) and 0xFF
             val b = px and 0xFF
@@ -137,7 +183,7 @@ class JpegEncoderTest {
         val (decoded, _) = Codec.MakeFromData(bytes)!!.getImage()
         assertNotNull(decoded)
         for (y in 0 until 8) for (x in 0 until 8) {
-            val a = (decoded!!.getPixel(x, y) ushr 24) and 0xFF
+            val a = (decoded!!.getArgb(x, y) ushr 24) and 0xFF
             assertEquals(0xFF, a, "JPEG pixel ($x,$y) must be fully opaque after encode")
         }
     }
@@ -153,8 +199,8 @@ class JpegEncoderTest {
             JpegEncoder.Options(quality = 100, alphaOption = JpegEncoder.AlphaOption.kBlendOnBlack),
         )!!
 
-        val ignoredPixel = decode(ignored).getPixel(0, 0)
-        val blendedPixel = decode(blended).getPixel(0, 0)
+        val ignoredPixel = decode(ignored).getArgb(0, 0)
+        val blendedPixel = decode(blended).getArgb(0, 0)
         assertTrue(((ignoredPixel ushr 16) and 0xFF) > 220, "kIgnore should preserve red RGB")
         assertTrue(((blendedPixel ushr 16) and 0xFF) < 8, "kBlendOnBlack should encode transparent red as black")
         assertTrue(((blendedPixel ushr 8) and 0xFF) < 8, "kBlendOnBlack green drift")
@@ -181,9 +227,9 @@ class JpegEncoderTest {
     fun `non-sRGB JPEG writes ICC APP2 chunks`() {
         val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val colorSpace = ImageColorSpace.fromIccProfile(IccProfile.parse(iccBytes).getOrThrow())
-        val src = SkBitmap(8, 8, colorSpace)
+        val src = Bitmap(ImageInfo.make(8, 8, ColorType.RGBA_8888, AlphaType.UNPREMUL, colorSpace))
         for (y in 0 until 8) for (x in 0 until 8) {
-            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8) or 0x7F
+            src[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8) or 0x7F
         }
         val bytes = JpegEncoder.encode(src)!!
         val codec = Codec.MakeFromData(bytes)
@@ -194,9 +240,9 @@ class JpegEncoderTest {
 
     @Test
     fun `sRGB JPEG does not write ICC APP2`() {
-        val src = SkBitmap(8, 8)
+        val src = Bitmap(8, 8)
         for (y in 0 until 8) for (x in 0 until 8) {
-            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
+            src[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
         }
         val bytes = JpegEncoder.encode(src)!!
         val codec = Codec.MakeFromData(bytes)
@@ -206,9 +252,9 @@ class JpegEncoderTest {
 
     @Test
     fun `EXIF orientation survives round-trip`() {
-        val src = SkBitmap(8, 8)
+        val src = Bitmap(8, 8)
         for (y in 0 until 8) for (x in 0 until 8) {
-            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
+            src[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
         }
         for (exifVal in 1..8) {
             val orientation = EncodedOrigin.fromExifValue(exifVal)
@@ -219,33 +265,33 @@ class JpegEncoderTest {
         }
     }
 
-    private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {
-        val b = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
+    private fun makeFlat(width: Int, height: Int, color: Int): Bitmap {
+        val b = Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()))
         for (y in 0 until height) for (x in 0 until width) {
-            b.pixels[y * width + x] = color
+            b[y * width + x] = color
         }
         return b
     }
 
-    private fun makeGradient(width: Int, height: Int): SkBitmap {
-        val b = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
+    private fun makeGradient(width: Int, height: Int): Bitmap {
+        val b = Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()))
         for (y in 0 until height) for (x in 0 until width) {
             val r = (x * 255 / maxOf(1, width - 1)).coerceIn(0, 255)
             val g = (y * 255 / maxOf(1, height - 1)).coerceIn(0, 255)
             val b2 = ((x xor y) * 17) and 0xFF
-            b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b2
+            b[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b2
         }
         return b
     }
 
-    private fun decode(bytes: ByteArray): SkBitmap {
+    private fun decode(bytes: ByteArray): Bitmap {
         val (decoded, result) = Codec.MakeFromData(bytes)!!.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         return decoded!!
     }
 
-    private fun decodeJpeg(bytes: ByteArray): SkBitmap {
+    private fun decodeJpeg(bytes: ByteArray): Bitmap {
         val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec, "JPEG decoder must load encoded output")
         val (bitmap, result) = codec!!.getImage()

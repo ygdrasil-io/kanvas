@@ -3,44 +3,43 @@ package org.graphiks.kanvas.codec.jpeg2000
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
 /** Static pure-Kotlin JPEG 2000 dispatcher owner for the bounded raw J2K profile. */
 public class Jpeg2000Codec private constructor(
     private val document: Jpeg2000Document,
 ) : Codec() {
-    private val info: SkImageInfo = SkImageInfo.Make(
+    private val info: ImageInfo = ImageInfo.make(
         width = document.frame.width,
         height = document.frame.height,
-        colorType = SkColorType.kRGBA_8888,
+        colorType = ColorType.RGBA_8888,
         alphaType = AlphaType.UNPREMUL,
         colorSpace = ImageColorSpace.sRGB(),
     )
 
-    override fun getInfo(): SkImageInfo = info
+    override fun getInfo(): ImageInfo = info
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG2000
 
     override fun getICCProfile(): IccProfile? = null
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
-        if (dst.width != info.width || dst.height != info.height || dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
+        if (info.width != this.info.width || info.height != this.info.height) return Result.kInvalidScale
         if (
-            info.width != this.info.width || info.height != this.info.height ||
-            info.colorType != SkColorType.kRGBA_8888 || info.alphaType != AlphaType.UNPREMUL
+            info.colorType != ColorType.RGBA_8888 || info.alphaType != AlphaType.UNPREMUL ||
+            info.colorSpace !== this.info.colorSpace
         ) {
             return Result.kInvalidConversion
         }
+        if (dst.info != info) return Result.kInvalidParameters
         val decoded = document.decode()
         val bitmap = decoded.bitmap ?: return decoded.diagnostic?.result ?: Result.kErrorInInput
-        System.arraycopy(bitmap.pixels8888, 0, dst.pixels8888, 0, bitmap.pixels8888.size)
+        for (y in 0 until dst.height) for (x in 0 until dst.width) dst.setArgb(x, y, bitmap.getArgb(x, y))
         return Result.kSuccess
     }
 

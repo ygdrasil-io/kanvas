@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -6,9 +8,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 
 /**
  * Release-facing matrix for the JPEG processes the portable codec actually
@@ -29,7 +31,7 @@ class JpegConformanceTest {
             val sofMarkers = document.segments.mapNotNull { JpegFrameSpec.fromSof(it.marker)?.marker }.toSet()
             assertEquals(stream.sofMarkers, sofMarkers, stream.name)
 
-            val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
             assertNull(decoded.diagnostic, stream.name)
             val bitmap = requireNotNull(decoded.bitmap) { stream.name }
             stream.width?.let { assertEquals(it, bitmap.width, stream.name) }
@@ -51,12 +53,12 @@ class JpegConformanceTest {
 
         val bareProgressiveDifferential = JpegConformanceFixtures.differentialProbe(0xC6)
         val differential = requireNotNull(JpegDocument.open(bareProgressiveDifferential).document)
-            .decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            .decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(refused.getValue(0xC6), differential.diagnostic?.code)
         assertEquals(Codec.Result.kUnimplemented, differential.diagnostic?.result)
 
         val arithmeticLossless = requireNotNull(JpegDocument.open(JpegConformanceFixtures.sof11Probe()).document)
-            .decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            .decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(refused.getValue(0xCB), arithmeticLossless.diagnostic?.code)
         assertEquals(Codec.Result.kErrorInInput, arithmeticLossless.diagnostic?.result)
     }
@@ -68,7 +70,7 @@ class JpegConformanceTest {
 
         val document = requireNotNull(JpegDocument.open(stream.bytes).document)
         assertNotNull(document.hierarchy)
-        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertNull(decoded.diagnostic)
         assertNotNull(decoded.bitmap)
     }
@@ -281,12 +283,12 @@ internal object JpegConformanceFixtures {
         )
     }
 
-    fun grayscale(width: Int, height: Int): SkBitmap = bitmap(width, height) { x, y ->
+    fun grayscale(width: Int, height: Int): Bitmap = bitmap(width, height) { x, y ->
         val value = (x * 29 + y * 17) and 0xFF
         0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
     }
 
-    fun color(width: Int, height: Int): SkBitmap = bitmap(width, height) { x, y ->
+    fun color(width: Int, height: Int): Bitmap = bitmap(width, height) { x, y ->
         val red = x * 255 / (width - 1).coerceAtLeast(1)
         val green = y * 255 / (height - 1).coerceAtLeast(1)
         val blue = (x * 13 + y * 31) and 0xFF
@@ -322,7 +324,7 @@ internal object JpegConformanceFixtures {
 
     private fun generated(
         name: String,
-        source: SkBitmap,
+        source: Bitmap,
         options: JpegEncoder.Options,
         sofMarkers: Set<Int>,
     ): Stream = Stream(
@@ -333,9 +335,9 @@ internal object JpegConformanceFixtures {
         height = source.height,
     )
 
-    private fun bitmap(width: Int, height: Int, pixel: (Int, Int) -> Int): SkBitmap =
-        SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888).also { bitmap ->
-            for (y in 0 until height) for (x in 0 until width) bitmap.setPixel(x, y, pixel(x, y))
+    private fun bitmap(width: Int, height: Int, pixel: (Int, Int) -> Int): Bitmap =
+        Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())).also { bitmap ->
+            for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, pixel(x, y))
         }
 
     private fun resource(path: String): ByteArray =

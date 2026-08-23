@@ -1,13 +1,15 @@
 package org.graphiks.kanvas.codec.gif
 
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
 public object GifEncoder {
 
     public data class Frame(
-        val bitmap: SkBitmap,
+        val bitmap: Bitmap,
         val delayCs: Int = 0,
         val disposal: Int = DISPOSAL_NONE,
         val left: Int = 0,
@@ -25,16 +27,16 @@ public object GifEncoder {
 
     private val defaultOptions = Options()
 
-    public fun encode(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(bitmap: Bitmap, options: Options = defaultOptions): ByteArray? {
         val baos = ByteArrayOutputStream()
         return if (encode(baos, bitmap, options)) baos.toByteArray() else null
     }
 
-    public fun encode(dst: OutputStream, bitmap: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, bitmap: Bitmap, options: Options = defaultOptions): Boolean {
         return try {
             val w = bitmap.width
             val h = bitmap.height
-            if (w <= 0 || h <= 0) return false
+            if (w <= 0 || h <= 0 || !canEncode(bitmap) || options.frames?.any { !canEncode(it.bitmap) } == true) return false
             writeGif(dst, bitmap, w, h, options)
             true
         } catch (_: Throwable) {
@@ -42,7 +44,7 @@ public object GifEncoder {
         }
     }
 
-    private fun writeGif(out: OutputStream, bitmap: SkBitmap, w: Int, h: Int, options: Options) {
+    private fun writeGif(out: OutputStream, bitmap: Bitmap, w: Int, h: Int, options: Options) {
         if (options.frames != null && options.frames.isNotEmpty()) {
             writeAnimatedGif(out, options.frames, options)
             return
@@ -156,33 +158,33 @@ public object GifEncoder {
         out.write(0x3B)
     }
 
-    private fun buildPalette(bitmap: SkBitmap, w: Int, h: Int): IntArray {
+    private fun buildPalette(bitmap: Bitmap, w: Int, h: Int): IntArray {
         val colorSet = linkedSetOf<Int>()
         for (y in 0 until h) for (x in 0 until w) {
-            colorSet.add(bitmap.getPixel(x, y) and 0x00FFFFFF)
+            colorSet.add(bitmap.getArgb(x, y) and 0x00FFFFFF)
             if (colorSet.size >= 256) break
         }
         return colorSet.toIntArray()
     }
 
-    private fun buildPaletteMulti(bitmaps: List<SkBitmap>): IntArray {
+    private fun buildPaletteMulti(bitmaps: List<Bitmap>): IntArray {
         val colorSet = linkedSetOf<Int>()
         for (bm in bitmaps) {
             for (y in 0 until bm.height) for (x in 0 until bm.width) {
-                colorSet.add(bm.getPixel(x, y) and 0x00FFFFFF)
+                colorSet.add(bm.getArgb(x, y) and 0x00FFFFFF)
                 if (colorSet.size >= 256) return colorSet.toIntArray()
             }
         }
         return colorSet.toIntArray()
     }
 
-    private fun buildIndices(bitmap: SkBitmap, w: Int, h: Int, palette: IntArray): ByteArray {
+    private fun buildIndices(bitmap: Bitmap, w: Int, h: Int, palette: IntArray): ByteArray {
         val indexMap = mutableMapOf<Int, Int>()
         for (i in palette.indices) indexMap[palette[i]] = i
         val indices = ByteArray(w * h)
         var pos = 0
         for (y in 0 until h) for (x in 0 until w) {
-            val rgb = bitmap.getPixel(x, y) and 0x00FFFFFF
+            val rgb = bitmap.getArgb(x, y) and 0x00FFFFFF
             indices[pos++] = (indexMap[rgb] ?: 0).toByte()
         }
         return indices
@@ -295,4 +297,8 @@ public object GifEncoder {
         out.write(v and 0xFF)
         out.write((v ushr 8) and 0xFF)
     }
+
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }

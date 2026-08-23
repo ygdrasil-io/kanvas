@@ -41,7 +41,9 @@ class BitmapImageGm : SkiaGm {
             ?: error("Codec.MakeFromData returned null")
         val (codecBitmap, result) = codec.getImage()
         require(result == Codec.Result.kSuccess) { "Codec.getImage failed: $result" }
-        val codecImage = skBitmapToImage(codecBitmap ?: error("Codec.getImage returned null bitmap"))
+        val codecImage = requireNotNull(
+            (codecBitmap ?: error("Codec.getImage returned null bitmap")).toImageOrNull(),
+        ) { "Codec bitmap has an unsupported image color profile" }
 
         val surfFlags = Surface(kSize * 2, kSize)
         surfFlags.canvas {
@@ -57,26 +59,6 @@ class BitmapImageGm : SkiaGm {
             drawImage(codecImage, Rect(kSize.toFloat(), 0f, (kSize * 2).toFloat(), kSize.toFloat()))
         }
         canvas.drawImage(surfSrgb.makeImageSnapshot(), Rect(0f, 0f, (kSize * 2).toFloat(), kSize.toFloat()))
-    }
-
-    private fun skBitmapToImage(bm: org.skia.foundation.SkBitmap): Image {
-        val w = bm.width
-        val h = bm.height
-        val argb = bm.pixels8888
-        val rgba = ByteArray(w * h * 4)
-        var di = 0
-        for (pixel in argb) {
-            val a = (pixel ushr 24) and 0xFF
-            val r = (pixel ushr 16) and 0xFF
-            val g = (pixel ushr 8) and 0xFF
-            val b = pixel and 0xFF
-            rgba[di] = b.toByte()
-            rgba[di + 1] = g.toByte()
-            rgba[di + 2] = r.toByte()
-            rgba[di + 3] = a.toByte()
-            di += 4
-        }
-        return Image.fromPixels(w, h, rgba)
     }
 
     private fun loadResource(path: String): ByteArray? {

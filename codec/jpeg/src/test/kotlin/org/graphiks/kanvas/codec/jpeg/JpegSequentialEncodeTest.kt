@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -9,13 +11,11 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.skia.foundation.SkImageInfo
-import org.skia.foundation.SkPixmap
+import org.graphiks.kanvas.image.Pixmap
 import java.nio.ByteBuffer
 
 class JpegSequentialEncodeTest {
@@ -123,7 +123,7 @@ class JpegSequentialEncodeTest {
         assertEquals(2, dri(bytes))
         assertTrue(entropyRestartMarkers(bytes).zipWithNext().all { (left, right) -> right == (left + 1) and 7 })
         assertTrue(entropyRestartMarkers(bytes).isNotEmpty())
-        assertEquals(decode(noRestart).pixels.toList(), decode(bytes).pixels.toList(), "RST must reset DC predictors")
+        assertEquals(decode(noRestart).argbPixels().toList(), decode(bytes).argbPixels().toList(), "RST must reset DC predictors")
         assertDecodes(bytes)
     }
 
@@ -221,28 +221,28 @@ class JpegSequentialEncodeTest {
 
     @Test
     fun `encoder refuses dimensions outside SOF range before writing output`() {
-        for (source in listOf(SkBitmap(65_536, 1), SkBitmap(1, 65_536))) {
+        for (source in listOf(Bitmap(65_536, 1), Bitmap(1, 65_536))) {
             val output = java.io.ByteArrayOutputStream()
             assertFalse(JpegEncoder.encode(output, source))
             assertEquals(0, output.size())
             assertNull(JpegEncoder.encode(source))
         }
-        val oversizedPixmap = SkPixmap(
-            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
+        val oversizedPixmap = Pixmap(
+            ImageInfo.make(65_536, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
             ByteBuffer.allocate(65_536 * 4),
             65_536 * 4,
         )
         assertNull(JpegEncoder.encode(oversizedPixmap))
     }
 
-    private fun assertReasonableRoundTrip(source: SkBitmap, bytes: ByteArray) {
+    private fun assertReasonableRoundTrip(source: Bitmap, bytes: ByteArray) {
         val decoded = decode(bytes)
         assertEquals(source.width, decoded.width)
         assertEquals(source.height, decoded.height)
         var totalError = 0L
-        for (index in source.pixels.indices) {
-            val expected = source.pixels[index]
-            val actual = decoded.pixels[index]
+        for (index in 0 until source.width * source.height) {
+            val expected = source[index]
+            val actual = decoded[index]
             totalError += kotlin.math.abs(((expected ushr 16) and 0xFF) - ((actual ushr 16) and 0xFF))
             totalError += kotlin.math.abs(((expected ushr 8) and 0xFF) - ((actual ushr 8) and 0xFF))
             totalError += kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
@@ -256,25 +256,25 @@ class JpegSequentialEncodeTest {
         assertEquals(Codec.Result.kSuccess, codec!!.getImage().second)
     }
 
-    private fun decode(bytes: ByteArray): SkBitmap {
+    private fun decode(bytes: ByteArray): Bitmap {
         val codec = Codec.MakeFromData(bytes) ?: error("Kanvas did not recognize encoder output")
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         return bitmap ?: error("Kanvas did not decode encoder output")
     }
 
-    private fun redAt(bytes: ByteArray): Int = (decode(bytes).getPixel(0, 0) ushr 16) and 0xFF
+    private fun redAt(bytes: ByteArray): Int = (decode(bytes).getArgb(0, 0) ushr 16) and 0xFF
 
-    private fun flat(width: Int, height: Int, color: Int): SkBitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888).also { bitmap ->
-        bitmap.pixels.fill(color)
+    private fun flat(width: Int, height: Int, color: Int): Bitmap = Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())).also { bitmap ->
+        for (index in 0 until width * height) bitmap[index] = color
     }
 
-    private fun gradient(width: Int, height: Int): SkBitmap = flat(width, height, 0).also { bitmap ->
+    private fun gradient(width: Int, height: Int): Bitmap = flat(width, height, 0).also { bitmap ->
         for (y in 0 until height) for (x in 0 until width) {
             val r = x * 255 / (width - 1).coerceAtLeast(1)
             val g = y * 255 / (height - 1).coerceAtLeast(1)
             val b = ((x * 13 + y * 29) and 0xFF)
-            bitmap.setPixel(x, y, (0xFF shl 24) or (r shl 16) or (g shl 8) or b)
+            bitmap.setArgb(x, y, (0xFF shl 24) or (r shl 16) or (g shl 8) or b)
         }
     }
 

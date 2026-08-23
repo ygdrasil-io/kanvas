@@ -1,5 +1,4 @@
 package org.graphiks.kanvas.codec.jpeg
-
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue

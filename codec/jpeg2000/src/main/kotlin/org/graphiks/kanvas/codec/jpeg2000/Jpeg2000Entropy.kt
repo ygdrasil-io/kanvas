@@ -1,7 +1,11 @@
 package org.graphiks.kanvas.codec.jpeg2000
 
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
 
 /** Packet range retained by the bounded raw-J2K parser for the narrow Tier-2 path. */
 internal data class J2kEntropyInput(
@@ -66,14 +70,14 @@ internal fun decodeNarrowRawJ2k(
                 decoded
             }
 
-            val bitmap = SkBitmap(frame.width, frame.height)
+            val bitmap = rgbaBitmap(frame.width, frame.height)
             for (y in 0 until frame.height) {
                 for (x in 0 until frame.width) {
                     val codeblockIndex = if (x < RAW_J2K_CODEBLOCK_WIDTH) 0 else 1
                     val codeblockX = if (codeblockIndex == 0) x else x - RAW_J2K_CODEBLOCK_WIDTH
                     val sample = (coefficients[codeblockIndex][y * codeblockWidths[codeblockIndex] + codeblockX] + 128)
                         .coerceIn(0, 255)
-                    bitmap.setPixel(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
+                    bitmap.setArgb(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
                 }
             }
             Jpeg2000DecodeResult(bitmap, null)
@@ -158,7 +162,7 @@ private fun decodeNdecompOneRawJ2k(
         ).copyInto(highRows, y * frame.width)
     }
 
-    val bitmap = SkBitmap(frame.width, frame.height)
+    val bitmap = rgbaBitmap(frame.width, frame.height)
     val lowColumn = IntArray(lowHeight)
     val highColumn = IntArray(highHeight)
     for (x in 0 until frame.width) {
@@ -167,7 +171,7 @@ private fun decodeNdecompOneRawJ2k(
         val samples = inverseReversible53(lowColumn, highColumn, frame.height)
         for (y in samples.indices) {
             val sample = (samples[y] + 128).coerceIn(0, 255)
-            bitmap.setPixel(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
+            bitmap.setArgb(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
         }
     }
     return Jpeg2000DecodeResult(bitmap, null)
@@ -280,13 +284,17 @@ private fun inverseReversible53Bands(
 }
 
 private fun grayscaleBitmap(width: Int, height: Int, coefficients: IntArray): Jpeg2000DecodeResult {
-    val bitmap = SkBitmap(width, height)
+    val bitmap = rgbaBitmap(width, height)
     coefficients.forEachIndexed { index, coefficient ->
         val sample = (coefficient + 128).coerceIn(0, 255)
-        bitmap.pixels[index] = 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample
+        bitmap.setArgb(index % width, index / width, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
     }
     return Jpeg2000DecodeResult(bitmap, null)
 }
+
+private fun rgbaBitmap(width: Int, height: Int): Bitmap = Bitmap(
+    ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
+)
 
 private fun decodeNdecompOneCodeblock(
     source: ByteArray,

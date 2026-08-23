@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.jpegxl
 
 import java.util.Collections
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 
 /** Resource ceilings checked before JPEG XL header parsing. */
 public data class JpegXlLimits(
@@ -37,7 +37,7 @@ public data class JpegXlOpenResult(
 
 /** Result of JPEG XL decoding. No result is fabricated while entropy is unavailable. */
 public data class JpegXlDecodeResult(
-    val bitmap: SkBitmap?,
+    val bitmap: Bitmap?,
     val diagnostic: JpegXlDiagnostic?,
 )
 

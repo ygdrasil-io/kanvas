@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.codec.bmp
 
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.math.color.ColorARGB
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -26,10 +28,10 @@ public object BmpEncoder {
 
     private val defaultOptions = Options()
 
-    public fun encode(bitmap: SkBitmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(bitmap: Bitmap, options: Options = defaultOptions): ByteArray? {
         val w = bitmap.width
         val h = bitmap.height
-        if (w <= 0 || h <= 0) return null
+        if (w <= 0 || h <= 0 || !canEncode(bitmap)) return null
 
         if (options.iccProfile != null) {
             return encodeV5(bitmap, options)
@@ -66,7 +68,7 @@ public object BmpEncoder {
         val pad = rowSize - w * bpp
         for (y in 0 until h) {
             for (x in 0 until w) {
-                val argb = bitmap.getPixel(x, y)
+                val argb = bitmap.getArgb(x, y)
                 val color = ColorARGB.fromPackedInt(argb)
                 out.write(color.blue)
                 out.write(color.green)
@@ -79,7 +81,7 @@ public object BmpEncoder {
         return out.toByteArray()
     }
 
-    public fun encode(dst: OutputStream, bitmap: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, bitmap: Bitmap, options: Options = defaultOptions): Boolean {
         val data = encode(bitmap, options) ?: return false
         return try {
             dst.write(data)
@@ -104,10 +106,10 @@ public object BmpEncoder {
         out.write((v ushr 8) and 0xFF)
     }
 
-    private fun encodeRle(bitmap: SkBitmap, options: Options): ByteArray? {
+    private fun encodeRle(bitmap: Bitmap, options: Options): ByteArray? {
         val colorSet = mutableSetOf<Int>()
         for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
-            colorSet.add(bitmap.getPixel(x, y) and 0x00FFFFFF)
+            colorSet.add(bitmap.getArgb(x, y) and 0x00FFFFFF)
         }
         if (colorSet.size > 256) return null
         if (options.compression == Compression.RLE4 && colorSet.size > 16) return null
@@ -122,7 +124,7 @@ public object BmpEncoder {
         val rleData = ByteArrayOutputStream()
 
         for (y in 0 until h) {
-            val indices = IntArray(w) { x -> palette.indexOf(bitmap.getPixel(x, y) and 0x00FFFFFF) }
+            val indices = IntArray(w) { x -> palette.indexOf(bitmap.getArgb(x, y) and 0x00FFFFFF) }
             var i = 0
             while (i < w) {
                 val colorIdx = indices[i]
@@ -202,15 +204,16 @@ public object BmpEncoder {
         return out.toByteArray()
     }
 
-    private fun encodeV5(bitmap: SkBitmap, options: Options): ByteArray? {
+    private fun encodeV5(bitmap: Bitmap, options: Options): ByteArray? {
         val w = bitmap.width
         val h = bitmap.height
         if (w <= 0 || h <= 0) return null
+        val iccProfile = requireNotNull(options.iccProfile)
 
         val bpp = if (options.format == BmpFormat.kBGRA_8888) 4 else 3
         val rowSize = (w * bpp + 3) and 3.inv()
         val pixelDataSize = rowSize * h
-        val iccSize = options.iccProfile!!.size
+        val iccSize = iccProfile.size
         val dataOffset = FILE_HEADER_SIZE + DIB_V5_HEADER_SIZE
         val fileSize = dataOffset + pixelDataSize + iccSize
 
@@ -252,7 +255,7 @@ public object BmpEncoder {
         val pad = rowSize - w * bpp
         for (y in 0 until h) {
             for (x in 0 until w) {
-                val argb = bitmap.getPixel(x, y)
+                val argb = bitmap.getArgb(x, y)
                 val color = ColorARGB.fromPackedInt(argb)
                 out.write(color.blue)
                 out.write(color.green)
@@ -262,9 +265,13 @@ public object BmpEncoder {
             for (i in 0 until pad) out.write(0)
         }
         // ICC profile data appended after pixel rows
-        out.write(options.iccProfile!!)
+        out.write(iccProfile)
         return out.toByteArray()
     }
 
     private const val DIB_V5_HEADER_SIZE = 124
+
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }

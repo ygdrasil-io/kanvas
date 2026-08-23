@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkData
 import java.io.InputStream
 
 /**
@@ -20,12 +19,6 @@ import java.io.InputStream
  * ISO-BMFF box wrapper (`00 00 00 0C 4A 58 4C 20 0D 0A 87 0A`).
  */
 public object JpegxlDecoder {
-
-    /**
-     * Stubbed JPEG-XL decode. Always returns `null`. See class kdoc
-     * for the R-suivi.28 follow-up that wires up libjxl.
-     */
-    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed JPEG-XL decode. Always returns `null`. See class kdoc

@@ -1,16 +1,18 @@
 package org.graphiks.kanvas.codec.wbmp
 
 import org.graphiks.math.color.ColorARGB
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
 public object WbmpEncoder {
 
-    public fun encode(bitmap: SkBitmap): ByteArray? {
+    public fun encode(bitmap: Bitmap): ByteArray? {
         val w = bitmap.width
         val h = bitmap.height
-        if (w <= 0 || h <= 0) return null
+        if (w <= 0 || h <= 0 || !canEncode(bitmap)) return null
 
         val out = ByteArrayOutputStream()
         out.write(0)
@@ -22,7 +24,7 @@ public object WbmpEncoder {
             var byte = 0
             var bitCount = 0
             for (x in 0 until w) {
-                val argb = bitmap.getPixel(x, y)
+                val argb = bitmap.getArgb(x, y)
                 val color = ColorARGB.fromPackedInt(argb)
                 val luma = color.red * 299 +
                     color.green * 587 +
@@ -45,7 +47,7 @@ public object WbmpEncoder {
         return out.toByteArray()
     }
 
-    public fun encode(dst: OutputStream, bitmap: SkBitmap): Boolean {
+    public fun encode(dst: OutputStream, bitmap: Bitmap): Boolean {
         val data = encode(bitmap) ?: return false
         return try {
             dst.write(data)
@@ -73,4 +75,8 @@ public object WbmpEncoder {
             out.write(b)
         }
     }
+
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }
