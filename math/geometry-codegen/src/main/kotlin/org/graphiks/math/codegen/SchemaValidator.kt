@@ -92,7 +92,7 @@ internal object SchemaValidator {
     }
 
     private fun isAvailable(representation: ImmutableRepresentation): Boolean =
-        representation == ImmutableRepresentation.MULTI_FIELD_VALUE
+        representation == ImmutableRepresentation.FINAL_CLASS
 }
 
 internal fun componentNames(dimension: Int): List<String> = when (dimension) {

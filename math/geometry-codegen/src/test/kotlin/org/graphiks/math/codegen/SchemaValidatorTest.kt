@@ -134,7 +134,7 @@ class SchemaValidatorTest {
     }
 
     @Test
-    fun `unavailable target representation requires fallback`() {
+    fun `future multi field target requires fallback`() {
         val error = assertFailsWith<SchemaValidationException> {
             SchemaValidator.validate(
                 schemaOf(
@@ -142,7 +142,7 @@ class SchemaValidatorTest {
                         Semantic.VECTOR,
                         2,
                         ScalarId.F32,
-                        targetRepresentation = ImmutableRepresentation.FINAL_CLASS,
+                        targetRepresentation = ImmutableRepresentation.MULTI_FIELD_VALUE,
                         fallbackRepresentation = null,
                     ),
                 ),
@@ -150,8 +150,23 @@ class SchemaValidatorTest {
         }
 
         assertEquals(
-            "Vector2F32 requires fallback representation when FINAL_CLASS is unavailable",
+            "Vector2F32 requires fallback representation when MULTI_FIELD_VALUE is unavailable",
             error.message,
+        )
+    }
+
+    @Test
+    fun `current final class target does not require fallback`() {
+        SchemaValidator.validate(
+            schemaOf(
+                primitive(
+                    Semantic.VECTOR,
+                    2,
+                    ScalarId.F32,
+                    targetRepresentation = ImmutableRepresentation.FINAL_CLASS,
+                    fallbackRepresentation = null,
+                ),
+            ),
         )
     }
 
