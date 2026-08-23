@@ -45,6 +45,7 @@ import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
@@ -54,6 +55,43 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductRouterTest {
+    @Test
+    fun `public stroke refusal terminates before generic path packets or native submission`() {
+        val surface = Surface(8, 8)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(2f, 2f, 6f, 6f),
+                Paint.stroke(ColorARGB.Red, 2f).copy(antiAlias = true),
+            )
+        }
+        val operations = surface.snapshotOps()
+        val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = operations,
+            target = org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(8, 8, "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = harness.backend.capabilities,
+        )
+
+        assertEquals("unsupported.stroke.rect_anti_alias", inventory.preparedRefusal?.code)
+        assertTrue(inventory.visualCommands.isEmpty())
+        assertTrue(inventory.visualCommands.none { it.normalized is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillPath })
+
+        val route = GPUPreparedSurfaceProductRouter.route(
+            operations,
+            8,
+            8,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+            harness.port,
+        )
+
+        val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(route)
+        assertEquals("unsupported.stroke.rect_anti_alias", terminal.diagnostic.code.value)
+        assertEquals(0, harness.backend.prepareCalls)
+        assertEquals(0, harness.backend.session.submitCalls)
+    }
+
     @Test
     fun `flush snapshot frames reach the execution port while BGRA8 renders prepared with BGRA byte order`() {
         val snapshotBytes = byteArrayOf(1, 2, 3, 4)

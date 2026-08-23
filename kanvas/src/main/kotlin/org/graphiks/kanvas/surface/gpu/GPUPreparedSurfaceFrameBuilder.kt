@@ -1089,6 +1089,11 @@ private fun collectPreparedImageVisuals(
                 operation.texRects.map {
                     PreparedVisualSource.Image(operationIndex, operation.atlas)
                 }
+            is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
+                List(4) { PreparedVisualSource.Core(operationIndex) }
+            } else {
+                listOf(PreparedVisualSource.Core(operationIndex))
+            }
             is DisplayOp.DrawText -> {
                 if (
                     operationIndex in inventory.elidedTextOperationIndices ||

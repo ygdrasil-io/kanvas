@@ -28,7 +28,39 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class GPUFramePathApiInventoryNativeSmokeTest {
+    @Test
+    fun `public Surface render expands one bounded stroke rect in one native frame`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val surface = Surface(width = 64, height = 64)
+        surface.canvas {
+            drawRect(
+                Rect.fromLTRB(16f, 16f, 48f, 48f),
+                Paint.stroke(Color.RED, 6f).copy(antiAlias = false),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(4, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertEquals(4, result.stats.drawCallCount)
+            assertEquals(1L, requireNotNull(GPUBackendRuntimeNativeFactory.createOrNull()).runtimeTelemetry.submissions)
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 32, 16, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 32, 47, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 16, 32, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 47, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 8, 8, 64))
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
     @Test
     fun `public Surface render submits bounded linear radial and sweep CorePrimitive gradients`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
@@ -158,5 +190,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val offset = (y * 32 + x) * 4
         val actual = (0..3).map { bytes[offset + it].toInt() and 0xff }
         assertEquals(expected, actual, "pixel ($x,$y)")
+    }
+
+    private fun rgba(bytes: UByteArray, x: Int, y: Int, width: Int): List<Int> {
+        val offset = (y * width + x) * 4
+        return (0..3).map { channel -> bytes[offset + channel].toInt() }
     }
 }

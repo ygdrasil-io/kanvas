@@ -68,6 +68,34 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
+    fun `public DrawRect stroke records four ordinary fill visuals with one source operation ownership`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRect(
+                        Rect.fromLTRB(8f, 8f, 24f, 20f),
+                        Paint.stroke(Color.RED, 4f).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.facts}"
+            },
+        )
+        assertEquals(4, ready.visualOperationCount)
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(listOf(0, 1, 2, 3), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(4, packets.size)
+    }
+
+    @Test
     fun `public DrawRRect linear gradient records the analytic 656 byte CorePrimitive program`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(

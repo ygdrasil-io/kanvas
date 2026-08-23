@@ -114,7 +114,10 @@ class GpuEvidenceCatalogTest {
         assertEquals("surface-srgb-linear-premul-src-over", translucentOracle.oracleId)
         assertEquals(2, translucentOracle.version)
         assertEquals(0, cases.first { it.descriptor.id.value == "scissor-overlay" }.descriptor.comparison?.perChannelTolerance)
-        assertEquals(0, cases.first { it.descriptor.id.value == "stroke-rect-outline" }.descriptor.comparison?.perChannelTolerance)
+        val strokeRect = cases.first { it.descriptor.id.value == "stroke-rect-outline" }
+        assertEquals(0, strokeRect.descriptor.comparison?.perChannelTolerance)
+        assertIs<KanvasSurfaceProgram>(strokeRect.program)
+        assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(strokeRect.program).routeId)
 
         listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })

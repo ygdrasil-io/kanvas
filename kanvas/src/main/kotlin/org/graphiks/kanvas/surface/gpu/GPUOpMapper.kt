@@ -164,6 +164,42 @@ internal object GPUOpMapper {
             if (operationIndex in elidedOperationIndices) {
                 return@forEachIndexed
             }
+            if (operation is DisplayOp.DrawRect && operation.paint.isStroke()) {
+                val firstCommandId = nextCommandId()
+                when (
+                    val lowered = GPUPreparedStrokeRectLowerer.lower(
+                        operation = operation,
+                        firstCommandId = GPUDrawCommandID(firstCommandId),
+                        firstPaintOrder = firstCommandId,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                        operationIndex = operationIndex,
+                    )
+                ) {
+                    is GPUPreparedStrokeRectLowering.Ready -> {
+                        visual += lowered.commands
+                        recordCommandIds(
+                            operationIndex,
+                            lowered.commands.mapTo(linkedSetOf()) { command ->
+                                command.normalized.commandId.value
+                            },
+                        )
+                    }
+                    is GPUPreparedStrokeRectLowering.Refused -> return GPUOpMapping(
+                        visualCommands = emptyList(),
+                        stateEvents = stateEvents.toList(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = firstCommandId,
+                            operationIndex = lowered.operationIndex,
+                            code = lowered.code,
+                            facts = lowered.facts,
+                        ),
+                    )
+                }
+                return@forEachIndexed
+            }
             when (operation) {
                 is DisplayOp.Annotation -> {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Annotation)

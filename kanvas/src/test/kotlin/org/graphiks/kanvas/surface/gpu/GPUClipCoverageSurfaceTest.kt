@@ -80,7 +80,7 @@ class GPUClipCoverageSurfaceTest {
             drawRect(RectF32(2f, 2f, 12f, 12f), Paint.fill(ColorARGB.Red))
             drawRRect(RRectF32.of(RectF32(20f, 2f, 30f, 12f), radius = 2f), Paint.fill(ColorARGB.Red))
             drawPath(Path { moveTo(2f, 22f); lineTo(12f, 22f); lineTo(7f, 30f); close() }, Paint.fill(ColorARGB.Red))
-            drawRect(RectF32(14f, 22f, 26f, 29f), Paint.stroke(ColorARGB.Red, 1f))
+            drawRect(RectF32(14f, 22f, 26f, 29f), Paint.stroke(ColorARGB.Red, 2f).copy(antiAlias = false))
             drawImage(bluePixel(), RectF32(24f, 14f, 30f, 20f), Paint())
             restore()
         }

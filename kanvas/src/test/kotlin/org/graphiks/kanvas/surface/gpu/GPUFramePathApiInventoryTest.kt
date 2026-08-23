@@ -70,6 +70,33 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
     @Test
+    fun `public stroke rect inventory reports analytic four band fills without a path key`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(8f, 8f, 24f, 20f),
+                    Paint.stroke(Color.RED, 4f).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertEquals(null, inventory.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), inventory.visualCommands.map { it.normalized.commandId.value })
+        assertTrue(inventory.visualCommands.all { visual ->
+            visual.normalized is NormalizedDrawCommand.FillRect &&
+                visual.normalized.source.operation == "drawRect.stroke.analytic-four-band"
+        })
+        assertTrue(inventory.visualCommands.none { visual ->
+            (visual.normalized as? NormalizedDrawCommand.FillPath)?.pathKey?.contains("rect-stroke") == true
+        })
+    }
+
+    @Test
     fun `public inventory path prepares vertices with text and maps the snapshot once`() {
         val operations = listOf(
             DisplayOp.DrawRect(
