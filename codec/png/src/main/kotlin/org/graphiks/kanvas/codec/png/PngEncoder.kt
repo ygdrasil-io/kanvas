@@ -391,29 +391,16 @@ public object PngEncoder {
             if (src.width() <= 0 || src.height() <= 0) return null
             if (!canEncode(src.info)) return null
             val bitmap = Bitmap(src.info)
-            when (src.info.colorType) {
-                ColorType.RGBA_8888 -> for (y in 0 until src.height()) {
-                    for (x in 0 until src.width()) {
-                        bitmap.setArgb(x, y, src.getArgb(x, y))
-                    }
+            for (y in 0 until src.height()) {
+                for (x in 0 until src.width()) {
+                    bitmap.setArgb(x, y, src.getArgb(x, y))
                 }
-                ColorType.RGBA_F16_NORM -> {
-                    val rgba = FloatArray(4)
-                    for (y in 0 until src.height()) {
-                        for (x in 0 until src.width()) {
-                            if (!src.getPremulRgbaF16(x, y, rgba)) return null
-                            bitmap.setPremulRgbaF16(x, y, rgba[0], rgba[1], rgba[2], rgba[3])
-                        }
-                    }
-                }
-                else -> return null
             }
             return bitmap
         }
     }
 
-    private fun canEncode(info: ImageInfo): Boolean =
-        info.colorType == ColorType.RGBA_8888 || info.colorType == ColorType.RGBA_F16_NORM
+    private fun canEncode(info: ImageInfo): Boolean = info.colorType == ColorType.RGBA_8888
 
     private val SPACE: Byte = 0x20
     private val NUL: Byte = 0x00

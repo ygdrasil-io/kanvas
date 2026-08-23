@@ -123,29 +123,16 @@ public object JpegEncoder {
             if (src.width() !in 1..0xFFFF || src.height() !in 1..0xFFFF) return null
             if (!canEncode(src.info)) return null
             val bm = Bitmap(src.info)
-            when (src.info.colorType) {
-                ColorType.RGBA_8888 -> for (y in 0 until src.height()) {
-                    for (x in 0 until src.width()) {
-                        bm.setArgb(x, y, src.getArgb(x, y))
-                    }
+            for (y in 0 until src.height()) {
+                for (x in 0 until src.width()) {
+                    bm.setArgb(x, y, src.getArgb(x, y))
                 }
-                ColorType.RGBA_F16_NORM -> {
-                    val rgba = FloatArray(4)
-                    for (y in 0 until src.height()) {
-                        for (x in 0 until src.width()) {
-                            if (!src.getPremulRgbaF16(x, y, rgba)) return null
-                            bm.setPremulRgbaF16(x, y, rgba[0], rgba[1], rgba[2], rgba[3])
-                        }
-                    }
-                }
-                else -> return null
             }
             return bm
         }
     }
 
-    private fun canEncode(info: ImageInfo): Boolean =
-        info.colorType == ColorType.RGBA_8888 || info.colorType == ColorType.RGBA_F16_NORM
+    private fun canEncode(info: ImageInfo): Boolean = info.colorType == ColorType.RGBA_8888
 }
 
 /**

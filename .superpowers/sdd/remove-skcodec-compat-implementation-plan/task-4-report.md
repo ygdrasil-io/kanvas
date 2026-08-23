@@ -7,9 +7,9 @@
 - Les destinations de décodage ne permettent que `RGBA_8888` et
   `RGBA_F16_NORM`, avec validation de la géométrie, du format, de l’alpha et
   de l’identité de `ImageColorSpace`.
-- Les parcours F16 utilisent les accès `getPremulRgbaF16` et
-  `setPremulRgbaF16`. Les copies depuis `Pixmap` passent par ses coordonnées,
-  et respectent donc son `rowBytes`.
+- Les parcours F16 de décodage utilisent les accès `getPremulRgbaF16` et
+  `setPremulRgbaF16`. Les copies `RGBA_8888` depuis `Pixmap` passent par ses
+  coordonnées, et respectent donc son `rowBytes`.
 - `PixmapUtils` est déplacé vers `org.graphiks.kanvas.codec`, où ses APIs sont
   `orient(Bitmap, Bitmap, EncodedOrigin)` et `swapWidthHeight(ImageInfo)`.
   Les chemins JPEG conservent le profil ICC et l’orientation EXIF.
@@ -21,9 +21,12 @@
   `kInvalidConversion`.
 - `JpegDocument.decode` hierarchy refuse le retagging d’espace couleur ; les
   sorties `RGBA_F16_NORM` utilisent `AlphaType.PREMUL`.
-- Les overloads `Pixmap` PNG/JPEG copient les composants F16 prémultipliés
-  directement. `Pixmap.getPremulRgbaF16` lit avec le `rowBytes` déclaré et
-  protège son usage aux formats F16.
+- Les encodeurs PNG/JPEG refusent explicitement les entrées
+  `RGBA_F16_NORM`, Bitmap comme Pixmap : leur sérialisation actuelle est 8-bit
+  et ne doit pas annoncer une fidélité F16 inexistante.
+- `Pixmap.getPremulRgbaF16` reste une API canonique, lit avec le `rowBytes`
+  déclaré et protège son usage aux formats F16. `PixmapTest` couvre deux
+  lignes avec padding, valeurs distinctes, hors limites et refus non-F16.
 
 ## Vérifications
 
@@ -34,6 +37,7 @@
 
 - `refactor(codec): migrate png and jpeg raster contracts`
 - `fix(codec): tighten png jpeg raster contracts`
+- `fix(codec): refuse lossy F16 encoder inputs`
 
 ## Hors périmètre
 
