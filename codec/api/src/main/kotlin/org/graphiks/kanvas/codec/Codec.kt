@@ -1,10 +1,11 @@
 package org.graphiks.kanvas.codec
 
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.image.capabilities
 import org.graphiks.kanvas.color.icc.IccProfile
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -43,14 +44,13 @@ public interface CodecDecoderProvider {
  * [Decoders].
  *
  * **API surface** (mapped from upstream) :
- *  - [getInfo] — a "reasonable [SkImageInfo] to decode into" ; carries
- *    the encoded width/height, the natural [org.skia.foundation.SkColorType]
+ *  - [getInfo] — a reasonable [ImageInfo] to decode into; carries
+ *    the encoded width/height, the natural Kanvas color type
  *    (F16 for ≥16-bpc PNGs, 8888 otherwise), and the colour space derived
  *    from the embedded ICC profile (or sRGB if the file has none).
- *  - [getPixels] — fills a caller-allocated [SkBitmap], mirroring
- *    `Result Codec::getPixels(const SkImageInfo&, void*, size_t,
- *    const Options*)`. The Kotlin signature collapses `(void*, size_t)`
- *    into the bitmap, since [SkBitmap] already carries its row stride.
+ *  - [getPixels] — fills a caller-allocated [Bitmap], mirroring the
+ *    upstream pixel-decode call. The Kanvas bitmap owns its pixels and
+ *    carries the target layout in its [Bitmap.info].
  *  - [getImage] — convenience that allocates a fresh bitmap matching
  *    [getInfo] and delegates to [getPixels]. Mirrors upstream's
  *    `getImage()` overload.
@@ -87,7 +87,7 @@ public abstract class Codec protected constructor() {
     }
 
     /** Default decode target. See class kdoc. */
-    public abstract fun getInfo(): SkImageInfo
+    public abstract fun getInfo(): ImageInfo
 
     /** On-disk format of the encoded bytes this codec was created from. */
     public abstract fun getEncodedFormat(): EncodedImageFormat
@@ -110,8 +110,8 @@ public abstract class Codec protected constructor() {
      * already upright. Format-specific subclasses with EXIF-aware
      * decoders override to surface
      * the parsed value ; callers that wish to materialise the rotation
-     * post-decode can compose [EncodedOrigin.toMatrix] /
-     * [org.skia.utils.PixmapUtils.Orient].
+     * post-decode can compose [EncodedOrigin.toMatrix] with the Kanvas
+     * orientation utility provided by its codec route.
      */
     public open fun getOrigin(): EncodedOrigin = EncodedOrigin.TOP_LEFT
 
@@ -119,34 +119,31 @@ public abstract class Codec protected constructor() {
     public fun bounds(): RectI32 = RectI32.ofSize(getInfo().width, getInfo().height)
 
     /**
-     * Decode into [dst], whose [SkBitmap.width] / [SkBitmap.height] /
-     * [SkBitmap.colorType] / [SkBitmap.colorSpace] **must** match the
-     * `info` argument. Mirrors `Codec::getPixels(const SkImageInfo&,
-     * void* dst, size_t rowBytes, const Options*)` — Kotlin folds the
-     * `(dst, rowBytes)` pair into a single [SkBitmap] since our bitmap
-     * already carries its stride.
+     * Decode into [dst], whose [Bitmap.info] **must** match [info].
+     * The Kanvas bitmap owns its pixels and exposes the layout described by
+     * its [ImageInfo].
      *
      * A codec may additionally require `info` to match its source geometry,
      * alpha representation, and colour space when it does not implement the
-     * requested scale or transforms. Returns [Result.kInvalidParameters] if
-     * the bitmap disagrees with `info`, [Result.kInvalidScale] or
-     * [Result.kInvalidConversion] for unsupported source requests, and
-     * [Result.kSuccess] when the pixels were written.
+     * requested scale or transforms. Destination metadata mismatches return
+     * [Result.kInvalidParameters]. A declared conversion without an active
+     * Kanvas capability returns [Result.kInvalidConversion]. Unsupported
+     * geometry scaling returns [Result.kInvalidScale]. [Result.kSuccess]
+     * means the pixels were written.
      */
-    public abstract fun getPixels(info: SkImageInfo, dst: SkBitmap): Result
+    public abstract fun getPixels(info: ImageInfo, dst: Bitmap): Result
 
     /** Default-info overload — equivalent to `getPixels(getInfo(), dst)`. */
-    public fun getPixels(dst: SkBitmap): Result = getPixels(getInfo(), dst)
+    public fun getPixels(dst: Bitmap): Result = getPixels(getInfo(), dst)
 
     /**
-     * Mirrors `Codec::Result Codec::getPixels(const SkImageInfo&,
-     * void*, size_t, const Options*)`. The Kotlin signature folds
-     * `(dst, rowBytes)` into [SkBitmap] (see [getPixels] above) and
-     * adds the [opts] hook for animated decoders. Default base-class
+     * Mirrors the upstream options-bearing pixel-decode overload. The Kanvas
+     * signature accepts [Bitmap] (see [getPixels] above) and adds the [opts]
+     * hook for animated decoders. Default base-class
      * behaviour ignores [opts] and dispatches to the single-frame path
      * — only multi-frame codecs (GIF, animated WebP) override.
      */
-    public open fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result =
+    public open fun getPixels(info: ImageInfo, dst: Bitmap, opts: Options): Result =
         getPixels(info, dst)
 
     /**
@@ -221,20 +218,17 @@ public abstract class Codec protected constructor() {
     public open fun getRepetitionCount(): Int = 0
 
     /**
-     * Allocate a fresh [SkBitmap] matching `info` and decode into it.
-     * Mirrors upstream's `std::tuple<sk_sp<SkImage>, Codec::Result>
-     * Codec::getImage(const SkImageInfo&)`. Returns `(null, result)`
+     * Allocate a fresh [Bitmap] matching [info] and decode into it.
+     * Returns `(null, result)`
      * if the decode failed for any reason other than [Result.kSuccess]
      * (the partial bitmap is dropped — no incremental decoding in
      * D3.1).
      */
-    public fun getImage(info: SkImageInfo = getInfo()): Pair<SkBitmap?, Result> {
-        val bitmap = SkBitmap(
-            width = info.width,
-            height = info.height,
-            colorSpace = info.colorSpace,
-            colorType = info.colorType,
-        )
+    public fun getImage(info: ImageInfo = getInfo()): Pair<Bitmap?, Result> {
+        if (!info.colorType.capabilities().allocatable) {
+            return null to Result.kInvalidConversion
+        }
+        val bitmap = Bitmap(info)
         val result = getPixels(info, bitmap)
         return if (result == Result.kSuccess) bitmap to result else null to result
     }
@@ -258,8 +252,8 @@ public abstract class Codec protected constructor() {
          * Sniff the leading bytes of [data] and return a codec that can
          * decode it, or `null` if no registered format matches.
          *
-         * Mirrors `Codec::MakeFromData(sk_sp<const SkData>, ...)` ; the
-         * Kotlin overload takes a [ByteArray] for symmetry with
+         * Mirrors the upstream encoded-data factory; the Kotlin overload takes
+         * a [ByteArray] for symmetry with
          * [InputStream.readBytes].
          */
         public fun MakeFromData(data: ByteArray): Codec? {

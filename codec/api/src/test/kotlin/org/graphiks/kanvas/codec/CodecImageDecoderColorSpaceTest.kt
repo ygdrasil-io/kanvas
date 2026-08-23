@@ -12,13 +12,13 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
+import org.graphiks.kanvas.image.ImageInfo
 
 class CodecImageDecoderColorSpaceTest {
     @Test
@@ -89,6 +89,45 @@ class CodecImageDecoderColorSpaceTest {
         assertArrayEquals(expected, codec.getICCProfile()!!.bytes)
     }
 
+    @Test
+    fun `codec info preserves its ImageColorSpace without an adapter`() {
+        val colorSpace = ImageColorSpace.linearSrgb()
+
+        assertEquals(colorSpace, FakeCodec(colorSpace).getInfo().colorSpace)
+    }
+
+    @Test
+    fun `decoder refuses a non canonical RGBA bitmap instead of reinterpreting it`() {
+        val decoder = object : Codec.Decoder {
+            override val name: String = TEST_DECODER_NAME
+            override fun matches(data: ByteArray): Boolean = data.contentEquals(TEST_DATA)
+            override fun make(data: ByteArray): Codec = FakeCodec(
+                colorSpace = ImageColorSpace.sRGB(),
+                colorType = ColorType.BGRA_8888,
+            )
+        }
+        Codec.Decoders.register(decoder)
+
+        val result = try {
+            CodecImageDecoder().decode(TEST_DATA)
+        } finally {
+            Codec.Decoders.unregister(TEST_DECODER_NAME)
+        }
+
+        assertEquals(ImageDecodeResult.Failure("codec.decode-failed:kInvalidConversion"), result)
+    }
+
+    @Test
+    fun `getImage refuses an unavailable output conversion`() {
+        val (bitmap, result) = FakeCodec(
+            colorSpace = ImageColorSpace.sRGB(),
+            colorType = ColorType.R8_UNORM,
+        ).getImage()
+
+        assertEquals(Codec.Result.kInvalidConversion, result)
+        assertEquals(null, bitmap)
+    }
+
     private fun decodeWith(colorSpace: ImageColorSpace): ImageDecodeResult {
         val data = "kanvas-color-space-test".toByteArray()
         val decoder = object : Codec.Decoder {
@@ -107,11 +146,12 @@ class CodecImageDecoderColorSpaceTest {
     private class FakeCodec(
         private val colorSpace: ImageColorSpace,
         private val iccProfile: IccProfile? = null,
+        private val colorType: ColorType = ColorType.RGBA_8888,
     ) : Codec() {
-        override fun getInfo(): SkImageInfo = SkImageInfo.Make(
+        override fun getInfo(): ImageInfo = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = colorType,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = colorSpace,
         )
@@ -120,8 +160,8 @@ class CodecImageDecoderColorSpaceTest {
 
         override fun getICCProfile(): IccProfile? = iccProfile
 
-        override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
-            dst.pixels8888[0] = SAMPLE_ARGB
+        override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
+            dst.setArgb(0, 0, SAMPLE_ARGB)
             return Result.kSuccess
         }
     }
