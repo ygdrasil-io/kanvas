@@ -6602,11 +6602,3 @@ tasks.register("generateGpuPhase6CoverageFamiliesEvidence") {
     description = "Delegates to :integration-tests:skia-evidence:generateGpuPhase6CoverageFamiliesEvidence."
     dependsOn(":integration-tests:skia-evidence:generateGpuPhase6CoverageFamiliesEvidence")
 }
-
-tasks.register("generateMathPrimitives") {
-    dependsOn(":math:geometry-codegen:generateMathPrimitives")
-}
-
-tasks.register("verifyMathPrimitivesGenerated") {
-    dependsOn(":math:geometry-codegen:verifyMathPrimitivesGenerated")
-}

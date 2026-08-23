@@ -80,7 +80,7 @@ Never edit these files by hand. After changing
 `MathPrimitiveManifest.kt` or the emitter, synchronize them explicitly:
 
 ```shell
-rtk ./gradlew generateMathPrimitives
+rtk ./gradlew :math:geometry-codegen:generateMathPrimitives
 ```
 
 Verify the exact file list, byte content, absence of stale outputs, generation
@@ -88,7 +88,7 @@ determinism, and forbidden immutable identity usage without modifying the
 checkout:
 
 ```shell
-rtk ./gradlew verifyMathPrimitivesGenerated
+rtk ./gradlew :math:geometry-codegen:verifyMathPrimitivesGenerated
 ```
 
 Normal JVM/JS compilation and test tasks consume the versioned sources as
