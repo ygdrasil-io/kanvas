@@ -21,9 +21,12 @@ class KotlinEmitterTest {
     }
 
     @Test
-    fun `manifest emits only the selected vector inventory`() {
+    fun `manifest emits only the selected primitive inventory`() {
         assertEquals(
             listOf(
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/MutablePoint2F32.kt",
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2F32.kt",
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point3F32.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector2F32.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector2F64.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector3F32.kt",
@@ -35,6 +38,20 @@ class KotlinEmitterTest {
             ),
             KotlinEmitter.emit(MathPrimitiveManifest.schema).files.map { it.relativePath },
         )
+    }
+
+    @Test
+    fun `point emission selects point vector operations only`() {
+        val source = emitted("Point2F32.kt")
+
+        assertContains(source, "operator fun plus(delta: Vector2F32): Point2F32")
+        assertContains(source, "operator fun minus(delta: Vector2F32): Point2F32")
+        assertContains(source, "operator fun minus(other: Point2F32): Vector2F32")
+        assertFalse("fun unaryMinus" in source)
+        assertFalse("operator fun times" in source)
+        assertFalse("fun dot" in source)
+        assertFalse("fun cross" in source)
+        assertFalse("fun normalized" in source)
     }
 
     @Test

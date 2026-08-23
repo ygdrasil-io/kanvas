@@ -13,6 +13,8 @@ internal object MathPrimitiveManifest {
             vector(4, ScalarId.F32),
             vector(2, ScalarId.F64, generateMutable = true),
             vector(2, ScalarId.I32),
+            point(2, ScalarId.F32, generateMutable = true),
+            point(3, ScalarId.F32),
         ),
     )
 
@@ -31,6 +33,18 @@ internal object MathPrimitiveManifest {
 
             ScalarId.I32 -> setOf(Capability.DIVIDE)
         },
+        generateMutable = generateMutable,
+    )
+
+    private fun point(
+        dimension: Int,
+        scalar: ScalarId,
+        generateMutable: Boolean = false,
+    ): PrimitiveSpec = PrimitiveSpec(
+        semantic = Semantic.POINT,
+        dimension = dimension,
+        scalar = scalar,
+        capabilities = setOf(Capability.FINITE_CHECK),
         generateMutable = generateMutable,
     )
 }

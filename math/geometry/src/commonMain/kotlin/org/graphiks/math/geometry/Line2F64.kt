@@ -10,7 +10,6 @@ import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqualUlps
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
-import org.graphiks.math.vector.Vector2F32
 
 /**
  * Double-precision 2D line segment.
@@ -42,8 +41,8 @@ public class Line2F64(source: Array<Point2F64>) {
     /** Returns a defensive copy of the endpoints array. */
     public fun toPointsArray(): Array<Point2F64> = arrayOf(pts[0], pts[1])
 
-    /** Sets both endpoints from [Vector2F32] points. */
-    fun set(p0: Vector2F32, p1: Vector2F32): Line2F64 {
+    /** Sets both endpoints from [Point2F32] values. */
+    fun set(p0: Point2F32, p1: Point2F32): Line2F64 {
         pts[0] = Point2F64(p0.x.toDouble(), p0.y.toDouble())
         pts[1] = Point2F64(p1.x.toDouble(), p1.y.toDouble())
         return this

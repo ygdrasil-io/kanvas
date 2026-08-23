@@ -8,7 +8,13 @@ internal data class SemanticPrimitiveModel(
     val representation: ImmutableRepresentation,
 ) {
     val mutableTypeName: String get() = "Mutable$typeName"
-    val packageName: String get() = "org.graphiks.math.${spec.semantic.name.lowercase()}"
+    val packageName: String
+        get() = when (spec.semantic) {
+            Semantic.POINT -> "org.graphiks.math.geometry"
+            Semantic.VECTOR -> "org.graphiks.math.vector"
+        }
+    val vectorTypeName: String get() = "Vector${spec.dimension}${spec.scalar}"
+    val vectorPackageName: String get() = "org.graphiks.math.vector"
     val generatedRoot: String
         get() = when (spec.semantic) {
             Semantic.POINT -> "math/geometry/src/generated/kotlin"

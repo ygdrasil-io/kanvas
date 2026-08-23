@@ -24,9 +24,13 @@ internal object KotlinEmitter {
     }
 
     private fun emitImmutable(model: SemanticPrimitiveModel): GeneratedFile {
-        require(model.spec.semantic == Semantic.VECTOR) {
-            "Task 2 only emits VECTOR primitives; unsupported semantic ${model.spec.semantic}"
+        return when (model.spec.semantic) {
+            Semantic.POINT -> emitPointImmutable(model)
+            Semantic.VECTOR -> emitVectorImmutable(model)
         }
+    }
+
+    private fun emitVectorImmutable(model: SemanticPrimitiveModel): GeneratedFile {
         val scalarType = model.scalar.typeName()
         val vectorType = ClassName(model.packageName, model.typeName)
         val constructor = FunSpec.constructorBuilder().apply {
@@ -101,6 +105,13 @@ internal object KotlinEmitter {
     }
 
     private fun emitMutable(model: SemanticPrimitiveModel): GeneratedFile {
+        return when (model.spec.semantic) {
+            Semantic.POINT -> emitPointMutable(model)
+            Semantic.VECTOR -> emitVectorMutable(model)
+        }
+    }
+
+    private fun emitVectorMutable(model: SemanticPrimitiveModel): GeneratedFile {
         val scalarType = model.scalar.typeName()
         val immutableType = ClassName(model.packageName, model.typeName)
         val mutableType = ClassName(model.packageName, model.mutableTypeName)
@@ -169,6 +180,111 @@ internal object KotlinEmitter {
         return generatedFile(model, model.mutableTypeName, file)
     }
 
+    private fun emitPointImmutable(model: SemanticPrimitiveModel): GeneratedFile {
+        val scalarType = model.scalar.typeName()
+        val pointType = ClassName(model.packageName, model.typeName)
+        val vectorType = ClassName(model.vectorPackageName, model.vectorTypeName)
+        val constructor = FunSpec.constructorBuilder().apply {
+            model.components.forEach { component -> addParameter(component, scalarType) }
+        }.build()
+        val point = TypeSpec.classBuilder(model.typeName)
+            .addModifiers(KModifier.PUBLIC)
+            .primaryConstructor(constructor)
+            .apply {
+                model.components.forEach { component ->
+                    addProperty(
+                        PropertySpec.builder(component, scalarType)
+                            .addModifiers(KModifier.PUBLIC)
+                            .initializer(component)
+                            .build(),
+                    )
+                }
+                addFunction(
+                    pointOffsetFunction(
+                        "plus",
+                        model,
+                        "delta",
+                        vectorType,
+                        model.components.map { "$it + delta.$it" },
+                    ),
+                )
+                addFunction(
+                    pointOffsetFunction(
+                        "minus",
+                        model,
+                        "delta",
+                        vectorType,
+                        model.components.map { "$it - delta.$it" },
+                    ),
+                )
+                addFunction(pointDifferenceFunction(model, pointType, vectorType))
+                addFunction(distanceToFunction(model, pointType))
+                addFunction(midpointToFunction(model, pointType))
+                addFunction(isFiniteFunction(model))
+                if (model.spec.generateMutable) addFunction(toMutableFunction(model))
+                addFunction(equalsFunction(model))
+                addFunction(hashCodeFunction(model))
+                addFunction(toStringFunction(model))
+                addType(pointCompanionObject(model))
+            }
+            .build()
+        val file = baseFile(model, model.typeName)
+            .addImport("kotlin.math", "abs", "sqrt")
+            .addType(point)
+            .build()
+        return generatedFile(model, model.typeName, file)
+    }
+
+    private fun emitPointMutable(model: SemanticPrimitiveModel): GeneratedFile {
+        val scalarType = model.scalar.typeName()
+        val immutableType = ClassName(model.packageName, model.typeName)
+        val mutableType = ClassName(model.packageName, model.mutableTypeName)
+        val vectorType = ClassName(model.vectorPackageName, model.vectorTypeName)
+        val constructor = FunSpec.constructorBuilder().apply {
+            model.components.forEach { component -> addParameter(component, scalarType) }
+        }.build()
+        val mutable = TypeSpec.classBuilder(model.mutableTypeName)
+            .addModifiers(KModifier.PUBLIC)
+            .primaryConstructor(constructor)
+            .apply {
+                model.components.forEach { component ->
+                    addProperty(
+                        PropertySpec.builder(component, scalarType)
+                            .mutable(true)
+                            .addModifiers(KModifier.PUBLIC)
+                            .initializer(component)
+                            .build(),
+                    )
+                }
+                addFunction(
+                    FunSpec.builder("translateBy")
+                        .addModifiers(KModifier.PUBLIC)
+                        .addParameter("delta", vectorType)
+                        .apply {
+                            model.components.forEach { addStatement("$it += delta.$it") }
+                        }
+                        .build(),
+                )
+                addFunction(hasSameComponentsFunction(model, immutableType))
+                addFunction(hasSameComponentsFunction(model, mutableType))
+                addFunction(
+                    FunSpec.builder("toImmutable")
+                        .addModifiers(KModifier.PUBLIC)
+                        .returns(immutableType)
+                        .addStatement(
+                            "return %T(${model.components.joinToString()})",
+                            immutableType,
+                        )
+                        .build(),
+                )
+            }
+            .build()
+        val file = baseFile(model, model.mutableTypeName)
+            .addType(mutable)
+            .build()
+        return generatedFile(model, model.mutableTypeName, file)
+    }
+
     private fun baseFile(model: SemanticPrimitiveModel, fileName: String): FileSpec.Builder =
         FileSpec.builder(model.packageName, fileName).addFileComment(GENERATED_HEADER)
 
@@ -195,6 +311,95 @@ internal object KotlinEmitter {
             .addParameter(parameterName, type)
             .returns(type)
             .addStatement("return %T(${expressions.joinToString()})", type)
+            .build()
+    }
+
+    private fun pointOffsetFunction(
+        name: String,
+        model: SemanticPrimitiveModel,
+        parameterName: String,
+        vectorType: ClassName,
+        expressions: List<String>,
+    ): FunSpec {
+        val pointType = ClassName(model.packageName, model.typeName)
+        return FunSpec.builder(name)
+            .addModifiers(KModifier.PUBLIC, KModifier.OPERATOR)
+            .addParameter(parameterName, vectorType)
+            .returns(pointType)
+            .addStatement("return %T(${expressions.joinToString()})", pointType)
+            .build()
+    }
+
+    private fun pointDifferenceFunction(
+        model: SemanticPrimitiveModel,
+        pointType: ClassName,
+        vectorType: ClassName,
+    ): FunSpec = FunSpec.builder("minus")
+        .addModifiers(KModifier.PUBLIC, KModifier.OPERATOR)
+        .addParameter("other", pointType)
+        .returns(vectorType)
+        .addStatement(
+            "return %T(${minusExpressions(model).joinToString()})",
+            vectorType,
+        )
+        .build()
+
+    private fun distanceToFunction(
+        model: SemanticPrimitiveModel,
+        pointType: ClassName,
+    ): FunSpec {
+        require(model.scalar.id != ScalarId.I32)
+        val returnType = model.scalar.typeName()
+        val zero = if (model.scalar.id == ScalarId.F32) "0f" else "0.0"
+        val scalarName = returnType.toString()
+        return FunSpec.builder("distanceTo")
+            .addModifiers(KModifier.PUBLIC)
+            .addParameter("other", pointType)
+            .returns(returnType)
+            .apply {
+                model.components.forEach { component ->
+                    addStatement("val delta${component.uppercase()} = $component - other.$component")
+                }
+                beginControlFlow(
+                    "if (${model.components.joinToString(" || ") { "delta${it.uppercase()}.isNaN()" }})",
+                )
+                addStatement("return $scalarName.NaN")
+                endControlFlow()
+                beginControlFlow(
+                    "if (${model.components.joinToString(" || ") { "delta${it.uppercase()}.isInfinite()" }})",
+                )
+                addStatement("return $scalarName.POSITIVE_INFINITY")
+                endControlFlow()
+                addStatement(
+                    "val scale = maxOf(${model.components.joinToString { "abs(delta${it.uppercase()})" }})",
+                )
+                beginControlFlow("if (scale == $zero)")
+                addStatement("return $zero")
+                endControlFlow()
+                model.components.forEach { component ->
+                    addStatement("val scaled${component.uppercase()} = delta${component.uppercase()} / scale")
+                }
+                val sum = model.components.joinToString(" + ") { component ->
+                    "scaled${component.uppercase()} * scaled${component.uppercase()}"
+                }
+                addStatement("return scale * sqrt($sum)")
+            }
+            .build()
+    }
+
+    private fun midpointToFunction(
+        model: SemanticPrimitiveModel,
+        pointType: ClassName,
+    ): FunSpec {
+        require(model.scalar.id == ScalarId.F32)
+        val components = model.components.joinToString(",\n") { component ->
+            "(($component.toDouble() + other.$component.toDouble()) * 0.5).toFloat()"
+        }
+        return FunSpec.builder("midpointTo")
+            .addModifiers(KModifier.PUBLIC)
+            .addParameter("other", pointType)
+            .returns(pointType)
+            .addCode("return %T(\n$components,\n)\n", pointType)
             .build()
     }
 
@@ -489,6 +694,19 @@ internal object KotlinEmitter {
                     )
                 }
             }
+            .build()
+    }
+
+    private fun pointCompanionObject(model: SemanticPrimitiveModel): TypeSpec {
+        val pointType = ClassName(model.packageName, model.typeName)
+        val zero = model.zeroLiteral()
+        return TypeSpec.companionObjectBuilder()
+            .addProperty(
+                PropertySpec.builder("Origin", pointType)
+                    .addModifiers(KModifier.PUBLIC)
+                    .initializer("%T(${model.components.joinToString { zero }})", pointType)
+                    .build(),
+            )
             .build()
     }
 

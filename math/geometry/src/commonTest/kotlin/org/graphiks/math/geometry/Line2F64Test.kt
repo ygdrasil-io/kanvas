@@ -1,6 +1,5 @@
 package org.graphiks.math.geometry
 
-import org.graphiks.math.vector.Vector2F32
 import kotlin.test.Test
 
 class Line2F64Test {
@@ -13,9 +12,9 @@ class Line2F64Test {
     }
 
     @Test
-    fun `set from Vector2F32 pair`() {
+    fun `set from Point2F32 pair`() {
         val line = Line2F64()
-        line.set(Vector2F32(1f, 2f), Vector2F32(3f, 4f))
+        line.set(Point2F32(1f, 2f), Point2F32(3f, 4f))
         kotlin.test.assertEquals(1.0, line[0].x)
         kotlin.test.assertEquals(2.0, line[0].y)
         kotlin.test.assertEquals(3.0, line[1].x)
