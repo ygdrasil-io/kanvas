@@ -663,7 +663,7 @@ class Matrix3x3F32Test {
             val slot = MutablePoint2F32(-1f, -1f)
             val destination = arrayOf(slot)
             matrix.transformPoints(source, destination)
-            assertTrue(slot === destination[0]) // identity-ok: verifies destination reuses mutable element
+            assertTrue(slot === destination[0])
             assertNear(expectedX, slot.x)
             assertNear(expectedY, slot.y)
         }
@@ -682,8 +682,8 @@ class Matrix3x3F32Test {
 
         affine.transformVectors(source, destination)
 
-        assertTrue(first === destination[0]) // identity-ok: verifies destination reuses mutable element
-        assertTrue(second === destination[1]) // identity-ok: verifies destination reuses mutable element
+        assertTrue(first === destination[0])
+        assertTrue(second === destination[1])
         assertEquals(19f, first.x)
         assertEquals(27f, first.y)
         assertEquals(18f, second.x)
@@ -715,7 +715,7 @@ class Matrix3x3F32Test {
             3f, 7f, 13f,
         ).transformVectors(source, destination, count = 0)
 
-        assertTrue(slot === destination[0]) // identity-ok: verifies destination reuses mutable element
+        assertTrue(slot === destination[0])
         assertEquals(-7f, slot.x)
         assertEquals(-11f, slot.y)
     }
@@ -732,7 +732,7 @@ class Matrix3x3F32Test {
 
         matrix.transformHomogeneousPoints(arrayOf(Point2F32(2f, 3f)), destination)
 
-        assertTrue(slot === destination[0]) // identity-ok: verifies destination reuses mutable element
+        assertTrue(slot === destination[0])
         assertEquals(30f, slot.x)
         assertEquals(40f, slot.y)
         assertEquals(1f, slot.z)
