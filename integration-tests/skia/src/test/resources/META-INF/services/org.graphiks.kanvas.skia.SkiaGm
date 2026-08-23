@@ -275,7 +275,6 @@ org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadAlphaTypeGm
 org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadGridGm
 org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadNoBleedGm
 org.graphiks.kanvas.skia.gm.image.AyncYUVNoScaleGm
-org.graphiks.kanvas.skia.gm.image.Bc1TransparencyGm
 org.graphiks.kanvas.skia.gm.image.BicubicGm
 org.graphiks.kanvas.skia.gm.image.BigMatrixGm
 org.graphiks.kanvas.skia.gm.image.BitmapCopyGm
@@ -297,7 +296,6 @@ org.graphiks.kanvas.skia.gm.image.ColorWheelGm
 org.graphiks.kanvas.skia.gm.image.Colorspace2Gm
 org.graphiks.kanvas.skia.gm.image.ColorspaceGm
 org.graphiks.kanvas.skia.gm.image.CompositorQuadsImageGm
-org.graphiks.kanvas.skia.gm.image.CompressedTexturesGm
 org.graphiks.kanvas.skia.gm.image.CoordClampShaderGm
 org.graphiks.kanvas.skia.gm.image.CopyTo4444Gm
 org.graphiks.kanvas.skia.gm.image.Crbug224618Gm
@@ -315,7 +313,6 @@ org.graphiks.kanvas.skia.gm.image.EncodeAlphaJpegGm
 org.graphiks.kanvas.skia.gm.image.EncodeColorTypesGm
 org.graphiks.kanvas.skia.gm.image.EncodePlatformGm
 org.graphiks.kanvas.skia.gm.image.EncodeSrgbGm
-org.graphiks.kanvas.skia.gm.image.ExoticFormatsGm
 org.graphiks.kanvas.skia.gm.image.FilterBugGm
 org.graphiks.kanvas.skia.gm.image.FilterIndiaBoxGm
 org.graphiks.kanvas.skia.gm.image.FlightAnimatedImageGm

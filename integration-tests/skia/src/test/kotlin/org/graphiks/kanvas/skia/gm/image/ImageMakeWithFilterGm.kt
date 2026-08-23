@@ -13,7 +13,7 @@ import org.graphiks.kanvas.types.Rect
 
 /**
  * Port stub for Skia's `gm/imagemakewithfilter.cpp::ImageMakeWithFilterGM`.
- * 1840x860 GM that exercises SkImages.MakeWithFilter across 13 filter
+ * 1840x860 GM that exercises Skia's `SkImages::MakeWithFilter` across 13 filter
  * factories. This minimal port renders only the per-cell structural
  * scaffolding (faded mandrill backgrounds) without running MakeWithFilter.
  * A proper port will follow when the missing SkImageFilters factories land.

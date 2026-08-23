@@ -70,10 +70,8 @@ public class CodecImageGenerator private constructor(
 
 /**
  * Static factories for [SkImage] creation that hinge on an
- * [SkImageGenerator]. Lives in its own file so the future cross-cutting
- * `SkImages` aggregator (mirrors Skia's `SkImages` namespace) can pick
- * this up without an ownership conflict with the parallel agent
- * responsible for the bitmap / encoded factories.
+ * [SkImageGenerator]. Lives in its own file to keep generator-owned factories
+ * separate from bitmap and encoded-image factories.
  */
 public object ImageGeneratorImages {
 
