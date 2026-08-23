@@ -1,38 +1,34 @@
 package org.graphiks.kanvas.codec
 
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.graphiks.math.color.ColorARGB
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImage
-import org.skia.foundation.SkImageGenerator
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.ImageInfo
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
- * A concrete [SkImageGenerator] backed by an [Codec] — mirrors
+ * A concrete image generator backed by an [Codec] — mirrors
  * Skia's `CodecImageGenerator` (`src/codec/CodecImageGenerator.h`).
  *
  * Decodes the codec on demand into the destination buffer ; the codec's
- * own [Codec.getInfo] drives the generator's reported [SkImageInfo].
+ * own [Codec.getInfo] drives the generator's reported [ImageInfo].
  *
  * **Use** : pair with [ImageGeneratorImages.DeferredFromGenerator]
  * ( (alias removed in iter 3c)) to produce a
- * deferred-decoded [SkImage] from raw encoded bytes.
+ * deferred-decoded [Image] from raw encoded bytes.
  */
 public class CodecImageGenerator private constructor(
     private val codec: Codec,
-) : SkImageGenerator(codec.getInfo()) {
+) {
+    public val info: ImageInfo = codec.getInfo()
 
-    override fun onGetPixels(info: SkImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
-        val bm = SkBitmap(
-            width = info.width,
-            height = info.height,
-            colorSpace = info.colorSpace,
-            colorType = SkColorType.kRGBA_8888,
-        )
-        val res = codec.getPixels(codec.getInfo(), bm)
+    public fun getPixels(info: ImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
+        if (info.width <= 0 || info.height <= 0 || rowBytes < info.minRowBytes()) return false
+        if (info.width != this.info.width || info.height != this.info.height || info.colorSpace != this.info.colorSpace) return false
+        if (info.colorType != ColorType.RGBA_8888) return false
+        val bm = Bitmap(codec.getInfo().makeColorType(ColorType.RGBA_8888))
+        val res = codec.getPixels(bm.info, bm)
         if (res != Codec.Result.kSuccess) return false
         // Pack the 32-bit pixels into the destination ByteBuffer in
         // RGBA byte order (matches the buffer layout the upstream
@@ -42,13 +38,16 @@ public class CodecImageGenerator private constructor(
         for (y in 0 until height) {
             val rowOff = y * rowBytes
             for (x in 0 until width) {
-                val c = bm.pixels[y * width + x]
-                val color = ColorARGB.fromPackedInt(c)
+                val c = bm.getArgb(x, y)
+                val a = (c ushr 24) and 0xFF
+                val r = (c ushr 16) and 0xFF
+                val g = (c ushr 8) and 0xFF
+                val b = c and 0xFF
                 val off = rowOff + x * 4
-                pixels.put(off, color.red.toByte())
-                pixels.put(off + 1, color.green.toByte())
-                pixels.put(off + 2, color.blue.toByte())
-                pixels.put(off + 3, color.alpha.toByte())
+                pixels.put(off, r.toByte())
+                pixels.put(off + 1, g.toByte())
+                pixels.put(off + 2, b.toByte())
+                pixels.put(off + 3, a.toByte())
             }
         }
         return true
@@ -57,7 +56,7 @@ public class CodecImageGenerator private constructor(
     public companion object {
         /**
          * Mirrors Skia's
-         * `CodecImageGenerator::MakeFromEncodedCodec(sk_sp<SkData>)`.
+         * `CodecImageGenerator::MakeFromEncodedCodec`.
          * Returns `null` when the bytes cannot be sniffed by any
          * registered [Codec] decoder.
          */
@@ -69,56 +68,39 @@ public class CodecImageGenerator private constructor(
 }
 
 /**
- * Static factories for [SkImage] creation that hinge on an
- * [SkImageGenerator]. Lives in its own file to keep generator-owned factories
+ * Static factories for [Image] creation that hinge on an
+ * [CodecImageGenerator]. Lives in its own file to keep generator-owned factories
  * separate from bitmap and encoded-image factories.
  */
 public object ImageGeneratorImages {
 
     /**
-     * Mirrors Skia's `SkImages::DeferredFromGenerator(sk_sp<SkImageGenerator>)`.
+     * Mirrors an upstream deferred-from-generator factory.
      *
-     * Decodes the generator into an `SkColorType.kRGBA_8888` buffer at
-     * the generator's reported size and returns a fresh [SkImage]. The
+     * Decodes the generator into an [ColorType.RGBA_8888] buffer at
+     * the generator's reported size and returns a fresh [Image]. The
      * upstream "deferred" semantic (the generator is held lazily and
      * decoded only when the image is first drawn) is *not* preserved by
-     * the Kanvas raster image path — every [SkImage] consumer
-     * ([SkBitmapShader], the raster device) reads from a materialised
+     * the Kanvas raster image path — every renderer consumer reads from a materialised
      * pixel buffer, so we decode eagerly. The factory name is kept for
      * source-compatibility with upstream call sites.
      *
-     * Returns `null` if the generator's [SkImageGenerator.getPixels]
+     * Returns `null` if the generator's [CodecImageGenerator.getPixels]
      * call fails.
      */
-    public fun DeferredFromGenerator(generator: SkImageGenerator): SkImage? {
-        val info = generator.getInfo()
+    public fun DeferredFromGenerator(generator: CodecImageGenerator): Image? {
+        val info = generator.info
         if (info.isEmpty()) return null
-        // Always materialise into 8888 — matches [SkImage]'s internal
-        // pixel-buffer contract (see SkImage.kt KDoc).
-        val target = info.makeColorType(SkColorType.kRGBA_8888)
+        val target = info.makeColorType(ColorType.RGBA_8888)
             .makeAlphaType(AlphaType.UNPREMUL)
         val rowBytes = target.minRowBytes()
         val bytes = ByteBuffer
             .allocate(rowBytes * target.height)
-            .order(ByteOrder.LITTLE_ENDIAN)
+
         if (!generator.getPixels(target, bytes, rowBytes)) return null
-        // Convert the byte buffer into the IntArray the SkImage
-        // constructor wants. Pack as Pascal-Argb (`0xAARRGGBB`) — the
-        // same layout SkBitmap.pixels8888 uses on a little-endian host.
-        val w = target.width
-        val h = target.height
-        val pixels = IntArray(w * h)
-        for (y in 0 until h) {
-            val rowOffset = y * rowBytes
-            for (x in 0 until w) {
-                val off = rowOffset + x * 4
-                val r = bytes.get(off).toInt() and 0xFF
-                val g = bytes.get(off + 1).toInt() and 0xFF
-                val b = bytes.get(off + 2).toInt() and 0xFF
-                val a = bytes.get(off + 3).toInt() and 0xFF
-                pixels[y * w + x] = ColorARGB.of(a, r, g, b).toPackedInt()
-            }
-        }
-        return SkImage(w, h, pixels, SkColorType.kRGBA_8888)
+        val bitmap = Bitmap(target)
+        bytes.rewind()
+        bytes.get(bitmap.pixels)
+        return bitmap.toImageOrNull()
     }
 }

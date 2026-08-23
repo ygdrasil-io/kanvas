@@ -4,11 +4,12 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.png.PngEncoder
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
 import java.awt.image.BufferedImage
 import java.io.File
 import java.io.InputStream
@@ -146,7 +147,7 @@ object ComparisonUtils {
 
     fun saveRgbaAsPng(rgba: ByteArray, width: Int, height: Int, outputFile: File) {
         outputFile.parentFile?.mkdirs()
-        val bitmap = rgbaToSkBitmap(rgba, width, height)
+        val bitmap = rgbaToBitmap(rgba, width, height)
         val bytes = PngEncoder.encode(bitmap) ?: error("Failed to encode PNG: ${outputFile.name}")
         outputFile.writeBytes(bytes)
     }
@@ -189,9 +190,9 @@ object ComparisonUtils {
         return rgbaToBufferedImage(rgba, size.first, size.second)
     }
 
-    private fun rgbaToSkBitmap(rgba: ByteArray, width: Int, height: Int): SkBitmap {
+    private fun rgbaToBitmap(rgba: ByteArray, width: Int, height: Int): Bitmap {
         require(rgba.size == width * height * BYTES_PER_PIXEL) { "RGBA buffer size mismatch" }
-        val bitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
+        val bitmap = Bitmap(ImageInfo.makeN32(width, height, colorSpace = ImageColorSpace.sRGB()))
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val i = (y * width + x) * BYTES_PER_PIXEL
@@ -199,7 +200,7 @@ object ComparisonUtils {
                 val g = rgba[i + 1].toInt() and 0xFF
                 val b = rgba[i + 2].toInt() and 0xFF
                 val a = rgba[i + 3].toInt() and 0xFF
-                bitmap.setPixel(x, y, ColorARGB.of(a, r, g, b).toPackedInt())
+                bitmap.setArgb(x, y, ColorARGB.of(a, r, g, b).toPackedInt())
             }
         }
         return bitmap
@@ -208,14 +209,14 @@ object ComparisonUtils {
     private fun decodePngAsSrgbRgba(data: ByteArray): ByteArray {
         val codec = Codec.MakeFromData(data) ?: error("Failed to decode PNG")
         val info = codec.getInfo()
-        val natural = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
+        val natural = Bitmap(info)
         val result = codec.getPixels(info, natural)
         if (result != Codec.Result.kSuccess) error("Failed to decode PNG: $result")
         val sourceColorSpace = pngIccpColorSpace(data) ?: info.colorSpace
-        return skBitmapToSrgbRgba(natural, sourceColorSpace)
+        return bitmapToSrgbRgba(natural, sourceColorSpace)
     }
 
-    private fun skBitmapToSrgbRgba(bitmap: SkBitmap, sourceColorSpace: ImageColorSpace): ByteArray {
+    private fun bitmapToSrgbRgba(bitmap: Bitmap, sourceColorSpace: ImageColorSpace): ByteArray {
         val rgba = ByteArray(bitmap.width * bitmap.height * BYTES_PER_PIXEL)
         val srgbToXyz = requireNotNull(ColorProfiles.sRGB().toXyzD50)
         val xyzToSrgb = invert3x3(srgbToXyz)
@@ -224,7 +225,10 @@ object ComparisonUtils {
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
                 val a: Float
-                val encodedRgb = if (bitmap.pixelsF16.isNotEmpty() && bitmap.getPixelF16(x, y, f16)) {
+                val encodedRgb = if (
+                    bitmap.colorType in setOf(ColorType.RGBA_F16, ColorType.RGBA_F16_NORM) &&
+                    bitmap.getPremulRgbaF16(x, y, f16)
+                ) {
                     a = f16[3].coerceIn(0f, 1f)
                     val invA = if (a > 0f) 1f / a else 0f
                     floatArrayOf(
@@ -233,7 +237,7 @@ object ComparisonUtils {
                         (f16[2] * invA).coerceIn(0f, 1f),
                     )
                 } else {
-                    val argb = bitmap.getPixel(x, y)
+                    val argb = bitmap.getArgb(x, y)
                     val color = ColorARGB.fromPackedInt(argb)
                     a = (color.alpha / 255f).coerceIn(0f, 1f)
                     floatArrayOf(

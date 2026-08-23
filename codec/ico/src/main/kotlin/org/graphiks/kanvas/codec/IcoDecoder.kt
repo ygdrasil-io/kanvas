@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkData
 import java.io.InputStream
 
 /**
@@ -27,9 +26,6 @@ import java.io.InputStream
  * present, the mask is applied to alpha before synthesising the BMP payload.
  */
 public object IcoDecoder {
-
-    /** Decode the ICO bytes wrapped in [data]. */
-    public fun Decode(data: SkData): Codec? = Decode(data.toByteArray())
 
     /**
      * Decode the ICO bytes in [data]. Returns the [Codec] for the

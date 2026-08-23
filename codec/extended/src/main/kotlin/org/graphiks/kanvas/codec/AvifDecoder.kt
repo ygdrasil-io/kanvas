@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkData
 import java.io.InputStream
 
 /**
@@ -31,12 +30,6 @@ import java.io.InputStream
  * to disambiguate.
  */
 public object AvifDecoder {
-
-    /**
-     * Stubbed AVIF decode. Always returns `null`. See class kdoc for
-     * the R-suivi.28 follow-up that wires up libavif.
-     */
-    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed AVIF decode. Always returns `null`. See class kdoc for

@@ -79,7 +79,7 @@ class AnimatedImageGifContractTest {
         assertEquals(expected.size, image.width)
         assertEquals(1, image.height)
         for (x in expected.indices) {
-            assertEquals(expected[x], image.peekPixel(x, 0), "x=$x")
+            assertEquals(expected[x], image.getArgb(x, 0), "x=$x")
         }
     }
 

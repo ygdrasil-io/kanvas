@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
 class AnimatedImageOwnershipTest {
@@ -28,7 +28,7 @@ class AnimatedImageOwnershipTest {
         assertEquals(listOf(Codec.Options(frameIndex = 0, priorFrame = Codec.kNoFrame)), codec.decodedOptions)
         assertEquals(2, animated.getFrameCount())
         assertEquals(40, animated.currentFrameDuration())
-        assertEquals(RED, animated.getCurrentFrame().peekPixel(0, 0))
+        assertEquals(RED, animated.getCurrentFrame().getArgb(0, 0))
 
         assertEquals(70, animated.decodeNextFrame())
         assertEquals(listOf(0, 1), codec.decodedFrameIndexes)
@@ -39,7 +39,7 @@ class AnimatedImageOwnershipTest {
             ),
             codec.decodedOptions,
         )
-        assertEquals(BLUE, animated.getCurrentFrame().peekPixel(0, 0))
+        assertEquals(BLUE, animated.getCurrentFrame().getArgb(0, 0))
 
         assertEquals(AnimatedImage.kFinished, animated.decodeNextFrame())
     }
@@ -50,7 +50,7 @@ class AnimatedImageOwnershipTest {
             frames = listOf(RED, BLUE),
             delaysMs = listOf(40, 70),
         )
-        val dst = SkBitmap(1, 1, codec.getInfo().colorSpace, codec.getInfo().colorType)
+        val dst = Bitmap(codec.getInfo())
 
         val result = codec.getPixels(
             codec.getInfo(),
@@ -69,14 +69,14 @@ class AnimatedImageOwnershipTest {
     ) : Codec() {
         val decodedFrameIndexes = mutableListOf<Int>()
         val decodedOptions = mutableListOf<Options>()
-        private val info = SkImageInfo.Make(
+        private val info = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
         )
 
-        override fun getInfo(): SkImageInfo = info
+        override fun getInfo(): ImageInfo = info
         override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.GIF
         override fun getICCProfile(): IccProfile? = null
         override fun getFrameCount(): Int = frames.size
@@ -90,16 +90,16 @@ class AnimatedImageOwnershipTest {
                 )
             }
 
-        override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result =
+        override fun getPixels(info: ImageInfo, dst: Bitmap): Result =
             getPixels(info, dst, Options())
 
-        override fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result {
+        override fun getPixels(info: ImageInfo, dst: Bitmap, opts: Options): Result {
             if (info != this.info || dst.width != 1 || dst.height != 1) {
                 return Result.kInvalidParameters
             }
             decodedOptions += opts
             decodedFrameIndexes += opts.frameIndex
-            dst.setPixel(0, 0, frames[opts.frameIndex])
+            dst.setArgb(0, 0, frames[opts.frameIndex])
             return Result.kSuccess
         }
     }
