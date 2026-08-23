@@ -43,6 +43,11 @@ internal object SchemaValidator {
                 "$name cannot use NORMALIZE with scalar I32; remove NORMALIZE",
             )
         }
+        if (primitive.scalar == ScalarId.I32 && Capability.DIVIDE in primitive.capabilities) {
+            throw SchemaValidationException(
+                "$name cannot use DIVIDE with scalar I32; remove DIVIDE",
+            )
+        }
         if (primitive.generateMutable && !primitive.generateImmutable) {
             throw SchemaValidationException(
                 "$name cannot generate mutable without immutable; enable generateImmutable",

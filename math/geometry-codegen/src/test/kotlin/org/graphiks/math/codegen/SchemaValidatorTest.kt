@@ -41,6 +41,27 @@ class SchemaValidatorTest {
     }
 
     @Test
+    fun `I32 rejects division`() {
+        val schema = schemaOf(
+            primitive(
+                Semantic.VECTOR,
+                2,
+                ScalarId.I32,
+                capabilities = setOf(Capability.DIVIDE),
+            ),
+        )
+
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(schema)
+        }
+
+        assertEquals(
+            "Vector2I32 cannot use DIVIDE with scalar I32; remove DIVIDE",
+            error.message,
+        )
+    }
+
+    @Test
     fun `dimension outside closed component table is rejected`() {
         val error = assertFailsWith<SchemaValidationException> {
             SchemaValidator.validate(schemaOf(primitive(Semantic.VECTOR, 1, ScalarId.F32)))

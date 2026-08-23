@@ -32,7 +32,7 @@ internal object MathPrimitiveManifest {
             ScalarId.F64,
             -> setOf(Capability.DIVIDE, Capability.NORMALIZE, Capability.FINITE_CHECK)
 
-            ScalarId.I32 -> setOf(Capability.DIVIDE)
+            ScalarId.I32 -> emptySet()
         },
         generateMutable = generateMutable,
     )
