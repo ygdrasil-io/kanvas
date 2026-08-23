@@ -156,6 +156,7 @@ class PerformanceBundleTest {
             coldReadbackNanos = null,
             timings = null,
             timingSamplesNanos = emptyList(),
+            telemetry = PerformanceTelemetry.Empty,
             environment = PerformanceRun.fixture().environment.copy(adapter = EvidenceAdapter("fallback", "Apple", "M2 Max", null, null, true)),
         )
         val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
@@ -172,6 +173,17 @@ class PerformanceBundleTest {
         )
         val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
         assertIs<PerformanceBundleVerification.Verified>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
+    @Test fun `eligible unavailable transition has the canonical capability reason`() {
+        val run = PerformanceRun.fixture().copy(
+            verdict = PerformanceVerdict.Unavailable("tampered runtime reason"),
+            coldReadbackNanos = null,
+            timings = null,
+            timingSamplesNanos = emptyList(),
+            telemetry = PerformanceTelemetry.Empty,
+        )
+        assertFails { PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run) }
     }
 
     private fun refreshHash(path: Path, name: String) {

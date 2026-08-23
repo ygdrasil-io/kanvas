@@ -241,6 +241,7 @@ object PerformanceBundleVerifier {
                 else -> verdictKind == eligibilityKind && reasonsMatch
             }
             if (!coherent) errors += "verdict does not match eligibility"
+            if (eligibilityKind == "EligibleMeasurement" && verdictKind == "Unavailable" && verdict["reason"]?.jsonPrimitive?.content != "GPU capabilities unavailable") errors += "unsupported unavailable transition reason"
         }
         val timings = parseObject(bundle.resolve("timings.json"), "timings", errors)
         if (timings != null) {
@@ -282,6 +283,8 @@ object PerformanceBundleVerifier {
         parseObject(bundle.resolve("telemetry.json"), "telemetry", errors)?.let { telemetry ->
             val phaseNames = setOf("cold", "warmup", "measured", "total")
             if (!telemetry.keys.all { it in phaseNames } || !setOf("cold", "warmup", "measured").all { it in telemetry.keys }) errors += "telemetry phase key set mismatch"
+            if ((verdictKind == "Unavailable" || verdictKind == "DiagnosticOnly") && telemetry.keys != setOf("cold", "warmup", "measured")) errors += "non-measurement telemetry phase key set mismatch"
+            if (verdictKind == "EligibleMeasurement" && telemetry.keys != setOf("cold", "warmup", "measured", "total")) errors += "eligible telemetry phase key set mismatch"
             telemetry.forEach { (phaseName, phaseElement) -> if (phaseElement is JsonObject) verifyPhase(phaseName, phaseElement, errors) else errors += "telemetry phase is invalid" }
             if (verdictKind == "EligibleMeasurement") {
                 mapOf("cold" to 1L, "warmup" to 10L, "measured" to 90L, "total" to 101L).forEach { (phaseName, expected) ->
@@ -289,7 +292,7 @@ object PerformanceBundleVerifier {
                     if (submissions?.get("source")?.jsonPrimitive?.content != MetricSource.Derived.name || submissions["value"]?.jsonPrimitive?.content?.toLongOrNull() != expected) errors += "$phaseName submissions provenance mismatch"
                 }
             }
-            if (verdictKind == "Unavailable") {
+            if (verdictKind == "Unavailable" || verdictKind == "DiagnosticOnly") {
                 telemetry.filterKeys { it != "total" }.forEach { (phaseName, phaseElement) ->
                     val phase = phaseElement as? JsonObject ?: return@forEach
                     val metrics = phase.values.flatMap { (it as? JsonObject)?.values.orEmpty() }
