@@ -48,9 +48,21 @@ class GpuEvidenceCliRunner(
                         is EvidenceExecutionResult.Observed -> when (val observation = result.observation) {
                             is SceneObservation.Unavailable -> { System.err.println("gpu evidence unavailable: ${observation.stableReasonCode}: ${observation.message}"); 1 }
                             else -> {
-                                val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
-                                writer.writeGenerated(evidenceCase.descriptor, observation, expected)
-                                if (EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation) is EvidenceVerdict.Pass) code else 1
+                                when (val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)) {
+                                    is EvidenceVerdict.Pass -> {
+                                        val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
+                                        writer.writeGenerated(evidenceCase.descriptor, observation, expected)
+                                        code
+                                    }
+                                    is EvidenceVerdict.Fail -> {
+                                        System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} failed: ${verdict.reason}")
+                                        1
+                                    }
+                                    is EvidenceVerdict.Unavailable -> {
+                                        System.err.println("gpu evidence unavailable: ${verdict.reason}")
+                                        1
+                                    }
+                                }
                             }
                         }
                     }

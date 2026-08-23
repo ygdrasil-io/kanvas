@@ -38,7 +38,7 @@ The checked-in production code at the evaluated commit is authoritative for impl
 | 2 | No speculative product API | `gpu-renderer` stays unchanged until a production consumer requires a seam |
 | 3 | Typed scene/result contracts and expectation gate | Full decision matrix passes without GPU |
 | 4 | Comparator, evidence schema, writer, verifier | Artifact round-trip and tamper tests pass |
-| 5 | Canonical product runner and 3-scene bootstrap | Eligible GPU produces three valid bundles |
+| 5 | Canonical product runner and approved two-case bootstrap | An eligible GPU produces one render bundle and one exact refusal bundle |
 | 6 | Curated four-case catalog | All code-backed render and refusal scenes execute through the product route |
 | 7 | Headless verification, GPU promotion, and rebaseline policy | Promoted bundles verify from a clean checkout |
 | 8 | Atomic legacy deletion | No executable legacy dependency remains; relevant build passes |
@@ -150,12 +150,6 @@ enum class LegacyDisposition { Covered, Duplicate, Historical, DependencyGated, 
 
 val coveredByReplacement = mapOf(
     "solid-card-stack" to "solid-card-stack",
-    "linear-gradient-lanes" to "linear-gradient-band",
-    "radial-swatch" to "radial-gradient-disc",
-    "sweep-disk" to "sweep-gradient-wheel",
-    "color-matrix-tint" to "color-matrix-identity",
-    "color-matrix-filter" to "color-matrix-grayscale",
-    "runtime-effect-color-tile" to "registered-simple-runtime-effect",
     "custom-runtime-effect-unregistered-refusal" to "custom-runtime-effect-unregistered-refusal",
     "blur-radius-ladder" to "separable-blur-rect",
     "cache-frame-budget-strip" to "aggregate-memory-budget-refusal",

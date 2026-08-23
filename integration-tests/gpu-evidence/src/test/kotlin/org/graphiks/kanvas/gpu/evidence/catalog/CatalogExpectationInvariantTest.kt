@@ -20,7 +20,19 @@ import org.graphiks.kanvas.gpu.evidence.runner.GPUPreparedEvidenceExecutor
 import org.graphiks.kanvas.gpu.evidence.runner.GpuEvidenceCliRunner
 import org.graphiks.kanvas.gpu.evidence.runner.PreparedEvidenceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
+import org.graphiks.kanvas.gpu.evidence.runner.ScenePreparation
+import org.graphiks.kanvas.gpu.evidence.runner.SceneRecordingContext
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class CatalogExpectationInvariantTest {
     @Test
@@ -46,10 +58,36 @@ class CatalogExpectationInvariantTest {
     }
 
     @Test
-    fun `fake product port exercises every catalog outcome without bypassing the gate`() {
+    fun `fake product port runs every actual catalog program before gate plumbing`() {
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
-            val observed = assertIs<EvidenceExecutionResult.Observed>(GPUPreparedEvidenceExecutor(ExpectedOutcomePort(), "a".repeat(40)).execute(evidenceCase)).observation
+            val port = ExpectedOutcomePort()
+            val observed = assertIs<EvidenceExecutionResult.Observed>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(evidenceCase)).observation
             assertIs<EvidenceVerdict.Pass>(EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observed), evidenceCase.descriptor.id.value)
+            when (evidenceCase.descriptor.id.value) {
+                "solid-card-stack" -> {
+                    assertEquals("product.solid-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
+                    assertEquals(1, port.preparedFrameCount)
+                }
+                "separable-blur-rect" -> {
+                    assertEquals("product.separable-blur-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
+                    assertEquals(1, port.preparedFrameCount)
+                }
+                "custom-runtime-effect-unregistered-refusal" -> {
+                    val refusal = assertIs<SceneObservation.Refused>(observed)
+                    assertEquals("product.runtime-effect.custom", refusal.route.routeId)
+                    assertEquals("unsupported.runtime_effect.custom_wgsl_not_registered", refusal.stableReasonCode)
+                    assertEquals(0L, refusal.submissionDelta)
+                    assertEquals(0, port.preparedFrameCount)
+                }
+                "aggregate-memory-budget-refusal" -> {
+                    val refusal = assertIs<SceneObservation.Refused>(observed)
+                    assertEquals("product.solid-rect", refusal.route.routeId)
+                    assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", refusal.stableReasonCode)
+                    assertEquals(0L, refusal.submissionDelta)
+                    assertEquals(true, refusal.diagnostics.contains("diagnostic.code=unsupported.frame_memory.aggregate_budget_exceeded"))
+                    assertEquals(0, port.preparedFrameCount)
+                }
+            }
         }
     }
 
@@ -118,24 +156,58 @@ class CatalogExpectationInvariantTest {
     }
 
     private class ExpectedOutcomePort : EvidenceBackendPort {
-        override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake")
+        private val productCapabilities = testCapabilities()
+        override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake", productCapabilities)
         override val deviceGeneration: Long = 1L
         private var current: EvidenceCase? = null
+        var preparedFrameCount = 0
+            private set
         override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = if (current?.descriptor?.expectation == EvidenceExpectation.ShouldRender) 1L else 0L)
         override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
             val evidenceCase = requireNotNull(GpuEvidenceCatalog.cases.firstOrNull { it.descriptor == context.descriptor })
             current = evidenceCase
-            return when (val expectation = evidenceCase.descriptor.expectation) {
-                EvidenceExpectation.ShouldRender -> EvidenceProgramPreparation.Recorded("fake.render", PreparedEvidenceProgram(null, context.readbackRequestId), emptyList())
-                is EvidenceExpectation.ShouldRefuse -> EvidenceProgramPreparation.Refused("fake.refusal", expectation.stableReasonCode, "expected refusal", emptyList())
+            return when (val preparation = program.prepare(
+                SceneRecordingContext(
+                    productCapabilities,
+                    GPUDeviceGenerationID(deviceGeneration),
+                    GPUFrameTargetRef("target.catalog-test"),
+                    GPUPixelBounds(0, 0, context.descriptor.width, context.descriptor.height),
+                    context.frameOrdinal,
+                    GPUReadbackRequestID(context.readbackRequestId),
+                ),
+            )) {
+                is ScenePreparation.Recorded -> EvidenceProgramPreparation.Recorded(
+                    preparation.routeId,
+                    PreparedEvidenceProgram(preparation.taskList, context.readbackRequestId),
+                    preparation.diagnostics,
+                )
+                is ScenePreparation.Refused -> EvidenceProgramPreparation.Refused(
+                    requireNotNull(program as? RoutedSceneProgram).routeId,
+                    preparation.stableReasonCode,
+                    preparation.message,
+                    preparation.diagnostics,
+                )
             }
         }
-        override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = object : EvidencePreparedFramePort {
+        override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort {
+            preparedFrameCount++
+            return object : EvidencePreparedFramePort {
             override fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
                 val evidenceCase = requireNotNull(current)
                 return EvidenceCompletedFrame.succeeded(program.readbackRequestId, requireNotNull(evidenceCase.oracle).render(width, height))
             }
             override fun close() = Unit
+            }
         }
+    }
+
+    private companion object {
+        fun testCapabilities() = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "test", "catalog", "device"),
+            facts = listOf(GPUCapabilityFact("limits", "test", "observed", true, "catalog-invariant")),
+            snapshotId = "catalog-invariant-capabilities",
+            limits = GPULimits(8192, 256, 256, maxBufferSize = 1L shl 30),
+            rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+        )
     }
 }

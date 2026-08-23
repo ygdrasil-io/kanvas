@@ -3,11 +3,13 @@ package org.graphiks.kanvas.gpu.evidence.runner
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
 class GpuEvidenceCliTest {
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
@@ -186,6 +188,20 @@ class GpuEvidenceCliTest {
         assertEquals(emptyList(), events)
     }
 
+    @Test fun `cli does not write generated evidence for an unexpected render refusal`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-refusal")
+
+        assertEquals(1, GpuEvidenceCliRunner(OutcomeRuntime(Outcome.UnexpectedRefusal)).run(validArgs(root)))
+        assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
+    }
+
+    @Test fun `cli does not write generated evidence when rendered pixels fail comparison`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-comparison")
+
+        assertEquals(1, GpuEvidenceCliRunner(OutcomeRuntime(Outcome.ComparisonFailure)).run(validArgs(root)))
+        assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
+    }
+
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
         val message = assertNotNull(snapshot.message)
         assertTrue(message.contains("failure snapshotted to avoid a cycle"))
@@ -195,10 +211,34 @@ class GpuEvidenceCliTest {
         assertEquals(emptyList(), snapshot.suppressed.toList())
     }
 
-    private fun validArgs() = arrayOf("--repository-root", Files.createTempDirectory("gpu-evidence-cli").toString(), "--source-commit", "a".repeat(40), "--scene", "solid-card-stack")
+    private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli")) = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "solid-card-stack")
     private class FakeRuntime(private val events: MutableList<String>, private val returned: Boolean = false, private val closeFails: Boolean = false, private val openFails: Boolean = false, private val executionFails: Boolean = false, private val executionFatal: Boolean = false, private val openFatal: Boolean = false, private val closeFatal: Boolean = false, private val closeFailure: Throwable? = null, private val disposeFailure: Throwable? = null, private val onDisposeFailure: (() -> Unit)? = null) : EvidenceRuntimePort {
         override fun open(): EvidenceBackendPort? { events += "open-session"; if (openFails || openFatal) { events += "runtime-session-created"; if (openFatal) throw LinkageError("fatal open") else error("primary open") }; return if (returned) object : EvidenceBackendPort { override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake"); override val deviceGeneration = 1L; override fun telemetry() = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry(); override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { events += "execute"; if (executionFatal) throw LinkageError("fatal execution"); if (executionFails) error("primary execution"); return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "fake", emptyList()) }; override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable") } else null }
         override fun close() { events += "close-session"; closeFailure?.let { throw it }; if (closeFatal) throw LinkageError("fatal close"); if (closeFails) error("close") }
         override fun dispose() { events += "dispose"; disposeFailure?.let { onDisposeFailure?.invoke(); throw it } }
+    }
+
+    private enum class Outcome { UnexpectedRefusal, ComparisonFailure }
+
+    private class OutcomeRuntime(private val outcome: Outcome) : EvidenceRuntimePort {
+        override fun open(): EvidenceBackendPort = object : EvidenceBackendPort {
+            override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake")
+            override val deviceGeneration: Long = 1L
+            private var submissions = 0L
+            override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = submissions)
+            override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation = when (outcome) {
+                Outcome.UnexpectedRefusal -> EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "unexpected refusal", emptyList())
+                Outcome.ComparisonFailure -> EvidenceProgramPreparation.Recorded("product.fake", PreparedEvidenceProgram(null, context.readbackRequestId), emptyList())
+            }
+            override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = object : EvidencePreparedFramePort {
+                override fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
+                    submissions++
+                    return EvidenceCompletedFrame.succeeded(program.readbackRequestId, ByteArray(width * height * 4))
+                }
+                override fun close() = Unit
+            }
+        }
+        override fun close() = Unit
+        override fun dispose() = Unit
     }
 }
