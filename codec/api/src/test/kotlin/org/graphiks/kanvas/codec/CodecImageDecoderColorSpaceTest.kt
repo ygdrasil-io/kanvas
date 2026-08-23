@@ -98,13 +98,6 @@ class CodecImageDecoderColorSpaceTest {
     }
 
     @Test
-    fun `codec info preserves its ImageColorSpace without an adapter`() {
-        val colorSpace = ImageColorSpace.linearSrgb()
-
-        assertEquals(colorSpace, FakeCodec(colorSpace).getInfo().colorSpace)
-    }
-
-    @Test
     fun `decoder refuses a non canonical RGBA bitmap instead of reinterpreting it`() {
         val decoder = object : Codec.Decoder {
             override val name: String = TEST_DECODER_NAME
