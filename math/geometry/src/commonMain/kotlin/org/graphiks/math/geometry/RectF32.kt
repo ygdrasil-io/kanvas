@@ -46,20 +46,20 @@ public data class RectF32(
     /** Returns the y-coordinate of the center (computed in double precision). */
     public fun centerY(): Float = (0.5 * (top.toDouble() + bottom)).toFloat()
 
-    /** Returns the center as a [Vector2F32]. */
-    public fun center(): Vector2F32 = Vector2F32.of(centerX(), centerY())
+    /** Returns the center as a [Point2F32]. */
+    public fun center(): Point2F32 = Point2F32(centerX(), centerY())
 
     /** Returns the top-left corner. */
-    public fun topLeft(): Vector2F32 = Vector2F32.of(left, top)
+    public fun topLeft(): Point2F32 = Point2F32(left, top)
 
     /** Returns the top-right corner. */
-    public fun topRight(): Vector2F32 = Vector2F32.of(right, top)
+    public fun topRight(): Point2F32 = Point2F32(right, top)
 
     /** Returns the bottom-left corner. */
-    public fun bottomLeft(): Vector2F32 = Vector2F32.of(left, bottom)
+    public fun bottomLeft(): Point2F32 = Point2F32(left, bottom)
 
     /** Returns the bottom-right corner. */
-    public fun bottomRight(): Vector2F32 = Vector2F32.of(right, bottom)
+    public fun bottomRight(): Point2F32 = Point2F32(right, bottom)
 
     /** `true` if the rect is empty (`left >= right` or `top >= bottom`). */
     public val isEmpty: Boolean get() = !(left < right && top < bottom)
@@ -162,6 +162,9 @@ public data class RectF32(
     /** Returns `true` if the point `(x, y)` is inside this rect. */
     public fun contains(x: Float, y: Float): Boolean =
         x >= left && x < right && y >= top && y < bottom
+
+    /** Returns `true` if [point] is inside this rect. */
+    public fun contains(point: Point2F32): Boolean = contains(point.x, point.y)
 
     /** Returns `true` if [r] is entirely inside this rect. */
     public fun contains(r: RectF32): Boolean =
@@ -289,7 +292,7 @@ public data class RectF32(
          * Returns a [RectF32] bounding all points, or `null` if any
          * component overflows (returns [Empty] for an empty array).
          */
-        public fun bounds(points: Array<Vector2F32>): RectF32? {
+        public fun bounds(points: Array<Point2F32>): RectF32? {
             if (points.isEmpty()) return Empty
             var l = points[0].x; var r = points[0].x
             var t = points[0].y; var b = points[0].y

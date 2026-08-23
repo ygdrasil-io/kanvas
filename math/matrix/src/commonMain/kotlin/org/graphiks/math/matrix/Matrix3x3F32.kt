@@ -9,8 +9,11 @@ import org.graphiks.math.scalar.nearlyEqual
 import org.graphiks.math.scalar.nearlyZero
 import org.graphiks.math.scalar.sin
 import org.graphiks.math.scalar.tan
+import org.graphiks.math.geometry.MutablePoint2F32
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.MutableVector2F32
+import org.graphiks.math.vector.MutableVector3F32
 import org.graphiks.math.vector.Vector2F32
-import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.vector.Vector4F32
 
@@ -36,7 +39,7 @@ import org.graphiks.math.vector.Vector4F32
  *    *device* coords after the prior CTM.
  *
  * Perspective semantics: when `(persp0, persp1, persp2) != (0, 0, 1)`,
- * [mapXY] / [mapPoints] perform the homogeneous divide; [concat] uses
+ * [transform] / [transformPoints] perform the homogeneous divide; [concat] uses
  * a full 3×3 multiply; [invert] uses the cofactor matrix. Affine
  * fast paths kick in when [hasPerspective] is `false`, so the cost
  * of the perspective fields is zero on existing affine traffic.
@@ -194,7 +197,7 @@ public data class Matrix3x3F32(
 
     /**
      * Determinant of the upper 2×2 (linear part). Equivalent to
-     * `sx * sy - kx * ky`. Used by [mapRadius] and the inverse algorithm.
+     * `sx * sy - kx * ky`. Used by [transformRadius] and the inverse algorithm.
      */
     public fun det2x2(): Float = sx * sy - kx * ky
 
@@ -241,38 +244,6 @@ public data class Matrix3x3F32(
         buffer[kATransX] = tx
         buffer[kATransY] = ty
         return true
-    }
-
-    /**
-     * Bulk map source points to homogeneous output (no perspective
-     * divide). `dst[i] = (sx*x + kx*y + tx, ky*x + sy*y + ty,
-     * persp0*x + persp1*y + persp2)`.
-     */
-    public fun mapHomogeneousPoints(
-        dst: Array<Vector3F32>,
-        src: Array<Vector2F32>,
-        count: Int = src.size,
-    ) {
-        require(count <= dst.size && count <= src.size)
-        if (isIdentity) {
-            for (i in 0 until count) dst[i] = Vector3F32.of(src[i].x, src[i].y, 1f)
-        } else if (hasPerspective()) {
-            for (i in 0 until count) {
-                val x = src[i].x
-                val y = src[i].y
-                dst[i] = Vector3F32.of(
-                    sx * x + kx * y + tx,
-                    ky * x + sy * y + ty,
-                    persp0 * x + persp1 * y + persp2,
-                )
-            }
-        } else {
-            for (i in 0 until count) {
-                val x = src[i].x
-                val y = src[i].y
-                dst[i] = Vector3F32.of(sx * x + kx * y + tx, ky * x + sy * y + ty, 1f)
-            }
-        }
     }
 
     // ─── Singular values / scale decomposition ──────────────────────────
@@ -328,7 +299,7 @@ public data class Matrix3x3F32(
             nearlyZero(sxLen) || nearlyZero(syLen)
         ) return null
         val remaining = preScale((1f / sxLen), (1f / syLen))
-        return Pair(Vector2F32.of(sxLen, syLen), remaining)
+        return Pair(Vector2F32(sxLen, syLen), remaining)
     }
 
     /**
@@ -385,195 +356,211 @@ public data class Matrix3x3F32(
         return true
     }
 
-    /**
-     * Apply this matrix to a point. With perspective, returns the
-     * homogeneous-divided result `(x/w, y/w)`.
-     */
-    public fun mapXY(x: Float, y: Float): Pair<Float, Float> {
-        val px = sx * x + kx * y + tx
-        val py = ky * x + sy * y + ty
-        if (!hasPerspective()) return Pair(px, py)
-        val w = persp0 * x + persp1 * y + persp2
-        val invW = if (w != 0f) 1f / w else 0f
-        return Pair(px * invW, py * invW)
+    /** Transform a 2D point, including translation and homogeneous division. */
+    public fun transform(point: Point2F32): Point2F32 {
+        val rawX = sx * point.x + kx * point.y + tx
+        val rawY = ky * point.x + sy * point.y + ty
+        if (!hasPerspective()) return Point2F32(rawX, rawY)
+        val w = persp0 * point.x + persp1 * point.y + persp2
+        val inverseW = if (w == 0f) 0f else 1f / w
+        return Point2F32(rawX * inverseW, rawY * inverseW)
     }
 
-    /** Apply this matrix to a [Vector2F32], returning a new mapped point. */
-    public fun mapXY(p: Vector2F32): Vector2F32 {
-        val (x, y) = mapXY(p.x, p.y)
-        return Vector2F32.of(x, y)
+    /** Transform an affine 2D vector using only the upper 2 × 2 linear block. */
+    public fun transform(vector: Vector2F32): Vector2F32 {
+        require(!hasPerspective()) {
+            "transform(vector) requires an affine Matrix3x3F32"
+        }
+        return Vector2F32(
+            sx * vector.x + kx * vector.y,
+            ky * vector.x + sy * vector.y,
+        )
+    }
+
+    /** Transform [source] as a point into an existing mutable destination. */
+    public fun transformInto(source: Point2F32, destination: MutablePoint2F32) {
+        val rawX = sx * source.x + kx * source.y + tx
+        val rawY = ky * source.x + sy * source.y + ty
+        if (!hasPerspective()) {
+            destination.x = rawX
+            destination.y = rawY
+            return
+        }
+        val w = persp0 * source.x + persp1 * source.y + persp2
+        val inverseW = if (w == 0f) 0f else 1f / w
+        destination.x = rawX * inverseW
+        destination.y = rawY * inverseW
+    }
+
+    /** Transform [source] as a vector into an existing mutable destination. */
+    public fun transformInto(source: Vector2F32, destination: MutableVector2F32) {
+        require(!hasPerspective()) {
+            "transform(vector) requires an affine Matrix3x3F32"
+        }
+        destination.x = sx * source.x + kx * source.y
+        destination.y = ky * source.x + sy * source.y
     }
 
     /**
-     * Apply only the linear part (drop translation) — used for direction
-     * vectors.
+     * Transform up to [count] points into existing mutable destination slots.
+     * Type-mask fast paths preserve the existing scalar arithmetic routes.
      */
-    public fun mapVector(dx: Float, dy: Float): Vector2F32 {
-        val dst = Array(1) { Vector2F32.Zero }
-        mapVectors(dst, arrayOf(Vector2F32.of(dx, dy)), 1)
-        return dst[0]
-    }
-
-    /**
-     * Bulk apply this matrix to `count` source points, writing the
-     * result to `dst`. `dst` and `src` may alias. Type-mask fast paths
-     * follow the type-dispatch pattern:
-     *
-     * - identity → straight copy
-     * - translate-only → `+ (tx, ty)` per point
-     * - scale + translate → `(sx*x + tx, sy*y + ty)` per point
-     * - else → full affine or perspective transform
-     *
-     * Mirrors [`SkMatrix::mapPoints`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L782).
-     */
-    public fun mapPoints(dst: Array<Vector2F32>, src: Array<Vector2F32>, count: Int) {
-        require(count <= dst.size && count <= src.size) {
-            "mapPoints count=$count exceeds dst.size=${dst.size} or src.size=${src.size}"
+    public fun transformPoints(
+        source: Array<Point2F32>,
+        destination: Array<MutablePoint2F32>,
+        count: Int = source.size,
+    ) {
+        require(count in 0..source.size && count <= destination.size) {
+            "count=$count exceeds source.size=${source.size} or destination.size=${destination.size}"
         }
         when (val type = getType()) {
             kIdentity_Mask -> {
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(src[i].x, src[i].y)
+                    destination[i].x = source[i].x
+                    destination[i].y = source[i].y
                 }
             }
             kTranslate_Mask -> {
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(src[i].x + tx, src[i].y + ty)
+                    destination[i].x = source[i].x + tx
+                    destination[i].y = source[i].y + ty
                 }
             }
             else -> if (type and (kAffine_Mask or kPerspective_Mask) == 0) {
-                // Scale + translate (no rotation/skew/perspective).
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(sx * src[i].x + tx, sy * src[i].y + ty)
+                    destination[i].x = sx * source[i].x + tx
+                    destination[i].y = sy * source[i].y + ty
                 }
             } else if (type and kPerspective_Mask == 0) {
-                // Full affine, no perspective.
                 for (i in 0 until count) {
-                    val x = src[i].x
-                    val y = src[i].y
-                    dst[i] = Vector2F32.of(sx * x + kx * y + tx, ky * x + sy * y + ty)
+                    val x = source[i].x
+                    val y = source[i].y
+                    destination[i].x = sx * x + kx * y + tx
+                    destination[i].y = ky * x + sy * y + ty
                 }
             } else {
-                // Perspective: full 3×3 with homogeneous divide.
                 for (i in 0 until count) {
-                    val x = src[i].x
-                    val y = src[i].y
+                    val x = source[i].x
+                    val y = source[i].y
                     val w = persp0 * x + persp1 * y + persp2
-                    val invW = if (w != 0f) 1f / w else 0f
-                    dst[i] = Vector2F32.of(
-                        (sx * x + kx * y + tx) * invW,
-                        (ky * x + sy * y + ty) * invW,
-                    )
+                    val inverseW = if (w == 0f) 0f else 1f / w
+                    destination[i].x = (sx * x + kx * y + tx) * inverseW
+                    destination[i].y = (ky * x + sy * y + ty) * inverseW
                 }
             }
         }
     }
 
-    /** In-place bulk map. Equivalent to `mapPoints(pts, pts, count)`. */
-    public fun mapPoints(pts: Array<Vector2F32>, count: Int = pts.size) {
-        mapPoints(pts, pts, count)
-    }
-
-    /**
-     * Bulk apply only the linear part (drop translation) to vectors.
-     *
-     * For perspective matrices this returns the finite displacement
-     * `mapPoint(src) - mapPoint(0, 0)`, because a single global linear
-     * part does not exist. For affine matrices it reduces to the upper
-     * 2×2 sub-matrix.
-     */
-    public fun mapVectors(dst: Array<Vector2F32>, src: Array<Vector2F32>, count: Int) {
-        require(count <= dst.size && count <= src.size)
-        if (hasPerspective()) {
-            // Perspective: dst[i] = mapPoint(src[i]) - mapPoint(0, 0).
-            // Uses the finite mapPoint - mapPoint(origin) displacement.
-            val originW = persp2
-            val originInvW = if (originW != 0f) 1f / originW else 0f
-            val originX = tx * originInvW
-            val originY = ty * originInvW
-            // Walk backwards so dst === src aliasing stays well-defined
-            // when count > 1 (reverse loop).
-            for (i in count - 1 downTo 0) {
-                val x = src[i].x
-                val y = src[i].y
-                val w = persp0 * x + persp1 * y + persp2
-                val invW = if (w != 0f) 1f / w else 0f
-                val px = (sx * x + kx * y + tx) * invW
-                val py = (ky * x + sy * y + ty) * invW
-                dst[i] = Vector2F32.of(px - originX, py - originY)
-            }
-        } else if (getType() and (kAffine_Mask or kScale_Mask) == 0) {
-            // Identity or translate-only — vectors are unchanged.
+    /** Transform up to [count] affine vectors into mutable destination slots. */
+    public fun transformVectors(
+        source: Array<Vector2F32>,
+        destination: Array<MutableVector2F32>,
+        count: Int = source.size,
+    ) {
+        require(count in 0..source.size && count <= destination.size) {
+            "count=$count exceeds source.size=${source.size} or destination.size=${destination.size}"
+        }
+        require(!hasPerspective()) {
+            "transform(vector) requires an affine Matrix3x3F32"
+        }
+        if (getType() and (kAffine_Mask or kScale_Mask) == 0) {
             for (i in 0 until count) {
-                if (dst !== src || dst[i] !== src[i]) dst[i] = Vector2F32.of(src[i].x, src[i].y)
+                destination[i].x = source[i].x
+                destination[i].y = source[i].y
             }
         } else {
             for (i in 0 until count) {
-                val x = src[i].x
-                val y = src[i].y
-                dst[i] = Vector2F32.of(sx * x + kx * y, ky * x + sy * y)
+                val x = source[i].x
+                val y = source[i].y
+                destination[i].x = sx * x + kx * y
+                destination[i].y = ky * x + sy * y
             }
         }
     }
 
-    public fun mapVectors(vectors: Array<Vector2F32>, count: Int = vectors.size) {
-        mapVectors(vectors, vectors, count)
+    /** Transform points into raw homogeneous coordinates without division. */
+    public fun transformHomogeneousPoints(
+        source: Array<Point2F32>,
+        destination: Array<MutableVector3F32>,
+        count: Int = source.size,
+    ) {
+        require(count in 0..source.size && count <= destination.size) {
+            "count=$count exceeds source.size=${source.size} or destination.size=${destination.size}"
+        }
+        if (isIdentity) {
+            for (i in 0 until count) {
+                destination[i].x = source[i].x
+                destination[i].y = source[i].y
+                destination[i].z = 1f
+            }
+        } else if (hasPerspective()) {
+            for (i in 0 until count) {
+                val x = source[i].x
+                val y = source[i].y
+                destination[i].x = sx * x + kx * y + tx
+                destination[i].y = ky * x + sy * y + ty
+                destination[i].z = persp0 * x + persp1 * y + persp2
+            }
+        } else {
+            for (i in 0 until count) {
+                val x = source[i].x
+                val y = source[i].y
+                destination[i].x = sx * x + kx * y + tx
+                destination[i].y = ky * x + sy * y + ty
+                destination[i].z = 1f
+            }
+        }
     }
 
-    /**
-     * Apply this matrix to a rect, returning the bounding box of the
-     * transformed quad. Equivalent to `Matrix3x3F32::mapRect`.
-     */
-    public fun mapRect(r: RectF32): RectF32 {
-        // Fast path: scale + translate preserves rect orientation, no
-        // need to map all four corners.
-        if (isScaleTranslate()) return mapRectScaleTranslate(r)
+    /** Transform a finite displacement at a specific anchor under any matrix. */
+    public fun transformDisplacementAt(
+        anchor: Point2F32,
+        displacement: Vector2F32,
+    ): Vector2F32 = transform(anchor + displacement) - transform(anchor)
 
-        val (x0, y0) = mapXY(r.left, r.top)
-        val (x1, y1) = mapXY(r.right, r.top)
-        val (x2, y2) = mapXY(r.right, r.bottom)
-        val (x3, y3) = mapXY(r.left, r.bottom)
+    /** Transform a rect and return the axis-aligned bounds of its four corners. */
+    public fun transformBounds(rect: RectF32): RectF32 {
+        if (isScaleTranslate()) return transformBoundsScaleTranslate(rect)
+
+        val topLeft = transform(Point2F32(rect.left, rect.top))
+        val topRight = transform(Point2F32(rect.right, rect.top))
+        val bottomRight = transform(Point2F32(rect.right, rect.bottom))
+        val bottomLeft = transform(Point2F32(rect.left, rect.bottom))
         return RectF32.ofLTRB(
-            minOf(x0, x1, x2, x3),
-            minOf(y0, y1, y2, y3),
-            maxOf(x0, x1, x2, x3),
-            maxOf(y0, y1, y2, y3),
+            minOf(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x),
+            minOf(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y),
+            maxOf(topLeft.x, topRight.x, bottomRight.x, bottomLeft.x),
+            maxOf(topLeft.y, topRight.y, bottomRight.y, bottomLeft.y),
         )
     }
 
-    /**
-     * Fast-path rect mapping for matrices satisfying [isScaleTranslate].
-     * Maps `(left, top)` and `(right, bottom)` directly; the result is
-     * sorted to handle negative scales (which flip edges).
-     *
-         * Caller must verify `isScaleTranslate()` first.
-     */
-    public fun mapRectScaleTranslate(r: RectF32): RectF32 {
+    /** Fast-path bounds transform for matrices satisfying [isScaleTranslate]. */
+    public fun transformBoundsScaleTranslate(rect: RectF32): RectF32 {
         check(isScaleTranslate()) {
-            "mapRectScaleTranslate requires isScaleTranslate matrix; got mask=${getType()}"
+            "transformBoundsScaleTranslate requires isScaleTranslate matrix; got mask=${getType()}"
         }
-        val l1 = sx * r.left + tx
-        val r1 = sx * r.right + tx
-        val t1 = sy * r.top + ty
-        val b1 = sy * r.bottom + ty
-        return RectF32.ofLTRB(minOf(l1, r1), minOf(t1, b1), maxOf(l1, r1), maxOf(t1, b1))
+        val left = sx * rect.left + tx
+        val right = sx * rect.right + tx
+        val top = sy * rect.top + ty
+        val bottom = sy * rect.bottom + ty
+        return RectF32.ofLTRB(
+            minOf(left, right),
+            minOf(top, bottom),
+            maxOf(left, right),
+            maxOf(top, bottom),
+        )
     }
 
-    /**
-     * Heuristic mapped radius — for a circle with radius `r` mapped by
-     * this matrix, returns the radius of a "representative" circle in
-     * device space. maps `(r, 0)` and `(0, r)` to device space, takes their lengths,
-     * then returns the geometric mean.
-     *
-     * Mirrors [`SkMatrix::mapRadius`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp).
-     */
-    public fun mapRadius(r: Float): Float {
-        val vec = arrayOf(Vector2F32.of(r, 0f), Vector2F32.of(0f, r))
-        mapVectors(vec)
-
-        val d0 = sqrt(vec[0].x * vec[0].x + vec[0].y * vec[0].y)
-        val d1 = sqrt(vec[1].x * vec[1].x + vec[1].y * vec[1].y)
-        return sqrt(d0 * d1)
+    /** Return the representative radius produced by this affine linear block. */
+    public fun transformRadius(radius: Float): Float {
+        require(!hasPerspective()) {
+            "transformRadius requires an affine Matrix3x3F32"
+        }
+        val xAxis = transform(Vector2F32(radius, 0f))
+        val yAxis = transform(Vector2F32(0f, radius))
+        val xLength = sqrt(xAxis.x * xAxis.x + xAxis.y * xAxis.y)
+        val yLength = sqrt(yAxis.x * yAxis.x + yAxis.y * yAxis.y)
+        return sqrt(xLength * yLength)
     }
 
     /** Pre-concat: `this = this · other` */
@@ -696,6 +683,12 @@ public data class Matrix3x3F32(
      * A point `p` is mapped first by `b`, then by `a`.
      */
     public operator fun times(other: Matrix3x3F32): Matrix3x3F32 = concat(this, other)
+
+    /** Transform [point] using point semantics. */
+    public operator fun times(point: Point2F32): Point2F32 = transform(point)
+
+    /** Transform [vector] using affine vector semantics. */
+    public operator fun times(vector: Vector2F32): Vector2F32 = transform(vector)
 
     /**
      * Inverse of this matrix, or `null` if it is singular or
@@ -851,7 +844,7 @@ public data class Matrix3x3F32(
          * corresponding destination points (0 ≤ count ≤ 4).
          * Returns `null` when the system is degenerate (no unique solution).
          */
-        public fun setPolyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? =
+        public fun setPolyToPoly(src: Array<Point2F32>, dst: Array<Point2F32>): Matrix3x3F32? =
             polyToPoly(src, dst)
 
         /**
@@ -1033,7 +1026,7 @@ public data class Matrix3x3F32(
 
         /**
          * Matrix multiply: returns `a · b`. A point `p` is mapped first by
-         * `b`, then by `a`: `(a · b).map(p) == a.map(b.map(p))`.
+         * `b`, then by `a`: `(a · b).transform(p) == a.transform(b.transform(p))`.
          *
          * Dispatches between the affine 6-cell formula and a full 3×3
          * `rowcol3` multiply when either input has perspective (mirrors
@@ -1148,7 +1141,7 @@ public data class Matrix3x3F32(
          * build `srcMap` from src, invert, build `dstMap` from dst,
          * return `dstMap · srcMap⁻¹`.
          */
-        public fun polyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? {
+        public fun polyToPoly(src: Array<Point2F32>, dst: Array<Point2F32>): Matrix3x3F32? {
             if (src.size != dst.size || src.size > 4) return null
             return when (src.size) {
                 0 -> Identity
@@ -1164,7 +1157,7 @@ public data class Matrix3x3F32(
         }
 
         /** Dispatcher for [poly2Proc] / [poly3Proc] / [poly4Proc]. */
-        private fun polyToMap(pts: Array<Vector2F32>): Matrix3x3F32? = when (pts.size) {
+        private fun polyToMap(pts: Array<Point2F32>): Matrix3x3F32? = when (pts.size) {
             2 -> poly2Proc(pts)
             3 -> poly3Proc(pts)
             4 -> poly4Proc(pts)
@@ -1175,7 +1168,7 @@ public data class Matrix3x3F32(
          * Builds the 2-point rotate-scale-translate fit so that the
          * basis maps `(0, 0) → src[0]` and `(1, 0) → src[1]`.
          */
-        private fun poly2Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly2Proc(p: Array<Point2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[1].y - p[0].y,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1185,7 +1178,7 @@ public data class Matrix3x3F32(
         )
 
         /** Polynomial solver for the 3-point poly-to-poly system. */
-        private fun poly3Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly3Proc(p: Array<Point2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[2].x - p[0].x,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1200,7 +1193,7 @@ public data class Matrix3x3F32(
          * (0,1)` (the unit square). Returns `null` on degenerate input
          * (zero-check short-circuit).
          */
-        private fun poly4Proc(p: Array<Vector2F32>): Matrix3x3F32? {
+        private fun poly4Proc(p: Array<Point2F32>): Matrix3x3F32? {
             val x0 = p[2].x - p[0].x
             val y0 = p[2].y - p[0].y
             val x1 = p[2].x - p[1].x

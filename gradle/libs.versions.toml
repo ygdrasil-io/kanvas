@@ -10,6 +10,7 @@ kotlinxCoroutines = "1.10.2"
 kotlinxBenchmark = "0.4.17"
 wgpu4k = "0.2.0-20260716.235022-2"
 wgsl4k = "1.0.0-20260629.231604-1"
+kotlinPoet = "2.3.0"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -20,6 +21,7 @@ kotlinxBenchmarkRuntime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-ru
 wgpu4kToolkit = { module = "io.ygdrasil:wgpu4k-toolkit", version.ref = "wgpu4k" }
 wgslCoreJvm = { module = "org.graphiks:wgsl-core-jvm", version.ref = "wgsl4k" }
 wgslParserJvm = { module = "org.graphiks:wgsl-parser-jvm", version.ref = "wgsl4k" }
+kotlinPoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinPoet" }
 
 # Libraries can be bundled together for easier import
 [bundles]

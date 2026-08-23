@@ -67,20 +67,6 @@ class ScalarF32Test {
     }
 
     @Test
-    fun testSaturatingAdd32() {
-        assertEquals(10, saturatingAdd32(7, 3))
-        assertEquals(Int.MAX_VALUE, saturatingAdd32(Int.MAX_VALUE, 1))
-        assertEquals(Int.MIN_VALUE, saturatingAdd32(Int.MIN_VALUE, -1))
-    }
-
-    @Test
-    fun testSaturatingSub32() {
-        assertEquals(4, saturatingSub32(7, 3))
-        assertEquals(Int.MIN_VALUE, saturatingSub32(Int.MIN_VALUE, 1))
-        assertEquals(Int.MAX_VALUE, saturatingSub32(Int.MAX_VALUE, -1))
-    }
-
-    @Test
     fun testInstanceIsNearlyZero() {
         assertTrue(ScalarF32.of(0f).isNearlyZero())
         assertFalse(ScalarF32.of(0.001f).isNearlyZero())

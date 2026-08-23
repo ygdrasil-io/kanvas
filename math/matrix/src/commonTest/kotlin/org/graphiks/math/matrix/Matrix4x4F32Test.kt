@@ -1,6 +1,7 @@
 package org.graphiks.math.matrix
 
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -8,7 +9,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.Test
 import kotlin.math.PI
-import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.vector.Vector4F32
 import org.graphiks.math.geometry.RectF32
@@ -44,33 +45,131 @@ class Matrix4x4F32Test {
 
     @Test
     fun `identity times vector returns vector`() {
-        val v = Vector4F32.of(1f, 2f, 3f, 4f)
+        val v = Vector4F32(1f, 2f, 3f, 4f)
         assertV4Near(v, Matrix4x4F32() * v)
     }
 
     @Test
     fun `translate factory shifts point`() {
         val t = Matrix4x4F32.translate(10f, 20f, 30f)
-        val mapped = t.map(1f, 2f, 3f, 1f)
-        assertV4Near(Vector4F32.of(11f, 22f, 33f, 1f), mapped)
+        assertEquals(Point3F32(11f, 22f, 33f), t.transform(Point3F32(1f, 2f, 3f)))
     }
 
     @Test
     fun `scale factory scales vector`() {
         val s = Matrix4x4F32.scale(2f, 3f, 4f)
-        assertV4Near(Vector4F32.of(2f, 6f, 12f, 1f), s.map(1f, 2f, 3f, 1f))
+        assertEquals(Vector3F32(2f, 6f, 12f), s.transform(Vector3F32(1f, 2f, 3f)))
+    }
+
+    @Test
+    fun `affine transform distinguishes point from vector`() {
+        val matrix = Matrix4x4F32(
+            2f, 3f, 5f, 7f,
+            11f, 13f, 17f, 19f,
+            23f, 29f, 31f, 37f,
+            0f, 0f, 0f, 1f,
+        )
+        val point = Point3F32(41f, 43f, 47f)
+        val vector = Vector3F32(41f, 43f, 47f)
+
+        val transformedPoint = matrix.transform(point)
+        assertEquals(2f * 41f + 3f * 43f + 5f * 47f + 7f, transformedPoint.x)
+        assertEquals(11f * 41f + 13f * 43f + 17f * 47f + 19f, transformedPoint.y)
+        assertEquals(23f * 41f + 29f * 43f + 31f * 47f + 37f, transformedPoint.z)
+        val operatorPoint = matrix * point
+        assertEquals(2f * 41f + 3f * 43f + 5f * 47f + 7f, operatorPoint.x)
+        assertEquals(11f * 41f + 13f * 43f + 17f * 47f + 19f, operatorPoint.y)
+        assertEquals(23f * 41f + 29f * 43f + 31f * 47f + 37f, operatorPoint.z)
+
+        val transformedVector = matrix.transform(vector)
+        assertEquals(2f * 41f + 3f * 43f + 5f * 47f, transformedVector.x)
+        assertEquals(11f * 41f + 13f * 43f + 17f * 47f, transformedVector.y)
+        assertEquals(23f * 41f + 29f * 43f + 31f * 47f, transformedVector.z)
+        val operatorVector = matrix * vector
+        assertEquals(2f * 41f + 3f * 43f + 5f * 47f, operatorVector.x)
+        assertEquals(11f * 41f + 13f * 43f + 17f * 47f, operatorVector.y)
+        assertEquals(23f * 41f + 29f * 43f + 31f * 47f, operatorVector.z)
+        assertTrue(matrix.isAffine())
+    }
+
+    @Test
+    fun `homogeneous transform uses all sixteen row-major coefficients`() {
+        val matrix = Matrix4x4F32(
+            2f, 3f, 5f, 7f,
+            11f, 13f, 17f, 19f,
+            23f, 29f, 31f, 37f,
+            41f, 43f, 47f, 53f,
+        )
+        val value = Vector4F32(59f, 61f, 67f, 71f)
+
+        val transformed = matrix.transformHomogeneous(value)
+        assertEquals(2f * 59f + 3f * 61f + 5f * 67f + 7f * 71f, transformed.x)
+        assertEquals(11f * 59f + 13f * 61f + 17f * 67f + 19f * 71f, transformed.y)
+        assertEquals(23f * 59f + 29f * 61f + 31f * 67f + 37f * 71f, transformed.z)
+        assertEquals(41f * 59f + 43f * 61f + 47f * 67f + 53f * 71f, transformed.w)
+        val operatorValue = matrix * value
+        assertEquals(2f * 59f + 3f * 61f + 5f * 67f + 7f * 71f, operatorValue.x)
+        assertEquals(11f * 59f + 13f * 61f + 17f * 67f + 19f * 71f, operatorValue.y)
+        assertEquals(23f * 59f + 29f * 61f + 31f * 67f + 37f * 71f, operatorValue.z)
+        assertEquals(41f * 59f + 43f * 61f + 47f * 67f + 53f * 71f, operatorValue.w)
+        assertFalse(matrix.isAffine())
+    }
+
+    @Test
+    fun `projective point transform divides by homogeneous w`() {
+        val matrix = Matrix4x4F32(
+            2f, 0f, 0f, 4f,
+            0f, 3f, 0f, 5f,
+            0f, 0f, 7f, 11f,
+            0.5f, 0f, 0f, 1f,
+        )
+        val point = Point3F32(2f, 3f, 5f)
+        val expectedW = 0.5f * 2f + 0f * 3f + 0f * 5f + 1f
+
+        val transformed = matrix.transform(point)
+        assertEquals((2f * 2f + 0f * 3f + 0f * 5f + 4f) / expectedW, transformed.x)
+        assertEquals((0f * 2f + 3f * 3f + 0f * 5f + 5f) / expectedW, transformed.y)
+        assertEquals((0f * 2f + 0f * 3f + 7f * 5f + 11f) / expectedW, transformed.z)
+    }
+
+    @Test
+    fun `point transform is total when homogeneous w is zero`() {
+        val matrix = Matrix4x4F32(
+            1f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 0f, 0f, -2f,
+        )
+
+        assertEquals(Point3F32.Origin, matrix.transform(Point3F32(2f, 3f, 5f)))
+    }
+
+    @Test
+    fun `projective vector transform is rejected`() {
+        val matrix = Matrix4x4F32(
+            1f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            1f, 0f, 0f, 1f,
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            matrix.transform(Vector3F32.UnitX)
+        }
+        assertEquals("transform(vector) requires an affine Matrix4x4F32", failure.message)
+        assertFailsWith<IllegalArgumentException> { matrix * Vector3F32.UnitX }
     }
 
     @Test
     fun `rotate Z 90 degrees maps unit-X to unit-Y`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 1f), (PI / 2).toFloat())
-        val out = r * Vector4F32.of(1f, 0f, 0f, 1f)
-        assertV4Near(Vector4F32.of(0f, 1f, 0f, 1f), out, 1e-5f)
+        val r = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 1f), (PI / 2).toFloat())
+        val out = r * Vector4F32(1f, 0f, 0f, 1f)
+        assertV4Near(Vector4F32(0f, 1f, 0f, 1f), out, 1e-5f)
     }
 
     @Test
     fun `rotate falls back to identity for zero axis`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 0f), 1f)
+        val r = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 0f), 1f)
         assertTrue(r.isIdentity())
     }
 
@@ -89,7 +188,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `invert of rotation equals its transpose`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(1f, 2f, 3f).normalize(), 0.7f)
+        val r = Matrix4x4F32.rotate(Vector3F32(1f, 2f, 3f).normalized(), 0.7f)
         val inv = r.invert()
         assertNotNull(inv)
         assertMatrixNear(r.transpose(), inv, 1e-4f)
@@ -191,46 +290,35 @@ class Matrix4x4F32Test {
     fun `multiplication is associative`() {
         val a = Matrix4x4F32.translate(1f, 2f, 3f)
         val b = Matrix4x4F32.scale(2f, 3f, 4f)
-        val c = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 1f), 0.5f)
+        val c = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 1f), 0.5f)
         assertMatrixNear((a * b) * c, a * (b * c), 1e-4f)
     }
 
     @Test
-    fun `mapPoint matches Matrix3x3F32 when m44 is affine`() {
-        val sk2D = Matrix3x3F32.of(2f, 0f, 5f, 0f, 3f, 7f)
-        val m44 = Matrix4x4F32(sk2D)
-        val p = Vector2F32.of(4f, 8f)
-        val viaM44 = m44.mapPoint(p)
-        val viaMatrix = sk2D.mapXY(p)
-        assertEquals(viaMatrix.x, viaM44.x, 1e-5f)
-        assertEquals(viaMatrix.y, viaM44.y, 1e-5f)
-    }
-
-    @Test
-    fun `mapRect on translate matches RectF32-shifted`() {
+    fun `transformBounds on translate returns shifted bounds`() {
         val m = Matrix4x4F32.translate(10f, 20f, 0f)
         val r = RectF32(0f, 0f, 4f, 6f)
-        val out = m.mapRect(r)
+        val out = m.transformBounds(r)
         assertEquals(RectF32(10f, 20f, 14f, 26f), out)
     }
 
     @Test
-    fun `mapRect on scale produces scaled bounds`() {
+    fun `transformBounds on scale produces scaled bounds`() {
         val m = Matrix4x4F32.scale(2f, 3f, 1f)
-        val out = m.mapRect(RectF32(0f, 0f, 4f, 6f))
+        val out = m.transformBounds(RectF32(0f, 0f, 4f, 6f))
         assertEquals(RectF32(0f, 0f, 8f, 18f), out)
     }
 
     @Test
-    fun `mapRect identity returns rect unchanged`() {
+    fun `transformBounds identity returns rect unchanged`() {
         val m = Matrix4x4F32()
         val r = RectF32(-1.5f, 2f, 3.25f, 7.5f)
-        val out = m.mapRect(r)
+        val out = m.transformBounds(r)
         assertEquals(r, out)
     }
 
     @Test
-    fun `mapRect with extreme perspective clips w less or equal 0 instead of NaN or Inf`() {
+    fun `transformBounds with extreme perspective clips w less or equal 0 instead of NaN or Inf`() {
         // Audit divergence #5: upstream `map_rect_perspective` clips
         // corners with w < kW0PlaneDistance against the w-plane;
         // the previous Kotlin implementation projected every corner
@@ -246,7 +334,7 @@ class Matrix4x4F32Test {
         // The right edge x = 0.5 collapses to w = 0; the right edge
         // x = 2 has w = 1.5; the left edge x = -1 has w = -1.5.
         val r = RectF32(-1f, -1f, 2f, 1f)
-        val out = m.mapRect(r)
+        val out = m.transformBounds(r)
         assertTrue(out.left.isFinite(),    "left was ${out.left}")
         assertTrue(out.top.isFinite(),     "top was ${out.top}")
         assertTrue(out.right.isFinite(),   "right was ${out.right}")
@@ -256,7 +344,7 @@ class Matrix4x4F32Test {
     }
 
     @Test
-    fun `mapRect with mild perspective gives finite bounds matching projected corners`() {
+    fun `transformBounds with mild perspective matches raw projected corner formulas`() {
         // All four corners have w well above kW0PlaneDistance ⇒ the
         // result is just min/max of (x/w, y/w) per corner, identical
         // to the old behaviour.
@@ -267,17 +355,17 @@ class Matrix4x4F32Test {
             0.1f, 0.2f, 0f, 1f, // bottom row: w = 1 + 0.1x + 0.2y
         )
         val r = RectF32(0f, 0f, 2f, 4f)
-        val out = m.mapRect(r)
+        val out = m.transformBounds(r)
 
-        // Reference: project each corner manually.
-        fun proj(x: Float, y: Float): Pair<Float, Float> {
-            val w = 0.1f * x + 0.2f * y + 1f
-            return Pair(x / w, y / w)
-        }
-        val (x0, y0) = proj(0f, 0f)
-        val (x1, y1) = proj(2f, 0f)
-        val (x2, y2) = proj(0f, 4f)
-        val (x3, y3) = proj(2f, 4f)
+        // Reference: project each corner with its raw scalar formula.
+        val x0 = 0f / (0.1f * 0f + 0.2f * 0f + 1f)
+        val y0 = 0f / (0.1f * 0f + 0.2f * 0f + 1f)
+        val x1 = 2f / (0.1f * 2f + 0.2f * 0f + 1f)
+        val y1 = 0f / (0.1f * 2f + 0.2f * 0f + 1f)
+        val x2 = 0f / (0.1f * 0f + 0.2f * 4f + 1f)
+        val y2 = 4f / (0.1f * 0f + 0.2f * 4f + 1f)
+        val x3 = 2f / (0.1f * 2f + 0.2f * 4f + 1f)
+        val y3 = 4f / (0.1f * 2f + 0.2f * 4f + 1f)
         assertEquals(minOf(x0, x1, x2, x3), out.left,   1e-5f)
         assertEquals(minOf(y0, y1, y2, y3), out.top,    1e-5f)
         assertEquals(maxOf(x0, x1, x2, x3), out.right,  1e-5f)
@@ -337,16 +425,31 @@ class Matrix4x4F32Test {
     }
 
     @Test
-    fun `lookAt produces invertible matrix for typical eye`() {
+    fun `lookAt transforms the eye point to the origin`() {
+        val eye = Point3F32(3f, 4f, 5f)
         val v = Matrix4x4F32.lookAt(
-            eye = Vector3F32.of(0f, 0f, 5f),
-            center = Vector3F32.of(0f, 0f, 0f),
-            up = Vector3F32.of(0f, 1f, 0f),
+            eye = eye,
+            center = Point3F32(-2f, 1f, 0f),
+            up = Vector3F32(0f, 1f, 0f),
         )
-        // The Skia look-at is the inverse of [right, up, -fwd, eye]; it
-        // should be a valid affine view matrix (finite, invertible).
+
+        val transformedEye = v.transform(eye)
+        assertEquals(0f, transformedEye.x, 1e-5f)
+        assertEquals(0f, transformedEye.y, 1e-5f)
+        assertEquals(0f, transformedEye.z, 1e-5f)
         assertTrue(v.isFinite())
         assertNotNull(v.invert())
+    }
+
+    @Test
+    fun `lookAt axial camera has negative eye z translation`() {
+        val v = Matrix4x4F32.lookAt(
+            eye = Point3F32(0f, 0f, 5f),
+            center = Point3F32.Origin,
+            up = Vector3F32.UnitY,
+        )
+
+        assertEquals(-5f, v.rc(2, 3), 1e-6f)
     }
 
     @Test
@@ -354,8 +457,8 @@ class Matrix4x4F32Test {
         val src = RectF32(0f, 0f, 2f, 4f)
         val dst = RectF32(10f, 20f, 14f, 28f)
         val m = Matrix4x4F32.rectToRect(src, dst)
-        assertV4Near(Vector4F32.of(10f, 20f, 0f, 1f), m.map(0f, 0f, 0f, 1f))
-        assertV4Near(Vector4F32.of(14f, 28f, 0f, 1f), m.map(2f, 4f, 0f, 1f))
+        assertEquals(Point3F32(10f, 20f, 0f), m.transform(Point3F32(0f, 0f, 0f)))
+        assertEquals(Point3F32(14f, 28f, 0f), m.transform(Point3F32(2f, 4f, 0f)))
     }
 
     @Test
@@ -412,10 +515,4 @@ class Matrix4x4F32Test {
         assertFalse(m.isFinite())
     }
 
-    @Test
-    fun `times Vector3F32 drops translation`() {
-        val m = Matrix4x4F32.translate(10f, 20f, 30f)
-        val v = Vector3F32.of(1f, 2f, 3f)
-        assertEquals(Vector3F32.of(1f, 2f, 3f), m * v)
-    }
 }

@@ -4,6 +4,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.Test
+import org.graphiks.math.vector.Vector2I32
 
 class RectI32Test {
 
@@ -48,13 +49,13 @@ class RectI32Test {
 
     @Test
     fun `fromPointSize delegates to ofOriginSize saturation semantics`() {
-        val max = RectI32.fromPointSize(Vector2I32(Int.MAX_VALUE - 1, Int.MAX_VALUE - 2), SizeI32(10, 20))
+        val max = RectI32.fromPointSize(Point2I32(Int.MAX_VALUE - 1, Int.MAX_VALUE - 2), SizeI32(10, 20))
         assertEquals(Int.MAX_VALUE - 1, max.left)
         assertEquals(Int.MAX_VALUE - 2, max.top)
         assertEquals(Int.MAX_VALUE, max.right)
         assertEquals(Int.MAX_VALUE, max.bottom)
 
-        val min = RectI32.fromPointSize(Vector2I32(Int.MIN_VALUE + 1, Int.MIN_VALUE + 2), SizeI32(-10, -20))
+        val min = RectI32.fromPointSize(Point2I32(Int.MIN_VALUE + 1, Int.MIN_VALUE + 2), SizeI32(-10, -20))
         assertEquals(Int.MIN_VALUE + 1, min.left)
         assertEquals(Int.MIN_VALUE + 2, min.top)
         assertEquals(Int.MIN_VALUE, min.right)
@@ -114,11 +115,39 @@ class RectI32Test {
     }
 
     @Test
+    fun `vector translation uses independently widened saturation expectations`() {
+        val original = RectI32.ofLTRB(Int.MIN_VALUE + 4, Int.MAX_VALUE - 4, Int.MAX_VALUE - 3, Int.MIN_VALUE + 3)
+        val delta = Vector2I32(-10, 10)
+        val expected = RectI32(
+            (original.left.toLong() + delta.x.toLong()).coerceIn(-2_147_483_648L, 2_147_483_647L).toInt(),
+            (original.top.toLong() + delta.y.toLong()).coerceIn(-2_147_483_648L, 2_147_483_647L).toInt(),
+            (original.right.toLong() + delta.x.toLong()).coerceIn(-2_147_483_648L, 2_147_483_647L).toInt(),
+            (original.bottom.toLong() + delta.y.toLong()).coerceIn(-2_147_483_648L, 2_147_483_647L).toInt(),
+        )
+
+        original.offset(delta)
+        assertEquals(expected, original)
+        assertEquals(expected, RectI32.ofLTRB(Int.MIN_VALUE + 4, Int.MAX_VALUE - 4, Int.MAX_VALUE - 3, Int.MIN_VALUE + 3).offsetBy(delta))
+    }
+
+    @Test
     fun `offsetTo uses 64-bit pinned arithmetic`() {
         val r = RectI32.ofLTRB(Int.MIN_VALUE, 0, Int.MIN_VALUE + 10, 5)
         r.offsetTo(Int.MAX_VALUE - 9, 0)
         assertEquals(Int.MAX_VALUE - 9, r.left)
         assertEquals(Int.MAX_VALUE, r.right)
+    }
+
+    @Test
+    fun `offsetTo clamps after the full widened translation`() {
+        val r = RectI32.ofLTRB(Int.MIN_VALUE, 0, Int.MAX_VALUE, 1)
+        val expectedRight = (Int.MAX_VALUE.toLong() + Int.MIN_VALUE.toLong() - Int.MIN_VALUE.toLong())
+            .coerceIn(-2_147_483_648L, 2_147_483_647L)
+            .toInt()
+
+        r.offsetTo(Int.MIN_VALUE, 0)
+
+        assertEquals(expectedRight, r.right)
     }
 
     @Test
@@ -155,10 +184,10 @@ class RectI32Test {
     @Test
     fun `contains point is half-open`() {
         val r = RectI32.ofLTRB(0, 0, 10, 10)
-        assertTrue(r.contains(0, 0))
-        assertTrue(r.contains(9, 9))
-        assertFalse(r.contains(10, 5))
-        assertFalse(r.contains(5, 10))
+        assertTrue(r.contains(Point2I32(0, 0)))
+        assertTrue(r.contains(Point2I32(9, 9)))
+        assertFalse(r.contains(Point2I32(10, 5)))
+        assertFalse(r.contains(Point2I32(5, 10)))
     }
 
     @Test
@@ -206,8 +235,8 @@ class RectI32Test {
     }
 
     @Test
-    fun `topLeft returns Vector2I32`() {
+    fun `topLeft returns Point2I32`() {
         val r = RectI32.ofLTRB(3, 5, 10, 20)
-        assertEquals(Vector2I32(3, 5), r.topLeft())
+        assertEquals(Point2I32(3, 5), r.topLeft())
     }
 }

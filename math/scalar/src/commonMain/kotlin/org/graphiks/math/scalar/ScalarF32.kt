@@ -121,23 +121,3 @@ public fun tan(radians: Float): Float {
     val r = kotlin.math.tan(radians.toDouble()).toFloat()
     return if (nearlyZero(r)) 0f else r
 }
-
-/**
- * Saturating 32-bit integer addition: clamps result to `[Int.MIN_VALUE, Int.MAX_VALUE]`.
- *
- * ([src/core/SkUtils.h](https://github.com/google/skia/blob/main/src/core/SkUtils.h)).
- */
-public fun saturatingAdd32(a: Int, b: Int): Int {
-    val sum = a.toLong() + b.toLong()
-    return sum.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-}
-
-/**
- * Saturating 32-bit integer subtraction: clamps result to `[Int.MIN_VALUE, Int.MAX_VALUE]`.
- *
- * ([src/core/SkUtils.h](https://github.com/google/skia/blob/main/src/core/SkUtils.h)).
- */
-public fun saturatingSub32(a: Int, b: Int): Int {
-    val diff = a.toLong() - b.toLong()
-    return diff.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-}

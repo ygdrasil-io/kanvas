@@ -10,6 +10,7 @@ kotlin {
 
     sourceSets {
         commonMain {
+            kotlin.srcDir("src/generated/kotlin")
             dependencies {
                 implementation(project(":math:scalar"))
                 api(project(":math:vector"))

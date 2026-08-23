@@ -6,7 +6,7 @@ import org.graphiks.math.scalar.cos
 import org.graphiks.math.scalar.nearlyZero
 import org.graphiks.math.scalar.sin
 import org.graphiks.math.scalar.tan
-import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.vector.Vector4F32
@@ -100,7 +100,7 @@ public class Matrix4x4F32 {
     public companion object {
         /**
          * Distance to the `w = 0` plane used when clipping perspective
-         * projections in [mapRect]. `kW0PlaneDistance = 1.f / (1 << 14)` ≈ 6.1e-5. Corners with homogeneous `w`
+         * projections in [transformBounds]. `kW0PlaneDistance = 1.f / (1 << 14)` ≈ 6.1e-5. Corners with homogeneous `w`
          * below this threshold are treated as being behind the camera.
          */
         public const val kW0PlaneDistance: Float = 1f / (1 shl 14)
@@ -141,7 +141,7 @@ public class Matrix4x4F32 {
          * Build the view matrix that places the camera at `eye` looking
          * at `center` with the given `up` direction.
          */
-        public fun lookAt(eye: Vector3F32, center: Vector3F32, up: Vector3F32): Matrix4x4F32 {
+        public fun lookAt(eye: Point3F32, center: Point3F32, up: Vector3F32): Matrix4x4F32 {
             val f = normalize3(center - eye)
             val u = normalize3(up)
             val s = normalize3(f.cross(u))
@@ -150,7 +150,7 @@ public class Matrix4x4F32 {
             cols.setCol(0, v4(s, 0f))
             cols.setCol(1, v4(s.cross(f), 0f))
             cols.setCol(2, v4(-f, 0f))
-            cols.setCol(3, v4(eye, 1f))
+            cols.setCol(3, Vector4F32(eye.x, eye.y, eye.z, 1f))
 
             val out = Matrix4x4F32()
             val inv = cols.invert()
@@ -208,7 +208,7 @@ public class Matrix4x4F32 {
             return if (kotlin.math.abs(len) < 1e-7f) v else v * (1f / len)
         }
 
-        private fun v4(v: Vector3F32, w: Float): Vector4F32 = Vector4F32.of(v.x, v.y, v.z, w)
+        private fun v4(v: Vector3F32, w: Float): Vector4F32 = Vector4F32(v.x, v.y, v.z, w)
     }
 
     // ─── Element access ────────────────────────────────────────────────
@@ -259,7 +259,7 @@ public class Matrix4x4F32 {
          */
     public fun row(i: Int): Vector4F32 {
         require(i in 0..3) { "row($i) out of range" }
-        return Vector4F32.of(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
+        return Vector4F32(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
     }
 
     /**
@@ -267,7 +267,7 @@ public class Matrix4x4F32 {
          */
     public fun col(i: Int): Vector4F32 {
         require(i in 0..3) { "col($i) out of range" }
-        return Vector4F32.of(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
+        return Vector4F32(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
     }
 
     /**
@@ -472,49 +472,47 @@ public class Matrix4x4F32 {
         return this
     }
 
-    // ─── Mapping ───────────────────────────────────────────────────────
+    // ─── Transformations ───────────────────────────────────────────────
 
-    /**
-     * Apply this matrix to the 4-vector `(x, y, z, w)`.
-     */
-    public fun map(x: Float, y: Float, z: Float, w: Float): Vector4F32 {
-        val rx = fMat[0] * x + fMat[4] * y + fMat[8] * z + fMat[12] * w
-        val ry = fMat[1] * x + fMat[5] * y + fMat[9] * z + fMat[13] * w
-        val rz = fMat[2] * x + fMat[6] * y + fMat[10] * z + fMat[14] * w
-        val rw = fMat[3] * x + fMat[7] * y + fMat[11] * z + fMat[15] * w
-        return Vector4F32.of(rx, ry, rz, rw)
-    }
+    /** Returns whether the homogeneous bottom row is exactly `[0, 0, 0, 1]`. */
+    public fun isAffine(): Boolean =
+        fMat[3] == 0f && fMat[7] == 0f && fMat[11] == 0f && fMat[15] == 1f
 
-    /** Convenience wrapper. */
-    public fun map(v: Vector4F32): Vector4F32 = map(v.x, v.y, v.z, v.w)
-
-    /** Operator overload: `this * v`. Mirrors C++ `operator*(const Vector4F32&)`. */
-    public operator fun times(v: Vector4F32): Vector4F32 = map(v.x, v.y, v.z, v.w)
-
-    /**
-     * Operator overload: apply with `w = 0` (vector mapping, drops
-     * translation). Mirrors C++ `operator*(Vector3F32)`.
-     */
-    public operator fun times(v: Vector3F32): Vector3F32 {
-        val r = map(v.x, v.y, v.z, 0f)
-        return Vector3F32.of(r.x, r.y, r.z)
+    /** Applies this matrix to the homogeneous 4-vector [value]. */
+    public fun transformHomogeneous(value: Vector4F32): Vector4F32 {
+        val rx = fMat[0] * value.x + fMat[4] * value.y + fMat[8] * value.z + fMat[12] * value.w
+        val ry = fMat[1] * value.x + fMat[5] * value.y + fMat[9] * value.z + fMat[13] * value.w
+        val rz = fMat[2] * value.x + fMat[6] * value.y + fMat[10] * value.z + fMat[14] * value.w
+        val rw = fMat[3] * value.x + fMat[7] * value.y + fMat[11] * value.z + fMat[15] * value.w
+        return Vector4F32(rx, ry, rz, rw)
     }
 
     /**
-     * Apply this matrix to a 2D point, treating it as `(x, y, 0, 1)`
-     * with a homogeneous divide on the result. If the bottom row is
-     * `[0, 0, 0, 1]` this returns the affine drop of the M44 to its
-     * 2D action (matches `asM33().mapXY`).
+     * Transforms [point] and applies the homogeneous divide. When the
+     * homogeneous `w` is zero, `inverseW` is defined as zero so this operation
+     * remains total and returns zero-valued coordinates.
      */
-    public fun mapPoint(p: Vector2F32): Vector2F32 {
-        val r = map(p.x, p.y, 0f, 1f)
-        return if (r.w == 1f || r.w == 0f) {
-            Vector2F32.of(r.x, r.y)
-        } else {
-            val invW = 1f / r.w
-            Vector2F32.of(r.x * invW, r.y * invW)
-        }
+    public fun transform(point: Point3F32): Point3F32 {
+        val value = transformHomogeneous(Vector4F32(point.x, point.y, point.z, 1f))
+        val inverseW = if (value.w == 0f) 0f else 1f / value.w
+        return Point3F32(value.x * inverseW, value.y * inverseW, value.z * inverseW)
     }
+
+    /** Transforms [vector]; projective matrices have no unambiguous 3D vector action. */
+    public fun transform(vector: Vector3F32): Vector3F32 {
+        require(isAffine()) { "transform(vector) requires an affine Matrix4x4F32" }
+        val value = transformHomogeneous(Vector4F32(vector.x, vector.y, vector.z, 0f))
+        return Vector3F32(value.x, value.y, value.z)
+    }
+
+    /** Operator equivalent of [transform] for a point. */
+    public operator fun times(point: Point3F32): Point3F32 = transform(point)
+
+    /** Operator equivalent of [transform] for a vector. */
+    public operator fun times(vector: Vector3F32): Vector3F32 = transform(vector)
+
+    /** Operator equivalent of [transformHomogeneous]. */
+    public operator fun times(value: Vector4F32): Vector4F32 = transformHomogeneous(value)
 
     /**
      * Apply this matrix to `r` and return the axis-aligned bounding
@@ -530,21 +528,19 @@ public class Matrix4x4F32 {
      * by ~zero) are clipped against the adjacent edges so the result
      * stays finite even when the rect crosses behind the camera.
      */
-    public fun mapRect(r: RectF32): RectF32 {
-        val hasPerspective =
-            fMat[3] != 0f || fMat[7] != 0f || fMat[11] != 0f || fMat[15] != 1f
-        if (!hasPerspective) {
-            return mapRectAffine(r)
+    public fun transformBounds(r: RectF32): RectF32 {
+        if (isAffine()) {
+            return transformBoundsAffine(r)
         }
-        return mapRectPerspective(r)
+        return transformBoundsPerspective(r)
     }
 
     /** Affine fast path: project 4 corners (w divide skipped since w == 1) and bound. */
-    private fun mapRectAffine(r: RectF32): RectF32 {
-        val tl = map(r.left,  r.top,    0f, 1f)
-        val tr = map(r.right, r.top,    0f, 1f)
-        val bl = map(r.left,  r.bottom, 0f, 1f)
-        val br = map(r.right, r.bottom, 0f, 1f)
+    private fun transformBoundsAffine(r: RectF32): RectF32 {
+        val tl = transform(Point3F32(r.left, r.top, 0f))
+        val tr = transform(Point3F32(r.right, r.top, 0f))
+        val bl = transform(Point3F32(r.left, r.bottom, 0f))
+        val br = transform(Point3F32(r.right, r.bottom, 0f))
         return RectF32(
             minOf(tl.x, tr.x, bl.x, br.x),
             minOf(tl.y, tr.y, bl.y, br.y),
@@ -563,17 +559,22 @@ public class Matrix4x4F32 {
      * `w = kW0PlaneDistance` plane; corners with no surviving neighbour
      * contribute `+Infinity`, which `minOf` discards.
      */
-    private fun mapRectPerspective(r: RectF32): RectF32 {
+    private fun transformBoundsPerspective(r: RectF32): RectF32 {
         val l = r.left
         val t = r.top
         val rg = r.right
         val b = r.bottom
 
-        // Build four homogeneous corners c0*x + c1*y + c3 (z = 0).
-        val tl = map(l,  t,  0f, 1f)
-        val tr = map(rg, t,  0f, 1f)
-        val br = map(rg, b,  0f, 1f)
-        val bl = map(l,  b,  0f, 1f)
+        val topLeft = Point3F32(l, t, 0f)
+        val topRight = Point3F32(rg, t, 0f)
+        val bottomRight = Point3F32(rg, b, 0f)
+        val bottomLeft = Point3F32(l, b, 0f)
+
+        // Keep the projected corners homogeneous until clipping has completed.
+        val tl = transformHomogeneous(Vector4F32(topLeft.x, topLeft.y, topLeft.z, 1f))
+        val tr = transformHomogeneous(Vector4F32(topRight.x, topRight.y, topRight.z, 1f))
+        val br = transformHomogeneous(Vector4F32(bottomRight.x, bottomRight.y, bottomRight.z, 1f))
+        val bl = transformHomogeneous(Vector4F32(bottomLeft.x, bottomLeft.y, bottomLeft.z, 1f))
 
         // Walk the corners clockwise. project(p0, p1, p2) returns
         // (minX, minY, -maxX, -maxY) — same "flip" trick so
@@ -770,7 +771,6 @@ public class Matrix4x4F32 {
     // ─── equals / hashCode / toString ──────────────────────────────────
 
     override fun equals(other: Any?): Boolean {
-        if (this === other) return true
         if (other !is Matrix4x4F32) return false
         for (i in 0..15) {
             if (fMat[i] != other.fMat[i]) return false
