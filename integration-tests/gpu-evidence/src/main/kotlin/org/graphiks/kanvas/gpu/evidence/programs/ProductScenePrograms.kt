@@ -21,6 +21,8 @@ import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectReg
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectChildSlotPlan
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectUniformSchema
 
+private const val PERFORMANCE_COMPLETION_ONLY_REQUEST_ID = "gpu-evidence.performance.completion-only"
+
 /** Product-only scene programs; this package never owns WGSL, ABI packing, or backend encoding. */
 object ProductScenePrograms {
     fun solidRects(
@@ -36,7 +38,7 @@ object ProductScenePrograms {
                 target = context.target,
                 targetBounds = context.targetBounds,
                 draws = draws,
-                readbackRequestId = context.readbackRequestId.takeIf { it.value.isNotBlank() },
+                readbackRequestId = context.readbackRequestId.takeIf { it.value != PERFORMANCE_COMPLETION_ONLY_REQUEST_ID },
                 configuredAggregateBudgetBytes = budgetBytes,
             ),
         )) {
@@ -72,7 +74,7 @@ object ProductScenePrograms {
                 sourcePremultipliedRgba = sourcePremultipliedRgba.copyOf(),
                 clearPremultipliedRgba = floatArrayOf(0f, 0f, 0f, 0f),
                 sigma = sigma,
-                readbackRequestId = context.readbackRequestId.takeIf { it.value.isNotBlank() },
+                readbackRequestId = context.readbackRequestId.takeIf { it.value != PERFORMANCE_COMPLETION_ONLY_REQUEST_ID },
             ),
         )) {
             is GPUSeparableBlurRectFrameRecordingResult.Recorded ->

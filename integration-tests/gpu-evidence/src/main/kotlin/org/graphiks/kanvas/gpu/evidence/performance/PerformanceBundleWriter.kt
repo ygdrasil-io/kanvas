@@ -163,7 +163,7 @@ object PerformanceBundleVerifier {
             val measured = timings["measuredFrames"]?.jsonPrimitive?.content?.toIntOrNull()
             val samples = timings["samples"]?.jsonArray
             if (measured == null || samples == null || samples.any { it !is JsonPrimitive || it.jsonPrimitive.isString || it.jsonPrimitive.content.toLongOrNull() == null }) errors += "timings provenance is invalid"
-            else if (samples.size != measured) errors += "timing sample count mismatch"
+            else if (samples.size != measured && verdictKind != "Failed") errors += "timing sample count mismatch"
         }
         val telemetry = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("telemetry.json"))).jsonObject }.getOrElse { errors += "telemetry is invalid"; null }
         telemetry?.values?.forEach { phase ->

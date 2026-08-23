@@ -43,7 +43,7 @@ class GpuEvidencePerformanceRunner(
                 validateCold(cold, prepared.program, evidenceCase, diagnostics)
                 val completionPrepared = backend.prepare(
                     evidenceCase.program,
-                    EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, ""),
+                    EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, "gpu-evidence.performance.completion-only"),
                 )
                 if (completionPrepared !is EvidenceProgramPreparation.Recorded) {
                     diagnostics += "completion-only scene preparation refused"
