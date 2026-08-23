@@ -12,7 +12,10 @@ import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.kanvas.color.ColorModel
+import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.types.Color
@@ -100,6 +103,8 @@ class AnimatedImageOwnershipTest {
                 bluePostProcess(),
             ),
         )
+        assertEquals(emptyList<Int>(), unpremul.decodedFrameIndexes)
+        assertEquals(emptyList<Codec.Options>(), unpremul.decodedOptions)
 
         val displayP3 = ImageColorSpace.fromColorProfile(ColorProfiles.displayP3())
         val p3 = RecordingAnimatedCodec(
@@ -116,6 +121,48 @@ class AnimatedImageOwnershipTest {
                 bluePostProcess(),
             ),
         )
+        assertEquals(emptyList<Int>(), p3.decodedFrameIndexes)
+        assertEquals(emptyList<Codec.Options>(), p3.decodedOptions)
+    }
+
+    @Test
+    fun `without post process preserves Display P3 and supported unclassified ICC metadata`() {
+        val displayP3 = ImageColorSpace.fromColorProfile(ColorProfiles.displayP3())
+        assertNoPostProcessPreserves(
+            RecordingAnimatedCodec(
+                frames = listOf(RED),
+                delaysMs = listOf(40),
+                alphaType = AlphaType.PREMUL,
+                colorSpace = displayP3,
+            ),
+        )
+
+        val nonClassifiableIcc = ImageColorSpace.fromIccProfile(
+            IccProfile.fromMatrixTrc(
+                ColorProfile(
+                    ColorModel.RGB,
+                    requireNotNull(ColorProfiles.displayP3().toXyzD50),
+                    ColorTransferFunction.parametric(
+                        g = 1.8f,
+                        a = 1f,
+                        b = 0f,
+                        c = 1f,
+                        d = 0f,
+                        e = 0f,
+                        f = 0f,
+                    ),
+                ),
+            ),
+        )
+        assertNull(nonClassifiableIcc.toColorSpaceOrNull())
+        assertNoPostProcessPreserves(
+            RecordingAnimatedCodec(
+                frames = listOf(RED),
+                delaysMs = listOf(40),
+                alphaType = AlphaType.UNPREMUL,
+                colorSpace = nonClassifiableIcc,
+            ),
+        )
     }
 
     private fun bluePostProcess() = PictureRecorder().let { recorder ->
@@ -124,6 +171,13 @@ class AnimatedImageOwnershipTest {
             Paint(color = Color.BLUE),
         )
         recorder.finishRecordingAsPicture()
+    }
+
+    private fun assertNoPostProcessPreserves(codec: RecordingAnimatedCodec) {
+        val animated = requireNotNull(AnimatedImage.MakeFromCodec(codec))
+        val frameInfo = animated.getCurrentFrame().info
+        assertEquals(codec.getInfo().alphaType, frameInfo.alphaType)
+        assertEquals(codec.getInfo().colorSpace, frameInfo.colorSpace)
     }
 
     private class RecordingAnimatedCodec(
