@@ -1,6 +1,6 @@
 # Primitives géométriques sémantiques et génération de code
 
-Date : 2026-08-23  
+Date : 2026-08-23
 Statut : conception approuvée
 
 ## 1. Contexte
