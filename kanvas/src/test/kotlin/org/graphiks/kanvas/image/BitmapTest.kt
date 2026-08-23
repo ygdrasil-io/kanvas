@@ -13,10 +13,28 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 class BitmapTest {
+
+    @Test
+    fun `ImageInfo construction retains canonical metadata and ARGB pixels`() {
+        val info = ImageInfo.make(
+            2,
+            1,
+            ColorType.RGBA_8888,
+            AlphaType.UNPREMUL,
+            ImageColorSpace.sRGB(),
+        )
+        val bitmap = Bitmap(info)
+
+        bitmap.setArgb(0, 0, 0x7F123456)
+
+        assertEquals(info, bitmap.info)
+        assertEquals(0x7F123456, bitmap.getArgb(0, 0))
+    }
 
     @Test
     fun `construction allocates correct byte array size`() {
@@ -48,6 +66,20 @@ class BitmapTest {
 
         bitmap.eraseColor(Color.BLUE)
         assertEquals(Color.BLUE, bitmap.getPixel(0, 0))
+    }
+
+    @Test
+    fun `F16 primitives retain premultiplied components`() {
+        val bitmap = Bitmap(1, 1, ColorType.RGBA_F16)
+        val out = FloatArray(4)
+
+        bitmap.setPremulRgbaF16(0, 0, 0.125f, 0.25f, 0.5f, 0.75f)
+
+        assertTrue(bitmap.getPremulRgbaF16(0, 0, out))
+        assertEquals(0.125f, out[0], 0.001f)
+        assertEquals(0.25f, out[1], 0.001f)
+        assertEquals(0.5f, out[2], 0.001f)
+        assertEquals(0.75f, out[3], 0.001f)
     }
 
     @Test

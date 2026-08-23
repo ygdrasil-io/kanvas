@@ -18,17 +18,33 @@ import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.toArgbInt
 
-class Bitmap(
-    val width: Int,
-    val height: Int,
-    val colorType: ColorType = ColorType.RGBA_8888,
-    val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
-) {
+class Bitmap(val info: ImageInfo) {
     init {
-        require(colorType.capabilities().allocatable) { "unsupported color type: $colorType" }
+        require(info.colorType.capabilities().allocatable) { "unsupported color type: ${info.colorType}" }
     }
 
-    val pixels: ByteArray = ByteArray(width * height * colorType.bytesPerPixel)
+    constructor(
+        width: Int,
+        height: Int,
+        colorType: ColorType = ColorType.RGBA_8888,
+        colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
+    ) : this(ImageInfo.make(width, height, colorType, colorType.defaultAlphaType(), colorSpace))
+
+    constructor(
+        width: Int,
+        height: Int,
+        colorType: ColorType,
+        alphaType: AlphaType,
+        colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
+    ) : this(ImageInfo.make(width, height, colorType, alphaType, colorSpace))
+
+    val width: Int get() = info.width
+    val height: Int get() = info.height
+    val colorType: ColorType get() = info.colorType
+    val alphaType: AlphaType get() = info.alphaType
+    val colorSpace: ImageColorSpace get() = info.colorSpace
+
+    val pixels: ByteArray = ByteArray(info.height * info.minRowBytes())
 
     fun getPixel(x: Int, y: Int): Color {
         if (x !in 0 until width || y !in 0 until height) throw IndexOutOfBoundsException("($x, $y) outside ${width}x$height")
@@ -177,6 +193,24 @@ class Bitmap(
         setPixel(x, y, Color.fromArgbInt(argb))
     }
 
+    fun setPremulRgbaF16(x: Int, y: Int, r: Float, g: Float, b: Float, a: Float) {
+        requireF16ColorType()
+        if (x !in 0 until width || y !in 0 until height) return
+        writePremulRgbaF16((y * width + x) * colorType.bytesPerPixel, r, g, b, a)
+    }
+
+    fun getPremulRgbaF16(x: Int, y: Int, out: FloatArray): Boolean {
+        requireF16ColorType()
+        require(out.size >= 4) { "out must hold at least four components" }
+        if (x !in 0 until width || y !in 0 until height) return false
+        val index = (y * width + x) * colorType.bytesPerPixel
+        out[0] = halfToFloat(readHalf(index))
+        out[1] = halfToFloat(readHalf(index + 2))
+        out[2] = halfToFloat(readHalf(index + 4))
+        out[3] = halfToFloat(readHalf(index + 6))
+        return true
+    }
+
     fun eraseColor(color: Color) {
         val r = color.r; val g = color.g; val b = color.b; val a = color.a
         when (colorType) {
@@ -280,7 +314,7 @@ class Bitmap(
         val sh = rect.height.toInt().coerceAtMost(height - sy)
         require(sw > 0 && sh > 0) { "empty subset rect: $rect" }
         val bpp = colorType.bytesPerPixel
-        val subset = Bitmap(sw, sh, colorType, colorSpace)
+        val subset = Bitmap(ImageInfo.make(sw, sh, colorType, alphaType, colorSpace))
         for (row in 0 until sh) {
             val srcOff = ((sy + row) * width + sx) * bpp
             val dstOff = row * sw * bpp
@@ -291,7 +325,7 @@ class Bitmap(
 
     fun toImageOrNull(): Image? =
         colorSpace.toColorSpaceOrNull()?.let { rendererColorSpace ->
-            Image(width, height, colorType, "bitmap", pixels.copyOf(), rendererColorSpace)
+            Image(width, height, colorType, "bitmap", pixels.copyOf(), rendererColorSpace, alphaType)
         }
 
     fun makeShader(
@@ -311,9 +345,38 @@ class Bitmap(
 
     companion object {
         fun fromImage(image: Image): Bitmap =
-            Bitmap(image.width, image.height, image.colorType, image.colorSpace.toImageColorSpace()).also { bmp ->
+            Bitmap(
+                ImageInfo.make(
+                    image.width,
+                    image.height,
+                    image.colorType,
+                    image.alphaType,
+                    image.colorSpace.toImageColorSpace(),
+                ),
+            ).also { bmp ->
                 image.pixels?.let { src -> src.copyInto(bmp.pixels) }
             }
+    }
+
+    private fun requireF16ColorType() {
+        require(colorType == ColorType.RGBA_F16 || colorType == ColorType.RGBA_F16_NORM) {
+            "unsupported color type: $colorType"
+        }
+    }
+
+    private fun writePremulRgbaF16(index: Int, r: Float, g: Float, b: Float, a: Float) {
+        writeHalf(index, floatToHalf(r))
+        writeHalf(index + 2, floatToHalf(g))
+        writeHalf(index + 4, floatToHalf(b))
+        writeHalf(index + 6, floatToHalf(a))
+    }
+
+    private fun readHalf(index: Int): Short =
+        (((pixels[index + 1].toInt() and 0xFF) shl 8) or (pixels[index].toInt() and 0xFF)).toShort()
+
+    private fun writeHalf(index: Int, value: Short) {
+        pixels[index] = (value.toInt() and 0xFF).toByte()
+        pixels[index + 1] = ((value.toInt() ushr 8) and 0xFF).toByte()
     }
 }
 
