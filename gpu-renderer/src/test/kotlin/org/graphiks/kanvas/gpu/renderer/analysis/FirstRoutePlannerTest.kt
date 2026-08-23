@@ -56,10 +56,30 @@ import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
+    @Test
+    fun `native FillRect route builder retains its four argument JVM descriptor`() {
+        val methods = GPUFirstRouteDecisionBuilder::class.java.methods.filter { method ->
+            method.name == "nativeFillRect"
+        }
+
+        assertEquals(1, methods.size)
+        assertEquals(4, methods.single().parameterCount)
+        assertEquals(
+            listOf(
+                Int::class.javaPrimitiveType,
+                String::class.java,
+                String::class.java,
+                List::class.java,
+            ),
+            methods.single().parameterTypes.toList(),
+        )
+    }
+
     /** Unsupported image sampling facts stay refused until the prepared semantic can represent them. */
     @Test
     fun `draw image rect rejects unsupported sampling facts before route selection`() {
@@ -392,6 +412,120 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `bounded radial and sweep fill rects receive the sealed axis aligned CorePrimitive authority`() {
+        val materials = listOf(
+            GPUMaterialDescriptor.RadialGradient(
+                centerX = 8f, centerY = 8f, radius = 8f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ),
+            GPUMaterialDescriptor.SweepGradient(
+                centerX = 8f, centerY = 8f, startAngle = 0f, endAngle = 360f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ),
+        )
+
+        materials.forEachIndexed { index, material ->
+            val plan = GPUFirstRoutePlanner(firstSliceWithRadialAndSweepGradientCapabilities()).plan(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(90 + index),
+                    rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                    target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                    material = material,
+                ).copy(antiAlias = false),
+            )
+
+            assertIs<GPURouteDecision.Native>(plan.routeDecision)
+            assertEquals(
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
+                plan.analysisRecord.corePrimitiveRectRouteAuthority,
+            )
+            assertNotNull(plan.analysisRecord.corePrimitiveRectGeometryAuthority)
+        }
+    }
+
+    @Test
+    fun `bounded radial and sweep fill rects select their CorePrimitive programs`() {
+        val cases = listOf(
+            GPUMaterialDescriptor.RadialGradient(
+                centerX = 8f, centerY = 8f, radius = 8f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ) to Triple(
+                "native.fill_rect.radial_gradient",
+                "radial.gradient.fill",
+                "first_slice.radial_gradient.native",
+            ),
+            GPUMaterialDescriptor.SweepGradient(
+                centerX = 8f, centerY = 8f, startAngle = 0f, endAngle = 360f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ) to Triple(
+                "native.fill_rect.sweep_gradient",
+                "sweep.gradient.fill",
+                "first_slice.sweep_gradient.native",
+            ),
+        )
+
+        cases.forEachIndexed { index, (material, expected) ->
+            val plan = GPUFirstRoutePlanner(firstSliceWithRadialAndSweepGradientCapabilities()).plan(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(100 + index),
+                    rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                    target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                    material = material,
+                ).copy(antiAlias = false),
+            )
+
+            val route = assertIs<GPURouteDecision.Native>(plan.routeDecision).route
+            assertEquals(expected.first, plan.analysisRecord.routeDecisionLabel)
+            assertEquals(listOf(expected.second), plan.analysisRecord.renderStepCandidates)
+            assertEquals("pending.pipeline.fill_rect.${expected.first.substringAfterLast('.')}.rgba8unorm.src_over", plan.pass.pipelineKeys.single())
+            assertEquals(expected.first, route.consumerKind)
+            assertEquals(expected.second, route.renderStepIdentity)
+            assertEquals(listOf(expected.third), route.requirements)
+        }
+    }
+
+    @Test
+    fun `radial and sweep antialias fill rects refuse before analytic recording`() {
+        val materials = listOf(
+            GPUMaterialDescriptor.RadialGradient(
+                centerX = 8f, centerY = 8f, radius = 8f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ),
+            GPUMaterialDescriptor.SweepGradient(
+                centerX = 8f, centerY = 8f, startAngle = 0f, endAngle = 360f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            ),
+        )
+
+        materials.forEachIndexed { index, material ->
+            val plan = GPUFirstRoutePlanner(firstSliceWithRadialAndSweepGradientCapabilities()).plan(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(110 + index),
+                    rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                    target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                    material = material,
+                ).copy(antiAlias = true),
+            )
+
+            assertEquals(
+                "unsupported.material.gradient_antialias",
+                assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code,
+            )
+            assertEquals(
+                "unsupported.material.gradient_antialias",
+                assertIs<GPUDrawAnalysisDecision.Refuse>(plan.analysisDecision).diagnostic.code,
+            )
+            assertTrue(plan.pass.drawPackets.isEmpty())
+        }
+    }
+
+    @Test
     fun `scale and affine fill rect accept only solid material while identity and translate keep gradient support`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val rect = firstRouteRect
@@ -403,6 +537,18 @@ class FirstRoutePlannerTest {
         val nonSolidCases = listOf(
             GPUTransformFacts.scale(2f, 3f) to gradient,
             GPUTransformFacts.affine(2f, 0f, 0f, 3f) to gradient,
+            GPUTransformFacts.affine(1f, 0.25f, 0.125f, 1f) to
+                GPUMaterialDescriptor.RadialGradient(
+                    centerX = 8f, centerY = 8f, radius = 8f,
+                    startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                    endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+                ),
+            GPUTransformFacts.affine(1f, 0.25f, 0.125f, 1f) to
+                GPUMaterialDescriptor.SweepGradient(
+                    centerX = 8f, centerY = 8f, startAngle = 0f, endAngle = 360f,
+                    startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                    endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+                ),
             GPUTransformFacts.scale(2f, 3f) to GPUMaterialDescriptor.RuntimeEffect("runtime.test"),
             GPUTransformFacts.affine(2f, 0f, 0f, 3f) to
                 GPUMaterialDescriptor.RuntimeEffect("runtime.test"),
@@ -705,6 +851,23 @@ class FirstRoutePlannerTest {
             assertEquals(expectedCode, routeDecision.diagnostic.code)
             assertEquals(expectedCode, analysisDecision.diagnostic.code)
             assertEquals(listOf(expectedCode), plan.pass.diagnostics.map { it.code })
+        }
+
+        listOf(
+            radial to "unsupported.material.radial_gradient_capability_missing",
+            sweep to "unsupported.material.sweep_gradient_capability_missing",
+        ).forEachIndexed { index, (material, expectedCode) ->
+            val plan = GPUFirstRoutePlanner(capabilities = emptyCapabilities()).plan(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(20 + index),
+                    rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                    target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                    material = material,
+                ),
+            )
+
+            assertEquals(expectedCode, assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+            assertTrue(plan.pass.invocations.isEmpty())
         }
     }
 
@@ -2447,6 +2610,27 @@ class FirstRoutePlannerTest {
                 evidenceLabel = "linear-gradient-fixture",
             ),
             snapshotId = "linear-gradient-test",
+        )
+
+    private fun firstSliceWithRadialAndSweepGradientCapabilities(): GPUCapabilities =
+        firstSliceCapabilities().copy(
+            facts = firstSliceCapabilities().facts + listOf(
+                GPUCapabilityFact(
+                    name = "first_slice.radial_gradient.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "radial-gradient-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.sweep_gradient.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "sweep-gradient-fixture",
+                ),
+            ),
+            snapshotId = "radial-sweep-gradient-test",
         )
 
     /** Capability snapshot that enables the FillRRect expansion route plus linear gradient material. */

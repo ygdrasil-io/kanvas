@@ -59,6 +59,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformByteSize
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
@@ -1888,7 +1889,8 @@ internal class GPUFramePreflighter(
         framePlan.memoryBudget.diagnostic?.let { return it }
         validateCorePrimitivePathMsaaAuthority(framePlan)?.let { return it }
         validateCorePrimitiveSemanticEnvelopes(framePlan)?.let { return it }
-        validateCorePrimitiveCoverageSampleMatrix(framePlan)?.let { return it }
+        val semanticEnvelopeAuthority = captureCorePrimitiveSemanticEnvelopeAuthority(framePlan)
+        validateCorePrimitiveCoverageSampleMatrix(framePlan, semanticEnvelopeAuthority)?.let { return it }
         val coverageMaskPreparedValidation =
             validateCorePrimitiveCoverageMaskPreparedRoutes(framePlan)
         coverageMaskPreparedValidation.diagnostic?.let { return it }
@@ -2017,6 +2019,7 @@ internal class GPUFramePreflighter(
                     step.drawPackets.forEach { packet ->
                         validateSemanticPayload(
                             framePlan,
+                            semanticEnvelopeAuthority,
                             sourceStepIndex,
                             step,
                             packet,
@@ -3582,7 +3585,8 @@ internal class GPUFramePreflighter(
         if (accepted.any { entry ->
                 val block = entry.semantic.payloadRef.uniformBlock
                 block == null || entry.semantic.payloadRef.uniformSlot?.fingerprint != block.fingerprint ||
-                    block.byteSize != 32L || block.bytes.size != 32
+                    block.byteSize != corePrimitiveUniformByteSize(entry.semantic.material).toLong() ||
+                    block.bytes.size != corePrimitiveUniformByteSize(entry.semantic.material)
             }
         ) {
             return diagnostic(
@@ -4044,40 +4048,83 @@ internal class GPUFramePreflighter(
         ): List<Int> = accepted.indices.filter { acceptedIndex ->
             packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout == layout
         }
-        val uniform32Authorities = stepUniformAuthorities.values.filter {
-            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        val legacyUniformLayouts = setOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1,
+        )
+        val legacyUniformAcceptedIndices = accepted.indices.filter { acceptedIndex ->
+            packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout in legacyUniformLayouts
         }
-        val frame32Seal = uniform32Authorities.firstOrNull()?.uniformSlabSeal
-        if (frame32Seal != null) {
-            if (uniform32Authorities.any { it.uniformSlabSeal !== frame32Seal } ||
-                frame32Seal.plan.deviceGeneration != context.deviceGeneration.value ||
-                frame32Seal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-                frame32Seal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L
-            ) {
-                return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
-            }
-            val uniform32AcceptedIndices = layoutAcceptedIndices(
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
+        val legacyUniformSlotByAcceptedIndex = IntArray(accepted.size) { -1 }
+        val legacyUniformSeal = legacyUniformAcceptedIndices.firstOrNull()?.let { acceptedIndex ->
+            packetAuthorities[acceptedIndex].uniformSlabSeal
+        }
+        if (legacyUniformAcceptedIndices.isNotEmpty()) {
+            val seal = legacyUniformSeal ?: return refuse(
+                "Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.",
             )
-            if (frame32Seal.drawCount != uniform32AcceptedIndices.size ||
-                uniform32AcceptedIndices.withIndex().any { (indexAt, acceptedIndex) ->
-                    val entry = accepted[acceptedIndex]
-                    val bytes = entry.semantic.payloadRef.uniformBlock?.bytes
-                        ?: return diagnostic(
-                            "invalid.preflight.core_primitive_semantic_integrity",
-                            "Core primitive packet authority contradicts its immutable semantic input.",
-                        )
-                    !frame32Seal.hasExactPayload(indexAt, entry.packet.commandIdValue, bytes)
-                }
+            if (seal.plan.sourceLabel != "core-primitive-uniform-pass" ||
+                seal.plan.deviceGeneration != context.deviceGeneration.value ||
+                seal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                seal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
+                seal.plan.slots.size != legacyUniformAcceptedIndices.size ||
+                seal.drawCount != legacyUniformAcceptedIndices.size
             ) {
                 return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
             }
+            legacyUniformAcceptedIndices.forEachIndexed { slotIndex, acceptedIndex ->
+                val entry = accepted[acceptedIndex]
+                val uniformBlock = entry.semantic.payloadRef.uniformBlock ?: return diagnostic(
+                    "invalid.preflight.core_primitive_semantic_integrity",
+                    "Core primitive packet authority contradicts its immutable semantic input.",
+                )
+                if (packetAuthorities[acceptedIndex].uniformSlabSeal !== seal ||
+                    seal.commandIds[slotIndex] != entry.packet.commandIdValue ||
+                    seal.plan.slots[slotIndex].slotLabel != "draw-${entry.packet.commandIdValue}" ||
+                    !seal.hasExactPayload(slotIndex, entry.packet.commandIdValue, uniformBlock.bytes)
+                ) {
+                    return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
+                }
+                legacyUniformSlotByAcceptedIndex[acceptedIndex] = slotIndex
+            }
         }
-        val gradientSteps = stepUniformAuthorities.filterValues { authority ->
-            authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ||
-                authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+        val gradientAcceptedIndices = accepted.indices.filter { acceptedIndex ->
+            packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1
         }
-        gradientSteps.forEach { (stepIndex, authority) ->
+        if (gradientAcceptedIndices.isNotEmpty()) {
+            val seal = legacyUniformSeal ?: return diagnostic(
+                "invalid.preflight.core_primitive_gradient_uniform_seal",
+                "Gradient packets must retain one exact uniform slab seal.",
+            )
+            gradientAcceptedIndices.forEach { acceptedIndex ->
+                val entry = accepted[acceptedIndex]
+                val authority = packetAuthorities[acceptedIndex]
+                val indexAt = legacyUniformSlotByAcceptedIndex[acceptedIndex]
+                val expectedHash = corePrimitiveGradientBindingLayoutHash(
+                    authority.structuralPipelineKey.shader,
+                ) ?: return diagnostic(
+                    "invalid.preflight.core_primitive_gradient_uniform_seal",
+                    "Gradient structural authority has no exact binding-layout identity.",
+                )
+                if (entry.packet.bindingLayoutHash != expectedHash ||
+                    entry.route.lane != GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry ||
+                    indexAt < 0 ||
+                    entry.semantic.payloadRef.uniformBlock?.byteSize !=
+                    corePrimitiveUniformByteSize(entry.semantic.material).toLong()
+                ) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_gradient_uniform_seal",
+                        "Gradient uniform slab payload contradicts the current packet or material ABI.",
+                    )
+                }
+            }
+        }
+        val analyticGradientSteps = stepUniformAuthorities.filterValues { authority ->
+            authority.layout ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
+        }
+        analyticGradientSteps.forEach { (stepIndex, authority) ->
             val seal = authority.uniformSlabSeal ?: return diagnostic(
                 "invalid.preflight.core_primitive_gradient_uniform_seal",
                 "Gradient packets must retain one exact uniform slab seal.",
@@ -4097,20 +4144,14 @@ internal class GPUFramePreflighter(
             }
             stepAcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
                 val entry = accepted[acceptedIndex]
-                val expectedBytes = if (
-                    authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
-                ) {
-                    when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
-                        entry.semantic,
-                        GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
-                    )) {
-                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted ->
-                            built.bytes.map { byte -> byte.toInt() and 0xff }
-                        is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
-                            return diagnostic(built.code, built.message)
-                    }
-                } else {
-                    requireNotNull(entry.semantic.payloadRef.uniformBlock).bytes
+                val expectedBytes = when (val built = buildCorePrimitiveGradientAnalyticShapeUniform(
+                    entry.semantic,
+                    GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
+                )) {
+                    is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted ->
+                        built.bytes.map { byte -> byte.toInt() and 0xff }
+                    is GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused ->
+                        return diagnostic(built.code, built.message)
                 }
                 val expectedHash = corePrimitiveGradientBindingLayoutHash(
                     packetAuthorities[acceptedIndex].structuralPipelineKey.shader,
@@ -4118,15 +4159,8 @@ internal class GPUFramePreflighter(
                     "invalid.preflight.core_primitive_gradient_uniform_seal",
                     "Gradient structural authority has no exact binding-layout identity.",
                 )
-                val routeLane = if (
-                    authority.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
-                ) {
-                    GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape
-                } else {
-                    GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry
-                }
                 if (entry.packet.bindingLayoutHash != expectedHash ||
-                    entry.route.lane != routeLane ||
+                    entry.route.lane != GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape ||
                     entry.semantic.payloadRef.uniformBlock?.byteSize !=
                     corePrimitiveUniformByteSize(entry.semantic.material).toLong() ||
                     entry.semantic.payloadRef.uniformBlock.bytes !=
@@ -4831,15 +4865,34 @@ internal class GPUFramePreflighter(
         return null
     }
 
+    private data class CorePrimitiveSemanticEnvelopeEntry(
+        val packet: GPUDrawPacket,
+        val semantic: GPUDrawSemanticPayload.CorePrimitive,
+    )
+
+    private class CorePrimitiveSemanticEnvelopeAuthority(
+        entriesByPacket: Map<GPUDrawPacket, CorePrimitiveSemanticEnvelopeEntry>,
+    ) {
+        private val entriesByPacket = entriesByPacket.toMap()
+
+        fun matches(
+            packet: GPUDrawPacket,
+            semantic: GPUDrawSemanticPayload.CorePrimitive,
+        ): Boolean = entriesByPacket[packet]?.let { entry ->
+            entry.packet === packet && entry.semantic === semantic
+        } == true
+    }
+
     private fun validateCorePrimitiveCoverageSampleMatrix(
         framePlan: GPUFramePlan,
+        semanticEnvelopeAuthority: CorePrimitiveSemanticEnvelopeAuthority,
     ): GPUDiagnostic? {
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
             render.drawPackets.forEach { packet ->
                 val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                     ?: return@forEach
-                if (!hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)) {
+                if (!semanticEnvelopeAuthority.matches(packet, semantic)) {
                     return diagnostic(
                         "invalid.preflight.core_primitive_semantic_integrity",
                         "Core primitive packet authority contradicts its immutable semantic input.",
@@ -4884,22 +4937,20 @@ internal class GPUFramePreflighter(
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEach
             render.drawPackets.forEach { packet ->
                 val semantic = packet.semanticPayload
-                if (packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY) {
-                    if (semantic == null) {
-                        return diagnostic(
-                            "invalid.preflight.core_primitive_semantic_payload_missing",
-                            "Executable core primitive packets require their gathered semantic payload.",
-                        )
-                    }
-                    if (semantic !is GPUDrawSemanticPayload.CorePrimitive ||
-                        !hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)
-                    ) {
-                        return diagnostic(
-                            "invalid.preflight.core_primitive_semantic_integrity",
-                            "Core primitive packet authority contradicts its immutable semantic input.",
-                        )
-                    }
-                } else if (semantic is GPUDrawSemanticPayload.CorePrimitive &&
+                val corePrimitiveStep = corePrimitiveSemanticStep(packet.renderStepId.value)
+                if (corePrimitiveStep != null && semantic == null) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_semantic_payload_missing",
+                        "Executable core primitive packets require their gathered semantic payload.",
+                    )
+                }
+                if (corePrimitiveStep != null && semantic !is GPUDrawSemanticPayload.CorePrimitive) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_semantic_integrity",
+                        "Core primitive packet authority contradicts its immutable semantic input.",
+                    )
+                }
+                if (semantic is GPUDrawSemanticPayload.CorePrimitive &&
                     !hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)
                 ) {
                     return diagnostic(
@@ -4912,12 +4963,48 @@ internal class GPUFramePreflighter(
         return null
     }
 
+    private fun captureCorePrimitiveSemanticEnvelopeAuthority(
+        framePlan: GPUFramePlan,
+    ): CorePrimitiveSemanticEnvelopeAuthority {
+        val entries = linkedMapOf<GPUDrawPacket, CorePrimitiveSemanticEnvelopeEntry>()
+        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().forEach { render ->
+            render.drawPackets.forEach { packet ->
+                val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return@forEach
+                entries[packet] = CorePrimitiveSemanticEnvelopeEntry(packet, semantic)
+            }
+        }
+        return CorePrimitiveSemanticEnvelopeAuthority(entries)
+    }
+
+    private enum class CorePrimitiveSemanticStep {
+        Generic,
+        RadialGradient,
+        SweepGradient,
+    }
+
+    private fun corePrimitiveSemanticStep(
+        renderStepIdentity: String,
+    ): CorePrimitiveSemanticStep? = when (renderStepIdentity) {
+        CORE_PRIMITIVE_RENDER_STEP_IDENTITY -> CorePrimitiveSemanticStep.Generic
+        "radial.gradient.fill" -> CorePrimitiveSemanticStep.RadialGradient
+        "sweep.gradient.fill" -> CorePrimitiveSemanticStep.SweepGradient
+        else -> null
+    }
+
     private fun hasCorePrimitiveSemanticEnvelopeIntegrity(
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
     ): Boolean {
         val clipExecutionPlan = packet.clipExecutionPlan ?: return false
-        return packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
+        val packetStepMatchesMaterial = when (corePrimitiveSemanticStep(packet.renderStepId.value)) {
+            CorePrimitiveSemanticStep.Generic -> true
+            CorePrimitiveSemanticStep.RadialGradient ->
+                semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient
+            CorePrimitiveSemanticStep.SweepGradient ->
+                semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
+            null -> false
+        }
+        return packetStepMatchesMaterial &&
             semantic.payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
             packet.commandIdValue == semantic.payloadRef.commandIdValue &&
             (semantic.analysisRecordId == null ||
@@ -4932,6 +5019,7 @@ internal class GPUFramePreflighter(
 
     private fun validateSemanticPayload(
         framePlan: GPUFramePlan,
+        semanticEnvelopeAuthority: CorePrimitiveSemanticEnvelopeAuthority,
         sourceStepIndex: Int,
         render: GPUFrameStep.RenderPassStep,
         packet: GPUDrawPacket,
@@ -4955,11 +5043,12 @@ internal class GPUFramePreflighter(
                     "invalid.preflight.registered_uniform_semantic_payload_missing",
                     "Executable registered uniform packets require their typed semantic payload.",
                 )
-                CORE_PRIMITIVE_RENDER_STEP_IDENTITY -> diagnostic(
-                    "invalid.preflight.core_primitive_semantic_payload_missing",
-                    "Executable core primitive packets require their gathered semantic payload.",
-                )
-                else -> null
+                else -> corePrimitiveSemanticStep(packet.renderStepId.value)?.let {
+                    diagnostic(
+                        "invalid.preflight.core_primitive_semantic_payload_missing",
+                        "Executable core primitive packets require their gathered semantic payload.",
+                    )
+                }
             }
         }
         return when (semantic) {
@@ -4971,6 +5060,7 @@ internal class GPUFramePreflighter(
                     render,
                     packet,
                     semantic,
+                    semanticEnvelopeAuthority,
                     clipStencilPreparedRouteSeal,
                     coverageMaskPreparedRouteSeal,
                 )
@@ -5136,12 +5226,13 @@ internal class GPUFramePreflighter(
         render: GPUFrameStep.RenderPassStep,
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
+        semanticEnvelopeAuthority: CorePrimitiveSemanticEnvelopeAuthority,
         clipStencilPreparedRouteSeal:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
         coverageMaskPreparedRouteSeal:
             GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
-        if (!hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)) {
+        if (!semanticEnvelopeAuthority.matches(packet, semantic)) {
             return diagnostic(
                 "invalid.preflight.core_primitive_semantic_integrity",
                 "Core primitive packet authority contradicts its immutable semantic input.",

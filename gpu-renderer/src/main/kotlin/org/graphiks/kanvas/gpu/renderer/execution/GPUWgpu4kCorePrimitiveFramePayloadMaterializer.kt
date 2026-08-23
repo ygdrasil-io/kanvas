@@ -54,7 +54,6 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
-import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
@@ -501,9 +500,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packetAuthority.analyticShapeUniformSeal !== expectedAnalyticShapeSeal ||
                 packetAuthority.analyticClipUniformSeal !== expectedAnalyticSeal ||
                 packetAuthority.analyticIntersectionUniformSeal !== expectedAnalyticIntersectionSeal ||
-                semantic.targetBounds != targetBounds || semantic.payloadRef.uniformBlock?.byteSize !=
-                corePrimitiveUniformByteSize(semantic.material).toLong() || semantic.payloadRef.uniformBlock.bytes !=
-                corePrimitiveUniformBytes(semantic.targetBounds, semantic.material)
+                semantic.targetBounds != targetBounds
             ) {
                 return refused(
                     "invalid.native-core-primitive.packet-authority",

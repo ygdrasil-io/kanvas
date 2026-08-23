@@ -80,6 +80,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
@@ -164,6 +166,121 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             "invalid.recording.core_primitive_semantic_authority",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
         )
+    }
+
+    @Test
+    fun `radial and sweep fill rect semantics require their matching gradient render steps`() {
+        val accepted = listOf(
+            "radial.gradient.fill" to radialMaterial(),
+            "sweep.gradient.fill" to sweepMaterial(),
+        )
+        accepted.forEachIndexed { index, (renderStepIdentity, material) ->
+            val commandId = 110 + index
+            val base = recording(command(commandId, index)).taskList
+                .withClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip))
+                .withPacketRouteIdentity(
+                    commandId = commandId,
+                    analysisRecordId = "analysis.fill_rect.$commandId",
+                    renderStepIdentity = renderStepIdentity,
+                )
+            val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, mapOf(commandId to semantic(packet, material = material))),
+            )
+
+            assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result, result.toString())
+        }
+
+        val forged = listOf(
+            "rect.fill.coverage" to radialMaterial(),
+            "linear.gradient.fill" to radialMaterial(),
+            "radial.gradient.fill" to sweepMaterial(),
+            "sweep.gradient.fill" to radialMaterial(),
+        )
+        forged.forEachIndexed { index, (renderStepIdentity, material) ->
+            val commandId = 120 + index
+            val base = recording(command(commandId, index)).taskList
+                .withClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip))
+                .withPacketRouteIdentity(
+                    commandId = commandId,
+                    analysisRecordId = "analysis.fill_rect.$commandId",
+                    renderStepIdentity = renderStepIdentity,
+                )
+            val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, mapOf(commandId to semantic(packet, material = material))),
+            )
+
+            assertEquals(
+                "invalid.recording.core_primitive_semantic_authority",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `affine solid render step rejects forged radial and sweep semantics`() {
+        val transform = GPUTransformFacts.affine(1f, 0.25f, 0.125f, 1f)
+        val rect = GPURect(1f, 1f, 8f, 8f)
+        val geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(1.25f, 1.125f, 8.25f, 2f, 10f, 9f, 3f, 8.125f),
+            indices = listOf(0, 1, 2, 0, 2, 3),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 4,
+            coverBounds = GPUPixelBounds(1, 1, 10, 9),
+            geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        )
+        listOf(radialMaterial(), sweepMaterial()).forEachIndexed { index, material ->
+            val commandId = 130 + index
+            val base = recording(command(commandId, index)).taskList
+                .withClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip))
+                .withPacketRouteIdentity(
+                    commandId = commandId,
+                    analysisRecordId = "analysis.fill_rect.$commandId",
+                    renderStepIdentity = CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY,
+                )
+            val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+            val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(
+                GPUCorePrimitivePayloadInput(
+                    commandIdValue = commandId,
+                    sourceFamily = GPUCorePrimitiveSourceFamily.Rect,
+                    geometry = geometry,
+                    premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                    material = material,
+                    targetBounds = targetBounds,
+                    scissorBounds = targetBounds,
+                    clipCoveragePlan = requireNotNull(packet.clipCoveragePlan),
+                    blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
+                    frameProvenance = packet.frameProvenance,
+                    coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+                    analysisRecordId = "analysis.fill_rect.$commandId",
+                    analysisCommandFamily = "FillRect",
+                    rectRouteAuthority = GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
+                    rectGeometryAuthority = corePrimitiveRectGeometryAuthority(rect, transform),
+                ),
+            )
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, mapOf(commandId to semantic)).copy(
+                    capabilities = capabilities().copy(
+                        facts = capabilities().facts + GPUCapabilityFact(
+                            CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY,
+                            "unit-test",
+                            "supported",
+                            true,
+                            "core-authority",
+                        ),
+                    ),
+                ),
+            )
+
+            assertEquals(
+                "invalid.recording.core_primitive_semantic_authority",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
     }
 
     @Test
@@ -2282,6 +2399,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     fun `radial gradient records on direct geometry but refuses path native planning`() {
         val directBase = recording(command(36, 0)).taskList.withClipPlans(
             mapOf(36 to GPUClipExecutionPlan.NoClip),
+        ).withPacketRouteIdentity(
+            commandId = 36,
+            analysisRecordId = "analysis.fill_rect.36",
+            renderStepIdentity = "radial.gradient.fill",
         )
         val directPacket = directBase.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
         val directResult = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
@@ -2332,6 +2453,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     fun `analytic radial gradient records its complete 656 byte uniform slab`() {
         val base = recording(command(41, 0)).taskList.withClipPlans(
             mapOf(41 to GPUClipExecutionPlan.NoClip),
+        ).withPacketRouteIdentity(
+            commandId = 41,
+            analysisRecordId = "analysis.fill_rect.41",
+            renderStepIdentity = "radial.gradient.fill",
         )
         val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
         val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
@@ -3115,6 +3240,18 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         centerX = 4f,
         centerY = 4f,
         radius = 4f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun sweepMaterial() = GPUCorePrimitiveMaterialPayload.SweepGradient(
+        centerX = 4f,
+        centerY = 4f,
+        startAngle = 0f,
+        endAngle = 360f,
         localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         interpolation = "srgb",
         tileMode = "clamp",

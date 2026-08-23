@@ -628,6 +628,35 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `bounded radial and sweep Canvas materials build CorePrimitive frames when facts are present`() {
+        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(2f, 2f, 14f, 14f),
+                Paint(shader = Shader.RadialGradient(Point(8f, 8f), 8f, stops)).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(16f, 2f, 30f, 14f),
+                Paint(shader = Shader.SweepGradient(Point(23f, 8f), stops = stops)).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(request(operations)),
+        )
+        val materials = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .map { assertIs<GPUDrawSemanticPayload.CorePrimitive>(it.semanticPayload).material }
+
+        assertTrue(materials.any { it is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.RadialGradient })
+        assertTrue(materials.any { it is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SweepGradient })
+    }
+
+    @Test
     fun `refusal matrix preserves true diagnostics while sRGB translucent solid is ready`() {
         val gradient = Shader.LinearGradient(
             Point2F32(0f, 0f),

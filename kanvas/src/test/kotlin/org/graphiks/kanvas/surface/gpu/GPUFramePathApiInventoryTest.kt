@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
@@ -1172,6 +1173,150 @@ class GPUFramePathApiInventoryTest {
 
         assertEquals("unsupported.core_primitive.material.non_solid", refused.code)
         assertEquals("LinearGradient", refused.facts["materialKind"])
+    }
+
+    @Test
+    fun `bounded radial and sweep public materials reach core primitive semantics when facts are present`() {
+        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val shaders = listOf(
+            Shader.RadialGradient(Point(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point(16f, 16f), stops = stops),
+        )
+
+        shaders.forEach { shader ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(
+                    FILL_RECT_CAPABILITY,
+                    "first_slice.radial_gradient.native",
+                    "first_slice.sweep_gradient.native",
+                ),
+            )
+
+            assertTrue(inventory.recording.routeDiagnostics.none { it.startsWith("refused:") })
+            val gatheredResult = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            )
+            val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+                gatheredResult,
+                gatheredResult.toString(),
+            )
+            val material = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                gathered.semantics.values.single(),
+            ).material
+            when (shader) {
+                is Shader.RadialGradient -> assertIs<GPUCorePrimitiveMaterialPayload.RadialGradient>(material)
+                is Shader.SweepGradient -> assertIs<GPUCorePrimitiveMaterialPayload.SweepGradient>(material)
+                else -> error("unexpected shader")
+            }
+        }
+    }
+
+    @Test
+    fun `antialiased radial and sweep public materials refuse before analytic recording`() {
+        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val shaders = listOf(
+            Shader.RadialGradient(Point(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point(16f, 16f), stops = stops),
+        )
+
+        shaders.forEach { shader ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = true),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(
+                    FILL_RECT_CAPABILITY,
+                    "first_slice.radial_gradient.native",
+                    "first_slice.sweep_gradient.native",
+                ),
+            )
+
+            assertEquals(
+                listOf("refused:unsupported.material.gradient_antialias"),
+                inventory.recording.routeDiagnostics,
+            )
+            assertTrue(
+                inventory.recording.taskList.tasks
+                    .filterIsInstance<GPUTask.Render>()
+                    .flatMap(GPUTask.Render::drawPackets)
+                    .isEmpty(),
+            )
+        }
+    }
+
+    @Test
+    fun `removing either gradient fact preserves exact planner refusal and no render packets`() {
+        val fixtures = listOf(
+            "first_slice.radial_gradient.native" to
+                Shader.RadialGradient(
+                    Point(16f, 16f), 16f,
+                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                ),
+            "first_slice.sweep_gradient.native" to
+                Shader.SweepGradient(
+                    Point(16f, 16f),
+                    stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                ),
+        )
+
+        fixtures.forEach { (missing, shader) ->
+            val allCapabilities = capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                "first_slice.radial_gradient.native",
+                "first_slice.sweep_gradient.native",
+            )
+            val capabilities = GPUCapabilities(
+                implementation = allCapabilities.implementation,
+                facts = allCapabilities.facts.filterNot { it.name == missing },
+                knownUnsupportedFacts = allCapabilities.knownUnsupportedFacts,
+                snapshotId = "${allCapabilities.snapshotId}:without-$missing",
+                limits = allCapabilities.limits,
+            )
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities,
+            )
+
+            val expected = if (missing.contains("radial")) {
+                "unsupported.material.radial_gradient_capability_missing"
+            } else {
+                "unsupported.material.sweep_gradient_capability_missing"
+            }
+            assertEquals(listOf("refused:$expected"), inventory.recording.routeDiagnostics)
+            assertTrue(
+                inventory.recording.taskList.tasks
+                    .filterIsInstance<GPUTask.Render>()
+                    .flatMap { it.drawPackets }
+                    .isEmpty(),
+            )
+        }
     }
 
     @Test

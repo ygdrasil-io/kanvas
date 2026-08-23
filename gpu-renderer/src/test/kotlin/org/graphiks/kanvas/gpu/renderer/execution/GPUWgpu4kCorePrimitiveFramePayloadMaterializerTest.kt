@@ -3102,6 +3102,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertFalse(source.contains("SHA-256"))
         assertFalse(source.contains("step !in renderEntries.map(RenderEntry::render)"))
         assertTrue(source.contains("retainedCoverageMaskRenderSteps"))
+        val directPacketAuthorityValidation = source
+            .substringAfter("val acceptedGeometries = semanticPackets.mapIndexed")
+            .substringBefore("if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)")
+        assertTrue(
+            directPacketAuthorityValidation.contains("semantic.hasStructuralIntegrity()"),
+            "materialization remains an independent semantic-integrity boundary",
+        )
+        assertFalse(
+            directPacketAuthorityValidation.contains("corePrimitiveUniformBytes("),
+            "materialization must not recompose a second direct uniform payload after structural integrity authenticated it",
+        )
         val analyticShapeValidation = source.balancedBlockAfter(
             anchor = "val acceptedGeometries = semanticPackets.mapIndexed",
             blockCondition = "if (uniformLayout == " +

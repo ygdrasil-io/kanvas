@@ -115,11 +115,53 @@ object GPUFirstRouteDecisionBuilder {
         pipelinePreimageHash: String,
         renderStepIdentity: String,
         requirements: List<String>,
+    ): GPURouteDecision.Native = nativeFillRectWithConsumer(
+        commandIdValue = commandIdValue,
+        pipelinePreimageHash = pipelinePreimageHash,
+        renderStepIdentity = renderStepIdentity,
+        requirements = requirements,
+        consumerKind = "native.fill_rect.solid",
+    )
+
+    /** Builds a native FillRect radial-gradient decision with its closed diagnostic consumer. */
+    fun nativeRadialGradientRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native = nativeFillRectWithConsumer(
+        commandIdValue = commandIdValue,
+        pipelinePreimageHash = pipelinePreimageHash,
+        renderStepIdentity = renderStepIdentity,
+        requirements = requirements,
+        consumerKind = "native.fill_rect.radial_gradient",
+    )
+
+    /** Builds a native FillRect sweep-gradient decision with its closed diagnostic consumer. */
+    fun nativeSweepGradientRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native = nativeFillRectWithConsumer(
+        commandIdValue = commandIdValue,
+        pipelinePreimageHash = pipelinePreimageHash,
+        renderStepIdentity = renderStepIdentity,
+        requirements = requirements,
+        consumerKind = "native.fill_rect.sweep_gradient",
+    )
+
+    private fun nativeFillRectWithConsumer(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+        consumerKind: String,
     ): GPURouteDecision.Native =
         GPURouteDecision.Native(
             route = GPUNativeRoute(
                 routeId = "route.fill_rect.$commandIdValue",
-                consumerKind = "native.fill_rect.solid",
+                consumerKind = consumerKind,
                 renderStepIdentity = renderStepIdentity,
                 pipelinePreimageHash = pipelinePreimageHash,
                 requirements = requirements,

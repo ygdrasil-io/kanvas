@@ -709,10 +709,20 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
     return when (renderStepId.value) {
         CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY ->
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
-                semantic.geometry is GPUCorePrimitiveGeometry.Rect
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
+        "radial.gradient.fill" ->
+            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient
+        "sweep.gradient.fill" ->
+            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
         CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY -> {
             val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
                 capabilities.facts.any { fact ->
                 fact.name == CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY &&
                     fact.value == "supported" && fact.affectsValidity
@@ -1493,6 +1503,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused(
                 "invalid.recording.core_primitive_semantics",
                 "Every accepted base packet requires exactly one gathered semantic payload and clip plan.",
+            )
+        }
+        basePackets.firstOrNull { packet ->
+            packet.renderStepId.value == CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY &&
+                request.coreSemantics().getValue(packet.commandIdValue).material !is
+                GPUCorePrimitiveMaterialPayload.SolidColor
+        }?.let {
+            return refused(
+                "invalid.recording.core_primitive_semantic_authority",
+                "Affine FillRect recording accepts only the sealed solid-color material authority.",
             )
         }
         basePackets.firstOrNull { packet ->
