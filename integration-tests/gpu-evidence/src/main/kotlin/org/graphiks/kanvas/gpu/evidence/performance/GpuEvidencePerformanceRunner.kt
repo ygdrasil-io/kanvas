@@ -29,7 +29,7 @@ class GpuEvidencePerformanceRunner(
         val adapterSummary = backend.adapter?.let { org.graphiks.kanvas.gpu.renderer.execution.GPUBackendAdapterSummary(it.summary ?: "", it.vendor, it.device, it.architecture, it.description, it.isFallbackAdapter) }
         val eligibility = PerformanceEligibility.evaluate(adapterSummary)
         if (eligibility !is PerformanceVerdict.EligibleMeasurement) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, eligibility, environment, eligibility, diagnostics = listOf("measurement skipped: ${eligibility.reason}"))
-        if (backend.capabilities == null) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, PerformanceVerdict.Unavailable("GPU capabilities unavailable"), environment, PerformanceVerdict.Unavailable("GPU capabilities unavailable"))
+        if (backend.capabilities == null) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, PerformanceVerdict.Unavailable("GPU capabilities unavailable"), environment, eligibility)
         val before = backend.telemetry()
         val prepared = backend.prepare(evidenceCase.program, EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, "gpu-performance.${evidenceCase.descriptor.id.value}"))
         if (prepared !is EvidenceProgramPreparation.Recorded) return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, PerformanceVerdict.Failed("scene preparation refused"), environment, eligibility, diagnostics = prepared.diagnostics())

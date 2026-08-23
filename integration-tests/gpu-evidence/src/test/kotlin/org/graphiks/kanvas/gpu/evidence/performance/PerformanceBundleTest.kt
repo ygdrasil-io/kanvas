@@ -162,6 +162,18 @@ class PerformanceBundleTest {
         assertIs<PerformanceBundleVerification.Verified>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
     }
 
+    @Test fun `eligible hardware with unavailable runtime round trips as unavailable verdict`() {
+        val run = PerformanceRun.fixture().copy(
+            verdict = PerformanceVerdict.Unavailable("GPU capabilities unavailable"),
+            coldReadbackNanos = null,
+            timings = null,
+            timingSamplesNanos = emptyList(),
+            telemetry = PerformanceTelemetry.Empty,
+        )
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        assertIs<PerformanceBundleVerification.Verified>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
     private fun refreshHash(path: Path, name: String) {
         val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path.resolve(name))).joinToString("") { "%02x".format(it) }
         val manifest = path.resolve("manifest.json")

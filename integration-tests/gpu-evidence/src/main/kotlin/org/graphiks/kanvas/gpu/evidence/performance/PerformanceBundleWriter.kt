@@ -236,8 +236,11 @@ object PerformanceBundleVerifier {
         }
         if (eligibility != null && verdict != null) {
             val reasonsMatch = eligibility["reason"]?.jsonPrimitive?.content == verdict["reason"]?.jsonPrimitive?.content
-            val allowedFailure = verdictKind == "Failed"
-            if ((allowedFailure && eligibilityKind != "EligibleMeasurement") || (!allowedFailure && eligibilityKind != verdictKind) || (!allowedFailure && !reasonsMatch)) errors += "verdict does not match eligibility"
+            val coherent = when {
+                eligibilityKind == "EligibleMeasurement" -> verdictKind == "EligibleMeasurement" || verdictKind == "Failed" || verdictKind == "Unavailable"
+                else -> verdictKind == eligibilityKind && reasonsMatch
+            }
+            if (!coherent) errors += "verdict does not match eligibility"
         }
         val timings = parseObject(bundle.resolve("timings.json"), "timings", errors)
         if (timings != null) {
@@ -251,15 +254,17 @@ object PerformanceBundleVerifier {
             val coldTypeValid = coldElement is JsonNull || coldValue != null
             if (!coldTypeValid) errors += "cold readback timing provenance is invalid"
             when {
-                eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed" && (coldValue == null || coldValue < 0L) -> errors += "eligible cold readback timing must be non-negative"
-                eligibilityKind == "DiagnosticOnly" || eligibilityKind == "Unavailable" -> if (coldElement !is JsonNull) errors += "diagnostic cold readback timing must be null"
+                verdictKind == "EligibleMeasurement" && (coldValue == null || coldValue < 0L) -> errors += "eligible cold readback timing must be non-negative"
+                verdictKind == "DiagnosticOnly" || verdictKind == "Unavailable" -> if (coldElement !is JsonNull) errors += "diagnostic cold readback timing must be null"
                 coldValue != null && coldValue < 0L -> errors += "cold readback timing must be non-negative"
             }
             val measured = timings["measuredFrames"]?.jsonPrimitive?.content?.toIntOrNull()
             val samples = timings["samples"]?.jsonArray
             if (measured == null || samples == null || samples.any { it !is JsonPrimitive || it.jsonPrimitive.isString || it.jsonPrimitive.content.toLongOrNull() == null }) errors += "timings provenance is invalid"
-            else if (eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed" && samples.size != measured) errors += "timing sample count mismatch"
-            else if (eligibilityKind != "EligibleMeasurement" && samples.isNotEmpty()) errors += "diagnostic timing samples must be empty"
+            else if (verdictKind == "EligibleMeasurement" && samples.size != measured) errors += "timing sample count mismatch"
+            else if (verdictKind == "DiagnosticOnly" || verdictKind == "Unavailable") {
+                if (samples.isNotEmpty()) errors += "diagnostic timing samples must be empty"
+            }
             else if (samples != null && samples.size > measured) errors += "timing sample count exceeds configured count"
             timings["summary"]?.let { summaryElement ->
                 if (summaryElement is JsonObject) {
@@ -278,10 +283,17 @@ object PerformanceBundleVerifier {
             val phaseNames = setOf("cold", "warmup", "measured", "total")
             if (!telemetry.keys.all { it in phaseNames } || !setOf("cold", "warmup", "measured").all { it in telemetry.keys }) errors += "telemetry phase key set mismatch"
             telemetry.forEach { (phaseName, phaseElement) -> if (phaseElement is JsonObject) verifyPhase(phaseName, phaseElement, errors) else errors += "telemetry phase is invalid" }
-            if (eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed") {
+            if (verdictKind == "EligibleMeasurement") {
                 mapOf("cold" to 1L, "warmup" to 10L, "measured" to 90L, "total" to 101L).forEach { (phaseName, expected) ->
                     val submissions = (telemetry[phaseName] as? JsonObject)?.get("delta")?.jsonObject?.get("submissions")?.jsonObject
                     if (submissions?.get("source")?.jsonPrimitive?.content != MetricSource.Derived.name || submissions["value"]?.jsonPrimitive?.content?.toLongOrNull() != expected) errors += "$phaseName submissions provenance mismatch"
+                }
+            }
+            if (verdictKind == "Unavailable") {
+                telemetry.filterKeys { it != "total" }.forEach { (phaseName, phaseElement) ->
+                    val phase = phaseElement as? JsonObject ?: return@forEach
+                    val metrics = phase.values.flatMap { (it as? JsonObject)?.values.orEmpty() }
+                    if (metrics.any { record -> (record as? JsonObject)?.get("source")?.jsonPrimitive?.content != MetricSource.Unavailable.name }) errors += "$phaseName unavailable telemetry is not explicit"
                 }
             }
         }
