@@ -13,7 +13,7 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.EncodedOrigin
 import java.util.ServiceLoader
@@ -101,7 +101,7 @@ class CodecAllKotlinRealImageTest {
             assertPixel(fixture.path, checkedBitmap, probe)
         }
         fixture.framePixelProbes.forEach { frameProbe ->
-            val frameBitmap = SkBitmap(checkedCodec.getInfo().width, checkedCodec.getInfo().height)
+            val frameBitmap = Bitmap(checkedCodec.getInfo())
             val frameResult = checkedCodec.getPixels(
                 checkedCodec.getInfo(),
                 frameBitmap,
@@ -720,8 +720,8 @@ class CodecAllKotlinRealImageTest {
             return stream.use { it.readBytes() }
         }
 
-        private fun assertPixel(label: String, bitmap: SkBitmap, probe: PixelProbe) {
-            val actual = bitmap.getPixel(probe.x, probe.y)
+        private fun assertPixel(label: String, bitmap: Bitmap, probe: PixelProbe) {
+            val actual = bitmap.getArgb(probe.x, probe.y)
             val delta = maxChannelDelta(actual, probe.argb)
             assertTrue(
                 delta <= probe.tolerance,
