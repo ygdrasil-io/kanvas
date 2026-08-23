@@ -54,7 +54,7 @@ object EvidenceBundleVerifier {
             val actual = actualPaths.map { it.fileName.toString() }.toSet()
             val expected = if (observed == "rendered") {
                 if (oracleKind == "checked-in-png") CHECKED_IN_RENDER_FILES else RENDER_FILES
-            } else if (observed == "refused") REFUSAL_FILES else error("unknown observedOutcome")
+            } else if (observed == "refused" || observed == "unavailable") REFUSAL_FILES else error("unknown observedOutcome")
             require(actual == expected || actual == expected + "promotion.json") { "file set mismatch: expected=$expected actual=$actual" }
             if ("promotion.json" in actual) verifyPromotion(directory, sceneId, sourceCommit)
             require(hashes.keys == expected - "manifest.json") { "manifest file hashes are incomplete" }
@@ -66,7 +66,8 @@ object EvidenceBundleVerifier {
             val environment = readObject(directory.resolve("environment.json"), "environment")
             environment.requireKeys(setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "capabilityImplementation", "available", "adapter"))
             require(manifest.requiredString("sourceCommit") == environment.requiredString("sourceCommit")) { "environment sourceCommit mismatch" }
-            environment.requiredString("osName"); environment.requiredString("osVersion"); environment.requiredString("osArchitecture"); environment.requiredString("javaVersion"); environment.optionalNullableLong("deviceGeneration"); environment.optionalNullableString("capabilityImplementation"); environment.requiredBoolean("available")
+            environment.requiredString("osName"); environment.requiredString("osVersion"); environment.requiredString("osArchitecture"); environment.requiredString("javaVersion"); environment.optionalNullableLong("deviceGeneration"); environment.optionalNullableString("capabilityImplementation"); val environmentAvailable = environment.requiredBoolean("available")
+            require(if (observed == "unavailable") !environmentAvailable else environmentAvailable) { "environment availability contradicts observed outcome" }
             val adapter = environment["adapter"]
             if (adapter != null && adapter !is JsonNull) {
                 val adapterObject = adapter.jsonObject

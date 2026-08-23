@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.evidence.artifacts
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -111,6 +112,84 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `late catalog root swap failure restores the old promoted tree byte for byte`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        val before = snapshot(promotedRoot(repository))
+        writeAllBundles(repository, COMMIT)
+        var moves = 0
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                moves++
+                if (moves == 2) throw IOException("injected late swap failure")
+                Files.move(source, destination)
+            },
+        ).run(args(repository, COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
+
+        assertTrue(result != 0)
+        assertTrue(moves >= 3)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `failed rollback preserves the backup root for recovery`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        val before = snapshot(promotedRoot(repository))
+        writeAllBundles(repository, COMMIT)
+        var moves = 0
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                moves++
+                if (moves == 2 || moves == 3) throw IOException("injected swap and restore failure")
+                Files.move(source, destination)
+            },
+        ).run(args(repository, COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+        val backup = Files.list(promotedRoot(repository).parent).use { stream ->
+            stream.iterator().asSequence().firstOrNull { it.fileName.toString().startsWith(".promoted.backup-") }
+        }
+        assertTrue(backup != null)
+        assertEquals(before, snapshot(requireNotNull(backup).resolve("promoted")))
+    }
+
+    @Test
+    fun `rebaseline preflight rejects an extra promoted entry before staging`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        Files.createDirectory(promotedRoot(repository).resolve("unexpected-scene"))
+        writeAllBundles(repository, COMMIT)
+
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
+
+        assertTrue(result != 0)
+        assertTrue(Files.isDirectory(promotedRoot(repository).resolve("unexpected-scene")))
+    }
+
+    @Test
+    fun `blank rebaseline summaries are rejected`() {
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", " ", "--new-comparison", "new"))
+        assertTrue(result != 0)
+    }
+
+    @Test
+    fun `tampered staged promotion metadata is rejected before swap`() {
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner(
+            beforeStagedVerification = { staged ->
+                val metadata = staged.resolve("solid-card-stack/promotion.json")
+                Files.writeString(metadata, Files.readString(metadata).replace("\"reason\":\"reason\"", "\"reason\":\"\""))
+            },
+        ).run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+    }
+
+    @Test
     fun `generation writer cannot write into canonical promoted tree`() {
         val promoted = promotedRoot(repository)
         assertFailsWith<IllegalArgumentException> {
@@ -153,6 +232,9 @@ class PromoteEvidenceCliTest {
     private fun generatedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
     private fun promotedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/promoted")
     private fun sceneDirectories(root: Path): Set<String> = if (!Files.exists(root)) emptySet() else Files.list(root).use { it.filter(Files::isDirectory).map { path -> path.fileName.toString() }.toList().toSet() }
+    private fun snapshot(root: Path): Map<String, List<Byte>> = if (!Files.exists(root)) emptyMap() else Files.walk(root).use { stream ->
+        stream.iterator().asSequence().filter(Files::isRegularFile).associate { root.relativize(it).toString() to Files.readAllBytes(it).toList() }
+    }
 
     companion object {
         private const val COMMIT = "0123456789abcdef0123456789abcdef01234567"

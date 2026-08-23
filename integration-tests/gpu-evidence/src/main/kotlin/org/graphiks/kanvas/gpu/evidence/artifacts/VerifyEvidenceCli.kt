@@ -111,7 +111,11 @@ class VerifyEvidenceCliRunner(
 
     private fun commonManifestCommit(entries: List<Path>): String {
         val commits = entries.map { path ->
-            val manifest = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("manifest.json"))).jsonObject
+            val manifestPath = path.resolve("manifest.json")
+            require(Files.isRegularFile(manifestPath, NOFOLLOW_LINKS) && !Files.isSymbolicLink(manifestPath)) {
+                "manifest must be a regular non-symlink file"
+            }
+            val manifest = EvidenceJson.parseToJsonElement(Files.readString(manifestPath)).jsonObject
             val commit = (manifest["sourceCommit"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
             require(commit != null && SOURCE_COMMIT.matches(commit)) { "manifest sourceCommit must be 40 lowercase hexadecimal characters" }
             commit

@@ -42,6 +42,17 @@ class VerifyEvidenceCliTest {
     }
 
     @Test
+    fun `historical mode rejects a manifest symlink before reading it`() {
+        writeAll(COMMIT)
+        val manifest = generatedRoot().resolve("solid-card-stack/manifest.json")
+        val backup = repository.resolve("manifest-backup.json")
+        Files.move(manifest, backup)
+        Files.createSymbolicLink(manifest, backup)
+
+        assertTrue(VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit")) != 0)
+    }
+
+    @Test
     fun `verifier rejects inconsistent source commits and non-pass verdicts`() {
         writeAll(COMMIT)
         val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
@@ -64,6 +75,20 @@ class VerifyEvidenceCliTest {
             SceneObservation.Rendered(failedPixels, failedRoute, emptyList(), failedEnvironment, ImageComparison(false, 0.0, failedDescriptor.width * failedDescriptor.height, 255, 1.0, ByteArray(failedPixels.size), 1)),
             failedPixels,
         )
+        assertTrue(verify(COMMIT) != 0)
+    }
+
+    @Test
+    fun `coherent unavailable bundle is rejected by the verifier gate`() {
+        writeAll(COMMIT)
+        val scene = generatedRoot().resolve("custom-runtime-effect-unregistered-refusal")
+        replaceAndRefresh(scene, "manifest.json", "\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\"")
+        replaceAndRefresh(scene, "route.json", "\"outcome\":\"refused\"", "\"outcome\":\"unavailable\"")
+        replaceAndRefresh(scene, "environment.json", "\"available\":true", "\"available\":false")
+        replaceAndRefresh(scene, "verdict.json", "\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\"")
+        replaceAndRefresh(scene, "verdict.json", "\"verdictKind\":\"pass\"", "\"verdictKind\":\"unavailable\"")
+        replaceAndRefresh(scene, "verdict.json", "\"reason\":\"exact refusal before submission\"", "\"reason\":\"scene unavailable: unsupported.runtime_effect.custom_wgsl_not_registered\"")
+
         assertTrue(verify(COMMIT) != 0)
     }
 
@@ -92,6 +117,18 @@ class VerifyEvidenceCliTest {
     private fun deleteTree(path: Path) {
         if (!Files.exists(path)) return
         Files.walk(path).use { stream -> stream.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+    }
+
+    private fun replaceAndRefresh(scene: Path, file: String, from: String, to: String) {
+        val path = scene.resolve(file)
+        Files.writeString(path, Files.readString(path).replace(from, to))
+        val manifest = scene.resolve("manifest.json")
+        val text = Files.readString(manifest)
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path)).joinToString("") { "%02x".format(it) }
+        val key = "\"$file\":\""
+        val start = text.indexOf(key) + key.length
+        val end = text.indexOf('"', start)
+        Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end))
     }
 
     companion object {

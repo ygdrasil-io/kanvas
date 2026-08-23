@@ -66,6 +66,7 @@ data class PromoteEvidenceCliRequest(
             require(actualReviewer.isNotBlank()) { "--reviewer must not be blank" }
             require(actualReason.isNotBlank()) { "--reason must not be blank" }
             require((prior == null) == (next == null)) { "prior and new comparison summaries must be provided together" }
+            if (prior != null) require(prior.isNotBlank() && next!!.isNotBlank()) { "comparison summaries must not be blank" }
             if (rebaseline) require(prior != null && next != null) { "--rebaseline requires prior and new comparison summaries" }
             return PromoteEvidenceCliRequest(root, commit, actualReviewer, actualReason, rebaseline, prior, next)
         }
@@ -77,10 +78,24 @@ data class PromoteEvidenceCliRequest(
     }
 }
 
-class PromoteEvidenceCliRunner(
+private fun defaultPromotionMove(source: Path, destination: Path, atomic: Boolean) {
+    if (!atomic) {
+        Files.move(source, destination, REPLACE_EXISTING)
+        return
+    }
+    try {
+        Files.move(source, destination, ATOMIC_MOVE)
+    } catch (_: AtomicMoveNotSupportedException) {
+        Files.move(source, destination, REPLACE_EXISTING)
+    }
+}
+
+class PromoteEvidenceCliRunner internal constructor(
     private val stdout: PrintStream = System.out,
     private val stderr: PrintStream = System.err,
     private val clock: Clock = Clock.systemUTC(),
+    private val moveStrategy: (Path, Path, Boolean) -> Unit = ::defaultPromotionMove,
+    private val beforeStagedVerification: (Path) -> Unit = {},
 ) {
     fun run(args: Array<String>): Int {
         val request = try {
@@ -101,7 +116,7 @@ class PromoteEvidenceCliRunner(
     private fun promote(request: PromoteEvidenceCliRequest) {
         val roots = canonicalRoots(request.repositoryRoot, request.sourceCommit)
         ensureNoSymlinkComponents(request.repositoryRoot, roots.generated)
-        ensureNoSymlinkComponents(request.repositoryRoot, roots.promoted)
+        ensureNoSymlinkComponents(request.repositoryRoot, roots.promoted.parent)
         require(Files.isDirectory(roots.generated, NOFOLLOW_LINKS)) { "generated evidence root does not exist: ${roots.generated}" }
         require(!Files.isSymbolicLink(roots.generated)) { "generated evidence root cannot be a symlink" }
 
@@ -111,31 +126,45 @@ class PromoteEvidenceCliRunner(
         }
 
         val sceneIds = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }
-        Files.createDirectories(roots.promoted)
-        require(!Files.isSymbolicLink(roots.promoted)) { "promoted evidence root cannot be a symlink" }
-        val existing = sceneIds.filter { Files.exists(roots.promoted.resolve(it), NOFOLLOW_LINKS) }
-        require(request.rebaseline || existing.isEmpty()) {
-            "destination already contains evidence; use --rebaseline with old/new comparison summaries"
-        }
-        require(request.rebaseline || existing.isEmpty()) { "promotion destination is not empty" }
-        if (request.rebaseline) require(request.priorComparison != null && request.newComparison != null) { "rebaseline metrics are required" }
-
-        val staged = mutableListOf<Pair<Path, Path>>()
+        preflightPromotedRoot(roots.promoted, request.rebaseline)
+        Files.createDirectories(roots.promoted.parent)
+        val staged = Files.createTempDirectory(roots.promoted.parent, ".promoted.staged-")
+        var swapped = false
         try {
             sceneIds.forEach { sceneId ->
                 val source = roots.generated.resolve(sceneId)
-                val destination = roots.promoted.resolve(sceneId)
-                val sibling = Files.createTempDirectory(roots.promoted, ".${sceneId}.promotion-")
-                val stagedScene = sibling.resolve(sceneId)
+                val stagedScene = staged.resolve(sceneId)
                 copyTree(source, stagedScene, request.repositoryRoot)
                 writePromotion(stagedScene, sceneId, request)
-                staged += stagedScene to destination
             }
-            staged.forEach { (source, destination) -> replaceRecoverably(source, destination, roots.promoted) }
+            beforeStagedVerification(staged)
+            require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--source-commit", request.sourceCommit)) == 0) {
+                "staged promotion failed independent verification"
+            }
+            swapCatalogRoot(staged, roots.promoted)
+            swapped = true
         } finally {
-            staged.map { it.first.parent }.distinct().forEach { deleteTree(it) }
+            if (!swapped) deleteTree(staged)
         }
         stdout.println("promoted ${sceneIds.size} GPU evidence scenes from ${request.sourceCommit}")
+    }
+
+    private fun preflightPromotedRoot(promoted: Path, rebaseline: Boolean) {
+        if (!Files.exists(promoted, NOFOLLOW_LINKS)) {
+            require(!rebaseline) { "rebaseline requires an existing promoted catalog" }
+            return
+        }
+        require(!Files.isSymbolicLink(promoted)) { "promoted evidence root cannot be a symlink" }
+        require(Files.isDirectory(promoted, NOFOLLOW_LINKS)) { "promoted evidence root must be a directory" }
+        val entries = Files.list(promoted).use { stream -> stream.iterator().asSequence().toList() }
+        if (!rebaseline) {
+            require(entries.isEmpty()) { "destination already contains evidence; use --rebaseline with old/new comparison summaries" }
+            return
+        }
+        require(entries.isNotEmpty()) { "rebaseline requires a non-empty promoted catalog" }
+        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", promoted.toString(), "--allow-historical-commit")) == 0) {
+            "existing promoted evidence is not an exact verified catalog"
+        }
     }
 
     private fun canonicalRoots(repositoryRoot: Path, sourceCommit: String): PromotionRoots {
@@ -176,26 +205,33 @@ class PromoteEvidenceCliRunner(
         Files.writeString(directory.resolve("promotion.json"), json.toString())
     }
 
-    private fun replaceRecoverably(source: Path, destination: Path, parent: Path) {
-        require(!Files.isSymbolicLink(destination)) { "destination scene cannot be a symlink" }
-        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) Files.createTempDirectory(parent, ".${destination.fileName}.previous-") else null
+    private fun swapCatalogRoot(staged: Path, destination: Path) {
+        val parent = destination.parent ?: error("promoted root has no parent")
+        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) Files.createTempDirectory(parent, ".promoted.backup-") else null
+        var restored = false
+        var installed = false
         try {
-            if (backup != null) move(source = destination, destination = backup.resolve(destination.fileName.toString()))
-            move(source, destination)
-            backup?.let { deleteTree(it) }
+            if (backup != null) moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            moveStrategy(staged, destination, true)
+            installed = true
         } catch (failure: Throwable) {
             if (backup != null && !Files.exists(destination, NOFOLLOW_LINKS)) {
-                runCatching { move(backup.resolve(destination.fileName.toString()), destination) }
+                try {
+                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
+                    restored = true
+                } catch (restoreFailure: Throwable) {
+                    failure.addSuppressed(restoreFailure)
+                }
             }
             throw failure
-        }
-    }
-
-    private fun move(source: Path, destination: Path) {
-        try {
-            Files.move(source, destination, ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source, destination, REPLACE_EXISTING)
+        } finally {
+            if (restored) {
+                runCatching { backup?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion restored old catalog; backup retained at $backup: ${cleanupFailure.message}") }
+            } else if (installed && backup != null) {
+                runCatching { deleteTree(backup) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion installed new catalog; backup retained at $backup: ${cleanupFailure.message}") }
+            }
         }
     }
 
