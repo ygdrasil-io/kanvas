@@ -5,7 +5,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class GpuEvidenceCliTest {
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
@@ -80,19 +82,33 @@ class GpuEvidenceCliTest {
         assertEquals(listOf("open-session", "close-session", "dispose"), events)
     }
 
-    @Test fun `cli does not duplicate a cleanup failure already suppressed by the root`() {
+    @Test fun `cli does not duplicate a cleanup failure already reachable through the root cause`() {
         val events = mutableListOf<String>()
-        val closeFailure = IllegalStateException("close")
         val disposeFailure = IllegalStateException("dispose")
-        closeFailure.addSuppressed(disposeFailure)
+        val closeFailure = IllegalStateException("close", disposeFailure)
         val result = GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).runResult(validArgs())
         assertEquals(1, result.exitCode)
         assertSame(closeFailure, result.failure)
-        assertEquals(listOf(disposeFailure), closeFailure.suppressed.toList())
+        assertSame(disposeFailure, closeFailure.cause)
+        assertEquals(emptyList(), closeFailure.suppressed.toList())
         assertEquals(listOf("open-session", "close-session", "dispose"), events)
     }
 
-    @Test fun `cli avoids a suppression cycle when dispose failure already references close Error`() {
+    @Test fun `cli snapshots dispose failure that has fatal close root as cause`() {
+        val events = mutableListOf<String>()
+        val closeFailure = LinkageError("fatal close")
+        val disposeFailure = IllegalStateException("dispose", closeFailure)
+        val failure = assertFailsWith<LinkageError> {
+            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+        }
+        assertSame(closeFailure, failure)
+        assertEquals(1, failure.suppressed.size)
+        assertCycleAvoidanceSnapshot(failure.suppressed.single(), disposeFailure)
+        assertSame(closeFailure, disposeFailure.cause)
+        assertEquals(listOf("open-session", "close-session", "dispose"), events)
+    }
+
+    @Test fun `cli snapshots dispose failure that already suppresses fatal close root`() {
         val events = mutableListOf<String>()
         val closeFailure = LinkageError("fatal close")
         val disposeFailure = IllegalStateException("dispose")
@@ -101,8 +117,36 @@ class GpuEvidenceCliTest {
             GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(closeFailure, failure)
-        assertEquals(emptyList(), closeFailure.suppressed.toList())
+        assertEquals(1, closeFailure.suppressed.size)
+        assertCycleAvoidanceSnapshot(closeFailure.suppressed.single(), disposeFailure)
         assertEquals(listOf(closeFailure), disposeFailure.suppressed.toList())
+        assertEquals(listOf("open-session", "close-session", "dispose"), events)
+    }
+
+    @Test fun `cli keeps execution fatal as root and retains both cleanup failures in order`() {
+        val events = mutableListOf<String>()
+        val closeFailure = IllegalStateException("close")
+        val disposeFailure = IllegalArgumentException("dispose")
+        val failure = assertFailsWith<LinkageError> {
+            GpuEvidenceCliRunner(FakeRuntime(events, returned = true, executionFatal = true, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+        }
+        assertEquals("fatal execution", failure.message)
+        assertEquals(listOf(closeFailure, disposeFailure), failure.suppressed.toList())
+        assertEquals(listOf("open-session", "execute", "close-session", "dispose"), events)
+    }
+
+    @Test fun `cli terminates failure graph traversal on an unrelated cause and suppressed cycle`() {
+        val events = mutableListOf<String>()
+        val closeFailure = LinkageError("fatal close")
+        val cycleHead = IllegalStateException("cycle head")
+        val cycleTail = IllegalStateException("cycle tail", cycleHead)
+        cycleHead.addSuppressed(cycleTail)
+        val disposeFailure = IllegalStateException("dispose", cycleHead)
+        val failure = assertFailsWith<LinkageError> {
+            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+        }
+        assertSame(closeFailure, failure)
+        assertSame(disposeFailure, failure.suppressed.single())
         assertEquals(listOf("open-session", "close-session", "dispose"), events)
     }
 
@@ -140,6 +184,15 @@ class GpuEvidenceCliTest {
         }
         assertEquals("fatal parse", failure.message)
         assertEquals(emptyList(), events)
+    }
+
+    private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
+        val message = assertNotNull(snapshot.message)
+        assertTrue(message.contains("failure snapshotted to avoid a cycle"))
+        assertTrue(message.contains(original.javaClass.name))
+        assertTrue(message.contains(original.message ?: "null"))
+        assertNull(snapshot.cause)
+        assertEquals(emptyList(), snapshot.suppressed.toList())
     }
 
     private fun validArgs() = arrayOf("--repository-root", Files.createTempDirectory("gpu-evidence-cli").toString(), "--source-commit", "a".repeat(40), "--scene", "solid-card-stack")

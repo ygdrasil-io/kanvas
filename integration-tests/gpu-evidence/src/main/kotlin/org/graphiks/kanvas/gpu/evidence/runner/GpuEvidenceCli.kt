@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.evidence.runner
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Collections
+import java.util.IdentityHashMap
 import kotlin.system.exitProcess
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
 import org.graphiks.kanvas.gpu.evidence.catalog.BootstrapEvidenceCatalog
@@ -93,22 +95,31 @@ private fun recordDistinctFailure(failures: MutableList<Throwable>, failure: Thr
 
 private fun attachDistinctFailures(root: Throwable, failures: List<Throwable>) {
     failures.forEach { failure ->
-        if (failure !== root && !hasSuppressedPath(root, failure) && !hasSuppressedPath(failure, root)) root.addSuppressed(failure)
+        when {
+            failure === root -> Unit
+            reachesFailureGraph(root, failure) -> Unit
+            reachesFailureGraph(failure, root) -> root.addSuppressed(snapshotToAvoidFailureGraphCycle(failure))
+            else -> root.addSuppressed(failure)
+        }
     }
 }
 
-private fun hasSuppressedPath(source: Throwable, target: Throwable): Boolean {
-    val pending = mutableListOf(source)
-    val visited = mutableListOf<Throwable>()
+private fun reachesFailureGraph(source: Throwable, target: Throwable): Boolean {
+    val pending = ArrayDeque<Throwable>()
+    val visited = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+    pending.addLast(source)
     while (pending.isNotEmpty()) {
-        val current = pending.removeAt(pending.lastIndex)
+        val current = pending.removeLast()
+        if (!visited.add(current)) continue
         if (current === target) return true
-        if (visited.any { it === current }) continue
-        visited += current
-        current.suppressed.forEach { pending += it }
+        current.cause?.let(pending::addLast)
+        current.suppressed.forEach(pending::addLast)
     }
     return false
 }
+
+private fun snapshotToAvoidFailureGraphCycle(failure: Throwable): Exception =
+    Exception("failure snapshotted to avoid a cycle: ${failure.javaClass.name}: ${failure.message}")
 
 internal data class EvidenceCliRunResult(val exitCode: Int, val failure: Throwable?)
 
