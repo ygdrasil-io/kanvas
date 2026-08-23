@@ -440,7 +440,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-         assertEquals(35, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -461,8 +461,10 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     @Test
     fun `gradient structural shaders map to distinct native programs and uniform bindings`() {
         val variants = listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient to 592uL,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient to 592uL,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient to 592uL,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient to 656uL,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient to 656uL,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient to 656uL,
         )
@@ -485,14 +487,16 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
 
         assertEquals(
             listOf(
+                GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradient,
                 GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient,
                 GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient,
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticLinearGradient,
                 GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient,
                 GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient,
             ),
             mapped.map { it.identity.program },
         )
-        assertEquals(4, mapped.map { it.componentIdentity }.distinct().size)
+        assertEquals(6, mapped.map { it.componentIdentity }.distinct().size)
     }
 
     @Test
@@ -612,7 +616,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-         assertEquals(35, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -770,7 +774,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-         assertEquals(35, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 

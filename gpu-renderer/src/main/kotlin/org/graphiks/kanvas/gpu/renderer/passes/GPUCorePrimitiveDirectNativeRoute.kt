@@ -101,12 +101,13 @@ internal fun validateCorePrimitiveDirectNativeRoute(
 ): GPUCorePrimitiveDirectNativeRoute {
     fun refused(code: String, message: String) = GPUCorePrimitiveDirectNativeRoute.Refused(code, message)
     if (semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor &&
+        semantic.material !is GPUCorePrimitiveMaterialPayload.LinearGradient &&
         semantic.material !is GPUCorePrimitiveMaterialPayload.RadialGradient &&
         semantic.material !is GPUCorePrimitiveMaterialPayload.SweepGradient
     ) {
         return refused(
             "unsupported.native-core-primitive.material.non_solid",
-            "Direct CorePrimitive native geometry accepts only the bounded radial and sweep gradient material ABI.",
+            "Direct CorePrimitive native geometry accepts only the bounded linear, radial, and sweep gradient material ABI.",
         )
     }
     if (targetFormat !in setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm")) {

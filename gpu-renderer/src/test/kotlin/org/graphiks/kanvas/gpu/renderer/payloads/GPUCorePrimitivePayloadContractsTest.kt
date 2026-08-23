@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -581,17 +582,25 @@ class GPUCorePrimitivePayloadContractsTest {
     }
 
     @Test
-    fun `linear payload is structurally closed before structural program publication rather than falling back to geometry shader`() {
-        val semantic = gather(
-            material = linearMaterial(),
+    fun `linear payload selects exact direct and analytic structural programs rather than falling back to geometry shader`() {
+        val direct = corePrimitiveRenderPipelineStructuralKey(
+            gather(material = linearMaterial()),
+            GPUClipExecutionPlan.NoClip,
+            blend(GPUBlendMode.SRC_OVER),
+        )
+        val analytic = corePrimitiveRenderPipelineStructuralKey(
+            gather(
+                material = linearMaterial(),
+                coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+            ),
+            GPUClipExecutionPlan.NoClip,
+            blend(GPUBlendMode.SRC_OVER),
         )
 
-        assertEquals(
-            "Linear gradient CorePrimitive structural authority is unavailable",
-            assertFailsWith<IllegalStateException> {
-                corePrimitiveRenderPipelineStructuralKey(semantic, GPUClipExecutionPlan.NoClip, blend(GPUBlendMode.SRC_OVER))
-            }.message,
-        )
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient, direct.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1, direct.uniformLayout)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient, analytic.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1, analytic.uniformLayout)
     }
 
     @Test

@@ -1156,7 +1156,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `non solid core material becomes a stable refusal instead of an exception`() {
+    fun `linear core material without its capability stays fail closed during semantic gathering`() {
         val gradient = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(16f, 0f),
@@ -1171,14 +1171,15 @@ class GPUFramePathApiInventoryTest {
 
         val refused = gatherRefusal(inventory)
 
-        assertEquals("unsupported.core_primitive.material.non_solid", refused.code)
-        assertEquals("LinearGradient", refused.facts["materialKind"])
+        assertEquals("unsupported.core_primitive.rect.analysis_authority_missing", refused.code)
+        assertEquals("analysis.fill_rect.0", refused.facts["analysisRecordId"])
     }
 
     @Test
-    fun `bounded radial and sweep public materials reach core primitive semantics when facts are present`() {
+    fun `bounded linear radial and sweep public materials reach core primitive semantics when facts are injected`() {
         val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
         val shaders = listOf(
+            Shader.LinearGradient(Point(0f, 0f), Point(32f, 0f), stops),
             Shader.RadialGradient(Point(16f, 16f), 16f, stops),
             Shader.SweepGradient(Point(16f, 16f), stops = stops),
         )
@@ -1197,6 +1198,7 @@ class GPUFramePathApiInventoryTest {
                 RenderConfig.DEFAULT,
                 capabilitiesWith(
                     FILL_RECT_CAPABILITY,
+                    "first_slice.linear_gradient.native",
                     "first_slice.radial_gradient.native",
                     "first_slice.sweep_gradient.native",
                 ),
@@ -1215,6 +1217,7 @@ class GPUFramePathApiInventoryTest {
                 gathered.semantics.values.single(),
             ).material
             when (shader) {
+                is Shader.LinearGradient -> assertIs<GPUCorePrimitiveMaterialPayload.LinearGradient>(material)
                 is Shader.RadialGradient -> assertIs<GPUCorePrimitiveMaterialPayload.RadialGradient>(material)
                 is Shader.SweepGradient -> assertIs<GPUCorePrimitiveMaterialPayload.SweepGradient>(material)
                 else -> error("unexpected shader")
@@ -1263,8 +1266,45 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `antialiased bounded linear public material reaches analytic core primitive semantics with injected fact`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 2f, 30f, 30f),
+                    Paint(
+                        shader = Shader.LinearGradient(
+                            Point(0f, 0f),
+                            Point(32f, 0f),
+                            listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                        ),
+                    ).copy(antiAlias = true),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.linear_gradient.native"),
+        )
+
+        assertTrue(inventory.recording.routeDiagnostics.none { it.startsWith("refused:") })
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertEquals(1, gathered.semantics.size)
+    }
+
+    @Test
     fun `removing either gradient fact preserves exact planner refusal and no render packets`() {
         val fixtures = listOf(
+            "first_slice.linear_gradient.native" to
+                Shader.LinearGradient(
+                    Point(0f, 0f), Point(32f, 0f),
+                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                ),
             "first_slice.radial_gradient.native" to
                 Shader.RadialGradient(
                     Point(16f, 16f), 16f,
@@ -1280,6 +1320,7 @@ class GPUFramePathApiInventoryTest {
         fixtures.forEach { (missing, shader) ->
             val allCapabilities = capabilitiesWith(
                 FILL_RECT_CAPABILITY,
+                "first_slice.linear_gradient.native",
                 "first_slice.radial_gradient.native",
                 "first_slice.sweep_gradient.native",
             )
@@ -1304,10 +1345,10 @@ class GPUFramePathApiInventoryTest {
                 capabilities,
             )
 
-            val expected = if (missing.contains("radial")) {
-                "unsupported.material.radial_gradient_capability_missing"
-            } else {
-                "unsupported.material.sweep_gradient_capability_missing"
+            val expected = when {
+                missing.contains("linear") -> "unsupported.material.linear_gradient_capability_missing"
+                missing.contains("radial") -> "unsupported.material.radial_gradient_capability_missing"
+                else -> "unsupported.material.sweep_gradient_capability_missing"
             }
             assertEquals(listOf("refused:$expected"), inventory.recording.routeDiagnostics)
             assertTrue(

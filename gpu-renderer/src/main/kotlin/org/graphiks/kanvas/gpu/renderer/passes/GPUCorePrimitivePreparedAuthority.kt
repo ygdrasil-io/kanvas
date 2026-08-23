@@ -69,8 +69,10 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class Shader {
         DirectGeometry,
         AnalyticShape,
+        DirectLinearGradient,
         DirectRadialGradient,
         DirectSweepGradient,
+        AnalyticLinearGradient,
         AnalyticRadialGradient,
         AnalyticSweepGradient,
         AnalyticRRect,
@@ -110,12 +112,21 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             role == Role.CoverageMaskConsumer -> UniformLayout.CoverageMaskConsumerUniform64V1
             role == Role.Shading && shader == Shader.AnalyticShape ->
                 UniformLayout.AnalyticShapeUniform80V1
-            role == Role.Shading &&
-                shader in setOf(Shader.DirectRadialGradient, Shader.DirectSweepGradient) ->
-                UniformLayout.GradientUniform592V1
-            role == Role.Shading &&
-                shader in setOf(Shader.AnalyticRadialGradient, Shader.AnalyticSweepGradient) ->
-                UniformLayout.GradientAnalyticShape656V1
+            role == Role.Shading -> when (shader) {
+                Shader.DirectLinearGradient,
+                Shader.DirectRadialGradient,
+                Shader.DirectSweepGradient,
+                -> UniformLayout.GradientUniform592V1
+                Shader.AnalyticLinearGradient,
+                Shader.AnalyticRadialGradient,
+                Shader.AnalyticSweepGradient,
+                -> UniformLayout.GradientAnalyticShape656V1
+                else -> when {
+                    clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
+                    clip == Clip.AnalyticIntersection4 -> UniformLayout.AnalyticClipUniform160V1
+                    else -> UniformLayout.DynamicUniform32V2
+                }
+            }
             (role == Role.Shading || role == Role.PathStencilCover) && clip is Clip.Analytic ->
                 UniformLayout.AnalyticClipUniform64V1
             role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
@@ -695,8 +706,13 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     }
     val shader = when (semantic.material) {
         is GPUCorePrimitiveMaterialPayload.SolidColor -> geometryShader
-        is GPUCorePrimitiveMaterialPayload.LinearGradient ->
-            error("Linear gradient CorePrimitive structural authority is unavailable")
+        is GPUCorePrimitiveMaterialPayload.LinearGradient -> when (geometryShader) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape ->
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient
+            else -> error("Gradient materials are not admitted on path-stencil CorePrimitive roles")
+        }
         is GPUCorePrimitiveMaterialPayload.RadialGradient -> when (geometryShader) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient

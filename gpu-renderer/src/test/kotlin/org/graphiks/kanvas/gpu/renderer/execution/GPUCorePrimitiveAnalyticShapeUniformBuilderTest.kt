@@ -22,8 +22,11 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
@@ -35,6 +38,39 @@ import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
+    @Test
+    fun `linear analytic gradient seals its 592 byte material before 64 byte shape ABI`() {
+        val material = GPUCorePrimitiveMaterialPayload.LinearGradient(
+            startX = 2f,
+            startY = 3f,
+            endX = 18f,
+            endY = 3f,
+            localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            interpolation = "srgb",
+            tileMode = "clamp",
+            positions = listOf(0f, 1f),
+            colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        val semantic = rectSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA, material = material)
+
+        val accepted = assertIs<GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted>(
+            buildCorePrimitiveGradientAnalyticShapeUniform(
+                semantic,
+                GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+            ),
+        )
+        val bytes = ByteBuffer.wrap(accepted.bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+        assertEquals(656, accepted.bytes.size)
+        assertContentEquals(listOf(2f, 3f, 18f, 3f), bytes.floatsAt(16, 4))
+        assertContentEquals(listOf(2.5f, 3.25f, 18.75f, 20.5f), bytes.floatsAt(592, 4))
+        assertContentEquals(List(8) { 0f }, bytes.floatsAt(608, 8))
+        assertEquals(1, bytes.getInt(640))
+        assertEquals(0, bytes.getInt(644))
+        assertEquals(0, bytes.getInt(648))
+        assertEquals(0, bytes.getInt(652))
+    }
+
     @Test
     fun `prepared rect builds exact uniform80 with zero radii and coverage anti alias`() {
         val semantic = rectSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA)
@@ -163,6 +199,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
 
     private fun rectSemantic(
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val geometry = GPUCorePrimitiveGeometryInput.Rect(2.5f, 3.25f, 18.75f, 20.5f)
         return gatheredSemantic(
@@ -174,6 +211,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
                 GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
                 GPUTransformFacts.identity(),
             ),
+            material = material,
         )
     }
 
@@ -209,6 +247,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUCorePrimitivePayloadGatherer().gatherSemantic(
         GPUCorePrimitivePayloadInput(
             commandIdValue = COMMAND_ID,
@@ -234,6 +273,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
             rectRouteAuthority = rectRouteAuthority,
             rectGeometryAuthority = rectGeometryAuthority,
             rrectGeometryAuthority = rrectGeometryAuthority,
+            material = material,
         ),
     )
 

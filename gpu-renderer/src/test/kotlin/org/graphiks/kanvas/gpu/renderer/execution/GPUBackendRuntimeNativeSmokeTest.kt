@@ -1101,6 +1101,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                     GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
                     "first_slice.fill_rect.affine.native",
                     "first_slice.mask_blur.native",
+                    "first_slice.linear_gradient.native",
                     "first_slice.radial_gradient.native",
                     "first_slice.sweep_gradient.native",
                 ),
@@ -1115,6 +1116,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 GPUFirstSliceCapabilityName.SCISSOR_NATIVE to "core-primitive-direct-native",
                 GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE to "core-primitive-bounded-clip-native",
                 GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER to "core-primitive-path-stencil-native",
+                "first_slice.linear_gradient.native" to "core-primitive-gradient-linear-native",
                 "first_slice.radial_gradient.native" to "core-primitive-gradient-radial-native",
                 "first_slice.sweep_gradient.native" to "core-primitive-gradient-sweep-native",
             )
@@ -1126,7 +1128,6 @@ class GPUBackendRuntimeNativeSmokeTest {
                 assertEquals(evidenceLabel, fact.evidenceLabel)
             }
             assertFalse("first_slice.path_fill.native" in nativeRouteFacts)
-            assertFalse("first_slice.linear_gradient.native" in nativeRouteFacts)
         }
     }
 

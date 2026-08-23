@@ -359,6 +359,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             is GPUCorePrimitiveDirectPreparedPassSeal -> preparedPassSeal
         }
+        if (
+            singleKeySeal.structuralPipelineKey.shader ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ||
+            singleKeySeal.structuralPipelineKey.shader ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient
+        ) {
+            if (singleKeySeal.structuralPipelineKey.blend is
+                GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.blend",
+                    "Linear-gradient CorePrimitive native geometry does not admit destination-read blending.",
+                )
+            }
+        }
         val uniformLayout = singleKeySeal.structuralPipelineKey.uniformLayout
         fun refuseAnalyticShape(message: String) = refused(
             "invalid.native-core-primitive.analytic-shape-uniform-seal",

@@ -211,6 +211,7 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER, "runtime", "core-primitive-path-stencil-native"),
     GPUCapabilityFact("first_slice.mask_blur.native", "runtime", "supported", true, "prepared-top-level-mask-blur"),
     GPUCapabilityFact("first_slice.fill_rect.affine.native", "runtime", "supported", true, "core-primitive-direct-native"),
+    GPUCapabilityFact("first_slice.linear_gradient.native", "runtime", "supported", true, "core-primitive-gradient-linear-native"),
     GPUCapabilityFact("first_slice.radial_gradient.native", "runtime", "supported", true, "core-primitive-gradient-radial-native"),
     GPUCapabilityFact("first_slice.sweep_gradient.native", "runtime", "supported", true, "core-primitive-gradient-sweep-native"),
 )

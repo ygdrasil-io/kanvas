@@ -284,6 +284,7 @@ class GPUFirstRoutePlanner(
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
         val rectRouteAuthority = when (command.material) {
             is GPUMaterialDescriptor.SolidColor,
+            is GPUMaterialDescriptor.LinearGradient,
             is GPUMaterialDescriptor.RadialGradient,
             is GPUMaterialDescriptor.SweepGradient,
             -> command.rectRouteAuthority()
