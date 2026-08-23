@@ -15,14 +15,18 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.Point
 import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates five public surface renders from two renderer refusals`() {
+    fun `catalog separates eight public surface renders from two renderer refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -32,6 +36,9 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap",
                 "scissor-overlay",
                 "stroke-rect-outline",
+                "linear-gradient-lanes",
+                "radial-swatch",
+                "sweep-disk",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -44,6 +51,9 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap",
                 "scissor-overlay",
                 "stroke-rect-outline",
+                "linear-gradient-lanes",
+                "radial-swatch",
+                "sweep-disk",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
@@ -56,7 +66,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            listOf("kanvas.surface.render", "kanvas.surface.render", "kanvas.surface.render", "kanvas.surface.render", "kanvas.surface.render"),
+            List(8) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -97,6 +107,19 @@ class GpuEvidenceCatalogTest {
         assertEquals(1, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.perChannelTolerance)
         assertEquals(0, cases.first { it.descriptor.id.value == "scissor-overlay" }.descriptor.comparison?.perChannelTolerance)
         assertEquals(0, cases.first { it.descriptor.id.value == "stroke-rect-outline" }.descriptor.comparison?.perChannelTolerance)
+
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { id ->
+            val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
+            assertEquals(64, evidenceCase.descriptor.width)
+            assertEquals(64, evidenceCase.descriptor.height)
+            assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
+            assertIs<KanvasSurfaceProgram>(evidenceCase.program)
+            assertNotNull(evidenceCase.oracle)
+            assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId)
+            assertEquals(1, evidenceCase.descriptor.comparison?.perChannelTolerance)
+            assertEquals(100.0, evidenceCase.descriptor.comparison?.minimumSimilarityPercent)
+            assertEquals(1, evidenceCase.descriptor.comparison?.version)
+        }
 
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)
@@ -148,6 +171,60 @@ class GpuEvidenceCatalogTest {
                 DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 48f, 48f), Paint.stroke(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("stroke-rect-outline"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(8f, 16f, 56f, 48f),
+                    Paint(
+                        shader = Shader.LinearGradient(
+                            Point(8.5f, 32.5f), Point(55.5f, 32.5f),
+                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 56, 56)), GradientStop(1f, Color.fromArgb(255, 56, 112, 255))),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            ops("linear-gradient-lanes"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    Paint(
+                        shader = Shader.RadialGradient(
+                            Point(32.5f, 32.5f), 23.5f,
+                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 232, 72)), GradientStop(1f, Color.fromArgb(255, 48, 80, 192))),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            ops("radial-swatch"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    Paint(
+                        shader = Shader.SweepGradient(
+                            Point(32.5f, 32.5f), 0f, 360f,
+                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 64, 64)), GradientStop(1f, Color.fromArgb(255, 64, 208, 255))),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            ops("sweep-disk"),
         )
     }
 

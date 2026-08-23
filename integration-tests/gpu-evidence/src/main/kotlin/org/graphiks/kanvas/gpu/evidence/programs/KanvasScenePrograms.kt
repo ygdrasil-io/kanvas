@@ -2,9 +2,13 @@ package org.graphiks.kanvas.gpu.evidence.programs
 
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.Point
 
 /** Rendered evidence scenes expressed solely through the public Kanvas Canvas API. */
 object KanvasScenePrograms {
@@ -56,6 +60,48 @@ object KanvasScenePrograms {
         drawRect(
             Rect.fromLTRB(16f, 16f, 48f, 48f),
             Paint.stroke(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false),
+        )
+    })
+
+    fun linearGradientLanes() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(
+            Rect.fromLTRB(8f, 16f, 56f, 48f),
+            Paint(
+                shader = Shader.LinearGradient(
+                    Point(8.5f, 32.5f), Point(55.5f, 32.5f),
+                    listOf(GradientStop(0f, Color.fromArgb(255, 255, 56, 56)), GradientStop(1f, Color.fromArgb(255, 56, 112, 255))),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
+        )
+    })
+
+    fun radialSwatch() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(
+            Rect.fromLTRB(8f, 8f, 56f, 56f),
+            Paint(
+                shader = Shader.RadialGradient(
+                    Point(32.5f, 32.5f), 23.5f,
+                    listOf(GradientStop(0f, Color.fromArgb(255, 255, 232, 72)), GradientStop(1f, Color.fromArgb(255, 48, 80, 192))),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
+        )
+    })
+
+    fun sweepDisk() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(
+            Rect.fromLTRB(8f, 8f, 56f, 56f),
+            Paint(
+                shader = Shader.SweepGradient(
+                    Point(32.5f, 32.5f), 0f, 360f,
+                    listOf(GradientStop(0f, Color.fromArgb(255, 255, 64, 64)), GradientStop(1f, Color.fromArgb(255, 64, 208, 255))),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
         )
     })
 
