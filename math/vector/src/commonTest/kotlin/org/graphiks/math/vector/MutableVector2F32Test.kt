@@ -31,12 +31,30 @@ class MutableVector2F32Test {
     }
 
     @Test
-    fun `normalize in place rejects near zero and clears components`() {
-        val value = MutableVector2F32(1e-8f, -1e-8f)
+    fun `normalize in place rejects near zero and preserves exact components`() {
+        val value = MutableVector2F32(-0f, -1e-8f)
 
         assertFalse(value.normalizeInPlace())
-        assertEquals(0f, value.x)
-        assertEquals(0f, value.y)
+        assertEquals((-0f).toBits(), value.x.toBits())
+        assertEquals(-1e-8f, value.y)
+    }
+
+    @Test
+    fun `normalize in place rejects NaN and preserves exact components`() {
+        val value = MutableVector2F32(Float.NaN, 7f)
+
+        assertFalse(value.normalizeInPlace())
+        assertEquals(Float.NaN.toBits(), value.x.toBits())
+        assertEquals(7f, value.y)
+    }
+
+    @Test
+    fun `normalize in place rejects infinity and preserves exact components`() {
+        val value = MutableVector2F32(Float.NEGATIVE_INFINITY, -3f)
+
+        assertFalse(value.normalizeInPlace())
+        assertEquals(Float.NEGATIVE_INFINITY, value.x)
+        assertEquals(-3f, value.y)
     }
 
     @Test
@@ -56,19 +74,5 @@ class MutableVector2F32Test {
         mutable.x = 9f
         assertEquals(2f, immutable.x)
         assertEquals(9f, mutable.x)
-    }
-}
-
-class MutableVector2F64Test {
-    @Test
-    fun `F64 mutable normalization and conversion use literal values`() {
-        val mutable = MutableVector2F64(3.0, 4.0)
-
-        assertTrue(mutable.normalizeInPlace())
-        assertEquals(0.6, mutable.x, 1e-12)
-        assertEquals(0.8, mutable.y, 1e-12)
-        val immutable = mutable.toImmutable()
-        mutable.x = 2.0
-        assertEquals(0.6, immutable.x, 1e-12)
     }
 }

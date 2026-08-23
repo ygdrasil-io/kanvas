@@ -32,13 +32,23 @@ class MutableVector3F32Test {
     }
 
     @Test
-    fun `3D mutable normalization rejects zero`() {
-        val value = MutableVector3F32(0f, 0f, 0f)
+    fun `3D mutable normalization rejects near zero and preserves exact components`() {
+        val value = MutableVector3F32(1e-8f, -1e-8f, 5e-8f)
 
         assertFalse(value.normalizeInPlace())
-        assertEquals(0f, value.x)
-        assertEquals(0f, value.y)
-        assertEquals(0f, value.z)
+        assertEquals(1e-8f, value.x)
+        assertEquals(-1e-8f, value.y)
+        assertEquals(5e-8f, value.z)
+    }
+
+    @Test
+    fun `3D mutable normalization rejects infinity and preserves exact components`() {
+        val value = MutableVector3F32(Float.POSITIVE_INFINITY, -2f, 9f)
+
+        assertFalse(value.normalizeInPlace())
+        assertEquals(Float.POSITIVE_INFINITY, value.x)
+        assertEquals(-2f, value.y)
+        assertEquals(9f, value.z)
     }
 
     @Test

@@ -503,9 +503,6 @@ internal object KotlinEmitter {
             immutableType,
         )
         .beginControlFlow("if (!length.isFinite() || abs(length) <= ${model.epsilonLiteral()})")
-        .apply {
-            model.components.forEach { addStatement("$it = ${model.zeroLiteral()}") }
-        }
         .addStatement("return false")
         .endControlFlow()
         .apply {

@@ -28,8 +28,6 @@ public class MutableVector2F64(
   public fun normalizeInPlace(): Boolean {
     val length = Vector2F64(x, y).length()
     if (!length.isFinite() || abs(length) <= 1e-12) {
-      x = 0.0
-      y = 0.0
       return false
     }
     x /= length

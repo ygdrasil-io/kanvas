@@ -32,9 +32,6 @@ public class MutableVector3F32(
   public fun normalizeInPlace(): Boolean {
     val length = Vector3F32(x, y, z).length()
     if (!length.isFinite() || abs(length) <= 1e-7f) {
-      x = 0f
-      y = 0f
-      z = 0f
       return false
     }
     x /= length
