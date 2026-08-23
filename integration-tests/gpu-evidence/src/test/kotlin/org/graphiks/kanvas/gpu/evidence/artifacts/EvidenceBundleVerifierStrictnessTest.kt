@@ -55,6 +55,23 @@ class EvidenceBundleVerifierStrictnessTest {
         assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(blank, COMMIT))
     }
 
+    @Test fun `coherent unavailable evidence with null adapter is verified as unavailable`() {
+        val path = bundle(refusalDescriptor(), refusedObservation())
+        replaceAndRefresh(path, "route.json", "\"outcome\":\"refused\"", "\"outcome\":\"unavailable\"")
+        replaceAndRefresh(path, "environment.json", "\"available\":true", "\"available\":false")
+        replaceAdapter(path, "null")
+        refreshHash(path, "environment.json")
+        replaceAndRefresh(path, "verdict.json", "\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\"")
+        replaceAndRefresh(path, "verdict.json", "\"verdictKind\":\"pass\"", "\"verdictKind\":\"unavailable\"")
+        replaceAndRefresh(path, "verdict.json", "\"reason\":\"exact refusal before submission\"", "\"reason\":\"scene unavailable: unsupported.example\"")
+        val manifest = path.resolve("manifest.json")
+        Files.writeString(manifest, Files.readString(manifest).replace("\"observedOutcome\":\"refused\"", "\"observedOutcome\":\"unavailable\""))
+
+        val verified = assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
+
+        assertEquals(EvidenceVerdict.Unavailable("scene unavailable: unsupported.example"), verified.verdict)
+    }
+
     @Test fun `checked in oracle uses skia and preserves provenance`() {
         val descriptor = renderDescriptor(OraclePolicy.CheckedInPng("oracle.png", sha256(ORIGINAL), "release-reference"))
         val path = bundle(descriptor, renderedObservation(), expected = PIXEL, checkedInBytes = ORIGINAL)
@@ -122,6 +139,10 @@ class EvidenceBundleVerifierStrictnessTest {
     private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
     private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
+    private fun replaceAndRefresh(path: Path, name: String, from: String, to: String) {
+        replace(path.resolve(name), from, to)
+        refreshHash(path, name)
+    }
     private fun replaceAdapter(path: Path, replacement: String) {
         val text = Files.readString(path.resolve("environment.json"))
         val start = text.indexOf("\"adapter\":")
