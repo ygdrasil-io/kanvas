@@ -1,9 +1,15 @@
 package org.graphiks.kanvas.gpu.evidence.programs
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.KanvasSurfaceRenderSession
 import org.graphiks.kanvas.surface.Surface
+
+/** Test-harness inspection seam for the real default Surface recording session. */
+internal interface KanvasSurfaceRecordedSession : KanvasSurfaceRenderSession {
+    fun snapshotOps(): List<DisplayOp>
+}
 
 /** Evidence program recorded and rendered solely through the public Kanvas [Surface] API. */
 class KanvasSurfaceProgram(
@@ -12,7 +18,10 @@ class KanvasSurfaceProgram(
     internal val sessionFactory: (Int, Int, Canvas.() -> Unit) -> KanvasSurfaceRenderSession =
         { width, height, commands -> Surface(width, height).let { surface ->
             surface.canvas(commands)
-            KanvasSurfaceRenderSession { surface.render() }
+            object : KanvasSurfaceRecordedSession {
+                override fun render() = surface.render()
+                override fun snapshotOps(): List<DisplayOp> = surface.snapshotOps()
+            }
         } },
 ) : EvidenceProgram {
     private var session: KanvasSurfaceRenderSession? = null

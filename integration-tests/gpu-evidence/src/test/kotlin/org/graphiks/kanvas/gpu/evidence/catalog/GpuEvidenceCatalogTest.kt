@@ -8,14 +8,17 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceRecordedSession
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
+import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
-import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.a
+import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
@@ -102,46 +105,56 @@ class GpuEvidenceCatalogTest {
 
     @Test
     fun `public surface programs record only the requested Canvas operations`() {
-        val solid = ops("solid-card-stack")
-        assertEquals(3, solid.size)
-        assertIs<DisplayOp.DrawColor>(solid[0])
         assertEquals(
-            listOf(Rect.fromLTRB(8f, 10f, 56f, 34f), Rect.fromLTRB(14f, 38f, 50f, 54f)),
-            solid.drop(1).map { assertIs<DisplayOp.DrawRect>(it).rect },
+            listOf(
+                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 56f, 34f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(Rect.fromLTRB(14f, 38f, 50f, 54f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            ),
+            ops("solid-card-stack"),
         )
-
-        val blur = assertIs<DisplayOp.DrawRect>(ops("separable-blur-rect").single())
-        assertEquals(Rect.fromLTRB(16f, 16f, 48f, 48f), blur.rect)
-        assertEquals(false, blur.paint.antiAlias)
-        assertEquals(MaskFilter.Blur(BlurStyle.NORMAL, 3f), blur.paint.maskFilter)
-
-        val translucent = ops("translucent-card-overlap")
-        assertIs<DisplayOp.DrawColor>(translucent[0])
-        assertEquals(2, translucent.drop(1).count { it is DisplayOp.DrawRect })
-        assertEquals(listOf(128f / 255f, 128f / 255f), translucent.drop(1).map { assertIs<DisplayOp.DrawRect>(it).paint.color.a })
-
-        val scissor = ops("scissor-overlay")
-        assertEquals(2, scissor.count { it is DisplayOp.SetClip })
-        assertEquals(2, scissor.count { it is DisplayOp.DrawRect })
         assertEquals(
-            listOf(Rect.fromLTRB(16f, 16f, 40f, 40f), Rect.fromLTRB(24f, 24f, 48f, 48f)),
-            scissor.filterIsInstance<DisplayOp.DrawRect>().map { it.clip }.map { clip ->
-                assertIs<org.graphiks.kanvas.canvas.ClipStack.DeviceRect>(clip).rect
-            },
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(16f, 16f, 48f, 48f),
+                    Paint(color = Color.fromRGBA(0.18f, 0.42f, 0.76f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f), antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            ops("separable-blur-rect"),
         )
-
-        val stroke = ops("stroke-rect-outline").filterIsInstance<DisplayOp.DrawRect>().single()
-        assertEquals(PaintStyle.STROKE, stroke.paint.style)
-        assertEquals(6f, stroke.paint.strokeWidth)
-        assertEquals(false, stroke.paint.antiAlias)
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 44f, 42f), Paint.fill(Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(Rect.fromLTRB(24f, 22f, 56f, 54f), Paint.fill(Color.fromRGBA(0.5f, 0.25f, 0.125f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            ),
+            ops("translucent-card-overlap"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.DrawRect(Rect.fromLTRB(8f, 8f, 56f, 56f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
+                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 56f, 56f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
+            ),
+            ops("scissor-overlay"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 48f, 48f), Paint.stroke(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            ),
+            ops("stroke-rect-outline"),
+        )
     }
 
     private fun ops(id: String): List<DisplayOp> {
         val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == id }.program)
-        val recordField = KanvasSurfaceProgram::class.java.getDeclaredField("record").also { it.isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val record = recordField.get(program) as Function1<org.graphiks.kanvas.canvas.Canvas, Unit>
-        return Surface(64, 64).also { surface -> surface.canvas { record(this) } }.snapshotOps()
+        val session = assertIs<KanvasSurfaceRecordedSession>(program.openSession(64, 64))
+        return session.snapshotOps()
     }
 
     @Test
