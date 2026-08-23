@@ -27,7 +27,7 @@ public class GifCodec private constructor(
 ) : Codec() {
 
     internal class DecodedFrame(
-        val pixels: IntArray,
+        val bitmap: Bitmap,
         val durationMs: Int,
         val requiredFrame: Int,
         val alphaType: AlphaType,
@@ -78,7 +78,7 @@ public class GifCodec private constructor(
         val frameIndex = opts.frameIndex
         if (frameIndex !in frames.indices) return Result.kInvalidParameters
         for (y in 0 until dst.height) for (x in 0 until dst.width) {
-            dst.setArgb(x, y, frames[frameIndex].pixels[y * dst.width + x])
+            dst.setArgb(x, y, frames[frameIndex].bitmap.getArgb(x, y))
         }
         return Result.kSuccess
     }
@@ -125,7 +125,15 @@ public class GifCodec private constructor(
 
             val globalColorTable = if (hasGlobalColorTable) readColorTable(globalColorTableSize) else null
             val frames = ArrayList<DecodedFrame>()
-            val canvas = IntArray(width * height)
+            val canvas = Bitmap(
+                ImageInfo.make(
+                    width = width,
+                    height = height,
+                    colorType = ColorType.RGBA_8888,
+                    alphaType = AlphaType.UNPREMUL,
+                    colorSpace = ImageColorSpace.sRGB(),
+                ),
+            )
             var nextRequiredFrame = Codec.kNoFrame
 
             while (offset < bytes.size) {
@@ -202,7 +210,7 @@ public class GifCodec private constructor(
             canvasHeight: Int,
             globalColorTable: IntArray?,
             backgroundColorIndex: Int,
-            canvas: IntArray,
+            canvas: Bitmap,
             frameIndex: Int,
             requiredFrame: Int,
         ): DecodedFrame? {
@@ -223,7 +231,7 @@ public class GifCodec private constructor(
             val lzwMinimumCodeSize = readU8()
             val imageData = readSubBlocks()
             val indexes = decodeLzw(imageData, lzwMinimumCodeSize, width * height) ?: return null
-            val beforeFrame = canvas.copyOf()
+            val beforeFrame = canvas.copyBitmap()
             val frameGce = gce
 
             for (i in indexes.indices) {
@@ -232,26 +240,26 @@ public class GifCodec private constructor(
                 val index = indexes[i]
                 if (index == frameGce.transparentIndex) continue
                 if (index !in colorTable.indices) return null
-                canvas[(top + localY) * canvasWidth + left + localX] = colorTable[index]
+                canvas.setArgb(left + localX, top + localY, colorTable[index])
             }
 
-            val pixels = canvas.copyOf()
+            val bitmap = canvas.copyBitmap()
             val frameRect = RectI32.ofOriginSize(left, top, width, height)
 
             val nextRequiredFrame = when (frameGce.disposal) {
                 DISPOSAL_RESTORE_BACKGROUND -> {
                     val backgroundColor = backgroundColor(globalColorTable, backgroundColorIndex, frameGce)
-                    clearRect(canvas, canvasWidth, left, top, width, height, backgroundColor)
+                    canvas.clearRect(left, top, width, height, backgroundColor)
                     frameIndex
                 }
                 DISPOSAL_RESTORE_PREVIOUS -> {
-                    System.arraycopy(beforeFrame, 0, canvas, 0, canvas.size)
+                    canvas.copyFrom(beforeFrame)
                     requiredFrame
                 }
                 else -> frameIndex
             }
             val frame = DecodedFrame(
-                pixels = pixels,
+                bitmap = bitmap,
                 durationMs = frameGce.delayMs,
                 requiredFrame = requiredFrame,
                 alphaType = AlphaType.UNPREMUL,
@@ -442,17 +450,23 @@ private fun deinterlacedY(row: Int, height: Int): Int {
     return row
 }
 
-private fun clearRect(
-    canvas: IntArray,
-    canvasWidth: Int,
+private fun Bitmap.clearRect(
     left: Int,
     top: Int,
     width: Int,
     height: Int,
     color: Int,
 ) {
-    for (y in top until top + height) {
-        java.util.Arrays.fill(canvas, y * canvasWidth + left, y * canvasWidth + left + width, color)
+    for (y in top until top + height) for (x in left until left + width) {
+        setArgb(x, y, color)
+    }
+}
+
+private fun Bitmap.copyBitmap(): Bitmap = Bitmap(info).also { copy -> copy.copyFrom(this) }
+
+private fun Bitmap.copyFrom(source: Bitmap) {
+    for (y in 0 until height) for (x in 0 until width) {
+        setArgb(x, y, source.getArgb(x, y))
     }
 }
 
