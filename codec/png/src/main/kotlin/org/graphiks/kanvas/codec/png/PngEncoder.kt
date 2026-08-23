@@ -5,7 +5,6 @@ import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
-import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
@@ -55,19 +54,14 @@ public object PngEncoder {
         }
     }
 
-    public fun encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
-        return encode(stream, bitmap, options)
+        return encode(dst, bitmap, options)
     }
 
     public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
         return encode(bitmap, options)
-    }
-
-    public fun encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        val bytes = encode(src, options) ?: return false
-        return stream.write(bytes, bytes.size)
     }
 
     private data class PreparedEncoding(

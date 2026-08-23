@@ -8,12 +8,17 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkAlphaType
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class JpegEncoderTest {
 
@@ -44,6 +49,24 @@ class JpegEncoderTest {
         val baos = ByteArrayOutputStream()
         assertTrue(JpegEncoder.encode(baos, src))
         assertEquals(viaData.toList(), baos.toByteArray().toList())
+    }
+
+    @Test
+    fun `SkPixmap OutputStream overload matches direct encode`() {
+        val info = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = ImageColorSpace.sRGB(),
+        )
+        val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
+        val pixmap = SkPixmap(info, pixels, 4)
+        val direct = JpegEncoder.encode(pixmap)!!
+        val output = ByteArrayOutputStream()
+
+        assertTrue(JpegEncoder.encode(output, pixmap))
+        assertEquals(direct.toList(), output.toByteArray().toList())
     }
 
     @Test

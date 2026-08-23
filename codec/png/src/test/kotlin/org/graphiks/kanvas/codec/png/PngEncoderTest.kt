@@ -20,7 +20,6 @@ import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.icc.IccProfile
-import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -207,7 +206,7 @@ class PngEncoderTest {
     }
 
     @Test
-    fun `SkPixmap overload preserves serializable color space`() {
+    fun `SkPixmap OutputStream overload preserves serializable color space`() {
         val colorSpace = ImageColorSpace.fromMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))!!
         val info = SkImageInfo.Make(
             width = 1,
@@ -219,14 +218,17 @@ class PngEncoderTest {
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
         val pixmap = SkPixmap(info, pixels, 4)
 
-        val bytes = PngEncoder.encode(pixmap)!!
+        val output = ByteArrayOutputStream()
+
+        assertTrue(PngEncoder.encode(output, pixmap))
+        val bytes = output.toByteArray()
 
         assertTrue(findChunk(bytes, 0x69434350), "Display-P3 pixmap must write iCCP")
         assertFalse(findChunk(bytes, 0x73524742), "Display-P3 pixmap must not be retagged sRGB")
     }
 
     @Test
-    fun `refusal propagates through SkWStream and SkPixmap overloads without output`() {
+    fun `refusal propagates through OutputStream and SkPixmap overloads without output`() {
         val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported"))
         val bitmap = SkBitmap(1, 1, unsupported).also { it.pixels[0] = 0xFF336699.toInt() }
         val info = SkImageInfo.Make(
@@ -238,14 +240,14 @@ class PngEncoderTest {
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
         val pixmap = SkPixmap(info, pixels, 4)
-        val bitmapStream = RecordingWStream()
-        val pixmapStream = RecordingWStream()
+        val bitmapOutput = ByteArrayOutputStream()
+        val pixmapOutput = ByteArrayOutputStream()
 
-        assertFalse(PngEncoder.encode(bitmapStream, bitmap))
-        assertEquals(0L, bitmapStream.bytesWritten())
+        assertFalse(PngEncoder.encode(bitmapOutput, bitmap))
+        assertEquals(0, bitmapOutput.size())
         assertNull(PngEncoder.encode(pixmap))
-        assertFalse(PngEncoder.encode(pixmapStream, pixmap))
-        assertEquals(0L, pixmapStream.bytesWritten())
+        assertFalse(PngEncoder.encode(pixmapOutput, pixmap))
+        assertEquals(0, pixmapOutput.size())
     }
 
     @Test
@@ -359,17 +361,6 @@ class PngEncoderTest {
             pos += 12 + len
         }
         error("chunk not found: ${type.toString(16)}")
-    }
-
-    private class RecordingWStream : SkWStream() {
-        private val output = ByteArrayOutputStream()
-
-        override fun write(buffer: ByteArray, size: Int): Boolean {
-            output.write(buffer, 0, size)
-            return true
-        }
-
-        override fun bytesWritten(): Long = output.size().toLong()
     }
 
     private fun decodePng(bytes: ByteArray): SkBitmap {

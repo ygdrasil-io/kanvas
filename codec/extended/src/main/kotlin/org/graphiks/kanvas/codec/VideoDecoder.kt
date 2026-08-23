@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec
 
 import org.skia.foundation.SkImage
-import org.skia.foundation.stream.SkStream
+import java.io.InputStream
 
 /**
  * R-final.S **STUB.FFMPEG** — surface stub for upstream's
@@ -23,11 +23,11 @@ import org.skia.foundation.stream.SkStream
 public object VideoDecoder {
 
     /**
-     * Mirrors `VideoDecoder::MakeFromStream(std::unique_ptr<SkStream>)`.
+     * Mirrors the upstream `VideoDecoder::MakeFromStream` entry point.
      * Always throws [NotImplementedError] — see the class doc.
      */
     @Suppress("FunctionName")
-    public fun MakeFromStream(stream: SkStream): VideoDecoderInstance =
+    public fun MakeFromStream(stream: InputStream): VideoDecoderInstance =
         throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — " +
                 "outside the portable codec matrix.",
