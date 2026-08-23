@@ -6,10 +6,6 @@ plugins {
 dependencies {
     implementation(libs.kotlinPoet)
     testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinCompilerEmbeddable)
-    testImplementation(project(":math:vector"))
-    testImplementation(project(":math:geometry"))
-    testImplementation(project(":math:matrix"))
 }
 
 application {
