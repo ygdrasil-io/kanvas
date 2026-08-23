@@ -11,12 +11,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
@@ -69,11 +69,11 @@ class WebpCodecTest {
         assertNotNull(codec)
         assertTrue(codec is WebpCodec)
         codec as WebpCodec
-        assertEquals(SkEncodedImageFormat.kWEBP, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.WEBP, codec.getEncodedFormat())
         assertEquals(321, codec.getInfo().width)
         assertEquals(123, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
         assertTrue(codec.metadata.flags.icc)
         assertTrue(codec.metadata.flags.alpha)
@@ -194,7 +194,7 @@ class WebpCodecTest {
         assertNotNull(codec)
         val metadata = codec!!.metadata
         assertEquals(WebpBitstreamFormat.VP8, metadata.format)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(metadata.flags.alpha)
         assertNotNull(metadata.alphaChunk)
         val alpha = metadata.alphaChunk!!
@@ -236,7 +236,7 @@ class WebpCodecTest {
         assertEquals(1, checkedCodec.getFrameCount())
         assertEquals(4, checkedCodec.getInfo().width)
         assertEquals(2, checkedCodec.getInfo().height)
-        assertEquals(SkAlphaType.kUnpremul, checkedCodec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, checkedCodec.getInfo().alphaType)
         assertEquals(7, checkedCodec.metadata.animation!!.loopCount)
         assertEquals(6, checkedCodec.getRepetitionCount())
         assertEquals(argb(0x40, 10, 20, 30), checkedCodec.metadata.animation.backgroundColor)
@@ -245,7 +245,7 @@ class WebpCodecTest {
         assertFalse(frame.blend)
         assertTrue(frame.disposeToBackground)
         assertEquals(
-            Codec.FrameInfo(Codec.kNoFrame, 45, SkAlphaType.kUnpremul, RectI32.ofOriginSize(0, 0, 2, 2)),
+            Codec.FrameInfo(Codec.kNoFrame, 45, AlphaType.UNPREMUL, RectI32.ofOriginSize(0, 0, 2, 2)),
             checkedCodec.getFrameInfo().single(),
         )
     }
@@ -370,7 +370,7 @@ class WebpCodecTest {
         assertNotNull(alpha)
         assertEquals(WebpAlphaCompression.LOSSLESS, alpha!!.compression)
         assertEquals(3, alpha.payloadSize)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
     }
 
     @Test
@@ -474,7 +474,7 @@ class WebpCodecTest {
         assertEquals(WebpBitstreamFormat.VP8L, codec!!.metadata.format)
         assertEquals(4096, codec.getInfo().width)
         assertEquals(2048, codec.getInfo().height)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
     }
 
     @Test
@@ -485,7 +485,7 @@ class WebpCodecTest {
         assertEquals(WebpBitstreamFormat.VP8, codec!!.metadata.format)
         assertEquals(640, codec.getInfo().width)
         assertEquals(480, codec.getInfo().height)
-        assertEquals(SkAlphaType.kOpaque, codec.getInfo().alphaType)
+        assertEquals(AlphaType.OPAQUE, codec.getInfo().alphaType)
         assertEquals(20, codec.metadata.payloadOffset)
         assertEquals(10, codec.metadata.payloadSize)
     }
@@ -1741,7 +1741,7 @@ class WebpCodecTest {
             colorSpace = ImageColorSpace.sRGB(),
         )
 
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         assertArrayEquals(
             intArrayOf(

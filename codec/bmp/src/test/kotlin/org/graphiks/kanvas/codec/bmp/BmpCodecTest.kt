@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 
@@ -47,7 +47,7 @@ class BmpCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec is BmpCodec)
-        assertEquals(SkEncodedImageFormat.kBMP, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.BMP, codec!!.getEncodedFormat())
         assertEquals(3, codec.dimensions().width)
         assertEquals(2, codec.dimensions().height)
 
@@ -345,7 +345,7 @@ class BmpCodecTest {
         )!!
         val info = codec.getInfo()
         assertEquals(SkColorType.kRGBA_8888, info.colorType)
-        assertEquals(SkAlphaType.kUnpremul, info.alphaType)
+        assertEquals(AlphaType.UNPREMUL, info.alphaType)
         assertTrue(info.colorSpace.isSrgb())
     }
 

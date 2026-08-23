@@ -3,7 +3,7 @@ package org.graphiks.kanvas.codec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
@@ -51,7 +51,7 @@ import org.skia.utils.PixmapUtils
  */
 public class AnimatedImage private constructor(
     private val codec: AndroidCodec,
-    private val origin: SkEncodedOrigin,
+    private val origin: EncodedOrigin,
     /**
      * Decode size — the dimensions [decodeNextFrame] writes into the
      * raw frame buffer (post-orientation but pre-crop). Equals the
@@ -213,7 +213,7 @@ public class AnimatedImage private constructor(
         //    a pre-scale "natural" buffer.
         val orientedW = if (origin.swapsWidthHeight()) rawFrame.height else rawFrame.width
         val orientedH = if (origin.swapsWidthHeight()) rawFrame.width else rawFrame.height
-        val oriented = if (origin == SkEncodedOrigin.kTopLeft) {
+        val oriented = if (origin == EncodedOrigin.TOP_LEFT) {
             rawFrame
         } else {
             SkBitmap(

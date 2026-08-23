@@ -3,11 +3,11 @@ package org.graphiks.kanvas.codec.gif
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -30,7 +30,7 @@ public class GifCodec private constructor(
         val pixels: IntArray,
         val durationMs: Int,
         val requiredFrame: Int,
-        val alphaType: SkAlphaType,
+        val alphaType: AlphaType,
         val frameRect: RectI32,
         val nextRequiredFrame: Int,
     )
@@ -40,14 +40,14 @@ public class GifCodec private constructor(
             width = canvasWidth,
             height = canvasHeight,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kGIF
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.GIF
 
     override fun getICCProfile(): IccProfile? = null
 
@@ -254,7 +254,7 @@ public class GifCodec private constructor(
                 pixels = pixels,
                 durationMs = frameGce.delayMs,
                 requiredFrame = requiredFrame,
-                alphaType = SkAlphaType.kUnpremul,
+                alphaType = AlphaType.UNPREMUL,
                 frameRect = frameRect,
                 nextRequiredFrame = nextRequiredFrame,
             )

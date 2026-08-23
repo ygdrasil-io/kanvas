@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 
 class Jpeg2000DocumentTest {
 
@@ -688,7 +688,7 @@ class Jpeg2000DocumentTest {
         assertEquals(Jpeg2000Container.J2K, document.container)
         assertEquals(1, document.frame.width)
         assertEquals(1, document.frame.height)
-        assertEquals(SkEncodedImageFormat.kJPEG2000, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.JPEG2000, codec.getEncodedFormat())
         assertEquals(Codec.Result.kErrorInInput, codec.getImage().second)
         assertEquals(Codec.Result.kErrorInInput, document.decode().diagnostic?.result)
     }

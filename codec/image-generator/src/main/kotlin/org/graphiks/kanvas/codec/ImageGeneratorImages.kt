@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.color.ColorARGB
 import org.skia.foundation.SkColorType
@@ -96,7 +96,7 @@ public object ImageGeneratorImages {
         // Always materialise into 8888 — matches [SkImage]'s internal
         // pixel-buffer contract (see SkImage.kt KDoc).
         val target = info.makeColorType(SkColorType.kRGBA_8888)
-            .makeAlphaType(SkAlphaType.kUnpremul)
+            .makeAlphaType(AlphaType.UNPREMUL)
         val rowBytes = target.minRowBytes()
         val bytes = ByteBuffer
             .allocate(rowBytes * target.height)

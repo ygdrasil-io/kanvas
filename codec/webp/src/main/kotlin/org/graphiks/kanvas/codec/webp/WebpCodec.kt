@@ -4,11 +4,11 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.color.icc.IccProfile
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 
 /**
@@ -30,14 +30,14 @@ public class WebpCodec internal constructor(
             width = metadata.width,
             height = metadata.height,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
+            alphaType = if (metadata.hasAlpha) AlphaType.UNPREMUL else AlphaType.OPAQUE,
             colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kWEBP
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.WEBP
 
     override fun getICCProfile(): IccProfile? = metadata.iccProfile
 
@@ -53,7 +53,7 @@ public class WebpCodec internal constructor(
             FrameInfo(
                 requiredFrame = if (index == 0) kNoFrame else index - 1,
                 durationMs = frame.durationMs,
-                alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
+                alphaType = if (metadata.hasAlpha) AlphaType.UNPREMUL else AlphaType.OPAQUE,
                 frameRect = RectI32.ofOriginSize(frame.x, frame.y, frame.width, frame.height),
             )
         } ?: super.getFrameInfo()

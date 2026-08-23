@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkEncodedOrigin
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.EncodedImageFormat
+import org.graphiks.kanvas.image.EncodedOrigin
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
@@ -90,7 +90,7 @@ public abstract class Codec protected constructor() {
     public abstract fun getInfo(): SkImageInfo
 
     /** On-disk format of the encoded bytes this codec was created from. */
-    public abstract fun getEncodedFormat(): SkEncodedImageFormat
+    public abstract fun getEncodedFormat(): EncodedImageFormat
 
     /**
      * The ICC profile parsed out of the encoded file, or `null` if it
@@ -104,16 +104,16 @@ public abstract class Codec protected constructor() {
     /**
      * The EXIF Orientation tag carried by the encoded stream — i.e. how
      * the source pixels were stored relative to the scene's intended
-     * top-left. Mirrors `SkEncodedOrigin Codec::getOrigin() const`.
+     * top-left. Mirrors `EncodedOrigin Codec::getOrigin() const`.
      *
-     * **Default :** [SkEncodedOrigin.kTopLeft] — the encoded grid is
+     * **Default :** [EncodedOrigin.TOP_LEFT] — the encoded grid is
      * already upright. Format-specific subclasses with EXIF-aware
      * decoders override to surface
      * the parsed value ; callers that wish to materialise the rotation
-     * post-decode can compose [SkEncodedOrigin.toMatrix] /
+     * post-decode can compose [EncodedOrigin.toMatrix] /
      * [org.skia.utils.PixmapUtils.Orient].
      */
-    public open fun getOrigin(): SkEncodedOrigin = SkEncodedOrigin.kTopLeft
+    public open fun getOrigin(): EncodedOrigin = EncodedOrigin.TOP_LEFT
 
     public fun dimensions(): SizeI32 = SizeI32.of(getInfo().width, getInfo().height)
     public fun bounds(): RectI32 = RectI32.ofSize(getInfo().width, getInfo().height)
@@ -186,7 +186,7 @@ public abstract class Codec protected constructor() {
     public data class FrameInfo(
         val requiredFrame: Int = kNoFrame,
         val durationMs: Int = 0,
-        val alphaType: SkAlphaType = SkAlphaType.kUnpremul,
+        val alphaType: AlphaType = AlphaType.UNPREMUL,
         val frameRect: RectI32 = RectI32.Empty,
     )
 

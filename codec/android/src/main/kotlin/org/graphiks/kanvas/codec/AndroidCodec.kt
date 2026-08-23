@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec
 
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
@@ -82,7 +82,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
     public fun getICCProfile(): IccProfile? = codec.getICCProfile()
 
     /** Mirrors `AndroidCodec::getEncodedFormat()`. */
-    public fun getEncodedFormat(): SkEncodedImageFormat = codec.getEncodedFormat()
+    public fun getEncodedFormat(): EncodedImageFormat = codec.getEncodedFormat()
 
     /**
      * Mirrors `int AndroidCodec::computeSampleSize(SkISize* size)`.
@@ -135,7 +135,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
             // clamp the generic pow-2 pick to that set ; values > 8 are
             // capped at 8 (post-decode resampling can take it the rest
             // of the way down for callers using getAndroidPixels).
-            SkEncodedImageFormat.kJPEG -> when {
+            EncodedImageFormat.JPEG -> when {
                 s >= 8 -> 8
                 s >= 4 -> 4
                 s >= 2 -> 2

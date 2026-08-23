@@ -11,11 +11,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
@@ -112,11 +112,11 @@ class CodecImageDecoderColorSpaceTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = colorSpace,
         )
 
-        override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
+        override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.PNG
 
         override fun getICCProfile(): IccProfile? = iccProfile
 

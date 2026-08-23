@@ -9,12 +9,12 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
 import java.io.ByteArrayOutputStream
@@ -85,11 +85,11 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec is PngCodec)
-        assertEquals(SkEncodedImageFormat.kPNG, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.PNG, codec!!.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(5, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
-        assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
@@ -512,7 +512,7 @@ class PngCodecTest {
         )!!
 
         assertEquals(SkColorType.kRGBA_F16Norm, codec.getInfo().colorType)
-        assertEquals(SkAlphaType.kPremul, codec.getInfo().alphaType)
+        assertEquals(AlphaType.PREMUL, codec.getInfo().alphaType)
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
@@ -647,7 +647,7 @@ class PngCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
@@ -670,7 +670,7 @@ class PngCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
@@ -693,7 +693,7 @@ class PngCodecTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
 
@@ -714,12 +714,12 @@ class PngCodecTest {
                 filters = intArrayOf(0),
             ),
         )!!
-        val supported = Triple(SkColorType.kBGRA_8888, SkAlphaType.kUnpremul, argb(0xFF, 0xFF, 0x00, 0x00))
+        val supported = Triple(SkColorType.kBGRA_8888, AlphaType.UNPREMUL, argb(0xFF, 0xFF, 0x00, 0x00))
         val unsupported = listOf(
-            SkColorType.kARGB_4444 to SkAlphaType.kPremul,
-            SkColorType.kAlpha_8 to SkAlphaType.kPremul,
-            SkColorType.kRGB_565 to SkAlphaType.kOpaque,
-            SkColorType.kGray_8 to SkAlphaType.kOpaque,
+            SkColorType.kARGB_4444 to AlphaType.PREMUL,
+            SkColorType.kAlpha_8 to AlphaType.PREMUL,
+            SkColorType.kRGB_565 to AlphaType.OPAQUE,
+            SkColorType.kGray_8 to AlphaType.OPAQUE,
         )
 
         val (colorType, alphaType, expected) = supported
@@ -763,7 +763,7 @@ class PngCodecTest {
         val requested = codec.getInfo().makeColorType(SkColorType.kRGB_565)
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(AlphaType.UNPREMUL, requested.alphaType)
         assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
@@ -781,7 +781,7 @@ class PngCodecTest {
         val requested = codec.getInfo().makeColorType(SkColorType.kGray_8)
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(AlphaType.UNPREMUL, requested.alphaType)
         assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
@@ -821,7 +821,7 @@ class PngCodecTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGB_565,
-            alphaType = SkAlphaType.kOpaque,
+            alphaType = AlphaType.OPAQUE,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
@@ -844,7 +844,7 @@ class PngCodecTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_F32,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
@@ -1300,7 +1300,7 @@ class PngCodecTest {
             ),
         )!!
 
-        val scaled = SkImageInfo.Make(1, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, codec.getInfo().colorSpace)
+        val scaled = SkImageInfo.Make(1, 1, SkColorType.kRGBA_8888, AlphaType.UNPREMUL, codec.getInfo().colorSpace)
         assertEquals(Codec.Result.kInvalidScale, codec.getPixels(scaled, SkBitmap(1, 1, scaled.colorSpace, scaled.colorType)))
 
         val sourceGeometry = codec.getInfo()
@@ -1318,7 +1318,7 @@ class PngCodecTest {
             codec.getPixels(sourceGeometry, SkBitmap(2, 2, ImageColorSpace.linearSrgb(), sourceGeometry.colorType)),
         )
 
-        val alphaMismatch = sourceGeometry.makeAlphaType(SkAlphaType.kPremul)
+        val alphaMismatch = sourceGeometry.makeAlphaType(AlphaType.PREMUL)
         assertEquals(
             Codec.Result.kInvalidConversion,
             codec.getPixels(alphaMismatch, SkBitmap(2, 2, alphaMismatch.colorSpace, alphaMismatch.colorType)),
