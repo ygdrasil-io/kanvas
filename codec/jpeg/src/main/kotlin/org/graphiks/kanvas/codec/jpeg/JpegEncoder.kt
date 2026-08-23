@@ -96,12 +96,14 @@ public object JpegEncoder {
         return try {
             if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF) return false
             if (!canEncode(src.info)) return false
+            val transaction = ByteArrayOutputStream()
             if (options.hierarchy.isEmpty()) {
                 if (!options.isSupportedRequest()) return false
-                JpegWriter(dst, src, options).write()
+                JpegWriter(transaction, src, options).write()
             } else {
-                JpegHierarchyWriter(dst, src, options).write()
+                JpegHierarchyWriter(transaction, src, options).write()
             }
+            dst.write(transaction.toByteArray())
             true
         } catch (_: Throwable) {
             false
@@ -132,7 +134,9 @@ public object JpegEncoder {
         }
     }
 
-    private fun canEncode(info: ImageInfo): Boolean = info.colorType == ColorType.RGBA_8888
+    private fun canEncode(info: ImageInfo): Boolean =
+        info.colorType == ColorType.RGBA_8888 &&
+            info.alphaType in setOf(AlphaType.UNPREMUL, AlphaType.OPAQUE)
 }
 
 /**

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.color.ColorModel
 import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.ImageInfo
@@ -400,7 +401,9 @@ public object PngEncoder {
         }
     }
 
-    private fun canEncode(info: ImageInfo): Boolean = info.colorType == ColorType.RGBA_8888
+    private fun canEncode(info: ImageInfo): Boolean =
+        info.colorType == ColorType.RGBA_8888 &&
+            info.alphaType in setOf(AlphaType.UNPREMUL, AlphaType.OPAQUE)
 
     private val SPACE: Byte = 0x20
     private val NUL: Byte = 0x00

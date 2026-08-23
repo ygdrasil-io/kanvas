@@ -41,8 +41,9 @@ class Pixmap(
     fun computeByteSize(): Long = info.computeByteSize(rowBytes)
 
     fun getArgb(x: Int, y: Int): Int {
-        if (!info.colorType.capabilities().cpuReadableWritable || x !in 0 until width() || y !in 0 until height()) {
-            return 0
+        if (x !in 0 until width() || y !in 0 until height()) return 0
+        if (!info.colorType.capabilities().cpuReadableWritable) {
+            throw UnsupportedOperationException("unsupported CPU-readable color type: ${info.colorType}")
         }
         val offset = y * rowBytes + x * info.bytesPerPixel()
         return when (info.colorType) {

@@ -345,15 +345,15 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
                 buf.put(off + 1, ((packed ushr 8) and 0xFF).toByte())
             }
             ColorType.ARGB_4444 -> {
-                // Premul ARGB 4-bit-per-channel, packed RGBA in upstream's
-                // ARGB_4444 wire layout: R<<12 | G<<8 | B<<4 | A.
+                // Premul ARGB 4-bit-per-channel, packed A R G B in the
+                // canonical ARGB_4444 wire layout: A<<12 | R<<8 | G<<4 | B.
                 val a = color.alpha / 255f
                 fun q(v: Int): Int = (((v / 255f) * a) * 15f + 0.5f).toInt().coerceIn(0, 15)
                 val rN = q(color.red)
                 val gN = q(color.green)
                 val bN = q(color.blue)
                 val aN = (a * 15f + 0.5f).toInt().coerceIn(0, 15)
-                val packed = (rN shl 12) or (gN shl 8) or (bN shl 4) or aN
+                val packed = (aN shl 12) or (rN shl 8) or (gN shl 4) or bN
                 buf.put(off, (packed and 0xFF).toByte())
                 buf.put(off + 1, ((packed ushr 8) and 0xFF).toByte())
             }

@@ -4,11 +4,13 @@ import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import org.graphiks.kanvas.color.ColorProfiles
@@ -147,6 +149,63 @@ class AnimatedImageOwnershipTest {
         )
     }
 
+    @Test
+    fun `without post process retains F16 pixels through scaling`() {
+        val codec = RecordingAnimatedCodec(
+            frames = listOf(0xFF204060.toInt()),
+            delaysMs = listOf(40),
+            width = 2,
+            height = 2,
+            colorType = ColorType.RGBA_F16_NORM,
+            alphaType = AlphaType.PREMUL,
+        )
+        val animated = requireNotNull(
+            AnimatedImage.Make(
+                AndroidCodec.MakeFromCodec(codec),
+                ImageInfo.make(1, 1, ColorType.RGBA_F16_NORM, AlphaType.PREMUL),
+                RectI32.ofSize(1, 1),
+                postProcess = null,
+            ),
+        )
+        val frame = animated.getCurrentFrame()
+        val components = FloatArray(4)
+
+        assertEquals(ColorType.RGBA_F16_NORM, frame.colorType)
+        assertEquals(AlphaType.PREMUL, frame.alphaType)
+        assertTrue(frame.getPremulRgbaF16(0, 0, components))
+        assertEquals(0.125f, components[0], 0.001f)
+        assertEquals(0.25f, components[1], 0.001f)
+        assertEquals(0.375f, components[2], 0.001f)
+        assertEquals(1f, components[3], 0.001f)
+    }
+
+    @Test
+    fun `without post process retains RGB 565 pixels through orientation`() {
+        val codec = RecordingAnimatedCodec(
+            frames = listOf(RED),
+            delaysMs = listOf(40),
+            width = 2,
+            height = 1,
+            origin = EncodedOrigin.TOP_RIGHT,
+            colorType = ColorType.RGB_565,
+            alphaType = AlphaType.OPAQUE,
+        )
+        val animated = requireNotNull(
+            AnimatedImage.Make(
+                AndroidCodec.MakeFromCodec(codec),
+                ImageInfo.make(2, 1, ColorType.RGB_565, AlphaType.OPAQUE),
+                RectI32.ofSize(2, 1),
+                postProcess = null,
+            ),
+        )
+        val frame = animated.getCurrentFrame()
+
+        assertEquals(ColorType.RGB_565, frame.colorType)
+        assertEquals(AlphaType.OPAQUE, frame.alphaType)
+        assertEquals(RED, frame.getArgb(0, 0))
+        assertEquals(RED, frame.getArgb(1, 0))
+    }
+
     private fun supportedNonClassifiableIccColorSpace(): ImageColorSpace =
         ImageColorSpace.fromIccProfile(
             IccProfile.fromMatrixTrc(
@@ -197,6 +256,9 @@ class AnimatedImageOwnershipTest {
     private class RecordingAnimatedCodec(
         private val frames: List<Int>,
         private val delaysMs: List<Int>,
+        private val width: Int = 1,
+        private val height: Int = 1,
+        private val origin: EncodedOrigin = EncodedOrigin.TOP_LEFT,
         private val colorType: ColorType = ColorType.RGBA_8888,
         private val alphaType: AlphaType = AlphaType.UNPREMUL,
         private val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
@@ -204,8 +266,8 @@ class AnimatedImageOwnershipTest {
         val decodedFrameIndexes = mutableListOf<Int>()
         val decodedOptions = mutableListOf<Options>()
         private val info = ImageInfo.make(
-            width = 1,
-            height = 1,
+            width = width,
+            height = height,
             colorType = colorType,
             alphaType = alphaType,
             colorSpace = colorSpace,
@@ -214,6 +276,7 @@ class AnimatedImageOwnershipTest {
         override fun getInfo(): ImageInfo = info
         override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.GIF
         override fun getICCProfile(): IccProfile? = null
+        override fun getOrigin(): EncodedOrigin = origin
         override fun getFrameCount(): Int = frames.size
 
         override fun getFrameInfo(): List<FrameInfo> =
@@ -229,12 +292,14 @@ class AnimatedImageOwnershipTest {
             getPixels(info, dst, Options())
 
         override fun getPixels(info: ImageInfo, dst: Bitmap, opts: Options): Result {
-            if (info != this.info || dst.width != 1 || dst.height != 1) {
+            if (info != this.info || dst.width != width || dst.height != height) {
                 return Result.kInvalidParameters
             }
             decodedOptions += opts
             decodedFrameIndexes += opts.frameIndex
-            dst.setArgb(0, 0, frames[opts.frameIndex])
+            for (y in 0 until height) for (x in 0 until width) {
+                dst.setArgb(x, y, frames[opts.frameIndex])
+            }
             return Result.kSuccess
         }
     }

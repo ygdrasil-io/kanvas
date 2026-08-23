@@ -70,14 +70,14 @@ public class AnimatedImage private constructor(
      * Current frame buffer — re-decoded in place by [decodeNextFrame].
      * Sized to match the codec's source [ImageInfo] (pre-orientation).
      */
-    private val rawFrame: Bitmap = Bitmap(codec.codec().getInfo().makeColorType(ColorType.RGBA_8888))
+    private val rawFrame: Bitmap = Bitmap(codec.codec().getInfo())
 
     /**
      * Post-orientation, post-scale frame buffer — what
      * [getCurrentFrame] / [makePictureSnapshot] expose, sized to
      * [decodeInfo] (the caller's requested logical dimensions).
      */
-    private var displayFrame: Bitmap = Bitmap(decodeInfo.makeColorType(ColorType.RGBA_8888))
+    private var displayFrame: Bitmap = Bitmap(decodeInfo)
 
     private var currentFrameIndex: Int = -1
     private var currentDuration: Int = 0

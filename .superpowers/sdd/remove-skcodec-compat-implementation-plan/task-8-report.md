@@ -114,3 +114,44 @@ passes, and no generated score file is included.
   still not a Gradle project, as documented above.
 - PASS — `rtk git diff --check` is clean; the pre-existing score-file change
   remains unstaged and excluded.
+
+## Global integration correction — DONE
+
+### Findings resolved
+
+1. PNG and JPEG now accept only `RGBA_8888` with `UNPREMUL` or `OPAQUE`
+   metadata for both `Bitmap` and `Pixmap` entry points. Existing encoder
+   tests prove `PREMUL` and `UNKNOWN` alpha refusals produce no output.
+2. `Pixmap.getArgb` retains its documented `0` out-of-bounds sentinel, but
+   now throws `UnsupportedOperationException` with a Kanvas diagnostic for
+   an in-bounds CPU-inactive color type.
+3. `AnimatedImage` now allocates its decode and display buffers directly
+   from `codec.getInfo()` and `decodeInfo`; it does not coerce them to
+   `RGBA_8888`. `PixmapUtils.orient` accepts every CPU-readable canonical
+   color type and preserves F16 components without an ARGB round trip.
+   Existing animation tests cover F16 scaling and RGB_565 orientation.
+4. Android `ARGB_4444` serialization now emits the canonical little-endian
+   packed value `A << 12 | R << 8 | G << 4 | B`; its existing bundle test
+   checks the exact bytes `0x23, 0xF1` for `0xFF112233`.
+5. JPEG writes to an in-memory transaction before forwarding bytes to the
+   caller's `OutputStream`, so an ICC serialization refusal leaves the
+   destination empty. The existing JPEG encoder test covers this path.
+
+### Test evidence
+
+- RED observed before the fixes:
+  `PngEncoderTest` alpha refusal, `JpegEncoderTest` alpha and ICC refusal,
+  and `PixmapTest` CPU-inactive read all failed at their new assertions.
+- PASS after the fixes:
+  `rtk ./gradlew :codec:png:test --tests org.graphiks.kanvas.codec.png.PngEncoderTest`,
+  `rtk ./gradlew :codec:jpeg:test --tests org.graphiks.kanvas.codec.jpeg.JpegEncoderTest`,
+  and `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.image.PixmapTest`.
+- PASS: the complete declared codec matrix was rerun after the integration
+  correction: `BUILD SUCCESSFUL` (117 actionable tasks: 17 executed,
+  100 up-to-date).
+
+`codec:android` and `codec:animated` remain directories with Gradle builds
+but no corresponding projects in `settings.gradle.kts`; their updated
+existing tests are therefore statically validated rather than executable in
+this worktree. This is the pre-existing package-boundary condition already
+recorded for Task 7, not a result of this correction.

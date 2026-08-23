@@ -244,6 +244,24 @@ class PngEncoderTest {
     }
 
     @Test
+    fun `premultiplied and unknown alpha Bitmap and Pixmap inputs refuse without output`() {
+        listOf(AlphaType.PREMUL, AlphaType.UNKNOWN).forEach { alphaType ->
+            val info = ImageInfo.make(1, 1, ColorType.RGBA_8888, alphaType, ImageColorSpace.sRGB())
+            val bitmap = Bitmap(info)
+            val pixmap = Pixmap(info, ByteBuffer.allocate(info.minRowBytes()), info.minRowBytes())
+            val bitmapOutput = ByteArrayOutputStream()
+            val pixmapOutput = ByteArrayOutputStream()
+
+            assertNull(PngEncoder.encode(bitmap), alphaType.name)
+            assertFalse(PngEncoder.encode(bitmapOutput, bitmap), alphaType.name)
+            assertEquals(0, bitmapOutput.size(), alphaType.name)
+            assertNull(PngEncoder.encode(pixmap), alphaType.name)
+            assertFalse(PngEncoder.encode(pixmapOutput, pixmap), alphaType.name)
+            assertEquals(0, pixmapOutput.size(), alphaType.name)
+        }
+    }
+
+    @Test
     fun `refusal propagates through OutputStream and Pixmap overloads without output`() {
         val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported"))
         val bitmap = Bitmap(ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, unsupported)).also { it[0] = 0xFF336699.toInt() }

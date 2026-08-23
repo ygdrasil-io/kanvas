@@ -133,6 +133,21 @@ class AndroidCodecBundleTest {
     }
 
     @Test
+    fun `getAndroidPixels writes canonical little endian ARGB 4444`() {
+        val sourceInfo = ImageInfo.makeN32(width = 1, height = 1)
+        val targetInfo = ImageInfo.make(1, 1, ColorType.ARGB_4444, AlphaType.PREMUL)
+        val pixels = ByteBuffer.allocate(targetInfo.minRowBytes())
+
+        assertEquals(
+            Codec.Result.kSuccess,
+            AndroidCodec.MakeFromCodec(StubCodec(sourceInfo))
+                .getAndroidPixels(targetInfo, pixels, targetInfo.minRowBytes()),
+        )
+        assertEquals(0x23, pixels.get(0).toInt() and 0xFF)
+        assertEquals(0xF1, pixels.get(1).toInt() and 0xFF)
+    }
+
+    @Test
     fun `getAndroidPixels reports invalid input and propagates codec failures`() {
         val info = ImageInfo.makeN32(width = 1, height = 1)
         val rowBytes = info.minRowBytes()

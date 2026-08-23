@@ -67,6 +67,25 @@ class PixmapTest {
     }
 
     @Test
+    fun `getArgb preserves out of bounds sentinel but refuses inactive CPU formats`() {
+        val readable = Pixmap(
+            ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
+            ByteBuffer.allocate(4),
+            4,
+        )
+        val inactive = Pixmap(
+            ImageInfo.make(1, 1, ColorType.UNKNOWN, AlphaType.UNKNOWN, ImageColorSpace.sRGB()),
+            ByteBuffer.allocate(0),
+            0,
+        )
+
+        assertEquals(0, readable.getArgb(1, 0))
+        val refusal = assertThrows<UnsupportedOperationException> { inactive.getArgb(0, 0) }
+        assertEquals("unsupported CPU-readable color type: UNKNOWN", refusal.message)
+        assertEquals(0, inactive.getArgb(1, 0))
+    }
+
+    @Test
     fun `reads premultiplied F16 pixels with row padding`() {
         val info = ImageInfo.make(2, 2, ColorType.RGBA_F16_NORM, AlphaType.PREMUL, ImageColorSpace.sRGB())
         val rowBytes = info.minRowBytes() + 8

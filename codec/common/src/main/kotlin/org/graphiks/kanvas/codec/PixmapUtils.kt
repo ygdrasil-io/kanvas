@@ -4,6 +4,7 @@ import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.image.capabilities
 
 /** Pixel-preserving EXIF orientation helpers for canonical Kanvas bitmaps. */
 public object PixmapUtils {
@@ -12,7 +13,7 @@ public object PixmapUtils {
      * matching layout, alpha representation, and identical [ImageInfo.colorSpace].
      */
     public fun orient(dst: Bitmap, src: Bitmap, origin: EncodedOrigin): Boolean {
-        if (src.colorType !in setOf(ColorType.RGBA_8888, ColorType.RGBA_F16_NORM)) return false
+        if (!src.colorType.capabilities().cpuReadableWritable) return false
         if (dst.colorType != src.colorType || dst.alphaType != src.alphaType || dst.colorSpace !== src.colorSpace) return false
         if (origin.swapsWidthHeight()) {
             if (dst.width != src.height || dst.height != src.width) return false
@@ -20,7 +21,13 @@ public object PixmapUtils {
             return false
         }
 
-        val f16 = if (src.colorType == ColorType.RGBA_F16_NORM) FloatArray(4) else null
+        val f16 = if (src.colorType == ColorType.RGBA_F16_NORM ||
+            src.colorType == ColorType.RGBA_F16
+        ) {
+            FloatArray(4)
+        } else {
+            null
+        }
         for (sy in 0 until src.height) {
             for (sx in 0 until src.width) {
                 val (dx, dy) = when (origin) {
@@ -33,7 +40,7 @@ public object PixmapUtils {
                     EncodedOrigin.RIGHT_BOTTOM -> src.height - 1 - sy to src.width - 1 - sx
                     EncodedOrigin.LEFT_BOTTOM -> sy to src.width - 1 - sx
                 }
-                if (src.colorType == ColorType.RGBA_F16_NORM) {
+                if (f16 != null) {
                     check(src.getPremulRgbaF16(sx, sy, checkNotNull(f16)))
                     dst.setPremulRgbaF16(dx, dy, f16[0], f16[1], f16[2], f16[3])
                 } else {

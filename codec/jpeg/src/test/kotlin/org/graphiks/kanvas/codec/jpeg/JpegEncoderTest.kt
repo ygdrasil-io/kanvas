@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.image.ColorType
@@ -84,6 +85,34 @@ class JpegEncoderTest {
         assertNull(JpegEncoder.encode(pixmap))
         assertFalse(JpegEncoder.encode(pixmapOutput, pixmap))
         assertEquals(0, pixmapOutput.size())
+    }
+
+    @Test
+    fun `premultiplied and unknown alpha Bitmap and Pixmap inputs refuse without output`() {
+        listOf(AlphaType.PREMUL, AlphaType.UNKNOWN).forEach { alphaType ->
+            val info = ImageInfo.make(1, 1, ColorType.RGBA_8888, alphaType, ImageColorSpace.sRGB())
+            val bitmap = Bitmap(info)
+            val pixmap = Pixmap(info, ByteBuffer.allocate(info.minRowBytes()), info.minRowBytes())
+            val bitmapOutput = ByteArrayOutputStream()
+            val pixmapOutput = ByteArrayOutputStream()
+
+            assertNull(JpegEncoder.encode(bitmap), alphaType.name)
+            assertFalse(JpegEncoder.encode(bitmapOutput, bitmap), alphaType.name)
+            assertEquals(0, bitmapOutput.size(), alphaType.name)
+            assertNull(JpegEncoder.encode(pixmap), alphaType.name)
+            assertFalse(JpegEncoder.encode(pixmapOutput, pixmap), alphaType.name)
+            assertEquals(0, pixmapOutput.size(), alphaType.name)
+        }
+    }
+
+    @Test
+    fun `non serializable ICC leaves OutputStream empty`() {
+        val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported"))
+        val bitmap = Bitmap(ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, unsupported))
+        val output = ByteArrayOutputStream()
+
+        assertFalse(JpegEncoder.encode(output, bitmap))
+        assertEquals(0, output.size())
     }
 
     @Test
