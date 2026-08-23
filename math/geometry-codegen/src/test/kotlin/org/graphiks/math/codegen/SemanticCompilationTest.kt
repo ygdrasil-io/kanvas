@@ -48,6 +48,26 @@ class SemanticCompilationTest {
         )
     }
 
+    @Test
+    fun `polygon correspondence rejects vector arrays`() {
+        assertRejected(
+            "PolyToPolyVectors.kt",
+            "polyToPoly",
+            "Matrix3x3F32.polyToPoly(source, destination)",
+            "argument type mismatch",
+        )
+    }
+
+    @Test
+    fun `vector component product is rejected at times`() {
+        assertRejected(
+            "VectorTimesVector.kt",
+            "times",
+            "left * right",
+            "argument type mismatch",
+        )
+    }
+
     private fun assertRejected(
         fileName: String,
         symbol: String,

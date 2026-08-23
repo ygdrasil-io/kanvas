@@ -844,7 +844,7 @@ public data class Matrix3x3F32(
          * corresponding destination points (0 ≤ count ≤ 4).
          * Returns `null` when the system is degenerate (no unique solution).
          */
-        public fun setPolyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? =
+        public fun setPolyToPoly(src: Array<Point2F32>, dst: Array<Point2F32>): Matrix3x3F32? =
             polyToPoly(src, dst)
 
         /**
@@ -1141,7 +1141,7 @@ public data class Matrix3x3F32(
          * build `srcMap` from src, invert, build `dstMap` from dst,
          * return `dstMap · srcMap⁻¹`.
          */
-        public fun polyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? {
+        public fun polyToPoly(src: Array<Point2F32>, dst: Array<Point2F32>): Matrix3x3F32? {
             if (src.size != dst.size || src.size > 4) return null
             return when (src.size) {
                 0 -> Identity
@@ -1157,7 +1157,7 @@ public data class Matrix3x3F32(
         }
 
         /** Dispatcher for [poly2Proc] / [poly3Proc] / [poly4Proc]. */
-        private fun polyToMap(pts: Array<Vector2F32>): Matrix3x3F32? = when (pts.size) {
+        private fun polyToMap(pts: Array<Point2F32>): Matrix3x3F32? = when (pts.size) {
             2 -> poly2Proc(pts)
             3 -> poly3Proc(pts)
             4 -> poly4Proc(pts)
@@ -1168,7 +1168,7 @@ public data class Matrix3x3F32(
          * Builds the 2-point rotate-scale-translate fit so that the
          * basis maps `(0, 0) → src[0]` and `(1, 0) → src[1]`.
          */
-        private fun poly2Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly2Proc(p: Array<Point2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[1].y - p[0].y,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1178,7 +1178,7 @@ public data class Matrix3x3F32(
         )
 
         /** Polynomial solver for the 3-point poly-to-poly system. */
-        private fun poly3Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly3Proc(p: Array<Point2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[2].x - p[0].x,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1193,7 +1193,7 @@ public data class Matrix3x3F32(
          * (0,1)` (the unit square). Returns `null` on degenerate input
          * (zero-check short-circuit).
          */
-        private fun poly4Proc(p: Array<Vector2F32>): Matrix3x3F32? {
+        private fun poly4Proc(p: Array<Point2F32>): Matrix3x3F32? {
             val x0 = p[2].x - p[0].x
             val y0 = p[2].y - p[0].y
             val x1 = p[2].x - p[1].x

@@ -3,6 +3,8 @@ package org.graphiks.math.vector
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class MutableVector2F32Test {
@@ -64,6 +66,16 @@ class MutableVector2F32Test {
         assertTrue(value.hasSameComponentsAs(MutableVector2F32(2f, 3f)))
         assertTrue(value.hasSameComponentsAs(Vector2F32(2f, 3f)))
         assertFalse(value.hasSameComponentsAs(Vector2F32(2f, 4f)))
+    }
+
+    @Test
+    fun `distinct mutables retain reference equality with matching components`() {
+        val first = MutableVector2F32(2f, 3f)
+        val second = MutableVector2F32(2f, 3f)
+
+        assertNotSame(first, second)
+        assertNotEquals(first, second)
+        assertTrue(first.hasSameComponentsAs(second))
     }
 
     @Test

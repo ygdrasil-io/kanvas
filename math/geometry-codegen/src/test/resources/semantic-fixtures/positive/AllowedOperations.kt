@@ -16,4 +16,8 @@ fun allowed(
     val scaled: Vector2F32 = 2f * v
     val transformedPoint: Point2F32 = matrix * p1
     val transformedVector: Vector2F32 = matrix * v
+    val correspondence: Matrix3x3F32? = Matrix3x3F32.polyToPoly(
+        arrayOf(p1, p2),
+        arrayOf(p2, p1),
+    )
 }

@@ -209,6 +209,73 @@ class IdentityUsageVerifierTest {
     }
 
     @Test
+    fun `reports forbidden calls with explicit type arguments`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/TypedCalls.kt",
+            """
+                import kotlin.synchronized as withLock
+
+                fun typedCalls(value: Any, lock: Any) {
+                    synchronized<Unit>(lock) {}
+                    kotlin.synchronized<Unit>(lock) {}
+                    withLock<Unit>(lock) {}
+                    val hash = System.identityHashCode<Int>(value)
+                }
+            """.trimIndent(),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(4, 5, 6, 7), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "synchronized<Unit>(lock) {}",
+                "kotlin.synchronized<Unit>(lock) {}",
+                "withLock<Unit>(lock) {}",
+                "val hash = System.identityHashCode<Int>(value)",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
+    fun `reports qualified imported and aliased callable references`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/CallableReferences.kt",
+            """
+                import java.lang.System as JvmSystem
+                import java.lang.System.identityHashCode
+                import java.lang.System.identityHashCode as objectId
+                import kotlin.synchronized as withLock
+
+                val systemReference = System::identityHashCode
+                val ownerAliasReference = JvmSystem::identityHashCode
+                val importedReference = ::identityHashCode
+                val importedAliasReference = ::objectId
+                val synchronizedReference = ::synchronized
+                val synchronizedAliasReference = ::withLock
+            """.trimIndent(),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(6, 7, 8, 9, 10, 11), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "val systemReference = System::identityHashCode",
+                "val ownerAliasReference = JvmSystem::identityHashCode",
+                "val importedReference = ::identityHashCode",
+                "val importedAliasReference = ::objectId",
+                "val synchronizedReference = ::synchronized",
+                "val synchronizedAliasReference = ::withLock",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
     fun `reports forbidden operations in regular and raw string templates`() = withRepository { repoRoot ->
         writeKotlin(
             repoRoot,

@@ -39,6 +39,11 @@ public class Point2F64(
     return scale * sqrt(scaledX * scaledX + scaledY * scaledY)
   }
 
+  public fun midpointTo(other: Point2F64): Point2F64 = Point2F64(
+  if ((x < 0.0) == (other.x < 0.0)) x + (other.x - x) * 0.5 else x * 0.5 + other.x * 0.5,
+  if ((y < 0.0) == (other.y < 0.0)) y + (other.y - y) * 0.5 else y * 0.5 + other.y * 0.5,
+  )
+
   public fun isFinite(): Boolean = x.isFinite() && y.isFinite()
 
   public fun toMutable(): MutablePoint2F64 = MutablePoint2F64(x, y)

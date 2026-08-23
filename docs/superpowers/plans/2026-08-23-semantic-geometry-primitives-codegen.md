@@ -1372,8 +1372,14 @@ Run:
 ```bash
 rtk rg -n "typealias (Point|Vector)|Vector[234](F32|F64|I32)\.of|Point[23](F32|F64|I32)\.of" math
 rtk rg -n "public fun map|fun map(XY|Point|Vector|Points|Vectors|Rect|Radius)" math/matrix
-rtk rg -n "operator fun times\([^)]*(Point|Vector)[^)]*\)" \
-  math/vector/src/generated/kotlin math/geometry/src/generated/kotlin
+rtk rg -n "^[[:space:]]+public operator fun times\(scalar: (Float|Double|Int)\): Vector" \
+  math/vector/src/generated/kotlin
+rtk rg -n "^public operator fun (Float|Double|Int)\.times\(vector: Vector" \
+  math/vector/src/generated/kotlin
+rtk rg -n "^[[:space:]]+public operator fun times\([^)]*: (Float|Double|Int)\)" \
+  math/geometry/src/generated/kotlin
+rtk rg -n "^[[:space:]]+public operator fun times\([^)]*: Vector" \
+  math/vector/src/generated/kotlin
 rtk rg -n "Point[234](F32|F64|I32).*(dot|cross|normalized)|operator fun unaryMinus.*Point" \
   math/geometry/src/generated/kotlin
 ```
@@ -1381,8 +1387,11 @@ rtk rg -n "Point[234](F32|F64|I32).*(dot|cross|normalized)|operator fun unaryMin
 Expected:
 
 - les deux premières commandes ne trouvent rien;
-- la troisième ne trouve que `times(scalar)` dans les vecteurs, jamais Point×scalaire ni Vector×Vector;
-- la quatrième ne trouve rien.
+- les troisième et quatrième classent respectivement les cinq formes
+  vector×scalar et les cinq formes scalar×vector autorisées;
+- les cinquième et sixième ne trouvent rien : elles rejettent respectivement
+  Point×scalar et Vector×Vector;
+- la septième ne trouve rien.
 
 Examiner chaque match au lieu de modifier aveuglément les `map` de collections Kotlin.
 

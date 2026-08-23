@@ -100,6 +100,16 @@ class KotlinEmitterTest {
     }
 
     @Test
+    fun `F64 point emission includes an overflow resistant midpoint`() {
+        val source = emitted("Point2F64.kt")
+
+        assertContains(source, "public fun midpointTo(other: Point2F64): Point2F64")
+        assertContains(source, "if ((x < 0.0) == (other.x < 0.0))")
+        assertContains(source, "x + (other.x - x) * 0.5")
+        assertContains(source, "x * 0.5 + other.x * 0.5")
+    }
+
+    @Test
     fun `I32 point emission uses saturating scalar operations`() {
         val source = emitted("Point2I32.kt")
 

@@ -20,6 +20,42 @@ class SchemaValidatorTest {
     }
 
     @Test
+    fun `generated point requires matching immutable vector output`() {
+        val schema = schemaOf(
+            primitive(Semantic.POINT, 2, ScalarId.F32),
+            primitive(
+                Semantic.VECTOR,
+                2,
+                ScalarId.F32,
+                generateImmutable = false,
+            ),
+        )
+
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(schema)
+        }
+
+        assertEquals(
+            "Point2F32 requires generated Vector2F32; enable generateImmutable on the matching VECTOR primitive",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `disabled point output does not require a vector`() {
+        SchemaValidator.validate(
+            schemaOf(
+                primitive(
+                    Semantic.POINT,
+                    2,
+                    ScalarId.F32,
+                    generateImmutable = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `I32 rejects normalization`() {
         val schema = schemaOf(
             primitive(
@@ -57,6 +93,88 @@ class SchemaValidatorTest {
 
         assertEquals(
             "Vector2I32 cannot use DIVIDE with scalar I32; remove DIVIDE",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `I32 rejects finite check`() {
+        val schema = schemaOf(
+            primitive(
+                Semantic.VECTOR,
+                2,
+                ScalarId.I32,
+                capabilities = setOf(Capability.FINITE_CHECK),
+            ),
+        )
+
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(schema)
+        }
+
+        assertEquals(
+            "Vector2I32 cannot use FINITE_CHECK with scalar I32; remove FINITE_CHECK",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `I32 mutable vector output is rejected explicitly`() {
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(
+                schemaOf(
+                    primitive(
+                        Semantic.VECTOR,
+                        2,
+                        ScalarId.I32,
+                        generateMutable = true,
+                    ),
+                ),
+            )
+        }
+
+        assertEquals(
+            "Vector2I32 cannot generate mutable output with scalar I32; disable generateMutable or use F32/F64",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `I32 mutable point output is rejected explicitly`() {
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(
+                schemaOf(
+                    primitive(
+                        Semantic.VECTOR,
+                        2,
+                        ScalarId.I32,
+                    ),
+                    primitive(
+                        Semantic.POINT,
+                        2,
+                        ScalarId.I32,
+                        generateMutable = true,
+                    ),
+                ),
+            )
+        }
+
+        assertEquals(
+            "Point2I32 cannot generate mutable output with scalar I32; disable generateMutable or use F32/F64",
+            error.message,
+        )
+    }
+
+    @Test
+    fun `I32 output is limited to supported two dimensional primitives`() {
+        val error = assertFailsWith<SchemaValidationException> {
+            SchemaValidator.validate(
+                schemaOf(primitive(Semantic.VECTOR, 3, ScalarId.I32)),
+            )
+        }
+
+        assertEquals(
+            "Vector3I32 cannot use scalar I32 with dimension 3; use dimension 2",
             error.message,
         )
     }

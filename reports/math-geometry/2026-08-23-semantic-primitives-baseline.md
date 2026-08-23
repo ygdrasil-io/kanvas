@@ -26,7 +26,7 @@ Both timing targets used five 300 ms warmup iterations followed by ten 300 ms me
 
 The values below are the summaries emitted by the two harnesses. A batch operation transforms 1,024 points into existing mutable destinations; a mutable accumulation operation performs 1,024 additions.
 
-| Target | Benchmark | Observed score | Harness error |
+| Target | Benchmark | Observed score | Score error |
 |---|---|---:|---:|
 | JVM | `mutableVectorAccumulation` | 1,079,910.769 ops/s | ±115,695.099 ops/s |
 | JVM | `transformPointBatch` | 599,276.332 ops/s | ±17,224.076 ops/s |

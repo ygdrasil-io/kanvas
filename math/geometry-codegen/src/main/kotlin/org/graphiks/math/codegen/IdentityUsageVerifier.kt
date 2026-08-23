@@ -76,11 +76,19 @@ internal object IdentityUsageVerifier {
                         token.text == "===" || token.text == "!==" -> add(token.line)
                         token.kind != TokenKind.IDENTIFIER -> Unit
                         token.text in identityMapNames -> add(token.line)
-                        token.text in importedIdentityCalls && codeTokens.isCallAt(index) -> add(token.line)
-                        token.text in synchronizedCalls && codeTokens.isCallAt(index) -> add(token.line)
+                        token.text in importedIdentityCalls &&
+                            (codeTokens.isCallAt(index) || codeTokens.isCallableReferenceAt(index)) ->
+                            add(token.line)
+                        token.text in synchronizedCalls &&
+                            (codeTokens.isCallAt(index) || codeTokens.isCallableReferenceAt(index)) ->
+                            add(token.line)
                         token.text == "identityHashCode" &&
-                            codeTokens.isCallAt(index) &&
-                            codeTokens.isQualifiedBySystemAt(index, systemNames) -> add(token.line)
+                            (
+                                codeTokens.isCallAt(index) &&
+                                    codeTokens.isQualifiedBySystemAt(index, systemNames) ||
+                                    codeTokens.isCallableReferenceAt(index) &&
+                                    codeTokens.isCallableReferenceQualifiedBySystemAt(index, systemNames)
+                            ) -> add(token.line)
                     }
                 }
             }.toSortedSet()
@@ -127,8 +135,31 @@ internal object IdentityUsageVerifier {
             }
         }
 
-        private fun List<IndexedValue<Token>>.isCallAt(index: Int): Boolean =
-            getOrNull(index + 1)?.value?.text == "("
+        private fun List<IndexedValue<Token>>.isCallAt(index: Int): Boolean {
+            var nextIndex = index + 1
+            if (getOrNull(nextIndex)?.value?.text == "<") {
+                var depth = 0
+                while (nextIndex < size) {
+                    when (get(nextIndex).value.text) {
+                        "<" -> depth++
+                        ">" -> {
+                            depth--
+                            if (depth == 0) {
+                                nextIndex++
+                                break
+                            }
+                        }
+                    }
+                    nextIndex++
+                }
+                if (depth != 0) return false
+            }
+            return getOrNull(nextIndex)?.value?.text == "("
+        }
+
+        private fun List<IndexedValue<Token>>.isCallableReferenceAt(index: Int): Boolean =
+            getOrNull(index - 1)?.value?.text == ":" &&
+                getOrNull(index - 2)?.value?.text == ":"
 
         private fun List<IndexedValue<Token>>.isQualifiedBySystemAt(
             index: Int,
@@ -136,6 +167,14 @@ internal object IdentityUsageVerifier {
         ): Boolean =
             getOrNull(index - 1)?.value?.text == "." &&
                 getOrNull(index - 2)?.value?.text?.let(systemNames::contains) == true
+
+        private fun List<IndexedValue<Token>>.isCallableReferenceQualifiedBySystemAt(
+            index: Int,
+            systemNames: Set<String>,
+        ): Boolean =
+            getOrNull(index - 1)?.value?.text == ":" &&
+                getOrNull(index - 2)?.value?.text == ":" &&
+                getOrNull(index - 3)?.value?.text?.let(systemNames::contains) == true
     }
 
     private data class LexedSource(

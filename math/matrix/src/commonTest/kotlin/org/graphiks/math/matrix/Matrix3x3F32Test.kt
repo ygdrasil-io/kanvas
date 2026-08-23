@@ -1274,8 +1274,8 @@ class Matrix3x3F32Test {
     @Test
     fun `MakePolyToPoly 1 point is pure translate`() {
         val m = Matrix3x3F32.polyToPoly(
-            arrayOf(Vector2F32(0f, 0f)),
-            arrayOf(Vector2F32(5f, 7f)),
+            arrayOf(Point2F32(0f, 0f)),
+            arrayOf(Point2F32(5f, 7f)),
         )!!
         assertTrue(m.isTranslate())
         assertEquals(5f, m.tx); assertEquals(7f, m.ty)
@@ -1283,8 +1283,8 @@ class Matrix3x3F32Test {
 
     @Test
     fun `setPolyToPoly delegates to MakePolyToPoly`() {
-        val src = arrayOf(Vector2F32(0f, 0f), Vector2F32(1f, 0f), Vector2F32(0f, 1f))
-        val dst = arrayOf(Vector2F32(10f, 20f), Vector2F32(40f, 25f), Vector2F32(15f, 70f))
+        val src = arrayOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))
+        val dst = arrayOf(Point2F32(10f, 20f), Point2F32(40f, 25f), Point2F32(15f, 70f))
 
         val viaSet = Matrix3x3F32.setPolyToPoly(src, dst)!!
         val viaMake = Matrix3x3F32.polyToPoly(src, dst)!!
@@ -1296,15 +1296,15 @@ class Matrix3x3F32Test {
     fun `MakePolyToPoly 4 points unit square to skewed quad maps corners`() {
         // Source: unit square with corners (0,0), (1,0), (1,1), (0,1).
         val src = arrayOf(
-            Vector2F32(0f, 0f), Vector2F32(1f, 0f), Vector2F32(1f, 1f), Vector2F32(0f, 1f),
+            Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(1f, 1f), Point2F32(0f, 1f),
         )
         // Destination: a skewed quad.
         val dst = arrayOf(
-            Vector2F32(10f, 20f), Vector2F32(110f, 30f), Vector2F32(120f, 130f), Vector2F32(20f, 120f),
+            Point2F32(10f, 20f), Point2F32(110f, 30f), Point2F32(120f, 130f), Point2F32(20f, 120f),
         )
         val m = Matrix3x3F32.polyToPoly(src, dst)!!
         for (i in 0 until 4) {
-            val mapped = m.transform(Point2F32(src[i].x, src[i].y))
+            val mapped = m.transform(src[i])
             assertNear(dst[i].x, mapped.x, eps = 1e-2f, msg = "corner $i x")
             assertNear(dst[i].y, mapped.y, eps = 1e-2f, msg = "corner $i y")
         }
@@ -1313,12 +1313,12 @@ class Matrix3x3F32Test {
     @Test
     fun `MakePolyToPoly 3 points is general affine`() {
         // 3 non-collinear points.
-        val src = arrayOf(Vector2F32(0f, 0f), Vector2F32(1f, 0f), Vector2F32(0f, 1f))
-        val dst = arrayOf(Vector2F32(10f, 20f), Vector2F32(40f, 25f), Vector2F32(15f, 70f))
+        val src = arrayOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))
+        val dst = arrayOf(Point2F32(10f, 20f), Point2F32(40f, 25f), Point2F32(15f, 70f))
         val m = Matrix3x3F32.polyToPoly(src, dst)!!
         assertFalse(m.hasPerspective(), "3-point fit should be affine")
         for (i in 0 until 3) {
-            val mapped = m.transform(Point2F32(src[i].x, src[i].y))
+            val mapped = m.transform(src[i])
             assertNear(dst[i].x, mapped.x, eps = 1e-3f)
             assertNear(dst[i].y, mapped.y, eps = 1e-3f)
         }
@@ -1327,15 +1327,15 @@ class Matrix3x3F32Test {
     @Test
     fun `MakePolyToPoly mismatched sizes returns null`() {
         assertEquals(null, Matrix3x3F32.polyToPoly(
-            arrayOf(Vector2F32(0f, 0f)),
-            arrayOf(Vector2F32(1f, 1f), Vector2F32(2f, 2f)),
+            arrayOf(Point2F32(0f, 0f)),
+            arrayOf(Point2F32(1f, 1f), Point2F32(2f, 2f)),
         ))
     }
 
     @Test
     fun `MakePolyToPoly more than 4 points returns null`() {
-        val src = Array(5) { Vector2F32.Zero }
-        val dst = Array(5) { Vector2F32.Zero }
+        val src = Array(5) { Point2F32.Origin }
+        val dst = Array(5) { Point2F32.Origin }
         assertEquals(null, Matrix3x3F32.polyToPoly(src, dst))
     }
 

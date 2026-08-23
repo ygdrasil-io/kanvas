@@ -32,6 +32,17 @@ class Point2F64Test {
     }
 
     @Test
+    fun `midpoint preserves finite large F64 coordinates`() {
+        val midpoint: Point2F64 = Point2F64(Double.MAX_VALUE, Double.MAX_VALUE)
+            .midpointTo(Point2F64(Double.MAX_VALUE, -Double.MAX_VALUE))
+
+        assertTrue(midpoint.x.isFinite())
+        assertEquals(Double.MAX_VALUE, midpoint.x)
+        assertTrue(midpoint.y.isFinite())
+        assertEquals(0.0, midpoint.y)
+    }
+
+    @Test
     fun `named F32 and F64 conversions preserve literal components`() {
         val widened: Point2F64 = Point2F32(1.25f, -3.5f).toPoint2F64()
         val narrowed: Point2F32 = Point2F64(7.5, -9.25).toPoint2F32()

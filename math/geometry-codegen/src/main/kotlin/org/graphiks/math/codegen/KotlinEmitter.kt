@@ -238,7 +238,7 @@ internal object KotlinEmitter {
                 )
                 addFunction(pointDifferenceFunction(model, pointType, vectorType))
                 if (model.scalar.id != ScalarId.I32) addFunction(distanceToFunction(model, pointType))
-                if (model.scalar.id == ScalarId.F32) addFunction(midpointToFunction(model, pointType))
+                if (model.scalar.id != ScalarId.I32) addFunction(midpointToFunction(model, pointType))
                 if (Capability.FINITE_CHECK in model.spec.capabilities) addFunction(isFiniteFunction(model))
                 if (model.spec.generateMutable) addFunction(toMutableFunction(model))
                 addFunction(equalsFunction(model))
@@ -459,9 +459,17 @@ internal object KotlinEmitter {
         model: SemanticPrimitiveModel,
         pointType: ClassName,
     ): FunSpec {
-        require(model.scalar.id == ScalarId.F32)
+        require(model.scalar.id != ScalarId.I32)
         val components = model.components.joinToString(",\n") { component ->
-            "(($component.toDouble() + other.$component.toDouble()) * 0.5).toFloat()"
+            when (model.scalar.id) {
+                ScalarId.F32 ->
+                    "(($component.toDouble() + other.$component.toDouble()) * 0.5).toFloat()"
+                ScalarId.F64 ->
+                    "if (($component < 0.0) == (other.$component < 0.0)) " +
+                        "$component + (other.$component - $component) * 0.5 " +
+                        "else $component * 0.5 + other.$component * 0.5"
+                ScalarId.I32 -> error("I32 point midpoints are not generated")
+            }
         }
         return FunSpec.builder("midpointTo")
             .addModifiers(KModifier.PUBLIC)

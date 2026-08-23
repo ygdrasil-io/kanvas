@@ -48,9 +48,25 @@ internal object SchemaValidator {
                 "$name cannot use DIVIDE with scalar I32; remove DIVIDE",
             )
         }
+        if (primitive.scalar == ScalarId.I32 && Capability.FINITE_CHECK in primitive.capabilities) {
+            throw SchemaValidationException(
+                "$name cannot use FINITE_CHECK with scalar I32; remove FINITE_CHECK",
+            )
+        }
+        if (primitive.scalar == ScalarId.I32 && primitive.dimension != 2) {
+            throw SchemaValidationException(
+                "$name cannot use scalar I32 with dimension ${primitive.dimension}; use dimension 2",
+            )
+        }
         if (primitive.generateMutable && !primitive.generateImmutable) {
             throw SchemaValidationException(
                 "$name cannot generate mutable without immutable; enable generateImmutable",
+            )
+        }
+        if (primitive.generateMutable && primitive.scalar == ScalarId.I32) {
+            throw SchemaValidationException(
+                "$name cannot generate mutable output with scalar I32; " +
+                    "disable generateMutable or use F32/F64",
             )
         }
         if (!isAvailable(primitive.targetRepresentation) && primitive.fallbackRepresentation == null) {
@@ -61,10 +77,17 @@ internal object SchemaValidator {
     }
 
     private fun validatePointVectorPairs(primitives: List<PrimitiveSpec>) {
-        val primitiveKeys = primitives.mapTo(mutableSetOf()) { it.key() }
-        primitives.filter { it.semantic == Semantic.POINT }
-            .firstOrNull { point -> point.vectorKey() !in primitiveKeys }
-            ?.let { point ->
+        primitives.filter { it.semantic == Semantic.POINT && it.generateImmutable }
+            .forEach { point ->
+                val matchingVectors = primitives.filter { it.key() == point.vectorKey() }
+                if (matchingVectors.any { it.generateImmutable }) return@forEach
+                if (matchingVectors.isNotEmpty()) {
+                    throw SchemaValidationException(
+                        "${typeName(point)} requires generated " +
+                            "${typeName(point.copy(semantic = Semantic.VECTOR))}; " +
+                            "enable generateImmutable on the matching VECTOR primitive",
+                    )
+                }
                 throw SchemaValidationException(
                     "${typeName(point)} requires ${typeName(point.copy(semantic = Semantic.VECTOR))}; " +
                         "add the matching VECTOR primitive",

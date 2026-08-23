@@ -41,6 +41,60 @@ class Line2F64Test {
     }
 
     @Test
+    fun `nearPoint preserves pathops distance underflow behavior end to end`() {
+        val line = Line2F64(
+            arrayOf(Point2F64(0.0, 0.0), Point2F64(1e-150, 0.0)),
+        )
+        val verticalOffset = 1e-163
+
+        kotlin.test.assertEquals(0.0, verticalOffset * verticalOffset)
+        kotlin.test.assertTrue(1e-150 + verticalOffset > 1e-150)
+        kotlin.test.assertEquals(0.5, line.nearPoint(Point2F64(5e-151, verticalOffset)))
+    }
+
+    @Test
+    fun `nearRay preserves pathops distance underflow behavior end to end`() {
+        val line = Line2F64(
+            arrayOf(Point2F64(0.0, 0.0), Point2F64(1e-150, 0.0)),
+        )
+        val verticalOffset = 1e-163
+
+        kotlin.test.assertEquals(0.0, verticalOffset * verticalOffset)
+        kotlin.test.assertTrue(1e-150 + verticalOffset > 1e-150)
+        kotlin.test.assertTrue(line.nearRay(Point2F64(5e-151, verticalOffset)))
+    }
+
+    @Test
+    fun `nearPoint preserves pathops distance overflow behavior end to end`() {
+        val baseline = 1e300
+        val adjacent = 1.0000000000000002e300
+        val horizontalOffset = adjacent - baseline
+        val line = Line2F64(
+            arrayOf(Point2F64(baseline, 0.0), Point2F64(baseline, 1.0)),
+        )
+
+        kotlin.test.assertTrue(horizontalOffset.isFinite())
+        kotlin.test.assertEquals(Double.POSITIVE_INFINITY, horizontalOffset * horizontalOffset)
+        kotlin.test.assertEquals(adjacent, baseline + horizontalOffset)
+        kotlin.test.assertEquals(-1.0, line.nearPoint(Point2F64(adjacent, 0.5)))
+    }
+
+    @Test
+    fun `nearRay preserves pathops distance overflow behavior end to end`() {
+        val baseline = 1e300
+        val adjacent = 1.0000000000000002e300
+        val horizontalOffset = adjacent - baseline
+        val line = Line2F64(
+            arrayOf(Point2F64(baseline, 0.0), Point2F64(baseline, 1.0)),
+        )
+
+        kotlin.test.assertTrue(horizontalOffset.isFinite())
+        kotlin.test.assertEquals(Double.POSITIVE_INFINITY, horizontalOffset * horizontalOffset)
+        kotlin.test.assertEquals(adjacent, baseline + horizontalOffset)
+        kotlin.test.assertFalse(line.nearRay(Point2F64(adjacent, 0.5)))
+    }
+
+    @Test
     fun `set from Point2F32 pair`() {
         val line = Line2F64()
         line.set(Point2F32(1f, 2f), Point2F32(3f, 4f))
