@@ -348,6 +348,53 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         )
         GPUCorePrimitiveMaterialPayload.SolidColor(premultipliedRgba) to premultipliedRgba
     }
+    is GPUMaterialDescriptor.LinearGradient -> {
+        val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
+        if (tileMode != "clamp") {
+            refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
+        }
+        if (interpolation != "srgb") {
+            refuseCoreMaterial("unsupported.core_primitive.material.interpolation", facts)
+        }
+        if (!startX.isFinite() || !startY.isFinite() || !endX.isFinite() || !endY.isFinite()) {
+            refuseCoreMaterial("unsupported.core_primitive.material.non_finite", facts)
+        }
+        val dx = endX - startX
+        val dy = endY - startY
+        if (!dx.isFinite() || !dy.isFinite() || (dx == 0f && dy == 0f)) {
+            refuseCoreMaterial("unsupported.core_primitive.material.linear.axis", facts)
+        }
+        if (!listOf(startR, startG, startB, startA, endR, endG, endB, endA).isNormalizedFinite()) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        if (localMatrix.size != 9 || localMatrix.any { !it.isFinite() }) {
+            refuseCoreMaterial("unsupported.core_primitive.material.matrix", facts)
+        }
+        if (localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)) {
+            refuseCoreMaterial("unsupported.core_primitive.material.matrix", facts)
+        }
+        val positions = allStopPositions?.toList() ?: listOf(0f, 1f)
+        val colors = allStopColors?.toList() ?: listOf(
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+        )
+        if (!positions.isValidCoreGradientPositions() ||
+            colors.size != positions.size * 4 || !colors.isNormalizedFinite()
+        ) {
+            refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
+        }
+        GPUCorePrimitiveMaterialPayload.LinearGradient(
+            startX = startX,
+            startY = startY,
+            endX = endX,
+            endY = endY,
+            localMatrix = localMatrix,
+            interpolation = interpolation,
+            tileMode = tileMode,
+            positions = positions,
+            colors = colors,
+        ) to listOf(0f, 0f, 0f, 0f)
+    }
     is GPUMaterialDescriptor.RadialGradient -> {
         val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
         if (tileMode != "clamp") {
@@ -450,11 +497,13 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
 private fun GPUMaterialDescriptor?.corePrimitiveMaterialFacts(): Map<String, String> = mapOf(
     "materialKind" to (this?.kind?.name.orEmpty()),
     "tileMode" to when (this) {
+        is GPUMaterialDescriptor.LinearGradient -> tileMode
         is GPUMaterialDescriptor.RadialGradient -> tileMode
         is GPUMaterialDescriptor.SweepGradient -> tileMode
         else -> "none"
     },
     "interpolation" to when (this) {
+        is GPUMaterialDescriptor.LinearGradient -> interpolation
         is GPUMaterialDescriptor.RadialGradient -> interpolation
         is GPUMaterialDescriptor.SweepGradient -> interpolation
         else -> "none"
@@ -480,6 +529,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
     val normalizedMaterial = normalized.material
+    if (normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
+        geometryCoverage == GPUCoverageConsumption.StencilCoverage1x
+    ) {
+        refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
+    }
     val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(colorTransform)
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?

@@ -695,6 +695,8 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     }
     val shader = when (semantic.material) {
         is GPUCorePrimitiveMaterialPayload.SolidColor -> geometryShader
+        is GPUCorePrimitiveMaterialPayload.LinearGradient ->
+            error("Linear gradient CorePrimitive structural authority is unavailable")
         is GPUCorePrimitiveMaterialPayload.RadialGradient -> when (geometryShader) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient

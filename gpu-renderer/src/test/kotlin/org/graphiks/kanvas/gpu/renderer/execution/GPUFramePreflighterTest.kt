@@ -9693,6 +9693,8 @@ class GPUFramePreflighterTest {
         pathCapabilities().copy(
             facts = pathCapabilities().facts + materials.map { material -> GPUCapabilityFact(
                 when (material) {
+                    is GPUCorePrimitiveMaterialPayload.LinearGradient ->
+                        "first_slice.linear_gradient.native"
                     is GPUCorePrimitiveMaterialPayload.RadialGradient ->
                         "first_slice.radial_gradient.native"
                     is GPUCorePrimitiveMaterialPayload.SweepGradient ->

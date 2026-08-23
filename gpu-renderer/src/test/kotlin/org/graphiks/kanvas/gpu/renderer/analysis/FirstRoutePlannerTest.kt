@@ -446,6 +446,29 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `linear gradient facts refuse before route selection when they are not supported`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 2f, startY = 3f, endX = 18f, endY = 21f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+        ).withGradientFacts(GPUMaterialDescriptor.GradientFacts(interpolation = "linear"))
+
+        val plan = GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(
+            GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(99),
+                rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                material = material,
+            ).copy(antiAlias = false),
+        )
+
+        assertEquals(
+            "unsupported.material.mapping.gradient_interpolation",
+            assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `bounded radial and sweep fill rects select their CorePrimitive programs`() {
         val cases = listOf(
             GPUMaterialDescriptor.RadialGradient(
@@ -753,6 +776,60 @@ class FirstRoutePlannerTest {
             "unsupported.material.linear_gradient_capability_missing",
             plan.pass.diagnostics.single().code,
         )
+    }
+
+    @Test
+    fun `linear gradient route refuses transform target and clip facts before semantic gathering`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 2f, startY = 3f, endX = 18f, endY = 21f,
+            startR = 1f, startG = 0.25f, startB = 0.5f, startA = 1f,
+            endR = 0f, endG = 0.75f, endB = 0.5f, endA = 1f,
+        )
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        fun command(
+            transform: GPUTransformFacts = GPUTransformFacts.identity(),
+            clip: GPUClipFacts = GPUClipFacts.wideOpen(bounds = GPUBounds(0f, 0f, 64f, 64f)),
+            commandTarget: GPUTargetFacts = target,
+        ) = GPULinearGradientCommandBuilder.build(
+            commandId = GPUDrawCommandID(40),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = commandTarget,
+            material = material,
+            transform = transform,
+            clip = clip,
+        ).copy(antiAlias = false)
+
+        val cases = listOf(
+            "transform" to Pair(
+                command(transform = GPUTransformFacts.affine(1f, 0.25f, 0.125f, 1f)),
+                firstSliceWithLinearGradientCapabilities(),
+            ),
+            "device-scissor" to Pair(
+                command(clip = GPUClipFacts.deviceRect(GPUBounds(4f, 5f, 16f, 17f))),
+                firstSliceWithLinearGradientCapabilities(),
+            ),
+            "complex-clip" to Pair(
+                command(clip = GPUClipFacts.complexStack(bounds = GPUBounds(0f, 0f, 64f, 64f))),
+                firstSliceWithLinearGradientCapabilities(),
+            ),
+            "target" to Pair(
+                command(commandTarget = target.copy(colorFormat = "bgra8unorm-srgb")),
+                firstSliceWithLinearGradientCapabilities(),
+            ),
+        )
+        val expectedCodes = listOf(
+            "unsupported.transform.affine_material",
+            "unsupported.clip.scissor_capability_missing",
+            "unsupported.clip.complex_stack",
+            "unsupported.target.format_blend_incompatible",
+        )
+
+        cases.zip(expectedCodes).forEach { (case, expectedCode) ->
+            val fixture = case.second
+            val plan = GPUFirstRoutePlanner(fixture.second).plan(fixture.first)
+            assertEquals(expectedCode, assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+            assertTrue(plan.pass.drawPackets.isEmpty())
+        }
     }
 
     @Test
