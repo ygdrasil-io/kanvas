@@ -52,6 +52,16 @@ class BitmapTest {
     }
 
     @Test
+    fun `construction refuses row and total byte sizes outside ByteArray range`() {
+        assertThrows<IllegalArgumentException> {
+            Bitmap(ImageInfo.make((Int.MAX_VALUE / 4) + 1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL))
+        }
+        assertThrows<IllegalArgumentException> {
+            Bitmap(ImageInfo.make(1, Int.MAX_VALUE, ColorType.RGBA_8888, AlphaType.UNPREMUL))
+        }
+    }
+
+    @Test
     fun `construction rejects formats without allocation capability`() {
         assertThrows<IllegalArgumentException> { Bitmap(1, 1, ColorType.UNKNOWN) }
         assertThrows<IllegalArgumentException> { Bitmap(1, 1, ColorType.RGBA_1010102) }

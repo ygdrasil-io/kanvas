@@ -23,6 +23,11 @@ class Bitmap(val info: ImageInfo) {
         require(info.colorType.capabilities().allocatable) { "unsupported color type: ${info.colorType}" }
     }
 
+    private val allocationByteCount: Int = info.computeByteSizeOrNull(info.minRowBytesLong())
+        ?.takeIf { it <= Int.MAX_VALUE.toLong() }
+        ?.toInt()
+        ?: throw IllegalArgumentException("bitmap byte size exceeds Int range: ${info.width}x${info.height} ${info.colorType}")
+
     constructor(
         width: Int,
         height: Int,
@@ -44,7 +49,7 @@ class Bitmap(val info: ImageInfo) {
     val alphaType: AlphaType get() = info.alphaType
     val colorSpace: ImageColorSpace get() = info.colorSpace
 
-    val pixels: ByteArray = ByteArray(info.height * info.minRowBytes())
+    val pixels: ByteArray = ByteArray(allocationByteCount)
 
     fun getPixel(x: Int, y: Int): Color {
         if (x !in 0 until width || y !in 0 until height) throw IndexOutOfBoundsException("($x, $y) outside ${width}x$height")

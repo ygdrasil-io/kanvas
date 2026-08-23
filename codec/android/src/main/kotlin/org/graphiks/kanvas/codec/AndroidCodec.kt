@@ -234,10 +234,11 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
         options: AndroidOptions = AndroidOptions(),
     ): Codec.Result {
         if (info.width <= 0 || info.height <= 0) return Codec.Result.kInvalidParameters
-        if (rowBytes < info.minRowBytes()) return Codec.Result.kInvalidParameters
+        if (rowBytes.toLong() < info.minRowBytesLong()) return Codec.Result.kInvalidParameters
         if (options.sampleSize < 1) return Codec.Result.kInvalidParameters
         val bpp = info.bytesPerPixel()
-        val requiredBytes = (info.height - 1).toLong() * rowBytes + info.width.toLong() * bpp
+        val requiredBytes = info.computeByteSizeOrNull(rowBytes.toLong())
+            ?: return Codec.Result.kInvalidParameters
         if (pixels.limit().toLong() < requiredBytes) return Codec.Result.kInvalidParameters
         val srcInfo = codec.getInfo()
         if (srcInfo.width <= 0 || srcInfo.height <= 0) return Codec.Result.kInvalidInput

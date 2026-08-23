@@ -16,12 +16,13 @@ class Pixmap(
 
     init {
         require(rowBytes >= 0) { "rowBytes must be non-negative: $rowBytes" }
-        val minRowBytes = info.minimumRowBytes()
+        val minRowBytes = info.minRowBytesLong()
         require(info.isEmpty() || rowBytes.toLong() >= minRowBytes) {
             "rowBytes=$rowBytes < minRowBytes=$minRowBytes"
         }
-        require(data.remaining().toLong() >= info.computeByteSize(rowBytes)) {
-            "buffer remaining=${data.remaining()} < byteSize=${info.computeByteSize(rowBytes)}"
+        val byteSize = info.computeByteSize(rowBytes.toLong())
+        require(data.remaining().toLong() >= byteSize) {
+            "buffer remaining=${data.remaining()} < byteSize=$byteSize"
         }
         buffer = data.slice().order(ByteOrder.LITTLE_ENDIAN)
     }
@@ -38,7 +39,7 @@ class Pixmap(
 
     fun addr(): ByteBuffer = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
-    fun computeByteSize(): Long = info.computeByteSize(rowBytes)
+    fun computeByteSize(): Long = info.computeByteSize(rowBytes.toLong())
 
     /**
      * Returns `0` when [x] or [y] is out of bounds. For an in-bounds pixel,
@@ -127,8 +128,3 @@ class Pixmap(
 
     private fun ushort(offset: Int): Int = byte(offset) or (byte(offset + 1) shl 8)
 }
-
-private fun ImageInfo.minimumRowBytes(): Long = width.toLong() * bytesPerPixel().toLong()
-
-private fun ImageInfo.computeByteSize(rowBytes: Int): Long =
-    if (isEmpty()) 0L else (height - 1).toLong() * rowBytes.toLong() + minimumRowBytes()

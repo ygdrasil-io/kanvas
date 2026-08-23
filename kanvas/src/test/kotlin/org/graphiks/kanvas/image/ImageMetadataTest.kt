@@ -5,8 +5,10 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class ImageMetadataTest {
     @Test
@@ -37,6 +39,27 @@ class ImageMetadataTest {
         assertEquals(12, info.minRowBytes())
         assertEquals(info.copy(width = 5, height = 6), info.makeWH(5, 6))
         assertEquals(info.copy(alphaType = AlphaType.OPAQUE), info.makeAlphaType(AlphaType.OPAQUE))
+    }
+
+    @Test
+    fun `ImageInfo keeps row-byte arithmetic in Long and rejects oversized Int results`() {
+        val info = ImageInfo.make(
+            width = (Int.MAX_VALUE / 4) + 1,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            alphaType = AlphaType.UNPREMUL,
+        )
+
+        assertEquals(Int.MAX_VALUE.toLong() + 1L, info.minRowBytesLong())
+        assertThrows<IllegalArgumentException> { info.minRowBytes() }
+
+        val totalOverflow = ImageInfo.make(
+            width = Int.MAX_VALUE,
+            height = Int.MAX_VALUE,
+            colorType = ColorType.RGBA_F16,
+            alphaType = AlphaType.PREMUL,
+        )
+        assertNull(totalOverflow.computeByteSizeOrNull(totalOverflow.minRowBytesLong()))
     }
 
     @Test

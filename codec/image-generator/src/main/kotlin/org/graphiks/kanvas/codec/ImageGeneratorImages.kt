@@ -24,11 +24,14 @@ public class CodecImageGenerator private constructor(
     public val info: ImageInfo = codec.getInfo()
 
     public fun getPixels(info: ImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
-        if (info.width <= 0 || info.height <= 0 || rowBytes < info.minRowBytes()) return false
+        if (info.width <= 0 || info.height <= 0) return false
+        val minRowBytes = info.minRowBytesLong()
+        if (minRowBytes > Int.MAX_VALUE.toLong() || rowBytes.toLong() < minRowBytes) return false
         if (info.width != this.info.width || info.height != this.info.height) return false
         if (info.colorType != ColorType.RGBA_8888) return false
         if (info.alphaType != this.info.alphaType || info.colorSpace !== this.info.colorSpace) return false
-        val requiredBytes = (info.height - 1).toLong() * rowBytes.toLong() + info.minRowBytes().toLong()
+        val requiredBytes = info.computeByteSizeOrNull(rowBytes.toLong()) ?: return false
+        if (requiredBytes > Int.MAX_VALUE.toLong()) return false
         if (pixels.remaining().toLong() < requiredBytes) return false
 
         val bm = Bitmap(info)
@@ -98,9 +101,13 @@ public object ImageGeneratorImages {
         if (info.isEmpty()) return null
         val target = info.makeColorType(ColorType.RGBA_8888)
             .makeAlphaType(info.alphaType)
-        val rowBytes = target.minRowBytes()
+        val rowBytesLong = target.minRowBytesLong()
+        if (rowBytesLong > Int.MAX_VALUE.toLong()) return null
+        val byteSize = target.computeByteSizeOrNull(rowBytesLong) ?: return null
+        if (byteSize > Int.MAX_VALUE.toLong()) return null
+        val rowBytes = rowBytesLong.toInt()
         val bytes = ByteBuffer
-            .allocate(rowBytes * target.height)
+            .allocate(byteSize.toInt())
 
         if (!generator.getPixels(target, bytes, rowBytes)) return null
         val bitmap = Bitmap(target)

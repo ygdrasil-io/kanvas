@@ -198,3 +198,37 @@ recorded for Task 7, not a result of this correction.
   were compiled where included (`codec:common`) and statically checked.
 - PASS — final `rtk git diff --check` is clean. The pre-existing score-file
   modification remains unedited and un-staged.
+
+## Final overflow audit correction — DONE
+
+### Findings resolved
+
+- `ImageInfo` centrally computes the minimum row stride as checked `Long`
+  arithmetic and exposes a checked `Int` boundary for `minRowBytes()`.
+  It also owns checked strided byte-size calculation and a nullable
+  refusal helper for callers that must not throw.
+- `Bitmap` calculates its full byte size before `ByteArray` allocation and
+  rejects every total larger than `Int.MAX_VALUE`; it cannot overflow into an
+  under-allocation.
+- `Pixmap`, Android's byte-buffer bridge, and `CodecImageGenerator` now use
+  the central `Long` calculation. Generator input rejects unrepresentable
+  stride/total sizes before decode or output writes, and
+  `DeferredFromGenerator` returns `null` before any overflowing allocation.
+
+### Test and static evidence
+
+- RED first: the new `ImageInfo.minRowBytesLong()` test did not compile
+  before implementation.
+- PASS — `ImageMetadataTest`, `BitmapTest`, `PixmapTest`, and
+  `:codec:common:compileKotlin` pass. Added cases validate an oversized
+  minimum row stride, checked `Long` total overflow, and both oversized row
+  and total `Bitmap` allocations.
+- PASS — the declared full codec matrix was rerun: `BUILD SUCCESSFUL`
+  (117 actionable tasks: 42 executed, 75 up-to-date).
+- PASS — static scan confirms image-generator and Android use
+  `minRowBytesLong()`/`computeByteSizeOrNull()` and generator performs both
+  `Int.MAX_VALUE` refusals before its decode/allocation. Those modules are
+  absent from `settings.gradle.kts`, so root Gradle cannot register their
+  direct tests; this is the pre-existing orphaned-module condition.
+- PASS — `rtk git diff --check` is clean. The pre-existing score-file change
+  remains unedited and un-staged.
