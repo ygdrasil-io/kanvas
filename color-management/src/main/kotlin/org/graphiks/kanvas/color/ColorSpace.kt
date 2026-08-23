@@ -2,7 +2,7 @@ package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
-import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.color.icc.toMatrixTrcIccBytes
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.isNear
@@ -112,7 +112,7 @@ private fun serializedGamutMatrix(
     transferFunction: ColorTransferFunction.Parametric,
 ): ColorMatrix3x3F32 = requireNotNull(
     IccProfileParser.parse(
-        IccProfileWriter.writeMatrixTrc(ColorProfile(ColorModel.RGB, matrix, transferFunction)),
+        ColorProfile(ColorModel.RGB, matrix, transferFunction).toMatrixTrcIccBytes(),
         IccParseLimits(),
     ).getOrThrow().toXyzD50,
 )

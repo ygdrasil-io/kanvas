@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.color.ColorModel
-import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.color.icc.toMatrixTrcIccBytes
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
@@ -79,7 +79,7 @@ public object PngEncoder {
         ) {
             return null
         }
-        val iccProfileData = if (colorSpace.isSrgb()) null else IccProfileWriter.writeMatrixTrc(profile)
+        val iccProfileData = if (colorSpace.isSrgb()) null else profile.toMatrixTrcIccBytes()
         val textChunks = options.comments.chunked(2).map { (keyword, text) -> textChunk(keyword, text) }
         return PreparedEncoding(textChunks, iccProfileData)
     }

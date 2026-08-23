@@ -44,7 +44,7 @@ public class IccProfile private constructor(
 
         /** Serializes the supported Matrix/TRC subset and retains the resulting encoded artifact. */
         public fun fromMatrixTrc(profile: ColorProfile): IccProfile =
-            parse(IccProfileWriter.writeMatrixTrc(profile)).getOrThrow()
+            parse(profile.toMatrixTrcIccBytes()).getOrThrow()
 
     }
 }

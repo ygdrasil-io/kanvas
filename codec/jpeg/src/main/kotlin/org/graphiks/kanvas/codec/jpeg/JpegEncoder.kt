@@ -5,7 +5,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.color.icc.toMatrixTrcIccBytes
 import org.skia.foundation.SkEncodedOrigin
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -721,7 +721,7 @@ private class JpegWriter(
     private fun writeMetadata() {
         val requested = options.metadata
         val icc = requested.icc ?: if (!bitmap.colorSpace.isSrgb()) {
-            IccProfileWriter.writeMatrixTrc(bitmap.colorSpace.colorProfile)
+            bitmap.colorSpace.colorProfile.toMatrixTrcIccBytes()
         } else {
             null
         }

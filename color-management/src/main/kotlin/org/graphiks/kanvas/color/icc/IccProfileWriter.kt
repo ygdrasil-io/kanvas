@@ -6,6 +6,9 @@ import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.math.color.ColorTransferFunction
 import kotlin.math.round
 
+/** Serializes this supported RGB SDR matrix/TRC profile as ICC bytes. */
+public fun ColorProfile.toMatrixTrcIccBytes(): ByteArray = IccProfileWriter.writeMatrixTrc(this)
+
 /**
  * Writes the RGB matrix/TRC subset represented by [ColorProfile].
  *
