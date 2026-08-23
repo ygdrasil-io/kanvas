@@ -12,6 +12,8 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -49,8 +51,9 @@ class PerformanceBundleWriter internal constructor(
             Files.createDirectory(staging)
             val files = content(run)
             files.forEach { (name, bytes) -> Files.write(staging.resolve(name), bytes) }
-            require(PerformanceBundleVerifier.verify(staging, sourceCommit) is PerformanceBundleVerification.Verified) {
-                "performance bundle failed independent verification"
+            val verification = PerformanceBundleVerifier.verify(staging, sourceCommit)
+            require(verification is PerformanceBundleVerification.Verified) {
+                "performance bundle failed independent verification: ${(verification as PerformanceBundleVerification.Invalid).errors.joinToString("; ")}"
             }
             if (Files.exists(destination, NOFOLLOW_LINKS)) {
                 require(!Files.isSymbolicLink(destination) && Files.isDirectory(destination, NOFOLLOW_LINKS)) { "destination must be a directory" }
@@ -136,14 +139,45 @@ object PerformanceBundleVerifier {
         if (!Files.isDirectory(bundle, NOFOLLOW_LINKS) || Files.isSymbolicLink(bundle)) return PerformanceBundleVerification.Invalid(listOf("bundle is not a directory"))
         val names = Files.list(bundle).use { stream -> stream.iterator().asSequence().map { it.fileName.toString() }.toSet() }
         if (names != required) errors += "required files mismatch"
+        required.forEach { name ->
+            val child = bundle.resolve(name)
+            if (Files.isSymbolicLink(child) || !Files.isRegularFile(child, NOFOLLOW_LINKS)) errors += "required entry is not a regular file: $name"
+        }
         val manifest = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("manifest.json"))).jsonObject }.getOrElse { return PerformanceBundleVerification.Invalid(listOf("manifest is invalid")) }
         if (manifest["schema"]?.jsonPrimitive?.content != GPU_EVIDENCE_PERFORMANCE_SCHEMA) errors += "schema mismatch"
         if (manifest["sourceCommit"]?.jsonPrimitive?.content != sourceCommit) errors += "source commit mismatch"
         val hashes = manifest["hashes"]?.jsonObject ?: run { errors += "hashes missing"; JsonObject(emptyMap()) }
         required.filter { it != "manifest.json" }.forEach { name -> if (hashes[name]?.jsonPrimitive?.content != sha256(Files.readAllBytes(bundle.resolve(name)))) errors += "hash mismatch: $name" }
-        val eligibility = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("eligibility.json"))).jsonObject }.getOrNull()
-        val verdict = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("verdict.json"))).jsonObject }.getOrNull()
-        if (eligibility != null && verdict != null && (eligibility["kind"]?.jsonPrimitive?.content != verdict["kind"]?.jsonPrimitive?.content || eligibility["reason"]?.jsonPrimitive?.content != verdict["reason"]?.jsonPrimitive?.content)) errors += "verdict does not match eligibility"
+        val eligibility = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("eligibility.json"))).jsonObject }.getOrElse { errors += "eligibility is invalid"; null }
+        val verdict = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("verdict.json"))).jsonObject }.getOrElse { errors += "verdict is invalid"; null }
+        val eligibilityKind = eligibility?.get("kind")?.jsonPrimitive?.content
+        val verdictKind = verdict?.get("kind")?.jsonPrimitive?.content
+        if (eligibilityKind == null || verdictKind == null) errors += "eligibility/verdict kind missing"
+        if (eligibility != null && verdict != null) {
+            val reasonsMatch = eligibility["reason"]?.jsonPrimitive?.content == verdict["reason"]?.jsonPrimitive?.content
+            val allowedFailure = verdictKind == "Failed"
+            if ((!allowedFailure && eligibilityKind != verdictKind) || (!allowedFailure && !reasonsMatch)) errors += "verdict does not match eligibility"
+        }
+        val timings = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("timings.json"))).jsonObject }.getOrElse { errors += "timings are invalid"; null }
+        if (timings != null) {
+            val measured = timings["measuredFrames"]?.jsonPrimitive?.content?.toIntOrNull()
+            val samples = timings["samples"]?.jsonArray
+            if (measured == null || samples == null || samples.any { it !is JsonPrimitive || it.jsonPrimitive.isString || it.jsonPrimitive.content.toLongOrNull() == null }) errors += "timings provenance is invalid"
+            else if (samples.size != measured) errors += "timing sample count mismatch"
+        }
+        val telemetry = runCatching { json.parseToJsonElement(Files.readString(bundle.resolve("telemetry.json"))).jsonObject }.getOrElse { errors += "telemetry is invalid"; null }
+        telemetry?.values?.forEach { phase ->
+            if (phase !is kotlinx.serialization.json.JsonObject) errors += "telemetry phase is invalid"
+            else phase.values.forEach { metric ->
+                val record = metric as? kotlinx.serialization.json.JsonObject
+                val source = record?.get("source")?.jsonPrimitive?.content
+                val value = record?.get("value")?.jsonPrimitive
+                val reason = record?.get("reason")?.jsonPrimitive?.contentOrNull
+                if (source !in setOf("Observed", "Derived", "Unavailable")) errors += "telemetry metric source is invalid"
+                if (source == "Unavailable" && reason.isNullOrBlank()) errors += "unavailable metric reason missing"
+                if (source != "Unavailable" && (value == null || value.isString || value.content.toLongOrNull() == null || value.content.toLong() < 0L)) errors += "available metric value is invalid"
+            }
+        }
         return if (errors.isEmpty()) PerformanceBundleVerification.Verified else PerformanceBundleVerification.Invalid(errors)
     }
     private fun sha256(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }

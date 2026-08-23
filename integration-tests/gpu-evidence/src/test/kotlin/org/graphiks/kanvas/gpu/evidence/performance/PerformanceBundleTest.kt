@@ -29,4 +29,20 @@ class PerformanceBundleTest {
         assertTrue(path.endsWith("reports/gpu-renderer/evidence/performance/generated/${run.sourceCommit}/${run.sceneId}"))
         assertEquals(setOf("manifest.json", "environment.json", "eligibility.json", "timings.json", "telemetry.json", "diagnostics.json", "verdict.json"), Files.list(path).use { stream -> stream.iterator().asSequence().map { file -> file.fileName.toString() }.toSet() })
     }
+
+    @Test fun `eligible capture may finish with a failed measurement verdict`() {
+        val run = PerformanceRun.fixture().copy(verdict = PerformanceVerdict.Failed("cold validation failed"))
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        assertIs<PerformanceBundleVerification.Verified>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
+    @Test fun `verifier rejects a required child symlink`() {
+        val run = PerformanceRun.fixture()
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        val target = root.resolve("outside-timings.json")
+        Files.copy(path.resolve("timings.json"), target)
+        Files.delete(path.resolve("timings.json"))
+        Files.createSymbolicLink(path.resolve("timings.json"), target)
+        assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
 }
