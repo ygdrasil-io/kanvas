@@ -1386,6 +1386,7 @@ private class WgpuBackendSession(
             queue = glfw.wgpuContext.device.queue,
             canonicalSceneTargetView = preparedTarget.view,
             onDestinationCopyEncoded = telemetryRecorder::recordDestinationCopy,
+            onSubmission = telemetryRecorder::recordSubmission,
         ))
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
