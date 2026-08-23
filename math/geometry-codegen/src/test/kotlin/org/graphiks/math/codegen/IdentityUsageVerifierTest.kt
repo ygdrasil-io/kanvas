@@ -101,6 +101,157 @@ class IdentityUsageVerifierTest {
         )
     }
 
+    @Test
+    fun `reports direct and aliased imported identity calls`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/ImportedCalls.kt",
+            """
+                import java.lang.System.identityHashCode
+                import java.lang.System.identityHashCode as objectId
+                import kotlin.synchronized as withLock
+
+                fun importedCalls(value: Any, lock: Any) {
+                    val direct = identityHashCode(value)
+                    val aliased = objectId(value)
+                    withLock(lock) {}
+                }
+            """.trimIndent(),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(6, 7, 8), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "val direct = identityHashCode(value)",
+                "val aliased = objectId(value)",
+                "withLock(lock) {}",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
+    fun `reports aliases for identity owner and map type`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/ImportedOwners.kt",
+            """
+                import java.lang.System as JvmSystem
+                import java.util.IdentityHashMap as ReferenceMap
+
+                fun importedOwners(value: Any) {
+                    val hash = JvmSystem.identityHashCode(value)
+                    val map = ReferenceMap<Any, Any>()
+                }
+            """.trimIndent(),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(5, 6), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "val hash = JvmSystem.identityHashCode(value)",
+                "val map = ReferenceMap<Any, Any>()",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
+    fun `does not treat a backticked import identifier as an import directive`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/BacktickedImport.kt",
+            "fun `import`(value: Any): Int = System.identityHashCode(value)",
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(1), violations.map { it.line })
+        assertEquals(
+            "fun `import`(value: Any): Int = System.identityHashCode(value)",
+            violations.single().expression,
+        )
+    }
+
+    @Test
+    fun `reports calls split between symbol and opening parenthesis`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/MultilineCalls.kt",
+            """
+                fun multilineCalls(value: Any, lock: Any) {
+                    val hash = System.identityHashCode
+                        (
+                            value,
+                        )
+                    kotlin.synchronized
+                        (
+                            lock,
+                        ) {}
+                }
+            """.trimIndent(),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(2, 6), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "val hash = System.identityHashCode",
+                "kotlin.synchronized",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
+    fun `reports forbidden operations in regular and raw string templates`() = withRepository { repoRoot ->
+        writeKotlin(
+            repoRoot,
+            "math/sample/src/main/kotlin/Templates.kt",
+            listOf(
+                "val regular = \"same=${'$'}{run { left === right }}\"",
+                "val raw = \"\"\"hash=${'$'}{run { System.identityHashCode(value) }}\"\"\"",
+            ).joinToString("\n"),
+        )
+
+        val violations = IdentityUsageVerifier.verify(repoRoot)
+
+        assertEquals(listOf(1, 2), violations.map { it.line })
+        assertEquals(
+            listOf(
+                "val regular = \"same=${'$'}{run { left === right }}\"",
+                "val raw = \"\"\"hash=${'$'}{run { System.identityHashCode(value) }}\"\"\"",
+            ),
+            violations.map { it.expression },
+        )
+    }
+
+    @Test
+    fun `does not follow Kotlin source symlinks outside repository`() = withRepository { repoRoot ->
+        val externalRoot = createTempDirectory("identity-verifier-external")
+        try {
+            val externalSource = externalRoot.resolve("External.kt")
+            Files.writeString(externalSource, "val escaped = left === right")
+            val symlink = repoRoot.resolve("math/sample/src/main/kotlin/Escape.kt")
+            Files.createDirectories(symlink.parent)
+            try {
+                Files.createSymbolicLink(symlink, externalSource)
+            } catch (failure: Exception) {
+                throw AssertionError("test environment cannot create the required source symlink", failure)
+            }
+            assertTrue(Files.isSymbolicLink(symlink), "test must exercise an actual symbolic link")
+
+            assertEquals(emptyList(), IdentityUsageVerifier.verify(repoRoot))
+        } finally {
+            deleteTree(externalRoot)
+        }
+    }
+
     private fun writeKotlin(repoRoot: Path, relativePath: String, source: String) {
         val path = repoRoot.resolve(relativePath)
         Files.createDirectories(path.parent)
@@ -112,9 +263,13 @@ class IdentityUsageVerifierTest {
         try {
             block(repoRoot)
         } finally {
-            Files.walk(repoRoot).use { paths ->
-                paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
-            }
+            deleteTree(repoRoot)
+        }
+    }
+
+    private fun deleteTree(root: Path) {
+        Files.walk(root).use { paths ->
+            paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
         }
     }
 }
