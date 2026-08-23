@@ -4,11 +4,11 @@ import org.skia.foundation.SkImage
 import java.nio.ByteBuffer
 
 /**
- * Codec-backed factory methods for [SkImage]. Split from
- * [org.skia.foundation.SkImages] so that `foundation` no longer imports
- * from `codec`; the encoded-image factories stay owned by the codec layer.
+ * Codec-backed factory methods for [SkImage]. Kept in the codec layer so
+ * `foundation` does not import from `codec`; encoded-image factories remain
+ * owned by their decoder implementations.
  *
- * Mirrors the subset of Skia's `SkImages::*` factories that need an
+ * Mirrors the subset of upstream Skia's `SkImages::*` factories that need an
  * [Codec] decoder.
  */
 public object ImageCodecs {

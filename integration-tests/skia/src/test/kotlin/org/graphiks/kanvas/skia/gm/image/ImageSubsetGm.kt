@@ -1,7 +1,7 @@
 /**
  * Port of Skia's `gm/imagesubset.cpp`.
  * Tests deferred image materialization + subset extraction + serialization
- * round-trip. [SkImages.DeferredFromPicture] replaced with eager [Surface],
+ * round-trip. Skia's `SkImages::DeferredFromPicture` is replaced with eager [Surface],
  * [SkImage.makeSubset] replaced with pixel-array slicing, image
  * serialization replaced with [Picture.toByteArray] round-trip.
  * @see https://github.com/google/skia/blob/main/gm/imagesubset.cpp
