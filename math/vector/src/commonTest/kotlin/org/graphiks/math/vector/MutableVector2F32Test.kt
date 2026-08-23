@@ -1,108 +1,74 @@
 package org.graphiks.math.vector
 
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class MutableVector2F32Test {
-
     @Test
-    fun testOf() {
-        val v = MutableVector2F32.of(1f, 2f)
-        assertEquals(1f, v.x)
-        assertEquals(2f, v.y)
+    fun `mutable operations update literal components`() {
+        val value = MutableVector2F32(1f, 2f)
+
+        value.add(Vector2F32(3f, 4f))
+        assertEquals(4f, value.x)
+        assertEquals(6f, value.y)
+        value.subtract(Vector2F32(1f, 2f))
+        assertEquals(3f, value.x)
+        assertEquals(4f, value.y)
+        value.scaleBy(2f)
+        assertEquals(6f, value.x)
+        assertEquals(8f, value.y)
     }
 
     @Test
-    fun testDefault() {
-        val v = MutableVector2F32.of()
-        assertEquals(0f, v.x)
-        assertEquals(0f, v.y)
+    fun `normalize in place returns success with literal unit components`() {
+        val value = MutableVector2F32(3f, 4f)
+
+        assertTrue(value.normalizeInPlace())
+        assertEquals(0.6f, value.x, 1e-6f)
+        assertEquals(0.8f, value.y, 1e-6f)
     }
 
     @Test
-    fun testSet() {
-        val v = MutableVector2F32.of(1f, 2f)
-        v.set(3f, 4f)
-        assertEquals(3f, v.x)
-        assertEquals(4f, v.y)
+    fun `normalize in place rejects near zero and clears components`() {
+        val value = MutableVector2F32(1e-8f, -1e-8f)
+
+        assertFalse(value.normalizeInPlace())
+        assertEquals(0f, value.x)
+        assertEquals(0f, value.y)
     }
 
     @Test
-    fun testOffset() {
-        val v = MutableVector2F32.of(1f, 2f)
-        v.offset(3f, 4f)
-        assertEquals(4f, v.x)
-        assertEquals(6f, v.y)
+    fun `same component checks support mutable and immutable values`() {
+        val value = MutableVector2F32(2f, 3f)
+
+        assertTrue(value.hasSameComponentsAs(MutableVector2F32(2f, 3f)))
+        assertTrue(value.hasSameComponentsAs(Vector2F32(2f, 3f)))
+        assertFalse(value.hasSameComponentsAs(Vector2F32(2f, 4f)))
     }
 
     @Test
-    fun testScale() {
-        val v = MutableVector2F32.of(3f, 4f)
-        v.scale(2f)
-        assertEquals(6f, v.x)
-        assertEquals(8f, v.y)
-    }
+    fun `immutable conversion copies components without aliasing`() {
+        val mutable = MutableVector2F32(2f, 3f)
+        val immutable = mutable.toImmutable()
 
-    @Test
-    fun testNegate() {
-        val v = MutableVector2F32.of(1f, -2f)
-        v.negate()
-        assertEquals(-1f, v.x)
-        assertEquals(2f, v.y)
+        mutable.x = 9f
+        assertEquals(2f, immutable.x)
+        assertEquals(9f, mutable.x)
     }
+}
 
+class MutableVector2F64Test {
     @Test
-    fun testLength() {
-        assertEquals(5f, MutableVector2F32.of(3f, 4f).length())
-    }
+    fun `F64 mutable normalization and conversion use literal values`() {
+        val mutable = MutableVector2F64(3.0, 4.0)
 
-    @Test
-    fun testNormalize() {
-        val v = MutableVector2F32.of(3f, 4f)
-        assertTrue(v.normalize())
-        assertTrue(kotlin.math.abs(v.length() - 1f) < 1e-6f)
-    }
-
-    @Test
-    fun testNormalizeZero() {
-        val v = MutableVector2F32.of(0f, 0f)
-        assertFalse(v.normalize())
-        assertEquals(0f, v.x)
-        assertEquals(0f, v.y)
-    }
-
-    @Test
-    fun testSetLength() {
-        val v = MutableVector2F32.of(1f, 0f)
-        assertTrue(v.setLength(2f))
-        assertEquals(2f, v.x)
-        assertEquals(0f, v.y)
-    }
-
-    @Test
-    fun testToVector() {
-        val v = MutableVector2F32.of(1f, 2f).toVector()
-        assertEquals(1f, v.x)
-        assertEquals(2f, v.y)
-    }
-
-    @Test
-    fun testFrom() {
-        val v = MutableVector2F32.from(Vector2F32(3f, 4f))
-        assertEquals(3f, v.x)
-        assertEquals(4f, v.y)
-    }
-
-    @Test
-    fun testXSet() {
-        val v = MutableVector2F32.of(1f, 2f)
-        v.x = 10f
-        assertEquals(10f, v.x)
-    }
-
-    @Test
-    fun testYSet() {
-        val v = MutableVector2F32.of(1f, 2f)
-        v.y = 20f
-        assertEquals(20f, v.y)
+        assertTrue(mutable.normalizeInPlace())
+        assertEquals(0.6, mutable.x, 1e-12)
+        assertEquals(0.8, mutable.y, 1e-12)
+        val immutable = mutable.toImmutable()
+        mutable.x = 2.0
+        assertEquals(0.6, immutable.x, 1e-12)
     }
 }

@@ -65,7 +65,7 @@ public data class Matrix3x4F32(
     public fun map(vector: Vector3F32): Vector3F32 = map(vector.x, vector.y, vector.z)
 
     /** Applies this affine matrix to the point `(x, y, z)`. */
-    public fun map(x: Float, y: Float, z: Float): Vector3F32 = Vector3F32.of(
+    public fun map(x: Float, y: Float, z: Float): Vector3F32 = Vector3F32(
         m00 * x + m01 * y + m02 * z + m03,
         m10 * x + m11 * y + m12 * z + m13,
         m20 * x + m21 * y + m22 * z + m23,

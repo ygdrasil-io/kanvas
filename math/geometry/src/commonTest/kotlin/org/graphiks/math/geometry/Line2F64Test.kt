@@ -15,7 +15,7 @@ class Line2F64Test {
     @Test
     fun `set from Vector2F32 pair`() {
         val line = Line2F64()
-        line.set(Vector2F32.of(1f, 2f), Vector2F32.of(3f, 4f))
+        line.set(Vector2F32(1f, 2f), Vector2F32(3f, 4f))
         kotlin.test.assertEquals(1.0, line[0].x)
         kotlin.test.assertEquals(2.0, line[0].y)
         kotlin.test.assertEquals(3.0, line[1].x)

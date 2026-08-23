@@ -127,7 +127,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
     public fun approximatelyZero(): Boolean = approximatelyZero(x) && approximatelyZero(y)
 
     /** Converts to a [Vector2F32]. */
-    public fun asVector2F32(): Vector2F32 = Vector2F32.of(x = x.toFloat(), y = y.toFloat())
+    public fun asVector2F32(): Vector2F32 = Vector2F32(x = x.toFloat(), y = y.toFloat())
 
     /** Euclidean distance to [a]. */
     public fun distance(a: Point2F64): Double {

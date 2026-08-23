@@ -47,19 +47,19 @@ public data class RectF32(
     public fun centerY(): Float = (0.5 * (top.toDouble() + bottom)).toFloat()
 
     /** Returns the center as a [Vector2F32]. */
-    public fun center(): Vector2F32 = Vector2F32.of(centerX(), centerY())
+    public fun center(): Vector2F32 = Vector2F32(centerX(), centerY())
 
     /** Returns the top-left corner. */
-    public fun topLeft(): Vector2F32 = Vector2F32.of(left, top)
+    public fun topLeft(): Vector2F32 = Vector2F32(left, top)
 
     /** Returns the top-right corner. */
-    public fun topRight(): Vector2F32 = Vector2F32.of(right, top)
+    public fun topRight(): Vector2F32 = Vector2F32(right, top)
 
     /** Returns the bottom-left corner. */
-    public fun bottomLeft(): Vector2F32 = Vector2F32.of(left, bottom)
+    public fun bottomLeft(): Vector2F32 = Vector2F32(left, bottom)
 
     /** Returns the bottom-right corner. */
-    public fun bottomRight(): Vector2F32 = Vector2F32.of(right, bottom)
+    public fun bottomRight(): Vector2F32 = Vector2F32(right, bottom)
 
     /** `true` if the rect is empty (`left >= right` or `top >= bottom`). */
     public val isEmpty: Boolean get() = !(left < right && top < bottom)

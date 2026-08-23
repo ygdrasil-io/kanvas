@@ -1,89 +1,63 @@
 package org.graphiks.math.vector
 
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class Vector3F32Test {
-
     @Test
-    fun testConstruct() {
-        val v = Vector3F32(1f, 2f, 3f)
-        assertEquals(1f, v.x)
-        assertEquals(2f, v.y)
-        assertEquals(3f, v.z)
+    fun `3D axes expose literal components`() {
+        assertEquals(0f, Vector3F32.Zero.x)
+        assertEquals(1f, Vector3F32.UnitX.x)
+        assertEquals(1f, Vector3F32.UnitY.y)
+        assertEquals(1f, Vector3F32.UnitZ.z)
+        assertEquals(0f, Vector3F32.UnitZ.x)
+        assertEquals(0f, Vector3F32.UnitZ.y)
     }
 
     @Test
-    fun testPlus() {
-        assertEquals(Vector3F32(5f, 7f, 9f), Vector3F32(1f, 2f, 3f) + Vector3F32(4f, 5f, 6f))
+    fun `3D cross uses hand-derived components`() {
+        val cross = Vector3F32(1f, 2f, 3f).cross(Vector3F32(4f, -5f, 6f))
+
+        assertEquals(27f, cross.x)
+        assertEquals(6f, cross.y)
+        assertEquals(-13f, cross.z)
     }
 
     @Test
-    fun testMinus() {
-        assertEquals(Vector3F32(3f, 3f, 3f), Vector3F32(4f, 5f, 6f) - Vector3F32(1f, 2f, 3f))
+    fun `3D dot and arithmetic use scalar literals`() {
+        val a = Vector3F32(1f, 2f, 3f)
+        val b = Vector3F32(4f, 5f, 6f)
+
+        assertEquals(32f, a.dot(b))
+        val sum = a + b
+        assertEquals(5f, sum.x)
+        assertEquals(7f, sum.y)
+        assertEquals(9f, sum.z)
+        val scaled = 2f * a
+        assertEquals(2f, scaled.x)
+        assertEquals(4f, scaled.y)
+        assertEquals(6f, scaled.z)
     }
 
     @Test
-    fun testUnaryMinus() {
-        assertEquals(Vector3F32(-1f, 2f, -3f), -Vector3F32(1f, -2f, 3f))
+    fun `3D length and normalization scale large finite values`() {
+        val value = Vector3F32(1e30f, 1e30f, 1e30f)
+        val expectedLength = 1.7320508e30f
+
+        assertEquals(expectedLength, value.length(), expectedLength * 1e-6f)
+        val normalized = value.normalized()
+        assertEquals(0.57735026f, normalized.x, 1e-6f)
+        assertEquals(0.57735026f, normalized.y, 1e-6f)
+        assertEquals(0.57735026f, normalized.z, 1e-6f)
     }
 
     @Test
-    fun testTimesScalar() {
-        assertEquals(Vector3F32(2f, 4f, 6f), Vector3F32(1f, 2f, 3f) * 2f)
-        assertEquals(Vector3F32(2f, 4f, 6f), 2f * Vector3F32(1f, 2f, 3f))
-    }
-
-    @Test
-    fun testTimesComponentWise() {
-        assertEquals(Vector3F32(2f, 6f, 12f), Vector3F32(1f, 2f, 3f) * Vector3F32(2f, 3f, 4f))
-    }
-
-    @Test
-    fun testDiv() {
-        assertEquals(Vector3F32(1f, 2f, 3f), Vector3F32(2f, 4f, 6f) / 2f)
-    }
-
-    @Test
-    fun testLength() {
-        val v = Vector3F32(1f, 2f, 2f)
-        assertEquals(3f, v.length())
-    }
-
-    @Test
-    fun testLengthAndNormalizeLargeFiniteVector() {
-        val v = Vector3F32(1e30f, 1e30f, 1e30f)
-        val expectedLength = (kotlin.math.sqrt(3.0) * 1e30).toFloat()
-        assertEquals(expectedLength, v.length(), expectedLength * 1e-6f)
-
-        val normalized = v.normalize()
-        assertEquals(1f, normalized.length(), 1e-6f)
-        assertTrue(normalized.x > 0f)
-        assertTrue(normalized.y > 0f)
-        assertTrue(normalized.z > 0f)
-    }
-
-    @Test
-    fun testDot() {
-        assertEquals(32f, Vector3F32(1f, 2f, 3f).dot(Vector3F32(4f, 5f, 6f)))
-    }
-
-    @Test
-    fun testCross() {
-        val a = Vector3F32(1f, 0f, 0f)
-        val b = Vector3F32(0f, 1f, 0f)
-        assertEquals(Vector3F32(0f, 0f, 1f), a.cross(b))
-    }
-
-    @Test
-    fun testNormalize() {
-        val v = Vector3F32(3f, 0f, 0f).normalize()
-        assertTrue(kotlin.math.abs(v.length() - 1f) < 1e-6f)
-        assertEquals(1f, v.x)
-    }
-
-    @Test
-    fun testIsFinite() {
-        assertTrue(Vector3F32(1f, 2f, 3f).isFinite())
-        assertFalse(Vector3F32(Float.NaN, 2f, 3f).isFinite())
+    fun `3D length prioritizes NaN over infinity`() {
+        assertTrue(Vector3F32(Float.NaN, Float.POSITIVE_INFINITY, 0f).length().isNaN())
+        assertEquals(
+            Float.POSITIVE_INFINITY,
+            Vector3F32(Float.POSITIVE_INFINITY, 1f, 2f).length(),
+        )
     }
 }

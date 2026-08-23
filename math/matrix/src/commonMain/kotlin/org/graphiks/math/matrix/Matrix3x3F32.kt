@@ -255,12 +255,12 @@ public data class Matrix3x3F32(
     ) {
         require(count <= dst.size && count <= src.size)
         if (isIdentity) {
-            for (i in 0 until count) dst[i] = Vector3F32.of(src[i].x, src[i].y, 1f)
+            for (i in 0 until count) dst[i] = Vector3F32(src[i].x, src[i].y, 1f)
         } else if (hasPerspective()) {
             for (i in 0 until count) {
                 val x = src[i].x
                 val y = src[i].y
-                dst[i] = Vector3F32.of(
+                dst[i] = Vector3F32(
                     sx * x + kx * y + tx,
                     ky * x + sy * y + ty,
                     persp0 * x + persp1 * y + persp2,
@@ -270,7 +270,7 @@ public data class Matrix3x3F32(
             for (i in 0 until count) {
                 val x = src[i].x
                 val y = src[i].y
-                dst[i] = Vector3F32.of(sx * x + kx * y + tx, ky * x + sy * y + ty, 1f)
+                dst[i] = Vector3F32(sx * x + kx * y + tx, ky * x + sy * y + ty, 1f)
             }
         }
     }
@@ -328,7 +328,7 @@ public data class Matrix3x3F32(
             nearlyZero(sxLen) || nearlyZero(syLen)
         ) return null
         val remaining = preScale((1f / sxLen), (1f / syLen))
-        return Pair(Vector2F32.of(sxLen, syLen), remaining)
+        return Pair(Vector2F32(sxLen, syLen), remaining)
     }
 
     /**
@@ -401,7 +401,7 @@ public data class Matrix3x3F32(
     /** Apply this matrix to a [Vector2F32], returning a new mapped point. */
     public fun mapXY(p: Vector2F32): Vector2F32 {
         val (x, y) = mapXY(p.x, p.y)
-        return Vector2F32.of(x, y)
+        return Vector2F32(x, y)
     }
 
     /**
@@ -410,7 +410,7 @@ public data class Matrix3x3F32(
      */
     public fun mapVector(dx: Float, dy: Float): Vector2F32 {
         val dst = Array(1) { Vector2F32.Zero }
-        mapVectors(dst, arrayOf(Vector2F32.of(dx, dy)), 1)
+        mapVectors(dst, arrayOf(Vector2F32(dx, dy)), 1)
         return dst[0]
     }
 
@@ -433,25 +433,25 @@ public data class Matrix3x3F32(
         when (val type = getType()) {
             kIdentity_Mask -> {
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(src[i].x, src[i].y)
+                    dst[i] = Vector2F32(src[i].x, src[i].y)
                 }
             }
             kTranslate_Mask -> {
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(src[i].x + tx, src[i].y + ty)
+                    dst[i] = Vector2F32(src[i].x + tx, src[i].y + ty)
                 }
             }
             else -> if (type and (kAffine_Mask or kPerspective_Mask) == 0) {
                 // Scale + translate (no rotation/skew/perspective).
                 for (i in 0 until count) {
-                    dst[i] = Vector2F32.of(sx * src[i].x + tx, sy * src[i].y + ty)
+                    dst[i] = Vector2F32(sx * src[i].x + tx, sy * src[i].y + ty)
                 }
             } else if (type and kPerspective_Mask == 0) {
                 // Full affine, no perspective.
                 for (i in 0 until count) {
                     val x = src[i].x
                     val y = src[i].y
-                    dst[i] = Vector2F32.of(sx * x + kx * y + tx, ky * x + sy * y + ty)
+                    dst[i] = Vector2F32(sx * x + kx * y + tx, ky * x + sy * y + ty)
                 }
             } else {
                 // Perspective: full 3×3 with homogeneous divide.
@@ -460,7 +460,7 @@ public data class Matrix3x3F32(
                     val y = src[i].y
                     val w = persp0 * x + persp1 * y + persp2
                     val invW = if (w != 0f) 1f / w else 0f
-                    dst[i] = Vector2F32.of(
+                    dst[i] = Vector2F32(
                         (sx * x + kx * y + tx) * invW,
                         (ky * x + sy * y + ty) * invW,
                     )
@@ -500,18 +500,18 @@ public data class Matrix3x3F32(
                 val invW = if (w != 0f) 1f / w else 0f
                 val px = (sx * x + kx * y + tx) * invW
                 val py = (ky * x + sy * y + ty) * invW
-                dst[i] = Vector2F32.of(px - originX, py - originY)
+                dst[i] = Vector2F32(px - originX, py - originY)
             }
         } else if (getType() and (kAffine_Mask or kScale_Mask) == 0) {
             // Identity or translate-only — vectors are unchanged.
             for (i in 0 until count) {
-                if (dst !== src || dst[i] !== src[i]) dst[i] = Vector2F32.of(src[i].x, src[i].y)
+                if (dst !== src || dst[i] !== src[i]) dst[i] = Vector2F32(src[i].x, src[i].y)
             }
         } else {
             for (i in 0 until count) {
                 val x = src[i].x
                 val y = src[i].y
-                dst[i] = Vector2F32.of(sx * x + kx * y, ky * x + sy * y)
+                dst[i] = Vector2F32(sx * x + kx * y, ky * x + sy * y)
             }
         }
     }
@@ -568,7 +568,7 @@ public data class Matrix3x3F32(
      * Mirrors [`SkMatrix::mapRadius`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp).
      */
     public fun mapRadius(r: Float): Float {
-        val vec = arrayOf(Vector2F32.of(r, 0f), Vector2F32.of(0f, r))
+        val vec = arrayOf(Vector2F32(r, 0f), Vector2F32(0f, r))
         mapVectors(vec)
 
         val d0 = sqrt(vec[0].x * vec[0].x + vec[0].y * vec[0].y)

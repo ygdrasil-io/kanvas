@@ -1,92 +1,55 @@
 package org.graphiks.math.vector
 
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class MutableVector3F32Test {
-
     @Test
-    fun testOf() {
-        val v = MutableVector3F32.of(1f, 2f, 3f)
-        assertEquals(1f, v.x)
-        assertEquals(2f, v.y)
-        assertEquals(3f, v.z)
+    fun `3D mutable operations update literal components`() {
+        val value = MutableVector3F32(1f, 2f, 3f)
+
+        value.add(Vector3F32(4f, 5f, 6f))
+        assertEquals(5f, value.x)
+        assertEquals(7f, value.y)
+        assertEquals(9f, value.z)
+        value.subtract(Vector3F32(1f, 2f, 3f))
+        value.scaleBy(0.5f)
+        assertEquals(2f, value.x)
+        assertEquals(2.5f, value.y)
+        assertEquals(3f, value.z)
     }
 
     @Test
-    fun testSet() {
-        val v = MutableVector3F32.of(1f, 2f, 3f)
-        v.set(4f, 5f, 6f)
-        assertEquals(4f, v.x)
-        assertEquals(5f, v.y)
-        assertEquals(6f, v.z)
+    fun `3D mutable normalization scales large finite components`() {
+        val value = MutableVector3F32(1e30f, 1e30f, 1e30f)
+
+        assertTrue(value.normalizeInPlace())
+        assertEquals(0.57735026f, value.x, 1e-6f)
+        assertEquals(0.57735026f, value.y, 1e-6f)
+        assertEquals(0.57735026f, value.z, 1e-6f)
     }
 
     @Test
-    fun testOffset() {
-        val v = MutableVector3F32.of(1f, 2f, 3f)
-        v.offset(1f, 1f, 1f)
-        assertEquals(2f, v.x)
-        assertEquals(3f, v.y)
-        assertEquals(4f, v.z)
+    fun `3D mutable normalization rejects zero`() {
+        val value = MutableVector3F32(0f, 0f, 0f)
+
+        assertFalse(value.normalizeInPlace())
+        assertEquals(0f, value.x)
+        assertEquals(0f, value.y)
+        assertEquals(0f, value.z)
     }
 
     @Test
-    fun testScale() {
-        val v = MutableVector3F32.of(1f, 2f, 3f)
-        v.scale(2f)
-        assertEquals(2f, v.x)
-        assertEquals(4f, v.y)
-        assertEquals(6f, v.z)
-    }
+    fun `3D mutable conversion and component checks do not alias`() {
+        val mutable = MutableVector3F32(2f, 3f, 4f)
 
-    @Test
-    fun testNegate() {
-        val v = MutableVector3F32.of(1f, -2f, 3f)
-        v.negate()
-        assertEquals(-1f, v.x)
-        assertEquals(2f, v.y)
-        assertEquals(-3f, v.z)
-    }
-
-    @Test
-    fun testLength() {
-        val v = MutableVector3F32.of(1f, 2f, 2f)
-        assertEquals(3f, v.length())
-    }
-
-    @Test
-    fun testNormalize() {
-        val v = MutableVector3F32.of(3f, 0f, 0f)
-        assertTrue(v.normalize())
-        assertTrue(kotlin.math.abs(v.length() - 1f) < 1e-6f)
-    }
-
-    @Test
-    fun testNormalizeLargeFiniteVector() {
-        val v = MutableVector3F32.of(1e30f, 1e30f, 1e30f)
-        assertTrue(v.normalize())
-        assertEquals(1f, v.length(), 1e-6f)
-        assertTrue(v.x > 0f)
-        assertTrue(v.y > 0f)
-        assertTrue(v.z > 0f)
-    }
-
-    @Test
-    fun testNormalizeZero() {
-        val v = MutableVector3F32.of(0f, 0f, 0f)
-        assertFalse(v.normalize())
-        assertEquals(0f, v.x)
-    }
-
-    @Test
-    fun testToVector() {
-        val v = MutableVector3F32.of(1f, 2f, 3f).toVector()
-        assertEquals(1f, v.x); assertEquals(2f, v.y); assertEquals(3f, v.z)
-    }
-
-    @Test
-    fun testFrom() {
-        val v = MutableVector3F32.from(Vector3F32(4f, 5f, 6f))
-        assertEquals(4f, v.x); assertEquals(5f, v.y); assertEquals(6f, v.z)
+        assertTrue(mutable.hasSameComponentsAs(Vector3F32(2f, 3f, 4f)))
+        assertTrue(mutable.hasSameComponentsAs(MutableVector3F32(2f, 3f, 4f)))
+        val immutable = mutable.toImmutable()
+        mutable.z = 9f
+        assertEquals(4f, immutable.z)
+        assertEquals(9f, mutable.z)
     }
 }

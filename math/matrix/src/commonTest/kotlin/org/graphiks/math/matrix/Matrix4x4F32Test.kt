@@ -44,7 +44,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `identity times vector returns vector`() {
-        val v = Vector4F32.of(1f, 2f, 3f, 4f)
+        val v = Vector4F32(1f, 2f, 3f, 4f)
         assertV4Near(v, Matrix4x4F32() * v)
     }
 
@@ -52,25 +52,25 @@ class Matrix4x4F32Test {
     fun `translate factory shifts point`() {
         val t = Matrix4x4F32.translate(10f, 20f, 30f)
         val mapped = t.map(1f, 2f, 3f, 1f)
-        assertV4Near(Vector4F32.of(11f, 22f, 33f, 1f), mapped)
+        assertV4Near(Vector4F32(11f, 22f, 33f, 1f), mapped)
     }
 
     @Test
     fun `scale factory scales vector`() {
         val s = Matrix4x4F32.scale(2f, 3f, 4f)
-        assertV4Near(Vector4F32.of(2f, 6f, 12f, 1f), s.map(1f, 2f, 3f, 1f))
+        assertV4Near(Vector4F32(2f, 6f, 12f, 1f), s.map(1f, 2f, 3f, 1f))
     }
 
     @Test
     fun `rotate Z 90 degrees maps unit-X to unit-Y`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 1f), (PI / 2).toFloat())
-        val out = r * Vector4F32.of(1f, 0f, 0f, 1f)
-        assertV4Near(Vector4F32.of(0f, 1f, 0f, 1f), out, 1e-5f)
+        val r = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 1f), (PI / 2).toFloat())
+        val out = r * Vector4F32(1f, 0f, 0f, 1f)
+        assertV4Near(Vector4F32(0f, 1f, 0f, 1f), out, 1e-5f)
     }
 
     @Test
     fun `rotate falls back to identity for zero axis`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 0f), 1f)
+        val r = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 0f), 1f)
         assertTrue(r.isIdentity())
     }
 
@@ -89,7 +89,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `invert of rotation equals its transpose`() {
-        val r = Matrix4x4F32.rotate(Vector3F32.of(1f, 2f, 3f).normalize(), 0.7f)
+        val r = Matrix4x4F32.rotate(Vector3F32(1f, 2f, 3f).normalized(), 0.7f)
         val inv = r.invert()
         assertNotNull(inv)
         assertMatrixNear(r.transpose(), inv, 1e-4f)
@@ -191,7 +191,7 @@ class Matrix4x4F32Test {
     fun `multiplication is associative`() {
         val a = Matrix4x4F32.translate(1f, 2f, 3f)
         val b = Matrix4x4F32.scale(2f, 3f, 4f)
-        val c = Matrix4x4F32.rotate(Vector3F32.of(0f, 0f, 1f), 0.5f)
+        val c = Matrix4x4F32.rotate(Vector3F32(0f, 0f, 1f), 0.5f)
         assertMatrixNear((a * b) * c, a * (b * c), 1e-4f)
     }
 
@@ -199,7 +199,7 @@ class Matrix4x4F32Test {
     fun `mapPoint matches Matrix3x3F32 when m44 is affine`() {
         val sk2D = Matrix3x3F32.of(2f, 0f, 5f, 0f, 3f, 7f)
         val m44 = Matrix4x4F32(sk2D)
-        val p = Vector2F32.of(4f, 8f)
+        val p = Vector2F32(4f, 8f)
         val viaM44 = m44.mapPoint(p)
         val viaMatrix = sk2D.mapXY(p)
         assertEquals(viaMatrix.x, viaM44.x, 1e-5f)
@@ -339,9 +339,9 @@ class Matrix4x4F32Test {
     @Test
     fun `lookAt produces invertible matrix for typical eye`() {
         val v = Matrix4x4F32.lookAt(
-            eye = Vector3F32.of(0f, 0f, 5f),
-            center = Vector3F32.of(0f, 0f, 0f),
-            up = Vector3F32.of(0f, 1f, 0f),
+            eye = Vector3F32(0f, 0f, 5f),
+            center = Vector3F32(0f, 0f, 0f),
+            up = Vector3F32(0f, 1f, 0f),
         )
         // The Skia look-at is the inverse of [right, up, -fwd, eye]; it
         // should be a valid affine view matrix (finite, invertible).
@@ -354,8 +354,8 @@ class Matrix4x4F32Test {
         val src = RectF32(0f, 0f, 2f, 4f)
         val dst = RectF32(10f, 20f, 14f, 28f)
         val m = Matrix4x4F32.rectToRect(src, dst)
-        assertV4Near(Vector4F32.of(10f, 20f, 0f, 1f), m.map(0f, 0f, 0f, 1f))
-        assertV4Near(Vector4F32.of(14f, 28f, 0f, 1f), m.map(2f, 4f, 0f, 1f))
+        assertV4Near(Vector4F32(10f, 20f, 0f, 1f), m.map(0f, 0f, 0f, 1f))
+        assertV4Near(Vector4F32(14f, 28f, 0f, 1f), m.map(2f, 4f, 0f, 1f))
     }
 
     @Test
@@ -415,7 +415,7 @@ class Matrix4x4F32Test {
     @Test
     fun `times Vector3F32 drops translation`() {
         val m = Matrix4x4F32.translate(10f, 20f, 30f)
-        val v = Vector3F32.of(1f, 2f, 3f)
-        assertEquals(Vector3F32.of(1f, 2f, 3f), m * v)
+        val v = Vector3F32(1f, 2f, 3f)
+        assertEquals(Vector3F32(1f, 2f, 3f), m * v)
     }
 }

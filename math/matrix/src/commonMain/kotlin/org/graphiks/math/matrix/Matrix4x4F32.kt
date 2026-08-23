@@ -208,7 +208,7 @@ public class Matrix4x4F32 {
             return if (kotlin.math.abs(len) < 1e-7f) v else v * (1f / len)
         }
 
-        private fun v4(v: Vector3F32, w: Float): Vector4F32 = Vector4F32.of(v.x, v.y, v.z, w)
+        private fun v4(v: Vector3F32, w: Float): Vector4F32 = Vector4F32(v.x, v.y, v.z, w)
     }
 
     // ─── Element access ────────────────────────────────────────────────
@@ -259,7 +259,7 @@ public class Matrix4x4F32 {
          */
     public fun row(i: Int): Vector4F32 {
         require(i in 0..3) { "row($i) out of range" }
-        return Vector4F32.of(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
+        return Vector4F32(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
     }
 
     /**
@@ -267,7 +267,7 @@ public class Matrix4x4F32 {
          */
     public fun col(i: Int): Vector4F32 {
         require(i in 0..3) { "col($i) out of range" }
-        return Vector4F32.of(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
+        return Vector4F32(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
     }
 
     /**
@@ -482,7 +482,7 @@ public class Matrix4x4F32 {
         val ry = fMat[1] * x + fMat[5] * y + fMat[9] * z + fMat[13] * w
         val rz = fMat[2] * x + fMat[6] * y + fMat[10] * z + fMat[14] * w
         val rw = fMat[3] * x + fMat[7] * y + fMat[11] * z + fMat[15] * w
-        return Vector4F32.of(rx, ry, rz, rw)
+        return Vector4F32(rx, ry, rz, rw)
     }
 
     /** Convenience wrapper. */
@@ -497,7 +497,7 @@ public class Matrix4x4F32 {
      */
     public operator fun times(v: Vector3F32): Vector3F32 {
         val r = map(v.x, v.y, v.z, 0f)
-        return Vector3F32.of(r.x, r.y, r.z)
+        return Vector3F32(r.x, r.y, r.z)
     }
 
     /**
@@ -509,10 +509,10 @@ public class Matrix4x4F32 {
     public fun mapPoint(p: Vector2F32): Vector2F32 {
         val r = map(p.x, p.y, 0f, 1f)
         return if (r.w == 1f || r.w == 0f) {
-            Vector2F32.of(r.x, r.y)
+            Vector2F32(r.x, r.y)
         } else {
             val invW = 1f / r.w
-            Vector2F32.of(r.x * invW, r.y * invW)
+            Vector2F32(r.x * invW, r.y * invW)
         }
     }
 

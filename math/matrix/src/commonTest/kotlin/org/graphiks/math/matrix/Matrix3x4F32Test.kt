@@ -34,7 +34,7 @@ class Matrix3x4F32Test {
             23f, 29f, 31f, 37f,
         )
 
-        assertEquals(Vector3F32.of(30f, 107f, 211f), matrix.map(Vector3F32.of(1f, 2f, 3f)))
+        assertEquals(Vector3F32(30f, 107f, 211f), matrix.map(Vector3F32(1f, 2f, 3f)))
     }
 
     @Test

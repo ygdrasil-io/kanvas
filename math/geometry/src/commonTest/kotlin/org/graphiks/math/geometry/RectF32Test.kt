@@ -222,14 +222,14 @@ class RectF32Test {
 
     @Test
     fun `bounds returns tight bbox`() {
-        val pts = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(5f, 7f), Vector2F32.of(-3f, 4f))
+        val pts = arrayOf(Vector2F32(1f, 2f), Vector2F32(5f, 7f), Vector2F32(-3f, 4f))
         val b = RectF32.bounds(pts)!!
         assertTrue(b.contentEqualsLTRB(RectF32.ofLTRB(-3f, 2f, 5f, 7f)))
     }
 
     @Test
     fun `bounds returns null on non-finite point`() {
-        val pts = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(Float.NaN, 0f))
+        val pts = arrayOf(Vector2F32(1f, 2f), Vector2F32(Float.NaN, 0f))
         assertNull(RectF32.bounds(pts))
     }
 
@@ -243,9 +243,9 @@ class RectF32Test {
     @Test
     fun `corner accessors return corners`() {
         val r = RectF32.ofLTRB(1f, 2f, 3f, 4f)
-        assertEquals(Vector2F32.of(1f, 2f), r.topLeft())
-        assertEquals(Vector2F32.of(3f, 2f), r.topRight())
-        assertEquals(Vector2F32.of(1f, 4f), r.bottomLeft())
-        assertEquals(Vector2F32.of(3f, 4f), r.bottomRight())
+        assertEquals(Vector2F32(1f, 2f), r.topLeft())
+        assertEquals(Vector2F32(3f, 2f), r.topRight())
+        assertEquals(Vector2F32(1f, 4f), r.bottomLeft())
+        assertEquals(Vector2F32(3f, 4f), r.bottomRight())
     }
 }

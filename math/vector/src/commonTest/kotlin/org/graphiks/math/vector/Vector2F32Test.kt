@@ -1,111 +1,180 @@
 package org.graphiks.math.vector
 
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class Vector2F32Test {
-
     @Test
-    fun testConstants() {
+    fun `axes expose literal components`() {
         assertEquals(0f, Vector2F32.Zero.x)
         assertEquals(0f, Vector2F32.Zero.y)
         assertEquals(1f, Vector2F32.UnitX.x)
         assertEquals(0f, Vector2F32.UnitX.y)
+        assertEquals(0f, Vector2F32.UnitY.x)
+        assertEquals(1f, Vector2F32.UnitY.y)
     }
 
     @Test
-    fun testPlus() {
-        val a = Vector2F32(1f, 2f)
-        val b = Vector2F32(3f, 4f)
-        assertEquals(Vector2F32(4f, 6f), a + b)
+    fun `arithmetic applies independent scalar expectations`() {
+        val a = Vector2F32(5f, -7f)
+        val b = Vector2F32(-2f, 3f)
+
+        val sum = a + b
+        assertEquals(3f, sum.x)
+        assertEquals(-4f, sum.y)
+        val difference = a - b
+        assertEquals(7f, difference.x)
+        assertEquals(-10f, difference.y)
+        val negated = -a
+        assertEquals(-5f, negated.x)
+        assertEquals(7f, negated.y)
+        val scaled = a * 2f
+        assertEquals(10f, scaled.x)
+        assertEquals(-14f, scaled.y)
+        val divided = a / 2f
+        assertEquals(2.5f, divided.x)
+        assertEquals(-3.5f, divided.y)
     }
 
     @Test
-    fun testMinus() {
-        val a = Vector2F32(5f, 7f)
-        val b = Vector2F32(2f, 3f)
-        assertEquals(Vector2F32(3f, 4f), a - b)
+    fun `scalar can multiply vector from the left`() {
+        val scaled = 3f * Vector2F32(2f, -4f)
+
+        assertEquals(6f, scaled.x)
+        assertEquals(-12f, scaled.y)
     }
 
     @Test
-    fun testTimesScalar() {
-        val a = Vector2F32(1f, 2f)
-        assertEquals(Vector2F32(3f, 6f), a * 3f)
-        assertEquals(Vector2F32(3f, 6f), 3f * a)
+    fun `dot and cross use independent scalar expectations`() {
+        val a = Vector2F32(3f, -4f)
+        val b = Vector2F32(-2f, 5f)
+
+        assertEquals(3f * -2f + -4f * 5f, a.dot(b))
+        assertEquals(3f * 5f - -4f * -2f, a.cross(b))
     }
 
     @Test
-    fun testTimesComponentWise() {
-        val a = Vector2F32(2f, 3f)
-        val b = Vector2F32(4f, 5f)
-        assertEquals(Vector2F32(8f, 15f), a * b)
-    }
-
-    @Test
-    fun testDiv() {
-        assertEquals(Vector2F32(2f, 3f), Vector2F32(4f, 6f) / 2f)
-    }
-
-    @Test
-    fun testUnaryMinus() {
-        assertEquals(Vector2F32(-1f, 2f), -Vector2F32(1f, -2f))
-    }
-
-    @Test
-    fun testLength() {
-        assertEquals(5f, Vector2F32(3f, 4f).length())
-        assertEquals(0f, Vector2F32(0f, 0f).length())
-    }
-
-    @Test
-    fun testLengthSquared() {
+    fun `length scales large finite components without overflow`() {
         assertEquals(25f, Vector2F32(3f, 4f).lengthSquared())
+        assertEquals(5f, Vector2F32(3f, 4f).length())
+        assertEquals(Float.MAX_VALUE, Vector2F32(Float.MAX_VALUE, 0f).length())
     }
 
     @Test
-    fun testDot() {
-        assertEquals(11f, Vector2F32.of(1f, 2f).dot(Vector2F32.of(3f, 4f)))
+    fun `length classifies zero NaN and infinity`() {
+        assertEquals(0f, Vector2F32(-0f, 0f).length())
+        assertTrue(Vector2F32(Float.NaN, Float.POSITIVE_INFINITY).length().isNaN())
+        assertEquals(
+            Float.POSITIVE_INFINITY,
+            Vector2F32(Float.NEGATIVE_INFINITY, 1f).length(),
+        )
     }
 
     @Test
-    fun testCross() {
-        assertEquals(-2f, Vector2F32(1f, 2f).cross(Vector2F32(3f, 4f)))
+    fun `normalization uses literal unit components and collapses near zero`() {
+        val normalized = Vector2F32(3f, 4f).normalized()
+
+        assertEquals(0.6f, normalized.x, 1e-6f)
+        assertEquals(0.8f, normalized.y, 1e-6f)
+        val nearZero = Vector2F32(1e-8f, -1e-8f).normalized()
+        assertEquals(0f, nearZero.x)
+        assertEquals(0f, nearZero.y)
     }
 
     @Test
-    fun testNormalize() {
-        val v = Vector2F32(3f, 4f).normalize()
-        assertTrue(kotlin.math.abs(v.length() - 1f) < 1e-6f)
-    }
-
-    @Test
-    fun testNormalizeZero() {
-        val v = Vector2F32(0f, 0f).normalize()
-        assertEquals(0f, v.x)
-        assertEquals(0f, v.y)
-    }
-
-    @Test
-    fun testDistance() {
-        assertEquals(5f, Vector2F32(0f, 0f).distanceTo(Vector2F32(3f, 4f)))
-    }
-
-    @Test
-    fun testIsFinite() {
+    fun `finite and zero checks classify components`() {
         assertTrue(Vector2F32(1f, 2f).isFinite())
         assertFalse(Vector2F32(Float.NaN, 2f).isFinite())
+        assertTrue(Vector2F32(1e-8f, -1e-8f).isZero())
+        assertFalse(Vector2F32(1e-4f, 0f).isZero())
     }
 
     @Test
-    fun testIsZero() {
-        assertTrue(Vector2F32(0f, 0f).isZero())
-        assertFalse(Vector2F32(1f, 0f).isZero())
+    fun `fallback equality hashes component bits without identity shortcut`() {
+        val first = Vector2F32(Float.NaN, -0f)
+        val sameBits = Vector2F32(Float.NaN, -0f)
+        val positiveZero = Vector2F32(Float.NaN, 0f)
+
+        assertEquals(first, sameBits)
+        assertEquals(first.hashCode(), sameBits.hashCode())
+        assertNotEquals(first, positiveZero)
     }
 
     @Test
-    fun testLengthOverflowFallback() {
-        val x = Float.MAX_VALUE
-        val y = 0f
-        val v = Vector2F32(x, y)
-        assertEquals(Float.MAX_VALUE, v.length())
+    fun `mutable conversion copies components without aliasing`() {
+        val immutable = Vector2F32(2f, 3f)
+        val mutable = immutable.toMutable()
+
+        mutable.x = 9f
+        assertEquals(2f, immutable.x)
+        assertEquals(9f, mutable.x)
+    }
+}
+
+class Vector2F64Test {
+    @Test
+    fun `F64 arithmetic and products use Double literals`() {
+        val a = Vector2F64(3.0, -4.0)
+        val b = Vector2F64(-2.0, 5.0)
+
+        val sum = a + b
+        assertEquals(1.0, sum.x)
+        assertEquals(1.0, sum.y)
+        assertEquals(-26.0, a.dot(b))
+        assertEquals(7.0, a.cross(b))
+        assertEquals(5.0, a.length())
+        val normalized = a.normalized()
+        assertEquals(0.6, normalized.x, 1e-12)
+        assertEquals(-0.8, normalized.y, 1e-12)
+    }
+
+    @Test
+    fun `F64 mutable conversion does not alias`() {
+        val immutable = Vector2F64(2.0, 3.0)
+        val mutable = immutable.toMutable()
+
+        mutable.y = 11.0
+        assertEquals(3.0, immutable.y)
+        assertEquals(11.0, mutable.y)
+    }
+}
+
+class Vector2I32Test {
+    @Test
+    fun `I32 arithmetic saturates all four operations`() {
+        val added = Vector2I32(2_147_483_647, -2_147_483_648) + Vector2I32(1, -1)
+        assertEquals(2_147_483_647, added.x)
+        assertEquals(-2_147_483_648, added.y)
+
+        val subtracted = Vector2I32(-2_147_483_648, 2_147_483_647) - Vector2I32(1, -1)
+        assertEquals(-2_147_483_648, subtracted.x)
+        assertEquals(2_147_483_647, subtracted.y)
+
+        val negated = -Vector2I32(-2_147_483_648, 2_147_483_647)
+        assertEquals(2_147_483_647, negated.x)
+        assertEquals(-2_147_483_647, negated.y)
+
+        val multiplied = Vector2I32(2_147_483_647, -2_147_483_648) * 2
+        assertEquals(2_147_483_647, multiplied.x)
+        assertEquals(-2_147_483_648, multiplied.y)
+    }
+
+    @Test
+    fun `I32 accumulation saturates after widened products`() {
+        val value = Vector2I32(Int.MIN_VALUE, Int.MIN_VALUE)
+
+        assertEquals(9_223_372_036_854_775_807L, value.dot(value))
+    }
+
+    @Test
+    fun `I32 dot and cross use widened scalar expectations`() {
+        val a = Vector2I32(30_000, -40_000)
+        val b = Vector2I32(-20_000, 50_000)
+
+        assertEquals(-2_600_000_000L, a.dot(b))
+        assertEquals(700_000_000L, a.cross(b))
     }
 }
