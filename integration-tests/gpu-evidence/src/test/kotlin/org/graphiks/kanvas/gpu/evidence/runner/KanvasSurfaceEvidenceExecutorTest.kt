@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.evidence.runner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.catalog.ComparisonPolicy
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
@@ -64,6 +65,16 @@ class KanvasSurfaceEvidenceExecutorTest {
         assertEquals("failed.kanvas.surface", failure.stableReasonCode)
         assertEquals("surface unavailable", failure.message)
         assertEquals("failed", failure.route.outcome)
+        assertNull(failure.route.furthestPhase)
+    }
+
+    @Test fun `surface setup exception has no completed route phase`() {
+        val telemetry = FakeTelemetryProbe()
+        val result = executor(telemetry).execute(case(telemetry, setupFailure = IllegalStateException("surface setup unavailable")))
+
+        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(result)
+        assertEquals("failed.kanvas.surface", failure.stableReasonCode)
+        assertNull(failure.route.furthestPhase)
     }
 
     @Test fun `surface program records once and reuses the same surface session`() {
@@ -84,6 +95,7 @@ class KanvasSurfaceEvidenceExecutorTest {
         telemetry: FakeTelemetryProbe,
         result: RenderResult = renderedResult(),
         failure: Exception? = null,
+        setupFailure: Exception? = null,
     ) = EvidenceCase(
         descriptor = EvidenceSceneDescriptor(
             EvidenceSceneId("surface-contract"), "Surface contract", "Surface execution contract.",
@@ -91,6 +103,7 @@ class KanvasSurfaceEvidenceExecutorTest {
             OraclePolicy.GeneratedCpu("literal-rgba", 1), ComparisonPolicy(0, 100.0, 1, "Exact literal RGBA8 oracle."), emptySet(),
         ),
         program = KanvasSurfaceProgram("kanvas.surface.render", {}, sessionFactory = { _, _, _ ->
+            setupFailure?.let { throw it }
             object : KanvasSurfaceRenderSession {
                 override fun render(): RenderResult {
                     failure?.let { throw it }

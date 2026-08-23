@@ -28,14 +28,14 @@ class KanvasSurfaceEvidenceExecutor(
         val session = try {
             program.openSession(evidenceCase.descriptor.width, evidenceCase.descriptor.height)
         } catch (failure: Exception) {
-            return failure(program.routeId, failure.message ?: "Surface session setup failed.", GPUBackendRuntimeTelemetry(), environment, failure)
+            return failure(program.routeId, null, failure.message ?: "Surface session setup failed.", GPUBackendRuntimeTelemetry(), environment, failure)
         }
         val before = backend.telemetry()
         val result = try {
             session.render()
         } catch (failure: Exception) {
             val delta = backend.telemetry() - before
-            return failure(program.routeId, failure.message ?: "Surface.render failed.", delta, environment, failure)
+            return failure(program.routeId, null, failure.message ?: "Surface.render failed.", delta, environment, failure)
         }
         val delta = backend.telemetry() - before
         val route = route(program.routeId, result, delta)
@@ -66,6 +66,7 @@ class KanvasSurfaceEvidenceExecutor(
 
     private fun failure(
         routeId: String,
+        furthestPhase: String?,
         message: String,
         delta: GPUBackendRuntimeTelemetry,
         environment: EvidenceEnvironment,
@@ -73,7 +74,7 @@ class KanvasSurfaceEvidenceExecutor(
     ) = EvidenceExecutionResult.ExecutionFailure(
         "failed.kanvas.surface",
         message,
-        RouteEvidence(routeId, null, "Completed", "failed", emptyList(), emptyList(), mapOf("queue.submit" to delta.submissions), delta),
+        RouteEvidence(routeId, null, furthestPhase, "failed", emptyList(), emptyList(), mapOf("queue.submit" to delta.submissions), delta),
         listOf(failure::class.simpleName.orEmpty()),
         environment,
     )
