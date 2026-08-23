@@ -1,12 +1,14 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.math.color.ColorARGB
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
-import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.icc.IccProfileWriter
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.image.Pixmap
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import kotlin.math.ceil
@@ -85,14 +87,15 @@ public object JpegEncoder {
 
     private val defaultOptions = Options()
 
-    public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(src: Bitmap, options: Options = defaultOptions): ByteArray? {
         val baos = ByteArrayOutputStream()
         return if (encode(baos, src, options)) baos.toByteArray() else null
     }
 
-    public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: Bitmap, options: Options = defaultOptions): Boolean {
         return try {
             if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF) return false
+            if (!canEncode(src.info)) return false
             if (options.hierarchy.isEmpty()) {
                 if (!options.isSupportedRequest()) return false
                 JpegWriter(dst, src, options).write()
@@ -105,30 +108,32 @@ public object JpegEncoder {
         }
     }
 
-    public fun encode(dst: OutputStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+    public fun encode(dst: OutputStream, src: Pixmap, options: Options = defaultOptions): Boolean {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
         return encode(dst, bitmap, options)
     }
 
-    public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+    public fun encode(src: Pixmap, options: Options = defaultOptions): ByteArray? {
         val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
         return encode(bitmap, options)
     }
 
     private object encoderSupport {
-        fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
+        fun pixmapToBitmap(src: Pixmap): Bitmap? {
             if (src.width() !in 1..0xFFFF || src.height() !in 1..0xFFFF) return null
-            if (src.colorType() == SkColorType.kUnknown) return null
-            val cs = src.colorSpace() ?: org.graphiks.kanvas.color.ImageColorSpace.sRGB()
-            val bm = SkBitmap(src.width(), src.height(), cs, SkColorType.kRGBA_8888)
+            if (!canEncode(src.info)) return null
+            val bm = Bitmap(src.info)
             for (y in 0 until src.height()) {
                 for (x in 0 until src.width()) {
-                    bm.setPixel(x, y, src.getColor(x, y))
+                    bm.setArgb(x, y, src.getArgb(x, y))
                 }
             }
             return bm
         }
     }
+
+    private fun canEncode(info: ImageInfo): Boolean =
+        info.colorType == ColorType.RGBA_8888 || info.colorType == ColorType.RGBA_F16_NORM
 }
 
 /**
@@ -140,7 +145,7 @@ public object JpegEncoder {
  */
 private class JpegHierarchyWriter(
     private val out: OutputStream,
-    private val bitmap: SkBitmap,
+    private val bitmap: Bitmap,
     private val options: JpegEncoder.Options,
 ) {
     fun write() {
@@ -148,13 +153,15 @@ private class JpegHierarchyWriter(
         val losslessResidual = options.hierarchy.single().process == JpegEncodeProcess.DifferentialLosslessHuffman
         val baseWidth = if (losslessResidual) bitmap.width else bitmap.width / 2
         val baseHeight = if (losslessResidual) bitmap.height else bitmap.height / 2
-        val baseBitmap = SkBitmap(baseWidth, baseHeight, bitmap.colorSpace, SkColorType.kRGBA_8888)
+        val baseBitmap = Bitmap(
+            ImageInfo.make(baseWidth, baseHeight, ColorType.RGBA_8888, bitmap.alphaType, bitmap.colorSpace),
+        )
         for (y in 0 until baseHeight) {
             for (x in 0 until baseWidth) {
-                baseBitmap.setPixel(
+                baseBitmap.setArgb(
                     x,
                     y,
-                    bitmap.getPixel(if (losslessResidual) x else x * 2, if (losslessResidual) y else y * 2),
+                    bitmap.getArgb(if (losslessResidual) x else x * 2, if (losslessResidual) y else y * 2),
                 )
             }
         }
@@ -176,7 +183,7 @@ private class JpegHierarchyWriter(
             expandReference(baseSamples.planes.single(), baseWidth, baseHeight)
         }
         val residual = IntArray(bitmap.width * bitmap.height) { index ->
-            grayscaleSample(bitmap.getPixel(index % bitmap.width, index / bitmap.width)) - expandedReference[index]
+            grayscaleSample(bitmap.getArgb(index % bitmap.width, index / bitmap.width)) - expandedReference[index]
         }
 
         val baseSofMarker = when (options.process) {
@@ -345,7 +352,7 @@ private class JpegHierarchyWriter(
 @Suppress("DEPRECATION")
 private class JpegWriter(
     private val out: OutputStream,
-    private val bitmap: SkBitmap,
+    private val bitmap: Bitmap,
     private val options: JpegEncoder.Options,
     /** Signed target-minus-EXP(reference) samples for the SOF5/SOF13/SOF14 hierarchy paths. */
     private val differentialResidual: IntArray? = null,
@@ -551,7 +558,7 @@ private class JpegWriter(
     private fun materializeRgb() {
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
-                val argb = bitmap.getPixel(x, y)
+                val argb = bitmap.getArgb(x, y)
                 val color = ColorARGB.fromPackedInt(argb)
                 val a = color.alpha
                 val r = color.red

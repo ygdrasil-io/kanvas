@@ -1,11 +1,11 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.codec.PixmapUtils
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedOrigin
-import org.skia.foundation.SkImageInfo
-import org.skia.utils.PixmapUtils
+import org.graphiks.kanvas.image.ImageInfo
 import java.io.ByteArrayOutputStream
 import java.util.Collections
 
@@ -552,13 +552,13 @@ internal fun decodeJpegHierarchy(
 ): JpegDecodeResult {
     val source = hierarchy.parsedFrames.lastOrNull()
         ?: return JpegDecodeResult(null, JpegDiagnostic("jpeg.hierarchy.frame.missing", document.encodedSize, Codec.Result.kErrorInInput))
-    if (request.colorType !in setOf(SkColorType.kRGBA_8888, SkColorType.kRGBA_F16Norm)) {
+    if (request.colorType !in setOf(ColorType.RGBA_8888, ColorType.RGBA_F16_NORM)) {
         return JpegDecodeResult(null, JpegDiagnostic("jpeg.decode.kInvalidConversion", document.encodedSize, Codec.Result.kInvalidConversion))
     }
     return try {
         val samples = decodeJpegHierarchy(hierarchy)
         val colorModel = source.colorModel()
-        val info = SkImageInfo.Make(
+        val info = ImageInfo.make(
             width = if (source.metadata.origin.swapsWidthHeight()) samples.height else samples.width,
             height = if (source.metadata.origin.swapsWidthHeight()) samples.width else samples.height,
             colorType = request.colorType,
@@ -566,15 +566,15 @@ internal fun decodeJpegHierarchy(
             colorSpace = request.colorSpace ?: source.metadata.iccProfile?.let(org.graphiks.kanvas.color.ImageColorSpace::fromIccProfile)
                 ?: org.graphiks.kanvas.color.ImageColorSpace.sRGB(),
         )
-        val bitmap = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
+        val bitmap = Bitmap(info)
         val raw = if (source.metadata.origin == EncodedOrigin.TOP_LEFT) bitmap else {
-            SkBitmap(samples.width, samples.height, info.colorSpace, info.colorType)
+            Bitmap(info.makeWH(samples.width, samples.height))
         }
         val write = writeHierarchyPixels(raw, samples, colorModel)
         if (write != Codec.Result.kSuccess) {
             return JpegDecodeResult(null, JpegDiagnostic("jpeg.decode.${write.name}", document.encodedSize, write))
         }
-        if (raw !== bitmap && !PixmapUtils.Orient(bitmap, raw, source.metadata.origin)) {
+        if (raw !== bitmap && !PixmapUtils.orient(bitmap, raw, source.metadata.origin)) {
             return JpegDecodeResult(null, JpegDiagnostic("jpeg.decode.kInvalidParameters", document.encodedSize, Codec.Result.kInvalidParameters))
         }
         JpegDecodeResult(bitmap, null)
@@ -592,21 +592,23 @@ internal fun decodeJpegHierarchy(
 }
 
 private fun writeHierarchyPixels(
-    bitmap: SkBitmap,
+    bitmap: Bitmap,
     samples: DecodedJpegSamples,
     colorModel: JpegColorModel,
 ): Codec.Result = when (bitmap.colorType) {
-    SkColorType.kRGBA_8888 -> {
+    ColorType.RGBA_8888 -> {
         val pixels = composePixels(samples, colorModel)
-        System.arraycopy(pixels, 0, bitmap.pixels8888, 0, pixels.size)
+        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+            bitmap.setArgb(x, y, pixels[y * bitmap.width + x])
+        }
         Codec.Result.kSuccess
     }
-    SkColorType.kRGBA_F16Norm -> {
+    ColorType.RGBA_F16_NORM -> {
         val pixels = composeF16Pixels(samples, colorModel)
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
                 val offset = (y * bitmap.width + x) * 4
-                bitmap.setPixelF16(x, y, pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3])
+                bitmap.setPremulRgbaF16(x, y, pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3])
             }
         }
         Codec.Result.kSuccess

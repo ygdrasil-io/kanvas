@@ -8,11 +8,11 @@ import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
 import java.util.Collections
@@ -41,12 +41,12 @@ public class PngCodec private constructor(
     /** Non-fatal metadata refusals retained while opening this static PNG. */
     public val diagnostics: List<PngDiagnostic> = Collections.unmodifiableList(ArrayList(diagnostics))
 
-    private val cachedInfo: SkImageInfo by lazy {
+    private val cachedInfo: ImageInfo by lazy {
         val isF16 = png.bitDepth == 16
-        SkImageInfo.Make(
+        ImageInfo.make(
             width = png.width,
             height = png.height,
-            colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
+            colorType = if (isF16) ColorType.RGBA_F16_NORM else ColorType.RGBA_8888,
             alphaType = if (isF16) AlphaType.PREMUL else AlphaType.UNPREMUL,
             colorSpace = png.resolvedIccProfile?.let(ImageColorSpace::fromIccProfile)
                 ?: png.resolvedColorProfile?.let(ImageColorSpace::fromColorProfile)
@@ -54,32 +54,23 @@ public class PngCodec private constructor(
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.PNG
 
     override fun getICCProfile(): IccProfile? = png.embeddedIccProfile
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
         if (info.width != cachedInfo.width || info.height != cachedInfo.height) {
             return Result.kInvalidScale
         }
         if (info.colorSpace !== cachedInfo.colorSpace || info.alphaType != cachedInfo.alphaType) {
             return Result.kInvalidConversion
         }
-        if (dst.width != info.width || dst.height != info.height) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorSpace !== info.colorSpace) {
+        if (dst.info != info || dst.width != info.width || dst.height != info.height) {
             return Result.kInvalidParameters
         }
         if (!canDecodeTo(info.colorType)) {
-            return Result.kInvalidConversion
-        }
-        if (isOpaqueColorType(info.colorType) && sourceMayContainAlpha()) {
             return Result.kInvalidConversion
         }
 
@@ -101,7 +92,7 @@ public class PngCodec private constructor(
         }
     }
 
-    private fun decodeScanlines(inflated: ByteArray, dst: SkBitmap): Result {
+    private fun decodeScanlines(inflated: ByteArray, dst: Bitmap): Result {
         val bpp = png.filterBytesPerPixel
         val rowBytes = png.rowBytes
         val previous = ByteArray(rowBytes)
@@ -125,7 +116,7 @@ public class PngCodec private constructor(
         return Result.kSuccess
     }
 
-    private fun decodeAdam7(inflated: ByteArray, dst: SkBitmap): Result {
+    private fun decodeAdam7(inflated: ByteArray, dst: Bitmap): Result {
         var src = 0
         for (pass in ADAM7_PASSES) {
             val passWidth = adam7Size(png.width, pass.xStart, pass.xStep)
@@ -158,7 +149,7 @@ public class PngCodec private constructor(
         return Result.kSuccess
     }
 
-    private fun decode8888Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
+    private fun decode8888Row(current: ByteArray, y: Int, dst: Bitmap): Result {
         for (x in 0 until png.width) {
             val result = decode8888Pixel(current, x, x, y, dst)
             if (result != Result.kSuccess) return result
@@ -166,7 +157,7 @@ public class PngCodec private constructor(
         return Result.kSuccess
     }
 
-    private fun decode8888Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: SkBitmap): Result {
+    private fun decode8888Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: Bitmap): Result {
         var p = sourceOffset(sourceX)
         when (png.colorType) {
             COLOR_GRAYSCALE -> {
@@ -177,14 +168,14 @@ public class PngCodec private constructor(
                 }
                 val gray = scaleSample(sample, png.bitDepth)
                 val alpha = if (png.transparency.isTransparentGray(sample)) 0x00 else 0xFF
-                dst.setPixel(dstX, y, argb(alpha, gray, gray, gray))
+                dst.setArgb(dstX, y, argb(alpha, gray, gray, gray))
             }
             COLOR_RGB -> {
                 val r = current[p++].toInt() and 0xFF
                 val g = current[p++].toInt() and 0xFF
                 val b = current[p].toInt() and 0xFF
                 val alpha = if (png.transparency.isTransparentRgb(r, g, b)) 0x00 else 0xFF
-                dst.setPixel(dstX, y, argb(alpha, r, g, b))
+                dst.setArgb(dstX, y, argb(alpha, r, g, b))
             }
             COLOR_PALETTE -> {
                 val index = if (png.bitDepth == 8) {
@@ -193,19 +184,19 @@ public class PngCodec private constructor(
                     readPackedSample(current, sourceX, png.bitDepth)
                 }
                 val palette = png.palette ?: return Result.kErrorInInput
-                dst.setPixel(dstX, y, palette.getOrElse(index) { OPAQUE_BLACK })
+                dst.setArgb(dstX, y, palette.getOrElse(index) { OPAQUE_BLACK })
             }
             COLOR_GRAYSCALE_ALPHA -> {
                 val gray = current[p++].toInt() and 0xFF
                 val alpha = current[p].toInt() and 0xFF
-                dst.setPixel(dstX, y, argb(alpha, gray, gray, gray))
+                dst.setArgb(dstX, y, argb(alpha, gray, gray, gray))
             }
             COLOR_RGBA -> {
                 val r = current[p++].toInt() and 0xFF
                 val g = current[p++].toInt() and 0xFF
                 val b = current[p++].toInt() and 0xFF
                 val a = current[p].toInt() and 0xFF
-                dst.setPixel(dstX, y, argb(a, r, g, b))
+                dst.setArgb(dstX, y, argb(a, r, g, b))
             }
             else -> return Result.kErrorInInput
         }
@@ -218,7 +209,7 @@ public class PngCodec private constructor(
             else -> sourceX * png.bitsPerPixel / 8
         }
 
-    private fun decodeF16Row(current: ByteArray, y: Int, dst: SkBitmap): Result {
+    private fun decodeF16Row(current: ByteArray, y: Int, dst: Bitmap): Result {
         for (x in 0 until png.width) {
             val result = decodeF16Pixel(current, x, x, y, dst)
             if (result != Result.kSuccess) return result
@@ -226,7 +217,7 @@ public class PngCodec private constructor(
         return Result.kSuccess
     }
 
-    private fun decodeF16Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: SkBitmap): Result {
+    private fun decodeF16Pixel(current: ByteArray, sourceX: Int, dstX: Int, y: Int, dst: Bitmap): Result {
         val p = sourceOffset(sourceX)
         var r: Float
         var g: Float
@@ -266,36 +257,12 @@ public class PngCodec private constructor(
             }
             else -> return Result.kErrorInInput
         }
-        dst.setPixelF16(dstX, y, r * a, g * a, b * a, a)
+        dst.setPremulRgbaF16(dstX, y, r * a, g * a, b * a, a)
         return Result.kSuccess
     }
 
-    private fun canDecodeTo(colorType: SkColorType): Boolean =
-        colorType == cachedInfo.colorType ||
-            (
-                png.bitDepth < 16 &&
-                (
-                        colorType == SkColorType.kBGRA_8888 ||
-                            colorType == SkColorType.kARGB_4444 ||
-                            colorType == SkColorType.kAlpha_8 ||
-                            colorType == SkColorType.kRGB_565 ||
-                            colorType == SkColorType.kGray_8
-                        )
-                )
-
-    private fun isOpaqueColorType(colorType: SkColorType): Boolean =
-        colorType == SkColorType.kRGB_565 || colorType == SkColorType.kGray_8
-
-    private fun sourceMayContainAlpha(): Boolean = when (png.colorType) {
-        COLOR_GRAYSCALE_ALPHA,
-        COLOR_RGBA,
-            -> true
-        COLOR_GRAYSCALE,
-        COLOR_RGB,
-            -> png.transparency != null
-        COLOR_PALETTE -> png.palette?.any { color -> (color ushr 24) != 0xFF } == true
-        else -> false
-    }
+    private fun canDecodeTo(colorType: ColorType): Boolean =
+        colorType == cachedInfo.colorType
 
     public companion object Decoder : Codec.Decoder {
         override val name: String = "png"

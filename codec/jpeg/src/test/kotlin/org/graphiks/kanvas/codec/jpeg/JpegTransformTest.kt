@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
@@ -8,9 +10,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import java.io.ByteArrayOutputStream
 
 /**
@@ -290,12 +292,12 @@ class JpegTransformTest {
         downsample: JpegEncoder.Downsample = JpegEncoder.Downsample.k420,
         quality: Int = 100,
     ): ByteArray {
-        val bitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
+        val bitmap = Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()))
         for (y in 0 until height) for (x in 0 until width) {
             val r = (x * 255 / (width - 1))
             val g = (y * 255 / (height - 1))
             val b = ((x * 19) xor (y * 37)) and 0xFF
-            bitmap.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+            bitmap[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
         return JpegEncoder.encode(bitmap, JpegEncoder.Options(quality = quality, downsample = downsample))!!
     }
@@ -399,7 +401,7 @@ class JpegTransformTest {
         val (bitmap, result) = codec!!.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        return Pixels(bitmap!!.width, bitmap.height, bitmap.pixels.copyOf())
+        return Pixels(bitmap!!.width, bitmap.height, bitmap.argbPixels())
     }
 
     private fun assertPixelsEqual(expected: Pixels, actual: Pixels, label: String = "") {

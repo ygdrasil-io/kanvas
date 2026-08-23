@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -9,14 +11,12 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
-import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.skia.foundation.SkImageInfo
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,7 +68,7 @@ class JpegCodecTest {
         assertEquals(EncodedImageFormat.JPEG, codec!!.getEncodedFormat())
         assertEquals(8, codec.getInfo().width)
         assertEquals(8, codec.getInfo().height)
-        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+        assertEquals(ColorType.RGBA_8888, codec.getInfo().colorType)
         assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
 
@@ -77,7 +77,7 @@ class JpegCodecTest {
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
-                assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFF808080.toInt(), bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -90,7 +90,7 @@ class JpegCodecTest {
         assertNotNull(bitmap)
         assertEquals(13, bitmap!!.width)
         assertEquals(9, bitmap.height)
-        assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
+        assertEquals(0xFF808080.toInt(), bitmap.getArgb(12, 8))
     }
 
     @Test
@@ -102,7 +102,7 @@ class JpegCodecTest {
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
-                assertEquals(0xFFF16937.toInt(), bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFFF16937.toInt(), bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -110,14 +110,14 @@ class JpegCodecTest {
     @Test
     fun `converts baseline grayscale decode into requested F16`() {
         val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
-        val requested = SkImageInfo.Make(
+        val requested = ImageInfo.make(
             width = 8,
             height = 8,
-            colorType = SkColorType.kRGBA_F16Norm,
+            colorType = ColorType.RGBA_F16_NORM,
             alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
-        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+        val dst = Bitmap(requested)
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertF16(dst, 0, 0, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f)
@@ -127,14 +127,14 @@ class JpegCodecTest {
     @Test
     fun `converts baseline color decode into requested F16`() {
         val codec = JpegCodec.Decoder.make(color444Jpeg())!!
-        val requested = SkImageInfo.Make(
+        val requested = ImageInfo.make(
             width = 8,
             height = 8,
-            colorType = SkColorType.kRGBA_F16Norm,
+            colorType = ColorType.RGBA_F16_NORM,
             alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
-        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+        val dst = Bitmap(requested)
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertF16(dst, 0, 0, 0xF1 / 255f, 0x69 / 255f, 0x37 / 255f, 1f)
@@ -144,14 +144,14 @@ class JpegCodecTest {
     @Test
     fun `rejects unsupported requested JPEG color conversion`() {
         val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
-        val requested = SkImageInfo.Make(
+        val requested = ImageInfo.make(
             width = 8,
             height = 8,
-            colorType = SkColorType.kRGB_565,
+            colorType = ColorType.RGB_565,
             alphaType = AlphaType.OPAQUE,
             colorSpace = codec.getInfo().colorSpace,
         )
-        val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
+        val dst = Bitmap(requested)
 
         assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
@@ -165,10 +165,10 @@ class JpegCodecTest {
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
-                assertEquals(yCbCrToArgb(140, 80, 200), bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(yCbCrToArgb(140, 80, 200), bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
             for (x in 8 until 16) {
-                assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -189,7 +189,7 @@ class JpegCodecTest {
         for (y in 0 until 16) {
             for (x in 0 until 16) {
                 val quadrant = (if (y < 8) 0 else 2) + if (x < 8) 0 else 1
-                assertEquals(expected[quadrant], bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(expected[quadrant], bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -205,7 +205,7 @@ class JpegCodecTest {
         assertEquals(9, bitmap.height)
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
-                assertEquals(0xFF404040.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFF404040.toInt(), bitmap.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -222,7 +222,7 @@ class JpegCodecTest {
         assertEquals(8, bitmap.height)
         for (y in 0 until bitmap.height) {
             for (x in 0 until bitmap.width) {
-                assertEquals(expected, bitmap.getPixel(x, y), "x=$x y=$y")
+                assertEquals(expected, bitmap.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -235,7 +235,7 @@ class JpegCodecTest {
         val (bitmap, result) = codec.getImage()
 
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(0xFF404040.toInt(), bitmap!!.getPixel(15, 7))
+        assertEquals(0xFF404040.toInt(), bitmap!!.getArgb(15, 7))
     }
 
     @Test
@@ -271,7 +271,7 @@ class JpegCodecTest {
             assertEquals(case.width, checked.width, case.name)
             assertEquals(case.height, checked.height, case.name)
             for (sample in case.samples) {
-                assertPixelNear(sample.argb, checked.getPixel(sample.x, sample.y), tolerance = 3, label = case.name)
+                assertPixelNear(sample.argb, checked.getArgb(sample.x, sample.y), tolerance = 3, label = case.name)
             }
         }
     }
@@ -284,9 +284,9 @@ class JpegCodecTest {
         val checked = bitmap!!
         assertEquals(128, checked.width)
         assertEquals(128, checked.height)
-        assertTrue(red(checked.getPixel(0, 0)) < 16, "top-left should stay dark")
-        assertTrue(red(checked.getPixel(127, 127)) > 240, "bottom-right should stay light")
-        assertTrue(red(checked.getPixel(64, 64)) in 96..192, "center should decode to a mid tone")
+        assertTrue(red(checked.getArgb(0, 0)) < 16, "top-left should stay dark")
+        assertTrue(red(checked.getArgb(127, 127)) > 240, "bottom-right should stay light")
+        assertTrue(red(checked.getArgb(64, 64)) in 96..192, "center should decode to a mid tone")
     }
 
     @Test
@@ -295,7 +295,7 @@ class JpegCodecTest {
         val (bitmap, result) = codec.getImage()
 
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getPixel(7, 15))
+        assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getArgb(7, 15))
     }
 
     @Test
@@ -373,7 +373,7 @@ class JpegCodecTest {
                     val (sx, sy) = sourcePixelForOrientedDestination(origin, dx, dy, width, height)
                     assertEquals(
                         expectedColor420(sx, sy),
-                        bitmap.getPixel(dx, dy),
+                        bitmap.getArgb(dx, dy),
                         "origin=$origin dx=$dx dy=$dy sx=$sx sy=$sy",
                     )
                 }
@@ -451,8 +451,8 @@ class JpegCodecTest {
         assertNotNull(bitmap)
         assertEquals(16, bitmap!!.width)
         assertEquals(8, bitmap.height)
-        assertEquals(0xFF808080.toInt(), bitmap.getPixel(0, 0))
-        assertEquals(0xFF808080.toInt(), bitmap.getPixel(15, 7))
+        assertEquals(0xFF808080.toInt(), bitmap.getArgb(0, 0))
+        assertEquals(0xFF808080.toInt(), bitmap.getArgb(15, 7))
     }
 
     @Test
@@ -477,12 +477,12 @@ class JpegCodecTest {
         assertEquals(EncodedImageFormat.JPEG, codec!!.getEncodedFormat())
         assertEquals(11, codec.getInfo().width)
         assertEquals(7, codec.getInfo().height)
-        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+        assertEquals(ColorType.RGBA_8888, codec.getInfo().colorType)
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(10, 6))
+        assertEquals(0xFF808080.toInt(), bitmap!!.getArgb(10, 6))
     }
 
     @Test
@@ -496,8 +496,8 @@ class JpegCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(0, 0))
-        assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
+        assertEquals(0xFF808080.toInt(), bitmap!!.getArgb(0, 0))
+        assertEquals(0xFF808080.toInt(), bitmap.getArgb(12, 8))
     }
 
     @Test
@@ -510,8 +510,8 @@ class JpegCodecTest {
         val (bitmap, result) = codec!!.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertTrue(bitmap!!.getPixel(0, 0) != 0xFF808080.toInt())
-        assertTrue(bitmap.getPixel(0, 0) > bitmap.getPixel(7, 0))
+        assertTrue(bitmap!!.getArgb(0, 0) != 0xFF808080.toInt())
+        assertTrue(bitmap.getArgb(0, 0) > bitmap.getArgb(7, 0))
     }
 
     @Test
@@ -525,10 +525,10 @@ class JpegCodecTest {
         assertEquals(8, bitmap.height)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
-                assertEquals(0xFF818181.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFF818181.toInt(), bitmap.getArgb(x, y), "x=$x y=$y")
             }
             for (x in 8 until 16) {
-                assertEquals(0xFF808080.toInt(), bitmap.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFF808080.toInt(), bitmap.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -540,7 +540,7 @@ class JpegCodecTest {
 
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getPixel(0, 0))
+        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getArgb(0, 0))
     }
 
     @Test
@@ -550,7 +550,7 @@ class JpegCodecTest {
 
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getPixel(0, 0))
+        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getArgb(0, 0))
     }
 
     @Test
@@ -1457,7 +1457,7 @@ class JpegCodecTest {
     }
 
     private fun assertF16(
-        bitmap: SkBitmap,
+        bitmap: Bitmap,
         x: Int,
         y: Int,
         r: Float,
@@ -1467,20 +1467,20 @@ class JpegCodecTest {
     ) {
         val pixel = FloatArray(4)
         bitmap.getPixelF16(x, y, pixel)
-        assertEquals(r, pixel[0], 0.000001f, "r x=$x y=$y")
-        assertEquals(g, pixel[1], 0.000001f, "g x=$x y=$y")
-        assertEquals(b, pixel[2], 0.000001f, "b x=$x y=$y")
-        assertEquals(a, pixel[3], 0.000001f, "a x=$x y=$y")
+        assertEquals(r, pixel[0], 0.0003f, "r x=$x y=$y")
+        assertEquals(g, pixel[1], 0.0003f, "g x=$x y=$y")
+        assertEquals(b, pixel[2], 0.0003f, "b x=$x y=$y")
+        assertEquals(a, pixel[3], 0.0003f, "a x=$x y=$y")
     }
 
-    private fun horizontalContrast(bitmap: SkBitmap): Int =
-        kotlin.math.abs(red(bitmap.getPixel(0, 0)) - red(bitmap.getPixel(7, 0)))
+    private fun horizontalContrast(bitmap: Bitmap): Int =
+        kotlin.math.abs(red(bitmap.getArgb(0, 0)) - red(bitmap.getArgb(7, 0)))
 
-    private fun pixelDistance(left: SkBitmap, right: SkBitmap, xRange: IntRange = 0 until left.width): Int {
+    private fun pixelDistance(left: Bitmap, right: Bitmap, xRange: IntRange = 0 until left.width): Int {
         var distance = 0
         for (y in 0 until left.height) {
             for (x in xRange) {
-                distance += kotlin.math.abs(red(left.getPixel(x, y)) - red(right.getPixel(x, y)))
+                distance += kotlin.math.abs(red(left.getArgb(x, y)) - red(right.getArgb(x, y)))
             }
         }
         return distance

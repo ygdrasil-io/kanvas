@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -9,9 +11,9 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -222,7 +224,7 @@ class JpegAdvancedEncodeTest {
                 assertArrayEquals(expectedChannel(source, precision) { it and 0xFF }, decoded.planes[2], "B precision=$precision predictor=$predictor")
                 val (bitmap, result) = JpegCodec.Decoder.make(bytes)!!.getImage()
                 assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
-                assertArrayEquals(source.pixels, bitmap!!.pixels, "RGB APP14 precision=$precision predictor=$predictor")
+                assertArrayEquals(source.argbPixels(), bitmap!!.argbPixels(), "RGB APP14 precision=$precision predictor=$predictor")
             }
         }
     }
@@ -581,7 +583,7 @@ class JpegAdvancedEncodeTest {
         val residual = decodeDifferentialLossless(hierarchy.parsedFrames[1]).planes.single()
         assertArrayEquals(
             IntArray(source.width * source.height) { index ->
-                (source.pixels[index] and 0xFF) - base[index]
+                (source[index] and 0xFF) - base[index]
             },
             residual,
             "SOF7 carries target-minus-decoded-base samples, without a marker-patched fallback",
@@ -590,7 +592,7 @@ class JpegAdvancedEncodeTest {
         val codec = requireNotNull(Codec.MakeFromData(bytes))
         val (decoded, result) = codec.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
-        assertArrayEquals(source.pixels, requireNotNull(decoded).pixels, "lossless residual restores the source exactly")
+        assertArrayEquals(source.argbPixels(), requireNotNull(decoded).argbPixels(), "lossless residual restores the source exactly")
     }
 
     @Test
@@ -950,33 +952,33 @@ class JpegAdvancedEncodeTest {
         )
     }
 
-    private fun grayscale(width: Int, height: Int): SkBitmap = bitmap(width, height) { x, y ->
+    private fun grayscale(width: Int, height: Int): Bitmap = bitmap(width, height) { x, y ->
         val value = (x * 29 + y * 41) and 0xFF
         0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
     }
 
-    private fun color(width: Int, height: Int): SkBitmap = bitmap(width, height) { x, y ->
+    private fun color(width: Int, height: Int): Bitmap = bitmap(width, height) { x, y ->
         0xFF000000.toInt() or
             ((x * 47 and 0xFF) shl 16) or
             ((y * 73 and 0xFF) shl 8) or
             ((x * 19 + y * 31) and 0xFF)
     }
 
-    private fun bitmap(width: Int, height: Int, pixel: (Int, Int) -> Int): SkBitmap =
-        SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888).also { bitmap ->
-            for (y in 0 until height) for (x in 0 until width) bitmap.setPixel(x, y, pixel(x, y))
+    private fun bitmap(width: Int, height: Int, pixel: (Int, Int) -> Int): Bitmap =
+        Bitmap(ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())).also { bitmap ->
+            for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, pixel(x, y))
         }
 
-    private fun expectedGray(source: SkBitmap, precision: Int, pointTransform: Int = 0): IntArray =
+    private fun expectedGray(source: Bitmap, precision: Int, pointTransform: Int = 0): IntArray =
         expectedChannel(source, precision, pointTransform) { pixel -> pixel and 0xFF }
 
     private fun expectedChannel(
-        source: SkBitmap,
+        source: Bitmap,
         precision: Int = 8,
         pointTransform: Int = 0,
         component: (Int) -> Int,
     ): IntArray = IntArray(source.width * source.height) { index ->
-        val scaled = (component(source.pixels[index]) * ((1 shl precision) - 1) + 127) / 255
+        val scaled = (component(source[index]) * ((1 shl precision) - 1) + 127) / 255
         (scaled ushr pointTransform) shl pointTransform
     }
 
@@ -997,13 +999,13 @@ class JpegAdvancedEncodeTest {
         return encoded.toByteArray()
     }
 
-    private fun assertReasonableRoundTrip(source: SkBitmap, bytes: ByteArray, label: String = "") {
+    private fun assertReasonableRoundTrip(source: Bitmap, bytes: ByteArray, label: String = "") {
         val (decoded, result) = JpegCodec.Decoder.make(bytes)!!.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         var absoluteError = 0L
-        for (index in source.pixels.indices) {
-            val expected = source.pixels[index]
-            val actual = decoded!!.pixels[index]
+        for (index in 0 until source.width * source.height) {
+            val expected = source[index]
+            val actual = decoded!![index]
             absoluteError += kotlin.math.abs((expected ushr 16 and 0xFF) - (actual ushr 16 and 0xFF))
             absoluteError += kotlin.math.abs((expected ushr 8 and 0xFF) - (actual ushr 8 and 0xFF))
             absoluteError += kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
@@ -1011,16 +1013,16 @@ class JpegAdvancedEncodeTest {
         assertTrue(absoluteError / (source.width * source.height * 3) < 45, "$label mean RGB error: $absoluteError")
     }
 
-    private fun assertReasonableHierarchyRoundTrip(source: SkBitmap, bytes: ByteArray, label: String) {
+    private fun assertReasonableHierarchyRoundTrip(source: Bitmap, bytes: ByteArray, label: String) {
         val codec = requireNotNull(Codec.MakeFromData(bytes))
         val (decoded, result) = codec.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         val resolved = requireNotNull(decoded)
         var absoluteError = 0L
         var maxChannelError = 0
-        for (index in source.pixels.indices) {
-            val expected = source.pixels[index]
-            val actual = resolved.pixels[index]
+        for (index in 0 until source.width * source.height) {
+            val expected = source[index]
+            val actual = resolved[index]
             val redError = kotlin.math.abs((expected ushr 16 and 0xFF) - (actual ushr 16 and 0xFF))
             val greenError = kotlin.math.abs((expected ushr 8 and 0xFF) - (actual ushr 8 and 0xFF))
             val blueError = kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
@@ -1033,7 +1035,7 @@ class JpegAdvancedEncodeTest {
 
     private fun assertPnmMatchesBitmap(
         actual: PnmImage,
-        expected: SkBitmap,
+        expected: Bitmap,
         maxError: Int,
         label: String,
     ) {
@@ -1044,7 +1046,7 @@ class JpegAdvancedEncodeTest {
         assertEquals(actual.width * actual.height * actual.channels, actual.samples.size, "$label sample count")
         for (y in 0 until actual.height) {
             for (x in 0 until actual.width) {
-                val pixel = expected.getPixel(x, y)
+                val pixel = expected.getArgb(x, y)
                 val expectedSamples = intArrayOf(
                     pixel ushr 16 and 0xFF,
                     pixel ushr 8 and 0xFF,
@@ -1065,7 +1067,7 @@ class JpegAdvancedEncodeTest {
 
     private fun assertPnmMatchesScaledBitmap(
         actual: PnmImage,
-        expected: SkBitmap,
+        expected: Bitmap,
         precision: Int,
         maxError: Int,
         label: String,
@@ -1078,7 +1080,7 @@ class JpegAdvancedEncodeTest {
         assertEquals(actual.width * actual.height, actual.samples.size, "$label sample count")
         for (y in 0 until actual.height) {
             for (x in 0 until actual.width) {
-                val expected8 = expected.getPixel(x, y) ushr 16 and 0xFF
+                val expected8 = expected.getArgb(x, y) ushr 16 and 0xFF
                 val expectedSample = (expected8 * maxValue + 127) / 255
                 val sample = actual.samples[y * actual.width + x]
                 val error = kotlin.math.abs(expectedSample - sample)
@@ -1090,7 +1092,7 @@ class JpegAdvancedEncodeTest {
         }
     }
 
-    private fun decodedBitmap(encoded: ByteArray): SkBitmap {
+    private fun decodedBitmap(encoded: ByteArray): Bitmap {
         val (bitmap, result) = JpegCodec.Decoder.make(encoded)!!.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         return requireNotNull(bitmap)

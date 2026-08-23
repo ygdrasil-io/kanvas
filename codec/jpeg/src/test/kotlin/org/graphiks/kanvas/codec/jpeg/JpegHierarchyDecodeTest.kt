@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -8,7 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 
 /**
  * Differential DHP/EXP fixtures and pixel oracles are documented beside their binary resources.
@@ -50,7 +52,7 @@ class JpegHierarchyDecodeTest {
             val document = JpegDocument.open(fixture(case.jpeg)).document
             assertNotNull(document, case.jpeg)
             val resolvedDocument = document!!
-            val actual = resolvedDocument.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            val actual = resolvedDocument.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
             assertEquals(null, actual.diagnostic, case.jpeg)
 
             assertNotNull(actual.bitmap, case.jpeg)
@@ -60,7 +62,7 @@ class JpegHierarchyDecodeTest {
             assertEquals(expected.height, bitmap.height, case.jpeg)
             for (y in 0 until expected.height) {
                 for (x in 0 until expected.width) {
-                    val actualSample = (bitmap.getPixel(x, y) ushr 16) and 0xFF
+                    val actualSample = (bitmap.getArgb(x, y) ushr 16) and 0xFF
                     val error = kotlin.math.abs(expected.sample(x, y) - actualSample)
                     assertTrue(
                         error <= case.maxError,
@@ -79,10 +81,10 @@ class JpegHierarchyDecodeTest {
         val samples = decodeJpegHierarchy(requireNotNull(document.hierarchy))
         assertEquals(256, samples.planes.single()[8], "IDCT rounding plus the exact residual")
 
-        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(null, decoded.diagnostic)
         assertNotNull(decoded.bitmap)
-        assertEquals(255, (decoded.bitmap!!.getPixel(0, 1) ushr 16) and 0xFF)
+        assertEquals(255, (decoded.bitmap!!.getArgb(0, 1) ushr 16) and 0xFF)
     }
 
     @Test
@@ -181,7 +183,7 @@ class JpegHierarchyDecodeTest {
 
     private fun assertHierarchyDiagnostic(data: ByteArray, expected: String) {
         val document = requireNotNull(JpegDocument.open(data).document)
-        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        val decoded = document.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
         assertEquals(expected, decoded.diagnostic?.code)
         assertNull(Codec.MakeFromData(data), "a malformed hierarchy must not decode only its base frame")
     }

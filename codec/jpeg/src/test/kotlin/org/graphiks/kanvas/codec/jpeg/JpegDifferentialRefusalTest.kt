@@ -1,4 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
@@ -6,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 
 /**
  * Structural probes only: the entropy bytes are deliberately not interpreted.
@@ -24,7 +26,7 @@ class JpegDifferentialRefusalTest {
             val document = JpegDocument.open(data).document
             assertNotNull(document, "SOF${marker.toString(16)}")
 
-            val result = document!!.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+            val result = document!!.decode(JpegDecodeRequest(ColorType.RGBA_8888, null))
 
             assertNull(result.bitmap, "SOF${marker.toString(16)}")
             assertEquals("jpeg.differential.reference.required", result.diagnostic?.code, "SOF${marker.toString(16)}")

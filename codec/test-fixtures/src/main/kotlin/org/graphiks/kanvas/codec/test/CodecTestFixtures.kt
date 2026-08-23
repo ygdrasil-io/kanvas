@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.test
 
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
 import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
 import java.util.zip.Deflater
@@ -165,9 +165,9 @@ public object CodecTestFixtures {
         return bitmap.toArgbRows()
     }
 
-    public fun SkBitmap.toArgbRows(): List<IntArray> =
+    public fun Bitmap.toArgbRows(): List<IntArray> =
         List(height) { y ->
-            IntArray(width) { x -> getPixel(x, y) }
+            IntArray(width) { x -> getArgb(x, y) }
         }
 
     private val PNG_SIGNATURE = byteArrayOf(

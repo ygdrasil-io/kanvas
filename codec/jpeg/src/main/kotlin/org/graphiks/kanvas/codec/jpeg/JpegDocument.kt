@@ -1,9 +1,9 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.Collections
@@ -14,12 +14,12 @@ public data class JpegOpenResult(
 )
 
 public data class JpegDecodeRequest(
-    val colorType: SkColorType,
+    val colorType: ColorType,
     val colorSpace: ImageColorSpace?,
 )
 
 public data class JpegDecodeResult(
-    val bitmap: SkBitmap?,
+    val bitmap: Bitmap?,
     val diagnostic: JpegDiagnostic?,
 )
 
