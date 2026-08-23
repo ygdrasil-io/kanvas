@@ -1,11 +1,12 @@
 package org.graphiks.math.matrix
 
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector3F32
 
 /**
  * Immutable 3 × 4 single-precision matrix stored in row-major coefficient order.
  *
- * The matrix represents an affine map from a 3D vector to a 3D vector:
+ * The matrix represents an affine transform from a 3D point to a 3D point:
  *
  * ```
  * [ m00 m01 m02 m03 ] [ x ]   [ m00·x + m01·y + m02·z + m03 ]
@@ -61,15 +62,25 @@ public data class Matrix3x4F32(
         m20, m21, m22, m23,
     )
 
-    /** Applies this affine matrix to [vector]. */
-    public fun map(vector: Vector3F32): Vector3F32 = map(vector.x, vector.y, vector.z)
-
-    /** Applies this affine matrix to the point `(x, y, z)`. */
-    public fun map(x: Float, y: Float, z: Float): Vector3F32 = Vector3F32(
-        m00 * x + m01 * y + m02 * z + m03,
-        m10 * x + m11 * y + m12 * z + m13,
-        m20 * x + m21 * y + m22 * z + m23,
+    /** Transforms [point], including the affine translation column. */
+    public fun transform(point: Point3F32): Point3F32 = Point3F32(
+        m00 * point.x + m01 * point.y + m02 * point.z + m03,
+        m10 * point.x + m11 * point.y + m12 * point.z + m13,
+        m20 * point.x + m21 * point.y + m22 * point.z + m23,
     )
+
+    /** Transforms [vector] using only the linear 3 × 3 coefficients. */
+    public fun transform(vector: Vector3F32): Vector3F32 = Vector3F32(
+        m00 * vector.x + m01 * vector.y + m02 * vector.z,
+        m10 * vector.x + m11 * vector.y + m12 * vector.z,
+        m20 * vector.x + m21 * vector.y + m22 * vector.z,
+    )
+
+    /** Operator equivalent of [transform] for a point. */
+    public operator fun times(point: Point3F32): Point3F32 = transform(point)
+
+    /** Operator equivalent of [transform] for a vector. */
+    public operator fun times(vector: Vector3F32): Vector3F32 = transform(vector)
 
     public companion object {
         /** Returns the all-zero 3 × 4 matrix. */

@@ -1026,7 +1026,7 @@ public data class Matrix3x3F32(
 
         /**
          * Matrix multiply: returns `a · b`. A point `p` is mapped first by
-         * `b`, then by `a`: `(a · b).map(p) == a.map(b.map(p))`.
+         * `b`, then by `a`: `(a · b).transform(p) == a.transform(b.transform(p))`.
          *
          * Dispatches between the affine 6-cell formula and a full 3×3
          * `rowcol3` multiply when either input has perspective (mirrors
