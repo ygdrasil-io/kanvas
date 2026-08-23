@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.color.icc.IccProfile
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 
 /** Controls how a future JPEG rewriter handles known metadata segments. */
 public enum class JpegMetadataPolicy {
@@ -21,7 +21,7 @@ internal data class JpegJfifMetadata(
 
 internal data class JpegMetadata(
     val iccProfile: IccProfile?,
-    val origin: SkEncodedOrigin,
+    val origin: EncodedOrigin,
     val jfif: JpegJfifMetadata?,
     val adobeTransform: Int?,
     val xmp: ByteArray?,
@@ -43,7 +43,7 @@ internal class JpegMetadataReader(
     private var iccOffset: Long? = null
 
     internal fun read(): Pair<JpegMetadata, List<JpegDiagnostic>> {
-        var origin = SkEncodedOrigin.kTopLeft
+        var origin = EncodedOrigin.TOP_LEFT
         var jfif: JpegJfifMetadata? = null
         var adobeTransform: Int? = null
         var xmp: ByteArray? = null
@@ -134,7 +134,7 @@ internal class JpegMetadataReader(
             }
             val value = readU16(entry + 8, littleEndian)
             if (value !in 1..8) return ExifResult.Invalid
-            return ExifResult.Parsed(SkEncodedOrigin.fromExifValue(value))
+            return ExifResult.Parsed(EncodedOrigin.fromExifValue(value))
         }
         return ExifResult.MissingOrientation
     }
@@ -255,7 +255,7 @@ internal class JpegMetadataReader(
     }
 
     private sealed interface ExifResult {
-        data class Parsed(val origin: SkEncodedOrigin) : ExifResult
+        data class Parsed(val origin: EncodedOrigin) : ExifResult
         data object Invalid : ExifResult
         data object MissingOrientation : ExifResult
     }

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 
@@ -25,14 +25,14 @@ class JpegMetadataTest {
         val profile = document.metadata.iccProfile
         assertNotNull(profile)
         assertEquals(icc.size, profile!!.size)
-        assertEquals(SkEncodedOrigin.kTopLeft, document.metadata.origin)
+        assertEquals(EncodedOrigin.TOP_LEFT, document.metadata.origin)
     }
 
     @Test
     fun `reads EXIF orientation with either TIFF byte order`() {
         val cases = listOf(
-            false to SkEncodedOrigin.kRightTop,
-            true to SkEncodedOrigin.kLeftBottom,
+            false to EncodedOrigin.RIGHT_TOP,
+            true to EncodedOrigin.LEFT_BOTTOM,
         )
 
         for ((littleEndian, expected) in cases) {
@@ -47,7 +47,7 @@ class JpegMetadataTest {
     fun `accepts valid EXIF without an orientation tag`() {
         val document = documentWith(exifWithoutOrientationSegment())
 
-        assertEquals(SkEncodedOrigin.kTopLeft, document.metadata.origin)
+        assertEquals(EncodedOrigin.TOP_LEFT, document.metadata.origin)
         assertEquals(emptyList<JpegDiagnostic>(), document.metadataDiagnostics)
     }
 
@@ -55,7 +55,7 @@ class JpegMetadataTest {
     fun `rejects EXIF IFD truncated before next offset`() {
         val document = documentWith(exifWithoutOrientationSegment(includeNextIfdOffset = false))
 
-        assertEquals(SkEncodedOrigin.kTopLeft, document.metadata.origin)
+        assertEquals(EncodedOrigin.TOP_LEFT, document.metadata.origin)
         assertEquals(listOf("jpeg.metadata.exif.invalid"), document.metadataDiagnostics.map(JpegDiagnostic::code))
         assertEquals(listOf(Codec.Result.kErrorInInput), document.metadataDiagnostics.map(JpegDiagnostic::result))
     }
@@ -92,7 +92,7 @@ class JpegMetadataTest {
             appSegment(0xEE, ADOBE_SIGNATURE + byteArrayOf(0)),
         )
 
-        assertEquals(SkEncodedOrigin.kTopLeft, document.metadata.origin)
+        assertEquals(EncodedOrigin.TOP_LEFT, document.metadata.origin)
         assertNull(document.metadata.iccProfile)
         assertEquals(
             listOf("jpeg.metadata.exif.invalid", "jpeg.metadata.adobe.invalid", "jpeg.metadata.icc.incomplete"),

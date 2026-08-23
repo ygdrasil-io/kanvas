@@ -9,11 +9,11 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPixmap
 import java.nio.ByteBuffer
@@ -130,7 +130,7 @@ class JpegSequentialEncodeTest {
     @Test
     fun `writer emits requested metadata segments and preserves their payloads`() {
         val icc = ByteArray(65_520) { index -> (index * 31).toByte() }
-        val exif = orientationTiff(SkEncodedOrigin.kRightTop.exifValue)
+        val exif = orientationTiff(EncodedOrigin.RIGHT_TOP.exifValue)
         val xmp = "<x:xmpmeta>kanvas</x:xmpmeta>".encodeToByteArray()
         val comment = "static JPEG metadata".encodeToByteArray()
         val bytes = JpegEncoder.encode(
@@ -147,7 +147,7 @@ class JpegSequentialEncodeTest {
         )!!
         val document = JpegDocument.open(bytes).document!!
 
-        assertEquals(SkEncodedOrigin.kRightTop, document.metadata.origin)
+        assertEquals(EncodedOrigin.RIGHT_TOP, document.metadata.origin)
         assertArrayEquals(xmp, document.metadata.xmp)
         assertEquals(1, document.metadata.adobeTransform)
         assertArrayEquals(comment, document.copyPayload(document.segments.single { it.marker == 0xFE }))
@@ -228,7 +228,7 @@ class JpegSequentialEncodeTest {
             assertNull(JpegEncoder.encode(source))
         }
         val oversizedPixmap = SkPixmap(
-            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, ImageColorSpace.sRGB()),
+            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
             ByteBuffer.allocate(65_536 * 4),
             65_536 * 4,
         )

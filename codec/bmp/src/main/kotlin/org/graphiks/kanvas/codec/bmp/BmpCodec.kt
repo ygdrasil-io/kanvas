@@ -2,11 +2,11 @@ package org.graphiks.kanvas.codec.bmp
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -34,14 +34,14 @@ public class BmpCodec private constructor(
             width = header.width,
             height = header.height,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = storedIccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kBMP
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.BMP
 
     override fun getICCProfile(): IccProfile? = storedIccProfile
 

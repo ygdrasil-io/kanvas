@@ -16,7 +16,7 @@ public object ImageCodecs {
     /**
      * Mirrors Skia's
      * `SkImages::DeferredFromEncodedData(sk_sp<const SkData>,
-     * std::optional<SkAlphaType>)`.
+     * std::optional<AlphaType>)`.
      *
      * Decodes the encoded byte stream [encoded] (PNG / JPEG / GIF /
      * BMP / WBMP / WEBP — see [Codec.MakeFromData] for the registered

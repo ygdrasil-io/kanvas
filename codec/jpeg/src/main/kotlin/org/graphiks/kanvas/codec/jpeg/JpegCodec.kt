@@ -2,12 +2,12 @@ package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedImageFormat
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import org.skia.utils.PixmapUtils
@@ -32,18 +32,18 @@ public class JpegCodec private constructor(
             width = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.height else jpeg.width,
             height = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.width else jpeg.height,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = jpeg.metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG
 
     override fun getICCProfile(): IccProfile? = jpeg.metadata.iccProfile
 
-    override fun getOrigin(): SkEncodedOrigin = jpeg.metadata.origin
+    override fun getOrigin(): EncodedOrigin = jpeg.metadata.origin
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         lastDecodeDiagnosticCode = null
@@ -85,7 +85,7 @@ public class JpegCodec private constructor(
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
         }
-        if (jpeg.metadata.origin == SkEncodedOrigin.kTopLeft) {
+        if (jpeg.metadata.origin == EncodedOrigin.TOP_LEFT) {
             return writeDecodedPixels(dst, pixels)
         }
         val raw = SkBitmap(
@@ -247,18 +247,18 @@ private class JpegHierarchyCodec(
             width = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.height else hierarchy.definition.width,
             height = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.width else hierarchy.definition.height,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.JPEG
 
     override fun getICCProfile(): IccProfile? = metadata.iccProfile
 
-    override fun getOrigin(): SkEncodedOrigin = metadata.origin
+    override fun getOrigin(): EncodedOrigin = metadata.origin
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Codec.Result {
         if (dst.width != info.width || dst.height != info.height || dst.colorType != info.colorType) {
@@ -267,7 +267,7 @@ private class JpegHierarchyCodec(
         if (
             info.width != cachedInfo.width ||
             info.height != cachedInfo.height ||
-            info.alphaType != SkAlphaType.kUnpremul
+            info.alphaType != AlphaType.UNPREMUL
         ) {
             return Codec.Result.kInvalidParameters
         }

@@ -6,7 +6,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.icc.IccProfileWriter
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import kotlin.math.ceil
@@ -33,7 +33,7 @@ public object JpegEncoder {
         val quality: Int = 100,
         @Deprecated("Use sampling") val downsample: Downsample = Downsample.k420,
         @Deprecated("Use alphaPolicy") val alphaOption: AlphaOption = AlphaOption.kIgnore,
-        @Deprecated("Use metadata.exif") val orientation: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
+        @Deprecated("Use metadata.exif") val orientation: EncodedOrigin = EncodedOrigin.TOP_LEFT,
         val process: JpegEncodeProcess = JpegEncodeProcess.SequentialHuffman,
         val precision: Int = 8,
         /** When absent, [downsample] remains the deprecated compatibility mapping. */
@@ -735,7 +735,7 @@ private class JpegWriter(
         val exif = requested.exif
         when {
             exif != null -> writeExifApp1(exif)
-            options.orientation != SkEncodedOrigin.kTopLeft -> writeExifApp1(orientationTiff(options.orientation.exifValue))
+            options.orientation != EncodedOrigin.TOP_LEFT -> writeExifApp1(orientationTiff(options.orientation.exifValue))
         }
         requested.xmp?.let(::writeXmpApp1)
         requested.comment?.let { writeSegment(COM, it) }

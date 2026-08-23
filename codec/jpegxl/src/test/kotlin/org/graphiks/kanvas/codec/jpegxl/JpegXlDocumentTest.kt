@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 
 class JpegXlDocumentTest {
 
@@ -31,7 +31,7 @@ class JpegXlDocumentTest {
 
         assertEquals(JpegXlContainer.CODESTREAM, document.container)
         assertEquals(JpegXlFrameInfo(width = 3, height = 2), document.frame)
-        assertEquals(SkEncodedImageFormat.kJPEGXL, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.JPEGXL, codec.getEncodedFormat())
         assertEquals(Codec.Result.kUnimplemented, codec.getImage().second)
         assertEquals("jpegxl.frame.entropy.unimplemented", document.decode().diagnostic?.code)
     }

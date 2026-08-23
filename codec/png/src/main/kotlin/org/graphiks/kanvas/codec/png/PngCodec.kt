@@ -7,11 +7,11 @@ import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.ColorMatrix3x3F32
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
@@ -47,7 +47,7 @@ public class PngCodec private constructor(
             width = png.width,
             height = png.height,
             colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
-            alphaType = if (isF16) SkAlphaType.kPremul else SkAlphaType.kUnpremul,
+            alphaType = if (isF16) AlphaType.PREMUL else AlphaType.UNPREMUL,
             colorSpace = png.resolvedIccProfile?.let(ImageColorSpace::fromIccProfile)
                 ?: png.resolvedColorProfile?.let(ImageColorSpace::fromColorProfile)
                 ?: ImageColorSpace.sRGB(),
@@ -56,7 +56,7 @@ public class PngCodec private constructor(
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.PNG
 
     override fun getICCProfile(): IccProfile? = png.embeddedIccProfile
 

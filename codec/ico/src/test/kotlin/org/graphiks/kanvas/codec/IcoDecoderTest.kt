@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import java.util.zip.CRC32
@@ -24,7 +24,7 @@ class IcoDecoderTest {
         val pixels = listOf(intArrayOf(RED, GREEN))
         val codec = Codec.MakeFromData(ico(entry(width = 2, height = 1, payload = png(2, 1, pixels))))!!
 
-        assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.PNG, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(1, codec.getInfo().height)
 
@@ -43,7 +43,7 @@ class IcoDecoderTest {
         )
         val codec = Codec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib32(2, 2, pixels))))!!
 
-        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.BMP, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
 
@@ -97,7 +97,7 @@ class IcoDecoderTest {
         )
         val codec = Codec.MakeFromData(ico(dib, embeddedPng))!!
 
-        assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.PNG, codec.getEncodedFormat())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
@@ -131,7 +131,7 @@ class IcoDecoderTest {
         )
         val codec = Codec.MakeFromData(ico(smallerPng, largerDib))!!
 
-        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.BMP, codec.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
         val (bitmap, result) = codec.getImage()
@@ -151,7 +151,7 @@ class IcoDecoderTest {
         )
         val codec = Codec.MakeFromData(ico(smallerSquare, encodedAsZero))!!
 
-        assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.PNG, codec.getEncodedFormat())
         assertEquals(256, codec.getInfo().width)
         assertEquals(1, codec.getInfo().height)
         val (bitmap, result) = codec.getImage()
@@ -172,7 +172,7 @@ class IcoDecoderTest {
         )
         val codec = Codec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib24WithMask(2, 2, pixels, mask))))!!
 
-        assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
+        assertEquals(EncodedImageFormat.BMP, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
 

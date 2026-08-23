@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 
 class WbmpCodecTest {
 
@@ -28,7 +28,7 @@ class WbmpCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec is WbmpCodec)
-        assertEquals(SkEncodedImageFormat.kWBMP, codec!!.getEncodedFormat())
+        assertEquals(EncodedImageFormat.WBMP, codec!!.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)

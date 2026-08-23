@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedOrigin
+import org.graphiks.kanvas.image.EncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkPixmap
 import org.graphiks.kanvas.color.icc.IccProfileWriter
@@ -57,7 +57,7 @@ class JpegEncoderTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
         val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
@@ -211,7 +211,7 @@ class JpegEncoderTest {
             src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
         }
         for (exifVal in 1..8) {
-            val orientation = SkEncodedOrigin.fromExifValue(exifVal)
+            val orientation = EncodedOrigin.fromExifValue(exifVal)
             val bytes = JpegEncoder.encode(src, JpegEncoder.Options(orientation = orientation))!!
             val codec = Codec.MakeFromData(bytes)
             assertNotNull(codec, "orientation $exifVal")

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
@@ -202,7 +202,7 @@ class JpegSequentialDecodeTest {
             width = 8,
             height = 8,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)
@@ -231,7 +231,7 @@ class JpegSequentialDecodeTest {
             width = 8,
             height = 8,
             colorType = SkColorType.kRGBA_F16Norm,
-            alphaType = SkAlphaType.kPremul,
+            alphaType = AlphaType.PREMUL,
             colorSpace = codec.getInfo().colorSpace,
         )
         val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)

@@ -2,11 +2,11 @@ package org.graphiks.kanvas.codec.wbmp
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkAlphaType
+import org.graphiks.kanvas.image.AlphaType
 import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkEncodedImageFormat
+import org.graphiks.kanvas.image.EncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
@@ -27,14 +27,14 @@ public class WbmpCodec internal constructor(
             width = width,
             height = height,
             colorType = SkColorType.kRGBA_8888,
-            alphaType = SkAlphaType.kUnpremul,
+            alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
     override fun getInfo(): SkImageInfo = cachedInfo
 
-    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kWBMP
+    override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.WBMP
 
     override fun getICCProfile(): IccProfile? = null
 
