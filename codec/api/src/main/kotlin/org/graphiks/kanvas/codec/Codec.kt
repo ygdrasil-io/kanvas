@@ -257,9 +257,12 @@ public abstract class Codec protected constructor() {
          * [InputStream.readBytes].
          */
         public fun MakeFromData(data: ByteArray): Codec? {
+            // A concrete codec may retain encoded bytes for deferred decode, so
+            // the public factory takes ownership at this boundary.
+            val ownedData = data.copyOf()
             for (decoder in Decoders.all()) {
-                if (decoder.matches(data)) {
-                    return decoder.make(data)
+                if (decoder.matches(ownedData)) {
+                    return decoder.make(ownedData)
                 }
             }
             return null

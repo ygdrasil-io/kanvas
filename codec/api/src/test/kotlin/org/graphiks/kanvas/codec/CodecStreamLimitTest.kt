@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.color.ImageColorSpace
@@ -15,6 +16,30 @@ import org.graphiks.kanvas.image.ImageInfo
 import java.io.InputStream
 
 class CodecStreamLimitTest {
+
+    @Test
+    fun `data factory gives a retaining decoder an owned byte array`() {
+        var retained: ByteArray? = null
+        val decoder = object : Codec.Decoder {
+            override val name: String = OWNERSHIP_DECODER_NAME
+            override fun matches(data: ByteArray): Boolean = data.contentEquals(OWNERSHIP_HEADER)
+            override fun make(data: ByteArray): Codec {
+                retained = data
+                return StreamTestCodec()
+            }
+        }
+        val source = OWNERSHIP_HEADER.copyOf()
+        Codec.Decoders.register(decoder)
+
+        try {
+            assertNotNull(Codec.MakeFromData(source))
+            source[0] = 0
+            assertNotSame(source, retained)
+            assertEquals(OWNERSHIP_HEADER[0], requireNotNull(retained)[0])
+        } finally {
+            Codec.Decoders.unregister(OWNERSHIP_DECODER_NAME)
+        }
+    }
 
     @Test
     fun `stream budget prevents dispatch after maximum encoded bytes`() {
@@ -169,6 +194,8 @@ class CodecStreamLimitTest {
     private companion object {
         const val TEST_DECODER_NAME: String = "codec-stream-limit-test"
         const val LARGE_STREAM_DECODER_NAME: String = "codec-large-stream-test"
+        const val OWNERSHIP_DECODER_NAME: String = "codec-owned-byte-array-test"
         val LARGE_STREAM_HEADER: ByteArray = "kanvas-large-stream".encodeToByteArray()
+        val OWNERSHIP_HEADER: ByteArray = "kanvas-owned-data".encodeToByteArray()
     }
 }

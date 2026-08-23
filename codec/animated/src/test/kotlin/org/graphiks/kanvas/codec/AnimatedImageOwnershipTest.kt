@@ -10,6 +10,10 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Rect
 
 class AnimatedImageOwnershipTest {
 
@@ -61,6 +65,24 @@ class AnimatedImageOwnershipTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(BLUE, dst.getPixel(0, 0))
         assertEquals(listOf(Codec.Options(frameIndex = 1, priorFrame = 0)), codec.decodedOptions)
+    }
+
+    @Test
+    fun `post process picture is rasterized into current frame`() {
+        val codec = RecordingAnimatedCodec(frames = listOf(RED), delaysMs = listOf(40))
+        val recorder = PictureRecorder()
+        recorder.beginRecording(Rect.fromXYWH(0f, 0f, 1f, 1f)).drawRect(
+            Rect.fromXYWH(0f, 0f, 1f, 1f),
+            Paint(color = Color.BLUE),
+        )
+        val animated = AnimatedImage.Make(
+            codec = AndroidCodec.MakeFromCodec(codec),
+            info = codec.getInfo(),
+            cropRect = RectI32.ofSize(1, 1),
+            postProcess = recorder.finishRecordingAsPicture(),
+        )!!
+
+        assertEquals(BLUE, animated.getCurrentFrame().getArgb(0, 0))
     }
 
     private class RecordingAnimatedCodec(

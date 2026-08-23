@@ -6,6 +6,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.types.Rect
 
@@ -74,7 +75,7 @@ public class AnimatedImage private constructor(
      * [getCurrentFrame] / [makePictureSnapshot] expose, sized to
      * [decodeInfo] (the caller's requested logical dimensions).
      */
-    private val displayFrame: Bitmap = Bitmap(decodeInfo.makeColorType(ColorType.RGBA_8888))
+    private var displayFrame: Bitmap = Bitmap(decodeInfo.makeColorType(ColorType.RGBA_8888))
 
     private var currentFrameIndex: Int = -1
     private var currentDuration: Int = 0
@@ -227,13 +228,28 @@ public class AnimatedImage private constructor(
             }
         }
 
-        // 3) The optional picture stays canonical. Rasterizing it into the
-        // bitmap would require an explicit surface, which this headless codec
-        // path deliberately does not create implicitly.
-        postProcess
+        // 3) Compose the optional picture over the display frame using the
+        // same headless canonical surface that produces image snapshots.
+        applyPostProcess()
 
         currentFrameIndex = index
         currentDuration = frameInfo.getOrNull(index)?.durationMs ?: 0
+    }
+
+    private fun applyPostProcess() {
+        val picture = postProcess ?: return
+        val frame = displayFrame
+        val bounds = Rect.fromXYWH(0f, 0f, frame.width.toFloat(), frame.height.toFloat())
+        val image = requireNotNull(frame.toImageOrNull()) {
+            "unsupported image color profile: ${frame.colorSpace.profileRefusalCode}"
+        }
+        val composed = Surface(frame.width, frame.height).apply {
+            canvas {
+                drawImage(image, bounds)
+                drawPicture(picture)
+            }
+        }.makeImageSnapshot()
+        displayFrame = Bitmap.fromImage(composed)
     }
 
     public companion object {
