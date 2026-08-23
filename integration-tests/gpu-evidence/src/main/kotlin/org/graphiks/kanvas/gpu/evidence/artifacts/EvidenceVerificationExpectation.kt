@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
 import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 
 /** Closed, code-derived facts against which an evidence bundle is verified. */
@@ -35,8 +36,11 @@ data class EvidenceVerificationExpectation(
             descriptor = evidenceCase.descriptor,
             expectedRgba = expectedRgba,
             checkedInPngBytes = checkedInPngBytes,
-            expectedRouteId = (evidenceCase.program as? RoutedSceneProgram)?.routeId
-                ?: error("catalog scene program must carry a route id"),
+            expectedRouteId = when (val program = evidenceCase.program) {
+                is KanvasSurfaceProgram -> program.routeId
+                is RoutedSceneProgram -> program.routeId
+                else -> error("catalog scene program must carry a route id")
+            },
         )
     }
 }

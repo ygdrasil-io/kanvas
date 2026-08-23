@@ -41,11 +41,12 @@ class GPUPreparedEvidenceExecutorContractTest {
         assertEquals("vendor", product.adapter?.vendor)
         assertEquals("device", product.adapter?.device)
         assertEquals(false, product.adapter?.isFallbackAdapter)
-        val result = GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), adapter = product.adapter), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+        val fixture = preparedFixture()
+        val result = GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), adapter = product.adapter), "a".repeat(40)).execute(fixture)
         val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
         val root = temporaryRoot.resolve("adapter-bundle")
-        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first(), observation, requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height))
+        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(fixture, observation, requireNotNull(fixture.oracle).render(fixture.descriptor.width, fixture.descriptor.height))
         val environment = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("environment.json"))).jsonObject
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals("fake-adapter", adapter["summary"]!!.jsonPrimitive.content)
@@ -54,14 +55,14 @@ class GPUPreparedEvidenceExecutorContractTest {
         assertEquals("architecture", adapter["architecture"]!!.jsonPrimitive.content)
         assertEquals("description", adapter["description"]!!.jsonPrimitive.content)
         assertEquals("false", adapter["isFallbackAdapter"]!!.jsonPrimitive.content)
-        val expected = requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height)
-        val verification = EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromCase(GpuEvidenceCatalog.cases.first(), "a".repeat(40), expected))
+        val expected = requireNotNull(fixture.oracle).render(fixture.descriptor.width, fixture.descriptor.height)
+        val verification = EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromCase(fixture, "a".repeat(40), expected))
         assertIs<EvidenceBundleVerification.Verified>(verification)
     }
 
     @Test fun `opened session samples telemetry around canonical prepared frame and closes in finally`() {
         val events = mutableListOf<String>()
-        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(preparedFixture())
         val rendered = assertIs<EvidenceExecutionResult.Observed>(result).observation
         assertIs<SceneObservation.Rendered>(rendered)
         assertEquals(listOf("telemetry-before", "prepare-program", "prepare-scene-frame", "render-frame", "wait-completion", "close-prepared-frame", "telemetry-after"), events)
@@ -70,7 +71,7 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `unregistered effect carries product route identity and refuses before session`() {
         val events = mutableListOf<String>()
-        val refusalCase = requireNotNull(GpuEvidenceCatalog.cases.firstOrNull { it.descriptor.id.value == "custom-runtime-effect-unregistered-refusal" })
+        val refusalCase = requireNotNull(GpuEvidenceCatalog.refusalCases.firstOrNull { it.descriptor.id.value == "custom-runtime-effect-unregistered-refusal" })
         val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(refusalCase)
         val refused = assertIs<SceneObservation.Refused>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("product.runtime-effect.custom", refused.route.routeId)
@@ -81,7 +82,7 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `missing capabilities is unavailable before telemetry and preparation`() {
         val events = mutableListOf<String>()
-        val result = GPUPreparedEvidenceExecutor(FakePort(events, capabilitiesAvailable = false), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+        val result = GPUPreparedEvidenceExecutor(FakePort(events, capabilitiesAvailable = false), "a".repeat(40)).execute(preparedFixture())
         assertIs<SceneObservation.Unavailable>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals(emptyList(), events)
     }
@@ -96,7 +97,7 @@ class GPUPreparedEvidenceExecutorContractTest {
     @Test fun `prepared frame closes before executor propagates fatal Error`() {
         val port = FakePort(mutableListOf(), completion = CompletionKind.FatalError)
         val failure = assertFailsWith<LinkageError> {
-            GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+            GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(preparedFixture())
         }
         assertEquals("fatal frame", failure.message)
         assertEquals(true, port.events.contains("close-prepared-frame"))
@@ -104,17 +105,25 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `completed product diagnostic fields are retained in deterministic execution failure diagnostics`() {
         val diagnostic = GPUDiagnostic(GPUDiagnosticCode("failed.test.completion"), GPUDiagnosticDomain.Execution, GPUDiagnosticSeverity.Fatal, "completion failed", mapOf("zeta" to "last", "alpha" to "first"), isTerminal = true, isRetryable = false)
-        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), completion = CompletionKind.Diagnostic, completionDiagnostic = diagnostic), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first()))
+        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), completion = CompletionKind.Diagnostic, completionDiagnostic = diagnostic), "a".repeat(40)).execute(preparedFixture()))
         assertEquals(listOf("diagnostic.code=failed.test.completion", "diagnostic.domain=Execution", "diagnostic.severity=Fatal", "diagnostic.message=completion failed", "diagnostic.terminal=true", "diagnostic.retryable=false", "diagnostic.fact.alpha=first", "diagnostic.fact.zeta=last"), failure.diagnostics)
     }
 
     private fun assertExecutionFailure(port: FakePort, expected: String) {
-        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first()))
+        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(preparedFixture()))
         assertEquals(true, failure.message.contains(expected, ignoreCase = true))
         assertEquals(true, failure.route.runtimeTelemetryDelta.submissions > 0L || expected == "runtime submission")
         assertEquals(true, port.events.contains("close-prepared-frame"))
         assertEquals(true, port.events.indexOf("close-prepared-frame") < port.events.indexOf("telemetry-after"))
     }
+
+    private fun preparedFixture() = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.copy(
+        program = object : RoutedSceneProgram {
+            override val routeId = "product.solid-rect"
+            override fun prepare(context: SceneRecordingContext) =
+                ScenePreparation.Refused("fixture.unused", "prepared executor fixture", emptyList())
+        },
+    )
 
     private enum class CompletionKind { Success, Timeout, Failed, MissingReadback, WrongReadback, Incomplete, NoStructuralSubmit, RuntimeDeltaZero, Diagnostic, FatalError }
     private class FakePort(val events: MutableList<String>, private val capabilitiesAvailable: Boolean = true, private val completion: CompletionKind = CompletionKind.Success, private val completionDiagnostic: GPUDiagnostic? = null, override val adapter: EvidenceAdapter? = EvidenceAdapter("fake-adapter", null, null, null, null, null)) : EvidenceBackendPort {

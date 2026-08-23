@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneId
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
@@ -26,26 +27,26 @@ import org.graphiks.kanvas.surface.RenderStats
 class GpuEvidenceCliTest {
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
         val events = mutableListOf<String>()
-        val code = GpuEvidenceCliRunner(FakeRuntime(events)).run(validArgs())
+        val code = runner(FakeRuntime(events)).run(validArgs())
         assertEquals(1, code)
         assertEquals(listOf("open-session", "close-session", "dispose"), events)
     }
     @Test fun `cli opens executes then closes and disposes a returned backend`() {
         val events = mutableListOf<String>()
-        val code = GpuEvidenceCliRunner(FakeRuntime(events, returned = true)).run(validArgs())
+        val code = runner(FakeRuntime(events, returned = true)).run(validArgs())
         assertEquals(1, code)
         assertEquals(listOf("open-session", "execute", "close-session", "dispose"), events)
     }
 
     @Test fun `cli disposes after close throws`() {
         val closeEvents = mutableListOf<String>()
-        assertEquals(1, GpuEvidenceCliRunner(FakeRuntime(closeEvents, closeFails = true)).run(validArgs()))
+        assertEquals(1, runner(FakeRuntime(closeEvents, closeFails = true)).run(validArgs()))
         assertEquals(listOf("open-session", "close-session", "dispose"), closeEvents)
     }
 
     @Test fun `cli closes and disposes after open throws following runtime session creation`() {
         val openEvents = mutableListOf<String>()
-        assertEquals(1, GpuEvidenceCliRunner(FakeRuntime(openEvents, openFails = true)).run(validArgs()))
+        assertEquals(1, runner(FakeRuntime(openEvents, openFails = true)).run(validArgs()))
         assertEquals(listOf("open-session", "runtime-session-created", "close-session", "dispose"), openEvents)
     }
 
@@ -53,7 +54,7 @@ class GpuEvidenceCliTest {
         val events = mutableListOf<String>()
         val closeFailure = IllegalStateException("close")
         val disposeFailure = IllegalStateException("dispose")
-        val result = GpuEvidenceCliRunner(FakeRuntime(events, returned = true, executionFails = true, closeFailure = closeFailure, disposeFailure = disposeFailure)).runResult(validArgs())
+        val result = runner(FakeRuntime(events, returned = true, executionFails = true, closeFailure = closeFailure, disposeFailure = disposeFailure)).runResult(validArgs())
         assertEquals(1, result.exitCode)
         assertEquals("primary execution", assertNotNull(result.failure).message)
         assertEquals(listOf(closeFailure, disposeFailure), result.failure.suppressed.toList())
@@ -65,7 +66,7 @@ class GpuEvidenceCliTest {
         val closeFailure = IllegalStateException("close")
         val disposeFailure = LinkageError("fatal dispose")
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(disposeFailure, failure)
         assertEquals(listOf(closeFailure), failure.suppressed.toList())
@@ -77,7 +78,7 @@ class GpuEvidenceCliTest {
         val closeFailure = LinkageError("fatal close")
         val disposeFailure = IllegalStateException("dispose")
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(closeFailure, failure)
         assertEquals(listOf(disposeFailure), failure.suppressed.toList())
@@ -88,7 +89,7 @@ class GpuEvidenceCliTest {
         val events = mutableListOf<String>()
         val cleanupFailure = IllegalStateException("shared cleanup")
         var disposeThrew = false
-        val result = GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = cleanupFailure, disposeFailure = cleanupFailure, onDisposeFailure = { disposeThrew = true })).runResult(validArgs())
+        val result = runner(FakeRuntime(events, closeFailure = cleanupFailure, disposeFailure = cleanupFailure, onDisposeFailure = { disposeThrew = true })).runResult(validArgs())
         assertEquals(1, result.exitCode)
         assertSame(cleanupFailure, result.failure)
         assertEquals(true, disposeThrew)
@@ -100,7 +101,7 @@ class GpuEvidenceCliTest {
         val events = mutableListOf<String>()
         val disposeFailure = IllegalStateException("dispose")
         val closeFailure = IllegalStateException("close", disposeFailure)
-        val result = GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).runResult(validArgs())
+        val result = runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).runResult(validArgs())
         assertEquals(1, result.exitCode)
         assertSame(closeFailure, result.failure)
         assertSame(disposeFailure, closeFailure.cause)
@@ -113,7 +114,7 @@ class GpuEvidenceCliTest {
         val closeFailure = LinkageError("fatal close")
         val disposeFailure = IllegalStateException("dispose", closeFailure)
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(closeFailure, failure)
         assertEquals(1, failure.suppressed.size)
@@ -128,7 +129,7 @@ class GpuEvidenceCliTest {
         val disposeFailure = IllegalStateException("dispose")
         disposeFailure.addSuppressed(closeFailure)
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(closeFailure, failure)
         assertEquals(1, closeFailure.suppressed.size)
@@ -142,7 +143,7 @@ class GpuEvidenceCliTest {
         val closeFailure = IllegalStateException("close")
         val disposeFailure = IllegalArgumentException("dispose")
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, returned = true, executionFatal = true, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, returned = true, executionFatal = true, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertEquals("fatal execution", failure.message)
         assertEquals(listOf(closeFailure, disposeFailure), failure.suppressed.toList())
@@ -157,7 +158,7 @@ class GpuEvidenceCliTest {
         cycleHead.addSuppressed(cycleTail)
         val disposeFailure = IllegalStateException("dispose", cycleHead)
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
+            runner(FakeRuntime(events, closeFailure = closeFailure, disposeFailure = disposeFailure)).run(validArgs())
         }
         assertSame(closeFailure, failure)
         assertSame(disposeFailure, failure.suppressed.single())
@@ -167,7 +168,7 @@ class GpuEvidenceCliTest {
     @Test fun `cli propagates execution Error only after close and dispose`() {
         val events = mutableListOf<String>()
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, returned = true, executionFatal = true)).run(validArgs())
+            runner(FakeRuntime(events, returned = true, executionFatal = true)).run(validArgs())
         }
         assertEquals("fatal execution", failure.message)
         assertEquals(listOf("open-session", "execute", "close-session", "dispose"), events)
@@ -176,7 +177,7 @@ class GpuEvidenceCliTest {
     @Test fun `cli propagates open Error only after close and dispose`() {
         val events = mutableListOf<String>()
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, openFatal = true)).run(validArgs())
+            runner(FakeRuntime(events, openFatal = true)).run(validArgs())
         }
         assertEquals("fatal open", failure.message)
         assertEquals(listOf("open-session", "runtime-session-created", "close-session", "dispose"), events)
@@ -185,7 +186,7 @@ class GpuEvidenceCliTest {
     @Test fun `cli propagates cleanup Error after still attempting dispose`() {
         val events = mutableListOf<String>()
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events, closeFatal = true)).run(validArgs())
+            runner(FakeRuntime(events, closeFatal = true)).run(validArgs())
         }
         assertEquals("fatal close", failure.message)
         assertEquals(listOf("open-session", "close-session", "dispose"), events)
@@ -194,7 +195,7 @@ class GpuEvidenceCliTest {
     @Test fun `cli does not absorb parser Error`() {
         val events = mutableListOf<String>()
         val failure = assertFailsWith<LinkageError> {
-            GpuEvidenceCliRunner(FakeRuntime(events), requestParser = { throw LinkageError("fatal parse") }).run(validArgs())
+            runner(FakeRuntime(events), requestParser = { throw LinkageError("fatal parse") }).run(validArgs())
         }
         assertEquals("fatal parse", failure.message)
         assertEquals(emptyList(), events)
@@ -203,14 +204,16 @@ class GpuEvidenceCliTest {
     @Test fun `cli does not write generated evidence for an unexpected render refusal`() {
         val root = Files.createTempDirectory("gpu-evidence-cli-refusal")
 
-        assertEquals(1, GpuEvidenceCliRunner(OutcomeRuntime(Outcome.UnexpectedRefusal)).run(validArgs(root)))
+        assertEquals(1, runner(OutcomeRuntime(Outcome.UnexpectedRefusal)).run(validArgs(root)))
         assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
     }
 
     @Test fun `cli does not write generated evidence when rendered pixels fail comparison`() {
         val root = Files.createTempDirectory("gpu-evidence-cli-comparison")
+        val runtime = SurfaceComparisonRuntime()
+        val evidenceCase = surfaceComparisonCase(runtime)
 
-        assertEquals(1, GpuEvidenceCliRunner(OutcomeRuntime(Outcome.ComparisonFailure)).run(validArgs(root)))
+        assertEquals(1, GpuEvidenceCliRunner(runtime, cases = listOf(evidenceCase)).run(validArgs(root, "surface-comparison")))
         assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
     }
 
@@ -244,7 +247,43 @@ class GpuEvidenceCliTest {
         assertEquals(emptyList(), snapshot.suppressed.toList())
     }
 
-    private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli"), scene: String = "solid-card-stack") = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
+    private fun runner(
+        runtime: EvidenceRuntimePort,
+        requestParser: (Array<String>) -> GpuEvidenceCliRequest = GpuEvidenceCliRequest::parse,
+    ) = GpuEvidenceCliRunner(runtime, requestParser = requestParser, cases = GpuEvidenceCatalog.refusalCases)
+
+    private fun surfaceComparisonCase(runtime: SurfaceComparisonRuntime) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("surface-comparison"),
+            "Surface comparison",
+            "Deterministic fake Surface pixels intentionally differ from the CPU oracle.",
+            1,
+            1,
+            1L,
+            emptySet(),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("literal-zero-rgba", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact fake comparison oracle."),
+            emptySet(),
+        ),
+        KanvasSurfaceProgram("kanvas.surface.render", {}, sessionFactory = { _, _, _ ->
+            object : KanvasSurfaceRenderSession {
+                override fun render(): RenderResult {
+                    runtime.observeSurfaceRender()
+                    return RenderResult(
+                        ubyteArrayOf(255u, 0u, 0u, 255u),
+                        1,
+                        1,
+                        diagnostics = Diagnostics(),
+                        stats = RenderStats(1, 0, 1, 1, 1f),
+                    )
+                }
+            }
+        }),
+        CpuOracle { _, _ -> byteArrayOf(0, 0, 0, 0) },
+    )
+
+    private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli"), scene: String = "custom-runtime-effect-unregistered-refusal") = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
     private class FakeRuntime(private val events: MutableList<String>, private val returned: Boolean = false, private val closeFails: Boolean = false, private val openFails: Boolean = false, private val executionFails: Boolean = false, private val executionFatal: Boolean = false, private val openFatal: Boolean = false, private val closeFatal: Boolean = false, private val closeFailure: Throwable? = null, private val disposeFailure: Throwable? = null, private val onDisposeFailure: (() -> Unit)? = null) : EvidenceRuntimePort {
         override fun open(): EvidenceBackendPort? { events += "open-session"; if (openFails || openFatal) { events += "runtime-session-created"; if (openFatal) throw LinkageError("fatal open") else error("primary open") }; return if (returned) object : EvidenceBackendPort { override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake"); override val deviceGeneration = 1L; override fun telemetry() = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry(); override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { events += "execute"; if (executionFatal) throw LinkageError("fatal execution"); if (executionFails) error("primary execution"); return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "fake", emptyList()) }; override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable") } else null }
         override fun close() { events += "close-session"; closeFailure?.let { throw it }; if (closeFatal) throw LinkageError("fatal close"); if (closeFails) error("close") }
@@ -285,6 +324,20 @@ class GpuEvidenceCliTest {
             override val deviceGeneration = 1L
             override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = submissions)
             override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { prepareCalls++; error("Surface program reached backend preparation") }
+            override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("Surface program reached prepared frame")
+        }
+        override fun close() = Unit
+        override fun dispose() = Unit
+    }
+
+    private class SurfaceComparisonRuntime : EvidenceRuntimePort {
+        private var submissions = 0L
+        fun observeSurfaceRender() { submissions++ }
+        override fun open(): EvidenceBackendPort = object : EvidenceBackendPort {
+            override val capabilities = EvidenceCapabilities("fake")
+            override val deviceGeneration = 1L
+            override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = submissions)
+            override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation = error("Surface program reached backend preparation")
             override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("Surface program reached prepared frame")
         }
         override fun close() = Unit

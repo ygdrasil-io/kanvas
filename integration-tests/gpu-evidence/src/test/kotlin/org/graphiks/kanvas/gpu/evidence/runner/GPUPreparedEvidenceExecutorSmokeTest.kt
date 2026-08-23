@@ -15,7 +15,8 @@ class GPUPreparedEvidenceExecutorSmokeTest {
         assumeTrue(System.getenv("GPU_EVIDENCE_SMOKE") == "1", "set GPU_EVIDENCE_SMOKE=1 to enable GPU smoke validation")
         val backend = requireNotNull(GPUBackendRuntimeFactory.createOrNull()) { "GPU backend runtime is unavailable" }
         try {
-            val result = GPUPreparedEvidenceExecutor(ProductEvidenceBackendPort(backend), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+            val evidenceCase = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }
+            val result = EvidenceCaseExecutor(ProductEvidenceBackendPort(backend), "a".repeat(40)).execute(evidenceCase)
             val rendered = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
             assertEquals("rendered", rendered.route.outcome)
             assertEquals("Completed", rendered.route.furthestPhase)

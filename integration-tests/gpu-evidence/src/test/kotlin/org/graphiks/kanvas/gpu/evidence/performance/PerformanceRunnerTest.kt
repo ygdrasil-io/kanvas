@@ -13,11 +13,13 @@ import org.graphiks.kanvas.gpu.evidence.runner.EvidencePreparedFramePort
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgramPreparation
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceRecordingRequest
 import org.graphiks.kanvas.gpu.evidence.runner.PreparedEvidenceProgram
+import org.graphiks.kanvas.gpu.evidence.runner.ScenePreparation
+import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
 class PerformanceRunnerTest {
     @Test fun `eligible runner records phase snapshots for one ten and ninety submissions`() {
-        val evidenceCase = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }
+        val evidenceCase = preparedFixture()
         val backend = CountingBackend(evidenceCase)
         var ticks = 0L
         val run = GpuEvidencePerformanceRunner(
@@ -35,7 +37,7 @@ class PerformanceRunnerTest {
     }
 
     @Test fun `hardware eligibility is preserved when capabilities are unavailable`() {
-        val evidenceCase = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }
+        val evidenceCase = preparedFixture()
         val run = GpuEvidencePerformanceRunner(
             CountingBackend(evidenceCase, null),
             "a".repeat(40),
@@ -44,6 +46,26 @@ class PerformanceRunnerTest {
         assertIs<PerformanceVerdict.Unavailable>(run.verdict)
         assertEquals("GPU capabilities unavailable", run.verdict.reason)
         assertIs<PerformanceVerdict.EligibleMeasurement>(run.eligibility)
+    }
+
+    @Test fun `catalog Surface render remains unavailable to prepared performance runner`() {
+        val evidenceCase = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }
+        val run = GpuEvidencePerformanceRunner(
+            CountingBackend(evidenceCase),
+            "a".repeat(40),
+        ).run(evidenceCase)
+
+        assertIs<PerformanceVerdict.Unavailable>(run.verdict)
+        assertEquals("performance requires a prepared scene program", run.verdict.reason)
+    }
+
+    private fun preparedFixture(): EvidenceCase {
+        val catalogCase = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }
+        return catalogCase.copy(
+            program = SceneProgram {
+                ScenePreparation.Refused("fixture.unused", "prepared performance fixture", emptyList())
+            },
+        )
     }
 
     private class CountingBackend(private val evidenceCase: EvidenceCase, capabilitiesValue: EvidenceCapabilities? = EvidenceCapabilities("test")) : EvidenceBackendPort {

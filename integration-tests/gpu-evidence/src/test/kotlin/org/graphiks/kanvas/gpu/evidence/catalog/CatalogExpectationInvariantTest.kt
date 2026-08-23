@@ -106,7 +106,10 @@ class CatalogExpectationInvariantTest {
     fun `cli never writes generated evidence for unavailable or execution failure`() {
         listOf(UnavailablePort, FailingPort).forEach { backend ->
             val root = Files.createTempDirectory("gpu-evidence-invariant")
-            val code = GpuEvidenceCliRunner(FakeRuntime(backend)).run(args(root))
+            val code = GpuEvidenceCliRunner(
+                FakeRuntime(backend),
+                cases = GpuEvidenceCatalog.refusalCases,
+            ).run(args(root, "custom-runtime-effect-unregistered-refusal"))
 
             assertEquals(1, code)
             assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
@@ -127,7 +130,7 @@ class CatalogExpectationInvariantTest {
     )
 
     private fun environment() = EvidenceEnvironment("a".repeat(40), "test", "test", "test", "test", null, 1L, "fake", true)
-    private fun args(root: java.nio.file.Path) = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "solid-card-stack")
+    private fun args(root: java.nio.file.Path, scene: String) = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
 
     private class FakeRuntime(private val backend: EvidenceBackendPort?) : EvidenceRuntimePort {
         override fun open(): EvidenceBackendPort? = backend

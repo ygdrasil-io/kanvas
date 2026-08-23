@@ -12,6 +12,7 @@ import java.time.Clock
 import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.graphiks.kanvas.test.ComparisonUtils
@@ -101,8 +102,11 @@ class EvidenceBundleWriter internal constructor(
         expectedRgba = expectedRgba,
         attemptId = attemptId,
         checkedInPngBytes = checkedInPngBytes,
-        expectedRouteId = (evidenceCase.program as? RoutedSceneProgram)?.routeId
-            ?: error("catalog scene program must carry a route id"),
+        expectedRouteId = when (val program = evidenceCase.program) {
+            is KanvasSurfaceProgram -> program.routeId
+            is RoutedSceneProgram -> program.routeId
+            else -> error("catalog scene program must carry a route id")
+        },
     )
 
     private fun destination(sceneId: String): Path {

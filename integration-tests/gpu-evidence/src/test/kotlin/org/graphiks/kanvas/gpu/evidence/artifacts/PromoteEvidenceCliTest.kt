@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.junit.jupiter.api.io.TempDir
@@ -61,11 +62,11 @@ class PromoteEvidenceCliTest {
     @Test
     fun `promotion rejects a coherent fail bundle without mutating the destination`() {
         writeAllBundles(repository, COMMIT)
-        val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
+        val descriptor = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
         val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
         val route = RouteEvidence("fail-route", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
-        val oracle = requireNotNull(GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(descriptor.width, descriptor.height)
+        val oracle = requireNotNull(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(descriptor.width, descriptor.height)
         val comparison = EvidenceComparator().compare(pixels, oracle, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
         EvidenceBundleWriter(repository, COMMIT).writeGenerated(
             descriptor,
@@ -271,7 +272,7 @@ class PromoteEvidenceCliTest {
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
-            val route = RouteEvidence((evidenceCase.program as RoutedSceneProgram).routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val route = RouteEvidence(routeId(evidenceCase.program), "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = when (descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> {
                     val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
@@ -281,6 +282,12 @@ class PromoteEvidenceCliTest {
             }
             writer.writeGenerated(descriptor, observation, if (observation is SceneObservation.Rendered) observation.rgba else null)
         }
+    }
+
+    private fun routeId(program: org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram): String = when (program) {
+        is KanvasSurfaceProgram -> program.routeId
+        is RoutedSceneProgram -> program.routeId
+        else -> error("unsupported evidence program: ${program::class.qualifiedName}")
     }
 
     private fun generatedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
