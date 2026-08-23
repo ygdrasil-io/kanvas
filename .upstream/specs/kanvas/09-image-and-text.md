@@ -36,26 +36,8 @@ data class Image(
 ### ColorType
 
 ```kotlin
-enum class ColorType(val bytesPerPixel: Int) {
-    UNKNOWN(0), ALPHA_8(1), RGB_565(2), ARGB_4444(2),
-    RGBA_8888(4), RGB_888X(4), BGRA_8888(4), RGBA_1010102(4),
-    BGRA_1010102(4), RGB_101010X(4), BGR_101010X(4),
-    BGR_101010X_XR(4), BGRA_10101010_XR(8), RGBA_10X6(8),
-    GRAY_8(1), RGBA_F16_NORM(8), RGBA_F16(8),
-    RGB_F16F16F16X(8), RGBA_F32(16), R8G8_UNORM(2),
-    A16_FLOAT(2), R16G16_FLOAT(4), A16_UNORM(2), R16_UNORM(2),
-    R16G16_UNORM(4), R16G16B16A16_UNORM(8), SRGBA_8888(4), R8_UNORM(1)
-}
-
-data class ColorTypeCapabilities(
-    val allocatable: Boolean,
-    val cpuReadableWritable: Boolean,
-)
+enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
 ```
-
-- `UNKNOWN` is metadata-only and is never concrete.
-- Only `ALPHA_8`, `RGB_565`, `ARGB_4444`, `RGBA_8888`, `BGRA_8888`, `GRAY_8`, `RGBA_F16_NORM`, and `RGBA_F16` are currently allocatable and CPU-readable/writable.
-- Every other concrete catalogue format is explicitly refused until its capability is enabled; no route implicitly falls back to `RGBA_8888`.
 
 ### ColorSpace
 
