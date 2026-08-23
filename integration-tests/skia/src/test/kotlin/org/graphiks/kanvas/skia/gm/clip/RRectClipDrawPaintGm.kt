@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -37,7 +37,7 @@ class RRectClipDrawPaintGm : SkiaGm {
             bottomRight = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
             bottomLeft = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
         )
-        val zoomOut = Matrix33.translate(128f, 128f) * Matrix33.scale(0.7f, 0.7f) * Matrix33.translate(-128f, -128f)
+        val zoomOut = Matrix3x3F32.translation(128f, 128f) * Matrix3x3F32.scaling(0.7f, 0.7f) * Matrix3x3F32.translation(-128f, -128f)
         val layerRect = Rect.fromXYWH(0f, 0f, 256f, 256f)
 
         var p = Paint(color = Color.RED)

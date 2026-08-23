@@ -32,7 +32,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.DynamicTest
@@ -86,7 +86,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                     val destination = DisplayOp.DrawRect(
                         rect = Rect.fromLTRB(0f, 0f, 40f, 80f),
                         paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     )
 
@@ -364,7 +364,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             DisplayOp.DrawRect(
                 Rect.fromLTRB(0f, 0f, 4f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, Color.WHITE),
@@ -473,7 +473,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             DisplayOp.DrawRect(
                 Rect.fromLTRB(0f, 0f, 4f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             text(
@@ -513,7 +513,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                 DisplayOp.DrawRect(
                     Rect.fromLTRB(0f, 0f, 4f, 4f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
-                    Matrix33.identity(),
+                    Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
             ),
@@ -586,7 +586,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         x = x.toFloat(),
         y = baselineY.toFloat(),
         paint = paint,
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 
@@ -597,7 +597,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         paint = Paint.fill(Color.WHITE).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.NEAREST),
         ),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

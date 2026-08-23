@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -59,7 +59,7 @@ class Skbug13047Gm : SkiaGm {
             indices = indices,
         )
 
-        val m = Matrix33.scale(2f, 2f)
+        val m = Matrix3x3F32.scaling(2f, 2f)
         val baseShader = image.makeShader()
         val paint = Paint(shader = Shader.WithLocalMatrix(baseShader, m))
 

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/image_shader.cpp` (draw-image-sampling variant).
@@ -30,7 +30,7 @@ class DrawimageSamplingGm : SkiaGm {
         val dst = Rect(0f, 0f, kScale * n, kScale * n)
         val img = checkerboardImage(n, n, 0xFF000000u.toInt(), 0xFFFFFFFFu.toInt(), 7)
         val src = Rect(0f, 0f, img.width.toFloat(), img.height.toFloat())
-        val mx = Matrix33.scale(dst.width / src.width, dst.height / src.height)
+        val mx = Matrix3x3F32.scaling(dst.width / src.width, dst.height / src.height)
 
         for (mm in listOf(false, true)) {
             for (fm in listOf(false, true)) {

@@ -31,7 +31,7 @@ import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
@@ -61,7 +61,7 @@ class GPUPreparedMeshProgramMapperTest {
                 float3("triple", 3f, 4f, 5f)
                 float4("color", 0.25f, 0.5f, 0.75f, 1f)
                 int1("count", 7)
-                mat3x3("matrix3", Matrix33.translate(3f, 5f))
+                mat3x3("matrix3", Matrix3x3F32.translation(3f, 5f))
                 mat4x4("matrix4", matrix4)
             },
             children = MeshChildren(mutableEntries),
@@ -461,7 +461,7 @@ class GPUPreparedMeshProgramMapperTest {
         ),
         paint = Paint(color = Color.WHITE, blendMode = paintBlendMode),
         blendMode = blendMode,
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 }

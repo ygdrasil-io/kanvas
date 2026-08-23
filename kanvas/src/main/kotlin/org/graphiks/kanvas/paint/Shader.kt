@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
@@ -51,7 +51,7 @@ sealed interface Shader {
         val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
         val children: Map<String, Shader> = emptyMap(),
     ) : Shader
-    data class WithLocalMatrix(val shader: Shader, val matrix: Matrix33) : Shader
+    data class WithLocalMatrix(val shader: Shader, val matrix: Matrix3x3F32) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader
     data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: Size?) : Shader
     data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: Size?) : Shader

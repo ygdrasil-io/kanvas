@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Port of Skia's `gm/scaledemoji_perspective.cpp`.
@@ -35,7 +35,7 @@ class ScaledEmojiPerspectiveGm : SkiaGm {
 
         // Perspective matrix: skew + scale to create depth illusion
         // mirroring upstream's 3x3 perspective transform
-        val perspective = Matrix33.makeAll(
+        val perspective = Matrix3x3F32.of(
             1.5f, 0.3f, 100f,
             0.1f, 1.0f, 150f,
             0.0005f, 0.0002f, 1f,

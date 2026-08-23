@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class PictureImageGeneratorGm : SkiaGm {
@@ -92,9 +92,9 @@ class PictureImageGeneratorGm : SkiaGm {
 
         for (i in configs.indices) {
             val cfg = configs[i]
-            var m = Matrix33.scale(cfg.scaleX, cfg.scaleY)
-            if (cfg.scaleX < 0f) m = m * Matrix33.translate(cfg.width.toFloat(), 0f)
-            if (cfg.scaleY < 0f) m = m * Matrix33.translate(0f, cfg.height.toFloat())
+            var m = Matrix3x3F32.scaling(cfg.sx, cfg.sy)
+            if (cfg.sx < 0f) m = m * Matrix3x3F32.translation(cfg.width.toFloat(), 0f)
+            if (cfg.sy < 0f) m = m * Matrix3x3F32.translation(0f, cfg.height.toFloat())
 
             val opacityPaint = if (cfg.opacity < 1f) {
                 Paint(color = Color.fromRGBA(1f, 1f, 1f, cfg.opacity))
@@ -131,8 +131,8 @@ class PictureImageGeneratorGm : SkiaGm {
     private data class Config(
         val width: Int,
         val height: Int,
-        val scaleX: Float,
-        val scaleY: Float,
+        val sx: Float,
+        val sy: Float,
         val opacity: Float,
     )
 

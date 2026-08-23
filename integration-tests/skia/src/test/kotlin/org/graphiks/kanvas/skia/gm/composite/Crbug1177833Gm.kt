@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -28,7 +28,7 @@ class Crbug1177833Gm : SkiaGm {
         canvas.translate(-700f, -700f)
 
         run {
-            val ctm = Matrix33.makeAll(
+            val ctm = Matrix3x3F32.of(
                 Float.fromBits(0xbf79250e.toInt()),
                 Float.fromBits(0x3e9da860),
                 Float.fromBits(0x44914c8a),
@@ -66,7 +66,7 @@ class Crbug1177833Gm : SkiaGm {
         canvas.save()
         canvas.translate(-300f, 0f)
         run {
-            val ctm = Matrix33.makeAll(
+            val ctm = Matrix3x3F32.of(
                 Float.fromBits(0x3f54dd8a),
                 Float.fromBits(0xbf9096a4.toInt()),
                 Float.fromBits(0x447eae34),
@@ -100,7 +100,7 @@ class Crbug1177833Gm : SkiaGm {
         canvas.restore()
 
         run {
-            val ctm = Matrix33.makeAll(
+            val ctm = Matrix3x3F32.of(
                 Float.fromBits(0x3f54b255),
                 Float.fromBits(0x3eb5a94d),
                 Float.fromBits(0x443d7419),

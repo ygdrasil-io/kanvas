@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -167,7 +167,7 @@ class DfTextGm : SkiaGm {
         // ─── 7. Perspective ───────────────────────────────────────────
         canvas.save()
         font = font.copy(size = 37.5f, antiAlias = true, subpixel = false)
-        val persp1 = Matrix33.makeAll(
+        val persp1 = Matrix3x3F32.of(
             0.9839f, 0f, 0f,
             0.2246f, 0.6829f, 0f,
             0.0002352f, -0.0003844f, 1f,
@@ -179,7 +179,7 @@ class DfTextGm : SkiaGm {
 
         canvas.save()
         font = font.copy(size = 0.1f, antiAlias = false, subpixel = false)
-        val persp2 = Matrix33.makeAll(
+        val persp2 = Matrix3x3F32.of(
             0.9839f, 0f, 0f,
             0.2246f, 0.6829f, 0f,
             0.0002352f, -0.0003844f, 1f,

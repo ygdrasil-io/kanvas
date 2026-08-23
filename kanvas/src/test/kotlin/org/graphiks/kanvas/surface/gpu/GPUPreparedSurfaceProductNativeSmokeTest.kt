@@ -32,7 +32,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
@@ -89,7 +89,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             DisplayOp.DrawPath(
                 triangle(),
                 Paint.fill(Color.GREEN).copy(antiAlias = false),
-                Matrix33.identity(),
+                Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             rect(Rect.fromLTRB(22f, 18f, 30f, 26f), Color.BLUE),
@@ -299,7 +299,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 center = Rect.fromLTRB(2f, 2f, 4f, 4f),
                 dst = Rect.fromLTRB(0f, 0f, 18f, 18f),
                 paint = null,
-                transform = Matrix33.translate(1f, 1f),
+                transform = Matrix3x3F32.translation(1f, 1f),
                 clip = ClipStack.WideOpen,
             ),
             DisplayOp.DrawImageLattice(
@@ -321,7 +321,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 ),
                 dst = Rect.fromLTRB(20f, 0f, 38f, 6f),
                 paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
-                transform = Matrix33.translate(0f, 10f),
+                transform = Matrix3x3F32.translation(0f, 10f),
                 clip = ClipStack.WideOpen,
                 sampling = SamplingOptions.NEAREST,
             ),
@@ -384,8 +384,8 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             DisplayOp.DrawAtlas(
                 atlas = atlas,
                 transforms = listOf(
-                    Matrix33.translate(2f, 2f),
-                    Matrix33.translate(8f, 2f),
+                    Matrix3x3F32.translation(2f, 2f),
+                    Matrix3x3F32.translation(8f, 2f),
                 ),
                 texRects = listOf(
                     Rect.fromLTRB(0f, 0f, 2f, 2f),
@@ -394,7 +394,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 colors = listOf(Color.BLUE, Color.RED),
                 blendMode = BlendMode.SRC,
                 paint = Paint.fill(Color.WHITE),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.DeviceRect(
                     rect = Rect.fromLTRB(3f, 2f, 11f, 4f),
                     antiAlias = false,
@@ -467,12 +467,12 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 add(
                     DisplayOp.DrawAtlas(
                         atlas = atlas,
-                        transforms = listOf(Matrix33.translate(0f, (index * 2).toFloat())),
+                        transforms = listOf(Matrix3x3F32.translation(0f, (index * 2).toFloat())),
                         texRects = listOf(Rect.fromLTRB(0f, 0f, 3f, 1f)),
                         colors = listOf(Color.fromArgb(160, 192, 96, 32)),
                         blendMode = mode,
                         paint = Paint.fill(Color.fromArgb(192, 128, 64, 160)),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 )
@@ -554,7 +554,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                         DisplayOp.DrawAtlas(
                             atlas = atlas,
                             transforms = listOf(
-                                Matrix33.translate(
+                                Matrix3x3F32.translation(
                                     paintIndex.toFloat(),
                                     (index * 2).toFloat(),
                                 ),
@@ -563,7 +563,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                             colors = listOf(Color.fromArgb(176, 80, 160, 48)),
                             blendMode = mode,
                             paint = paint,
-                            transform = Matrix33.identity(),
+                            transform = Matrix3x3F32.Identity,
                             clip = ClipStack.WideOpen,
                         ),
                     )
@@ -639,7 +639,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                     ),
                 ),
                 paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
             rect(Rect.fromLTRB(6f, 0f, 10f, 4f), Color.BLUE),
@@ -790,7 +790,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                     positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
                 ),
                 paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
-                transform = Matrix33.identity(),
+                transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
         )
@@ -878,7 +878,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                         ),
                         paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
                         blendMode = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -901,7 +901,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(
         bounds,
         Paint.fill(color).copy(antiAlias = false),
-        Matrix33.identity(),
+        Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
@@ -926,7 +926,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         x = x.toFloat(),
         y = baselineY.toFloat(),
         paint = Paint.fill(color),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 
@@ -954,7 +954,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = paint.copy(shader = Shader.Image(image, sampling = sampling)),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

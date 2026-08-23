@@ -33,7 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 internal data class GPUPreparedSurfaceExecutionRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -221,7 +221,7 @@ internal fun DisplayOp.DrawText.hasConservativeTargetEmptyTextProof(
 ): Boolean {
     if (blob.typeface == null) return false
     if (blob.variationCoordinates.isNotEmpty() || !blob.fontSize.isFinite() || blob.fontSize <= 0f ||
-        !x.isFinite() || !y.isFinite() || transform != Matrix33.identity()
+        !x.isFinite() || !y.isFinite() || transform != Matrix3x3F32.Identity
     ) return false
     if (paint.blendMode != BlendMode.SRC_OVER || paint.style != PaintStyle.FILL ||
         paint.shader != null || paint.colorFilter != null || paint.maskFilter != null ||

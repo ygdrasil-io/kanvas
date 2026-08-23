@@ -12,9 +12,10 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Mesh
@@ -83,9 +84,9 @@ class GmCanvas(
     val width: Int,
     val height: Int,
 ) {
-    private val transformStack = mutableListOf<Matrix33>()
+    private val transformStack = mutableListOf<Matrix3x3F32>()
     private val clipStack = mutableListOf<Rect?>()
-    private var currentTransform = Matrix33.identity()
+    private var currentTransform = Matrix3x3F32.Identity
     private var currentClip: Rect? = null
 
     fun save() {
@@ -117,26 +118,26 @@ class GmCanvas(
     }
 
     fun translate(dx: Float, dy: Float) {
-        currentTransform = currentTransform * Matrix33.translate(dx, dy)
+        currentTransform = currentTransform * Matrix3x3F32.translation(dx, dy)
     }
 
     fun scale(sx: Float, sy: Float) {
-        currentTransform = currentTransform * Matrix33.scale(sx, sy)
+        currentTransform = currentTransform * Matrix3x3F32.scaling(sx, sy)
     }
 
     fun rotate(degrees: Float) {
-        currentTransform = currentTransform * Matrix33.rotate(degrees)
+        currentTransform = currentTransform * Matrix3x3F32.rotation(degrees)
     }
 
     fun skew(sx: Float, sy: Float) {
-        currentTransform = currentTransform * Matrix33.skew(sx, sy)
+        currentTransform = currentTransform * Matrix3x3F32.skewing(sx, sy)
     }
 
-    fun concat(matrix: Matrix33) {
+    fun concat(matrix: Matrix3x3F32) {
         currentTransform = currentTransform * matrix
     }
 
-    fun setMatrix(matrix: Matrix33) {
+    fun setMatrix(matrix: Matrix3x3F32) {
         inner.setMatrix(matrix)
     }
 
@@ -165,17 +166,17 @@ class GmCanvas(
 
     fun quickReject(path: Path): Boolean = inner.quickReject(path)
 
-    private fun Matrix33.isIdentity(): Boolean =
-        scaleX == 1f && skewX == 0f && transX == 0f &&
-        skewY == 0f && scaleY == 1f && transY == 0f &&
+    private fun Matrix3x3F32.isIdentity(): Boolean =
+        sx == 1f && kx == 0f && tx == 0f &&
+        ky == 0f && sy == 1f && ty == 0f &&
         persp0 == 0f && persp1 == 0f && persp2 == 1f
 
     private fun transformRect(clip: Rect): Rect? {
         val t = currentTransform
-        val p0 = t * Point(clip.left, clip.top)
-        val p1 = t * Point(clip.right, clip.top)
-        val p2 = t * Point(clip.right, clip.bottom)
-        val p3 = t * Point(clip.left, clip.bottom)
+        val p0 = t.mapPoint(Point(clip.left, clip.top))
+        val p1 = t.mapPoint(Point(clip.right, clip.top))
+        val p2 = t.mapPoint(Point(clip.right, clip.bottom))
+        val p3 = t.mapPoint(Point(clip.left, clip.bottom))
         val l = min(min(p0.x, p1.x), min(p2.x, p3.x))
         val tp = min(min(p0.y, p1.y), min(p2.y, p3.y))
         val r = max(max(p0.x, p1.x), max(p2.x, p3.x))
@@ -202,10 +203,10 @@ class GmCanvas(
                 inner.drawRect(rect, paint)
             } else {
                 val t = currentTransform
-                val p0 = t * Point(rect.left, rect.top)
-                val p1 = t * Point(rect.right, rect.top)
-                val p2 = t * Point(rect.right, rect.bottom)
-                val p3 = t * Point(rect.left, rect.bottom)
+                val p0 = t.mapPoint(Point(rect.left, rect.top))
+                val p1 = t.mapPoint(Point(rect.right, rect.top))
+                val p2 = t.mapPoint(Point(rect.right, rect.bottom))
+                val p3 = t.mapPoint(Point(rect.left, rect.bottom))
                 val path = Path {
                     moveTo(p0.x, p0.y)
                     lineTo(p1.x, p1.y)
@@ -334,7 +335,7 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawPoints(mode, points, paint)
             } else {
-                val transformed = points.map { currentTransform * it }
+                val transformed = points.map(currentTransform::mapPoint)
                 inner.drawPoints(mode, transformed, paint)
             }
         }
@@ -342,7 +343,7 @@ class GmCanvas(
 
     fun drawPoint(x: Float, y: Float, paint: Paint) {
         withClip {
-            val pt = currentTransform * Point(x, y)
+            val pt = currentTransform.mapPoint(Point(x, y))
             inner.drawPoint(pt.x, pt.y, paint)
         }
     }
@@ -352,7 +353,7 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawVertices(vertices, paint)
             } else {
-                val transformed = vertices.positions.map { currentTransform * it }
+                val transformed = vertices.positions.map(currentTransform::mapPoint)
                 inner.drawVertices(vertices.copy(positions = transformed), paint)
             }
         }
@@ -363,7 +364,7 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawMesh(mesh, paint, blendMode)
             } else {
-                val transformed = mesh.vertices.positions.map { currentTransform * it }
+                val transformed = mesh.vertices.positions.map(currentTransform::mapPoint)
                 val transformedVerts = mesh.vertices.copy(positions = transformed)
                 inner.drawMesh(mesh.copy(vertices = transformedVerts), paint, blendMode)
             }
@@ -376,8 +377,8 @@ class GmCanvas(
                 inner.drawImage(image, rect, paint)
             } else {
                 val t = currentTransform
-                val p0 = t * Point(rect.left, rect.top)
-                val p1 = t * Point(rect.right, rect.bottom)
+                val p0 = t.mapPoint(Point(rect.left, rect.top))
+                val p1 = t.mapPoint(Point(rect.right, rect.bottom))
                 val left = min(p0.x, p1.x)
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
@@ -393,8 +394,8 @@ class GmCanvas(
                 inner.drawImageRect(image, src, dst, paint)
             } else {
                 val t = currentTransform
-                val p0 = t * Point(dst.left, dst.top)
-                val p1 = t * Point(dst.right, dst.bottom)
+                val p0 = t.mapPoint(Point(dst.left, dst.top))
+                val p1 = t.mapPoint(Point(dst.right, dst.bottom))
                 val left = min(p0.x, p1.x)
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
@@ -409,8 +410,8 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawImageNine(image, center, dst, paint)
             } else {
-                val p0 = currentTransform * Point(dst.left, dst.top)
-                val p1 = currentTransform * Point(dst.right, dst.bottom)
+                val p0 = currentTransform.mapPoint(Point(dst.left, dst.top))
+                val p1 = currentTransform.mapPoint(Point(dst.right, dst.bottom))
                 val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageNine(image, center, tdst, paint)
             }
@@ -428,8 +429,8 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawImageLattice(image, lattice, dst, paint, sampling)
             } else {
-                val p0 = currentTransform * Point(dst.left, dst.top)
-                val p1 = currentTransform * Point(dst.right, dst.bottom)
+                val p0 = currentTransform.mapPoint(Point(dst.left, dst.top))
+                val p1 = currentTransform.mapPoint(Point(dst.right, dst.bottom))
                 val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageLattice(image, lattice, tdst, paint, sampling)
             }
@@ -438,7 +439,7 @@ class GmCanvas(
 
     fun drawAtlas(
         atlas: Image,
-        transforms: List<Matrix33>,
+        transforms: List<Matrix3x3F32>,
         texRects: List<Rect>,
         colors: List<Color>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
@@ -567,7 +568,7 @@ class GmCanvas(
             for (i in 0..divisions) {
                 val u = i.toFloat() / divisions
                 val pu = coonsPatchPoint(u, v, curves, corners)
-                verts.add(currentTransform * pu)
+                verts.add(currentTransform.mapPoint(pu))
                 if (colors != null) {
                     vertColors.add(bilinearInterp(u, v, colors))
                 }

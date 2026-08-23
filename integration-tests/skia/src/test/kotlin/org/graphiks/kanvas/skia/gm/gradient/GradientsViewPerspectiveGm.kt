@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -30,10 +30,10 @@ class GradientsViewPerspectiveGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val perspective = Matrix33.makeAll(
+        val perspective = Matrix3x3F32.of(
             sx = 1f, kx = 8f / 25f, tx = 0f,
             ky = 0f, sy = 1f, ty = 0f,
-            p0 = 0f, p1 = 0.001f, p2 = 1f,
+            persp0 = 0f, persp1 = 0.001f, persp2 = 1f,
         )
         canvas.concat(perspective)
 
@@ -100,7 +100,7 @@ class GradientsViewPerspectiveGm : SkiaGm {
         for (i in gradDatas.indices) {
             canvas.save()
             val matrix = if (i == 5) {
-                Matrix33.scale(0.5f, 0.5f) * Matrix33.translate(25f, 25f)
+                Matrix3x3F32.scaling(0.5f, 0.5f) * Matrix3x3F32.translation(25f, 25f)
             } else null
             for (j in makers.indices) {
                 val shader = makers[j](pts, gradDatas[i])

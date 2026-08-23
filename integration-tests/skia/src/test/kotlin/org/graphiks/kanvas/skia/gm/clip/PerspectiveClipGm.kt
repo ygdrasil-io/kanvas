@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import kotlin.random.Random
 
@@ -35,7 +35,7 @@ class PerspectiveClipGm : SkiaGm {
         canvas.drawPath(path, greyPaint)
 
         // Crazy perspective matrix derived from halfplanes3
-        val mx = Matrix33.makeAll(
+        val mx = Matrix3x3F32.of(
             -1.7866f, 1.3357f, 273.0295f,
             -1.0820f, 1.3186f, 135.5196f,
             -0.0047f, -0.0015f, 2.1485f,

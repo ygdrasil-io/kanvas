@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.cos
 import kotlin.math.sin
@@ -47,7 +47,7 @@ class DrawAtlasGm : SkiaGm {
             val rad = r.degrees * (PI.toFloat() / 180f)
             val scos = r.scale * cos(rad)
             val ssin = r.scale * sin(rad)
-            Matrix33.makeAll(scos, -ssin, r.tx, ssin, scos, r.ty)
+            Matrix3x3F32.of(scos, -ssin, r.tx, ssin, scos, r.ty)
         }
         val tex = List(n) { target }
         val colors = List(n) { Color.fromRGBA(0.5f, 1f, 0f, 0f) } // colors currently ignored by Kanvas drawAtlas

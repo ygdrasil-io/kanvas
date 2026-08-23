@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/filterbug.cpp`.
@@ -40,7 +40,7 @@ class FilterBugGm : SkiaGm {
                 antiAlias = doAA,
                 shader = Shader.WithLocalMatrix(
                     Shader.Image(top, TileMode.REPEAT, TileMode.REPEAT),
-                    Matrix33.makeAll(2f, 0f, 50f, 0f, 2f, 0f),
+                    Matrix3x3F32.of(2f, 0f, 50f, 0f, 2f, 0f),
                 ),
             ),
         )
@@ -56,7 +56,7 @@ class FilterBugGm : SkiaGm {
                 antiAlias = doAA,
                 shader = Shader.WithLocalMatrix(
                     Shader.Image(bot, TileMode.REPEAT, TileMode.REPEAT),
-                    Matrix33.makeAll(2f, 0f, 50f, 0f, 2f, 86f),
+                    Matrix3x3F32.of(2f, 0f, 50f, 0f, 2f, 86f),
                 ),
             ),
         )

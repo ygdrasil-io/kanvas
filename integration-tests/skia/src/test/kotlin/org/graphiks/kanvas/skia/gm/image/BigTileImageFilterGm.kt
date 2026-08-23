@@ -51,7 +51,7 @@ class BigTileImageFilterGm : SkiaGm {
         val greenPaint = Paint(imageFilter = tileGreen)
         canvas.translate(320f, 320f)
         canvas.saveLayer(bound2, greenPaint)
-        canvas.setMatrix(org.graphiks.kanvas.types.Matrix33.identity())
+        canvas.setMatrix(org.graphiks.math.matrix.Matrix3x3F32.Identity)
         canvas.drawImageRect(greenImage, bound2, Rect.fromXYWH(320f, 320f, kBitmapSize.toFloat(), kBitmapSize.toFloat()))
         canvas.restore()
     }

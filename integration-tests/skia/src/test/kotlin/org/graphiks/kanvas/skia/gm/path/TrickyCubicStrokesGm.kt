@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.abs
 import kotlin.math.max
@@ -76,11 +76,11 @@ open class TrickyCubicStrokesGm(
                 (cellRect.width - (strokeBounds.right - strokeBounds.left) - 2f * K_STROKE_WIDTH) / 2f
             val ty = cellRect.top + K_STROKE_WIDTH +
                 (cellRect.height - (strokeBounds.bottom - strokeBounds.top) - 2f * K_STROKE_WIDTH) / 2f
-                Matrix33.translate(tx, ty)
+                Matrix3x3F32.translation(tx, ty)
             }
 
             val maxScale = max(
-                abs(matrix.scaleX), abs(matrix.scaleY),
+                abs(matrix.sx), abs(matrix.sy),
             ).coerceAtLeast(1e-6f)
 
             canvas.save()
@@ -144,7 +144,7 @@ open class TrickyCubicStrokesGm(
     private fun lerp(a: Pair<Float, Float>, b: Pair<Float, Float>, t: Float) =
         Pair((b.first - a.first) * t + a.first, (b.second - a.second) * t + a.second)
 
-    private fun makeRectToRect(src: Rect, dst: Rect, fit: ScaleToFit): Matrix33 {
+    private fun makeRectToRect(src: Rect, dst: Rect, fit: ScaleToFit): Matrix3x3F32 {
         val sx = dst.width / src.width
         val sy = dst.height / src.height
         val s = when (fit) {
@@ -155,7 +155,7 @@ open class TrickyCubicStrokesGm(
         }
         val tx = dst.left + (dst.width - src.width * s) / 2f - src.left * s
         val ty = dst.top + (dst.height - src.height * s) / 2f - src.top * s
-        return Matrix33.makeAll(s, 0f, tx, 0f, s, ty)
+        return Matrix3x3F32.of(s, 0f, tx, 0f, s, ty)
     }
 
     private enum class ScaleToFit { kCenter, kStart, kEnd, kFill }

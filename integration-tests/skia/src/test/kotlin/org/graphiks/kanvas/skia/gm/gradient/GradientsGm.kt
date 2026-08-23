@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -92,7 +92,7 @@ class GradientsGm : SkiaGm {
         for (i in gradDatas.indices) {
             canvas.save()
             val matrix = if (i == 5) {
-                Matrix33.scale(0.5f, 0.5f) * Matrix33.translate(25f, 25f)
+                Matrix3x3F32.scaling(0.5f, 0.5f) * Matrix3x3F32.translation(25f, 25f)
             } else null
             for (j in makers.indices) {
                 val shader = makers[j](pts, gradDatas[i])

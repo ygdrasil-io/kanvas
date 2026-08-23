@@ -10,7 +10,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 
 class GPUPreparedEmojiTextTest {
@@ -122,7 +122,7 @@ class GPUPreparedEmojiTextTest {
             x = 0f,
             y = 0f,
             paint = Paint.fill(Color.WHITE),
-            transform = Matrix33.identity(),
+            transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
         return GPUPreparedTextLowerer.lower(

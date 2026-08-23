@@ -18,7 +18,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
@@ -82,7 +82,7 @@ class GPUPreparedSurfaceFrameGateTest {
     @Test
     fun `empty and state only frames classify as candidate and complete as noop`() {
         val stateOnly = listOf(
-            DisplayOp.SetTransform(Matrix33.translate(1f, 2f)),
+            DisplayOp.SetTransform(Matrix3x3F32.translation(1f, 2f)),
             DisplayOp.SetClip(ClipStack.WideOpen),
             DisplayOp.Annotation(RECT, "key", "value"),
         )
@@ -102,7 +102,7 @@ class GPUPreparedSurfaceFrameGateTest {
         val text = displayOpFixtures().single { it.operation is DisplayOp.DrawText }.operation
         val flush = DisplayOp.FlushAndSnapshot(RECT)
         val cases = listOf(
-            listOf(DisplayOp.SetTransform(Matrix33.identity()), visual, image, flush, text),
+            listOf(DisplayOp.SetTransform(Matrix3x3F32.Identity), visual, image, flush, text),
             listOf(visual, flush, image),
         )
 
@@ -198,7 +198,7 @@ class GPUPreparedSurfaceFrameGateTest {
         val RECT = Rect.fromLTRB(0f, 0f, 8f, 8f)
         val INNER_RECT = Rect.fromLTRB(2f, 2f, 6f, 6f)
         val PAINT = Paint.fill(Color.RED)
-        val MATRIX = Matrix33.identity()
+        val MATRIX = Matrix3x3F32.Identity
         val CLIP = ClipStack.WideOpen
     }
 }

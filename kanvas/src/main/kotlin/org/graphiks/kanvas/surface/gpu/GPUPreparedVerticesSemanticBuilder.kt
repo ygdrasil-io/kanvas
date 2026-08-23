@@ -116,8 +116,8 @@ internal object GPUPreparedVerticesSemanticBuilder {
             val record = analysis.getValue(mapped.commandId)
             val expectedTransform = draw.transform.let { matrix ->
                 listOf(
-                    matrix.scaleX, matrix.skewX, matrix.transX,
-                    matrix.skewY, matrix.scaleY, matrix.transY,
+                    matrix.sx, matrix.kx, matrix.tx,
+                    matrix.ky, matrix.sy, matrix.ty,
                     matrix.persp0, matrix.persp1, matrix.persp2,
                 ).map(Float::toRawBits)
             }
@@ -327,23 +327,23 @@ private fun GPUDrawPacket.exactlyMatchesPreparedVerticesSemanticPacket(
         diagnostics == other.diagnostics &&
         clipProducerAuthority == other.clipProducerAuthority
 
-private fun normalizedTransformFacts(matrix: org.graphiks.kanvas.types.Matrix33) =
+private fun normalizedTransformFacts(matrix: org.graphiks.math.matrix.Matrix3x3F32) =
     org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts(
         type = when {
             matrix.persp0 != 0f || matrix.persp1 != 0f || matrix.persp2 != 1f -> GPUTransformType.Perspective
-            matrix.scaleX == 1f && matrix.scaleY == 1f && matrix.skewX == 0f && matrix.skewY == 0f &&
-                matrix.transX == 0f && matrix.transY == 0f -> GPUTransformType.Identity
-            matrix.scaleX == 1f && matrix.scaleY == 1f && matrix.skewX == 0f && matrix.skewY == 0f ->
+            matrix.sx == 1f && matrix.sy == 1f && matrix.kx == 0f && matrix.ky == 0f &&
+                matrix.tx == 0f && matrix.ty == 0f -> GPUTransformType.Identity
+            matrix.sx == 1f && matrix.sy == 1f && matrix.kx == 0f && matrix.ky == 0f ->
                 GPUTransformType.Translate
-            matrix.skewX == 0f && matrix.skewY == 0f -> GPUTransformType.Scale
+            matrix.kx == 0f && matrix.ky == 0f -> GPUTransformType.Scale
             else -> GPUTransformType.Affine
         },
-        translateX = matrix.transX,
-        translateY = matrix.transY,
-        scaleX = matrix.scaleX,
-        scaleY = matrix.scaleY,
-        skewX = matrix.skewX,
-        skewY = matrix.skewY,
+        translateX = matrix.tx,
+        translateY = matrix.ty,
+        scaleX = matrix.sx,
+        scaleY = matrix.sy,
+        skewX = matrix.kx,
+        skewY = matrix.ky,
     )
 
 private fun org.graphiks.kanvas.gpu.renderer.commands.GPUBounds.preparedVerticesBoundsHash(): String =

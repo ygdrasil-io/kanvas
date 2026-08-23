@@ -45,12 +45,12 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.types.r
 import kotlin.math.max
 import kotlin.math.min
@@ -155,7 +155,7 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
 
-        if (!operation.transform.isAffine()) {
+        if (operation.transform.hasPerspective()) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
                 mapOf(
@@ -168,18 +168,18 @@ internal object GPUPreparedDrawImageLowerer {
         }
 
         val determinant =
-            operation.transform.scaleX * operation.transform.scaleY -
-                operation.transform.skewX * operation.transform.skewY
+            operation.transform.sx * operation.transform.sy -
+                operation.transform.kx * operation.transform.ky
         if (determinant == 0f || !determinant.isFinite()) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
                 mapOf(
                     "sourceId" to image.sourceId,
                     "transformClass" to "singular-affine",
-                    "scaleX" to operation.transform.scaleX.toString(),
-                    "skewX" to operation.transform.skewX.toString(),
-                    "skewY" to operation.transform.skewY.toString(),
-                    "scaleY" to operation.transform.scaleY.toString(),
+                    "sx" to operation.transform.sx.toString(),
+                    "kx" to operation.transform.kx.toString(),
+                    "ky" to operation.transform.ky.toString(),
+                    "sy" to operation.transform.sy.toString(),
                 ),
             )
         }
@@ -198,7 +198,7 @@ internal object GPUPreparedDrawImageLowerer {
             Point(dx1, dy1),
             Point(dx0, dy1),
         )
-        val transformedCorners = corners.map { operation.transform * it }
+        val transformedCorners = corners.map(operation.transform::mapPoint)
 
         val imageW = image.width.toFloat()
         val imageH = image.height.toFloat()
@@ -224,7 +224,7 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
 
-        val hasSkew = operation.transform.skewX != 0f || operation.transform.skewY != 0f
+        val hasSkew = operation.transform.kx != 0f || operation.transform.ky != 0f
         val geometryClass = if (hasSkew) GPUPreparedImageGeometryClass.Quad
         else GPUPreparedImageGeometryClass.Rect
 
@@ -317,12 +317,12 @@ internal object GPUPreparedDrawImageLowerer {
             src = gpuSrc,
             dst = gpuDst,
             transform = GPUTransformFacts.affine(
-                scaleX = operation.transform.scaleX,
-                skewX = operation.transform.skewX,
-                skewY = operation.transform.skewY,
-                scaleY = operation.transform.scaleY,
-                translateX = operation.transform.transX,
-                translateY = operation.transform.transY,
+                scaleX = operation.transform.sx,
+                skewX = operation.transform.kx,
+                skewY = operation.transform.ky,
+                scaleY = operation.transform.sy,
+                translateX = operation.transform.tx,
+                translateY = operation.transform.ty,
             ),
             clip = operation.clip.toGPUClipFacts(target),
             layer = GPULayerFacts.root(target),

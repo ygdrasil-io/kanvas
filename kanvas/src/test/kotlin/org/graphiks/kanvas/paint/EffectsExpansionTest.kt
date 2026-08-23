@@ -2,6 +2,7 @@ package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -92,7 +93,7 @@ class EffectsExpansionTest {
         assertTrue(pe is PathEffect)
     }
     @Test fun `Path2D constructs`() {
-        val pe = PathEffect.Path2D(Matrix33.identity(), Path())
+        val pe = PathEffect.Path2D(Matrix3x3F32.Identity, Path())
         assertTrue(pe is PathEffect)
     }
     @Test fun `Trim constructs`() {

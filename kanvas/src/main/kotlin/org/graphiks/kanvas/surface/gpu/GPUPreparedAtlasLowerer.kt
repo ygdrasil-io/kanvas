@@ -18,13 +18,13 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.types.r
 
 sealed interface GPUPreparedAtlasLowering {
@@ -240,10 +240,10 @@ internal object GPUPreparedAtlasLowerer {
         }
 
     private fun validateTransform(
-        transform: Matrix33,
+        transform: Matrix3x3F32,
         spriteIndex: Int?,
     ): GPUPreparedAtlasLowering.Refused? {
-        if (!transform.isAffine()) {
+        if (transform.hasPerspective()) {
             return refused(
                 code = GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
                 spriteIndex = spriteIndex,
@@ -251,15 +251,15 @@ internal object GPUPreparedAtlasLowerer {
             )
         }
         val values = listOf(
-            transform.scaleX,
-            transform.skewX,
-            transform.transX,
-            transform.skewY,
-            transform.scaleY,
-            transform.transY,
+            transform.sx,
+            transform.kx,
+            transform.tx,
+            transform.ky,
+            transform.sy,
+            transform.ty,
         )
         val determinant =
-            transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+            transform.sx * transform.sy - transform.kx * transform.ky
         return if (values.any { !it.isFinite() } || !determinant.isFinite() || determinant == 0f) {
             refused(
                 code = GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
@@ -454,14 +454,14 @@ internal object GPUPreparedAtlasLowerer {
     private fun Rect.isFiniteRect(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
 
-    private fun Rect.hasFiniteTransformedCorners(transform: Matrix33): Boolean =
+    private fun Rect.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =
         listOf(
             Point(left, top),
             Point(right, top),
             Point(right, bottom),
             Point(left, bottom),
         ).all { point ->
-            val transformed = transform * point
+            val transformed = transform.mapPoint(point)
             transformed.x.isFinite() && transformed.y.isFinite()
         }
 

@@ -42,7 +42,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -377,7 +377,7 @@ class GPUPreparedImageRefusalMatrixTest {
                 RuntimeRefusalCase(
                     "perspective",
                     drawImage(image).copy(
-                        transform = Matrix33.makeAll(
+                        transform = Matrix3x3F32.of(
                             1f, 0f, 0f,
                             0f, 1f, 0f,
                             0.1f, 0f, 1f,
@@ -408,7 +408,7 @@ class GPUPreparedImageRefusalMatrixTest {
                         center = Rect.fromLTRB(3f, 0f, 2f, 2f),
                         dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
                         paint = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                     GPUPreparedImageRefusalCodes.NINE_GEOMETRY,
@@ -425,7 +425,7 @@ class GPUPreparedImageRefusalMatrixTest {
                         ),
                         dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
                         paint = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                     GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
@@ -535,18 +535,18 @@ class GPUPreparedImageRefusalMatrixTest {
         src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = Rect.fromLTRB(0f, 0f, 4f, 4f),
         paint = Paint.fill(Color.WHITE).copy(shader = shader),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 
     private fun atlas(image: Image) = DisplayOp.DrawAtlas(
         atlas = image,
-        transforms = listOf(Matrix33.identity()),
+        transforms = listOf(Matrix3x3F32.Identity),
         texRects = listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
         colors = listOf(Color.WHITE),
         blendMode = BlendMode.SRC_OVER,
         paint = Paint.fill(Color.WHITE),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -46,12 +46,12 @@ class ClipShaderGm : SkiaGm {
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_IN))
         canvas.translate(-tx, -ty)
 
-        val m0 = Matrix33.makeAll(
+        val m0 = Matrix3x3F32.of(
             1.2f, 0.03f, 0f,
             0f, 0.8f, 0f,
             -0.002f, 0.0007f, 1f,
         )
-        val rot = Matrix33.rotate(30f)
+        val rot = Matrix3x3F32.rotation(30f)
         canvas.concat(rot * m0)
 
         val gradient = Shader.RadialGradient(

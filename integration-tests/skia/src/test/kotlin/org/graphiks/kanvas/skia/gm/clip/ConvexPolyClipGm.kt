@@ -15,7 +15,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.PI
@@ -133,12 +133,12 @@ class ConvexPolyClipGm : SkiaGm {
             val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
             val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
             var rect = Rect.fromXYWH(0f, 0f, wF, hF)
-            var mat = Matrix33.identity()
+            var mat = Matrix3x3F32.Identity
             for (i in 0 until 4) {
                 drawRect(rect, Paint(shader = Shader.WithLocalMatrix(Shader.RadialGradient(pt, radius, stops, TileMode.REPEAT), mat)))
                 val inset = wF / 8f
                 rect = Rect(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
-                mat = Matrix33.translate(6f * wF, 6f * hF) * Matrix33.scale(1f / 3f, 1f / 3f) * mat
+                mat = Matrix3x3F32.translation(6f * wF, 6f * hF) * Matrix3x3F32.scaling(1f / 3f, 1f / 3f) * mat
             }
         }
         return surface.makeImageSnapshot()

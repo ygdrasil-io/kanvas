@@ -25,7 +25,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
@@ -152,7 +152,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                             ),
                         ),
                         paint = validPaint,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -167,7 +167,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                             positions = listOf(Point(0f, 0f), Point(1f, 0f)),
                         ),
                         paint = validPaint,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -188,7 +188,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                             indices = listOf(0, 1, 9),
                         ),
                         paint = validPaint,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -218,7 +218,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                         ),
                         paint = validPaint,
                         blendMode = null,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -231,7 +231,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                     DisplayOp.DrawVertices(
                         vertices = triangle,
                         paint = Paint.fill(Color.RED).copy(shader = hostileShader()),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),
@@ -244,7 +244,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                     DisplayOp.DrawVertices(
                         vertices = triangle,
                         paint = validPaint,
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.Complex(listOf(
                             ClipStackOp.PathOp(
                                 Path().addRect(Rect.fromLTRB(0f, 0f, 4f, 4f)),
@@ -278,7 +278,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                                 ),
                             ),
                         ),
-                        transform = Matrix33.identity(),
+                        transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
                 ),

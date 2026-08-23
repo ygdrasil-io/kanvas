@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -280,7 +280,7 @@ class Bitmap(
         tileX: TileMode = TileMode.CLAMP,
         tileY: TileMode = TileMode.CLAMP,
         sampling: SamplingOptions = SamplingOptions.NEAREST,
-        localMatrix: Matrix33 = Matrix33.identity(),
+        localMatrix: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): Shader = Shader.WithLocalMatrix(Shader.Image(toImage(), tileX, tileY, sampling), localMatrix)
 
     companion object {

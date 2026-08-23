@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -51,17 +51,17 @@ class PathFillGm : SkiaGm {
             lineTo(15f, 5f)
             lineTo(30f, 30f)
             close()
-        }.transform(Matrix33.translate(10f, 0f))
+        }.transform(Matrix3x3F32.translation(10f, 0f))
         canvas.drawPath(triangle, paint)
         canvas.translate(0f, 30f)
 
         // Rect
-        val rectPath = Path { }.also { it.addRect(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix33.translate(10f, 0f))
+        val rectPath = Path { }.also { it.addRect(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
         canvas.drawPath(rectPath, paint)
         canvas.translate(0f, 30f)
 
         // Oval
-        val ovalPath = Path { }.also { it.addOval(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix33.translate(10f, 0f))
+        val ovalPath = Path { }.also { it.addOval(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
         canvas.drawPath(ovalPath, paint)
         canvas.translate(0f, 30f)
 
@@ -179,7 +179,7 @@ class PathFillGm : SkiaGm {
             lineTo(15f, 16f)
             lineTo(9f, 16f)
             close()
-        }.transform(Matrix33.translate(20f, 0f))
+        }.transform(Matrix3x3F32.translation(20f, 0f))
     }
 
     private fun makeInfo(): Path {

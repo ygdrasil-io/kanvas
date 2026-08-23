@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
@@ -39,9 +39,9 @@ class ClipShaderDifferenceGm : SkiaGm {
         canvas.drawColor(0.533f, 0.533f, 0.533f)
 
         val rect = Rect.fromXYWH(0f, 0f, 256f, 256f)
-        val scaleX = 64f / image.width.toFloat()
-        val scaleY = 64f / image.height.toFloat()
-        val localMatrix = Matrix33.scale(scaleX, scaleY)
+        val sx = 64f / image.width.toFloat()
+        val sy = 64f / image.height.toFloat()
+        val localMatrix = Matrix3x3F32.scaling(sx, sy)
         val shader = Shader.WithLocalMatrix(
             Shader.Image(image, TileMode.REPEAT, TileMode.REPEAT, SamplingOptions.LINEAR),
             localMatrix,

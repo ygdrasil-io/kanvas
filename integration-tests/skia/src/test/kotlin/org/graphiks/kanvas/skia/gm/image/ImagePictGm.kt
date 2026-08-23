@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 class ImagePictGm : SkiaGm {
@@ -55,7 +55,7 @@ class ImagePictGm : SkiaGm {
         canvas.drawPath(ovalPath, fillPaint)
     }
 
-    private fun materialise(picture: Picture, size: Int, matrix: Matrix33): Image {
+    private fun materialise(picture: Picture, size: Int, matrix: Matrix3x3F32): Image {
         val surface = Surface(size, size)
         val c = surface.canvas()
         c.clear(Color.TRANSPARENT)
@@ -71,7 +71,7 @@ class ImagePictGm : SkiaGm {
 
     private fun drawSet(canvas: GmCanvas) {
         canvas.save()
-        canvas.concat(Matrix33.translate(-100f, -100f))
+        canvas.concat(Matrix3x3F32.translation(-100f, -100f))
         canvas.drawPicture(fPicture)
         canvas.restore()
 
@@ -93,12 +93,12 @@ class ImagePictGm : SkiaGm {
             drawSomething(rc, bounds)
             fPicture = recorder.finishRecordingAsPicture()
 
-            val m0 = Matrix33.translate(-100f, -100f)
+            val m0 = Matrix3x3F32.translation(-100f, -100f)
             fImage0 = materialise(fPicture, 100, m0)
 
-            val m1Pre = Matrix33.translate(-150f, -150f)
-            val rot = Matrix33.rotate(45f)
-            val tBack = Matrix33.translate(50f, 50f)
+            val m1Pre = Matrix3x3F32.translation(-150f, -150f)
+            val rot = Matrix3x3F32.rotation(45f)
+            val tBack = Matrix3x3F32.translation(50f, 50f)
             val m1 = tBack * rot * m1Pre
             fImage1 = materialise(fPicture, 100, m1)
 

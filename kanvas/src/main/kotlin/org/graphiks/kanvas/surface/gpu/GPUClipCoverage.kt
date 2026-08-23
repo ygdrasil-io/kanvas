@@ -4,7 +4,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 
@@ -37,7 +37,7 @@ private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (paint != null && SaveLayerRec(paint = paint).gpuCompositePreflightRefusalOrNull() != null) {
         return "unsupported.picture.paint"
     }
-    if (transform != Matrix33.identity() && picture.containsLayer()) {
+    if (transform != Matrix3x3F32.Identity && picture.containsLayer()) {
         // Fill dispatch intentionally accepts identity transforms only. Refuse before
         // expanding the picture so no partially transformed layer/clip is encoded.
         return "unsupported.picture.transformed_layer"
@@ -52,7 +52,7 @@ private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
                     ) {
                         return "unsupported.picture.nested_paint"
                     }
-                    if (nested.transform != Matrix33.identity() && nested.picture.containsLayer()) {
+                    if (nested.transform != Matrix3x3F32.Identity && nested.picture.containsLayer()) {
                         return "unsupported.picture.transformed_layer"
                     }
                     val nestedRefusal = validatePicture(nested.picture)

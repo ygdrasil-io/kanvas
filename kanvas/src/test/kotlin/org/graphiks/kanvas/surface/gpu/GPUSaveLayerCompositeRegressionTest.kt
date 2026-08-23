@@ -11,7 +11,7 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
@@ -588,7 +588,7 @@ class GPUSaveLayerCompositeRegressionTest {
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
             drawCheckerboardRoot()
-            concat(Matrix33.makeAll(1f, 0f, Float.POSITIVE_INFINITY, 0f, 1f, 0f))
+            concat(Matrix3x3F32.of(1f, 0f, Float.POSITIVE_INFINITY, 0f, 1f, 0f))
             saveLayer(Rect(0f, 0f, 4f, 4f))
             drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()

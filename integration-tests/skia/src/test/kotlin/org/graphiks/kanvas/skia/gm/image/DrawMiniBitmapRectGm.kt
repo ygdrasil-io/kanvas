@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
@@ -116,7 +116,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
 
             surface.canvas {
                 var rect = Rect.fromXYWH(0f, 0f, wScalar, hScalar)
-                var mat = Matrix33.identity()
+                var mat = Matrix3x3F32.Identity
                 for (i in 0 until 4) {
                     val shader = Shader.RadialGradient(
                         center = pt,
@@ -127,7 +127,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
                     drawRect(rect, Paint(shader = Shader.WithLocalMatrix(shader, mat)))
                     val inset = wScalar / 8f
                     rect = Rect(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
-                    mat = mat * Matrix33.scale(0.25f, 0.25f)
+                    mat = mat * Matrix3x3F32.scaling(0.25f, 0.25f)
                 }
             }
             return surface.makeImageSnapshot()

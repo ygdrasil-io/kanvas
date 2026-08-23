@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -38,7 +38,7 @@ class Crbug1113794Gm : SkiaGm {
             pathEffect = PathEffect.Dash(floatArrayOf(10f, 10f), 0f),
         )
 
-        canvas.concat(Matrix33.scale(6f, 2f))
+        canvas.concat(Matrix3x3F32.scaling(6f, 2f))
         canvas.drawPath(path, paint)
     }
 }

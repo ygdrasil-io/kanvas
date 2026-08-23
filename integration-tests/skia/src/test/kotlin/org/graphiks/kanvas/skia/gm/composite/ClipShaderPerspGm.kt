@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
@@ -35,15 +35,15 @@ class ClipShaderPerspGm : SkiaGm {
     override val height = 1030
 
     companion object {
-        private fun perspTransformPoint(matrix: Matrix33, p: Point): Point {
+        private fun perspTransformPoint(matrix: Matrix3x3F32, p: Point): Point {
             val w = matrix.persp0 * p.x + matrix.persp1 * p.y + matrix.persp2
             if (w == 0f) return Point(0f, 0f)
-            val x = (matrix.scaleX * p.x + matrix.skewX * p.y + matrix.transX) / w
-            val y = (matrix.skewY * p.x + matrix.scaleY * p.y + matrix.transY) / w
+            val x = (matrix.sx * p.x + matrix.kx * p.y + matrix.tx) / w
+            val y = (matrix.ky * p.x + matrix.sy * p.y + matrix.ty) / w
             return Point(x, y)
         }
 
-        private fun computePerspectiveMatrix(w: Float, h: Float): Matrix33 {
+        private fun computePerspectiveMatrix(w: Float, h: Float): Matrix3x3F32 {
             val dx0 = 0f; val dy0 = 80f
             val dx1 = w + 28f; val dy1 = -100f
             val dx2 = w - 28f; val dy2 = h + 100f
@@ -88,7 +88,7 @@ class ClipShaderPerspGm : SkiaGm {
             }
 
             val hValues = FloatArray(8) { i -> A[i][8] }
-            return Matrix33.makeAll(
+            return Matrix3x3F32.of(
                 hValues[0], hValues[1], hValues[2],
                 hValues[3], hValues[4], hValues[5],
                 hValues[6], hValues[7], 1f,
@@ -102,7 +102,7 @@ class ClipShaderPerspGm : SkiaGm {
         val imgRect = Rect(0f, 0f, img.width.toFloat(), img.height.toFloat())
 
         val persp = computePerspectiveMatrix(img.width.toFloat(), img.height.toFloat())
-        val scale = Matrix33.scale(0.25f, 0.25f)
+        val scale = Matrix3x3F32.scaling(0.25f, 0.25f)
         val perspScale = persp * scale
 
         val mappedBounds = computeBoundingBox(persp, imgRect)
@@ -139,9 +139,9 @@ class ClipShaderPerspGm : SkiaGm {
         canvas: GmCanvas,
         img: Image,
         imgRect: Rect,
-        scale: Matrix33,
-        persp: Matrix33,
-        perspScale: Matrix33,
+        scale: Matrix3x3F32,
+        persp: Matrix3x3F32,
+        perspScale: Matrix3x3F32,
         config: Config,
     ) {
         canvas.save()
@@ -221,7 +221,7 @@ class ClipShaderPerspGm : SkiaGm {
         canvas.drawString("Persp: $perspectiveTarget$suffix", 20f, -30f, font, Paint())
     }
 
-    private fun computeBoundingBox(m: Matrix33, r: Rect): Rect {
+    private fun computeBoundingBox(m: Matrix3x3F32, r: Rect): Rect {
         val corners = listOf(
             perspTransformPoint(m, Point(r.left, r.top)),
             perspTransformPoint(m, Point(r.right, r.top)),

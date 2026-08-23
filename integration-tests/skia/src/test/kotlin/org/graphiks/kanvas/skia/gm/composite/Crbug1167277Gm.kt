@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Port of Skia's `gm/crbug_1167277.cpp::Crbug1167277`.
@@ -25,7 +25,7 @@ class Crbug1167277Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(-1250f, -900f)
 
-        val ctm = Matrix33.makeAll(
+        val ctm = Matrix3x3F32.of(
             Float.fromBits(0xbf8fcfae.toInt()),
             Float.fromBits(0xbeae25ee.toInt()),
             Float.fromBits(0x449ca6db),

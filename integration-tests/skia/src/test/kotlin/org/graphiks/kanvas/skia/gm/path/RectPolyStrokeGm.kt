@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -72,7 +72,7 @@ class RectPolyStrokeGm : SkiaGm {
                     canvas.save()
                     for ((proc, color) in procs) {
                         canvas.save()
-                        val pivot = Matrix33.translate(r.center.x, r.center.y) * Matrix33.rotate(angle) * Matrix33.translate(-r.center.x, -r.center.y)
+                        val pivot = Matrix3x3F32.translation(r.center.x, r.center.y) * Matrix3x3F32.rotation(angle) * Matrix3x3F32.translation(-r.center.x, -r.center.y)
                         canvas.concat(pivot)
                         paint = paint.copy(strokeWidth = THICKNESS, color = color)
                         proc(canvas, r, paint)

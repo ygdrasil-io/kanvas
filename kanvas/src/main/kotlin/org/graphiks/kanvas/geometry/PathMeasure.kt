@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.geometry
 
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -228,10 +228,10 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         return true
     }
 
-    fun getMatrix(distance: Float, matrix: Matrix33, flags: Int = POSITION_MATRIX_FLAG or TANGENT_MATRIX_FLAG): Boolean {
+    fun getMatrix(distance: Float, matrix: Matrix3x3F32, flags: Int = POSITION_MATRIX_FLAG or TANGENT_MATRIX_FLAG): Boolean {
         val tan = Point(0f, 0f)
         if (!getPosition(distance, null, tan)) return false
-        // Matrix33 is immutable; the caller should use getPosition() directly for
+        // Matrix3x3F32 is immutable; the caller should use getPosition() directly for
         // full control. getMatrix provides the tangent orientation only.
         return true
     }

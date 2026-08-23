@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -29,8 +29,8 @@ class LocalMatrixImageShaderGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val redImage = makeImage(Color.RED)
-        val translate = Matrix33.translate(100f, 0f)
-        val rotate = Matrix33.rotate(45f)
+        val translate = Matrix3x3F32.translation(100f, 0f)
+        val rotate = Matrix3x3F32.rotation(45f)
 
         val redComposed = translate * rotate
         var paint = Paint(

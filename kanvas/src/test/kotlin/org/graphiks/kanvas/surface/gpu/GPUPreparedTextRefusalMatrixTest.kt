@@ -24,7 +24,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.TestInstance
@@ -153,7 +153,7 @@ class GPUPreparedTextRefusalMatrixTest {
             RefusalCase(
                 "non finite transform",
                 valid.copy(
-                    transform = Matrix33.makeAll(
+                    transform = Matrix3x3F32.of(
                         1f, 0f, 0f,
                         0f, Float.NaN, 0f,
                         0f, 0f, 1f,
@@ -163,13 +163,13 @@ class GPUPreparedTextRefusalMatrixTest {
             ),
             RefusalCase(
                 "singular transform",
-                valid.copy(transform = Matrix33.scale(0f, 1f)),
+                valid.copy(transform = Matrix3x3F32.scaling(0f, 1f)),
                 GPUTextRefusalCodes.TRANSFORM_SINGULAR,
             ),
             RefusalCase(
                 "perspective transform",
                 valid.copy(
-                    transform = Matrix33.makeAll(
+                    transform = Matrix3x3F32.of(
                         1f, 0f, 0f,
                         0f, 1f, 0f,
                         0.1f, 0f, 1f,
@@ -240,7 +240,7 @@ class GPUPreparedTextRefusalMatrixTest {
                             ),
                         ),
                     ),
-                    transform = Matrix33.scale(0f, 0f),
+                    transform = Matrix3x3F32.scaling(0f, 0f),
                 ),
                 GPUTextRefusalCodes.TYPEFACE_MISSING,
             ),
@@ -271,7 +271,7 @@ class GPUPreparedTextRefusalMatrixTest {
             RefusalCase(
                 "non-finite determinant produced by finite coefficients",
                 valid.copy(
-                    transform = Matrix33.makeAll(
+                    transform = Matrix3x3F32.of(
                         Float.MAX_VALUE, Float.MAX_VALUE, 0f,
                         Float.MAX_VALUE, Float.MAX_VALUE, 0f,
                         0f, 0f, 1f,
@@ -551,7 +551,7 @@ class GPUPreparedTextRefusalMatrixTest {
         paint = Paint.fill(Color.RED).copy(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
         ),
-        transform = Matrix33.identity(),
+        transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
 

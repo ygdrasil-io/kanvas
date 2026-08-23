@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import kotlin.random.Random
 
@@ -103,7 +103,7 @@ class GetPosTextPathGm : SkiaGm {
                     dx = advance
                     dy = 0f
                 }
-                path.addPath(glyphPath.transform(Matrix33.translate(dx, dy)))
+                path.addPath(glyphPath.transform(Matrix3x3F32.translation(dx, dy)))
             }
             if (positions == null) {
                 advance += typeface.getAdvance(gid, font.size)

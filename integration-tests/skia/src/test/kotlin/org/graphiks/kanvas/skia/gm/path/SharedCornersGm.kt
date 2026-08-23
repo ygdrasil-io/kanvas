@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import kotlin.math.PI
 import kotlin.math.cos
@@ -108,16 +108,16 @@ class SharedCornersGm : SkiaGm {
         val pw = maxX - minX
         val ph = maxY - minY
         val scale = kBoxSize.toFloat() / maxOf(pw, ph)
-        val scaled = path.transform(Matrix33.scale(scale, scale))
+        val scaled = path.transform(Matrix3x3F32.scaling(scale, scale))
 
         drawRow(canvas, fillPaint, wirePaint, scaled)
         canvas.translate(0f, (kBoxSize + kPadSize).toFloat())
 
-        val rot1 = scaled.transform(Matrix33.rotate(45f))
+        val rot1 = scaled.transform(Matrix3x3F32.rotation(45f))
         drawRow(canvas, fillPaint, wirePaint, rot1)
         canvas.translate(0f, (kBoxSize + kPadSize).toFloat())
 
-        val rot2 = rot1.transform(Matrix33.rotate(-69.38111f))
+        val rot2 = rot1.transform(Matrix3x3F32.rotation(-69.38111f))
         drawRow(canvas, fillPaint, wirePaint, rot2)
         canvas.translate(0f, (kBoxSize + kPadSize).toFloat())
     }

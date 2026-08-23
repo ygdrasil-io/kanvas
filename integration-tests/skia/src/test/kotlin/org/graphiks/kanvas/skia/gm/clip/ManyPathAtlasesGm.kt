@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Port of Skia's `gm/manypathatlases.cpp`.
@@ -30,12 +30,12 @@ open class ManyPathAtlasesGm(private val maxAtlasSize: Int) : SkiaGm {
             cubicTo(-50f, -20f, 50f, -20f, 50f, 40f)
             cubicTo(20f, 0f, -20f, 0f, -50f, 20f)
         }
-        val translateM = Matrix33.translate(64f, 70f)
+        val translateM = Matrix3x3F32.translation(64f, 70f)
         val transformedClip = Path { }.apply { reverseAddPath(clip) }.transform(translateM)
 
         for (i in 0 until 4) {
             val angle = 30f * i + 128f
-            val rot = Matrix33.translate(64f, 70f) * Matrix33.rotate(angle) * Matrix33.translate(-64f, -70f)
+            val rot = Matrix3x3F32.translation(64f, 70f) * Matrix3x3F32.rotation(angle) * Matrix3x3F32.translation(-64f, -70f)
             val rotatedClip = Path { }.apply { reverseAddPath(transformedClip) }.transform(rot)
             canvas.clipPath(rotatedClip)
         }

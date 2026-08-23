@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
@@ -62,7 +62,7 @@ class HitTestPathGm : SkiaGm {
         }
 
         path.fillType = FillType.EVEN_ODD
-        val offsetPath = path.transform(Matrix33.translate(20f, 20f))
+        val offsetPath = path.transform(Matrix3x3F32.translation(20f, 20f))
         val margin = 4f
         val bounds = Rect.fromLTRB(minX + 20f, minY + 20f, maxX + 20f, maxY + 20f)
 

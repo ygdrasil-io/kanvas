@@ -31,7 +31,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
@@ -488,9 +488,9 @@ class GPUAllApiBlendSurfaceTest {
         drawAtlas(
             atlas = image,
             transforms = listOf(
-                Matrix33.translate(14f, 14f),
-                Matrix33.translate(8f, 14f),
-                Matrix33.translate(14f, 12f),
+                Matrix3x3F32.translation(14f, 14f),
+                Matrix3x3F32.translation(8f, 14f),
+                Matrix3x3F32.translation(14f, 12f),
             ),
             texRects = listOf(
                 Rect(0f, 0f, 4f, 4f),
