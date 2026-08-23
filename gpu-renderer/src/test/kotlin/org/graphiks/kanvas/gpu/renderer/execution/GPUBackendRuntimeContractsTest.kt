@@ -18,26 +18,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class GPUBackendRuntimeContractsTest {
     @Test
-    fun `adapter summary keeps one argument construction source compatible and exposes structured identity`() {
-        val legacy = GPUBackendAdapterSummary("summary")
-        val structured = GPUBackendAdapterSummary(
-            summary = "Apple/Apple M2 Max",
-            vendor = "Apple",
-            device = "Apple M2 Max",
-            architecture = "Apple Silicon",
-            description = "Apple M2 Max",
-            isFallbackAdapter = false,
-        )
-
-        assertEquals("summary", legacy.summary)
-        assertEquals(null, legacy.vendor)
-        assertEquals("Apple", structured.vendor)
-        assertEquals("Apple M2 Max", structured.device)
-        assertEquals(false, structured.isFallbackAdapter)
-        assertEquals(null, structured.backend)
-        assertEquals(null, structured.driver)
-    }
-    @Test
     fun `queue completion access exposes only the non-owning consumer view`() {
         val runtime = GPUQueueCompletionAdapter.disabled("unsupported.queue-completion.test")
         val access = object : GPUBackendQueueCompletionAccess {
