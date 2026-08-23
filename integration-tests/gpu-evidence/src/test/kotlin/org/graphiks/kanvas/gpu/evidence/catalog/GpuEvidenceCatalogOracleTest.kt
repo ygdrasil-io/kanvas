@@ -40,7 +40,7 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     private fun oracle(id: String): ByteArray = assertNotNull(
-        GpuEvidenceCatalog.cases.firstOrNull { it.descriptor.id.value == id }?.oracle,
+        GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)
 
     private fun assertPixel(pixels: ByteArray, width: Int, height: Int, x: Int, y: Int, expected: IntArray) {

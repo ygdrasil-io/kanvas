@@ -38,9 +38,17 @@ class CatalogExpectationInvariantTest {
     @Test
     fun `every render case has exactly one oracle and every refusal has none`() {
         assertEquals(7, GpuEvidenceCatalog.cases.size)
-        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
+        assertEquals(5, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(2, GpuEvidenceCatalog.refusalCases.size)
+        GpuEvidenceCatalog.renderCases.forEach { evidenceCase ->
+            assertIs<org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram>(evidenceCase.program)
+            assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
+            assertNotNull(evidenceCase.oracle, evidenceCase.descriptor.id.value)
+        }
+        GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
+            assertIs<SceneProgram>(evidenceCase.program)
             when (evidenceCase.descriptor.expectation) {
-                EvidenceExpectation.ShouldRender -> assertNotNull(evidenceCase.oracle, evidenceCase.descriptor.id.value)
+                EvidenceExpectation.ShouldRender -> error("refusalCases must not contain renders")
                 is EvidenceExpectation.ShouldRefuse -> assertEquals(null, evidenceCase.oracle, evidenceCase.descriptor.id.value)
             }
         }
@@ -58,28 +66,12 @@ class CatalogExpectationInvariantTest {
     }
 
     @Test
-    fun `fake product port runs every actual catalog program before gate plumbing`() {
-        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
+    fun `fake renderer port runs each refusal contract before gate plumbing`() {
+        GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
             val port = ExpectedOutcomePort()
             val observed = assertIs<EvidenceExecutionResult.Observed>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(evidenceCase)).observation
             assertIs<EvidenceVerdict.Pass>(EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observed), evidenceCase.descriptor.id.value)
             when (evidenceCase.descriptor.id.value) {
-                "solid-card-stack" -> {
-                    assertEquals("product.solid-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
-                    assertEquals(1, port.preparedFrameCount)
-                }
-                "separable-blur-rect" -> {
-                    assertEquals("product.separable-blur-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
-                    assertEquals(1, port.preparedFrameCount)
-                }
-                "translucent-card-overlap", "scissor-overlay" -> {
-                    assertEquals("product.solid-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
-                    assertEquals(1, port.preparedFrameCount)
-                }
-                "stroke-rect-outline" -> {
-                    assertEquals("product.stroke-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
-                    assertEquals(1, port.preparedFrameCount)
-                }
                 "custom-runtime-effect-unregistered-refusal" -> {
                     val refusal = assertIs<SceneObservation.Refused>(observed)
                     assertEquals("product.runtime-effect.custom", refusal.route.routeId)
@@ -103,7 +95,7 @@ class CatalogExpectationInvariantTest {
     fun `unavailable fake product port cannot produce a pass for any catalog case`() {
         val executor = GPUPreparedEvidenceExecutor(UnavailablePort, "a".repeat(40))
 
-        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
+        GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
             val observed = assertIs<EvidenceExecutionResult.Observed>(executor.execute(evidenceCase)).observation
             assertIs<SceneObservation.Unavailable>(observed)
             assertIs<EvidenceVerdict.Unavailable>(EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observed))
@@ -172,7 +164,7 @@ class CatalogExpectationInvariantTest {
             private set
         override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = if (current?.descriptor?.expectation == EvidenceExpectation.ShouldRender) 1L else 0L)
         override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
-            val evidenceCase = requireNotNull(GpuEvidenceCatalog.cases.firstOrNull { it.descriptor == context.descriptor })
+            val evidenceCase = requireNotNull(GpuEvidenceCatalog.refusalCases.firstOrNull { it.descriptor == context.descriptor })
             current = evidenceCase
             return when (val preparation = program.prepare(
                 SceneRecordingContext(
