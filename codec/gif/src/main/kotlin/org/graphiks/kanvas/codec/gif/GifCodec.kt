@@ -4,11 +4,11 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
@@ -35,17 +35,17 @@ public class GifCodec private constructor(
         val nextRequiredFrame: Int,
     )
 
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = canvasWidth,
             height = canvasHeight,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.GIF
 
@@ -64,22 +64,22 @@ public class GifCodec private constructor(
         )
     }
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result =
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result =
         getPixels(info, dst, Options())
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result {
-        if (dst.width != info.width || dst.height != info.height) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
-        if (info.colorType != SkColorType.kRGBA_8888) {
-            return Result.kInvalidConversion
-        }
+    override fun getPixels(info: ImageInfo, dst: Bitmap, opts: Options): Result {
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) return Result.kInvalidScale
+        if (
+            info.colorType != ColorType.RGBA_8888 ||
+            info.alphaType != cachedInfo.alphaType ||
+            info.colorSpace !== cachedInfo.colorSpace
+        ) return Result.kInvalidConversion
+        if (dst.info != info) return Result.kInvalidParameters
         val frameIndex = opts.frameIndex
         if (frameIndex !in frames.indices) return Result.kInvalidParameters
-        System.arraycopy(frames[frameIndex].pixels, 0, dst.pixels8888, 0, frames[frameIndex].pixels.size)
+        for (y in 0 until dst.height) for (x in 0 until dst.width) {
+            dst.setArgb(x, y, frames[frameIndex].pixels[y * dst.width + x])
+        }
         return Result.kSuccess
     }
 

@@ -2,7 +2,11 @@ package org.graphiks.kanvas.codec.jpegls
 
 import java.util.Collections
 import org.graphiks.kanvas.codec.Codec
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.ImageInfo
 
 /** Resource ceilings applied while opening a JPEG-LS static image. */
 public data class JpegLsLimits(
@@ -46,7 +50,7 @@ public class JpegLsMetadataSegment internal constructor(
 
 /** Result of a document-level JPEG-LS decode. */
 public data class JpegLsDecodeResult(
-    val bitmap: SkBitmap?,
+    val bitmap: Bitmap?,
     val diagnostic: JpegLsDiagnostic?,
 )
 
@@ -87,14 +91,16 @@ public class JpegLsDocument private constructor(
     public fun decode(): JpegLsDecodeResult {
         return try {
             val samples = JpegLsEntropy.decode(source, scans, frame)
-            val bitmap = SkBitmap(width, height)
+            val bitmap = Bitmap(
+                ImageInfo.make(width, height, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB()),
+            )
             val components = frame.components.size
             repeat(width * height) { index ->
                 val base = index * components
                 val red = samples[base]
                 val green = if (components == 1) red else samples[base + 1]
                 val blue = if (components == 1) red else samples[base + 2]
-                bitmap.setPixel(
+                bitmap.setArgb(
                     index % width,
                     index / width,
                     0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue,

@@ -45,7 +45,7 @@ class JpegLsCodecTest {
         assertNotNull(bitmap)
         for (y in 0 until 4) {
             for (x in 0 until 8) {
-                assertEquals(0xFF414141.toInt(), bitmap!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(0xFF414141.toInt(), bitmap!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -66,7 +66,7 @@ class JpegLsCodecTest {
         expected.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                bitmap!!.getPixel(index % 8, index / 8),
+                bitmap!!.getArgb(index % 8, index / 8),
                 "index=$index",
             )
         }
@@ -88,7 +88,7 @@ class JpegLsCodecTest {
         expected.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                bitmap!!.getPixel(index % 8, index / 8),
+                bitmap!!.getArgb(index % 8, index / 8),
                 "index=$index",
             )
         }
@@ -106,7 +106,7 @@ class JpegLsCodecTest {
                 val sample = if (((x + y) and 1) == 0) 0x41 else 0x71
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    bitmap!!.getPixel(x, y),
+                    bitmap!!.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }
@@ -128,7 +128,7 @@ class JpegLsCodecTest {
         CHARLS_RGB_LINE_SAMPLES.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
-                bitmap.getPixel(index % 4, index / 4),
+                bitmap.getArgb(index % 4, index / 4),
                 "index=$index",
             )
         }
@@ -153,7 +153,7 @@ class JpegLsCodecTest {
             val blue = 0x42 + ((x * y) and 3)
             assertEquals(
                 0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue,
-                bitmap!!.getPixel(x, y),
+                bitmap!!.getArgb(x, y),
                 "x=$x y=$y",
             )
         }
@@ -172,7 +172,7 @@ class JpegLsCodecTest {
             val x = index % 6
             val y = index / 6
             val pixel = if (x == 4 && y == 2) 0xFF706050.toInt() else 0xFF415042.toInt()
-            assertEquals(pixel, bitmap!!.getPixel(x, y), "x=$x y=$y")
+            assertEquals(pixel, bitmap!!.getArgb(x, y), "x=$x y=$y")
         }
     }
 
@@ -193,7 +193,7 @@ class JpegLsCodecTest {
             val blue = 0x42 + ((x * y) and 3)
             assertEquals(
                 0xFF000000.toInt() or (0x41 shl 16) or (green shl 8) or blue,
-                bitmap!!.getPixel(x, y),
+                bitmap!!.getArgb(x, y),
                 "x=$x y=$y",
             )
         }
@@ -233,7 +233,7 @@ class JpegLsCodecTest {
         assertNotNull(bitmap)
         repeat(32) { index ->
             val expected = 0xFF000000.toInt() or (0x41 shl 16) or ((0x50 + index % 8) shl 8) or 0x42
-            assertEquals(expected, bitmap!!.getPixel(index % 8, index / 8), "index=$index")
+            assertEquals(expected, bitmap!!.getArgb(index % 8, index / 8), "index=$index")
         }
     }
 
@@ -424,7 +424,7 @@ class JpegLsCodecTest {
         assertEquals(listOf(0xE0, 0xFE), document.metadataSegments.map { it.marker })
         assertArrayEquals(byteArrayOf('r'.code.toByte(), 'g'.code.toByte(), 'b'.code.toByte()), document.copyPayload(document.metadataSegments[1]))
         assertNotNull(decoded.bitmap)
-        assertEquals(0xFF414243.toInt(), decoded.bitmap!!.getPixel(0, 0))
+        assertEquals(0xFF414243.toInt(), decoded.bitmap!!.getArgb(0, 0))
     }
 
     @Test
@@ -436,7 +436,7 @@ class JpegLsCodecTest {
         assertNotNull(bitmap)
         assertEquals(1, requireNotNull(JpegLsDocument.open(CHARLS_NEAR_1_FIXTURE).document).nearLossless)
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
-            val decodedSample = bitmap!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = bitmap!!.getArgb(index % 8, index / 8) and 0xFF
             assertEquals(CHARLS_NEAR_1_DECODED[index], decodedSample, "index=$index")
             assertTrue(abs(decodedSample - sourceSample) <= 1, "index=$index source=$sourceSample decoded=$decodedSample")
         }
@@ -451,7 +451,7 @@ class JpegLsCodecTest {
         assertNotNull(bitmap)
         assertEquals(13, requireNotNull(JpegLsDocument.open(CHARLS_NEAR_13_FIXTURE).document).nearLossless)
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
-            val decodedSample = bitmap!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = bitmap!!.getArgb(index % 8, index / 8) and 0xFF
             assertEquals(CHARLS_NEAR_13_DECODED[index], decodedSample, "index=$index")
             assertTrue(abs(decodedSample - sourceSample) <= 13, "index=$index source=$sourceSample decoded=$decodedSample")
         }
@@ -466,7 +466,7 @@ class JpegLsCodecTest {
         assertNotNull(bitmap)
         assertEquals(127, requireNotNull(JpegLsDocument.open(CHARLS_NEAR_127_FIXTURE).document).nearLossless)
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
-            val decodedSample = bitmap!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = bitmap!!.getArgb(index % 8, index / 8) and 0xFF
             assertEquals(CHARLS_NEAR_127_DECODED[index], decodedSample, "index=$index")
             assertTrue(abs(decodedSample - sourceSample) <= 127, "index=$index source=$sourceSample decoded=$decodedSample")
         }
@@ -492,7 +492,7 @@ class JpegLsCodecTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         CHARLS_NEAR_127_GRADIENT_DECODED.forEachIndexed { index, sample ->
-            assertEquals(sample, bitmap!!.getPixel(index, 0) and 0xFF, "index=$index")
+            assertEquals(sample, bitmap!!.getArgb(index, 0) and 0xFF, "index=$index")
         }
     }
 
@@ -505,8 +505,8 @@ class JpegLsCodecTest {
 
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF414141.toInt(), bitmap!!.getPixel(0, 0))
-        assertEquals(0xFF717171.toInt(), bitmap.getPixel(1, 0))
+        assertEquals(0xFF414141.toInt(), bitmap!!.getArgb(0, 0))
+        assertEquals(0xFF717171.toInt(), bitmap.getArgb(1, 0))
     }
 
     @Test
@@ -521,8 +521,8 @@ class JpegLsCodecTest {
 
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(0xFF414141.toInt(), bitmap!!.getPixel(0, 0))
-        assertEquals(0xFF717171.toInt(), bitmap.getPixel(1, 0))
+        assertEquals(0xFF414141.toInt(), bitmap!!.getArgb(0, 0))
+        assertEquals(0xFF717171.toInt(), bitmap.getArgb(1, 0))
     }
 
     @Test
@@ -536,7 +536,7 @@ class JpegLsCodecTest {
         assertEquals(1, document.nearLossless)
         assertNotNull(decoded.bitmap)
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
-            assertTrue(abs((decoded.bitmap!!.getPixel(index % 8, index / 8) and 0xFF) - sourceSample) <= 1)
+            assertTrue(abs((decoded.bitmap!!.getArgb(index % 8, index / 8) and 0xFF) - sourceSample) <= 1)
         }
     }
 
@@ -551,7 +551,7 @@ class JpegLsCodecTest {
         assertEquals(127, document.nearLossless)
         assertNotNull(decoded.bitmap)
         CHARLS_NEAR_127_GRADIENT_DECODED.forEachIndexed { index, sample ->
-            assertEquals(sample, decoded.bitmap!!.getPixel(index, 0) and 0xFF, "index=$index")
+            assertEquals(sample, decoded.bitmap!!.getArgb(index, 0) and 0xFF, "index=$index")
         }
     }
 
@@ -680,7 +680,7 @@ class JpegLsCodecTest {
         assertNotNull(decoded)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                assertEquals(source.getPixel(x, y), decoded!!.getPixel(x, y), "x=$x y=$y")
+                assertEquals(source.getPixel(x, y), decoded!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -698,7 +698,7 @@ class JpegLsCodecTest {
         CHARLS_RGB_LINE_SAMPLES.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
-                decoded!!.getPixel(index % 4, index / 4),
+                decoded!!.getArgb(index % 4, index / 4),
                 "index=$index",
             )
         }
@@ -725,7 +725,7 @@ class JpegLsCodecTest {
         samples.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
-                bitmap!!.getPixel(index % 6, index / 6),
+                bitmap!!.getArgb(index % 6, index / 6),
                 "index=$index",
             )
         }
@@ -752,7 +752,7 @@ class JpegLsCodecTest {
         samples.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
-                bitmap!!.getPixel(index % 6, index / 6),
+                bitmap!!.getArgb(index % 6, index / 6),
                 "index=$index",
             )
         }
@@ -782,7 +782,7 @@ class JpegLsCodecTest {
         samples.forEachIndexed { index, sample ->
             assertEquals(
                 0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
-                bitmap!!.getPixel(index % 6, index / 6),
+                bitmap!!.getArgb(index % 6, index / 6),
                 "index=$index",
             )
         }
@@ -802,7 +802,7 @@ class JpegLsCodecTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         sourceSamples.forEachIndexed { index, sample ->
-            val pixel = decoded!!.getPixel(index % source.width, index / source.width)
+            val pixel = decoded!!.getArgb(index % source.width, index / source.width)
             assertTrue(abs((pixel ushr 16 and 0xFF) - sample[0]) <= 1, "R index=$index")
             assertTrue(abs((pixel ushr 8 and 0xFF) - sample[1]) <= 1, "G index=$index")
             assertTrue(abs((pixel and 0xFF) - sample[2]) <= 1, "B index=$index")
@@ -822,7 +822,7 @@ class JpegLsCodecTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         sourceSamples.forEachIndexed { index, sample ->
-            val pixel = decoded!!.getPixel(index % source.width, index / source.width)
+            val pixel = decoded!!.getArgb(index % source.width, index / source.width)
             assertTrue(abs((pixel ushr 16 and 0xFF) - sample[0]) <= 127, "R index=$index")
             assertTrue(abs((pixel ushr 8 and 0xFF) - sample[1]) <= 127, "G index=$index")
             assertTrue(abs((pixel and 0xFF) - sample[2]) <= 127, "B index=$index")
@@ -842,7 +842,7 @@ class JpegLsCodecTest {
         assertNotNull(decoded)
         assertEquals(1, requireNotNull(JpegLsDocument.open(encoded).document).nearLossless)
         sourceSamples.forEachIndexed { index, sourceSample ->
-            val decodedSample = decoded!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = decoded!!.getArgb(index % 8, index / 8) and 0xFF
             assertTrue(abs(decodedSample - sourceSample) <= 1, "index=$index source=$sourceSample decoded=$decodedSample")
         }
     }
@@ -860,7 +860,7 @@ class JpegLsCodecTest {
         assertNotNull(decoded)
         assertEquals(13, requireNotNull(JpegLsDocument.open(encoded).document).nearLossless)
         sourceSamples.forEachIndexed { index, sourceSample ->
-            val decodedSample = decoded!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = decoded!!.getArgb(index % 8, index / 8) and 0xFF
             assertTrue(abs(decodedSample - sourceSample) <= 13, "index=$index source=$sourceSample decoded=$decodedSample")
         }
     }
@@ -877,7 +877,7 @@ class JpegLsCodecTest {
         assertNotNull(decoded)
         assertEquals(127, requireNotNull(JpegLsDocument.open(encoded).document).nearLossless)
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
-            val decodedSample = decoded!!.getPixel(index % 8, index / 8) and 0xFF
+            val decodedSample = decoded!!.getArgb(index % 8, index / 8) and 0xFF
             assertTrue(abs(decodedSample - sourceSample) <= 127, "index=$index source=$sourceSample decoded=$decodedSample")
         }
     }
@@ -1234,7 +1234,7 @@ class JpegLsCodecTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         reconstruction.forEachIndexed { index, expected ->
-            val pixel = bitmap!!.getPixel(index % bitmap.width, index / bitmap.width)
+            val pixel = bitmap!!.getArgb(index % bitmap.width, index / bitmap.width)
             assertEquals(expected[0], pixel ushr 16 and 0xFF, "R reconstruction index=$index")
             assertEquals(expected[1], pixel ushr 8 and 0xFF, "G reconstruction index=$index")
             assertEquals(expected[2], pixel and 0xFF, "B reconstruction index=$index")

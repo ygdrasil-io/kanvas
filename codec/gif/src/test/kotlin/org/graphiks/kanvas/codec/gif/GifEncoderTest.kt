@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec.gif
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.image.Bitmap
 import org.skia.foundation.SkBitmap
 import java.io.ByteArrayOutputStream
 
@@ -119,7 +120,7 @@ class GifEncoderTest {
         val (bm1dec, r1) = codec!!.getImage()
         assertNotNull(bm1dec)
         assertEquals(Codec.Result.kSuccess, r1)
-        val dst = SkBitmap(4, 4)
+        val dst = Bitmap(codec.getInfo())
         val r2 = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1, priorFrame = 0))
         assertEquals(Codec.Result.kSuccess, r2)
     }

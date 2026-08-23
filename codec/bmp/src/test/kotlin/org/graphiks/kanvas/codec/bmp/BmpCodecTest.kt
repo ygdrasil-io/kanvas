@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.graphiks.kanvas.color.icc.IccProfileWriter
@@ -54,12 +54,12 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
-        assertEquals(BLUE, bitmap.getPixel(2, 0))
-        assertEquals(WHITE, bitmap.getPixel(0, 1))
-        assertEquals(BLACK, bitmap.getPixel(1, 1))
-        assertEquals(YELLOW, bitmap.getPixel(2, 1))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
+        assertEquals(BLUE, bitmap.getArgb(2, 0))
+        assertEquals(WHITE, bitmap.getArgb(0, 1))
+        assertEquals(BLACK, bitmap.getArgb(1, 1))
+        assertEquals(YELLOW, bitmap.getArgb(2, 1))
     }
 
     @Test
@@ -81,10 +81,10 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(semi, bitmap!!.getPixel(0, 0))
-        assertEquals(BLUE, bitmap.getPixel(1, 0))
-        assertEquals(GREEN, bitmap.getPixel(0, 1))
-        assertEquals(RED, bitmap.getPixel(1, 1))
+        assertEquals(semi, bitmap!!.getArgb(0, 0))
+        assertEquals(BLUE, bitmap.getArgb(1, 0))
+        assertEquals(GREEN, bitmap.getArgb(0, 1))
+        assertEquals(RED, bitmap.getArgb(1, 1))
     }
 
     @Test
@@ -113,12 +113,12 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
-        assertEquals(BLUE, bitmap.getPixel(2, 0))
-        assertEquals(WHITE, bitmap.getPixel(0, 1))
-        assertEquals(BLACK, bitmap.getPixel(1, 1))
-        assertEquals(YELLOW, bitmap.getPixel(2, 1))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
+        assertEquals(BLUE, bitmap.getArgb(2, 0))
+        assertEquals(WHITE, bitmap.getArgb(0, 1))
+        assertEquals(BLACK, bitmap.getArgb(1, 1))
+        assertEquals(YELLOW, bitmap.getArgb(2, 1))
     }
 
     @Test
@@ -141,10 +141,10 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
-        assertEquals(BLUE, bitmap.getPixel(0, 1))
-        assertEquals(WHITE, bitmap.getPixel(1, 1))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
+        assertEquals(BLUE, bitmap.getArgb(0, 1))
+        assertEquals(WHITE, bitmap.getArgb(1, 1))
     }
 
     @Test
@@ -168,10 +168,10 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(translucent, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
-        assertEquals(BLUE, bitmap.getPixel(0, 1))
-        assertEquals(argb(0x7F, 0xFE, 0xDC, 0xBA), bitmap.getPixel(1, 1))
+        assertEquals(translucent, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
+        assertEquals(BLUE, bitmap.getArgb(0, 1))
+        assertEquals(argb(0x7F, 0xFE, 0xDC, 0xBA), bitmap.getArgb(1, 1))
     }
 
     @Test
@@ -243,7 +243,7 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(argb(0x80, 0x12, 0x34, 0x56), bitmap!!.getPixel(0, 0))
+        assertEquals(argb(0x80, 0x12, 0x34, 0x56), bitmap!!.getArgb(0, 0))
         assertNull(codec.getICCProfile())
     }
 
@@ -278,12 +278,12 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(GREEN, bitmap!!.getPixel(0, 0))
-        assertEquals(BLUE, bitmap.getPixel(1, 0))
-        assertEquals(WHITE, bitmap.getPixel(2, 0))
-        assertEquals(BLACK, bitmap.getPixel(3, 0))
-        assertEquals(RED, bitmap.getPixel(0, 1))
-        assertEquals(RED, bitmap.getPixel(3, 1))
+        assertEquals(GREEN, bitmap!!.getArgb(0, 0))
+        assertEquals(BLUE, bitmap.getArgb(1, 0))
+        assertEquals(WHITE, bitmap.getArgb(2, 0))
+        assertEquals(BLACK, bitmap.getArgb(3, 0))
+        assertEquals(RED, bitmap.getArgb(0, 1))
+        assertEquals(RED, bitmap.getArgb(3, 1))
     }
 
     @Test
@@ -311,14 +311,14 @@ class BmpCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(GREEN, bitmap!!.getPixel(0, 0))
-        assertEquals(WHITE, bitmap.getPixel(1, 0))
-        assertEquals(RED, bitmap.getPixel(2, 0))
-        assertEquals(BLACK, bitmap.getPixel(3, 0))
-        assertEquals(RED, bitmap.getPixel(0, 1))
-        assertEquals(GREEN, bitmap.getPixel(1, 1))
-        assertEquals(BLACK, bitmap.getPixel(2, 1))
-        assertEquals(BLUE, bitmap.getPixel(3, 1))
+        assertEquals(GREEN, bitmap!!.getArgb(0, 0))
+        assertEquals(WHITE, bitmap.getArgb(1, 0))
+        assertEquals(RED, bitmap.getArgb(2, 0))
+        assertEquals(BLACK, bitmap.getArgb(3, 0))
+        assertEquals(RED, bitmap.getArgb(0, 1))
+        assertEquals(GREEN, bitmap.getArgb(1, 1))
+        assertEquals(BLACK, bitmap.getArgb(2, 1))
+        assertEquals(BLUE, bitmap.getArgb(3, 1))
     }
 
     @Test
@@ -344,7 +344,7 @@ class BmpCodecTest {
             bmp(width = 1, height = 1, bitsPerPixel = 24, rowsTopDown = listOf(listOf(RED))),
         )!!
         val info = codec.getInfo()
-        assertEquals(SkColorType.kRGBA_8888, info.colorType)
+        assertEquals(ColorType.RGBA_8888, info.colorType)
         assertEquals(AlphaType.UNPREMUL, info.alphaType)
         assertTrue(info.colorSpace.isSrgb())
     }
@@ -371,7 +371,7 @@ class BmpCodecTest {
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (x in rows[0].indices) {
-            assertEquals(palette[rows[0][x]], bitmap!!.getPixel(x, 0), "bpp=$bitsPerPixel x=$x")
+            assertEquals(palette[rows[0][x]], bitmap!!.getArgb(x, 0), "bpp=$bitsPerPixel x=$x")
         }
     }
 

@@ -5,11 +5,11 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.color.icc.IccProfile
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 
 /**
  * Pure Kotlin WebP metadata codec.
@@ -25,17 +25,17 @@ public class WebpCodec internal constructor(
     private val data: ByteArray,
 ) : Codec() {
 
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = metadata.width,
             height = metadata.height,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = if (metadata.hasAlpha) AlphaType.UNPREMUL else AlphaType.OPAQUE,
             colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.WEBP
 
@@ -58,22 +58,17 @@ public class WebpCodec internal constructor(
             )
         } ?: super.getFrameInfo()
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result =
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result =
         getPixels(info, dst, Options())
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap, opts: Options): Result {
-        if (info.width != metadata.width || info.height != metadata.height) {
-            return Result.kInvalidParameters
-        }
-        if (info.colorType != SkColorType.kRGBA_8888) {
-            return Result.kInvalidParameters
-        }
-        if (dst.width != info.width || dst.height != info.height) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
+    override fun getPixels(info: ImageInfo, dst: Bitmap, opts: Options): Result {
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) return Result.kInvalidScale
+        if (
+            info.colorType != ColorType.RGBA_8888 ||
+            info.alphaType != cachedInfo.alphaType ||
+            info.colorSpace !== cachedInfo.colorSpace
+        ) return Result.kInvalidConversion
+        if (dst.info != info) return Result.kInvalidParameters
         metadata.animation?.let { animation ->
             return decodeAnimatedFrame(info, dst, animation, opts.frameIndex)
         }
@@ -82,7 +77,7 @@ public class WebpCodec internal constructor(
                 Vp8LossyDecodeResult.Invalid -> Result.kErrorInInput
                 Vp8LossyDecodeResult.Unsupported -> Result.kUnimplemented
                 is Vp8LossyDecodeResult.Pixels -> {
-                    decoded.rgba.copyInto(dst.pixels8888)
+                    writeArgbPixels(dst, decoded.rgba)
                     Result.kSuccess
                 }
             }
@@ -94,26 +89,28 @@ public class WebpCodec internal constructor(
             Vp8lDecodeResult.Unsupported -> Result.kUnimplemented
             Vp8lDecodeResult.Invalid -> Result.kErrorInInput
             is Vp8lDecodeResult.Pixels -> {
-                decoded.argb.copyInto(dst.pixels8888)
+                writeArgbPixels(dst, decoded.argb)
                 Result.kSuccess
             }
         }
     }
 
     private fun decodeAnimatedFrame(
-        info: SkImageInfo,
-        dst: SkBitmap,
+        info: ImageInfo,
+        dst: Bitmap,
         animation: WebpAnimation,
         frameIndex: Int,
     ): Result {
         if (frameIndex !in animation.frames.indices) return Result.kInvalidParameters
-        val canvas = IntArray(info.width * info.height) { animation.backgroundColor }
+        val canvas = Bitmap(info)
+        for (y in 0 until canvas.height) for (x in 0 until canvas.width) {
+            canvas.setArgb(x, y, animation.backgroundColor)
+        }
         var previousFrame: WebpAnimationFrame? = null
         for (index in 0..frameIndex) {
             previousFrame?.let { previous ->
                 if (previous.disposeToBackground) {
                     canvas.fillRect(
-                        canvasWidth = info.width,
                         x = previous.x,
                         y = previous.y,
                         width = previous.width,
@@ -126,12 +123,12 @@ public class WebpCodec internal constructor(
             val framePixels = when (val result = decodeAnimationFramePixels(frame)) {
                 AnimationFrameDecodeResult.Invalid -> return Result.kErrorInInput
                 AnimationFrameDecodeResult.Unsupported -> return Result.kUnimplemented
-                is AnimationFrameDecodeResult.Pixels -> result.pixels
+                is AnimationFrameDecodeResult.Pixels -> result.bitmap
             }
-            canvas.compositeFrame(info.width, frame, framePixels)
+            canvas.compositeFrame(frame, framePixels)
             previousFrame = frame
         }
-        canvas.copyInto(dst.pixels8888)
+        for (y in 0 until dst.height) for (x in 0 until dst.width) dst.setArgb(x, y, canvas.getArgb(x, y))
         return Result.kSuccess
     }
 
@@ -156,7 +153,7 @@ public class WebpKotlinDecoderProvider : CodecDecoderProvider {
 }
 
 private sealed interface AnimationFrameDecodeResult {
-    data class Pixels(val pixels: IntArray) : AnimationFrameDecodeResult
+    data class Pixels(val bitmap: Bitmap) : AnimationFrameDecodeResult
     data object Unsupported : AnimationFrameDecodeResult
     data object Invalid : AnimationFrameDecodeResult
 }
@@ -245,38 +242,35 @@ private fun decodeAnimationFramePixels(frame: WebpAnimationFrame): AnimationFram
     val codec = WebpCodec.Decoder.make(frame.asSingleFrameWebp())
         ?: return AnimationFrameDecodeResult.Invalid
     val info = codec.getInfo()
-    if (info.width != frame.width || info.height != frame.height || info.colorType != SkColorType.kRGBA_8888) {
+    if (info.width != frame.width || info.height != frame.height || info.colorType != ColorType.RGBA_8888) {
         return AnimationFrameDecodeResult.Invalid
     }
-    val bitmap = SkBitmap(
-        width = frame.width,
-        height = frame.height,
-        colorType = SkColorType.kRGBA_8888,
-        colorSpace = ImageColorSpace.sRGB(),
-    )
+    val bitmap = Bitmap(info)
     return when (codec.getPixels(info, bitmap)) {
-        Codec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap.pixels8888.copyOf())
+        Codec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap)
         Codec.Result.kUnimplemented -> AnimationFrameDecodeResult.Unsupported
         else -> AnimationFrameDecodeResult.Invalid
     }
 }
 
-private fun IntArray.compositeFrame(canvasWidth: Int, frame: WebpAnimationFrame, framePixels: IntArray) {
+private fun Bitmap.compositeFrame(frame: WebpAnimationFrame, framePixels: Bitmap) {
     for (row in 0 until frame.height) {
-        val canvasOffset = (frame.y + row) * canvasWidth + frame.x
-        val frameOffset = row * frame.width
         for (x in 0 until frame.width) {
-            val src = framePixels[frameOffset + x]
-            val dstIndex = canvasOffset + x
-            this[dstIndex] = if (frame.blend) blendSrcOver(src, this[dstIndex]) else src
+            val src = framePixels.getArgb(x, row)
+            val dst = getArgb(frame.x + x, frame.y + row)
+            setArgb(frame.x + x, frame.y + row, if (frame.blend) blendSrcOver(src, dst) else src)
         }
     }
 }
 
-private fun IntArray.fillRect(canvasWidth: Int, x: Int, y: Int, width: Int, height: Int, color: Int) {
+private fun Bitmap.fillRect(x: Int, y: Int, width: Int, height: Int, color: Int) {
     for (row in 0 until height) {
-        fill(color, (y + row) * canvasWidth + x, (y + row) * canvasWidth + x + width)
+        for (column in 0 until width) setArgb(x + column, y + row, color)
     }
+}
+
+private fun writeArgbPixels(dst: Bitmap, pixels: IntArray) {
+    for (y in 0 until dst.height) for (x in 0 until dst.width) dst.setArgb(x, y, pixels[y * dst.width + x])
 }
 
 private fun blendSrcOver(src: Int, dst: Int): Int {

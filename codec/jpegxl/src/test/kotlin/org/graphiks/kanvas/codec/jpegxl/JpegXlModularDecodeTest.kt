@@ -6,6 +6,7 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Base64
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.image.Bitmap
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -63,13 +64,13 @@ class JpegXlModularDecodeTest {
         assertEquals(4, bitmap.width)
         assertEquals(3, bitmap.height)
         val grayscale = ByteArray(expected.size) { index ->
-            ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
+            ((bitmap.getArgb(index % bitmap.width, index / bitmap.width) ushr 16) and 0xFF).toByte()
         }
         assertArrayEquals(expected, grayscale)
-        bitmap.pixels.forEachIndexed { index, pixel ->
+        assertArgbPixels(IntArray(expected.size) { index ->
             val sample = expected[index].toInt() and 0xFF
-            assertEquals(0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample, pixel, "pixel=$index")
-        }
+            0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample
+        }, bitmap)
     }
 
     @Test
@@ -96,7 +97,7 @@ class JpegXlModularDecodeTest {
             val bitmap = requireNotNull(actual)
             assertEquals(4, bitmap.width)
             assertEquals(3, bitmap.height)
-            assertArrayEquals(expected, bitmap.pixels)
+            assertArgbPixels(expected, bitmap)
         }
     }
 
@@ -114,7 +115,7 @@ class JpegXlModularDecodeTest {
 
         val diagnostic = requireNotNull(JpegXlDocument.open(encoded).document).decode().diagnostic
         assertEquals(Codec.Result.kSuccess, result, "diagnostic=$diagnostic")
-        assertArrayEquals(expected, requireNotNull(actual).pixels)
+        assertArgbPixels(expected, requireNotNull(actual))
     }
 
     @Test
@@ -140,7 +141,7 @@ class JpegXlModularDecodeTest {
             531 * 510 to 0xFF4080C0.toInt(),
             531 * 510 + 509 to 0xFFFA8001.toInt(),
         ).forEach { (index, expected) ->
-            assertEquals(expected, bitmap.pixels[index], "pixel=$index")
+            assertEquals(expected, bitmap.getArgb(index % bitmap.width, index / bitmap.width), "pixel=$index")
         }
     }
 
@@ -175,7 +176,7 @@ class JpegXlModularDecodeTest {
         assertEquals(expected.width, bitmap.width)
         assertEquals(expected.height, bitmap.height)
         val grayscale = ByteArray(expected.samples.size) { index ->
-            ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
+            ((bitmap.getArgb(index % bitmap.width, index / bitmap.width) ushr 16) and 0xFF).toByte()
         }
         assertArrayEquals(expected.samples, grayscale)
     }
@@ -190,7 +191,7 @@ class JpegXlModularDecodeTest {
 
         assertEquals(Codec.Result.kSuccess, result)
         val bitmap = requireNotNull(actual)
-        assertArrayEquals(expected, ByteArray(expected.size) { index -> (bitmap.pixels[index] ushr 16).toByte() })
+        assertArrayEquals(expected, ByteArray(expected.size) { index -> (bitmap.getArgb(index % bitmap.width, index / bitmap.width) ushr 16).toByte() })
     }
 
     @Test
@@ -233,7 +234,7 @@ class JpegXlModularDecodeTest {
         assertEquals(expected.width, bitmap.width)
         assertEquals(expected.height, bitmap.height)
         val grayscale = ByteArray(expected.samples.size) { index ->
-            ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
+            ((bitmap.getArgb(index % bitmap.width, index / bitmap.width) ushr 16) and 0xFF).toByte()
         }
         assertArrayEquals(expected.samples, grayscale)
     }
@@ -283,13 +284,13 @@ class JpegXlModularDecodeTest {
         assertEquals(expected.width, bitmap.width)
         assertEquals(expected.height, bitmap.height)
         val grayscale = ByteArray(expected.samples.size) { index ->
-            ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
+            ((bitmap.getArgb(index % bitmap.width, index / bitmap.width) ushr 16) and 0xFF).toByte()
         }
         assertArrayEquals(expected.samples, grayscale)
-        bitmap.pixels.forEachIndexed { index, pixel ->
+        assertArgbPixels(IntArray(expected.samples.size) { index ->
             val sample = expected.samples[index].toInt() and 0xFF
-            assertEquals(0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample, pixel, "pixel=$index")
-        }
+            0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample
+        }, bitmap)
     }
 
     @Test
@@ -418,4 +419,12 @@ class JpegXlModularDecodeTest {
         write(value)
     }
 
+}
+
+private fun assertArgbPixels(expected: IntArray, bitmap: Bitmap) {
+    assertEquals(expected.size, bitmap.width * bitmap.height)
+    for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+        val index = y * bitmap.width + x
+        assertEquals(expected[index], bitmap.getArgb(x, y), "x=$x y=$y")
+    }
 }

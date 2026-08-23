@@ -116,6 +116,10 @@ class WbmpEncoderTest {
         val (bitmap, result) = codec!!.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        return bitmap!!
+        return SkBitmap(bitmap!!.width, bitmap.height).also { decoded ->
+            for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+                decoded.pixels[y * bitmap.width + x] = bitmap.getArgb(x, y)
+            }
+        }
     }
 }

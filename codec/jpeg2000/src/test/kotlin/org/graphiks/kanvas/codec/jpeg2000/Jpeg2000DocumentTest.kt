@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec.jpeg2000
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.image.Bitmap
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -93,7 +94,7 @@ class Jpeg2000DocumentTest {
         val documentBitmap = requireNotNull(documentResult.bitmap)
         assertEquals(5, documentBitmap.width)
         assertEquals(5, documentBitmap.height)
-        assertArrayEquals(
+        assertArgbPixels(
             intArrayOf(
                 0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFF010101.toInt(), 0xFF808080.toInt(), 0xFF404040.toInt(),
                 0xFF101010.toInt(), 0xFFE0E0E0.toInt(), 0xFF3F3F3F.toInt(), 0xFFC0C0C0.toInt(), 0xFFAAAAAA.toInt(),
@@ -101,14 +102,14 @@ class Jpeg2000DocumentTest {
                 0xFF202020.toInt(), 0xFFF0F0F0.toInt(), 0xFF2D2D2D.toInt(), 0xFFD1D1D1.toInt(), 0xFF424242.toInt(),
                 0xFFBEBEBE.toInt(), 0xFF0C0C0C.toInt(), 0xFF636363.toInt(), 0xFF999999.toInt(), 0xFFC9C9C9.toInt(),
             ),
-            documentBitmap.pixels8888,
+            documentBitmap,
         )
 
         val codec = requireNotNull(Codec.MakeFromData(jp2))
         val (codecBitmap, codecResult) = codec.getImage()
 
         assertEquals(Codec.Result.kSuccess, codecResult)
-        assertArrayEquals(documentBitmap.pixels8888, requireNotNull(codecBitmap).pixels8888)
+        assertBitmapsEqual(documentBitmap, requireNotNull(codecBitmap))
     }
 
     @Test
@@ -152,7 +153,7 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
+                    decoded.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }
@@ -175,7 +176,7 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
+                    decoded.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }
@@ -200,8 +201,8 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
-                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()}",
+                    decoded.getArgb(x, y),
+                    "x=$x y=$y decoded=${describeArgbPixels(decoded)}",
                 )
             }
         }
@@ -229,7 +230,7 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
+                    decoded.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }
@@ -256,8 +257,8 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
-                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()}",
+                    decoded.getArgb(x, y),
+                    "x=$x y=$y decoded=${describeArgbPixels(decoded)}",
                 )
             }
         }
@@ -512,8 +513,8 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
-                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()} trace=${fixtureDecisions().joinToString()}",
+                    decoded.getArgb(x, y),
+                    "x=$x y=$y decoded=${describeArgbPixels(decoded)} trace=${fixtureDecisions().joinToString()}",
                 )
             }
         }
@@ -542,7 +543,7 @@ class Jpeg2000DocumentTest {
                 val sample = expected[y * decoded.width + x].toInt() and 0xFF
                 assertEquals(
                     0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
-                    decoded.getPixel(x, y),
+                    decoded.getArgb(x, y),
                     "x=$x y=$y",
                 )
             }
@@ -1519,5 +1520,28 @@ class Jpeg2000DocumentTest {
 
     private fun ByteArrayOutputStream.writeU32(value: Int) {
         write(value ushr 24); write(value ushr 16); write(value ushr 8); write(value and 0xFF)
+    }
+}
+
+private fun assertArgbPixels(expected: IntArray, bitmap: Bitmap) {
+    assertEquals(expected.size, bitmap.width * bitmap.height)
+    for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+        val index = y * bitmap.width + x
+        assertEquals(expected[index], bitmap.getArgb(x, y), "x=$x y=$y")
+    }
+}
+
+private fun assertBitmapsEqual(expected: Bitmap, actual: Bitmap) {
+    assertEquals(expected.width, actual.width)
+    assertEquals(expected.height, actual.height)
+    for (y in 0 until expected.height) for (x in 0 until expected.width) {
+        assertEquals(expected.getArgb(x, y), actual.getArgb(x, y), "x=$x y=$y")
+    }
+}
+
+private fun describeArgbPixels(bitmap: Bitmap): String = buildString {
+    for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+        if (isNotEmpty()) append(", ")
+        append(bitmap.getArgb(x, y))
     }
 }

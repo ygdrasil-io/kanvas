@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 
 class WbmpCodecTest {
@@ -31,17 +31,17 @@ class WbmpCodecTest {
         assertEquals(EncodedImageFormat.WBMP, codec!!.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
-        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+        assertEquals(ColorType.RGBA_8888, codec.getInfo().colorType)
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(WHITE, bitmap!!.getPixel(0, 0))
-        assertEquals(BLACK, bitmap.getPixel(1, 0))
-        assertEquals(WHITE, bitmap.getPixel(2, 0))
-        assertEquals(BLACK, bitmap.getPixel(0, 1))
-        assertEquals(WHITE, bitmap.getPixel(1, 1))
-        assertEquals(BLACK, bitmap.getPixel(2, 1))
+        assertEquals(WHITE, bitmap!!.getArgb(0, 0))
+        assertEquals(BLACK, bitmap.getArgb(1, 0))
+        assertEquals(WHITE, bitmap.getArgb(2, 0))
+        assertEquals(BLACK, bitmap.getArgb(0, 1))
+        assertEquals(WHITE, bitmap.getArgb(1, 1))
+        assertEquals(BLACK, bitmap.getArgb(2, 1))
     }
 
     @Test

@@ -3,11 +3,11 @@ package org.graphiks.kanvas.codec.bmp
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
 import org.graphiks.kanvas.color.ImageColorSpace
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
-import org.skia.foundation.SkImageInfo
+import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
@@ -29,32 +29,30 @@ public class BmpCodec private constructor(
 
     private val storedIccProfile: IccProfile? = iccBytes?.let { IccProfile.parse(it).profileOrNull() }
 
-    private val cachedInfo: SkImageInfo by lazy {
-        SkImageInfo.Make(
+    private val cachedInfo: ImageInfo by lazy {
+        ImageInfo.make(
             width = header.width,
             height = header.height,
-            colorType = SkColorType.kRGBA_8888,
+            colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
             colorSpace = storedIccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
-    override fun getInfo(): SkImageInfo = cachedInfo
+    override fun getInfo(): ImageInfo = cachedInfo
 
     override fun getEncodedFormat(): EncodedImageFormat = EncodedImageFormat.BMP
 
     override fun getICCProfile(): IccProfile? = storedIccProfile
 
-    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
-        if (dst.width != info.width || dst.height != info.height) {
-            return Result.kInvalidParameters
-        }
-        if (dst.colorType != info.colorType) {
-            return Result.kInvalidParameters
-        }
-        if (info.colorType != SkColorType.kRGBA_8888) {
-            return Result.kInvalidConversion
-        }
+    override fun getPixels(info: ImageInfo, dst: Bitmap): Result {
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) return Result.kInvalidScale
+        if (
+            info.colorType != ColorType.RGBA_8888 ||
+            info.alphaType != cachedInfo.alphaType ||
+            info.colorSpace !== cachedInfo.colorSpace
+        ) return Result.kInvalidConversion
+        if (dst.info != info) return Result.kInvalidParameters
 
         if (header.compression == BI_RLE8 || header.compression == BI_RLE4) {
             return decodeRle(dst)
@@ -67,7 +65,7 @@ public class BmpCodec private constructor(
                 val sy = if (header.topDown) dy else header.height - 1 - dy
                 val row = header.pixelOffset + sy * rowBytes
                 for (x in 0 until header.width) {
-                    dst.setPixel(x, dy, readPixel(row, x))
+                    dst.setArgb(x, dy, readPixel(row, x))
                 }
             }
             return Result.kSuccess
@@ -131,14 +129,14 @@ public class BmpCodec private constructor(
         }
     }
 
-    private fun decodeRle(dst: SkBitmap): Result {
+    private fun decodeRle(dst: Bitmap): Result {
         if (header.topDown) return Result.kInvalidInput
         if (header.pixelOffset > bytes.size) return Result.kIncompleteInput
 
         val background = header.palette.firstOrNull() ?: TRANSPARENT_BLACK
         for (dy in 0 until header.height) {
             for (x in 0 until header.width) {
-                dst.setPixel(x, dy, background)
+                dst.setArgb(x, dy, background)
             }
         }
 
@@ -179,7 +177,7 @@ public class BmpCodec private constructor(
         return Result.kIncompleteInput
     }
 
-    private fun writeRleRun(dst: SkBitmap, x: Int, fileY: Int, count: Int, value: Int): Boolean {
+    private fun writeRleRun(dst: Bitmap, x: Int, fileY: Int, count: Int, value: Int): Boolean {
         if (x < 0 || x + count > header.width || fileY < 0 || fileY >= header.height) return false
         for (i in 0 until count) {
             val index = if (header.compression == BI_RLE8) {
@@ -194,7 +192,7 @@ public class BmpCodec private constructor(
         return true
     }
 
-    private fun writeRleAbsolute(dst: SkBitmap, x: Int, fileY: Int, count: Int, offset: Int): Boolean {
+    private fun writeRleAbsolute(dst: Bitmap, x: Int, fileY: Int, count: Int, offset: Int): Boolean {
         val bytesToRead = absoluteBytes(count)
         if (offset + bytesToRead > bytes.size) return false
         if (x < 0 || x + count > header.width || fileY < 0 || fileY >= header.height) return false
@@ -212,10 +210,10 @@ public class BmpCodec private constructor(
         return true
     }
 
-    private fun setRlePixel(dst: SkBitmap, x: Int, fileY: Int, index: Int): Boolean {
+    private fun setRlePixel(dst: Bitmap, x: Int, fileY: Int, index: Int): Boolean {
         if (index !in header.palette.indices) return false
         val dy = header.height - 1 - fileY
-        dst.setPixel(x, dy, header.palette[index])
+        dst.setArgb(x, dy, header.palette[index])
         return true
     }
 

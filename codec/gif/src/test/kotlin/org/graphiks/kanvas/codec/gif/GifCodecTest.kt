@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.AlphaType
-import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.EncodedImageFormat
 import java.util.ServiceLoader
 
@@ -50,14 +50,14 @@ class GifCodecTest {
         assertEquals(1, codec.getFrameCount())
         assertEquals(1, codec.dimensions().width)
         assertEquals(1, codec.dimensions().height)
-        assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
+        assertEquals(ColorType.RGBA_8888, codec.getInfo().colorType)
         assertEquals(AlphaType.UNPREMUL, codec.getInfo().alphaType)
         assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
     }
 
     @Test
@@ -75,8 +75,8 @@ class GifCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(TRANSPARENT, bitmap.getPixel(1, 0))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(TRANSPARENT, bitmap.getArgb(1, 0))
     }
 
     @Test
@@ -93,8 +93,8 @@ class GifCodecTest {
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(GREEN, bitmap!!.getPixel(0, 0))
-        assertEquals(YELLOW, bitmap.getPixel(1, 0))
+        assertEquals(GREEN, bitmap!!.getArgb(0, 0))
+        assertEquals(YELLOW, bitmap.getArgb(1, 0))
     }
 
     @Test
@@ -120,14 +120,14 @@ class GifCodecTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(RED, bitmap.getPixel(0, 1))
-        assertEquals(BLUE, bitmap.getPixel(0, 2))
-        assertEquals(GREEN, bitmap.getPixel(0, 3))
-        assertEquals(GREEN, bitmap.getPixel(0, 4))
-        assertEquals(BLUE, bitmap.getPixel(0, 5))
-        assertEquals(YELLOW, bitmap.getPixel(0, 6))
-        assertEquals(YELLOW, bitmap.getPixel(0, 7))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(RED, bitmap.getArgb(0, 1))
+        assertEquals(BLUE, bitmap.getArgb(0, 2))
+        assertEquals(GREEN, bitmap.getArgb(0, 3))
+        assertEquals(GREEN, bitmap.getArgb(0, 4))
+        assertEquals(BLUE, bitmap.getArgb(0, 5))
+        assertEquals(YELLOW, bitmap.getArgb(0, 6))
+        assertEquals(YELLOW, bitmap.getArgb(0, 7))
     }
 
     @Test
@@ -166,15 +166,15 @@ class GifCodecTest {
         assertEquals(1, frameInfo[1].frameRect.width())
         assertEquals(2, frameInfo[1].frameRect.height())
 
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1))
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(RED, dst.getPixel(0, 0))
-        assertEquals(BLUE, dst.getPixel(1, 0))
-        assertEquals(RED, dst.getPixel(2, 0))
-        assertEquals(RED, dst.getPixel(0, 1))
-        assertEquals(YELLOW, dst.getPixel(1, 1))
-        assertEquals(RED, dst.getPixel(2, 1))
+        assertEquals(RED, dst.getArgb(0, 0))
+        assertEquals(BLUE, dst.getArgb(1, 0))
+        assertEquals(RED, dst.getArgb(2, 0))
+        assertEquals(RED, dst.getArgb(0, 1))
+        assertEquals(YELLOW, dst.getArgb(1, 1))
+        assertEquals(RED, dst.getArgb(2, 1))
     }
 
     @Test
@@ -193,12 +193,12 @@ class GifCodecTest {
             ),
         )!!
 
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(RED, dst.getPixel(0, 0))
-        assertEquals(GREEN, dst.getPixel(1, 0))
-        assertEquals(BLUE, dst.getPixel(2, 0))
+        assertEquals(RED, dst.getArgb(0, 0))
+        assertEquals(GREEN, dst.getArgb(1, 0))
+        assertEquals(BLUE, dst.getArgb(2, 0))
     }
 
     @Test
@@ -225,12 +225,12 @@ class GifCodecTest {
             ),
         )!!
 
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(RED, dst.getPixel(0, 0))
-        assertEquals(TRANSPARENT, dst.getPixel(1, 0))
-        assertEquals(BLUE, dst.getPixel(2, 0))
+        assertEquals(RED, dst.getArgb(0, 0))
+        assertEquals(TRANSPARENT, dst.getArgb(1, 0))
+        assertEquals(BLUE, dst.getArgb(2, 0))
     }
 
     @Test
@@ -253,12 +253,12 @@ class GifCodecTest {
         assertEquals(0, frameInfo[1].requiredFrame)
         assertEquals(0, frameInfo[2].requiredFrame)
 
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(RED, dst.getPixel(0, 0))
-        assertEquals(RED, dst.getPixel(1, 0))
-        assertEquals(GREEN, dst.getPixel(2, 0))
+        assertEquals(RED, dst.getArgb(0, 0))
+        assertEquals(RED, dst.getArgb(1, 0))
+        assertEquals(GREEN, dst.getArgb(2, 0))
     }
 
     @Test
@@ -280,12 +280,12 @@ class GifCodecTest {
             val frameInfo = codec.getFrameInfo()
             assertEquals(1, frameInfo[2].requiredFrame)
 
-            val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+            val dst = Bitmap(codec.getInfo())
             val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
             assertEquals(Codec.Result.kSuccess, result)
-            assertEquals(RED, dst.getPixel(0, 0))
-            assertEquals(BLUE, dst.getPixel(1, 0))
-            assertEquals(GREEN, dst.getPixel(2, 0))
+            assertEquals(RED, dst.getArgb(0, 0))
+            assertEquals(BLUE, dst.getArgb(1, 0))
+            assertEquals(GREEN, dst.getArgb(2, 0))
         }
     }
 
@@ -313,11 +313,11 @@ class GifCodecTest {
         assertEquals(40, codec.getFrameInfo()[0].durationMs)
         assertEquals(90, codec.getFrameInfo()[1].durationMs)
 
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1))
         assertEquals(Codec.Result.kSuccess, result)
-        assertEquals(RED, dst.getPixel(0, 0))
-        assertEquals(BLUE, dst.getPixel(1, 0))
+        assertEquals(RED, dst.getArgb(0, 0))
+        assertEquals(BLUE, dst.getArgb(1, 0))
     }
 
     @Test
@@ -760,12 +760,12 @@ class GifCodecTest {
     }
 
     private fun assertFramePixels(codec: Codec, frameIndex: Int, expected: List<IntArray>) {
-        val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
+        val dst = Bitmap(codec.getInfo())
         val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = frameIndex))
         assertEquals(Codec.Result.kSuccess, result)
         for (y in expected.indices) {
             for (x in expected[y].indices) {
-                assertEquals(expected[y][x], dst.getPixel(x, y), "frame=$frameIndex x=$x y=$y")
+                assertEquals(expected[y][x], dst.getArgb(x, y), "frame=$frameIndex x=$x y=$y")
             }
         }
     }
