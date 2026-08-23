@@ -25,8 +25,18 @@ class EvidenceComparatorTest {
         val expected = byteArrayOf(10, 20, 30, 40)
         val inside = byteArrayOf(11, 20, 30, 40)
         val outside = byteArrayOf(12, 20, 30, 40)
-        assertTrue(EvidenceComparator().compare(inside, expected, 1, 1, policy).passed)
-        assertFalse(EvidenceComparator().compare(outside, expected, 1, 1, policy).passed)
+        val insideResult = EvidenceComparator().compare(inside, expected, 1, 1, policy)
+        val outsideResult = EvidenceComparator().compare(outside, expected, 1, 1, policy)
+        assertTrue(insideResult.passed)
+        assertEquals(0, insideResult.differingPixels)
+        assertEquals(0, insideResult.maxChannelDifference)
+        assertEquals(0.0, insideResult.meanChannelDifference)
+        assertContentEquals(ByteArray(4), insideResult.diffRgba)
+        assertFalse(outsideResult.passed)
+        assertEquals(1, outsideResult.differingPixels)
+        assertEquals(2, outsideResult.maxChannelDifference)
+        assertEquals(0.5, outsideResult.meanChannelDifference)
+        assertContentEquals(byteArrayOf(255.toByte(), 0, 0, 255.toByte()), outsideResult.diffRgba)
     }
 
     @Test fun `transparent pixels compare all channels`() {

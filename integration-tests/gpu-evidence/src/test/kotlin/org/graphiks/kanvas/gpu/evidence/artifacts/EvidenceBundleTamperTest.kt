@@ -34,6 +34,6 @@ class EvidenceBundleTamperTest {
         return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, attemptId = "attempt")
     }
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
-    private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", null, null, null, true)
+    private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
     private fun route(outcome: String = "rendered") = RouteEvidence("route", null, null, outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
 }

@@ -43,6 +43,18 @@ class EvidenceBundleVerifierStrictnessTest {
         assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, COMMIT))
     }
 
+    @Test fun `available evidence requires a nonblank adapter summary`() {
+        val missing = bundle(renderDescriptor(), renderedObservation())
+        replaceAdapter(missing, "null")
+        refreshHash(missing, "environment.json")
+        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(missing, COMMIT))
+
+        val blank = bundle(renderDescriptor(), renderedObservation())
+        replace(blank.resolve("environment.json"), "\"summary\":\"fake-adapter\"", "\"summary\":\" \"")
+        refreshHash(blank, "environment.json")
+        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(blank, COMMIT))
+    }
+
     @Test fun `checked in oracle uses skia and preserves provenance`() {
         val descriptor = renderDescriptor(OraclePolicy.CheckedInPng("oracle.png", sha256(ORIGINAL), "release-reference"))
         val path = bundle(descriptor, renderedObservation(), expected = PIXEL, checkedInBytes = ORIGINAL)
@@ -108,8 +120,14 @@ class EvidenceBundleVerifierStrictnessTest {
     private fun renderedObservation() = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
     private fun refusedObservation() = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused", 0), emptyList(), environment())
     private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
-    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", null, null, null, true)
+    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
+    private fun replaceAdapter(path: Path, replacement: String) {
+        val text = Files.readString(path.resolve("environment.json"))
+        val start = text.indexOf("\"adapter\":")
+        val end = text.indexOf('}', start) + 1
+        Files.writeString(path.resolve("environment.json"), text.substring(0, start) + "\"adapter\":" + replacement + text.substring(end))
+    }
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     private fun refreshHash(path: Path, name: String) {
         val manifest = path.resolve("manifest.json")

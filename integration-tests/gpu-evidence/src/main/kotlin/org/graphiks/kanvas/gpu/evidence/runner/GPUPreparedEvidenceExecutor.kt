@@ -19,6 +19,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 /** Narrow injectable boundary for host-independent runner tests. */
 interface EvidenceBackendPort {
     val capabilities: EvidenceCapabilities?
+    /** Handle-free adapter identity for auditable available evidence. */
+    val adapter: EvidenceAdapter?
+        get() = null
     val deviceGeneration: Long
     fun telemetry(): GPUBackendRuntimeTelemetry
     fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation
@@ -119,6 +122,7 @@ class GPUPreparedEvidenceExecutor(
 /** Real adapter around the existing product [GPUBackendSession] and prepared session APIs. */
 class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : EvidenceBackendPort {
     override val capabilities: EvidenceCapabilities? = backend.capabilities?.let { EvidenceCapabilities(it.implementation.implementationName, it) }
+    override val adapter: EvidenceAdapter? = backend.adapterInfo?.let { EvidenceAdapter(it.summary, null, null, null, null, null) }
     override val deviceGeneration: Long get() = backend.deviceGeneration.value
     override fun telemetry(): GPUBackendRuntimeTelemetry = backend.runtimeTelemetry
 
@@ -157,7 +161,7 @@ internal fun completionDiagnosticLines(diagnostic: org.graphiks.kanvas.gpu.rende
     diagnostic.facts.toSortedMap().forEach { (key, value) -> add("diagnostic.fact.$key=$value") }
 }
 
-private fun environmentOf(port: EvidenceBackendPort, sourceCommit: String) = EvidenceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), null, port.deviceGeneration, port.capabilities?.implementation, port.capabilities != null)
+private fun environmentOf(port: EvidenceBackendPort, sourceCommit: String) = EvidenceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), port.adapter, port.deviceGeneration, port.capabilities?.implementation, port.capabilities != null)
 
 private operator fun GPUBackendRuntimeTelemetry.minus(before: GPUBackendRuntimeTelemetry) = GPUBackendRuntimeTelemetry(
     renderPasses - before.renderPasses, offscreenPasses - before.offscreenPasses, windowPasses - before.windowPasses, submissions - before.submissions, commandBuffers - before.commandBuffers, buffersCreated - before.buffersCreated, texturesCreated - before.texturesCreated, intermediateTexturesCreated - before.intermediateTexturesCreated, coverageMasksDestroyed - before.coverageMasksDestroyed, destinationCopies - before.destinationCopies, destinationReadbackSnapshots - before.destinationReadbackSnapshots, msaaTargets - before.msaaTargets, msaaResolves - before.msaaResolves, bindGroupsCreated - before.bindGroupsCreated, samplersCreated - before.samplersCreated, queueWrites - before.queueWrites, uniformSlabsCreated - before.uniformSlabsCreated, uniformSlabBytesAllocated - before.uniformSlabBytesAllocated, uniformSlabFallbacks - before.uniformSlabFallbacks, passBatchPlans - before.passBatchPlans, passBatchesAccepted - before.passBatchesAccepted, passBatchCuts - before.passBatchCuts, passBatchPackets - before.passBatchPackets,

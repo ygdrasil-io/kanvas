@@ -4,15 +4,38 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import java.nio.file.Files
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerification
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerifier
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendAdapterSummary
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
+import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneFrameSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 class GPUPreparedEvidenceExecutorContractTest {
+    @Test fun `product adapter identity reaches runner environment and verified bundle`() {
+        val product = ProductEvidenceBackendPort(AdapterSession())
+        assertEquals("fake-adapter", assertNotNull(product.adapter).summary)
+        val result = GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), adapter = product.adapter), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
+        val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
+        assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
+        val root = Files.createTempDirectory("gpu-evidence-adapter")
+        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first().descriptor, observation, observation.rgba)
+        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "a".repeat(40)))
+    }
+
     @Test fun `opened session samples telemetry around canonical prepared frame and closes in finally`() {
         val events = mutableListOf<String>()
         val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
@@ -71,7 +94,7 @@ class GPUPreparedEvidenceExecutorContractTest {
     }
 
     private enum class CompletionKind { Success, Timeout, Failed, MissingReadback, WrongReadback, Incomplete, NoStructuralSubmit, RuntimeDeltaZero, Diagnostic, FatalError }
-    private class FakePort(val events: MutableList<String>, private val capabilitiesAvailable: Boolean = true, private val completion: CompletionKind = CompletionKind.Success, private val completionDiagnostic: GPUDiagnostic? = null) : EvidenceBackendPort {
+    private class FakePort(val events: MutableList<String>, private val capabilitiesAvailable: Boolean = true, private val completion: CompletionKind = CompletionKind.Success, private val completionDiagnostic: GPUDiagnostic? = null, override val adapter: EvidenceAdapter? = EvidenceAdapter("fake-adapter", null, null, null, null, null)) : EvidenceBackendPort {
         override val capabilities = if (capabilitiesAvailable) EvidenceCapabilities("test") else null
         override val deviceGeneration = 1L
         private var submissions = 0L
@@ -102,5 +125,13 @@ class GPUPreparedEvidenceExecutorContractTest {
                 override fun close() { events += "close-prepared-frame" }
             }
         }
+    }
+
+    private class AdapterSession : GPUBackendSession {
+        override val adapterInfo = GPUBackendAdapterSummary("fake-adapter")
+        override val deviceGeneration = GPUDeviceGenerationID(1)
+        override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget = error("not used")
+        override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession = error("not used")
+        override fun close() = Unit
     }
 }

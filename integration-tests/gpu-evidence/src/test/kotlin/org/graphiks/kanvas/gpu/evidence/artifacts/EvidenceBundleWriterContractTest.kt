@@ -128,7 +128,7 @@ class EvidenceBundleWriterContractTest {
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun rendered() = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
     private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "complete", outcome, emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
-    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", null, null, null, true)
+    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
     private fun refreshHash(path: Path, name: String) { val manifest = path.resolve("manifest.json"); val hash = sha256(Files.readAllBytes(path.resolve(name))); val text = Files.readString(manifest); val key = "\"$name\":\""; val start = text.indexOf(key) + key.length; val end = text.indexOf('"', start); Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end)) }
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

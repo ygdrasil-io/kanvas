@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.boolean
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneId
@@ -59,7 +60,7 @@ class PromoteEvidenceCliTest {
     fun `promotion rejects a coherent fail bundle without mutating the destination`() {
         writeAllBundles(repository, COMMIT)
         val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
-        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", null, null, null, true)
+        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
         val route = RouteEvidence("fail-route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
         EvidenceBundleWriter(repository, COMMIT).writeGenerated(
@@ -264,7 +265,7 @@ class PromoteEvidenceCliTest {
         val writer = EvidenceBundleWriter(root, commit)
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
             val descriptor = evidenceCase.descriptor
-            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", null, null, null, true)
+            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
             val route = RouteEvidence("test-route", "attempt", "complete", if (descriptor.expectation is EvidenceExpectation.ShouldRender) "rendered" else "refused", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
             val observation = when (descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> {

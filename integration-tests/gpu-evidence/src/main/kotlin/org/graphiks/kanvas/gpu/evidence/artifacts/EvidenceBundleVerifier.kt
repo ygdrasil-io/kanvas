@@ -72,7 +72,11 @@ object EvidenceBundleVerifier {
             if (adapter != null && adapter !is JsonNull) {
                 val adapterObject = adapter.jsonObject
                 adapterObject.requireKeys(setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter"))
-                adapterObject.optionalNullableString("summary"); adapterObject.optionalNullableString("vendor"); adapterObject.optionalNullableString("device"); adapterObject.optionalNullableString("architecture"); adapterObject.optionalNullableString("description"); adapterObject.optionalNullableBoolean("isFallbackAdapter")
+                val adapterSummary = adapterObject.optionalNullableString("summary")
+                require(!environmentAvailable || !adapterSummary.isNullOrBlank()) { "available evidence requires a nonblank adapter summary" }
+                adapterObject.optionalNullableString("vendor"); adapterObject.optionalNullableString("device"); adapterObject.optionalNullableString("architecture"); adapterObject.optionalNullableString("description"); adapterObject.optionalNullableBoolean("isFallbackAdapter")
+            } else {
+                require(!environmentAvailable) { "available evidence requires a nonblank adapter summary" }
             }
             val route = readObject(directory.resolve("route.json"), "route")
             route.requireKeys(setOf("routeId", "attemptId", "furthestPhase", "outcome", "encodedScopeKinds", "structuralEvents", "structuralCounters", "runtimeTelemetryDelta"))
