@@ -194,10 +194,11 @@ object PerformanceBundleVerifier {
             val actual = runCatching { sha256(Files.readAllBytes(bundle.resolve(name))) }.getOrNull()
             if (hashes[name]?.jsonPrimitive?.content != actual) errors += "hash mismatch: $name"
         }
-        parseObject(bundle.resolve("environment.json"), "environment", errors)?.let { environment ->
-            requireKeys(environment, setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "adapter"), "environment", errors)
-            if (environment["sourceCommit"]?.jsonPrimitive?.content != sourceCommit) errors += "environment source commit mismatch"
-            val adapterElement = environment["adapter"]
+        val environment = parseObject(bundle.resolve("environment.json"), "environment", errors)
+        environment?.let { environmentObject ->
+            requireKeys(environmentObject, setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "adapter"), "environment", errors)
+            if (environmentObject["sourceCommit"]?.jsonPrimitive?.content != sourceCommit) errors += "environment source commit mismatch"
+            val adapterElement = environmentObject["adapter"]
             if (adapterElement is JsonObject) {
                 requireKeys(adapterElement, setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter", "backend", "driver"), "adapter", errors)
                 verifyUnavailableRecord(adapterElement["backend"], "adapter backend", errors)
@@ -215,14 +216,23 @@ object PerformanceBundleVerifier {
         val eligibilityKinds = setOf("EligibleMeasurement", "DiagnosticOnly", "Unavailable")
         val verdictKinds = eligibilityKinds + "Failed"
         if (eligibilityKind !in eligibilityKinds || verdictKind !in verdictKinds) errors += "eligibility/verdict kind unknown"
-        if (eligibilityKind == "EligibleMeasurement") {
-            val adapter = (parseObject(bundle.resolve("environment.json"), "environment", mutableListOf())?.get("adapter") as? JsonObject)
-            if (adapter == null) errors += "eligible measurement requires adapter identity"
-            else {
-                val identity = listOf("summary", "vendor", "device", "architecture", "description").any { !adapter[it]?.jsonPrimitive?.contentOrNull.isNullOrBlank() }
-                if (!identity) errors += "eligible measurement adapter identity missing"
-                if (adapter["isFallbackAdapter"]?.jsonPrimitive?.content != "false") errors += "eligible measurement cannot use fallback adapter"
-            }
+        val adapter = environment?.get("adapter") as? JsonObject
+        val reconstructedAdapter = adapter?.let {
+            org.graphiks.kanvas.gpu.renderer.execution.GPUBackendAdapterSummary(
+                summary = readString(it, "summary", errors) ?: "",
+                vendor = readString(it, "vendor", errors),
+                device = readString(it, "device", errors),
+                architecture = readString(it, "architecture", errors),
+                description = readString(it, "description", errors),
+                isFallbackAdapter = readBoolean(it, "isFallbackAdapter", errors),
+            )
+        }
+        val recomputedEligibility = PerformanceEligibility.evaluate(reconstructedAdapter)
+        val recomputedKind = kind(recomputedEligibility)
+        val eligibilityReason = eligibility?.get("reason")?.jsonPrimitive?.content
+        if (eligibilityKind != recomputedKind || eligibilityReason != recomputedEligibility.reason) errors += "eligibility does not match structured adapter"
+        if (eligibilityKind == "EligibleMeasurement" && reconstructedAdapter?.isFallbackAdapter != false) {
+            errors += "eligible measurement cannot use fallback or untyped adapter"
         }
         if (eligibility != null && verdict != null) {
             val reasonsMatch = eligibility["reason"]?.jsonPrimitive?.content == verdict["reason"]?.jsonPrimitive?.content
@@ -233,6 +243,18 @@ object PerformanceBundleVerifier {
         if (timings != null) {
             requireKeys(timings, setOf("coldReadbackNanos", "warmupFrames", "measuredFrames", "samples", "summary"), "timings", errors)
             if (timings["warmupFrames"]?.jsonPrimitive?.content != "10" || timings["measuredFrames"]?.jsonPrimitive?.content != "90") errors += "timing config mismatch"
+            val coldElement = timings["coldReadbackNanos"]
+            val coldValue = when (coldElement) {
+                is JsonPrimitive -> if (!coldElement.isString) coldElement.content.toLongOrNull() else null
+                else -> null
+            }
+            val coldTypeValid = coldElement is JsonNull || coldValue != null
+            if (!coldTypeValid) errors += "cold readback timing provenance is invalid"
+            when {
+                eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed" && (coldValue == null || coldValue < 0L) -> errors += "eligible cold readback timing must be non-negative"
+                eligibilityKind == "DiagnosticOnly" || eligibilityKind == "Unavailable" -> if (coldElement !is JsonNull) errors += "diagnostic cold readback timing must be null"
+                coldValue != null && coldValue < 0L -> errors += "cold readback timing must be non-negative"
+            }
             val measured = timings["measuredFrames"]?.jsonPrimitive?.content?.toIntOrNull()
             val samples = timings["samples"]?.jsonArray
             if (measured == null || samples == null || samples.any { it !is JsonPrimitive || it.jsonPrimitive.isString || it.jsonPrimitive.content.toLongOrNull() == null }) errors += "timings provenance is invalid"
@@ -278,6 +300,26 @@ object PerformanceBundleVerifier {
         object_
     }.getOrElse { errors += "$label is invalid"; null }
     private fun requireKeys(object_: JsonObject, expected: Set<String>, label: String, errors: MutableList<String>) { if (object_.keys != expected) errors += "$label key set mismatch" }
+    private fun readString(object_: JsonObject, key: String, errors: MutableList<String>): String? {
+        return when (val value = object_[key]) {
+            null, JsonNull -> null
+            is JsonPrimitive -> if (value.isString) value.content else { errors += "$key must be a string or null"; null }
+            else -> { errors += "$key must be a string or null"; null }
+        }
+    }
+    private fun readBoolean(object_: JsonObject, key: String, errors: MutableList<String>): Boolean? {
+        return when (val value = object_[key]) {
+            null, JsonNull -> null
+            is JsonPrimitive -> if (!value.isString && value.content in setOf("true", "false")) value.content == "true" else { errors += "$key must be a boolean or null"; null }
+            else -> { errors += "$key must be a boolean or null"; null }
+        }
+    }
+    private fun kind(verdict: PerformanceVerdict) = when (verdict) {
+        is PerformanceVerdict.EligibleMeasurement -> "EligibleMeasurement"
+        is PerformanceVerdict.DiagnosticOnly -> "DiagnosticOnly"
+        is PerformanceVerdict.Unavailable -> "Unavailable"
+        is PerformanceVerdict.Failed -> "Failed"
+    }
     private fun verifyUnavailableRecord(element: kotlinx.serialization.json.JsonElement?, label: String, errors: MutableList<String>) {
         val record = element as? JsonObject
         if (record == null) { errors += "$label record invalid"; return }

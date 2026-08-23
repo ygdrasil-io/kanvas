@@ -10,6 +10,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.assertContains
 import org.junit.jupiter.api.io.TempDir
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
 
 class PerformanceBundleTest {
     @TempDir lateinit var root: Path
@@ -86,6 +87,24 @@ class PerformanceBundleTest {
         assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
     }
 
+    @Test fun `verifier rejects invalid cold readback timing after hash refresh`() {
+        val run = PerformanceRun.fixture()
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        val timings = path.resolve("timings.json")
+        Files.writeString(timings, Files.readString(timings).replace("\"coldReadbackNanos\":10", "\"coldReadbackNanos\":-1"))
+        refreshHash(path, "timings.json")
+        assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
+    @Test fun `verifier rejects an eligible verdict for a software adapter after hash refresh`() {
+        val run = PerformanceRun.fixture()
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        val environment = path.resolve("environment.json")
+        Files.writeString(environment, Files.readString(environment).replace("\"summary\":\"Apple GPU\"", "\"summary\":\"SwiftShader\""))
+        refreshHash(path, "environment.json")
+        assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
     @Test fun `verifier rejects missing malformed and extra entries without throwing`() {
         val run = PerformanceRun.fixture()
         val missing = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
@@ -117,12 +136,13 @@ class PerformanceBundleTest {
 
     @Test fun `missing telemetry counters are explicit unavailable metrics`() {
         val run = PerformanceRun.fixture().copy(
-            eligibility = PerformanceVerdict.Unavailable("telemetry unavailable"),
-            verdict = PerformanceVerdict.Unavailable("telemetry unavailable"),
+            eligibility = PerformanceVerdict.Unavailable("adapter identity unavailable"),
+            verdict = PerformanceVerdict.Unavailable("adapter identity unavailable"),
             coldReadbackNanos = null,
             timings = null,
             timingSamplesNanos = emptyList(),
             telemetry = PerformanceTelemetry.Empty,
+            environment = PerformanceRun.fixture().environment.copy(adapter = null),
         )
         val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
         assertContains(Files.readString(path.resolve("telemetry.json")), "\"source\":\"Unavailable\"")
@@ -136,6 +156,7 @@ class PerformanceBundleTest {
             coldReadbackNanos = null,
             timings = null,
             timingSamplesNanos = emptyList(),
+            environment = PerformanceRun.fixture().environment.copy(adapter = EvidenceAdapter("fallback", "Apple", "M2 Max", null, null, true)),
         )
         val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
         assertIs<PerformanceBundleVerification.Verified>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
