@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.ArrayDeque
 
 internal data class IdentityViolation(
@@ -20,15 +21,28 @@ internal object IdentityUsageVerifier {
         val mathRoot = normalizedRoot.resolve("math")
         if (!Files.isDirectory(mathRoot, LinkOption.NOFOLLOW_LINKS)) return emptyList()
 
-        val sourceFiles = Files.walk(mathRoot).use { paths ->
-            paths
-                .filter { path ->
-                    Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && path.isMathKotlinSource(mathRoot)
+        val sourceFiles = mutableListOf<Path>()
+        val pendingDirectories = ArrayDeque<Path>().apply { add(mathRoot) }
+        while (pendingDirectories.isNotEmpty()) {
+            val directory = pendingDirectories.removeFirst()
+            val beneathSourceRoot = directory.isBeneathSourceRoot(mathRoot)
+            Files.newDirectoryStream(directory).use { entries ->
+                entries.forEach { entry ->
+                    if (!beneathSourceRoot && entry.fileName.toString() == "build") return@forEach
+                    val attributes = Files.readAttributes(
+                        entry,
+                        BasicFileAttributes::class.java,
+                        LinkOption.NOFOLLOW_LINKS,
+                    )
+                    when {
+                        attributes.isDirectory -> pendingDirectories.add(entry)
+                        attributes.isRegularFile &&
+                            entry.isMathKotlinSource(mathRoot) -> sourceFiles.add(entry)
+                    }
                 }
-                .sorted()
-                .toList()
+            }
         }
-        return sourceFiles.flatMap { path -> scan(normalizedRoot, path) }
+        return sourceFiles.sorted().flatMap { path -> scan(normalizedRoot, path) }
     }
 
     private fun scan(repoRoot: Path, sourcePath: Path): List<IdentityViolation> {
@@ -50,6 +64,13 @@ internal object IdentityUsageVerifier {
         if (!fileName.endsWith(".kt") && !fileName.endsWith(".kts")) return false
         val relativePath = mathRoot.relativize(this)
         return (0 until relativePath.nameCount - 1).any { index ->
+            relativePath.getName(index).toString() == "src"
+        }
+    }
+
+    private fun Path.isBeneathSourceRoot(mathRoot: Path): Boolean {
+        val relativePath = mathRoot.relativize(this)
+        return (0 until relativePath.nameCount).any { index ->
             relativePath.getName(index).toString() == "src"
         }
     }

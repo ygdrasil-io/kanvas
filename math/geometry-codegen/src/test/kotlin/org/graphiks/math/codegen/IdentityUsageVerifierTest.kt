@@ -85,8 +85,10 @@ class IdentityUsageVerifierTest {
     @Test
     fun `scans only Kotlin sources beneath math src directories`() = withRepository { repoRoot ->
         writeKotlin(repoRoot, "math/one/src/main/kotlin/Source.kt", "val bad = a === b")
+        writeKotlin(repoRoot, "math/one/src/main/kotlin/build/SourcePackage.kt", "val bad = a === b")
         writeKotlin(repoRoot, "math/two/src/check.kts", "val bad = a !== b")
         writeKotlin(repoRoot, "math/one/tools/OutsideSrc.kt", "val ignored = a === b")
+        writeKotlin(repoRoot, "math/one/build/generated/src/main/kotlin/BuildOutput.kt", "val ignored = a === b")
         writeKotlin(repoRoot, "other/src/main/kotlin/OutsideMath.kt", "val ignored = a === b")
         writeKotlin(repoRoot, "math/one/src/main/kotlin/NotKotlin.java", "val ignored = a === b")
 
@@ -95,6 +97,7 @@ class IdentityUsageVerifierTest {
         assertEquals(
             listOf(
                 "math/one/src/main/kotlin/Source.kt",
+                "math/one/src/main/kotlin/build/SourcePackage.kt",
                 "math/two/src/check.kts",
             ),
             violations.map { it.path },
