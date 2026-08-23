@@ -3,6 +3,7 @@ package org.graphiks.kanvas.image
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.math.color.halfToFloat
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.toArgbInt
 
@@ -65,6 +66,21 @@ class Pixmap(
                 -> pixelColor(offset).toArgbInt()
             else -> 0
         }
+    }
+
+    /** Reads the stored premultiplied F16 components without converting through ARGB. */
+    fun getPremulRgbaF16(x: Int, y: Int, out: FloatArray): Boolean {
+        require(info.colorType == ColorType.RGBA_F16 || info.colorType == ColorType.RGBA_F16_NORM) {
+            "getPremulRgbaF16 requires an F16 pixmap, got ${info.colorType}"
+        }
+        require(out.size >= 4) { "out must hold at least four components" }
+        if (x !in 0 until width() || y !in 0 until height()) return false
+        val offset = y * rowBytes + x * info.bytesPerPixel()
+        out[0] = halfToFloat(ushort(offset).toShort())
+        out[1] = halfToFloat(ushort(offset + 2).toShort())
+        out[2] = halfToFloat(ushort(offset + 4).toShort())
+        out[3] = halfToFloat(ushort(offset + 6).toShort())
+        return true
     }
 
     private fun pixelColor(offset: Int): Color = when (info.colorType) {

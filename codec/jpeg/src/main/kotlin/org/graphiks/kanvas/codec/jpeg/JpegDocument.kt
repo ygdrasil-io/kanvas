@@ -52,6 +52,9 @@ public class JpegDocument internal constructor(
 
     internal val metadata: JpegMetadata
     internal val metadataDiagnostics: List<JpegDiagnostic>
+    internal val decodedColorSpace: ImageColorSpace by lazy {
+        metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB()
+    }
 
     /** Parsed DHP/EXP frame graph, when this document declares a JPEG hierarchy. */
     public val hierarchy: JpegHierarchy?

@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.codec.jpeg
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.image.ImageInfo
 
 import org.graphiks.kanvas.codec.Codec
@@ -19,6 +22,39 @@ import org.graphiks.kanvas.image.ColorType
  * reference implementation, exact commands, commit, licence, and SHA-256 provenance.
  */
 class JpegHierarchyDecodeTest {
+
+    @Test
+    fun `hierarchy codec classifies destination contract refusals`() {
+        val codec = requireNotNull(Codec.MakeFromData(fixture("sof5-huffman-sequential-exp11.jpg")))
+        val sourceInfo = codec.getInfo()
+
+        val scaled = sourceInfo.makeWH(sourceInfo.width + 1, sourceInfo.height)
+        assertEquals(Codec.Result.kInvalidScale, codec.getPixels(scaled, Bitmap(scaled)))
+
+        val wrongAlpha = sourceInfo.makeAlphaType(AlphaType.PREMUL)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(wrongAlpha, Bitmap(wrongAlpha)))
+
+        val nonIdenticalColorSpace = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("test.nonidentical"))
+        val wrongColorSpace = sourceInfo.makeColorSpace(nonIdenticalColorSpace)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(wrongColorSpace, Bitmap(wrongColorSpace)))
+    }
+
+    @Test
+    fun `hierarchy document refuses color space retagging and keeps F16 premultiplied`() {
+        val document = requireNotNull(JpegDocument.open(fixture("sof5-huffman-sequential-exp11.jpg")).document)
+
+        val f16 = document.decode(JpegDecodeRequest(ColorType.RGBA_F16_NORM, null))
+        assertNull(f16.diagnostic)
+        assertEquals(AlphaType.PREMUL, requireNotNull(f16.bitmap).alphaType)
+
+        val retagged = document.decode(
+            JpegDecodeRequest(
+                ColorType.RGBA_8888,
+                ImageColorSpace.fromColorProfile(ColorProfile.unsupported("test.retag")),
+            ),
+        )
+        assertEquals(Codec.Result.kInvalidConversion, retagged.diagnostic?.result)
+    }
 
     @Test
     fun `DHP frames expose immutable references and EXP expansion`() {

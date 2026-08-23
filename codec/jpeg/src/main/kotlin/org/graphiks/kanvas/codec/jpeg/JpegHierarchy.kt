@@ -555,6 +555,10 @@ internal fun decodeJpegHierarchy(
     if (request.colorType !in setOf(ColorType.RGBA_8888, ColorType.RGBA_F16_NORM)) {
         return JpegDecodeResult(null, JpegDiagnostic("jpeg.decode.kInvalidConversion", document.encodedSize, Codec.Result.kInvalidConversion))
     }
+    val decodedColorSpace = document.decodedColorSpace
+    if (request.colorSpace != null && request.colorSpace !== decodedColorSpace) {
+        return JpegDecodeResult(null, JpegDiagnostic("jpeg.decode.kInvalidConversion", document.encodedSize, Codec.Result.kInvalidConversion))
+    }
     return try {
         val samples = decodeJpegHierarchy(hierarchy)
         val colorModel = source.colorModel()
@@ -562,9 +566,12 @@ internal fun decodeJpegHierarchy(
             width = if (source.metadata.origin.swapsWidthHeight()) samples.height else samples.width,
             height = if (source.metadata.origin.swapsWidthHeight()) samples.width else samples.height,
             colorType = request.colorType,
-            alphaType = source.metadata.origin.let { org.graphiks.kanvas.image.AlphaType.UNPREMUL },
-            colorSpace = request.colorSpace ?: source.metadata.iccProfile?.let(org.graphiks.kanvas.color.ImageColorSpace::fromIccProfile)
-                ?: org.graphiks.kanvas.color.ImageColorSpace.sRGB(),
+            alphaType = if (request.colorType == ColorType.RGBA_F16_NORM) {
+                org.graphiks.kanvas.image.AlphaType.PREMUL
+            } else {
+                org.graphiks.kanvas.image.AlphaType.UNPREMUL
+            },
+            colorSpace = decodedColorSpace,
         )
         val bitmap = Bitmap(info)
         val raw = if (source.metadata.origin == EncodedOrigin.TOP_LEFT) bitmap else {

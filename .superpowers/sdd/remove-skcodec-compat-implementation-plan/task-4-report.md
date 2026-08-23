@@ -14,6 +14,17 @@
   `orient(Bitmap, Bitmap, EncodedOrigin)` et `swapWidthHeight(ImageInfo)`.
   Les chemins JPEG conservent le profil ICC et l’orientation EXIF.
 
+## Correctif de revue
+
+- Le chemin JPEG hierarchy classe désormais une géométrie différente comme
+  `kInvalidScale`, et un alpha ou un `ImageColorSpace` non identique comme
+  `kInvalidConversion`.
+- `JpegDocument.decode` hierarchy refuse le retagging d’espace couleur ; les
+  sorties `RGBA_F16_NORM` utilisent `AlphaType.PREMUL`.
+- Les overloads `Pixmap` PNG/JPEG copient les composants F16 prémultipliés
+  directement. `Pixmap.getPremulRgbaF16` lit avec le `rowBytes` déclaré et
+  protège son usage aux formats F16.
+
 ## Vérifications
 
 - `rtk ./gradlew :codec:png:test :codec:jpeg:test :codec:common:test` — PASS.
@@ -22,6 +33,7 @@
 ## Commit
 
 - `refactor(codec): migrate png and jpeg raster contracts`
+- `fix(codec): tighten png jpeg raster contracts`
 
 ## Hors périmètre
 

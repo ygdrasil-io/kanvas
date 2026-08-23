@@ -247,7 +247,7 @@ private class JpegHierarchyCodec(
             height = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.width else hierarchy.definition.height,
             colorType = ColorType.RGBA_8888,
             alphaType = AlphaType.UNPREMUL,
-            colorSpace = metadata.iccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
+            colorSpace = document.decodedColorSpace,
         )
     }
 
@@ -260,15 +260,16 @@ private class JpegHierarchyCodec(
     override fun getOrigin(): EncodedOrigin = metadata.origin
 
     override fun getPixels(info: ImageInfo, dst: Bitmap): Codec.Result {
-        if (dst.info != info) {
-            return Codec.Result.kInvalidParameters
+        if (info.width != cachedInfo.width || info.height != cachedInfo.height) {
+            return Codec.Result.kInvalidScale
         }
         if (
-            info.width != cachedInfo.width ||
-            info.height != cachedInfo.height ||
             info.alphaType != (if (info.colorType == ColorType.RGBA_F16_NORM) AlphaType.PREMUL else AlphaType.UNPREMUL) ||
             info.colorSpace !== cachedInfo.colorSpace
         ) {
+            return Codec.Result.kInvalidConversion
+        }
+        if (dst.info != info) {
             return Codec.Result.kInvalidParameters
         }
         if (info.colorType !in setOf(ColorType.RGBA_8888, ColorType.RGBA_F16_NORM)) {

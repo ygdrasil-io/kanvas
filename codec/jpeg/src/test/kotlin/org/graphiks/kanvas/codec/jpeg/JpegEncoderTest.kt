@@ -16,6 +16,7 @@ import org.graphiks.kanvas.image.EncodedOrigin
 import org.graphiks.kanvas.image.Pixmap
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.graphiks.kanvas.color.icc.IccProfile
+import org.graphiks.math.color.floatToHalf
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -67,6 +68,28 @@ class JpegEncoderTest {
 
         assertTrue(JpegEncoder.encode(output, pixmap))
         assertEquals(direct.toList(), output.toByteArray().toList())
+    }
+
+    @Test
+    fun `F16 Pixmap overload preserves premultiplied samples`() {
+        val info = ImageInfo.make(1, 1, ColorType.RGBA_F16_NORM, AlphaType.PREMUL, ImageColorSpace.sRGB())
+        val pixels = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putShort(0, floatToHalf(0.25f))
+            putShort(2, floatToHalf(0.125f))
+            putShort(4, floatToHalf(0.375f))
+            putShort(6, floatToHalf(0.5f))
+        }
+        val pixmap = Pixmap(info, pixels, 12)
+        val premul = FloatArray(4)
+
+        assertTrue(pixmap.getPremulRgbaF16(0, 0, premul))
+        assertEquals(0.25f, premul[0], 0.001f)
+        assertEquals(0.125f, premul[1], 0.001f)
+        assertEquals(0.375f, premul[2], 0.001f)
+        assertEquals(0.5f, premul[3], 0.001f)
+
+        val expected = Bitmap(info).also { it.setPremulRgbaF16(0, 0, premul[0], premul[1], premul[2], premul[3]) }
+        assertEquals(JpegEncoder.encode(expected)!!.toList(), JpegEncoder.encode(pixmap)!!.toList())
     }
 
     @Test
