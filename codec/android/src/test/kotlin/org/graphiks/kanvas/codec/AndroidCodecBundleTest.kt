@@ -10,7 +10,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.nio.ByteBuffer
 
 class AndroidCodecBundleTest {
@@ -199,7 +199,7 @@ class AndroidCodecBundleTest {
     ) : Codec() {
         override fun getInfo(): SkImageInfo = info
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
-        override fun getICCProfile(): SkcmsICCProfile? = null
+        override fun getICCProfile(): IccProfile? = null
 
         override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
             if (decodeResult == Result.kSuccess) {

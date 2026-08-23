@@ -4,11 +4,11 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
  * Pure Kotlin WBMP decoder. This is the first non-AWT backend in the
@@ -28,7 +28,7 @@ public class WbmpCodec internal constructor(
             height = height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
     }
 
@@ -36,7 +36,7 @@ public class WbmpCodec internal constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kWBMP
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): IccProfile? = null
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) {

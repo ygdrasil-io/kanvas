@@ -9,7 +9,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 
 class AnimatedImageOwnershipTest {
 
@@ -78,7 +78,7 @@ class AnimatedImageOwnershipTest {
 
         override fun getInfo(): SkImageInfo = info
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kGIF
-        override fun getICCProfile(): SkcmsICCProfile? = null
+        override fun getICCProfile(): IccProfile? = null
         override fun getFrameCount(): Int = frames.size
 
         override fun getFrameInfo(): List<FrameInfo> =

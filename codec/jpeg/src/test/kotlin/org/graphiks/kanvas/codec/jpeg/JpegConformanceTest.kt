@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 
 /**
@@ -334,7 +334,7 @@ internal object JpegConformanceFixtures {
     )
 
     private fun bitmap(width: Int, height: Int, pixel: (Int, Int) -> Int): SkBitmap =
-        SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888).also { bitmap ->
+        SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888).also { bitmap ->
             for (y in 0 until height) for (x in 0 until width) bitmap.setPixel(x, y, pixel(x, y))
         }
 

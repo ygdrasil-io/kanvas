@@ -4,11 +4,11 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 
 /** Pure Kotlin static JPEG-LS owner for verified 8-bit grayscale and RGB LOCO-I profiles. */
 public class JpegLsCodec private constructor(
@@ -19,12 +19,12 @@ public class JpegLsCodec private constructor(
         height = document.height,
         colorType = SkColorType.kRGBA_8888,
         alphaType = SkAlphaType.kUnpremul,
-        colorSpace = SkColorSpace.makeSRGB(),
+        colorSpace = ImageColorSpace.sRGB(),
     )
 
     override fun getInfo(): SkImageInfo = info
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): IccProfile? = null
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (

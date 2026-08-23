@@ -13,13 +13,11 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
-import org.skia.foundation.SkColorSpaceProfileStatus
+import org.graphiks.kanvas.color.ImageColorSpace
+import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 
@@ -76,7 +74,7 @@ class WebpCodecTest {
         assertEquals(123, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
         assertTrue(codec.metadata.flags.icc)
         assertTrue(codec.metadata.flags.alpha)
         assertTrue(codec.metadata.flags.exif)
@@ -87,7 +85,7 @@ class WebpCodecTest {
 
     @Test
     fun `extracts VP8X ICC profile chunk`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
@@ -105,12 +103,12 @@ class WebpCodecTest {
         assertNotNull(profile)
         assertEquals(iccBytes.size, profile!!.size)
         assertTrue(profile.hasTrc)
-        assertTrue(profile.hasToXYZD50)
-        assertFalse(checkedCodec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kSupported, checkedCodec.getInfo().colorSpace.profileStatus)
+        assertTrue(profile.hasToXyzD50)
+        assertFalse(checkedCodec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.SUPPORTED, checkedCodec.getInfo().colorSpace.profileStatus)
         assertEquals(
-            SkNamedGamut.kDisplayP3[0, 0],
-            checkedCodec.getInfo().colorSpace.toXYZD50[0, 0],
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)[0, 0],
+            requireNotNull(checkedCodec.getInfo().colorSpace.toXyzD50)[0, 0],
             64f / 65_536f,
         )
     }
@@ -127,8 +125,8 @@ class WebpCodecTest {
         )!!
 
         assertNotNull(codec.getICCProfile())
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
@@ -209,7 +207,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
@@ -286,7 +284,7 @@ class WebpCodecTest {
             width = 4,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 0)))
@@ -1690,7 +1688,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
@@ -1705,7 +1703,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
@@ -1718,7 +1716,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -1740,7 +1738,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
@@ -1777,7 +1775,7 @@ class WebpCodecTest {
                 width = 2,
                 height = 2,
                 colorType = SkColorType.kRGBA_8888,
-                colorSpace = SkColorSpace.makeSRGB(),
+                colorSpace = ImageColorSpace.sRGB(),
             )
 
             assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
@@ -1805,7 +1803,7 @@ class WebpCodecTest {
                 width = 2,
                 height = 2,
                 colorType = SkColorType.kRGBA_8888,
-                colorSpace = SkColorSpace.makeSRGB(),
+                colorSpace = ImageColorSpace.sRGB(),
             )
 
             assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
@@ -1857,7 +1855,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -1873,7 +1871,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
@@ -1896,7 +1894,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -1988,7 +1986,7 @@ class WebpCodecTest {
             width = 2,
             height = 2,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Vp8LossyBitstreamLayoutDecodeResult.Invalid, decodeVp8LossyBitstreamLayout(data, codec.metadata))
@@ -2006,7 +2004,7 @@ class WebpCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -2030,7 +2028,7 @@ class WebpCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -2055,7 +2053,7 @@ class WebpCodecTest {
             width = 3,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -2079,7 +2077,7 @@ class WebpCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -2103,7 +2101,7 @@ class WebpCodecTest {
             width = 2,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
@@ -2323,7 +2321,7 @@ class WebpCodecTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
@@ -2336,7 +2334,7 @@ class WebpCodecTest {
             width = 1,
             height = 1,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
@@ -2861,7 +2859,7 @@ class WebpCodecTest {
     }
 
     private fun grayProfileBytes(): ByteArray {
-        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val bytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         iccWriteU32(bytes, 16, iccSignature("GRAY"))
         repeat(iccReadU32(bytes, 128)) { index ->
             val entry = 132 + index * 12
@@ -2934,7 +2932,7 @@ class WebpCodecTest {
             width = width,
             height = height,
             colorType = SkColorType.kRGBA_8888,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))

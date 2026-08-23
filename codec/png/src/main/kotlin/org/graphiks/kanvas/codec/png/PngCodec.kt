@@ -9,13 +9,11 @@ import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.color.ColorMatrix3x3F32
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.ByteArrayOutputStream
 import java.util.Collections
 import java.util.zip.DataFormatException
@@ -50,7 +48,9 @@ public class PngCodec private constructor(
             height = png.height,
             colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
             alphaType = if (isF16) SkAlphaType.kPremul else SkAlphaType.kUnpremul,
-            colorSpace = png.resolvedColorProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+            colorSpace = png.resolvedIccProfile?.let(ImageColorSpace::fromIccProfile)
+                ?: png.resolvedColorProfile?.let(ImageColorSpace::fromColorProfile)
+                ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -58,7 +58,7 @@ public class PngCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
 
-    override fun getICCProfile(): SkcmsICCProfile? = png.embeddedIccProfile
+    override fun getICCProfile(): IccProfile? = png.embeddedIccProfile
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (info.width != cachedInfo.width || info.height != cachedInfo.height) {
@@ -407,6 +407,7 @@ public class PngCodec private constructor(
                 transparency = if (h.colorType == COLOR_GRAYSCALE || h.colorType == COLOR_RGB) transparency else null,
                 embeddedIccProfile = colors.embeddedIccProfile,
                 resolvedColorProfile = colors.resolvedColorProfile,
+                resolvedIccProfile = colors.resolvedIccProfile,
             )
         }
 
@@ -526,7 +527,7 @@ public class PngCodec private constructor(
             return colors
         }
 
-        private fun parseEmbeddedIccp(data: ByteArray, record: PngChunkRecord): SkcmsICCProfile? {
+        private fun parseEmbeddedIccp(data: ByteArray, record: PngChunkRecord): IccProfile? {
             val offset = record.payloadRange.startInclusive.toInt()
             val length = record.payloadRange.size.toInt()
             val end = offset + length
@@ -537,7 +538,9 @@ public class PngCodec private constructor(
             if (nameEnd + 2 > end) return null
             if ((data[nameEnd + 1].toInt() and 0xFF) != 0) return null
             return try {
-                skcmsParse(inflateAll(data.copyOfRange(nameEnd + 2, end), maxSize = MAX_ICC_PROFILE_SIZE))
+                IccProfile.parse(
+                    inflateAll(data.copyOfRange(nameEnd + 2, end), maxSize = MAX_ICC_PROFILE_SIZE),
+                ).profileOrNull()
             } catch (_: DataFormatException) {
                 null
             }
@@ -561,7 +564,8 @@ public class PngCodec private constructor(
             if (iccp != null) {
                 return ColorResolution(
                     embeddedIccProfile = embeddedIcc,
-                    resolvedColorProfile = SkcmsICCProfile.fromColorProfile(iccp.value.profile),
+                    resolvedColorProfile = iccp.value.profile,
+                    resolvedIccProfile = embeddedIcc,
                     diagnostics = emptyList(),
                 )
             }
@@ -569,7 +573,7 @@ public class PngCodec private constructor(
             if (metadata.sRGB is PngMetadataValue.Resolved<PngSrgbMetadata>) {
                 return ColorResolution(
                     embeddedIccProfile = embeddedIcc,
-                    resolvedColorProfile = SkcmsICCProfile.fromColorProfile(ColorProfiles.sRGB()),
+                    resolvedColorProfile = ColorProfiles.sRGB(),
                     diagnostics = emptyList(),
                 )
             }
@@ -589,21 +593,19 @@ public class PngCodec private constructor(
 
         private fun resolveCicpProfile(
             cicp: PngMetadataValue.Resolved<PngCicpMetadata>,
-            embeddedIcc: SkcmsICCProfile?,
+            embeddedIcc: IccProfile?,
         ): ColorResolution = when (cicp.value.profileResolution) {
             PngCicpProfileResolution.RGB_PROFILE -> {
                 if (cicp.value.info.fullRange) {
                     ColorResolution(
                         embeddedIccProfile = embeddedIcc,
-                        resolvedColorProfile = SkcmsICCProfile.fromColorProfile(requireNotNull(cicp.value.profile)),
+                        resolvedColorProfile = requireNotNull(cicp.value.profile),
                         diagnostics = emptyList(),
                     )
                 } else {
                     ColorResolution(
                         embeddedIccProfile = embeddedIcc,
-                        resolvedColorProfile = SkcmsICCProfile.fromColorProfile(
-                            ColorProfile.unsupported(CICP_NARROW_RANGE_UNSUPPORTED),
-                        ),
+                        resolvedColorProfile = ColorProfile.unsupported(CICP_NARROW_RANGE_UNSUPPORTED),
                         diagnostics = listOf(
                             PngDiagnostic(
                                 code = CICP_NARROW_RANGE_UNSUPPORTED,
@@ -635,7 +637,7 @@ public class PngCodec private constructor(
         private fun resolveChromaticityGamma(
             chromaticities: PngMetadataValue.Resolved<PngChromaticitiesMetadata>,
             gamma: PngMetadataValue.Resolved<PngGammaMetadata>,
-            embeddedIcc: SkcmsICCProfile?,
+            embeddedIcc: IccProfile?,
         ): ColorResolution {
             val matrix = chromaticitiesToXyzD50(chromaticities.value)
             val exponent = GAMMA_SCALE / gamma.value.encodedGamma.toDouble()
@@ -671,7 +673,7 @@ public class PngCodec private constructor(
             }
             return ColorResolution(
                 embeddedIccProfile = embeddedIcc,
-                resolvedColorProfile = SkcmsICCProfile.fromColorProfile(profile),
+                resolvedColorProfile = profile,
                 diagnostics = diagnostics,
             )
         }
@@ -690,9 +692,15 @@ public class PngCodec private constructor(
             if (scale.any { !it.isFinite() || it <= 0.0 }) return null
             val sourceToXyz = DoubleArray(9) { index -> primaries[index] * scale[index % 3] }
             val d50 = doubleArrayOf(
-                SkNamedGamut.kSRGB[0, 0].toDouble() + SkNamedGamut.kSRGB[0, 1] + SkNamedGamut.kSRGB[0, 2],
-                SkNamedGamut.kSRGB[1, 0].toDouble() + SkNamedGamut.kSRGB[1, 1] + SkNamedGamut.kSRGB[1, 2],
-                SkNamedGamut.kSRGB[2, 0].toDouble() + SkNamedGamut.kSRGB[2, 1] + SkNamedGamut.kSRGB[2, 2],
+                requireNotNull(ColorProfiles.sRGB().toXyzD50)[0, 0].toDouble() +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[0, 1] +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[0, 2],
+                requireNotNull(ColorProfiles.sRGB().toXyzD50)[1, 0].toDouble() +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[1, 1] +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[1, 2],
+                requireNotNull(ColorProfiles.sRGB().toXyzD50)[2, 0].toDouble() +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[2, 1] +
+                    requireNotNull(ColorProfiles.sRGB().toXyzD50)[2, 2],
             )
             val sourceCone = BRADFORD.times(white)
             val targetCone = BRADFORD.times(d50)
@@ -753,13 +761,15 @@ public class PngCodec private constructor(
         val idat: ByteArray,
         val palette: IntArray?,
         val transparency: Transparency?,
-        val embeddedIccProfile: SkcmsICCProfile?,
-        val resolvedColorProfile: SkcmsICCProfile?,
+        val embeddedIccProfile: IccProfile?,
+        val resolvedColorProfile: ColorProfile?,
+        val resolvedIccProfile: IccProfile?,
     )
 
     private data class ColorResolution(
-        val embeddedIccProfile: SkcmsICCProfile?,
-        val resolvedColorProfile: SkcmsICCProfile?,
+        val embeddedIccProfile: IccProfile?,
+        val resolvedColorProfile: ColorProfile?,
+        val resolvedIccProfile: IccProfile? = null,
         val diagnostics: List<PngDiagnostic>,
     )
 }

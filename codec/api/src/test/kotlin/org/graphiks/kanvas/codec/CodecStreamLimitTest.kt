@@ -7,11 +7,11 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
+import org.graphiks.kanvas.color.icc.IccProfile
 import java.io.InputStream
 
 class CodecStreamLimitTest {
@@ -156,12 +156,12 @@ class CodecStreamLimitTest {
             height = 1,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = ImageColorSpace.sRGB(),
         )
 
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
 
-        override fun getICCProfile(): SkcmsICCProfile? = null
+        override fun getICCProfile(): IccProfile? = null
 
         override fun getPixels(info: SkImageInfo, dst: SkBitmap): Codec.Result = Codec.Result.kSuccess
     }

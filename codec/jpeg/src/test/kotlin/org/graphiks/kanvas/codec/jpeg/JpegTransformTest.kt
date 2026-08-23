@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import java.io.ByteArrayOutputStream
 
@@ -290,7 +290,7 @@ class JpegTransformTest {
         downsample: JpegEncoder.Downsample = JpegEncoder.Downsample.k420,
         quality: Int = 100,
     ): ByteArray {
-        val bitmap = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
+        val bitmap = SkBitmap(width, height, ImageColorSpace.sRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
             val r = (x * 255 / (width - 1))
             val g = (y * 255 / (height - 1))

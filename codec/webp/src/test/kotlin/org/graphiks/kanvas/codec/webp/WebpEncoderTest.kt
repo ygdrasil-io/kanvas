@@ -7,9 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 
 class WebpEncoderTest {
@@ -47,7 +45,7 @@ class WebpEncoderTest {
     fun `VP8X ICC profile round-trips`() {
         val src = SkBitmap(4, 4)
         for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         val options = WebpEncoder.Options(iccProfile = iccBytes)
         val encoded = WebpEncoder.encode(src, options)!!
         val codec = Codec.MakeFromData(encoded)
@@ -81,7 +79,7 @@ class WebpEncoderTest {
     fun `VP8X with all metadata round-trips`() {
         val src = SkBitmap(4, 4)
         for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         val exifBytes = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x49, 0x49)
         val xmpBytes = byteArrayOf(60, 120, 58, 120, 109, 112, 109, 101, 116, 97)
         val options = WebpEncoder.Options(iccProfile = iccBytes, exifData = exifBytes, xmpData = xmpBytes)

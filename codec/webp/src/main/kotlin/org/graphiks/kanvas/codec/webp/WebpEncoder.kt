@@ -1,9 +1,7 @@
 package org.graphiks.kanvas.codec.webp
 
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
-import org.skia.foundation.SkICC
 import org.skia.foundation.SkImage
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream

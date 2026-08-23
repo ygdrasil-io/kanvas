@@ -14,6 +14,18 @@ import kotlin.math.round
  * discrepancies are refused.
  */
 public object IccProfileWriter {
+    /** Writes a Matrix/TRC ICC profile directly from its reusable numeric components. */
+    public fun writeMatrixTrc(
+        transferFunction: ColorTransferFunction.Parametric,
+        toXyzD50: ColorMatrix3x3F32,
+    ): ByteArray = writeMatrixTrc(
+        ColorProfile(
+            colorModel = ColorModel.RGB,
+            toXyzD50 = toXyzD50,
+            transferFunction = transferFunction,
+        ),
+    )
+
     public fun writeMatrixTrc(profile: ColorProfile): ByteArray {
         require(profile.colorModel == ColorModel.RGB) { "ICC matrix/TRC output requires an RGB profile" }
         require(profile.unsupportedCode == null && profile.hasMatrixTrc && !profile.isHdr) {

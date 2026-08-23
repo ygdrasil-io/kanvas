@@ -563,8 +563,8 @@ internal fun decodeJpegHierarchy(
             height = if (source.metadata.origin.swapsWidthHeight()) samples.width else samples.height,
             colorType = request.colorType,
             alphaType = source.metadata.origin.let { org.skia.foundation.SkAlphaType.kUnpremul },
-            colorSpace = request.colorSpace ?: source.metadata.iccProfile?.let(org.skia.foundation.SkColorSpace::makeProfileAware)
-                ?: org.skia.foundation.SkColorSpace.makeSRGB(),
+            colorSpace = request.colorSpace ?: source.metadata.iccProfile?.let(org.graphiks.kanvas.color.ImageColorSpace::fromIccProfile)
+                ?: org.graphiks.kanvas.color.ImageColorSpace.sRGB(),
         )
         val bitmap = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
         val raw = if (source.metadata.origin == SkEncodedOrigin.kTopLeft) bitmap else {

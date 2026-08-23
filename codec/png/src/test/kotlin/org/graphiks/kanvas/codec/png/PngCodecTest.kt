@@ -11,14 +11,12 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkColorSpaceProfileStatus
+import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
 import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkICC
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import java.util.zip.CRC32
@@ -92,7 +90,7 @@ class PngCodecTest {
         assertEquals(5, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
 
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -869,12 +867,12 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
     }
 
     @Test
     fun `iCCP with valid RGB profile exposes parsed ICC profile`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val codec = PngCodec.Decoder.make(
             pngFromChunks(
                 "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
@@ -885,22 +883,19 @@ class PngCodecTest {
         )
 
         assertNotNull(codec)
-        val profile = codec!!.getICCProfile()
-        assertNotNull(profile)
-        assertEquals(0x52474220, profile!!.dataColorSpace)
-        assertEquals(0x58595A20, profile.pcs)
+        val profile = requireNotNull(codec!!.getICCProfile())
         assertEquals(9, profile.tagCount)
         assertTrue(profile.hasTrc)
-        assertTrue(profile.hasToXYZD50)
-        assertNotNull(profile.buffer)
-        assertEquals(profile.size, profile.buffer!!.size)
+        assertTrue(profile.hasToXyzD50)
+        assertEquals(profile.size, profile.bytes.size)
         assertEquals(iccBytes.size, profile.size)
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(profile, codec.getInfo().colorSpace.iccProfile)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.SUPPORTED, codec.getInfo().colorSpace.profileStatus)
         for (row in 0 until 3) for (column in 0 until 3) {
             assertEquals(
-                SkNamedGamut.kDisplayP3[row, column],
-                codec.getInfo().colorSpace.toXYZD50[row, column],
+                requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)[row, column],
+                requireNotNull(codec.getInfo().colorSpace.toXyzD50)[row, column],
                 1f / 65_536f,
             )
         }
@@ -918,8 +913,8 @@ class PngCodecTest {
         )!!
 
         assertNotNull(codec.getICCProfile())
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
@@ -929,7 +924,7 @@ class PngCodecTest {
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "iCCP" to iccpChunkData(
                 "display-p3",
-                profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                profileBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)),
             ),
             "IDAT" to deflate(byteArrayOf(0, 0x40)),
             "IEND" to ByteArray(0),
@@ -956,7 +951,7 @@ class PngCodecTest {
                 "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
                 "iCCP" to iccpChunkData(
                     "display-p3",
-                    profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                    profileBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)),
                 ),
                 "IDAT" to deflate(byteArrayOf(0, 0x40)),
                 "IEND" to ByteArray(0),
@@ -974,7 +969,7 @@ class PngCodecTest {
             assertTrue(opened is PngCodecOpenResult.Success)
             val codec = (opened as PngCodecOpenResult.Success).codec
             assertNull(codec.getICCProfile())
-            assertTrue(codec.getInfo().colorSpace.isSRGB())
+            assertTrue(codec.getInfo().colorSpace.isSrgb())
             assertTrue(codec.diagnostics.any { it.code == "png.metadata.iCCP.color-model.mismatch" })
         }
     }
@@ -1010,7 +1005,7 @@ class PngCodecTest {
         assertTrue(opened is PngCodecOpenResult.Success)
         val codec = (opened as PngCodecOpenResult.Success).codec
         assertNull(codec.getICCProfile())
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
         assertTrue(codec.diagnostics.any { it.code == "png.metadata.cICP.color-model.mismatch" })
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -1031,7 +1026,7 @@ class PngCodecTest {
         assertTrue(opened is PngCodecOpenResult.Success)
         val codec = (opened as PngCodecOpenResult.Success).codec
         assertNull(codec.getICCProfile())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("color.hdr.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -1040,7 +1035,7 @@ class PngCodecTest {
 
     @Test
     fun `cICP resolves before embedded iCCP while ICC provenance remains embedded only`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val codec = PngCodec.Decoder.make(
             pngFromChunks(
                 "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
@@ -1053,7 +1048,7 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertTrue(codec!!.getInfo().colorSpace.colorProfile.isHdr)
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertNotNull(codec.getICCProfile())
         assertFalse(codec.getICCProfile()!!.colorProfile.isHdr)
         assertEquals(iccBytes.size, codec.getICCProfile()!!.size)
@@ -1063,7 +1058,7 @@ class PngCodecTest {
     fun `cICP remains active when lower priority iCCP is structurally refused`() {
         val iccp = iccpChunkData(
             "display-p3",
-            profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+            profileBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)),
         )
         val cases = listOf(
             "png.metadata.iCCP.duplicate" to pngFromChunks(
@@ -1107,7 +1102,7 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("png.cicp.narrow-range.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -1127,7 +1122,7 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
@@ -1193,7 +1188,7 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
     }
 
     @Test
@@ -1218,7 +1213,7 @@ class PngCodecTest {
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
-        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.getInfo().colorSpace.isSrgb())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
@@ -1243,7 +1238,7 @@ class PngCodecTest {
                 "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
                 "iCCP" to iccpChunkData(
                     " invalid",
-                    profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                    profileBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)),
                 ),
                 "sRGB" to byteArrayOf(0),
                 "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
@@ -1252,7 +1247,7 @@ class PngCodecTest {
         )
         assertNotNull(refusedIccp)
         assertNull(refusedIccp!!.getICCProfile())
-        assertTrue(refusedIccp.getInfo().colorSpace.isSRGB())
+        assertTrue(refusedIccp.getInfo().colorSpace.isSrgb())
         assertTrue((refusedIccp as PngCodec).diagnostics.any { it.code == "png.metadata.iCCP.keyword.invalid" })
 
         for ((chunkType, payload, diagnosticCode) in listOf(
@@ -1309,7 +1304,7 @@ class PngCodecTest {
         assertEquals(Codec.Result.kInvalidScale, codec.getPixels(scaled, SkBitmap(1, 1, scaled.colorSpace, scaled.colorType)))
 
         val sourceGeometry = codec.getInfo()
-        val sourceSpaceMismatch = sourceGeometry.makeColorSpace(SkColorSpace.makeSRGBLinear())
+        val sourceSpaceMismatch = sourceGeometry.makeColorSpace(ImageColorSpace.linearSrgb())
         assertEquals(
             Codec.Result.kInvalidConversion,
             codec.getPixels(
@@ -1320,7 +1315,7 @@ class PngCodecTest {
 
         assertEquals(
             Codec.Result.kInvalidParameters,
-            codec.getPixels(sourceGeometry, SkBitmap(2, 2, SkColorSpace.makeSRGBLinear(), sourceGeometry.colorType)),
+            codec.getPixels(sourceGeometry, SkBitmap(2, 2, ImageColorSpace.linearSrgb(), sourceGeometry.colorType)),
         )
 
         val alphaMismatch = sourceGeometry.makeAlphaType(SkAlphaType.kPremul)
@@ -2062,7 +2057,7 @@ class PngCodecTest {
     }
 
     private fun grayProfileBytes(): ByteArray {
-        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val bytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         iccWriteU32(bytes, 16, iccSignature("GRAY"))
         repeat(iccReadU32(bytes, 128)) { index ->
             val entry = 132 + index * 12

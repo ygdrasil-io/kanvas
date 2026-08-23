@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.ColorSpaceClassification
 import org.graphiks.kanvas.color.ColorSpaceClassificationFailure
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.color.classifyColorSpace
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Bitmap
@@ -13,7 +14,6 @@ import org.graphiks.kanvas.image.ImageInfo
 import org.graphiks.kanvas.types.Color
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
@@ -105,9 +105,9 @@ public fun SkEncodedOrigin.toKanvasEncodedOrigin(): EncodedOrigin = when (this) 
 
 internal class UnsupportedKanvasColorSpaceException(
     public val reason: String,
-) : IllegalArgumentException("Unsupported SkColorSpace for Kanvas conversion: $reason")
+) : IllegalArgumentException("Unsupported ImageColorSpace for Kanvas conversion: $reason")
 
-internal fun SkColorSpace.toKanvasColorSpace(): ColorSpace {
+internal fun ImageColorSpace.toKanvasColorSpace(): ColorSpace {
     return when (val classification = colorProfile.classifyColorSpace()) {
         is ColorSpaceClassification.Supported -> classification.colorSpace
         is ColorSpaceClassification.Unsupported -> throw UnsupportedKanvasColorSpaceException(

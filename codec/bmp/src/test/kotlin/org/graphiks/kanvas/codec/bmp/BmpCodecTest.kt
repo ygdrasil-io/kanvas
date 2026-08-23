@@ -10,10 +10,8 @@ import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
-import org.skia.foundation.SkColorSpaceProfileStatus
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedGamut
-import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.kanvas.color.ImageColorSpaceProfileStatus
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 
 class BmpCodecTest {
 
@@ -178,7 +176,7 @@ class BmpCodecTest {
 
     @Test
     fun `V5 BMP with embedded ICC profile exposes it via getICCProfile`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val iccBytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50))
         val codec = BmpCodec.Decoder.make(
             v4BitfieldsBmp(
                 width = 1,
@@ -195,9 +193,13 @@ class BmpCodecTest {
         val profile = codec.getICCProfile()
         assertNotNull(profile, "V5 BMP with embedded ICC must expose a profile")
         assertEquals(iccBytes.size, profile!!.size)
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
-        assertEquals(SkNamedGamut.kDisplayP3[0, 0], codec.getInfo().colorSpace.toXYZD50[0, 0], 64f / 65_536f)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.SUPPORTED, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(
+            requireNotNull(org.graphiks.kanvas.color.ColorProfiles.displayP3().toXyzD50)[0, 0],
+            requireNotNull(codec.getInfo().colorSpace.toXyzD50)[0, 0],
+            64f / 65_536f,
+        )
     }
 
     @Test
@@ -217,8 +219,8 @@ class BmpCodecTest {
         )!!
 
         assertNotNull(codec.getICCProfile())
-        assertFalse(codec.getInfo().colorSpace.isSRGB())
-        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertFalse(codec.getInfo().colorSpace.isSrgb())
+        assertEquals(ImageColorSpaceProfileStatus.UNSUPPORTED, codec.getInfo().colorSpace.profileStatus)
         assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
@@ -344,7 +346,7 @@ class BmpCodecTest {
         val info = codec.getInfo()
         assertEquals(SkColorType.kRGBA_8888, info.colorType)
         assertEquals(SkAlphaType.kUnpremul, info.alphaType)
-        assertTrue(info.colorSpace.isSRGB())
+        assertTrue(info.colorSpace.isSrgb())
     }
 
     private fun assertPaletteDecode(bitsPerPixel: Int) {
@@ -585,7 +587,7 @@ class BmpCodecTest {
     }
 
     private fun grayProfileBytes(): ByteArray {
-        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val bytes = IccProfileWriter.writeMatrixTrc(requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().transferFunction), requireNotNull(org.graphiks.kanvas.color.ColorProfiles.sRGB().toXyzD50))
         iccWriteU32(bytes, 16, iccSignature("GRAY"))
         repeat(iccReadU32(bytes, 128)) { index ->
             val entry = 132 + index * 12

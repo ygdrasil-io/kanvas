@@ -4,12 +4,11 @@ import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
-import org.skia.foundation.skcms.SkcmsICCProfile
-import org.skia.foundation.skcms.skcmsParse
+import org.graphiks.kanvas.color.icc.IccProfile
 
 /**
  * Pure Kotlin BMP decoder for the common uncompressed Windows BMP path.
@@ -28,7 +27,7 @@ public class BmpCodec private constructor(
     iccBytes: ByteArray?,
 ) : Codec() {
 
-    private val storedIccProfile: SkcmsICCProfile? = iccBytes?.let { skcmsParse(it) }
+    private val storedIccProfile: IccProfile? = iccBytes?.let { IccProfile.parse(it).profileOrNull() }
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -36,7 +35,7 @@ public class BmpCodec private constructor(
             height = header.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = storedIccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+            colorSpace = storedIccProfile?.let(ImageColorSpace::fromIccProfile) ?: ImageColorSpace.sRGB(),
         )
     }
 
@@ -44,7 +43,7 @@ public class BmpCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kBMP
 
-    override fun getICCProfile(): SkcmsICCProfile? = storedIccProfile
+    override fun getICCProfile(): IccProfile? = storedIccProfile
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) {
