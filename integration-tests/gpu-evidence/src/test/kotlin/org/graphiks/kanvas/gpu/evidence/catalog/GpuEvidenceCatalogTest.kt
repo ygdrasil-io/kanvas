@@ -95,6 +95,9 @@ class GpuEvidenceCatalogTest {
         assertNotNull(blur.oracle)
         assertEquals(2, blur.descriptor.comparison?.perChannelTolerance)
         assertEquals(99.0, blur.descriptor.comparison?.minimumSimilarityPercent)
+        assertEquals(1, blur.descriptor.comparison?.version)
+        assertEquals("surface-srgb-mask-blur-normal-decal", (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId)
+        assertEquals(2, (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).version)
 
         listOf("translucent-card-overlap", "scissor-overlay", "stroke-rect-outline").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
@@ -105,6 +108,11 @@ class GpuEvidenceCatalogTest {
             assertNotNull(evidenceCase.descriptor.comparison)
         }
         assertEquals(1, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.perChannelTolerance)
+        assertEquals(100.0, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.minimumSimilarityPercent)
+        assertEquals(1, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.version)
+        val translucentOracle = cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.oracle as OraclePolicy.GeneratedCpu
+        assertEquals("surface-srgb-linear-premul-src-over", translucentOracle.oracleId)
+        assertEquals(2, translucentOracle.version)
         assertEquals(0, cases.first { it.descriptor.id.value == "scissor-overlay" }.descriptor.comparison?.perChannelTolerance)
         assertEquals(0, cases.first { it.descriptor.id.value == "stroke-rect-outline" }.descriptor.comparison?.perChannelTolerance)
 

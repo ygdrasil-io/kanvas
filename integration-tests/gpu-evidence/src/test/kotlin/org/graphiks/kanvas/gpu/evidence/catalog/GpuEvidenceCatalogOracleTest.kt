@@ -11,9 +11,9 @@ class GpuEvidenceCatalogOracleTest {
         val pixels = oracle("translucent-card-overlap")
 
         assertPixel(pixels, 64, 64, 2, 2, intArrayOf(13, 20, 33, 255))
-        assertPixel(pixels, 64, 64, 12, 12, intArrayOf(38, 73, 112, 255))
-        assertPixel(pixels, 64, 64, 50, 50, intArrayOf(70, 41, 32, 255))
-        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(82, 68, 71, 255))
+        assertPixel(pixels, 64, 64, 12, 12, intArrayOf(46, 94, 142, 255))
+        assertPixel(pixels, 64, 64, 50, 50, intArrayOf(93, 48, 33, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(98, 81, 105, 255))
     }
 
     @Test

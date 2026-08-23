@@ -2,7 +2,9 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 
 import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.ReferenceRaster
-import org.graphiks.kanvas.gpu.evidence.oracle.SeparableBlurCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSeparableMaskBlurCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.GradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -49,16 +51,15 @@ object GpuEvidenceCatalog {
     }
 
     private fun separableBlurRect(): EvidenceCase {
-        val sourceColor = floatArrayOf(0.18f, 0.42f, 0.76f, 1f)
         return EvidenceCase(
             descriptor = EvidenceSceneDescriptor(
                 EvidenceSceneId("separable-blur-rect"), "Separable blur rectangle", "Public Kanvas Surface normal mask blur recording.",
                 64, 64, 1L, setOf("separable-blur", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-                OraclePolicy.GeneratedCpu("separable-blur-transparent-decal", 1),
-                ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the vertical pass quantization."), emptySet(),
+                OraclePolicy.GeneratedCpu("surface-srgb-mask-blur-normal-decal", 2),
+                ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the independently quantized vertical mask stage."), emptySet(),
             ),
             program = KanvasScenePrograms.separableBlurRect(),
-            oracle = SeparableBlurCpuOracle(org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(16, 16, 48, 48), sourceColor, sigma = 3f),
+            oracle = SurfaceSrgbSeparableMaskBlurCpuOracle(),
         )
     }
 
@@ -67,15 +68,21 @@ object GpuEvidenceCatalog {
             descriptor = EvidenceSceneDescriptor(
                 EvidenceSceneId("translucent-card-overlap"), "Translucent card overlap", "Two partially transparent Kanvas Canvas cards exercise SrcOver overlap.",
                 64, 64, 1L, setOf("solid-rect", "translucent", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-                OraclePolicy.GeneratedCpu("reference-raster-translucent-src-over", 1),
-                ComparisonPolicy(1, 100.0, 1, "Hardware capture on Apple M2 Max showed rgba8unorm nearest quantization versus ReferenceRaster.srcOver integer truncation: RGB deltas are bounded to 1, alpha remains exact; delta 2 remains a failure."), emptySet(),
+                OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
+                ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."), emptySet(),
             ),
             program = KanvasScenePrograms.translucentCardOverlap(),
-            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
-                fillRect(0, 0, width, height, intArrayOf(13, 20, 33, 255))
-                srcOver(8, 10, 44, 42, intArrayOf(32, 64, 96, 128))
-                srcOver(24, 22, 56, 54, intArrayOf(64, 32, 16, 128))
-            }.rgba() },
+            oracle = SurfaceSrgbSrcOverCpuOracle(
+                background = intArrayOf(13, 20, 33, 255),
+                rectangles = listOf(
+                    SurfaceSrgbSrcOverCpuOracle.StraightSrgbRectangle(
+                        SurfaceSrgbOracleMath.PixelRect(8, 10, 44, 42), intArrayOf(64, 128, 191, 128),
+                    ),
+                    SurfaceSrgbSrcOverCpuOracle.StraightSrgbRectangle(
+                        SurfaceSrgbOracleMath.PixelRect(24, 22, 56, 54), intArrayOf(128, 64, 32, 128),
+                    ),
+                ),
+            ),
         )
     }
 

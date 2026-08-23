@@ -34,5 +34,25 @@ class GpuEvidenceArchitectureBoundaryTest {
             projectRoot.resolve("build.gradle.kts").readText().contains("implementation(project(\":kanvas\"))"),
             "gpu evidence must depend directly on the public Kanvas Surface API",
         )
+        val oracleRoot = projectRoot.resolve("src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle")
+        val requiredSurfaceOracles = listOf(
+            "SurfaceSrgbOracleMath.kt",
+            "SurfaceSrgbSrcOverCpuOracle.kt",
+            "SurfaceSrgbSeparableMaskBlurCpuOracle.kt",
+        )
+        requiredSurfaceOracles.forEach { name ->
+            assertTrue(oracleRoot.resolve(name).isFile, "missing required Surface sRGB oracle: $name")
+        }
+        val legacyOracleExceptions = setOf("CpuOracle.kt", "ReferenceRaster.kt", "GradientCpuOracle.kt", "GradientCpuOracleTest.kt")
+        val surfaceOracleFiles = oracleRoot.listFiles()
+            .orEmpty()
+            .filter { it.extension == "kt" && it.name !in legacyOracleExceptions }
+        assertTrue(surfaceOracleFiles.any { it.name.startsWith("SurfaceSrgb") }, "Surface sRGB oracle scan must not be vacuous")
+        val surfaceOracleText = surfaceOracleFiles
+            .joinToString("\n") { it.readText().replace(Regex("^package\\s+org\\.graphiks\\.kanvas\\.gpu\\.evidence\\.oracle\\s*$", RegexOption.MULTILINE), "") }
+        assertFalse(
+            Regex("org\\.graphiks\\.kanvas\\.").containsMatchIn(surfaceOracleText),
+            "Surface sRGB oracles must be independent of product types",
+        )
     }
 }
