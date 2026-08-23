@@ -95,16 +95,15 @@ class AnimatedImageOwnershipTest {
     @Test
     fun `post process rejects metadata that Surface cannot preserve`() {
         val unpremul = RecordingAnimatedCodec(frames = listOf(RED), delaysMs = listOf(40))
-        assertNull(
-            AnimatedImage.Make(
-                AndroidCodec.MakeFromCodec(unpremul),
-                unpremul.getInfo(),
-                RectI32.ofSize(1, 1),
-                bluePostProcess(),
-            ),
+        assertPostProcessRejectedBeforeDecode(unpremul)
+
+        val rgb565 = RecordingAnimatedCodec(
+            frames = listOf(RED),
+            delaysMs = listOf(40),
+            colorType = ColorType.RGB_565,
+            alphaType = AlphaType.PREMUL,
         )
-        assertEquals(emptyList<Int>(), unpremul.decodedFrameIndexes)
-        assertEquals(emptyList<Codec.Options>(), unpremul.decodedOptions)
+        assertPostProcessRejectedBeforeDecode(rgb565)
 
         val displayP3 = ImageColorSpace.fromColorProfile(ColorProfiles.displayP3())
         val p3 = RecordingAnimatedCodec(
@@ -113,16 +112,15 @@ class AnimatedImageOwnershipTest {
             alphaType = AlphaType.PREMUL,
             colorSpace = displayP3,
         )
-        assertNull(
-            AnimatedImage.Make(
-                AndroidCodec.MakeFromCodec(p3),
-                p3.getInfo(),
-                RectI32.ofSize(1, 1),
-                bluePostProcess(),
-            ),
+        assertPostProcessRejectedBeforeDecode(p3)
+
+        val nonClassifiableIcc = RecordingAnimatedCodec(
+            frames = listOf(RED),
+            delaysMs = listOf(40),
+            alphaType = AlphaType.PREMUL,
+            colorSpace = supportedNonClassifiableIccColorSpace(),
         )
-        assertEquals(emptyList<Int>(), p3.decodedFrameIndexes)
-        assertEquals(emptyList<Codec.Options>(), p3.decodedOptions)
+        assertPostProcessRejectedBeforeDecode(nonClassifiableIcc)
     }
 
     @Test
@@ -137,7 +135,20 @@ class AnimatedImageOwnershipTest {
             ),
         )
 
-        val nonClassifiableIcc = ImageColorSpace.fromIccProfile(
+        val nonClassifiableIcc = supportedNonClassifiableIccColorSpace()
+        assertNull(nonClassifiableIcc.toColorSpaceOrNull())
+        assertNoPostProcessPreserves(
+            RecordingAnimatedCodec(
+                frames = listOf(RED),
+                delaysMs = listOf(40),
+                alphaType = AlphaType.UNPREMUL,
+                colorSpace = nonClassifiableIcc,
+            ),
+        )
+    }
+
+    private fun supportedNonClassifiableIccColorSpace(): ImageColorSpace =
+        ImageColorSpace.fromIccProfile(
             IccProfile.fromMatrixTrc(
                 ColorProfile(
                     ColorModel.RGB,
@@ -154,16 +165,6 @@ class AnimatedImageOwnershipTest {
                 ),
             ),
         )
-        assertNull(nonClassifiableIcc.toColorSpaceOrNull())
-        assertNoPostProcessPreserves(
-            RecordingAnimatedCodec(
-                frames = listOf(RED),
-                delaysMs = listOf(40),
-                alphaType = AlphaType.UNPREMUL,
-                colorSpace = nonClassifiableIcc,
-            ),
-        )
-    }
 
     private fun bluePostProcess() = PictureRecorder().let { recorder ->
         recorder.beginRecording(Rect.fromXYWH(0f, 0f, 1f, 1f)).drawRect(
@@ -180,9 +181,23 @@ class AnimatedImageOwnershipTest {
         assertEquals(codec.getInfo().colorSpace, frameInfo.colorSpace)
     }
 
+    private fun assertPostProcessRejectedBeforeDecode(codec: RecordingAnimatedCodec) {
+        assertNull(
+            AnimatedImage.Make(
+                AndroidCodec.MakeFromCodec(codec),
+                codec.getInfo(),
+                RectI32.ofSize(1, 1),
+                bluePostProcess(),
+            ),
+        )
+        assertEquals(emptyList<Int>(), codec.decodedFrameIndexes)
+        assertEquals(emptyList<Codec.Options>(), codec.decodedOptions)
+    }
+
     private class RecordingAnimatedCodec(
         private val frames: List<Int>,
         private val delaysMs: List<Int>,
+        private val colorType: ColorType = ColorType.RGBA_8888,
         private val alphaType: AlphaType = AlphaType.UNPREMUL,
         private val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
     ) : Codec() {
@@ -191,7 +206,7 @@ class AnimatedImageOwnershipTest {
         private val info = ImageInfo.make(
             width = 1,
             height = 1,
-            colorType = ColorType.RGBA_8888,
+            colorType = colorType,
             alphaType = alphaType,
             colorSpace = colorSpace,
         )
