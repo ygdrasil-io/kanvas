@@ -1,12 +1,12 @@
 package org.graphiks.kanvas.gpu.evidence.catalog
 
 import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
-import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
+import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram
 
 /** A closed, executable evidence case paired with its validation-only CPU oracle. */
 data class EvidenceCase(
     val descriptor: EvidenceSceneDescriptor,
-    val program: SceneProgram,
+    val program: EvidenceProgram,
     val oracle: CpuOracle?,
 ) {
     init {

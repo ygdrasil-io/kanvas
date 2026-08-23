@@ -20,6 +20,7 @@ interface EvidenceRuntimePort { fun open(): EvidenceBackendPort?; fun close(); f
 class GpuEvidenceCliRunner(
     private val runtime: EvidenceRuntimePort,
     private val requestParser: (Array<String>) -> GpuEvidenceCliRequest = GpuEvidenceCliRequest::parse,
+    private val cases: List<org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase> = GpuEvidenceCatalog.cases,
 ) {
     fun run(args: Array<String>): Int = runResult(args).exitCode
 
@@ -31,6 +32,10 @@ class GpuEvidenceCliRunner(
             System.err.println("gpu evidence arguments rejected: ${failure.message}")
             return EvidenceCliRunResult(2, null)
         }
+        if (request.sceneId != null && cases.none { it.descriptor.id.value == request.sceneId }) {
+            System.err.println("gpu evidence arguments rejected: unknown scene ${request.sceneId}")
+            return EvidenceCliRunResult(2, null)
+        }
         val failures = mutableListOf<Throwable>()
         var primaryFailure: Throwable? = null
         var exitCode = 1
@@ -39,9 +44,9 @@ class GpuEvidenceCliRunner(
             if (backend == null) {
                 System.err.println("gpu evidence unavailable: unavailable.gpu.backend: GPU backend runtime could not create a session.")
             } else {
-                val executor = GPUPreparedEvidenceExecutor(backend, request.sourceCommit)
+                val executor = EvidenceCaseExecutor(backend, request.sourceCommit)
                 val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
-                val selected = request.sceneId?.let { id -> GpuEvidenceCatalog.cases.filter { it.descriptor.id.value == id } } ?: GpuEvidenceCatalog.cases
+                val selected = request.sceneId?.let { id -> cases.filter { it.descriptor.id.value == id } } ?: cases
                 exitCode = selected.fold(0) { code, evidenceCase ->
                     when (val result = executor.execute(evidenceCase)) {
                         is EvidenceExecutionResult.ExecutionFailure -> { System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}"); 1 }
@@ -150,7 +155,7 @@ data class GpuEvidenceCliRequest(val repositoryRoot: Path, val sourceCommit: Str
             while (index < args.size) { val flag = args[index]; require(flag in setOf("--repository-root", "--source-commit", "--scene")); require(index + 1 < args.size && !args[index + 1].startsWith("--")); require(values.put(flag, args[index + 1]) == null); index += 2 }
             val root = Path.of(requireNotNull(values["--repository-root"])); require(root.isAbsolute && Files.isDirectory(root))
             val commit = requireNotNull(values["--source-commit"]); require(SHA.matches(commit) && commit.any { it != '0' })
-            val scene = values["--scene"]; require(scene == null || GpuEvidenceCatalog.cases.any { it.descriptor.id.value == scene })
+            val scene = values["--scene"]
             return GpuEvidenceCliRequest(root.toAbsolutePath().normalize(), commit, scene)
         }
     }

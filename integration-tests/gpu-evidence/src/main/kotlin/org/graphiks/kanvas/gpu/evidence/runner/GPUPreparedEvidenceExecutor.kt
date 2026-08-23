@@ -66,13 +66,15 @@ class GPUPreparedEvidenceExecutor(
     private var nextFrameOrdinal = 1L
 
     fun execute(evidenceCase: EvidenceCase): EvidenceExecutionResult {
+        val program = evidenceCase.program as? SceneProgram
+            ?: error("GPUPreparedEvidenceExecutor requires SceneProgram")
         val environment = environmentOf(backend, sourceCommit)
         if (backend.capabilities == null) return EvidenceExecutionResult.Observed(SceneObservation.Unavailable(
             "unavailable.gpu.capabilities", "GPU backend session did not expose capabilities.", environment,
         ))
         val before = backend.telemetry()
         val requestId = "gpu-evidence.${evidenceCase.descriptor.id.value}"
-        val prepared = backend.prepare(evidenceCase.program, EvidenceRecordingRequest(evidenceCase.descriptor, nextFrameOrdinal++, requestId))
+        val prepared = backend.prepare(program, EvidenceRecordingRequest(evidenceCase.descriptor, nextFrameOrdinal++, requestId))
         return when (prepared) {
             is EvidenceProgramPreparation.Refused -> refusal(prepared, before, environment)
             is EvidenceProgramPreparation.Recorded -> render(evidenceCase, prepared, before, environment)
@@ -170,8 +172,8 @@ internal fun completionDiagnosticLines(diagnostic: org.graphiks.kanvas.gpu.rende
     diagnostic.facts.toSortedMap().forEach { (key, value) -> add("diagnostic.fact.$key=$value") }
 }
 
-private fun environmentOf(port: EvidenceBackendPort, sourceCommit: String) = EvidenceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), port.adapter, port.deviceGeneration, port.capabilities?.implementation, port.capabilities != null)
+internal fun environmentOf(port: EvidenceBackendPort, sourceCommit: String) = EvidenceEnvironment(sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"), System.getProperty("java.version"), port.adapter, port.deviceGeneration, port.capabilities?.implementation, port.capabilities != null)
 
-private operator fun GPUBackendRuntimeTelemetry.minus(before: GPUBackendRuntimeTelemetry) = GPUBackendRuntimeTelemetry(
+internal operator fun GPUBackendRuntimeTelemetry.minus(before: GPUBackendRuntimeTelemetry) = GPUBackendRuntimeTelemetry(
     renderPasses - before.renderPasses, offscreenPasses - before.offscreenPasses, windowPasses - before.windowPasses, submissions - before.submissions, commandBuffers - before.commandBuffers, buffersCreated - before.buffersCreated, texturesCreated - before.texturesCreated, intermediateTexturesCreated - before.intermediateTexturesCreated, coverageMasksDestroyed - before.coverageMasksDestroyed, destinationCopies - before.destinationCopies, destinationReadbackSnapshots - before.destinationReadbackSnapshots, msaaTargets - before.msaaTargets, msaaResolves - before.msaaResolves, bindGroupsCreated - before.bindGroupsCreated, samplersCreated - before.samplersCreated, queueWrites - before.queueWrites, uniformSlabsCreated - before.uniformSlabsCreated, uniformSlabBytesAllocated - before.uniformSlabBytesAllocated, uniformSlabFallbacks - before.uniformSlabFallbacks, passBatchPlans - before.passBatchPlans, passBatchesAccepted - before.passBatchesAccepted, passBatchCuts - before.passBatchCuts, passBatchPackets - before.passBatchPackets,
 )

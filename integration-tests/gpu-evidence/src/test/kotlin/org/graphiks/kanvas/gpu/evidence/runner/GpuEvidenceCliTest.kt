@@ -10,7 +10,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.gpu.evidence.catalog.ComparisonPolicy
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneId
+import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
+import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
+import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
+import org.graphiks.kanvas.surface.Diagnostics
+import org.graphiks.kanvas.surface.RenderResult
+import org.graphiks.kanvas.surface.RenderStats
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class GpuEvidenceCliTest {
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
         val events = mutableListOf<String>()
@@ -202,6 +214,27 @@ class GpuEvidenceCliTest {
         assertFalse(Files.exists(root.resolve("reports/gpu-renderer/evidence/correctness/generated")))
     }
 
+    @Test fun `cli dispatches a Surface program without preparing it through the backend`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-surface")
+        val runtime = SurfaceRuntime()
+        val surfaceCase = EvidenceCase(
+            EvidenceSceneDescriptor(EvidenceSceneId("surface-cli"), "Surface CLI", "Surface dispatch contract.", 1, 1, 1L, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("literal-rgba", 1), ComparisonPolicy(0, 100.0, 1, "Exact literal RGBA8 oracle."), emptySet()),
+            KanvasSurfaceProgram("kanvas.surface.render", {}, sessionFactory = { _, _, _ ->
+                object : KanvasSurfaceRenderSession {
+                    override fun render(): RenderResult {
+                        runtime.observeSurfaceRender()
+                        return RenderResult(ubyteArrayOf(0u, 0u, 0u, 0u), 1, 1, diagnostics = Diagnostics(), stats = RenderStats(1, 0, 1, 1, 1f))
+                    }
+                }
+            }),
+            CpuOracle { _, _ -> byteArrayOf(0, 0, 0, 0) },
+        )
+
+        assertEquals(1, GpuEvidenceCliRunner(runtime, cases = listOf(surfaceCase)).run(validArgs(root, "surface-cli")))
+        assertEquals(1, runtime.surfaceRenders)
+        assertEquals(0, runtime.prepareCalls)
+    }
+
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
         val message = assertNotNull(snapshot.message)
         assertTrue(message.contains("failure snapshotted to avoid a cycle"))
@@ -211,7 +244,7 @@ class GpuEvidenceCliTest {
         assertEquals(emptyList(), snapshot.suppressed.toList())
     }
 
-    private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli")) = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "solid-card-stack")
+    private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli"), scene: String = "solid-card-stack") = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
     private class FakeRuntime(private val events: MutableList<String>, private val returned: Boolean = false, private val closeFails: Boolean = false, private val openFails: Boolean = false, private val executionFails: Boolean = false, private val executionFatal: Boolean = false, private val openFatal: Boolean = false, private val closeFatal: Boolean = false, private val closeFailure: Throwable? = null, private val disposeFailure: Throwable? = null, private val onDisposeFailure: (() -> Unit)? = null) : EvidenceRuntimePort {
         override fun open(): EvidenceBackendPort? { events += "open-session"; if (openFails || openFatal) { events += "runtime-session-created"; if (openFatal) throw LinkageError("fatal open") else error("primary open") }; return if (returned) object : EvidenceBackendPort { override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake"); override val deviceGeneration = 1L; override fun telemetry() = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry(); override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { events += "execute"; if (executionFatal) throw LinkageError("fatal execution"); if (executionFails) error("primary execution"); return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "fake", emptyList()) }; override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable") } else null }
         override fun close() { events += "close-session"; closeFailure?.let { throw it }; if (closeFatal) throw LinkageError("fatal close"); if (closeFails) error("close") }
@@ -237,6 +270,22 @@ class GpuEvidenceCliTest {
                 }
                 override fun close() = Unit
             }
+        }
+        override fun close() = Unit
+        override fun dispose() = Unit
+    }
+
+    private class SurfaceRuntime : EvidenceRuntimePort {
+        var prepareCalls = 0
+        var surfaceRenders = 0
+        private var submissions = 0L
+        fun observeSurfaceRender() { surfaceRenders++; submissions++ }
+        override fun open(): EvidenceBackendPort = object : EvidenceBackendPort {
+            override val capabilities = EvidenceCapabilities("fake")
+            override val deviceGeneration = 1L
+            override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = submissions)
+            override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { prepareCalls++; error("Surface program reached backend preparation") }
+            override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("Surface program reached prepared frame")
         }
         override fun close() = Unit
         override fun dispose() = Unit

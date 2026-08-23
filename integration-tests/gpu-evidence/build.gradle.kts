@@ -8,6 +8,7 @@ val sourceSets = the<org.gradle.api.tasks.SourceSetContainer>()
 
 dependencies {
     implementation(kotlin("stdlib"))
+    implementation(project(":kanvas"))
     implementation(project(":gpu-renderer"))
     implementation(project(":integration-tests:test-utils"))
     implementation(libs.kotlinxSerialization)

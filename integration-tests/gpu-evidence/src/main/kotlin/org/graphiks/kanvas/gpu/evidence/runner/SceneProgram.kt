@@ -43,8 +43,11 @@ sealed interface ScenePreparation {
     }
 }
 
+/** Marker for a closed executable evidence program. */
+interface EvidenceProgram
+
 /** Backend-independent scene recording function. */
-fun interface SceneProgram {
+fun interface SceneProgram : EvidenceProgram {
     fun prepare(context: SceneRecordingContext): ScenePreparation
 }
 

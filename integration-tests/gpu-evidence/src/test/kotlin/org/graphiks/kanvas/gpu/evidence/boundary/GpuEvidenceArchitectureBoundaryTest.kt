@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.evidence.boundary
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class GpuEvidenceArchitectureBoundaryTest {
     @Test
@@ -29,5 +30,9 @@ class GpuEvidenceArchitectureBoundaryTest {
         forbidden.forEach { (label, pattern) ->
             assertFalse(pattern.containsMatchIn(text), "$label crossed the gpu-evidence boundary")
         }
+        assertTrue(
+            projectRoot.resolve("build.gradle.kts").readText().contains("implementation(project(\":kanvas\"))"),
+            "gpu evidence must depend directly on the public Kanvas Surface API",
+        )
     }
 }
