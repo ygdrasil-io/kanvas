@@ -1,5 +1,9 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.scalar.saturatingAddI32
+import org.graphiks.math.scalar.saturatingSubtractI32
+import org.graphiks.math.vector.Vector2I32
+
 /**
  * Mutable axis-aligned integer rectangle.
  *
@@ -41,7 +45,7 @@ public data class RectI32(
     public fun height64(): Long = bottom.toLong() - top.toLong()
 
     /** Returns the top-left corner. */
-    public fun topLeft(): Vector2I32 = Vector2I32(left, top)
+    public fun topLeft(): Point2I32 = Point2I32(left, top)
 
     /** `true` if the rect is empty (non-positive size or overflow). */
     public val isEmpty: Boolean get() {
@@ -67,7 +71,7 @@ public data class RectI32(
 
     /** Sets edges from origin `(x, y)` and size `(w, h)` with saturating add. */
     public fun setXYWH(x: Int, y: Int, w: Int, h: Int) {
-        setLTRB(x, y, Vector2I32.saturatingAdd32(x, w), Vector2I32.saturatingAdd32(y, h))
+        setLTRB(x, y, saturatingAddI32(x, w), saturatingAddI32(y, h))
     }
 
     /** Sets the rect to `(0, 0, w, h)`. */
@@ -75,10 +79,10 @@ public data class RectI32(
 
     /** Translates by `(dx, dy)` with saturating arithmetic. */
     public fun offset(dx: Int, dy: Int) {
-        left = Vector2I32.saturatingAdd32(left, dx)
-        top = Vector2I32.saturatingAdd32(top, dy)
-        right = Vector2I32.saturatingAdd32(right, dx)
-        bottom = Vector2I32.saturatingAdd32(bottom, dy)
+        left = saturatingAddI32(left, dx)
+        top = saturatingAddI32(top, dy)
+        right = saturatingAddI32(right, dx)
+        bottom = saturatingAddI32(bottom, dy)
     }
 
     /** Translates by [delta]. */
@@ -86,34 +90,38 @@ public data class RectI32(
 
     /** Moves the rect to `(newX, newY)` preserving size with saturating arithmetic. */
     public fun offsetTo(newX: Int, newY: Int) {
-        right = Vector2I32.pinToInt32(right.toLong() + newX.toLong() - left.toLong())
-        bottom = Vector2I32.pinToInt32(bottom.toLong() + newY.toLong() - top.toLong())
+        right = (right.toLong() + newX.toLong() - left.toLong())
+            .coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())
+            .toInt()
+        bottom = (bottom.toLong() + newY.toLong() - top.toLong())
+            .coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())
+            .toInt()
         left = newX
         top = newY
     }
 
     /** Insets by `(dx, dy)` with saturating arithmetic. */
     public fun inset(dx: Int, dy: Int) {
-        left = Vector2I32.saturatingAdd32(left, dx)
-        top = Vector2I32.saturatingAdd32(top, dy)
-        right = Vector2I32.saturatingSub32(right, dx)
-        bottom = Vector2I32.saturatingSub32(bottom, dy)
+        left = saturatingAddI32(left, dx)
+        top = saturatingAddI32(top, dy)
+        right = saturatingSubtractI32(right, dx)
+        bottom = saturatingSubtractI32(bottom, dy)
     }
 
     /** Outsets by `(dx, dy)` with saturating arithmetic. */
     public fun outset(dx: Int, dy: Int) {
-        left = Vector2I32.saturatingSub32(left, dx)
-        top = Vector2I32.saturatingSub32(top, dy)
-        right = Vector2I32.saturatingAdd32(right, dx)
-        bottom = Vector2I32.saturatingAdd32(bottom, dy)
+        left = saturatingSubtractI32(left, dx)
+        top = saturatingSubtractI32(top, dy)
+        right = saturatingAddI32(right, dx)
+        bottom = saturatingAddI32(bottom, dy)
     }
 
     /** Adjusts edges individually with saturating arithmetic. */
     public fun adjust(dL: Int, dT: Int, dR: Int, dB: Int) {
-        left = Vector2I32.saturatingAdd32(left, dL)
-        top = Vector2I32.saturatingAdd32(top, dT)
-        right = Vector2I32.saturatingAdd32(right, dR)
-        bottom = Vector2I32.saturatingAdd32(bottom, dB)
+        left = saturatingAddI32(left, dL)
+        top = saturatingAddI32(top, dT)
+        right = saturatingAddI32(right, dR)
+        bottom = saturatingAddI32(bottom, dB)
     }
 
     /** Sorts edges so `left <= right` and `top <= bottom`. */
@@ -130,31 +138,37 @@ public data class RectI32(
 
     /** Returns a copy translated by `(dx, dy)` with saturating arithmetic. */
     public fun offsetBy(dx: Int, dy: Int): RectI32 = RectI32(
-        Vector2I32.saturatingAdd32(left, dx),
-        Vector2I32.saturatingAdd32(top, dy),
-        Vector2I32.saturatingAdd32(right, dx),
-        Vector2I32.saturatingAdd32(bottom, dy),
+        saturatingAddI32(left, dx),
+        saturatingAddI32(top, dy),
+        saturatingAddI32(right, dx),
+        saturatingAddI32(bottom, dy),
     )
+
+    /** Returns a copy translated by [delta] with saturating arithmetic. */
+    public fun offsetBy(delta: Vector2I32): RectI32 = offsetBy(delta.x, delta.y)
 
     /** Returns a copy inset by `(dx, dy)` with saturating arithmetic. */
     public fun insetBy(dx: Int, dy: Int): RectI32 = RectI32(
-        Vector2I32.saturatingAdd32(left, dx),
-        Vector2I32.saturatingAdd32(top, dy),
-        Vector2I32.saturatingSub32(right, dx),
-        Vector2I32.saturatingSub32(bottom, dy),
+        saturatingAddI32(left, dx),
+        saturatingAddI32(top, dy),
+        saturatingSubtractI32(right, dx),
+        saturatingSubtractI32(bottom, dy),
     )
 
     /** Returns a copy outset by `(dx, dy)` with saturating arithmetic. */
     public fun outsetBy(dx: Int, dy: Int): RectI32 = RectI32(
-        Vector2I32.saturatingSub32(left, dx),
-        Vector2I32.saturatingSub32(top, dy),
-        Vector2I32.saturatingAdd32(right, dx),
-        Vector2I32.saturatingAdd32(bottom, dy),
+        saturatingSubtractI32(left, dx),
+        saturatingSubtractI32(top, dy),
+        saturatingAddI32(right, dx),
+        saturatingAddI32(bottom, dy),
     )
 
     /** Returns `true` if the point `(x, y)` is inside this rect. */
     public fun contains(x: Int, y: Int): Boolean =
         x >= left && x < right && y >= top && y < bottom
+
+    /** Returns `true` if [point] is inside this rect. */
+    public fun contains(point: Point2I32): Boolean = contains(point.x, point.y)
 
     /** Returns `true` if [r] is entirely inside this rect. */
     public fun contains(r: RectI32): Boolean =
@@ -198,7 +212,7 @@ public data class RectI32(
 
         /** Creates a [RectI32] from origin `(x, y)` and size `(w, h)` with saturating add. */
         public fun ofOriginSize(x: Int, y: Int, w: Int, h: Int): RectI32 =
-            RectI32(x, y, Vector2I32.saturatingAdd32(x, w), Vector2I32.saturatingAdd32(y, h))
+            RectI32(x, y, saturatingAddI32(x, w), saturatingAddI32(y, h))
 
         /** Creates a [RectI32] from size `(w, h)` at origin. */
         public fun ofSize(w: Int, h: Int): RectI32 = RectI32(0, 0, w, h)
@@ -210,7 +224,7 @@ public data class RectI32(
         public fun fromSize(size: SizeI32): RectI32 = RectI32(0, 0, size.width, size.height)
 
         /** Creates a [RectI32] from a point and size. */
-        public fun fromPointSize(pt: Vector2I32, size: SizeI32): RectI32 =
+        public fun fromPointSize(pt: Point2I32, size: SizeI32): RectI32 =
             ofOriginSize(pt.x, pt.y, size.width, size.height)
 
         /** Returns `true` if [a] and [b] intersect. */

@@ -26,6 +26,7 @@ class KotlinEmitterTest {
             listOf(
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/MutablePoint2F32.kt",
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2F32.kt",
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2I32.kt",
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point3F32.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector2F32.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector2F64.kt",
@@ -52,6 +53,19 @@ class KotlinEmitterTest {
         assertFalse("fun dot" in source)
         assertFalse("fun cross" in source)
         assertFalse("fun normalized" in source)
+    }
+
+    @Test
+    fun `I32 point emission uses saturating scalar operations`() {
+        val source = emitted("Point2I32.kt")
+
+        assertContains(source, "import org.graphiks.math.scalar.saturatingAddI32")
+        assertContains(source, "import org.graphiks.math.scalar.saturatingSubtractI32")
+        assertContains(source, "operator fun plus(delta: Vector2I32): Point2I32 = Point2I32(saturatingAddI32(x, delta.x), saturatingAddI32(y, delta.y))")
+        assertContains(source, "operator fun minus(other: Point2I32): Vector2I32 = Vector2I32(saturatingSubtractI32(x, other.x), saturatingSubtractI32(y, other.y))")
+        assertFalse("fun distanceTo" in source)
+        assertFalse("fun midpointTo" in source)
+        assertFalse("fun isFinite" in source)
     }
 
     @Test

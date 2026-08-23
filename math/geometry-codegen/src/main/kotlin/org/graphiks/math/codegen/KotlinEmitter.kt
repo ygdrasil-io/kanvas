@@ -205,7 +205,13 @@ internal object KotlinEmitter {
                         model,
                         "delta",
                         vectorType,
-                        model.components.map { "$it + delta.$it" },
+                        model.components.map { component ->
+                            if (model.scalar.id == ScalarId.I32) {
+                                "saturatingAddI32($component, delta.$component)"
+                            } else {
+                                "$component + delta.$component"
+                            }
+                        },
                     ),
                 )
                 addFunction(
@@ -214,13 +220,19 @@ internal object KotlinEmitter {
                         model,
                         "delta",
                         vectorType,
-                        model.components.map { "$it - delta.$it" },
+                        model.components.map { component ->
+                            if (model.scalar.id == ScalarId.I32) {
+                                "saturatingSubtractI32($component, delta.$component)"
+                            } else {
+                                "$component - delta.$component"
+                            }
+                        },
                     ),
                 )
                 addFunction(pointDifferenceFunction(model, pointType, vectorType))
-                addFunction(distanceToFunction(model, pointType))
-                addFunction(midpointToFunction(model, pointType))
-                addFunction(isFiniteFunction(model))
+                if (model.scalar.id != ScalarId.I32) addFunction(distanceToFunction(model, pointType))
+                if (model.scalar.id == ScalarId.F32) addFunction(midpointToFunction(model, pointType))
+                if (Capability.FINITE_CHECK in model.spec.capabilities) addFunction(isFiniteFunction(model))
                 if (model.spec.generateMutable) addFunction(toMutableFunction(model))
                 addFunction(equalsFunction(model))
                 addFunction(hashCodeFunction(model))
@@ -229,7 +241,17 @@ internal object KotlinEmitter {
             }
             .build()
         val file = baseFile(model, model.typeName)
-            .addImport("kotlin.math", "abs", "sqrt")
+            .apply {
+                if (model.scalar.id == ScalarId.I32) {
+                    addImport(
+                        "org.graphiks.math.scalar",
+                        "saturatingAddI32",
+                        "saturatingSubtractI32",
+                    )
+                } else {
+                    addImport("kotlin.math", "abs", "sqrt")
+                }
+            }
             .addType(point)
             .build()
         return generatedFile(model, model.typeName, file)
