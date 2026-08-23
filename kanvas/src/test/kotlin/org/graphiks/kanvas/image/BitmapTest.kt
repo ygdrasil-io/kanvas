@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.image
 
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
@@ -9,6 +11,8 @@ import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
@@ -27,6 +31,36 @@ class BitmapTest {
     fun `construction with F16 allocates 8 bytes per pixel`() {
         val bmp = Bitmap(10, 10, ColorType.RGBA_F16)
         assertEquals(800, bmp.pixels.size)
+    }
+
+    @Test
+    fun `construction rejects formats without allocation capability`() {
+        assertThrows<IllegalArgumentException> { Bitmap(1, 1, ColorType.UNKNOWN) }
+        assertThrows<IllegalArgumentException> { Bitmap(1, 1, ColorType.RGBA_1010102) }
+    }
+
+    @Test
+    fun `F16 normalized supports the existing F16 pixel operations`() {
+        val bitmap = Bitmap(1, 1, ColorType.RGBA_F16_NORM)
+
+        bitmap.setPixel(0, 0, Color.RED)
+        assertEquals(Color.RED, bitmap.getPixel(0, 0))
+
+        bitmap.eraseColor(Color.BLUE)
+        assertEquals(Color.BLUE, bitmap.getPixel(0, 0))
+    }
+
+    @Test
+    fun `ImageColorSpace is retained and renderer conversion refuses unsupported profiles`() {
+        val supported = ImageColorSpace.linearSrgb()
+        val supportedBitmap = Bitmap(1, 1, colorSpace = supported)
+        assertSame(supported, supportedBitmap.colorSpace)
+        assertEquals(org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB, supportedBitmap.toImageOrNull()!!.colorSpace)
+
+        val unsupported = ImageColorSpace.fromColorProfile(ColorProfile.unsupported("test.profile.unsupported"))
+        val unsupportedBitmap = Bitmap(1, 1, colorSpace = unsupported)
+        assertSame(unsupported, unsupportedBitmap.colorSpace)
+        assertNull(unsupportedBitmap.toImageOrNull())
     }
 
     @Test
@@ -97,18 +131,18 @@ class BitmapTest {
     }
 
     @Test
-    fun `toImage returns independent copy`() {
+    fun `toImageOrNull returns independent copy`() {
         val bmp = Bitmap(2, 2)
         bmp.eraseColor(Color.RED)
-        val img = bmp.toImage()
+        val img = requireNotNull(bmp.toImageOrNull())
         bmp.setPixel(0, 0, Color.BLUE)
         assertEquals(Color.RED, Color.fromRGBA(1f, 0f, 0f, 1f))
         assertEquals(AlphaType.UNPREMUL, img.alphaType)
     }
 
     @Test
-    fun `toImage uses the color type default alpha type for A8`() {
-        val image = Bitmap(1, 1, ColorType.ALPHA_8).toImage()
+    fun `toImageOrNull uses the color type default alpha type for A8`() {
+        val image = requireNotNull(Bitmap(1, 1, ColorType.ALPHA_8).toImageOrNull())
 
         assertEquals(AlphaType.PREMUL, image.alphaType)
     }

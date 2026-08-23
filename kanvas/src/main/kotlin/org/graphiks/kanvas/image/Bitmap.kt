@@ -6,7 +6,10 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
@@ -19,8 +22,12 @@ class Bitmap(
     val width: Int,
     val height: Int,
     val colorType: ColorType = ColorType.RGBA_8888,
-    val colorSpace: ColorSpace = ColorSpace.SRGB,
+    val colorSpace: ImageColorSpace = ImageColorSpace.sRGB(),
 ) {
+    init {
+        require(colorType.capabilities().allocatable) { "unsupported color type: $colorType" }
+    }
+
     val pixels: ByteArray = ByteArray(width * height * colorType.bytesPerPixel)
 
     fun getPixel(x: Int, y: Int): Color {
@@ -49,7 +56,9 @@ class Bitmap(
                 val l = (pixels[index].toInt() and 0xFF) / 255f
                 Color.fromRGBA(l, l, l, 1f)
             }
-            ColorType.RGBA_F16 -> {
+            ColorType.RGBA_F16,
+            ColorType.RGBA_F16_NORM,
+                -> {
                 val rh = ((pixels[index + 1].toInt() and 0xFF) shl 8) or (pixels[index].toInt() and 0xFF)
                 val gh = ((pixels[index + 3].toInt() and 0xFF) shl 8) or (pixels[index + 2].toInt() and 0xFF)
                 val bh = ((pixels[index + 5].toInt() and 0xFF) shl 8) or (pixels[index + 4].toInt() and 0xFF)
@@ -121,7 +130,9 @@ class Bitmap(
                 val l = (r * 0.299f + g * 0.587f + b * 0.114f).coerceIn(0f, 1f)
                 pixels[index] = (l * 255f).toInt().coerceIn(0, 255).toByte()
             }
-            ColorType.RGBA_F16 -> {
+            ColorType.RGBA_F16,
+            ColorType.RGBA_F16_NORM,
+                -> {
                 val pa = a.coerceIn(0f, 1f)
                 val pr = (r * pa).coerceIn(0f, 1f)
                 val pg = (g * pa).coerceIn(0f, 1f)
@@ -200,7 +211,9 @@ class Bitmap(
                 val li = (l * 255f).toInt().coerceIn(0, 255).toByte()
                 pixels.fill(li)
             }
-            ColorType.RGBA_F16 -> {
+            ColorType.RGBA_F16,
+            ColorType.RGBA_F16_NORM,
+                -> {
                 val pa = a.coerceIn(0f, 1f)
                 val pr = (r * pa).coerceIn(0f, 1f)
                 val pg = (g * pa).coerceIn(0f, 1f)
@@ -276,20 +289,39 @@ class Bitmap(
         return subset
     }
 
-    fun toImage(): Image =
-        Image(width, height, colorType, "bitmap", pixels.copyOf(), colorSpace)
+    fun toImageOrNull(): Image? =
+        colorSpace.toColorSpaceOrNull()?.let { rendererColorSpace ->
+            Image(width, height, colorType, "bitmap", pixels.copyOf(), rendererColorSpace)
+        }
 
     fun makeShader(
         tileX: TileMode = TileMode.CLAMP,
         tileY: TileMode = TileMode.CLAMP,
         sampling: SamplingOptions = SamplingOptions.NEAREST,
         localMatrix: Matrix3x3F32 = Matrix3x3F32.Identity,
-    ): Shader = Shader.WithLocalMatrix(Shader.Image(toImage(), tileX, tileY, sampling), localMatrix)
+    ): Shader = Shader.WithLocalMatrix(
+        Shader.Image(
+            requireNotNull(toImageOrNull()) { "unsupported image color profile: ${colorSpace.profileRefusalCode}" },
+            tileX,
+            tileY,
+            sampling,
+        ),
+        localMatrix,
+    )
 
     companion object {
         fun fromImage(image: Image): Bitmap =
-            Bitmap(image.width, image.height, image.colorType, image.colorSpace).also { bmp ->
+            Bitmap(image.width, image.height, image.colorType, image.colorSpace.toImageColorSpace()).also { bmp ->
                 image.pixels?.let { src -> src.copyInto(bmp.pixels) }
             }
     }
+}
+
+private fun ColorSpace.toImageColorSpace(): ImageColorSpace = when (this) {
+    ColorSpace.SRGB -> ImageColorSpace.sRGB()
+    ColorSpace.LINEAR_SRGB -> ImageColorSpace.linearSrgb()
+    ColorSpace.DISPLAY_P3 -> ImageColorSpace.fromColorProfile(ColorProfiles.displayP3())
+    else -> ImageColorSpace.fromColorProfile(
+        ColorProfile.unsupported("renderer.color-space.unsupported"),
+    )
 }
