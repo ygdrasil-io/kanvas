@@ -278,7 +278,8 @@ internal object KotlinEmitter {
             ScalarId.I32 -> error("I32 point conversions are not generated")
         }
         val target = models.singleOrNull {
-            it.spec.semantic == Semantic.POINT &&
+            it.spec.generateImmutable &&
+                it.spec.semantic == Semantic.POINT &&
                 it.spec.dimension == source.spec.dimension &&
                 it.scalar.id == targetScalar
         } ?: return emptyList()

@@ -62,6 +62,30 @@ class KotlinEmitterTest {
     }
 
     @Test
+    fun `disabled immutable F64 point is not a conversion target`() {
+        val schema = MathPrimitiveManifest.schema.copy(
+            primitives = MathPrimitiveManifest.schema.primitives.map { primitive ->
+                if (primitive.semantic == Semantic.POINT &&
+                    primitive.dimension == 2 &&
+                    primitive.scalar == ScalarId.F64
+                ) {
+                    primitive.copy(generateImmutable = false, generateMutable = false)
+                } else {
+                    primitive
+                }
+            },
+        )
+        val tree = KotlinEmitter.emit(schema)
+        val paths = tree.files.map { it.relativePath }
+        val f32 = emitted(tree, "Point2F32.kt")
+
+        assertTrue(paths.any { it.endsWith("/Point2F32.kt") })
+        assertFalse(paths.any { it.endsWith("/Point2F64.kt") })
+        assertFalse(paths.any { it.endsWith("/MutablePoint2F64.kt") })
+        assertFalse("toPoint2F64" in f32)
+    }
+
+    @Test
     fun `point emission selects point vector operations only`() {
         val source = emitted("Point2F32.kt")
 

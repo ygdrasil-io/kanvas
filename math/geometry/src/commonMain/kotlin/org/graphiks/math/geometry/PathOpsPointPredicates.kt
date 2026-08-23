@@ -103,7 +103,7 @@ internal fun pathOpsWayRoughlyEquals(a: Point2F32, b: Point2F32): Boolean {
     return roughlyZeroWhenComparedTo(largestDiff.toDouble(), largest.toDouble())
 }
 
-private fun Point2F64.pathOpsDistanceTo(other: Point2F64): Double {
+internal fun Point2F64.pathOpsDistanceTo(other: Point2F64): Double {
     val dx = x - other.x
     val dy = y - other.y
     return sqrt(dx * dx + dy * dy)
