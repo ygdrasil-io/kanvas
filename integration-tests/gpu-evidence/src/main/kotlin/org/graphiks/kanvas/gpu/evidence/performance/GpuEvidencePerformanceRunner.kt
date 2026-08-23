@@ -41,12 +41,20 @@ class GpuEvidencePerformanceRunner(
                 backend.telemetry()
                 val coldStart = clock.nanoTime(); val cold = frame.render(prepared.program); coldNanos = elapsed(coldStart); backend.telemetry()
                 validateCold(cold, prepared.program, evidenceCase, diagnostics)
+                val completionPrepared = backend.prepare(
+                    evidenceCase.program,
+                    EvidenceRecordingRequest(evidenceCase.descriptor, frameOrdinal++, ""),
+                )
+                if (completionPrepared !is EvidenceProgramPreparation.Recorded) {
+                    diagnostics += "completion-only scene preparation refused"
+                }
+                val completionProgram = (completionPrepared as? EvidenceProgramPreparation.Recorded)?.program
                 backend.telemetry()
-                repeat(config.warmupFrames) { validateCompletion(frame.renderCompletionOnly(prepared.program), diagnostics) }
+                if (completionProgram != null) repeat(config.warmupFrames) { validateCompletion(frame.renderCompletionOnly(completionProgram), diagnostics) }
                 backend.telemetry()
                 backend.telemetry()
-                repeat(config.measuredFrames) {
-                    val start = clock.nanoTime(); val completion = frame.renderCompletionOnly(prepared.program); val elapsed = elapsed(start); validateCompletion(completion, diagnostics); samples += elapsed
+                if (completionProgram != null) repeat(config.measuredFrames) {
+                    val start = clock.nanoTime(); val completion = frame.renderCompletionOnly(completionProgram); val elapsed = elapsed(start); validateCompletion(completion, diagnostics); samples += elapsed
                 }
                 backend.telemetry()
             }

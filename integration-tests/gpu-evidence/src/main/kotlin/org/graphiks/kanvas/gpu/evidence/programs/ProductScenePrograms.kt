@@ -36,7 +36,7 @@ object ProductScenePrograms {
                 target = context.target,
                 targetBounds = context.targetBounds,
                 draws = draws,
-                readbackRequestId = context.readbackRequestId,
+                readbackRequestId = context.readbackRequestId.takeIf { it.value.isNotBlank() },
                 configuredAggregateBudgetBytes = budgetBytes,
             ),
         )) {
@@ -72,7 +72,7 @@ object ProductScenePrograms {
                 sourcePremultipliedRgba = sourcePremultipliedRgba.copyOf(),
                 clearPremultipliedRgba = floatArrayOf(0f, 0f, 0f, 0f),
                 sigma = sigma,
-                readbackRequestId = context.readbackRequestId,
+                readbackRequestId = context.readbackRequestId.takeIf { it.value.isNotBlank() },
             ),
         )) {
             is GPUSeparableBlurRectFrameRecordingResult.Recorded ->
