@@ -14,18 +14,22 @@ internal object KotlinEmitter {
             "Edit MathPrimitiveManifest.kt and run generateMathPrimitives."
 
     fun emit(schema: PrimitiveSchema): GeneratedTree {
-        val files = SemanticModel.expand(schema).flatMap { model ->
+        val models = SemanticModel.expand(schema)
+        val files = models.flatMap { model ->
             buildList {
-                if (model.spec.generateImmutable) add(emitImmutable(model))
+                if (model.spec.generateImmutable) add(emitImmutable(model, models))
                 if (model.spec.generateMutable) add(emitMutable(model))
             }
         }.sortedBy { it.relativePath }
         return GeneratedTree(files)
     }
 
-    private fun emitImmutable(model: SemanticPrimitiveModel): GeneratedFile {
+    private fun emitImmutable(
+        model: SemanticPrimitiveModel,
+        models: List<SemanticPrimitiveModel>,
+    ): GeneratedFile {
         return when (model.spec.semantic) {
-            Semantic.POINT -> emitPointImmutable(model)
+            Semantic.POINT -> emitPointImmutable(model, models)
             Semantic.VECTOR -> emitVectorImmutable(model)
         }
     }
@@ -180,7 +184,10 @@ internal object KotlinEmitter {
         return generatedFile(model, model.mutableTypeName, file)
     }
 
-    private fun emitPointImmutable(model: SemanticPrimitiveModel): GeneratedFile {
+    private fun emitPointImmutable(
+        model: SemanticPrimitiveModel,
+        models: List<SemanticPrimitiveModel>,
+    ): GeneratedFile {
         val scalarType = model.scalar.typeName()
         val pointType = ClassName(model.packageName, model.typeName)
         val vectorType = ClassName(model.vectorPackageName, model.vectorTypeName)
@@ -253,8 +260,46 @@ internal object KotlinEmitter {
                 }
             }
             .addType(point)
+            .apply {
+                pointScalarConversions(model, models).forEach(::addFunction)
+            }
             .build()
         return generatedFile(model, model.typeName, file)
+    }
+
+    private fun pointScalarConversions(
+        source: SemanticPrimitiveModel,
+        models: List<SemanticPrimitiveModel>,
+    ): List<FunSpec> {
+        if (source.scalar.id !in setOf(ScalarId.F32, ScalarId.F64)) return emptyList()
+        val targetScalar = when (source.scalar.id) {
+            ScalarId.F32 -> ScalarId.F64
+            ScalarId.F64 -> ScalarId.F32
+            ScalarId.I32 -> error("I32 point conversions are not generated")
+        }
+        val target = models.singleOrNull {
+            it.spec.semantic == Semantic.POINT &&
+                it.spec.dimension == source.spec.dimension &&
+                it.scalar.id == targetScalar
+        } ?: return emptyList()
+        val sourceType = ClassName(source.packageName, source.typeName)
+        val targetType = ClassName(target.packageName, target.typeName)
+        val scalarConversion = when (targetScalar) {
+            ScalarId.F32 -> "toFloat"
+            ScalarId.F64 -> "toDouble"
+            ScalarId.I32 -> error("I32 point conversions are not generated")
+        }
+        return listOf(
+            FunSpec.builder("to${target.typeName}")
+                .addModifiers(KModifier.PUBLIC)
+                .receiver(sourceType)
+                .returns(targetType)
+                .addStatement(
+                    "return %T(${source.components.joinToString { "$it.$scalarConversion()" }})",
+                    targetType,
+                )
+                .build(),
+        )
     }
 
     private fun emitPointMutable(model: SemanticPrimitiveModel): GeneratedFile {

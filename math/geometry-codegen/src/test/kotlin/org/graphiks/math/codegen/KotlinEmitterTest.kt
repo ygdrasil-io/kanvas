@@ -25,7 +25,9 @@ class KotlinEmitterTest {
         assertEquals(
             listOf(
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/MutablePoint2F32.kt",
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/MutablePoint2F64.kt",
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2F32.kt",
+                "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2F64.kt",
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point2I32.kt",
                 "math/geometry/src/generated/kotlin/org/graphiks/math/geometry/Point3F32.kt",
                 "math/vector/src/generated/kotlin/org/graphiks/math/vector/MutableVector2F32.kt",
@@ -39,6 +41,24 @@ class KotlinEmitterTest {
             ),
             KotlinEmitter.emit(MathPrimitiveManifest.schema).files.map { it.relativePath },
         )
+    }
+
+    @Test
+    fun `selected F32 and F64 points emit named scalar conversions only`() {
+        val tree = KotlinEmitter.emit(MathPrimitiveManifest.schema)
+        val f32 = emitted(tree, "Point2F32.kt")
+        val f64 = emitted(tree, "Point2F64.kt")
+
+        assertContains(
+            f32,
+            "public fun Point2F32.toPoint2F64(): Point2F64 = Point2F64(x.toDouble(), y.toDouble())",
+        )
+        assertContains(
+            f64,
+            "public fun Point2F64.toPoint2F32(): Point2F32 = Point2F32(x.toFloat(), y.toFloat())",
+        )
+        assertFalse("toVector" in f32)
+        assertFalse("toVector" in f64)
     }
 
     @Test
@@ -106,7 +126,10 @@ class KotlinEmitterTest {
     }
 
     private fun emitted(fileName: String): String =
-        KotlinEmitter.emit(MathPrimitiveManifest.schema).files
+        emitted(KotlinEmitter.emit(MathPrimitiveManifest.schema), fileName)
+
+    private fun emitted(tree: GeneratedTree, fileName: String): String =
+        tree.files
             .single { it.relativePath.endsWith("/$fileName") }
             .utf8
             .decodeToString()

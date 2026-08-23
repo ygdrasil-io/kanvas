@@ -7,6 +7,7 @@ import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlpsPin
 import org.graphiks.math.geometry.PathOpsEpsilon.between
 import org.graphiks.math.geometry.PathOpsEpsilon.pinT
 import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqualUlps
+import org.graphiks.math.vector.Vector2F64
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -26,7 +27,13 @@ public class Line2F64(source: Array<Point2F64>) {
 
     private val pts: Array<Point2F64> = arrayOf(source[0], source[1])
 
-    public constructor() : this(arrayOf(Point2F64(), Point2F64()))
+    public constructor() : this(arrayOf(Point2F64.Origin, Point2F64.Origin))
+
+    public val start: Point2F64 get() = pts[0]
+
+    public val end: Point2F64 get() = pts[1]
+
+    public fun direction(): Vector2F64 = end - start
 
     public operator fun get(n: Int): Point2F64 {
         require(n in 0..1)
@@ -43,15 +50,15 @@ public class Line2F64(source: Array<Point2F64>) {
 
     /** Sets both endpoints from [Point2F32] values. */
     fun set(p0: Point2F32, p1: Point2F32): Line2F64 {
-        pts[0] = Point2F64(p0.x.toDouble(), p0.y.toDouble())
-        pts[1] = Point2F64(p1.x.toDouble(), p1.y.toDouble())
+        pts[0] = p0.toPoint2F64()
+        pts[1] = p1.toPoint2F64()
         return this
     }
 
     /** Returns the point at parameter `t` along this segment (0 → p0, 1 → p1). */
     fun ptAtT(t: Double): Point2F64 {
-        if (0.0 == t) return Point2F64.of(pts[0].x, pts[0].y)
-        if (1.0 == t) return Point2F64.of(pts[1].x, pts[1].y)
+        if (0.0 == t) return Point2F64(pts[0].x, pts[0].y)
+        if (1.0 == t) return Point2F64(pts[1].x, pts[1].y)
         val oneT = 1 - t
         return Point2F64(
             oneT * pts[0].x + t * pts[1].x,
@@ -74,15 +81,15 @@ public class Line2F64(source: Array<Point2F64>) {
     fun nearPoint(xy: Point2F64, unequal: BooleanArray? = null): Double {
         if (!almostBetweenUlps(pts[0].x, xy.x, pts[1].x)
             || !almostBetweenUlps(pts[0].y, xy.y, pts[1].y)) return -1.0
-        val len = pts[1] - pts[0]
+        val len: Vector2F64 = pts[1] - pts[0]
         val denom = len.x * len.x + len.y * len.y
-        val ab0 = xy - pts[0]
-        val numer = len.x * ab0.x + ab0.y * len.y
+        val ab0: Vector2F64 = xy - pts[0]
+        val numer = len.dot(ab0)
         if (!between(0.0, numer, denom)) return -1.0
         if (denom == 0.0) return 0.0
         var t = numer / denom
-        val realPt = ptAtT(t)
-        val dist = realPt.distance(xy)
+        val realPt: Point2F64 = ptAtT(t)
+        val dist = realPt.distanceTo(xy)
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
@@ -99,13 +106,13 @@ public class Line2F64(source: Array<Point2F64>) {
      * this segment
      */
     fun nearRay(xy: Point2F64): Boolean {
-        val len = pts[1] - pts[0]
+        val len: Vector2F64 = pts[1] - pts[0]
         val denom = len.x * len.x + len.y * len.y
-        val ab0 = xy - pts[0]
-        val numer = len.x * ab0.x + ab0.y * len.y
+        val ab0: Vector2F64 = xy - pts[0]
+        val numer = len.dot(ab0)
         val t = numer / denom
-        val realPt = ptAtT(t)
-        val dist = realPt.distance(xy)
+        val realPt: Point2F64 = ptAtT(t)
+        val dist = realPt.distanceTo(xy)
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)

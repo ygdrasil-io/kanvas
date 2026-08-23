@@ -1,5 +1,6 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.vector.Vector2F64 as F64Vector
 import kotlin.test.Test
 
 class Line2F64Test {
@@ -7,8 +8,18 @@ class Line2F64Test {
     @Test
     fun `constructs with two default points`() {
         val line = Line2F64()
-        kotlin.test.assertEquals(0.0, line[0].x)
-        kotlin.test.assertEquals(0.0, line[1].y)
+        kotlin.test.assertEquals(Point2F64.Origin, line.start)
+        kotlin.test.assertEquals(Point2F64.Origin, line.end)
+    }
+
+    @Test
+    fun `line direction is endpoint difference`() {
+        val line = Line2F64(arrayOf(Point2F64(2.0, 7.0), Point2F64(11.0, -5.0)))
+
+        val direction: F64Vector = line.direction()
+
+        kotlin.test.assertEquals(9.0, direction.x)
+        kotlin.test.assertEquals(-12.0, direction.y)
     }
 
     @Test
@@ -53,7 +64,7 @@ class Line2F64Test {
     @Test
     fun `constructor requires exactly 2 points`() {
         kotlin.test.assertFailsWith<IllegalArgumentException> {
-            Line2F64(arrayOf(Point2F64()))
+            Line2F64(arrayOf(Point2F64.Origin))
         }
     }
 

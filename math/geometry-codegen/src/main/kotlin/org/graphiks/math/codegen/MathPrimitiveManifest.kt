@@ -14,6 +14,7 @@ internal object MathPrimitiveManifest {
             vector(2, ScalarId.F64, generateMutable = true),
             vector(2, ScalarId.I32),
             point(2, ScalarId.F32, generateMutable = true),
+            point(2, ScalarId.F64, generateMutable = true),
             point(2, ScalarId.I32),
             point(3, ScalarId.F32),
         ),

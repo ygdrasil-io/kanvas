@@ -58,3 +58,5 @@ public class Point2F32(
     public val Origin: Point2F32 = Point2F32(0f, 0f)
   }
 }
+
+public fun Point2F32.toPoint2F64(): Point2F64 = Point2F64(x.toDouble(), y.toDouble())
