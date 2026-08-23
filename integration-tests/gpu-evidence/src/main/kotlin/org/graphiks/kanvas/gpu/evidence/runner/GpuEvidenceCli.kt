@@ -51,7 +51,7 @@ class GpuEvidenceCliRunner(
                                 when (val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)) {
                                     is EvidenceVerdict.Pass -> {
                                         val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
-                                        writer.writeGenerated(evidenceCase.descriptor, observation, expected)
+                                        writer.writeGenerated(evidenceCase, observation, expected)
                                         code
                                     }
                                     is EvidenceVerdict.Fail -> {

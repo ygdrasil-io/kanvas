@@ -23,6 +23,8 @@ import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
+import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.junit.jupiter.api.io.TempDir
 
@@ -266,11 +268,12 @@ class PromoteEvidenceCliTest {
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-            val route = RouteEvidence("test-route", "attempt", "complete", if (descriptor.expectation is EvidenceExpectation.ShouldRender) "rendered" else "refused", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+            val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+            val route = RouteEvidence((evidenceCase.program as RoutedSceneProgram).routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = when (descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> {
-                    val pixels = ByteArray(descriptor.width * descriptor.height * 4) { (it and 0xff).toByte() }
-                    SceneObservation.Rendered(pixels, route, emptyList(), environment, ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(pixels.size), 1))
+                    val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
+                    SceneObservation.Rendered(pixels, route, emptyList(), environment, EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison)))
                 }
                 is EvidenceExpectation.ShouldRefuse -> SceneObservation.Refused(descriptor.expectation.stableReasonCode, "test refusal", 0, route, emptyList(), environment)
             }

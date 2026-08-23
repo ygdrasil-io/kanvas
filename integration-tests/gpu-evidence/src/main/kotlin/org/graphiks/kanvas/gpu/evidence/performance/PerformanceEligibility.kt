@@ -7,6 +7,7 @@ object PerformanceEligibility {
 
     fun evaluate(adapter: GPUBackendAdapterSummary?): PerformanceVerdict {
         if (adapter == null) return PerformanceVerdict.Unavailable("adapter identity unavailable")
+        if (adapter.isFallbackAdapter == null) return PerformanceVerdict.Unavailable("adapter fallback status unavailable")
         if (adapter.isFallbackAdapter == true) return PerformanceVerdict.DiagnosticOnly("fallback adapter")
         val normalized = adapter.summary.lowercase()
         if (softwareTokens.any(normalized::contains)) return PerformanceVerdict.DiagnosticOnly("software adapter")

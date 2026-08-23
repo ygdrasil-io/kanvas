@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.evidence.performance
 
 import kotlin.math.ceil
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 
 const val GPU_EVIDENCE_PERFORMANCE_SCHEMA = "gpu-evidence-performance-v1"
@@ -114,7 +116,9 @@ data class PerformanceRun(
 ) {
     init {
         require(sourceCommit.matches(Regex("[0-9a-f]{40}"))) { "sourceCommit must be lowercase 40-hex" }
-        require(sceneId.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "sceneId must use lower-kebab-case" }
+        require(GpuEvidenceCatalog.cases.any { it.descriptor.id.value == sceneId && it.descriptor.expectation is EvidenceExpectation.ShouldRender }) {
+            "sceneId must identify a catalogued ShouldRender case"
+        }
         require(timingSamplesNanos.all { it >= 0L }) { "timing samples must be non-negative" }
         require(coldReadbackNanos == null || coldReadbackNanos >= 0L) { "cold readback timing must be non-negative" }
     }

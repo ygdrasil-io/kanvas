@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerification
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerifier
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceVerificationExpectation
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceJson
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -44,7 +45,7 @@ class GPUPreparedEvidenceExecutorContractTest {
         val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
         val root = temporaryRoot.resolve("adapter-bundle")
-        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first().descriptor, observation, observation.rgba)
+        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(GpuEvidenceCatalog.cases.first().descriptor, observation, requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height))
         val environment = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("environment.json"))).jsonObject
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals("fake-adapter", adapter["summary"]!!.jsonPrimitive.content)
@@ -53,7 +54,9 @@ class GPUPreparedEvidenceExecutorContractTest {
         assertEquals("architecture", adapter["architecture"]!!.jsonPrimitive.content)
         assertEquals("description", adapter["description"]!!.jsonPrimitive.content)
         assertEquals("false", adapter["isFallbackAdapter"]!!.jsonPrimitive.content)
-        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "a".repeat(40)))
+        val expected = requireNotNull(GpuEvidenceCatalog.cases.first().oracle).render(GpuEvidenceCatalog.cases.first().descriptor.width, GpuEvidenceCatalog.cases.first().descriptor.height)
+        val verification = EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromCase(GpuEvidenceCatalog.cases.first(), "a".repeat(40), expected))
+        assertIs<EvidenceBundleVerification.Verified>(verification)
     }
 
     @Test fun `opened session samples telemetry around canonical prepared frame and closes in finally`() {

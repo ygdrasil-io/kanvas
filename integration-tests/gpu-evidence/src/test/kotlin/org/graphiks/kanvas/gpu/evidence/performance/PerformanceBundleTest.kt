@@ -34,6 +34,16 @@ class PerformanceBundleTest {
         assertEquals(setOf("manifest.json", "environment.json", "eligibility.json", "timings.json", "telemetry.json", "diagnostics.json", "verdict.json"), Files.list(path).use { stream -> stream.iterator().asSequence().map { file -> file.fileName.toString() }.toSet() })
     }
 
+    @Test fun `verifier rejects arbitrary render scene id even when hashes and canonical path agree`() {
+        val run = PerformanceRun.fixture()
+        val original = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        val forged = original.parent.resolve("forged-render-scene")
+        Files.move(original, forged)
+        val manifest = forged.resolve("manifest.json")
+        Files.writeString(manifest, Files.readString(manifest).replace("solid-card-stack", "forged-render-scene"))
+        assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(forged, run.sourceCommit))
+    }
+
     @Test fun `eligible capture may finish with a failed measurement verdict`() {
         val run = PerformanceRun.fixture().copy(verdict = PerformanceVerdict.Failed("cold validation failed"))
         val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)

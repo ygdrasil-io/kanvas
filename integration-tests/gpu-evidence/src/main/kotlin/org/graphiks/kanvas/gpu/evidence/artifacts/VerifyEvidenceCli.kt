@@ -91,9 +91,15 @@ class VerifyEvidenceCliRunner(
         require(entries.all { Files.isDirectory(it, NOFOLLOW_LINKS) }) { "evidence root contains a non-directory entry" }
 
         val commit = request.sourceCommit ?: commonManifestCommit(entries)
-        val results = expectedIds.map { sceneId ->
+        val results = GpuEvidenceCatalog.cases.map { evidenceCase ->
+            val sceneId = evidenceCase.descriptor.id.value
             val directory = request.root.resolve(sceneId)
-            when (val result = EvidenceBundleVerifier.verify(directory, commit)) {
+            val expected = EvidenceVerificationExpectation.fromCase(
+                evidenceCase = evidenceCase,
+                sourceCommit = commit,
+                expectedRgba = evidenceCase.oracle?.render(evidenceCase.descriptor.width, evidenceCase.descriptor.height),
+            )
+            when (val result = EvidenceBundleVerifier.verify(directory, expected)) {
                 is EvidenceBundleVerification.Invalid -> {
                     stderr.println("$sceneId: invalid (${result.errors.joinToString("; ")})")
                     false

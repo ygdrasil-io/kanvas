@@ -19,17 +19,18 @@ class EvidenceBundleTamperTest {
     @Test fun `changing refusal reason is invalid`() = assertRefusalInvalid { replace(it.resolve("diagnostics.json"), "unsupported.example", "changed.reason") }
     @Test fun `setting refusal submission delta to one is invalid`() = assertRefusalInvalid { replace(it.resolve("diagnostics.json"), "\"submissionDelta\":0", "\"submissionDelta\":1") }
 
-    private fun assertRenderInvalid(tamper: (Path) -> Unit) { val path = renderBundle(); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, "abc123")) }
-    private fun assertRefusalInvalid(tamper: (Path) -> Unit) { val path = refusalBundle(); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, "abc123")) }
-    private fun renderBundle(): Path {
+    private fun assertRenderInvalid(tamper: (Path) -> Unit) { val descriptor = renderDescriptor(); val path = renderBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromDescriptor(descriptor, "abc123", PIXEL, null, "route"))) }
+    private fun assertRefusalInvalid(tamper: (Path) -> Unit) { val descriptor = refusalDescriptor(); val path = refusalBundle(descriptor); tamper(path); assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, EvidenceVerificationExpectation.fromDescriptor(descriptor, "abc123", null, null, "route"))) }
+    private fun renderDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("oracle", 1), ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
+    private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
+    private val PIXEL = byteArrayOf(1, 2, 3, 4)
+    private fun renderBundle(descriptor: EvidenceSceneDescriptor): Path {
         val root = Files.createTempDirectory("gpu-evidence")
-        val descriptor = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, OraclePolicy.GeneratedCpu("oracle", 1), ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
-        val observation = SceneObservation.Rendered(byteArrayOf(1, 2, 3, 4), route(), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
-        return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, byteArrayOf(1, 2, 3, 4), "attempt")
+        val observation = SceneObservation.Rendered(PIXEL, route(), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
+        return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, PIXEL, "attempt")
     }
-    private fun refusalBundle(): Path {
+    private fun refusalBundle(descriptor: EvidenceSceneDescriptor): Path {
         val root = Files.createTempDirectory("gpu-evidence")
-        val descriptor = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
         val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused"), emptyList(), environment())
         return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, attemptId = "attempt")
     }

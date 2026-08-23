@@ -18,6 +18,8 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 
 private val PerformanceJson = kotlinx.serialization.json.Json { prettyPrint = false; explicitNulls = true; ignoreUnknownKeys = false }
 
@@ -182,6 +184,10 @@ object PerformanceBundleVerifier {
         if (manifest["schema"]?.jsonPrimitive?.content != GPU_EVIDENCE_PERFORMANCE_SCHEMA) errors += "schema mismatch"
         if (manifest["sourceCommit"]?.jsonPrimitive?.content != sourceCommit || (!allowStaging && bundle.parent?.fileName?.toString() != sourceCommit)) errors += "source commit mismatch"
         if (manifest["sceneId"]?.jsonPrimitive?.content != bundle.fileName.toString()) errors += "scene mismatch"
+        val sceneId = manifest["sceneId"]?.jsonPrimitive?.content
+        if (sceneId == null || GpuEvidenceCatalog.cases.none { it.descriptor.id.value == sceneId && it.descriptor.expectation is EvidenceExpectation.ShouldRender }) {
+            errors += "scene is not a catalogued ShouldRender case"
+        }
         if (!allowStaging) {
             val absolute = bundle.toAbsolutePath().normalize()
             val tail = (0 until absolute.nameCount).map { absolute.getName(it).toString() }.takeLast(7)

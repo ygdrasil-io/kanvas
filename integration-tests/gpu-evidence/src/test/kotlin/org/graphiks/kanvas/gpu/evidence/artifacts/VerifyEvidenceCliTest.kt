@@ -15,6 +15,8 @@ import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.ImageComparison
 import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
+import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.junit.jupiter.api.io.TempDir
 
@@ -63,7 +65,7 @@ class VerifyEvidenceCliTest {
         writeAll(COMMIT)
         val descriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
         val env = EvidenceEnvironment(OTHER_COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-        val route = RouteEvidence("route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+            val route = RouteEvidence("product.solid-rect", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
         val otherRoot = Files.createTempDirectory("other-evidence")
         EvidenceBundleWriter(otherRoot, OTHER_COMMIT).writeGenerated(descriptor, SceneObservation.Rendered(pixels, route, emptyList(), env, ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(pixels.size), 1)), pixels)
@@ -74,7 +76,7 @@ class VerifyEvidenceCliTest {
         writeAll(COMMIT)
         val failedDescriptor = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
         val failedEnvironment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-        val failedRoute = RouteEvidence("route", "attempt", "complete", "rendered", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+        val failedRoute = RouteEvidence("product.solid-rect", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val failedPixels = ByteArray(failedDescriptor.width * failedDescriptor.height * 4)
         EvidenceBundleWriter(repository, COMMIT).writeGenerated(
             failedDescriptor,
@@ -111,10 +113,12 @@ class VerifyEvidenceCliTest {
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
-            val route = RouteEvidence("route", "attempt", "complete", if (rendered) "rendered" else "refused", emptyList(), emptyList(), emptyMap(), GPUBackendRuntimeTelemetry.Empty)
+            val routeId = (evidenceCase.program as RoutedSceneProgram).routeId
+            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = if (rendered) {
-                val pixels = ByteArray(descriptor.width * descriptor.height * 4)
-                SceneObservation.Rendered(pixels, route, emptyList(), environment, ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(pixels.size), 1))
+                val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
+                val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
+                SceneObservation.Rendered(pixels, route, emptyList(), environment, comparison)
             } else {
                 val reason = (descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
                 SceneObservation.Refused(reason, "test", 0, route, emptyList(), environment)

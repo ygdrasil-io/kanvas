@@ -68,36 +68,38 @@ class EvidenceBundleWriterContractTest {
         val root = Files.createTempDirectory("gpu-evidence")
         val observation = SceneObservation.Rendered(PIXEL, route("rendered", 3), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
         val path = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), observation, PIXEL, "attempt")
-        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
+        assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, COMMIT))
     }
 
     @Test fun `checked in writer preserves original differently encoded png bytes`() {
-        val original = byteArrayOf(1, 2, 3, 4, 5, 6)
+        val originalFile = Files.createTempFile("checked-in-oracle", ".png").toFile()
+        ComparisonUtils.saveRgbaAsPng(byteArrayOf(1, 2, 3, 4), 1, 1, originalFile)
+        val original = originalFile.readBytes().also { originalFile.delete() }
         val descriptor = renderDescriptor(OraclePolicy.CheckedInPng("oracle.png", sha256(original), "checked-in-release"))
         val root = Files.createTempDirectory("gpu-evidence")
         val path = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGenerated(descriptor, rendered(), PIXEL, "attempt", checkedInPngBytes = original)
         assertContentEquals(original, Files.readAllBytes(path.resolve("skia.png")))
-        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
+        assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, COMMIT))
     }
 
     @Test fun `escaped duplicate and quoted optional primitives are invalid`() {
         val path = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
         replace(path.resolve("route.json"), "\"routeId\":\"route\"", "\"routeId\":\"route\",\"\\u0072outeId\":\"route\"")
         refreshHash(path, "route.json")
-        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(path, COMMIT))
+        assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(path, COMMIT))
         val second = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
         replace(second.resolve("environment.json"), "\"available\":true", "\"available\":\"true\"")
         refreshHash(second, "environment.json")
-        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(second, COMMIT))
+        assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(second, COMMIT))
         val third = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
         replace(third.resolve("route.json"), "\"submissions\":0", "\"submissions\":\"0\"")
         refreshHash(third, "route.json")
-        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(third, COMMIT))
+        assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(third, COMMIT))
         val adapterObservation = SceneObservation.Rendered(PIXEL, route("rendered", 0), emptyList(), environment().copy(adapter = EvidenceAdapter("s", "v", "d", "a", "description", false)), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
         val fourth = EvidenceBundleWriter(Files.createTempDirectory("gpu-evidence"), COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), adapterObservation, PIXEL, "attempt")
         replace(fourth.resolve("environment.json"), "\"isFallbackAdapter\":false", "\"isFallbackAdapter\":\"false\"")
         refreshHash(fourth, "environment.json")
-        assertIs<EvidenceBundleVerification.Invalid>(EvidenceBundleVerifier.verify(fourth, COMMIT))
+        assertIs<EvidenceBundleVerification.Invalid>(verifyFixtureIntegrity(fourth, COMMIT))
     }
 
     @Test fun `replacement falls back when atomic moves are unavailable`() {
@@ -110,7 +112,7 @@ class EvidenceBundleWriterContractTest {
         val writer = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK, fallback)
         val path = writer.writeGenerated(renderDescriptor(), rendered(), PIXEL, "attempt")
         assertTrue(atomicAttempts > 0)
-        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, COMMIT))
+        assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, COMMIT))
     }
 
     @Test fun `successful replacement installs the new generated bundle`() {
@@ -122,7 +124,7 @@ class EvidenceBundleWriterContractTest {
 
         assertTrue(original == replacement)
         assertTrue(Files.readString(replacement.resolve("route.json")).contains("\"attemptId\":\"attempt-2\""))
-        assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(replacement, COMMIT))
+        assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(replacement, COMMIT))
     }
 
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())

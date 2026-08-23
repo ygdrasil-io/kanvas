@@ -16,7 +16,7 @@ class PerformanceEligibilityTest {
         listOf("llvmpipe", "SwiftShader Vulkan", "software rasterizer").forEach { token ->
             assertEquals(
                 PerformanceVerdict.DiagnosticOnly("software adapter"),
-                PerformanceEligibility.evaluate(GPUBackendAdapterSummary(token, vendor = "Mesa")),
+                PerformanceEligibility.evaluate(GPUBackendAdapterSummary(token, vendor = "Mesa", isFallbackAdapter = false)),
             )
         }
     }
@@ -24,7 +24,18 @@ class PerformanceEligibilityTest {
     @Test fun `hardware identity is eligible even without backend or driver`() {
         assertEquals(
             PerformanceVerdict.EligibleMeasurement("hardware adapter"),
-            PerformanceEligibility.evaluate(GPUBackendAdapterSummary("Apple/Apple M2 Max", vendor = "Apple", device = "Apple M2 Max")),
+            PerformanceEligibility.evaluate(GPUBackendAdapterSummary("Apple/Apple M2 Max", vendor = "Apple", device = "Apple M2 Max", isFallbackAdapter = false)),
+        )
+    }
+
+    @Test fun `unknown fallback state is unavailable until explicitly proven nonfallback`() {
+        assertEquals(
+            PerformanceVerdict.Unavailable("adapter fallback status unavailable"),
+            PerformanceEligibility.evaluate(GPUBackendAdapterSummary("Apple/Apple M2 Max", vendor = "Apple", device = "Apple M2 Max", isFallbackAdapter = null)),
+        )
+        assertEquals(
+            PerformanceVerdict.EligibleMeasurement("hardware adapter"),
+            PerformanceEligibility.evaluate(GPUBackendAdapterSummary("Apple/Apple M2 Max", vendor = "Apple", device = "Apple M2 Max", isFallbackAdapter = false)),
         )
     }
 
@@ -34,7 +45,7 @@ class PerformanceEligibilityTest {
             PerformanceEligibility.evaluate(null),
         )
         assertEquals(
-            PerformanceVerdict.Unavailable("adapter identity unavailable"),
+            PerformanceVerdict.Unavailable("adapter fallback status unavailable"),
             PerformanceEligibility.evaluate(GPUBackendAdapterSummary("unknown-adapter")),
         )
     }

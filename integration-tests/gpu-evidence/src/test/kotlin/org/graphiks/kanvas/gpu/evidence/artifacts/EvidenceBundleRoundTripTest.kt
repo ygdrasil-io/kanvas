@@ -30,7 +30,7 @@ class EvidenceBundleRoundTripTest {
 
             val path = writer.writeGenerated(descriptor, observation, attemptId = "attempt-portable")
 
-            assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "abc123"))
+            assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, "abc123"))
         } finally {
             if (previousOsName == null) System.clearProperty("os.name") else System.setProperty("os.name", previousOsName)
         }
@@ -46,7 +46,7 @@ class EvidenceBundleRoundTripTest {
         )
         val path = writer.writeGenerated(descriptor, observation, byteArrayOf(1, 2, 3, 4), "attempt-1")
         assertEquals(setOf("manifest.json", "gpu.png", "cpu.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json"), Files.list(path).use { stream -> stream.iterator().asSequence().map { p -> p.fileName.toString() }.toSet() })
-        val result = EvidenceBundleVerifier.verify(path, "abc123")
+        val result = verifyFixtureIntegrity(path, "abc123")
         val verified = assertIs<EvidenceBundleVerification.Verified>(result)
         assertEquals("render-scene", verified.sceneId)
         assertIs<EvidenceVerdict.Pass>(verified.verdict)
@@ -59,7 +59,7 @@ class EvidenceBundleRoundTripTest {
         val observation = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused"), listOf("no-submit"), environment())
         val path = writer.writeGenerated(descriptor, observation, attemptId = "attempt-2")
         assertEquals(setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json"), Files.list(path).use { stream -> stream.iterator().asSequence().map { p -> p.fileName.toString() }.toSet() })
-        val verified = assertIs<EvidenceBundleVerification.Verified>(EvidenceBundleVerifier.verify(path, "abc123"))
+        val verified = assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, "abc123"))
         assertIs<EvidenceVerdict.Pass>(verified.verdict)
     }
 
