@@ -13,6 +13,9 @@ object GpuEvidenceCatalog {
     val cases: List<EvidenceCase> = listOf(
         solidCardStack(),
         separableBlurRect(),
+        translucentCardOverlap(),
+        scissorOverlay(),
+        strokeRectOutline(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
     )
@@ -52,6 +55,93 @@ object GpuEvidenceCatalog {
             ),
             program = ProductScenePrograms.separableBlur(sourceBounds, sourceColor, sigma = 3f),
             oracle = SeparableBlurCpuOracle(sourceBounds, sourceColor, sigma = 3f),
+        )
+    }
+
+    private fun translucentCardOverlap(): EvidenceCase {
+        val first = GPUSolidRectFrameResolvedDraw(
+            2,
+            GPUPixelBounds(8, 10, 44, 42),
+            listOf(0.25f, 0.5f, 0.75f, 0.5f),
+        )
+        val second = GPUSolidRectFrameResolvedDraw(
+            3,
+            GPUPixelBounds(24, 22, 56, 54),
+            listOf(0.5f, 0.25f, 0.125f, 0.5f),
+        )
+        return EvidenceCase(
+            descriptor = EvidenceSceneDescriptor(
+                EvidenceSceneId("translucent-card-overlap"), "Translucent card overlap", "Two partially transparent product SolidRect cards exercise premultiplied SrcOver overlap.",
+                64, 64, 1L, setOf("solid-rect", "translucent", "prepared-session"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("reference-raster-translucent-src-over", 1),
+                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from premultiplied SrcOver rectangles."), emptySet(),
+            ),
+            program = ProductScenePrograms.solidRects(
+                listOf(
+                    GPUSolidRectFrameResolvedDraw(1, GPUPixelBounds(0, 0, 64, 64), listOf(13f / 255f, 20f / 255f, 33f / 255f, 1f), paintOrder = 0),
+                    first,
+                    second,
+                ),
+            ),
+            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+                fillRect(0, 0, width, height, intArrayOf(13, 20, 33, 255))
+                srcOver(8, 10, 44, 42, intArrayOf(32, 64, 96, 128))
+                srcOver(24, 22, 56, 54, intArrayOf(64, 32, 16, 128))
+            }.rgba() },
+        )
+    }
+
+    private fun scissorOverlay(): EvidenceCase {
+        val firstBounds = GPUPixelBounds(8, 8, 56, 56)
+        val firstScissor = GPUPixelBounds(16, 16, 40, 40)
+        val secondBounds = GPUPixelBounds(16, 16, 56, 56)
+        val secondScissor = GPUPixelBounds(24, 24, 48, 48)
+        return EvidenceCase(
+            descriptor = EvidenceSceneDescriptor(
+                EvidenceSceneId("scissor-overlay"), "Scissor overlay", "Strict sub-rectangle scissors constrain product SolidRect draws.",
+                64, 64, 1L, setOf("solid-rect", "scissor", "prepared-session"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
+                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."), emptySet(),
+            ),
+            program = ProductScenePrograms.solidRects(
+                listOf(
+                    GPUSolidRectFrameResolvedDraw(1, GPUPixelBounds(0, 0, 64, 64), listOf(13f / 255f, 20f / 255f, 33f / 255f, 1f), paintOrder = 0),
+                    GPUSolidRectFrameResolvedDraw(2, firstBounds, listOf(31f / 255f, 115f / 255f, 209f / 255f, 1f), firstScissor),
+                    GPUSolidRectFrameResolvedDraw(3, secondBounds, listOf(242f / 255f, 135f / 255f, 46f / 255f, 1f), secondScissor),
+                ),
+            ),
+            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+                fillRect(0, 0, width, height, intArrayOf(13, 20, 33, 255))
+                fillRect(16, 16, 40, 40, intArrayOf(31, 115, 209, 255))
+                fillRect(24, 24, 48, 48, intArrayOf(242, 135, 46, 255))
+            }.rgba() },
+        )
+    }
+
+    private fun strokeRectOutline(): EvidenceCase {
+        val pathBounds = GPUPixelBounds(16, 16, 48, 48)
+        val clear = intArrayOf(13, 20, 33, 255)
+        val stroke = intArrayOf(242, 135, 46, 255)
+        return EvidenceCase(
+            descriptor = EvidenceSceneDescriptor(
+                EvidenceSceneId("stroke-rect-outline"), "Stroke rectangle outline", "An analytic even-width rectangular stroke is recorded as four product SolidRect coverage bands.",
+                64, 64, 1L, setOf("solid-rect", "stroke-rect", "geometry-coverage", "prepared-session"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
+                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."), emptySet(),
+            ),
+            program = ProductScenePrograms.axisAlignedStrokeRect(
+                pathBounds = pathBounds,
+                strokeWidth = 6f,
+                clearColor = listOf(13f / 255f, 20f / 255f, 33f / 255f, 1f),
+                strokeColor = listOf(242f / 255f, 135f / 255f, 46f / 255f, 1f),
+            ),
+            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+                fillRect(0, 0, width, height, clear)
+                fillRect(13, 13, 51, 19, stroke)
+                fillRect(13, 45, 51, 51, stroke)
+                fillRect(13, 19, 19, 45, stroke)
+                fillRect(45, 19, 51, 45, stroke)
+            }.rgba() },
         )
     }
 

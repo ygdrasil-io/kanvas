@@ -14,6 +14,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectFrameRecor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectFrameRecordingResult
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLowerer
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLoweringRequest
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLoweringResult
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectDescriptor
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectExecutor
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -84,6 +87,67 @@ object ProductScenePrograms {
                 recorded.diagnostic.message,
                 diagnosticLines(recorded.diagnostic),
             )
+        }
+    }
+
+    fun axisAlignedStrokeRect(
+        pathBounds: GPUPixelBounds,
+        strokeWidth: Float,
+        clearColor: List<Float>,
+        strokeColor: List<Float>,
+    ): RoutedSceneProgram = routed("product.stroke-rect") { context ->
+        val lowering = GPUAxisAlignedStrokeRectLowerer().lower(
+            GPUAxisAlignedStrokeRectLoweringRequest(
+                targetBounds = context.targetBounds,
+                pathBounds = pathBounds,
+                strokeWidth = strokeWidth,
+                pathKey = "path:gpu-evidence:stroke-rect-outline:v1",
+                provenance = "integration-tests/gpu-evidence",
+            ),
+        )
+        when (lowering) {
+            is GPUAxisAlignedStrokeRectLoweringResult.Refused -> ScenePreparation.Refused(
+                lowering.diagnostic.code,
+                lowering.diagnostic.message,
+                listOf(
+                    "diagnostic.code=${lowering.diagnostic.code}",
+                    "diagnostic.message=${lowering.diagnostic.message}",
+                ),
+            )
+            is GPUAxisAlignedStrokeRectLoweringResult.Lowered -> {
+                val draws = buildList {
+                    add(GPUSolidRectFrameResolvedDraw(1, context.targetBounds, clearColor, paintOrder = 0))
+                    lowering.coverageBands.forEachIndexed { index, bounds ->
+                        add(GPUSolidRectFrameResolvedDraw(index + 2, bounds, strokeColor, paintOrder = index + 1))
+                    }
+                }
+                when (val recorded = GPUSolidRectFrameRecorder().record(
+                    GPUSolidRectFrameRecordingRequest(
+                        frameId = GPUFrameID(context.frameOrdinal),
+                        recordingId = GPURecordingID("gpu-evidence.${context.frameOrdinal}"),
+                        capabilities = context.capabilities,
+                        deviceGeneration = context.deviceGeneration,
+                        target = context.target,
+                        targetBounds = context.targetBounds,
+                        draws = draws,
+                        readbackRequestId = context.readbackRequestId.takeIf { it.value != PERFORMANCE_COMPLETION_ONLY_REQUEST_ID },
+                    ),
+                )) {
+                    is GPUSolidRectFrameRecordingResult.Recorded -> ScenePreparation.Recorded(
+                        "product.stroke-rect",
+                        recorded.taskList,
+                        listOf(
+                            "geometry.route=analytic-annular-rect.coverage",
+                            "geometry.coverageBands=${lowering.coverageBands.size}",
+                        ),
+                    )
+                    is GPUSolidRectFrameRecordingResult.Refused -> ScenePreparation.Refused(
+                        recorded.diagnostic.code.value,
+                        recorded.diagnostic.message,
+                        diagnosticLines(recorded.diagnostic),
+                    )
+                }
+            }
         }
     }
 

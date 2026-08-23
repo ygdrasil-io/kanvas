@@ -89,6 +89,9 @@ class LegacyCutoverInventoryTest {
             "custom-runtime-effect-unregistered-refusal" to "custom-runtime-effect-unregistered-refusal",
             "blur-radius-ladder" to "separable-blur-rect",
             "cache-frame-budget-strip" to "aggregate-memory-budget-refusal",
+            "translucent-card-overlap" to "translucent-card-overlap",
+            "scissor-overlay" to "scissor-overlay",
+            "stroke-rect-outline" to "stroke-rect-outline",
         )
     }
 

@@ -7,13 +7,16 @@ import kotlin.test.assertNotNull
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog is the approved four case gate`() {
+    fun `catalog is the approved seven case gate`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
             listOf(
                 "solid-card-stack",
                 "separable-blur-rect",
+                "translucent-card-overlap",
+                "scissor-overlay",
+                "stroke-rect-outline",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -45,6 +48,18 @@ class GpuEvidenceCatalogTest {
         assertNotNull(blur.oracle)
         assertEquals(2, blur.descriptor.comparison?.perChannelTolerance)
         assertEquals(99.0, blur.descriptor.comparison?.minimumSimilarityPercent)
+
+        listOf("translucent-card-overlap", "scissor-overlay", "stroke-rect-outline").forEach { id ->
+            val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
+            assertEquals(64, evidenceCase.descriptor.width)
+            assertEquals(64, evidenceCase.descriptor.height)
+            assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
+            assertNotNull(evidenceCase.oracle)
+            assertNotNull(evidenceCase.descriptor.comparison)
+        }
+        assertEquals(0, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.perChannelTolerance)
+        assertEquals(0, cases.first { it.descriptor.id.value == "scissor-overlay" }.descriptor.comparison?.perChannelTolerance)
+        assertEquals(0, cases.first { it.descriptor.id.value == "stroke-rect-outline" }.descriptor.comparison?.perChannelTolerance)
 
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)

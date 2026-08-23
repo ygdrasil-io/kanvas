@@ -37,7 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 class CatalogExpectationInvariantTest {
     @Test
     fun `every render case has exactly one oracle and every refusal has none`() {
-        assertEquals(4, GpuEvidenceCatalog.cases.size)
+        assertEquals(7, GpuEvidenceCatalog.cases.size)
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
             when (evidenceCase.descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> assertNotNull(evidenceCase.oracle, evidenceCase.descriptor.id.value)
@@ -70,6 +70,14 @@ class CatalogExpectationInvariantTest {
                 }
                 "separable-blur-rect" -> {
                     assertEquals("product.separable-blur-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
+                    assertEquals(1, port.preparedFrameCount)
+                }
+                "translucent-card-overlap", "scissor-overlay" -> {
+                    assertEquals("product.solid-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
+                    assertEquals(1, port.preparedFrameCount)
+                }
+                "stroke-rect-outline" -> {
+                    assertEquals("product.stroke-rect", assertIs<SceneObservation.Rendered>(observed).route.routeId)
                     assertEquals(1, port.preparedFrameCount)
                 }
                 "custom-runtime-effect-unregistered-refusal" -> {
