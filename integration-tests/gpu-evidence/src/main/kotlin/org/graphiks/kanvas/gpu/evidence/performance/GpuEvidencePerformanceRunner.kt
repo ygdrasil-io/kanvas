@@ -53,23 +53,20 @@ class GpuEvidencePerformanceRunner(
             val session = program.openSession(evidenceCase.descriptor.width, evidenceCase.descriptor.height)
 
             val coldBefore = backend.telemetry()
-            val coldStart = clock.nanoTime()
-            val cold = render(session, evidenceCase, diagnostics)
-            coldNanos = elapsed(coldStart)
+            val cold = timedRender(session, evidenceCase, diagnostics)
+            coldNanos = cold.nanos
             val coldAfter = backend.telemetry()
             coldSnapshot = snapshot(coldBefore, coldAfter)
-            validateCold(cold, evidenceCase, diagnostics)
+            validateCold(cold.result, evidenceCase, diagnostics)
 
             val warmupBefore = backend.telemetry()
-            repeat(config.warmupFrames) { render(session, evidenceCase, diagnostics) }
+            repeat(config.warmupFrames) { renderAndValidate(session, evidenceCase, diagnostics) }
             val warmupAfter = backend.telemetry()
             warmupSnapshot = snapshot(warmupBefore, warmupAfter)
 
             val measuredBefore = backend.telemetry()
             repeat(config.measuredFrames) {
-                val start = clock.nanoTime()
-                render(session, evidenceCase, diagnostics)
-                samples += elapsed(start)
+                samples += timedRender(session, evidenceCase, diagnostics).nanos
             }
             val measuredAfter = backend.telemetry()
             measuredSnapshot = snapshot(measuredBefore, measuredAfter)
@@ -103,7 +100,21 @@ class GpuEvidencePerformanceRunner(
         return PerformanceRun(sourceCommit, evidenceCase.descriptor.id.value, config, verdict, environment, verdict)
     }
 
-    private fun render(
+    private fun timedRender(
+        session: KanvasSurfaceRenderSession,
+        evidenceCase: EvidenceCase,
+        diagnostics: MutableList<String>,
+    ): TimedSurfaceRender {
+        val before = backend.telemetry()
+        val start = clock.nanoTime()
+        val result = session.render()
+        val nanos = elapsed(start)
+        val after = backend.telemetry()
+        validateRender(result, evidenceCase, before, after, diagnostics)
+        return TimedSurfaceRender(result, nanos)
+    }
+
+    private fun renderAndValidate(
         session: KanvasSurfaceRenderSession,
         evidenceCase: EvidenceCase,
         diagnostics: MutableList<String>,
@@ -193,6 +204,8 @@ class GpuEvidencePerformanceRunner(
     }
 
     private fun elapsed(start: Long) = (clock.nanoTime() - start).coerceAtLeast(0L)
+
+    private data class TimedSurfaceRender(val result: RenderResult, val nanos: Long)
 
     private fun environment() = PerformanceEnvironment(
         sourceCommit, System.getProperty("os.name"), System.getProperty("os.version"),

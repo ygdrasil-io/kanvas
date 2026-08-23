@@ -22,6 +22,26 @@ import org.graphiks.kanvas.surface.RenderStats
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class PerformanceRunnerTest {
+    @Test fun `cold and measured timings enclose only the public Surface render call`() {
+        val events = mutableListOf<String>()
+        val fixture = surfaceFixture(events = events)
+        var tick = 0
+
+        val run = GpuEvidencePerformanceRunner(
+            fixture.backend,
+            "a".repeat(40),
+            clock = MonotonicClock { events += "clock[$tick]"; tick++.toLong() },
+        ).run(fixture.evidenceCase)
+
+        assertIs<PerformanceVerdict.EligibleMeasurement>(run.verdict)
+        assertEquals(90, run.timingSamplesNanos.size)
+        assertTimedRender(events, "clock[0]", "clock[1]")
+        (2 until 182 step 2).forEach { start -> assertTimedRender(events, "clock[$start]", "clock[${start + 1}]") }
+        val coldEnd = events.indexOf("clock[1]")
+        val firstMeasuredStart = events.indexOf("clock[2]")
+        assertEquals(10, events.subList(coldEnd + 1, firstMeasuredStart).count { it == "surface.render" })
+    }
+
     @Test fun `eligible runner measures one reusable Surface session across cold warmup and measured phases`() {
         val fixture = surfaceFixture()
         var ticks = 0L
@@ -85,6 +105,17 @@ class PerformanceRunnerTest {
         assertEquals("Surface render did not report pipeline work", assertIs<PerformanceVerdict.Failed>(noPipeline.verdict).reason)
     }
 
+    @Test fun `malformed Surface dimensions or RGBA byte size fail measurement deterministically`() {
+        val malformedDimensions = surfaceFixture(resultWidth = 1)
+        val malformedPixels = surfaceFixture(malformedPixelCount = true)
+
+        val dimensionsRun = GpuEvidencePerformanceRunner(malformedDimensions.backend, "a".repeat(40)).run(malformedDimensions.evidenceCase)
+        val pixelsRun = GpuEvidencePerformanceRunner(malformedPixels.backend, "a".repeat(40)).run(malformedPixels.evidenceCase)
+
+        assertEquals("Surface render dimensions did not match the evidence descriptor", assertIs<PerformanceVerdict.Failed>(dimensionsRun.verdict).reason)
+        assertEquals("Surface render did not produce descriptor-sized RGBA pixels", assertIs<PerformanceVerdict.Failed>(pixelsRun.verdict).reason)
+    }
+
     @Test fun `hardware eligibility is preserved when capabilities are unavailable`() {
         val fixture = surfaceFixture(capabilities = null)
 
@@ -101,9 +132,13 @@ class PerformanceRunnerTest {
         wrongColdPixels: Boolean = false,
         draws: Int = 1,
         pipelines: Int = 1,
+        resultWidth: Int? = null,
+        resultHeight: Int? = null,
+        malformedPixelCount: Boolean = false,
+        events: MutableList<String>? = null,
     ): SurfaceFixture {
         val catalogCase = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }
-        val probe = SurfaceTelemetryProbe(capabilities, submissionDelta)
+        val probe = SurfaceTelemetryProbe(capabilities, submissionDelta, events)
         var recordings = 0
         var opens = 0
         var renders = 0
@@ -116,9 +151,11 @@ class PerformanceRunnerTest {
             object : KanvasSurfaceRenderSession {
                 override fun render(): RenderResult {
                     renders++
+                    events?.add("surface.render")
                     probe.observeRender()
                     return RenderResult(
-                        output.toUByteArray(), width, height,
+                        if (malformedPixelCount) output.copyOf(output.size - 1).toUByteArray() else output.toUByteArray(),
+                        resultWidth ?: width, resultHeight ?: height,
                         diagnostics = Diagnostics(), stats = RenderStats(1, 0, pipelines, draws, 1f),
                     )
                 }
@@ -142,20 +179,30 @@ class PerformanceRunnerTest {
     private class SurfaceTelemetryProbe(
         override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("test"),
         private val submissionDelta: Long = 1L,
+        private val events: MutableList<String>? = null,
     ) : EvidenceBackendPort {
         var submissions = 0L
             private set
         override val adapter = EvidenceAdapter("Apple GPU", "Apple", "M2 Max", "Apple", "test", false)
         override val deviceGeneration = 1L
-        override fun telemetry() = GPUBackendRuntimeTelemetry(
-            submissions = submissions, commandBuffers = submissions, renderPasses = submissions,
-            buffersCreated = submissions, texturesCreated = submissions, queueWrites = submissions,
-            uniformSlabsCreated = submissions, bindGroupsCreated = submissions, passBatchPlans = submissions,
-        )
+        override fun telemetry(): GPUBackendRuntimeTelemetry {
+            events?.add("telemetry")
+            return GPUBackendRuntimeTelemetry(
+                submissions = submissions, commandBuffers = submissions, renderPasses = submissions,
+                buffersCreated = submissions, texturesCreated = submissions, queueWrites = submissions,
+                uniformSlabsCreated = submissions, bindGroupsCreated = submissions, passBatchPlans = submissions,
+            )
+        }
         fun observeRender() { submissions += submissionDelta }
         override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation =
             error("performance Surface measurement must not prepare scenes")
         override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort =
             error("performance Surface measurement must not prepare frames")
+    }
+
+    private fun assertTimedRender(events: List<String>, start: String, end: String) {
+        val startIndex = events.indexOf(start)
+        val endIndex = events.indexOf(end)
+        assertEquals(listOf(start, "surface.render", end), events.subList(startIndex, endIndex + 1))
     }
 }
