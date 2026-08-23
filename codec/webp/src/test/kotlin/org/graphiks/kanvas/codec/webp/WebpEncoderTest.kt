@@ -8,6 +8,10 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.ImageInfo
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.icc.IccProfileWriter
 import java.io.ByteArrayOutputStream
 
@@ -19,6 +23,37 @@ class WebpEncoderTest {
         WebpEncoder.custom { _, _ -> calls++; byteArrayOf(1) }
         try {
             assertNull(WebpEncoder.encode(Bitmap(1, 1, ColorType.RGB_565)))
+            assertEquals(0, calls)
+        } finally {
+            WebpEncoder.custom(null)
+        }
+    }
+
+    @Test
+    fun `premultiplied RGBA source is refused without invoking custom encoder`() {
+        var calls = 0
+        WebpEncoder.custom { _, _ -> calls++; byteArrayOf(1) }
+        try {
+            assertNull(WebpEncoder.encode(premulBitmap()))
+            assertEquals(0, calls)
+        } finally {
+            WebpEncoder.custom(null)
+        }
+    }
+
+    @Test
+    fun `non-sRGB images are refused before invoking custom encoder`() {
+        var calls = 0
+        val p3Image = Image(
+            width = 1,
+            height = 1,
+            sourceId = "display-p3",
+            pixels = byteArrayOf(0, 0, 0, -1),
+            colorSpace = ColorSpace.DISPLAY_P3,
+        )
+        WebpEncoder.custom { _, _ -> calls++; byteArrayOf(1) }
+        try {
+            assertNull(WebpEncoder.encode(p3Image))
             assertEquals(0, calls)
         } finally {
             WebpEncoder.custom(null)
@@ -145,4 +180,8 @@ class WebpEncoderTest {
     private fun bitmap(width: Int, height: Int, argb: Int): Bitmap = Bitmap(width, height).also { bitmap ->
         for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, argb)
     }
+
+    private fun premulBitmap(): Bitmap = Bitmap(
+        ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.PREMUL),
+    )
 }

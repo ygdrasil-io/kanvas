@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec.ico
 import org.graphiks.kanvas.codec.png.PngEncoder
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
@@ -101,5 +102,7 @@ public object IcoEncoder {
         out.write((v ushr 24) and 0xFF)
     }
 
-    private fun canEncode(bitmap: Bitmap): Boolean = bitmap.colorType == ColorType.RGBA_8888
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.codec.bmp
 
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.math.color.ColorARGB
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -270,5 +271,7 @@ public object BmpEncoder {
 
     private const val DIB_V5_HEADER_SIZE = 124
 
-    private fun canEncode(bitmap: Bitmap): Boolean = bitmap.colorType == ColorType.RGBA_8888
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }

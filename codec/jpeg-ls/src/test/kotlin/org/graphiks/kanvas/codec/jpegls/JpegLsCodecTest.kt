@@ -7,6 +7,8 @@ import kotlin.math.abs
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -22,6 +24,16 @@ class JpegLsCodecTest {
     @Test
     fun `encoder refuses an unsupported source color type`() {
         assertNull(JpegLsEncoder.encode(Bitmap(1, 1, ColorType.RGB_565)))
+    }
+
+    @Test
+    fun `encoder refuses premultiplied RGBA source`() {
+        val source = Bitmap(ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.PREMUL))
+        source.setArgb(0, 0, 0xFF112233.toInt())
+
+        assertNull(
+            JpegLsEncoder.encode(source),
+        )
     }
 
     @Test

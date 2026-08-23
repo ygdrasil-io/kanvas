@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec.jpegls
 import java.io.ByteArrayOutputStream
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 
 /** Interleave modes exposed for the RGB JPEG-LS encoder. */
 public enum class JpegLsRgbInterleaveMode {
@@ -179,5 +180,7 @@ public object JpegLsEncoder {
         )
     }
 
-    private fun canEncode(source: Bitmap): Boolean = source.colorType == ColorType.RGBA_8888
+    private fun canEncode(source: Bitmap): Boolean =
+        source.colorType == ColorType.RGBA_8888 &&
+            (source.alphaType == AlphaType.UNPREMUL || source.alphaType == AlphaType.OPAQUE)
 }

@@ -3,6 +3,8 @@ package org.graphiks.kanvas.codec.webp
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.color.ColorSpace
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
@@ -36,8 +38,10 @@ public object WebpEncoder {
         customEncoder = callback
     }
 
-    public fun encode(image: Image, options: Options = defaultOptions): ByteArray? =
-        runCatching { Bitmap.fromImage(image) }.getOrNull()?.let { encode(it, options) }
+    public fun encode(image: Image, options: Options = defaultOptions): ByteArray? {
+        if (image.colorSpace != ColorSpace.SRGB) return null
+        return runCatching { Bitmap.fromImage(image) }.getOrNull()?.let { encode(it, options) }
+    }
 
     public fun encode(bitmap: Bitmap, options: Options = defaultOptions): ByteArray? {
         if (!canEncode(bitmap)) return null
@@ -93,7 +97,9 @@ public object WebpEncoder {
         )
     }
 
-    private fun canEncode(bitmap: Bitmap): Boolean = bitmap.colorType == ColorType.RGBA_8888
+    private fun canEncode(bitmap: Bitmap): Boolean =
+        bitmap.colorType == ColorType.RGBA_8888 &&
+            (bitmap.alphaType == AlphaType.UNPREMUL || bitmap.alphaType == AlphaType.OPAQUE)
 }
 
 // =====================================================================

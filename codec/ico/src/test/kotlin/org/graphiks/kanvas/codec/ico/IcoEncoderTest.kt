@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ImageInfo
 import java.io.ByteArrayOutputStream
 
 class IcoEncoderTest {
@@ -14,6 +16,14 @@ class IcoEncoderTest {
         val dst = ByteArrayOutputStream().also { it.write(0x2A) }
 
         assertFalse(IcoEncoder.encode(dst, Bitmap(1, 1, ColorType.RGB_565)))
+        assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
+    }
+
+    @Test
+    fun `premultiplied RGBA source is refused without writing to stream`() {
+        val dst = ByteArrayOutputStream().also { it.write(0x2A) }
+
+        assertFalse(IcoEncoder.encode(dst, premulBitmap()))
         assertEquals(listOf(0x2A.toByte()), dst.toByteArray().toList())
     }
 
@@ -110,4 +120,8 @@ class IcoEncoderTest {
     private fun bitmap(width: Int, height: Int, argb: Int): Bitmap = Bitmap(width, height).also { bitmap ->
         for (y in 0 until height) for (x in 0 until width) bitmap.setArgb(x, y, argb)
     }
+
+    private fun premulBitmap(): Bitmap = Bitmap(
+        ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.PREMUL),
+    )
 }
