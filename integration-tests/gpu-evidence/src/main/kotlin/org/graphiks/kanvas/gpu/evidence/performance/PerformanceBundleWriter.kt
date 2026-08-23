@@ -257,7 +257,7 @@ object PerformanceBundleVerifier {
             if (!telemetry.keys.all { it in phaseNames } || !setOf("cold", "warmup", "measured").all { it in telemetry.keys }) errors += "telemetry phase key set mismatch"
             telemetry.forEach { (phaseName, phaseElement) -> if (phaseElement is JsonObject) verifyPhase(phaseName, phaseElement, errors) else errors += "telemetry phase is invalid" }
             if (eligibilityKind == "EligibleMeasurement" && verdictKind != "Failed") {
-                mapOf("cold" to 1L, "warmup" to 10L, "measured" to 90L).forEach { (phaseName, expected) ->
+                mapOf("cold" to 1L, "warmup" to 10L, "measured" to 90L, "total" to 101L).forEach { (phaseName, expected) ->
                     val submissions = (telemetry[phaseName] as? JsonObject)?.get("delta")?.jsonObject?.get("submissions")?.jsonObject
                     if (submissions?.get("source")?.jsonPrimitive?.content != MetricSource.Derived.name || submissions["value"]?.jsonPrimitive?.content?.toLongOrNull() != expected) errors += "$phaseName submissions provenance mismatch"
                 }
@@ -296,7 +296,7 @@ object PerformanceBundleVerifier {
             if (b == null || a == null || d == null || b.keys != setOf("value", "source", "reason") || a.keys != b.keys || d.keys != b.keys) errors += "$name metric record invalid: $key"
             if (bs !in setOf("Observed", "Unavailable") || as_ !in setOf("Observed", "Unavailable") || ds !in setOf("Derived", "Unavailable")) errors += "$name metric source invalid: $key"
             val bv = b?.get("value")?.jsonPrimitive?.content?.toLongOrNull(); val av = a?.get("value")?.jsonPrimitive?.content?.toLongOrNull(); val dv = d?.get("value")?.jsonPrimitive?.content?.toLongOrNull()
-            if (bs != "Unavailable" && bv == null || as_ != "Unavailable" && av == null || ds != "Unavailable" && dv == null) errors += "$name metric value invalid: $key"
+            if (bs != "Unavailable" && (bv == null || bv < 0L) || as_ != "Unavailable" && (av == null || av < 0L) || ds != "Unavailable" && (dv == null || dv < 0L)) errors += "$name metric value invalid: $key"
             if (ds == "Derived" && bv != null && av != null && dv != av - bv) errors += "$name metric delta mismatch: $key"
             if (bs == "Unavailable" && b?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank() || as_ == "Unavailable" && a?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank() || ds == "Unavailable" && d?.get("reason")?.jsonPrimitive?.contentOrNull.isNullOrBlank()) errors += "$name unavailable metric reason missing: $key"
             if (bs == "Unavailable" && b?.get("value") !is JsonNull || as_ == "Unavailable" && a?.get("value") !is JsonNull || ds == "Unavailable" && d?.get("value") !is JsonNull) errors += "$name unavailable metric value must be null: $key"

@@ -77,6 +77,15 @@ class PerformanceBundleTest {
         assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
     }
 
+    @Test fun `verifier rejects negative observed or derived counters`() {
+        val run = PerformanceRun.fixture()
+        val path = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
+        val telemetry = path.resolve("telemetry.json")
+        Files.writeString(telemetry, Files.readString(telemetry).replace("\"value\":1,\"source\":\"Derived\"", "\"value\":-1,\"source\":\"Derived\""))
+        refreshHash(path, "telemetry.json")
+        assertIs<PerformanceBundleVerification.Invalid>(PerformanceBundleVerifier.verify(path, run.sourceCommit))
+    }
+
     @Test fun `verifier rejects missing malformed and extra entries without throwing`() {
         val run = PerformanceRun.fixture()
         val missing = PerformanceBundleWriter(root, run.sourceCommit).writeGenerated(run)
