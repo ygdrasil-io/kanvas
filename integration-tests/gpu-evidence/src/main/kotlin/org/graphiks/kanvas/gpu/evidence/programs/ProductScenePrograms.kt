@@ -9,6 +9,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecordingRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameRecordingResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSolidRectFrameResolvedDraw
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectFrameRecorder
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectFrameRecordingRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectFrameRecordingResult
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectDescriptor
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectExecutor
@@ -49,6 +53,36 @@ object ProductScenePrograms {
     fun unregisteredRuntimeEffect(id: GPUCustomRuntimeEffectID): RoutedSceneProgram = routed("product.runtime-effect.custom") {
         val execution = GPUCustomRuntimeEffectExecutor(EmptyCustomRuntimeEffectRegistry).execute(id)
         ScenePreparation.Refused(execution.reason, "Custom runtime effect ${execution.descriptorId} was ${execution.outcome}.", execution.dumpLines())
+    }
+
+    fun separableBlur(
+        sourceBounds: GPUPixelBounds,
+        sourcePremultipliedRgba: FloatArray,
+        sigma: Float,
+    ): RoutedSceneProgram = routed("product.separable-blur-rect") { context ->
+        when (val recorded = GPUSeparableBlurRectFrameRecorder().record(
+            GPUSeparableBlurRectFrameRecordingRequest(
+                frameId = GPUFrameID(context.frameOrdinal),
+                recordingId = GPURecordingID("gpu-evidence.${context.frameOrdinal}"),
+                capabilities = context.capabilities,
+                deviceGeneration = context.deviceGeneration,
+                target = context.target,
+                targetBounds = context.targetBounds,
+                sourceBounds = sourceBounds,
+                sourcePremultipliedRgba = sourcePremultipliedRgba.copyOf(),
+                clearPremultipliedRgba = floatArrayOf(0f, 0f, 0f, 0f),
+                sigma = sigma,
+                readbackRequestId = context.readbackRequestId,
+            ),
+        )) {
+            is GPUSeparableBlurRectFrameRecordingResult.Recorded ->
+                ScenePreparation.Recorded("product.separable-blur-rect", recorded.taskList, emptyList())
+            is GPUSeparableBlurRectFrameRecordingResult.Refused -> ScenePreparation.Refused(
+                recorded.diagnostic.code.value,
+                recorded.diagnostic.message,
+                diagnosticLines(recorded.diagnostic),
+            )
+        }
     }
 
     private fun routed(routeId: String, prepare: (org.graphiks.kanvas.gpu.evidence.runner.SceneRecordingContext) -> ScenePreparation): RoutedSceneProgram = object : RoutedSceneProgram {

@@ -39,7 +39,7 @@ The checked-in production code at the evaluated commit is authoritative for impl
 | 3 | Typed scene/result contracts and expectation gate | Full decision matrix passes without GPU |
 | 4 | Comparator, evidence schema, writer, verifier | Artifact round-trip and tamper tests pass |
 | 5 | Canonical product runner and 3-scene bootstrap | Eligible GPU produces three valid bundles |
-| 6 | Curated 11-scene catalog | All positive and refusal scenes pass on eligible GPU |
+| 6 | Curated four-case catalog | All code-backed render and refusal scenes execute through the product route |
 | 7 | Headless verification, GPU promotion, and rebaseline policy | Promoted bundles verify from a clean checkout |
 | 8 | Atomic legacy deletion | No executable legacy dependency remains; relevant build passes |
 | 9 | Separate performance lane | Hardware eligibility and measurement semantics pass |
@@ -717,16 +717,14 @@ rtk git commit -m "feat: prove GPU evidence bootstrap routes"
 
 ---
 
-## Task 6: Grow to the fixed 11-scene cutover catalog
+## Task 6: Establish the curated code-backed GPU evidence catalog
 
 **Files:**
 
 - Rename: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/BootstrapEvidenceCatalog.kt` → `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/GpuEvidenceCatalog.kt`
 - Rename: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/BootstrapEvidenceCatalogTest.kt` → `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/GpuEvidenceCatalogTest.kt`
 - Modify: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/programs/ProductScenePrograms.kt`
-- Create: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/RegisteredUniformCpuOracles.kt`
 - Create: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SeparableBlurCpuOracle.kt`
-- Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/RegisteredUniformCpuOraclesTest.kt`
 - Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SeparableBlurCpuOracleTest.kt`
 - Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/CatalogExpectationInvariantTest.kt`
 - Modify: `integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/runner/GpuEvidenceCli.kt`
@@ -734,27 +732,20 @@ rtk git commit -m "feat: prove GPU evidence bootstrap routes"
 
 ### Contract to establish
 
-The cutover catalog contains exactly eleven current product-backed cases. It does not claim path, clip, bitmap, text, color-glyph, stroke, or destination-read support merely because legacy fixtures existed. Those intents remain classified in the temporary inventory until the relevant product routes and dependencies exist.
+The catalog contains exactly four current product-backed cases. It does not claim registered uniforms, gradients, matrices, SimpleRT, path, clip, bitmap, text, color-glyph, stroke, or destination-read support merely because legacy fixtures existed. Those intents remain classified in the temporary inventory until the relevant product routes and dependencies exist.
 
-- [ ] Replace the bootstrap catalog test with an exact ordered-ID test for these eleven rows:
+- [ ] Replace the bootstrap catalog test with an exact ordered-ID test for these four rows:
 
 | # | Scene ID | Size | Program/route | Oracle and fixed policy |
 |---:|---|---:|---|---|
 | 1 | `solid-card-stack` | 64×64 | `GPUSolidRectFrameRecorder` | CPU rect SrcOver v1; tolerance 0; 100.0% |
-| 2 | `registered-solid-color` | 32×32 | `SolidColor` typed payload | CPU solid v1; tolerance 0; 100.0% |
-| 3 | `linear-gradient-band` | 64×16 | `LinearGradient` typed payload | two-stop clamp CPU v1; tolerance 1; 99.5% |
-| 4 | `radial-gradient-disc` | 64×64 | `RadialGradient` typed payload | two-stop clamp CPU v1; tolerance 1; 99.5% |
-| 5 | `sweep-gradient-wheel` | 64×64 | `SweepGradient` typed payload | two-stop clamp CPU v1; tolerance 1; 99.5% |
-| 6 | `color-matrix-identity` | 32×32 | `ColorMatrix` typed payload | 4×5 matrix CPU v1; tolerance 0; 100.0% |
-| 7 | `color-matrix-grayscale` | 32×32 | `ColorMatrix` typed payload | coefficients 0.213/0.715/0.072; tolerance 1; 100.0% |
-| 8 | `registered-simple-runtime-effect` | 32×32 | `SimpleRuntimeEffect` typed payload | `SimpleRTCPUOracle` v1; tolerance 0; 100.0% |
-| 9 | `separable-blur-rect` | 64×64 | `GPUSeparableBlurRectFrameRecorder`, sigma 3 | independent separable convolution v1; tolerance 2; 99.0% |
-| 10 | `custom-runtime-effect-unregistered-refusal` | 16×16 | product custom-effect executor | exact `unsupported.runtime_effect.custom_wgsl_not_registered`, zero submissions |
-| 11 | `aggregate-memory-budget-refusal` | 16×16 | registered solid request with budget 1 byte | exact `unsupported.frame_memory.aggregate_budget_exceeded`, zero submissions |
+| 2 | `separable-blur-rect` | 64×64 | `GPUSeparableBlurRectFrameRecorder`, sigma 3 | independent seven-tap separable convolution v1; tolerance 2; 99.0% |
+| 3 | `custom-runtime-effect-unregistered-refusal` | 16×16 | product custom-effect executor | exact `unsupported.runtime_effect.custom_wgsl_not_registered`, zero submissions |
+| 4 | `aggregate-memory-budget-refusal` | 16×16 | `GPUSolidRectFrameRecorder`, budget 1 byte | exact `unsupported.frame_memory.aggregate_budget_exceeded`, zero submissions |
 
 Every `ComparisonPolicy.rationale` states whether the policy is exact integer output or permits bounded GPU floating-point rounding. These are initial reviewed values. A failing eligible adapter opens a reviewed rebaseline record in Task 7; it does not edit the policy in the render task.
 
-- [ ] Write oracle unit tests at edges and centers, alpha-zero and alpha-one cases, gradient clamp before/after endpoints, sweep wrap, matrix translation, and a 1D impulse blur whose weights sum to one. The expected values must be hand-calculated constants for these test pixels; do not compare CPU code to itself.
+- [ ] Write blur-oracle unit tests at edges and centers, alpha-zero and alpha-one cases, and a 1D impulse blur whose seven hand-derived weights are symmetric and sum to one. Do not compare CPU code to itself.
 
 - [ ] Write `CatalogExpectationInvariantTest` to run every catalog case through a fake product port with rendered/refused/unavailable outcomes and prove the descriptor/result gate cannot be bypassed by the CLI or writer. Assert each positive route has exactly one non-null oracle and each refusal has none.
 
@@ -763,20 +754,17 @@ Every `ComparisonPolicy.rationale` states whether the policy is exact integer ou
 ```bash
 rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test \
   --tests '*GpuEvidenceCatalogTest' \
-  --tests '*RegisteredUniformCpuOraclesTest' \
   --tests '*SeparableBlurCpuOracleTest' \
   --tests '*CatalogExpectationInvariantTest'
 ```
 
-- [ ] Implement registered-uniform CPU oracles from scene fixture values, not from packed bytes. Evaluate at pixel centers and emit encoded premultiplied sRGB RGBA8. Use the same public, parser-validated product formula identities where available, but keep the oracle independent from GPU readback.
-
 - [ ] Implement `ProductScenePrograms.separableBlur` with `GPUSeparableBlurRectFrameRecorder`. Its request uses transparent clear, an opaque source rectangle, sigma `3f`, the context target/readback IDs, and the observed capabilities/device generation. Map a recorder refusal to `ScenePreparation.Refused` without rewriting its code.
 
-- [ ] Implement `SeparableBlurCpuOracle` as a validation-only horizontal then vertical convolution over premultiplied floats. Use `GaussianKernelCache.getOrCompute(sigma = 3f, taps = 19)` for the product's stable kernel definition, clamp sample coordinates to transparent outside the target, and quantize only after the vertical pass. Assert the resulting buffer is never passed into a product recorder.
+- [ ] Implement `SeparableBlurCpuOracle` as a validation-only horizontal then vertical convolution over premultiplied floats. Derive the Gaussian weights independently for `SeparableBlurQualityTier.NORMAL.tapCount(3f) = 7`, sample transparent outside the target, and quantize only after the vertical pass. Assert the resulting buffer is never passed into a product recorder.
 
 - [ ] Implement the budget refusal with a valid full-target registered solid draw and `configuredAggregateBudgetBytes = 1L`. Assert the refusal happens while recording and runtime submission delta stays zero.
 
-- [ ] Rename the Gradle task to `generateGpuEvidence` and make it execute the full catalog. Keep `generateBootstrapGpuEvidence` as a temporary alias only until Task 8, where it is removed.
+- [ ] Rename the Gradle task to `generateGpuEvidence` and make it execute the current catalog. Keep `generateBootstrapGpuEvidence` as a temporary alias only until Task 8, where it is removed.
 
 - [ ] Run the entire host suite and full eligible-GPU catalog:
 
@@ -786,9 +774,9 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence \
   -PsourceCommit=$(rtk git rev-parse HEAD)
 ```
 
-Expected: nine complete render bundles, two exact refusal bundles, no `Unavailable`, and no direct backend boundary violations.
+Expected on an eligible adapter: two complete render bundles and two exact refusal bundles. An unavailable adapter remains a nonzero attempt and never creates promotable evidence.
 
-- [ ] Commit the fixed cutover catalog:
+- [ ] Commit the curated code-backed catalog:
 
 ```bash
 rtk git add integration-tests/gpu-evidence gpu-renderer-scenes/legacy-cutover-inventory.json
@@ -806,7 +794,7 @@ rtk git commit -m "feat: establish curated GPU evidence catalog"
 - Create: `integration-tests/gpu-evidence/src/test/kotlin/org/graphiks/kanvas/gpu/evidence/artifacts/PromoteEvidenceCliTest.kt`
 - Modify: `integration-tests/gpu-evidence/build.gradle.kts`
 - Modify: `build.gradle.kts`
-- Create from reviewed eligible-GPU output: `reports/gpu-renderer/evidence/correctness/promoted/<scene-id>/` for all eleven catalog rows
+- Create from reviewed eligible-GPU output: `reports/gpu-renderer/evidence/correctness/promoted/<scene-id>/` for every checked-in catalog row
 
 ### Contract to establish
 
@@ -820,9 +808,9 @@ Ordinary `check` runs only host-independent tests. `gpuEvidenceCorrectness` requ
 rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*PromoteEvidenceCliTest'
 ```
 
-- [ ] Implement `VerifyEvidenceCli` with arguments `--root`, optional `--source-commit`, and optional `--allow-historical-commit`. It verifies every catalog ID, rejects extra scene directories, prints one line per scene, and exits nonzero on invalid, fail, or unavailable evidence. `--allow-historical-commit` requires all bundles to agree on one internally consistent manifest commit but does not require equality with the checkout; use it only for checked-in historical snapshots and PM packaging, never correctness promotion.
+- [ ] Implement `VerifyEvidenceCli` with arguments `--root`, optional `--source-commit`, and optional `--allow-historical-commit`. It verifies every checked-in catalog ID, rejects extra scene directories, prints one line per scene, and exits nonzero on invalid, fail, or unavailable evidence. `--allow-historical-commit` requires all bundles to agree on one internally consistent manifest commit but does not require equality with the checkout; use it only for checked-in historical snapshots and PM packaging, never correctness promotion.
 
-- [ ] Implement `PromoteEvidenceCli` to verify a generated root, copy through a sibling temporary directory, record `promotion.json`, and then atomically replace only verified scene directories. `promotion.json` fields are `schemaVersion = gpu-evidence-promotion-v1`, `sceneId`, `sourceCommit`, `promotedAtUtc`, `reviewer`, `reason`, `rebaseline`, and nullable prior/new comparison summaries. In `--all` mode, verify all eleven sources before changing any destination. The CLI accepts a repository root and derives the two canonical trees itself: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/` and `reports/gpu-renderer/evidence/correctness/promoted/`. It rejects arbitrary source/destination arguments and any canonical path escaping `reports/gpu-renderer/evidence/`.
+- [ ] Implement `PromoteEvidenceCli` to verify a generated root, copy through a sibling temporary directory, record `promotion.json`, and then atomically replace only verified scene directories. `promotion.json` fields are `schemaVersion = gpu-evidence-promotion-v1`, `sceneId`, `sourceCommit`, `promotedAtUtc`, `reviewer`, `reason`, `rebaseline`, and nullable prior/new comparison summaries. In `--all` mode, verify every current catalog source before changing any destination. The CLI accepts a repository root and derives the two canonical trees itself: `reports/gpu-renderer/evidence/correctness/generated/<source-commit>/` and `reports/gpu-renderer/evidence/correctness/promoted/`. It rejects arbitrary source/destination arguments and any canonical path escaping `reports/gpu-renderer/evidence/`.
 
 - [ ] Add module tasks with explicit separation:
 
@@ -920,15 +908,15 @@ tasks.register("gpuEvidenceVerification") {
 
 - [ ] Add only `gpuEvidenceVerification` to `pipelinePmBundle.dependsOn`. Do not add `generateGpuEvidence`, native runtime dependencies, or unpublished native-windowing artifacts. Keep the PM package static/headless.
 
-- [ ] Run the GPU gate on an eligible adapter and review all nine image triples plus both refusal records:
+- [ ] Run the GPU gate on an eligible adapter and review every current image triple and refusal record:
 
 ```bash
 rtk ./gradlew --no-daemon gpuEvidenceCorrectness -PsourceCommit=$(rtk git rev-parse HEAD)
 ```
 
-Expected: nine render verdicts pass, two refusal verdicts pass, no unavailable row, source commit identical across bundles.
+Expected: every current render verdict and refusal verdict passes, with no unavailable row; source commit is identical across bundles.
 
-- [ ] Promote the reviewed full catalog in one invocation. `PromoteEvidenceCli --all` first verifies all eleven source bundles and only then atomically replaces each exact destination scene. Use one reviewer/reason string for this initial baseline, then verify the promoted root:
+- [ ] Promote the reviewed current catalog in one invocation. `PromoteEvidenceCli --all` first verifies every current source bundle and only then atomically replaces each exact destination scene. Use one reviewer/reason string for this initial baseline, then verify the promoted root:
 
 ```bash
 rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence \
@@ -1190,7 +1178,7 @@ rtk ./gradlew --no-daemon \
   pipelinePmBundle
 ```
 
-- [ ] Run correctness on an eligible GPU and verify all eleven rows:
+- [ ] Run correctness on an eligible GPU and verify every current catalog row:
 
 ```bash
 rtk ./gradlew --no-daemon gpuEvidenceCorrectness \

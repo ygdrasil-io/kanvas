@@ -6,7 +6,7 @@ import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.system.exitProcess
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
-import org.graphiks.kanvas.gpu.evidence.catalog.BootstrapEvidenceCatalog
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
@@ -41,7 +41,7 @@ class GpuEvidenceCliRunner(
             } else {
                 val executor = GPUPreparedEvidenceExecutor(backend, request.sourceCommit)
                 val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
-                val selected = request.sceneId?.let { id -> BootstrapEvidenceCatalog.cases.filter { it.descriptor.id.value == id } } ?: BootstrapEvidenceCatalog.cases
+                val selected = request.sceneId?.let { id -> GpuEvidenceCatalog.cases.filter { it.descriptor.id.value == id } } ?: GpuEvidenceCatalog.cases
                 exitCode = selected.fold(0) { code, evidenceCase ->
                     when (val result = executor.execute(evidenceCase)) {
                         is EvidenceExecutionResult.ExecutionFailure -> { System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}"); 1 }
@@ -138,7 +138,7 @@ data class GpuEvidenceCliRequest(val repositoryRoot: Path, val sourceCommit: Str
             while (index < args.size) { val flag = args[index]; require(flag in setOf("--repository-root", "--source-commit", "--scene")); require(index + 1 < args.size && !args[index + 1].startsWith("--")); require(values.put(flag, args[index + 1]) == null); index += 2 }
             val root = Path.of(requireNotNull(values["--repository-root"])); require(root.isAbsolute && Files.isDirectory(root))
             val commit = requireNotNull(values["--source-commit"]); require(SHA.matches(commit) && commit.any { it != '0' })
-            val scene = values["--scene"]; require(scene == null || BootstrapEvidenceCatalog.cases.any { it.descriptor.id.value == scene })
+            val scene = values["--scene"]; require(scene == null || GpuEvidenceCatalog.cases.any { it.descriptor.id.value == scene })
             return GpuEvidenceCliRequest(root.toAbsolutePath().normalize(), commit, scene)
         }
     }

@@ -24,9 +24,9 @@ tasks.withType<Test> {
     if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs("-XstartOnFirstThread")
 }
 
-tasks.register<JavaExec>("generateBootstrapGpuEvidence") {
+val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
     group = "verification"
-    description = "Generates bootstrap GPU evidence through the canonical prepared-session route."
+    description = "Generates curated GPU evidence through the canonical prepared-session route."
     dependsOn(tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.runner.GpuEvidenceCliKt")
@@ -37,4 +37,10 @@ tasks.register<JavaExec>("generateBootstrapGpuEvidence") {
         require(commit != null && commit.matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
     }
     setArgs(listOf("--repository-root", rootDir.absolutePath, "--source-commit", commit ?: ""))
+}
+
+tasks.register("generateBootstrapGpuEvidence") {
+    group = "verification"
+    description = "Temporary alias for generateGpuEvidence; removed by Task 8."
+    dependsOn(generateGpuEvidence)
 }

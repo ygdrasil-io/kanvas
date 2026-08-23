@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import org.graphiks.kanvas.gpu.evidence.catalog.BootstrapEvidenceCatalog
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -15,7 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 class GPUPreparedEvidenceExecutorContractTest {
     @Test fun `opened session samples telemetry around canonical prepared frame and closes in finally`() {
         val events = mutableListOf<String>()
-        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first())
+        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
         val rendered = assertIs<EvidenceExecutionResult.Observed>(result).observation
         assertIs<SceneObservation.Rendered>(rendered)
         assertEquals(listOf("telemetry-before", "prepare-program", "prepare-scene-frame", "render-frame", "wait-completion", "close-prepared-frame", "telemetry-after"), events)
@@ -24,7 +24,8 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `unregistered effect carries product route identity and refuses before session`() {
         val events = mutableListOf<String>()
-        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.last())
+        val refusalCase = requireNotNull(GpuEvidenceCatalog.cases.firstOrNull { it.descriptor.id.value == "custom-runtime-effect-unregistered-refusal" })
+        val result = GPUPreparedEvidenceExecutor(FakePort(events), "a".repeat(40)).execute(refusalCase)
         val refused = assertIs<SceneObservation.Refused>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("product.runtime-effect.custom", refused.route.routeId)
         assertEquals("unsupported.runtime_effect.custom_wgsl_not_registered", refused.stableReasonCode)
@@ -34,7 +35,7 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `missing capabilities is unavailable before telemetry and preparation`() {
         val events = mutableListOf<String>()
-        val result = GPUPreparedEvidenceExecutor(FakePort(events, capabilitiesAvailable = false), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first())
+        val result = GPUPreparedEvidenceExecutor(FakePort(events, capabilitiesAvailable = false), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
         assertIs<SceneObservation.Unavailable>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals(emptyList(), events)
     }
@@ -49,7 +50,7 @@ class GPUPreparedEvidenceExecutorContractTest {
     @Test fun `prepared frame closes before executor propagates fatal Error`() {
         val port = FakePort(mutableListOf(), completion = CompletionKind.FatalError)
         val failure = assertFailsWith<LinkageError> {
-            GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first())
+            GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first())
         }
         assertEquals("fatal frame", failure.message)
         assertEquals(true, port.events.contains("close-prepared-frame"))
@@ -57,12 +58,12 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     @Test fun `completed product diagnostic fields are retained in deterministic execution failure diagnostics`() {
         val diagnostic = GPUDiagnostic(GPUDiagnosticCode("failed.test.completion"), GPUDiagnosticDomain.Execution, GPUDiagnosticSeverity.Fatal, "completion failed", mapOf("zeta" to "last", "alpha" to "first"), isTerminal = true, isRetryable = false)
-        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), completion = CompletionKind.Diagnostic, completionDiagnostic = diagnostic), "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first()))
+        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(FakePort(mutableListOf(), completion = CompletionKind.Diagnostic, completionDiagnostic = diagnostic), "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first()))
         assertEquals(listOf("diagnostic.code=failed.test.completion", "diagnostic.domain=Execution", "diagnostic.severity=Fatal", "diagnostic.message=completion failed", "diagnostic.terminal=true", "diagnostic.retryable=false", "diagnostic.fact.alpha=first", "diagnostic.fact.zeta=last"), failure.diagnostics)
     }
 
     private fun assertExecutionFailure(port: FakePort, expected: String) {
-        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(BootstrapEvidenceCatalog.cases.first()))
+        val failure = assertIs<EvidenceExecutionResult.ExecutionFailure>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(GpuEvidenceCatalog.cases.first()))
         assertEquals(true, failure.message.contains(expected, ignoreCase = true))
         assertEquals(true, failure.route.runtimeTelemetryDelta.submissions > 0L || expected == "runtime submission")
         assertEquals(true, port.events.contains("close-prepared-frame"))

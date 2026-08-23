@@ -86,12 +86,6 @@ class LegacyCutoverInventoryTest {
     private companion object {
         val coveredByReplacement = mapOf(
             "solid-card-stack" to "solid-card-stack",
-            "linear-gradient-lanes" to "linear-gradient-band",
-            "radial-swatch" to "radial-gradient-disc",
-            "sweep-disk" to "sweep-gradient-wheel",
-            "color-matrix-tint" to "color-matrix-identity",
-            "color-matrix-filter" to "color-matrix-grayscale",
-            "runtime-effect-color-tile" to "registered-simple-runtime-effect",
             "custom-runtime-effect-unregistered-refusal" to "custom-runtime-effect-unregistered-refusal",
             "blur-radius-ladder" to "separable-blur-rect",
             "cache-frame-budget-strip" to "aggregate-memory-budget-refusal",

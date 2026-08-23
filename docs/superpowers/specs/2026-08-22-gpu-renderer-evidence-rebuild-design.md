@@ -70,7 +70,7 @@ evidence gates pass. At cutover:
   rather than an active archive tree.
 
 The replacement is allowed to reduce active scene count from 88 to a curated
-initial set of 10 to 12. Breadth is recovered only through production-backed
+initial code-backed set. Breadth is recovered only through production-backed
 scenes with complete evidence.
 
 ## Goals
@@ -281,7 +281,11 @@ bytes or introduce a renderer API solely for evidence:
 2. unregistered runtime-effect descriptor or arbitrary WGSL,
    `ShouldRefuse("unsupported.runtime_effect.custom_wgsl_not_registered")`.
 
-The cutover catalog targets 10 to 12 focused scenes drawn from:
+The current catalog is intentionally four code-backed cases: solid-card-stack,
+separable-blur-rect, custom-runtime-effect-unregistered-refusal, and
+aggregate-memory-budget-refusal. Future breadth candidates are design intent,
+not current catalog rows or acceptance criteria. They may be added only when a
+production route and independent oracle exist. Candidate families include:
 
 - solid rect;
 - rounded rect with linear gradient;
