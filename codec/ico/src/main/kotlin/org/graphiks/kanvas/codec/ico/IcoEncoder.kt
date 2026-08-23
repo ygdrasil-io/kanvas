@@ -1,7 +1,8 @@
 package org.graphiks.kanvas.codec.ico
 
 import org.graphiks.kanvas.codec.png.PngEncoder
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
@@ -10,7 +11,7 @@ public object IcoEncoder {
     public enum class PayloadFormat { PNG, BMP }
 
     public data class Entry(
-        val bitmap: SkBitmap,
+        val bitmap: Bitmap,
         val format: PayloadFormat = PayloadFormat.PNG,
     )
 
@@ -20,7 +21,7 @@ public object IcoEncoder {
         for (entry in entries) {
             val w = entry.bitmap.width
             val h = entry.bitmap.height
-            if (w <= 0 || h <= 0) return null
+            if (w <= 0 || h <= 0 || !canEncode(entry.bitmap)) return null
             val payload = when (entry.format) {
                 PayloadFormat.PNG -> PngEncoder.encode(entry.bitmap) ?: return null
                 PayloadFormat.BMP -> {
@@ -34,11 +35,11 @@ public object IcoEncoder {
         return buildIco(entries, payloads)
     }
 
-    public fun encode(bitmap: SkBitmap): ByteArray? {
+    public fun encode(bitmap: Bitmap): ByteArray? {
         return encode(listOf(Entry(bitmap)))
     }
 
-    public fun encode(dst: OutputStream, bitmap: SkBitmap): Boolean {
+    public fun encode(dst: OutputStream, bitmap: Bitmap): Boolean {
         val bytes = encode(bitmap) ?: return false
         return try {
             dst.write(bytes)
@@ -99,4 +100,6 @@ public object IcoEncoder {
         out.write((v ushr 16) and 0xFF)
         out.write((v ushr 24) and 0xFF)
     }
+
+    private fun canEncode(bitmap: Bitmap): Boolean = bitmap.colorType == ColorType.RGBA_8888
 }

@@ -1,7 +1,8 @@
 package org.graphiks.kanvas.codec.jpegls
 
 import java.io.ByteArrayOutputStream
-import org.skia.foundation.SkBitmap
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 
 /** Interleave modes exposed for the RGB JPEG-LS encoder. */
 public enum class JpegLsRgbInterleaveMode {
@@ -49,12 +50,12 @@ public object JpegLsEncoder {
         }
     }
 
-    public fun encode(source: SkBitmap, options: Options = Options()): ByteArray? {
-        if (source.width !in 1..0xFFFF || source.height !in 1..0xFFFF) return null
+    public fun encode(source: Bitmap, options: Options = Options()): ByteArray? {
+        if (source.width !in 1..0xFFFF || source.height !in 1..0xFFFF || !canEncode(source)) return null
         var grayscale = true
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                val argb = source.getPixel(x, y)
+                val argb = source.getArgb(x, y)
                 val a = argb ushr 24 and 0xFF
                 val r = argb ushr 16 and 0xFF
                 val g = argb ushr 8 and 0xFF
@@ -80,7 +81,7 @@ public object JpegLsEncoder {
         val samples = IntArray(source.width * source.height * components.size)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                val argb = source.getPixel(x, y)
+                val argb = source.getArgb(x, y)
                 val base = (y * source.width + x) * components.size
                 samples[base] = argb ushr 16 and 0xFF
                 if (components.size == 3) {
@@ -177,4 +178,6 @@ public object JpegLsEncoder {
             reset,
         )
     }
+
+    private fun canEncode(source: Bitmap): Boolean = source.colorType == ColorType.RGBA_8888
 }

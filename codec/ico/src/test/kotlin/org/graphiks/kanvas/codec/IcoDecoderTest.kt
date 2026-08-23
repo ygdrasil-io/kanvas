@@ -31,8 +31,8 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
     }
 
     @Test
@@ -50,10 +50,10 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(GREEN, bitmap.getPixel(1, 0))
-        assertEquals(BLUE, bitmap.getPixel(0, 1))
-        assertEquals(WHITE, bitmap.getPixel(1, 1))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(GREEN, bitmap.getArgb(1, 0))
+        assertEquals(BLUE, bitmap.getArgb(0, 1))
+        assertEquals(WHITE, bitmap.getArgb(1, 1))
     }
 
     @Test
@@ -78,7 +78,7 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(GREEN, bitmap!!.getPixel(2, 1))
+        assertEquals(GREEN, bitmap!!.getArgb(2, 1))
     }
 
     @Test
@@ -101,7 +101,7 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
     }
 
     @Test
@@ -137,7 +137,7 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(GREEN, bitmap!!.getPixel(2, 1))
+        assertEquals(GREEN, bitmap!!.getArgb(2, 1))
     }
 
     @Test
@@ -157,7 +157,7 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(GREEN, bitmap!!.getPixel(255, 0))
+        assertEquals(GREEN, bitmap!!.getArgb(255, 0))
     }
 
     @Test
@@ -179,10 +179,10 @@ class IcoDecoderTest {
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(RED, bitmap!!.getPixel(0, 0))
-        assertEquals(TRANSPARENT_GREEN, bitmap.getPixel(1, 0))
-        assertEquals(TRANSPARENT_BLUE, bitmap.getPixel(0, 1))
-        assertEquals(WHITE, bitmap.getPixel(1, 1))
+        assertEquals(RED, bitmap!!.getArgb(0, 0))
+        assertEquals(TRANSPARENT_GREEN, bitmap.getArgb(1, 0))
+        assertEquals(TRANSPARENT_BLUE, bitmap.getArgb(0, 1))
+        assertEquals(WHITE, bitmap.getArgb(1, 1))
     }
 
     private data class Entry(val width: Int, val height: Int, val bitDepth: Int, val payload: ByteArray)

@@ -5,6 +5,8 @@ import java.nio.file.Files
 import java.security.MessageDigest
 import kotlin.math.abs
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.image.Bitmap
+import org.graphiks.kanvas.image.ColorType
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -14,9 +16,13 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
-import org.skia.foundation.SkBitmap
 
 class JpegLsCodecTest {
+
+    @Test
+    fun `encoder refuses an unsupported source color type`() {
+        assertNull(JpegLsEncoder.encode(Bitmap(1, 1, ColorType.RGB_565)))
+    }
 
     @Test
     fun `detects only JPEG-LS SOF55 streams`() {
@@ -680,7 +686,7 @@ class JpegLsCodecTest {
         assertNotNull(decoded)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                assertEquals(source.getPixel(x, y), decoded!!.getArgb(x, y), "x=$x y=$y")
+                assertEquals(source.getArgb(x, y), decoded!!.getArgb(x, y), "x=$x y=$y")
             }
         }
     }
@@ -1198,20 +1204,20 @@ class JpegLsCodecTest {
         }
     }
 
-    private fun grayscaleBitmap(width: Int, height: Int, samples: IntArray): SkBitmap {
+    private fun grayscaleBitmap(width: Int, height: Int, samples: IntArray): Bitmap {
         require(samples.size == width * height)
-        return SkBitmap(width, height).also { bitmap ->
+        return Bitmap(width, height).also { bitmap ->
             samples.forEachIndexed { index, sample ->
-                bitmap.setPixel(index % width, index / width, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
+                bitmap.setArgb(index % width, index / width, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
             }
         }
     }
 
-    private fun rgbBitmap(width: Int, height: Int, samples: Array<IntArray>): SkBitmap {
+    private fun rgbBitmap(width: Int, height: Int, samples: Array<IntArray>): Bitmap {
         require(samples.size == width * height)
-        return SkBitmap(width, height).also { bitmap ->
+        return Bitmap(width, height).also { bitmap ->
             samples.forEachIndexed { index, sample ->
-                bitmap.setPixel(
+                bitmap.setArgb(
                     index % width,
                     index / width,
                     0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
