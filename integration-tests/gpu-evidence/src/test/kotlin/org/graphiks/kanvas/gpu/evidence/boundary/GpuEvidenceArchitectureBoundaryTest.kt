@@ -39,11 +39,12 @@ class GpuEvidenceArchitectureBoundaryTest {
             "SurfaceSrgbOracleMath.kt",
             "SurfaceSrgbSrcOverCpuOracle.kt",
             "SurfaceSrgbSeparableMaskBlurCpuOracle.kt",
+            "SurfaceSrgbGradientCpuOracle.kt",
         )
         requiredSurfaceOracles.forEach { name ->
             assertTrue(oracleRoot.resolve(name).isFile, "missing required Surface sRGB oracle: $name")
         }
-        val legacyOracleExceptions = setOf("CpuOracle.kt", "ReferenceRaster.kt", "GradientCpuOracle.kt", "GradientCpuOracleTest.kt")
+        val legacyOracleExceptions = setOf("CpuOracle.kt", "ReferenceRaster.kt")
         val surfaceOracleFiles = oracleRoot.listFiles()
             .orEmpty()
             .filter { it.extension == "kt" && it.name !in legacyOracleExceptions }

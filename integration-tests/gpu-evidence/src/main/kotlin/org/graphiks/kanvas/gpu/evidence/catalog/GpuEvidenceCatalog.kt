@@ -5,14 +5,10 @@ import org.graphiks.kanvas.gpu.evidence.oracle.ReferenceRaster
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSeparableMaskBlurCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
-import org.graphiks.kanvas.gpu.evidence.oracle.GradientCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
-import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.Rect
 
 /** Curated catalog deliberately contains only product routes backed by the evaluated commit. */
 object GpuEvidenceCatalog {
@@ -125,47 +121,72 @@ object GpuEvidenceCatalog {
     }
 
     private fun linearGradientLanes(): EvidenceCase {
-        val bounds = Rect.fromLTRB(8f, 16f, 56f, 48f)
-        val stops = listOf(GradientStop(0f, Color.fromArgb(255, 255, 56, 56)), GradientStop(1f, Color.fromArgb(255, 56, 112, 255)))
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255),
+        )
         return EvidenceCase(
             descriptor = EvidenceSceneDescriptor(
                 EvidenceSceneId("linear-gradient-lanes"), "Linear gradient lanes", "Public Kanvas Surface clamp linear gradient across a literal rectangle.",
                 64, 64, 1L, setOf("linear-gradient", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-                OraclePolicy.GeneratedCpu("gradient-cpu-oracle-linear-clamp", 1),
-                ComparisonPolicy(1, 100.0, 1, "Independent two-stop opaque clamp-gradient RGBA8 oracle."), emptySet(),
+                OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
+                ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet(),
             ),
             program = KanvasScenePrograms.linearGradientLanes(),
-            oracle = GradientCpuOracle.linear(bounds, Point(8.5f, 32.5f), Point(55.5f, 32.5f), stops),
+            oracle = SurfaceSrgbGradientCpuOracle.linear(
+                bounds,
+                SurfaceSrgbGradientCpuOracle.Point(8.5f, 32.5f),
+                SurfaceSrgbGradientCpuOracle.Point(55.5f, 32.5f),
+                stops,
+            ),
         )
     }
 
     private fun radialSwatch(): EvidenceCase {
-        val bounds = Rect.fromLTRB(8f, 8f, 56f, 56f)
-        val stops = listOf(GradientStop(0f, Color.fromArgb(255, 255, 232, 72)), GradientStop(1f, Color.fromArgb(255, 48, 80, 192)))
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 8f, 56f, 56f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 232, 72),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 48, 80, 192),
+        )
         return EvidenceCase(
             descriptor = EvidenceSceneDescriptor(
                 EvidenceSceneId("radial-swatch"), "Radial swatch", "Public Kanvas Surface clamp radial gradient across a literal swatch.",
                 64, 64, 1L, setOf("radial-gradient", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-                OraclePolicy.GeneratedCpu("gradient-cpu-oracle-radial-clamp", 1),
-                ComparisonPolicy(1, 100.0, 1, "Independent two-stop opaque clamp-gradient RGBA8 oracle."), emptySet(),
+                OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
+                ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet(),
             ),
             program = KanvasScenePrograms.radialSwatch(),
-            oracle = GradientCpuOracle.radial(bounds, Point(32.5f, 32.5f), 23.5f, stops),
+            oracle = SurfaceSrgbGradientCpuOracle.radial(
+                bounds,
+                SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f),
+                23.5f,
+                stops,
+            ),
         )
     }
 
     private fun sweepDisk(): EvidenceCase {
-        val bounds = Rect.fromLTRB(8f, 8f, 56f, 56f)
-        val stops = listOf(GradientStop(0f, Color.fromArgb(255, 255, 64, 64)), GradientStop(1f, Color.fromArgb(255, 64, 208, 255)))
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 8f, 56f, 56f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 64, 64),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 64, 208, 255),
+        )
         return EvidenceCase(
             descriptor = EvidenceSceneDescriptor(
                 EvidenceSceneId("sweep-disk"), "Sweep disk", "Public Kanvas Surface clamp sweep gradient across a literal disk swatch.",
                 64, 64, 1L, setOf("sweep-gradient", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-                OraclePolicy.GeneratedCpu("gradient-cpu-oracle-sweep-clamp", 1),
-                ComparisonPolicy(1, 100.0, 1, "Independent two-stop opaque clamp-gradient RGBA8 oracle."), emptySet(),
+                OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
+                ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet(),
             ),
             program = KanvasScenePrograms.sweepDisk(),
-            oracle = GradientCpuOracle.sweep(bounds, Point(32.5f, 32.5f), 0f, 360f, stops),
+            oracle = SurfaceSrgbGradientCpuOracle.sweep(
+                bounds,
+                SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f),
+                0f,
+                360f,
+                stops,
+            ),
         )
     }
 

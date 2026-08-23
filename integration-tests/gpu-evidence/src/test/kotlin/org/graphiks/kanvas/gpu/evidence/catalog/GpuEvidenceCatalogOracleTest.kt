@@ -43,13 +43,16 @@ class GpuEvidenceCatalogOracleTest {
     fun `gradient oracles preserve literal clamp endpoints and transparent exterior`() {
         assertPixel(oracle("linear-gradient-lanes"), 64, 64, 7, 16, intArrayOf(0, 0, 0, 0))
         assertPixel(oracle("linear-gradient-lanes"), 64, 64, 8, 16, intArrayOf(255, 56, 56, 255))
+        assertPixel(oracle("linear-gradient-lanes"), 64, 64, 32, 16, intArrayOf(189, 90, 192, 255))
         assertPixel(oracle("linear-gradient-lanes"), 64, 64, 55, 16, intArrayOf(56, 112, 255, 255))
 
         assertPixel(oracle("radial-swatch"), 64, 64, 7, 8, intArrayOf(0, 0, 0, 0))
         assertPixel(oracle("radial-swatch"), 64, 64, 32, 32, intArrayOf(255, 232, 72, 255))
+        assertPixel(oracle("radial-swatch"), 64, 64, 44, 32, intArrayOf(188, 176, 149, 255))
 
         assertPixel(oracle("sweep-disk"), 64, 64, 7, 8, intArrayOf(0, 0, 0, 0))
         assertPixel(oracle("sweep-disk"), 64, 64, 48, 32, intArrayOf(255, 64, 64, 255))
+        assertPixel(oracle("sweep-disk"), 64, 64, 32, 48, intArrayOf(226, 122, 146, 255))
     }
 
     private fun oracle(id: String): ByteArray = assertNotNull(

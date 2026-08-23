@@ -128,6 +128,24 @@ class GpuEvidenceCatalogTest {
             assertEquals(100.0, evidenceCase.descriptor.comparison?.minimumSimilarityPercent)
             assertEquals(1, evidenceCase.descriptor.comparison?.version)
         }
+        assertEquals(
+            mapOf(
+                "linear-gradient-lanes" to "surface-srgb-gradient-linear-clamp",
+                "radial-swatch" to "surface-srgb-gradient-radial-clamp",
+                "sweep-disk" to "surface-srgb-gradient-sweep-clamp",
+            ),
+            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").associateWith { id ->
+                (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
+            },
+        )
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { id ->
+            val oracle = cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu
+            assertEquals(2, oracle.version)
+            assertEquals(
+                "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage.",
+                cases.first { it.descriptor.id.value == id }.descriptor.comparison?.rationale,
+            )
+        }
 
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)
