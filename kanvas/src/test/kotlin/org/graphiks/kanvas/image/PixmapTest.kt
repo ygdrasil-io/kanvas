@@ -34,9 +34,29 @@ class PixmapTest {
     }
 
     @Test
+    fun `rejects a buffer shorter than its strided pixel data`() {
+        val info = ImageInfo.make(2, 2, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())
+        val rowBytes = info.minRowBytes() + 4
+
+        assertThrows<IllegalArgumentException> {
+            Pixmap(info, ByteBuffer.allocate(19), rowBytes)
+        }
+    }
+
+    @Test
     fun `reads RGBA pixels from little endian storage`() {
         val info = ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())
         val data = ByteBuffer.wrap(byteArrayOf(0x12, 0x34, 0x56, 0x7F))
+        val pixmap = Pixmap(info, data, info.minRowBytes())
+
+        assertEquals(0x7F123456, pixmap.getArgb(0, 0))
+    }
+
+    @Test
+    fun `reads from the supplied buffer window`() {
+        val info = ImageInfo.make(1, 1, ColorType.RGBA_8888, AlphaType.UNPREMUL, ImageColorSpace.sRGB())
+        val data = ByteBuffer.wrap(byteArrayOf(0x00, 0x12, 0x34, 0x56, 0x7F))
+        data.position(1)
         val pixmap = Pixmap(info, data, info.minRowBytes())
 
         assertEquals(0x7F123456, pixmap.getArgb(0, 0))

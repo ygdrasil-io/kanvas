@@ -15,10 +15,14 @@ class Pixmap(
 
     init {
         require(rowBytes >= 0) { "rowBytes must be non-negative: $rowBytes" }
-        require(info.isEmpty() || rowBytes >= info.minRowBytes()) {
-            "rowBytes=$rowBytes < minRowBytes=${info.minRowBytes()}"
+        val minRowBytes = info.minimumRowBytes()
+        require(info.isEmpty() || rowBytes.toLong() >= minRowBytes) {
+            "rowBytes=$rowBytes < minRowBytes=$minRowBytes"
         }
-        buffer = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        require(data.remaining().toLong() >= info.computeByteSize(rowBytes)) {
+            "buffer remaining=${data.remaining()} < byteSize=${info.computeByteSize(rowBytes)}"
+        }
+        buffer = data.slice().order(ByteOrder.LITTLE_ENDIAN)
     }
 
     fun width(): Int = info.width
@@ -33,8 +37,7 @@ class Pixmap(
 
     fun addr(): ByteBuffer = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
-    fun computeByteSize(): Long =
-        if (info.isEmpty()) 0L else (height() - 1).toLong() * rowBytes + info.minRowBytes()
+    fun computeByteSize(): Long = info.computeByteSize(rowBytes)
 
     fun getArgb(x: Int, y: Int): Int {
         if (!info.colorType.capabilities().cpuReadableWritable || x !in 0 until width() || y !in 0 until height()) {
@@ -102,3 +105,8 @@ class Pixmap(
 
     private fun ushort(offset: Int): Int = byte(offset) or (byte(offset + 1) shl 8)
 }
+
+private fun ImageInfo.minimumRowBytes(): Long = width.toLong() * bytesPerPixel().toLong()
+
+private fun ImageInfo.computeByteSize(rowBytes: Int): Long =
+    if (isEmpty()) 0L else (height - 1).toLong() * rowBytes.toLong() + minimumRowBytes()
