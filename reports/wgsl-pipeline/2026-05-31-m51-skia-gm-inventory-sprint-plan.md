@@ -172,7 +172,7 @@ Baseline validation:
 rtk git diff --check
 rtk ./gradlew --no-daemon pipelineSceneDashboard
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 ```
 
 M51 should add and run an inventory-specific task, for example:

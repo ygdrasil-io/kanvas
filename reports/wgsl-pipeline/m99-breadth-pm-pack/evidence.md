@@ -64,7 +64,7 @@ KAN-050 aggregates existing PM-visible support, refusal, dependency, performance
 - `no-broad-skia-parity`: No broad Skia parity or arbitrary GM support is claimed from selected rows.
 - `no-broad-codecs-fonts`: No broad codec, font fallback, complex shaping, emoji, LCD, SDF, animated image, AVIF, JPEG XL, RAW, or video support is claimed.
 - `no-estimated-performance-measured`: Estimated, unavailable, derived, or observed-partial performance/cache data is not counted as measured release evidence.
-- `no-native-kadre-ci-requirement`: Headless validation and pipelinePmBundle do not require native Kadre window execution or an initialized external/poc-koreos submodule.
+- `no-native-kadre-ci-requirement`: Headless validation and pipelineSceneDashboardGate do not require native Kadre window execution or an initialized external/poc-koreos submodule.
 - `no-dynamic-sksl-compilation`: SkSL remains a Skia compatibility/refusal surface; WGSL remains the Kanvas shader implementation target.
 - `no-renderer-threshold-readiness-change`: KAN-050 does not modify renderer code, shader code, thresholds, performance gates, cache gates, or readiness denominators.
 
@@ -77,6 +77,6 @@ KAN-050 aggregates existing PM-visible support, refusal, dependency, performance
 ## Validation
 
 - `validateKan050PmBreadthSupportRefusalPack`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 - `pipelineConformance`
 - `git diff --check`

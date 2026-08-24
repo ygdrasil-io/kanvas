@@ -82,7 +82,7 @@ owner policy metadata, but do not become release-blocking gates.
 that M54 pass rows have GPU evidence plus `fallbackReason=none`, while M54
 expected-unsupported rows retain stable non-`none` fallback reasons.
 
-`pipelinePmBundle` exposes M54 counters in `manifest.json` under
+`pipelineSceneDashboardGate` exposes M54 counters in `manifest.json` under
 `m54HardFeatureDepth`, including selected/promoted/rejected counts, family
 counters, promoted row details, performance warning rows, and rejected/deferred
 details.
@@ -108,7 +108,7 @@ details.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate
 ```
 
 Result: pass.

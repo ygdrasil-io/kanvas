@@ -50,7 +50,7 @@ visible refusal with `font.shaping-fallback-missing` and legacy reason
 - `validateKan043TextShapingFallbackScope`
 - `:gpu-raster:pipelineConformanceTest -- includes SimpleLatinLineSceneEvidenceTest`
 - `:kanvas-skia:pipelineConformanceTest -- includes font/shaper contract tests in the standard suite`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

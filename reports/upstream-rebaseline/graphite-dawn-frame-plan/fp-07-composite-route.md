@@ -232,8 +232,8 @@ Explicit terminal refusal, never silent:
 
 - Per-task trial record (withheld Task 9 flip + Task 17 re-flip triage):
   `fp-07-composite-route-evidence.md`.
-- Plan and revised design: `reports/fp07-composite-route-plan.md`,
-  `reports/fp07-composite-route-design.md`.
+- Historical plan and revised design: recover the removed FP-07 documents from
+  Git history if needed.
 - Executor smoke evidence: `GPUWgpu4kLayerTargetCompositeSmokeTest` (8 tests,
   green).
 - Boundary audit artifacts: base-worktree boundary run at `40a873560` (20

@@ -17,7 +17,7 @@
     "gatePhase": "candidate-reporting-only",
     "releaseBlocking": false,
     "countedAsMeasuredGate": false,
-    "sourceNativeDemo": "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+    "sourceNativeDemo": "historical Git evidence (M83 native demo retired from the working tree)",
     "sceneContractId": "m83-display-list-pm-scene-v1",
     "measuredPayload": {
         "status": "measured",
@@ -77,8 +77,7 @@
     "artifactPaths": [
         "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
         "reports/wgsl-pipeline/m84-native-frame-timing/evidence.md",
-        "reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json",
-        "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"
+        "reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json"
     ],
     "validationRows": [
         {

@@ -30,8 +30,8 @@
                 "purpose": "Generates the RC2 evidence package."
             },
             {
-                "name": "pipelinePmBundle",
-                "purpose": "Builds the portable PM dashboard/report bundle including M88."
+                "name": "validateM88ReleaseCandidate2",
+                "purpose": "Validates the checked-in M88 RC2 evidence package without native dependencies."
             },
             {
                 "name": "pipelineSceneDashboardGate",
@@ -63,10 +63,10 @@
                 "rationale": "Dashboard must have zero fail/tracked-gap rows and stable expected-unsupported reasons."
             },
             {
-                "name": "pipelinePmBundle",
+                "name": "validateM88ReleaseCandidate2",
                 "phase": "blocking",
                 "status": "pass",
-                "rationale": "Portable PM bundle must copy and validate M65-M88 evidence without resolving unpublished Kadre runtime dependencies."
+                "rationale": "The checked-in RC2 package is validated without resolving unpublished native runtime dependencies."
             },
             {
                 "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
@@ -105,7 +105,7 @@
             "Adapter/host mismatch quarantines frame results instead of silently failing RC2.",
             "Estimated or missing metrics never count as measured evidence.",
             "Correctness regressions remain rollback/blocking events.",
-            "Missing native Kadre setup is dependency-gated for local demos, not an opaque pipelinePmBundle failure."
+            "Missing native Kadre setup is dependency-gated for local demos, not a headless RC2 validation failure."
         ]
     },
     "supportRefusalMatrix": {
@@ -228,10 +228,10 @@
         ]
     },
     "pmPackage": {
-        "generationCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
-        "sourceGenerationCommand": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineM88ReleaseCandidate2",
-        "serveCommand": "python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard",
-        "dashboardEntry": "build/reports/wgsl-pipeline-pm-bundle/dashboard/index.html",
+        "generationCommand": "rtk ./gradlew --no-daemon validateM88ReleaseCandidate2",
+        "sourceGenerationCommand": "not-applicable",
+        "serveCommand": "not-applicable",
+        "dashboardEntry": "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.md",
         "rc2Evidence": "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json",
         "pmDemoScript": "reports/wgsl-pipeline/m88-realtime-rc2/pm-demo-script.md",
         "releaseNotes": "reports/wgsl-pipeline/m88-realtime-rc2/release-notes.md",

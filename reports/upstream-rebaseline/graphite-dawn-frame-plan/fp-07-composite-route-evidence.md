@@ -24,7 +24,7 @@ rtk proxy ./gradlew -p ... :kanvas:test \
 # BUILD SUCCESSFUL (39 actionable tasks)
 ```
 
-The gate condition in `reports/fp07-composite-route-design.md` (§ Méthodologie: "le cutover du frame gate n'est activé qu'une fois tous les tests des phases 1-3 verts") is satisfied after Tasks 1–8.
+The gate condition in the historical FP-07 design (§ Méthodologie: "le cutover du frame gate n'est activé qu'une fois tous les tests des phases 1-3 verts"; recover from Git history) is satisfied after Tasks 1–8.
 
 ## 2. The flip applied (Step 2)
 

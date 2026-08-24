@@ -156,7 +156,7 @@ Correction:
 - `/Users/chaos/.codex/worktrees/e281/kanvas/gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommandTest.kt`
 - `/Users/chaos/.codex/worktrees/e281/kanvas/gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt`
 - `/Users/chaos/.codex/worktrees/e281/kanvas/gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt`
-- `/Users/chaos/.codex/worktrees/e281/kanvas/reports/gpu-renderer/2026-06-14-m1-m2-ticket-wave.md`
+- Historical M1/M2 ticket-wave evidence: recover from Git history only.
 - `/Users/chaos/.codex/worktrees/e281/kanvas/.upstream/specs/gpu-renderer/tickets/M2-rect-rrect-gradient-scissor/KGPU-M2-001-add-native-fillrrect-first-expansion-route.md`
 
 ## Validation Commands

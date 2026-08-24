@@ -28,8 +28,8 @@
       "section": "Durable Legacy Gates"
     },
     {
-      "path": ".upstream/specs/pure-kotlin-text/tickets/M0-claims-ci-diagnostics/KFONT-M0-005-harden-dashboard-claim-classification.md",
-      "section": "Acceptance Criteria"
+      "path": ".upstream/specs/pure-kotlin-text/README.md",
+      "section": "Scope"
     }
   ],
   "supportClaim": "validation-dashboard-infrastructure-only",
@@ -1165,8 +1165,8 @@
       "gpuClaimed": false,
       "claimPromotionAllowed": false,
       "targetSpec": {
-        "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
-        "section": "Dashboard Impact"
+        "path": ".upstream/specs/pure-kotlin-text/README.md",
+        "section": "Scope"
       },
       "evidence": {
         "fixtureProvenance": [],
@@ -1385,7 +1385,7 @@
     "taskName": "validatePureKotlinTextClaimDashboard",
     "validatorCommand": "rtk python3 scripts/validate_pure_kotlin_text_claim_dashboard.py",
     "sceneGateTask": "pipelineSceneDashboardGate",
-    "pmBundleTask": "pipelinePmBundle"
+    "pmBundleTask": "pipelineSceneDashboardGate"
   },
   "validationCommands": [
     "rtk python3 -m unittest scripts/test_validate_pure_kotlin_text_claim_dashboard.py",

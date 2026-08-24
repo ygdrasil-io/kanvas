@@ -66,7 +66,7 @@ texture are closed by `closeDrawResources` after command submission.
 
 ```bash
 rtk ./gradlew --no-daemon :validateKan006IntermediateTextureOwnership
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 ```
 
 ## Non-Claims

@@ -34,7 +34,7 @@ fallback policy, tracked gaps, and expected unsupported rows.
 - `build/reports/wgsl-pipeline-front-qa/front-qa.md`
 - `build/reports/wgsl-pipeline-front-qa/front-qa.json`
 
-`pipelinePmBundle` includes that report under `front-qa/` and records the
+`pipelineSceneDashboardGate` includes that report under `front-qa/` and records the
 desktop/mobile screenshot paths in `manifest.json`.
 
 The static QA threshold is 0 critical issues. Browser screenshots for the PM
@@ -47,5 +47,5 @@ bundle are:
 
 ```bash
 rtk ./gradlew --no-daemon pipelineSceneDashboard
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 ```

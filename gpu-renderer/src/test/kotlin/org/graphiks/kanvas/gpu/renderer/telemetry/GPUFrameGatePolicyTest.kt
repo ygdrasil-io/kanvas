@@ -151,6 +151,7 @@ class GPUFrameGatePolicyTest {
             )
         }
     }
+
 }
 
 private fun frameWarmupPolicy(
@@ -174,7 +175,7 @@ private fun frameLane(
     laneId: String,
     targetState: GPUFrameGateState = GPUFrameGateState.Candidate,
     sourceKind: String = "owned-adapter-frame-samples",
-    sourceArtifactLabel: String = "reports/gpu-renderer-scenes/windowed/frame-gate-blocker-board/session.json",
+    sourceArtifactLabel: String = "reports/gpu-renderer-scenes/frame-samples/frame-gate-blocker-board/frame-samples.json",
     sourceHash: String? = null,
     sceneId: String = "frame-gate-blocker-board",
     adapterLabel: String? = null,

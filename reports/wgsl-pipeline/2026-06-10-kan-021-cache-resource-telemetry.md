@@ -19,7 +19,7 @@ The selected evidence is readable by PM and dev reviewers:
 | M85 ledger | `derived` | `reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json` | Deterministic selected-scene ledger for cache hits/misses, resource generations, key spaces, resize invalidation, and invalid reuse. |
 | M90 native route allocations | `observed-partial` | `reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json` | Native route shader/pipeline creation churn is observed, but it is not broad cache-hit telemetry. |
 | FOR-315 headless WebGPU snapshot | `observed` | `reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json` | One Kanvas headless WebGPU warm-cache snapshot exists through `SkWebGpuDevice.cacheTelemetrySnapshot()`. |
-| Broad Kadre/wgpu4k cache callbacks | `not-observable` | `reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json` | Broad native cache callbacks and resource lifetime snapshots remain blockers. |
+| Retired native-windowing callbacks | `not-observable` | `.upstream/target/skia-like-realtime-renderer-target.md` | Native-windowing cache callbacks and resource lifetime snapshots are outside the current runtime scope. |
 
 The KAN-021 JSON lives at
 `reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json`.
@@ -65,6 +65,6 @@ observed cache hits.
 ```bash
 rtk python3 scripts/validate_kan021_cache_resource_telemetry.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan021CacheResourceTelemetry
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

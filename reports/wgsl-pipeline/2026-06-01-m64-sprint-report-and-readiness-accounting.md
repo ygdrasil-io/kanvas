@@ -57,7 +57,7 @@ Still open for later milestones:
 Required before merge:
 
 ```bash
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
 rtk git diff --check
 ```

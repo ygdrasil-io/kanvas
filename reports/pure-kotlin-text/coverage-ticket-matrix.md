@@ -613,7 +613,7 @@ Evidence:
   GPU claims without GPU artifacts, missing legacy gates, and missing Gradle
   wiring.
 - `validatePureKotlinTextClaimDashboard` is wired into
-  `pipelineSceneDashboardGate` and `pipelinePmBundle`; CI path filters and the
+  `pipelineSceneDashboardGate` and `pipelineSceneDashboardGate`; CI path filters and the
   pure Kotlin font foundation job invoke the new dashboard validator.
 
 Validation:
@@ -5895,7 +5895,7 @@ Evidence:
   for each telemetry domain plus stable refusal cases for missing dimensions
   and single-run budget misuse.
 - `font-telemetry-pm-bundle.json` now records advisory `tracked-gap`
-  `pipelinePmBundle` packaging for the M12 row and pins one stable sample per
+  `pipelineSceneDashboardGate` packaging for the M12 row and pins one stable sample per
   telemetry domain without turning budgets into release gates.
 - `FontTelemetrySchemaTest` asserts byte-identical checked-in dumps, required
   domain coverage, repeated-run aggregation fields, conditional GPU adapter
@@ -5972,7 +5972,7 @@ Validation:
 ```bash
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
@@ -6031,7 +6031,7 @@ Validation:
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
 rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
@@ -6092,7 +6092,7 @@ Validation:
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py

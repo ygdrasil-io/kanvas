@@ -47,7 +47,7 @@ or dependency-gated row.
 - `validateKan038DashesBoundedV1`
 - `validateKan039NestedClipStackV1`
 - `pipelineSceneDashboardGate`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

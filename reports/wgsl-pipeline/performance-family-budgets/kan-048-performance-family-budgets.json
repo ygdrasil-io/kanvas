@@ -374,7 +374,7 @@
   "requiredValidation": [
     "validateKan048PerformanceFamilyBudgets",
     "pipelineConformance",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "claimGuard": {
     "missingFamilies": [],

@@ -30,8 +30,8 @@
       "section": "Migration Categories"
     },
     {
-      "path": ".upstream/specs/pure-kotlin-text/tickets/M13-skia-facade-migration/KFONT-M13-001-add-facade-adapter-inventory.md",
-      "section": "Acceptance Criteria"
+      "path": ".upstream/specs/pure-kotlin-text/README.md",
+      "section": "Scope"
     }
   ],
   "migrationCategories": [
@@ -318,5 +318,5 @@
     "rtk git diff --check"
   ],
   "dashboardSurfaceId": "skia-facade-adapter-inventory",
-  "pmBundleTask": "pipelinePmBundle"
+  "pmBundleTask": "pipelineSceneDashboardGate"
 }

@@ -114,6 +114,6 @@ support claim remains unchanged:
 Required:
 
 - `rtk ./gradlew pipelineSceneDashboardGate`
-- `rtk ./gradlew pipelinePmBundle`
+- `rtk ./gradlew pipelineSceneDashboardGate`
 - `rtk python3 -m json.tool reports/wgsl-pipeline/for-304-renderer-feature-conversion-wave-closeout.json`
 - `rtk git diff --check origin/master...HEAD`

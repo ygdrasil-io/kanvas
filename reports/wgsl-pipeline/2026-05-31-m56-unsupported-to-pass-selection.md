@@ -59,7 +59,7 @@ M56 can move PM readiness from 95% to 97% only if:
 - at least two selected rows are generated as `pass`;
 - those rows have adapter-backed GPU artifacts;
 - `pipelineSceneDashboardGate` reports 0 failures;
-- `pipelinePmBundle` exposes final M56 counters;
+- `pipelineSceneDashboardGate` exposes final M56 counters;
 - README, target, and backlog state exact before/after counters.
 
 With only the sweep-gradient row promoted, M56 must stay below the 97% target

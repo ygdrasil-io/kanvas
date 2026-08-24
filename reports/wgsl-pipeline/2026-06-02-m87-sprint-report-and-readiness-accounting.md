@@ -44,5 +44,5 @@ python3 -m json.tool reports/wgsl-pipeline/m87-runtime-effect-live-editing/evide
 Broader validation expected before merge:
 
 ```bash
-./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest pipelinePmBundle
+./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest pipelineSceneDashboardGate
 ```

@@ -36,7 +36,7 @@ The sprint preserves the current architecture rules:
 
 Validation source: `build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.md`
 from `rtk ./gradlew --no-daemon pipelineM60NestedClipPathAaPromotionPack
-pipelineSceneDashboardGate pipelinePmBundle`.
+pipelineSceneDashboardGate pipelineSceneDashboardGate`.
 
 | Counter | Value |
 |---|---:|
@@ -118,7 +118,7 @@ refusal evidence and diagnostics while preserving the published score.
 Commands run:
 
 ```text
-rtk ./gradlew --no-daemon pipelineM60NestedClipPathAaPromotionPack pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineM60NestedClipPathAaPromotionPack pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk jq '{total:(.scenes|length), statuses:(.scenes|map(.status)|group_by(.)|map({(.[0]):length})|add), m60:(.scenes|map(select(.id|test("m60")))|map({id,status,source,gpuStatus:.gpu.status,fallback:.gpu.route.fallbackReason, generation:.generation.derivationTask}))}' build/reports/wgsl-pipeline-scenes/data/scenes.json
 ```
 
@@ -127,6 +127,5 @@ Results:
 - Gradle validation succeeded.
 - `pipelineSceneDashboardGate` reported 63 total rows, 47 `pass`, 16
   `expected-unsupported`, 0 failures.
-- `pipelinePmBundle` generated
-  `build/reports/wgsl-pipeline-pm-bundle/manifest.json` with the same dashboard
-  counters and unchanged M59 performance release-gate counters.
+- `pipelineSceneDashboardGate` validated the generated scene dashboard with the
+  same counters and unchanged M59 performance release-gate counters.

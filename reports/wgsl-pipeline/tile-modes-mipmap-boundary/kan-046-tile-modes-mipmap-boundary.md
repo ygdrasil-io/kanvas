@@ -56,7 +56,7 @@ requests without a real mipmap chain remain expected-unsupported.
 
 - `validateKan046TileModesMipmapBoundary`
 - `pipelineSceneDashboardGate`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Non-Claims
 

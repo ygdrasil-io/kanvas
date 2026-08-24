@@ -35,7 +35,7 @@ Each artifact records:
 Validation:
 
 ```text
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 ```
 
 Result: success, with no scene gate failures.

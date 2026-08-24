@@ -107,7 +107,7 @@ M64 does not claim:
 Required implementation validation:
 
 ```bash
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest
 rtk git diff --check
 ```

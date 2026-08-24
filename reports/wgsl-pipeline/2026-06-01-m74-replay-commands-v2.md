@@ -60,5 +60,5 @@ rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-linear-gradient-rect-replay-v
 rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-bitmap-rect-nearest-replay-v1 -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
 rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-nested-rrect-clip-refusal-v1 -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
 rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-unknown-scene -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
-rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-linear-gradient-rect-replay-v1 -PkadreDemoFrames=180 -PkadreDemoWarmupFrames=30 :kadre-runtime:runM70KadreNativeDemo pipelineM70KadreLiveRuntimeEvidence pipelinePmBundle
+rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-linear-gradient-rect-replay-v1 -PkadreDemoFrames=180 -PkadreDemoWarmupFrames=30 :kadre-runtime:runM70KadreNativeDemo pipelineM70KadreLiveRuntimeEvidence pipelineSceneDashboardGate
 ```

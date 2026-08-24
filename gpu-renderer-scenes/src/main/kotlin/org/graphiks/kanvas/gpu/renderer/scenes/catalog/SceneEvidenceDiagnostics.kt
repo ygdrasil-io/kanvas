@@ -69,8 +69,8 @@ internal fun GPURendererScene<*>.pmReadinessFreezeDiagnostics(): List<String> {
         "performanceReadinessPromoted=false",
         "missingGate=none",
         "reportingOnlyGatesVisible=true",
-        "pipelinePmBundleUpdated=true",
-        "pmManifestKey=gpuRendererM9ReadinessPmEvidence",
+        "standalonePmEvidenceBundleWritten=true",
+        "pmEvidenceSidecar=gpuRendererM9ReadinessPmEvidence",
         "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed",
     )
 }

@@ -71,6 +71,6 @@ to `fallbackReason=none`.
 ```text
 rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk git diff --check
 ```

@@ -155,7 +155,8 @@ Verification:
 
 ## 8. Before/after legacy map (Task 1 inventory → final state)
 
-The Task 1 before-snapshot (`reports/fp09-legacy-map.txt`, committed at `42ef8a093`)
+The Task 1 before-snapshot (removed from the working tree; recover from Git
+history at `42ef8a093`)
 lists every production `Legacy` site at the FP-08 tip `accaea616`:
 
 | site | retired by |

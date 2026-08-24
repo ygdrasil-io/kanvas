@@ -64,8 +64,8 @@ fun writeRendererReadinessPMEvidenceBundle(outputDirectory: File): List<String> 
 private fun defaultRendererReadinessDashboard(): GPURendererReadinessDashboard =
     GPURendererReadinessDashboardIntegrator.integrate(
         dashboardId = "m9-gpu-renderer-readiness",
-        correctnessEvidenceRows = listOf("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md"),
-        activationEvidenceRows = listOf("pipelinePmBundle"),
+        correctnessEvidenceRows = listOf("gpuEvidenceVerification"),
+        activationEvidenceRows = listOf("headless-offscreen-only"),
         cacheReport = defaultCacheSourceMapReport(),
         frameGatePolicyReport = defaultFrameGatePolicyReport(),
     )
@@ -194,7 +194,7 @@ private fun defaultRendererReadinessManifestEntryJson(): String =
         "No dashboard row promotes readiness."
       ],
       "notice": "GPU renderer M9 readiness dashboard integration separates correctness, activation, performance, cache, and release visibility without moving readiness.",
-      "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+      "pmPackageCommand": "rtk ./gradlew --no-daemon :gpu-renderer:gpuRendererM9ReadinessPmEvidenceBundle",
       "productRouteActivated": false,
       "readinessDelta": 0.0,
       "releaseBlocking": false,

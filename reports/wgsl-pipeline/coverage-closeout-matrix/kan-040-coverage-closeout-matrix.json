@@ -239,7 +239,7 @@
     "validateKan038DashesBoundedV1",
     "validateKan039NestedClipStackV1",
     "pipelineSceneDashboardGate",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "nonClaims": [
     "KAN-040 does not add renderer, shader, selector, PipelineKey, threshold, edge-budget, dash-budget, or clip-depth changes.",

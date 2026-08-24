@@ -37,6 +37,6 @@ No. The current passing text rows use generated glyph outlines routed through pa
 ## Validation
 
 ```text
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk git diff --check
 ```

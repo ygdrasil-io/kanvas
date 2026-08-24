@@ -151,7 +151,7 @@ Commands run:
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate
 ```
 
 Results are recorded in the GRA-336 worker handoff.

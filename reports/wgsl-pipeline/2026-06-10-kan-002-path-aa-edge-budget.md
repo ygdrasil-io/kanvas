@@ -53,6 +53,6 @@ No Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM work is introduced.
 rtk python3 scripts/validate_kan002_path_aa_edge_budget.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan002PathAaEdgeBudget
 rtk python3 scripts/validate_for307_path_aa_edge_budget_candidate_selection.py
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

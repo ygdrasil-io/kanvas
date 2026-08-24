@@ -68,6 +68,6 @@ materialises one intermediate texture for `Compose(ColorFilter, MatrixTransform)
 rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest
 rtk python3 scripts/validate_kan007_savelayer_simple_filter.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan007SaveLayerSimpleFilter
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

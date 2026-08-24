@@ -31,7 +31,7 @@
   `font-telemetry-schema` row now records that all M12 telemetry domains have
   checked-in deterministic producer evidence and remain advisory-only.
 - `font-telemetry-pm-bundle.json` now carries the checked-in parser/scaler
-  dumps as advisory PM artifacts, and `pipelinePmBundle` now copies those
+  dumps as advisory PM artifacts, and `pipelineSceneDashboardGate` now copies those
   exact checked-in JSON files without changing `warning-only` posture.
 - The trend-series excerpt remains advisory only: `font.parser.scan.time`,
   `font.parser.parse.time`, `font.scaler.outline.time`,
@@ -44,7 +44,7 @@
 ```bash
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py
