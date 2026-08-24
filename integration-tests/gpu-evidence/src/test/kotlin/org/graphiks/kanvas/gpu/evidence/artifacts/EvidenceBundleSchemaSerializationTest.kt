@@ -35,7 +35,7 @@ class EvidenceBundleSchemaSerializationTest {
     @Test fun `writer serializes every v1 field with its complete value`() {
         val root = Files.createTempDirectory("gpu-evidence")
         val telemetry = GPUBackendRuntimeTelemetry(
-            renderPasses = 1, offscreenPasses = 2, windowPasses = 3, submissions = 4, commandBuffers = 5,
+            renderPasses = 1, offscreenPasses = 2, windowPasses = 3, submissions = 1, commandBuffers = 5,
             buffersCreated = 6, texturesCreated = 7, intermediateTexturesCreated = 8, coverageMasksDestroyed = 9,
             destinationCopies = 10, destinationReadbackSnapshots = 11, msaaTargets = 12, msaaResolves = 13,
             bindGroupsCreated = 14, samplersCreated = 15, queueWrites = 16, uniformSlabsCreated = 17,
@@ -51,7 +51,7 @@ class EvidenceBundleSchemaSerializationTest {
                 outcome = "rendered",
                 encodedScopeKinds = listOf("clip", "layer"),
                 structuralEvents = listOf(StructuralEventEvidence("draw", "record", "first-draw")),
-                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 4L),
+                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L),
                 runtimeTelemetryDelta = telemetry,
             ),
             diagnostics = listOf("diagnostic-a", "diagnostic-b"),
@@ -63,7 +63,7 @@ class EvidenceBundleSchemaSerializationTest {
                 javaVersion = "25",
                 adapter = EvidenceAdapter("adapter summary", "vendor", "device", "architecture", "description", false),
                 deviceGeneration = 77L,
-                capabilityImplementation = "capability-id",
+                capabilityImplementation = "native",
                 available = true,
             ),
             comparison = ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(8), 9),
@@ -106,17 +106,17 @@ class EvidenceBundleSchemaSerializationTest {
         val event = route["structuralEvents"]!!.jsonArray.single().jsonObject
         assertEquals(setOf("kind", "phase", "label"), event.keys); assertEquals("draw", event.string("kind")); assertEquals("record", event.string("phase")); assertEquals("first-draw", event.string("label"))
         val counters = route["structuralCounters"]!!.jsonObject
-        assertEquals(mapOf("clips" to 2L, "draws" to 3L, "queue.submit" to 4L), counters.mapValues { it.value.jsonPrimitive.long })
+        assertEquals(mapOf("clips" to 2L, "draws" to 3L, "queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L), counters.mapValues { it.value.jsonPrimitive.long })
         val telemetryJson = route["runtimeTelemetryDelta"]!!.jsonObject
         assertEquals(TELEMETRY, telemetryJson.mapValues { it.value.jsonPrimitive.long })
 
         val diagnostics = json(path, "diagnostics.json")
         assertEquals(setOf("attemptId", "diagnostics", "stableReasonCode", "message", "submissionDelta"), diagnostics.keys)
-        assertEquals("attempt-9", diagnostics.string("attemptId")); assertEquals(listOf("diagnostic-a", "diagnostic-b"), diagnostics["diagnostics"]!!.jsonArray.map { it.jsonPrimitive.content }); assertEquals(JsonNull, diagnostics["stableReasonCode"]); assertEquals(JsonNull, diagnostics["message"]); assertEquals(4L, diagnostics["submissionDelta"]!!.jsonPrimitive.long)
+        assertEquals("attempt-9", diagnostics.string("attemptId")); assertEquals(listOf("diagnostic-a", "diagnostic-b"), diagnostics["diagnostics"]!!.jsonArray.map { it.jsonPrimitive.content }); assertEquals(JsonNull, diagnostics["stableReasonCode"]); assertEquals(JsonNull, diagnostics["message"]); assertEquals(1L, diagnostics["submissionDelta"]!!.jsonPrimitive.long)
 
         val environment = json(path, "environment.json")
         assertEquals(setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "capabilityImplementation", "available", "adapter"), environment.keys)
-        assertEquals(COMMIT, environment.string("sourceCommit")); assertEquals("TestOS", environment.string("osName")); assertEquals("42", environment.string("osVersion")); assertEquals("test-arch", environment.string("osArchitecture")); assertEquals("25", environment.string("javaVersion")); assertEquals(77L, environment["deviceGeneration"]!!.jsonPrimitive.long); assertEquals("capability-id", environment.string("capabilityImplementation")); assertEquals(true, environment.boolean("available"))
+        assertEquals(COMMIT, environment.string("sourceCommit")); assertEquals("TestOS", environment.string("osName")); assertEquals("42", environment.string("osVersion")); assertEquals("test-arch", environment.string("osArchitecture")); assertEquals("25", environment.string("javaVersion")); assertEquals(77L, environment["deviceGeneration"]!!.jsonPrimitive.long); assertEquals("native", environment.string("capabilityImplementation")); assertEquals(true, environment.boolean("available"))
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals(setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter"), adapter.keys)
         assertEquals("adapter summary", adapter.string("summary")); assertEquals("vendor", adapter.string("vendor")); assertEquals("device", adapter.string("device")); assertEquals("architecture", adapter.string("architecture")); assertEquals("description", adapter.string("description")); assertEquals(false, adapter.boolean("isFallbackAdapter"))
@@ -142,7 +142,7 @@ class EvidenceBundleSchemaSerializationTest {
         }
         private val FIXED_CLOCK = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)
         private val TELEMETRY = linkedMapOf(
-            "renderPasses" to 1L, "offscreenPasses" to 2L, "windowPasses" to 3L, "submissions" to 4L, "commandBuffers" to 5L,
+            "renderPasses" to 1L, "offscreenPasses" to 2L, "windowPasses" to 3L, "submissions" to 1L, "commandBuffers" to 5L,
             "buffersCreated" to 6L, "texturesCreated" to 7L, "intermediateTexturesCreated" to 8L, "coverageMasksDestroyed" to 9L,
             "destinationCopies" to 10L, "destinationReadbackSnapshots" to 11L, "msaaTargets" to 12L, "msaaResolves" to 13L,
             "bindGroupsCreated" to 14L, "samplersCreated" to 15L, "queueWrites" to 16L, "uniformSlabsCreated" to 17L,

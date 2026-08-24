@@ -35,6 +35,6 @@ class EvidenceBundleTamperTest {
         return EvidenceBundleWriter(root, "abc123", Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).writeGenerated(descriptor, observation, attemptId = "attempt")
     }
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
-    private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-    private fun route(outcome: String = "rendered") = RouteEvidence("route", "attempt", if (outcome == "rendered") "Completed" else null, outcome, emptyList(), emptyList(), if (outcome == "rendered") mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (outcome == "rendered") 1L else 0L))
+    private fun environment() = EvidenceEnvironment("abc123", "test", "1", "x86_64", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
+    private fun route(outcome: String = "rendered") = RouteEvidence("route", "attempt", if (outcome == "rendered") "Completed" else null, outcome, emptyList(), emptyList(), if (outcome == "rendered") mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (outcome == "rendered") 1L else 0L))
 }

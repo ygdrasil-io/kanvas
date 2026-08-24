@@ -55,6 +55,25 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(oracle("sweep-disk"), 64, 64, 32, 48, intArrayOf(226, 122, 146, 255))
     }
 
+    @Test
+    fun `wave two oracles preserve hand-derived gradient affine and clip pixels`() {
+        assertPixel(oracle("linear-gradient-three-stops"), 64, 64, 20, 16, intArrayOf(189, 167, 95, 255))
+        assertPixel(oracle("linear-gradient-three-stops"), 64, 64, 32, 16, intArrayOf(56, 218, 125, 255))
+        assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 48, 32, intArrayOf(255, 64, 64, 255))
+        assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 32, 48, intArrayOf(236, 107, 126, 255))
+        // Pixel centres make (16,17) cross the sloped left edge: its top-left
+        // corner maps outside, while its centre maps to local x = 8.125.
+        assertPixel(oracle("affine-solid-rect"), 64, 64, 15, 15, intArrayOf(0, 0, 0, 0))
+        assertPixel(oracle("affine-solid-rect"), 64, 64, 15, 16, intArrayOf(0, 0, 0, 0))
+        assertPixel(oracle("affine-solid-rect"), 64, 64, 16, 16, intArrayOf(242, 135, 46, 255))
+        assertPixel(oracle("affine-solid-rect"), 64, 64, 16, 17, intArrayOf(242, 135, 46, 255))
+        // The right edge is half-open: at this row, the pixel centre maps to
+        // local x = 40.125, so it remains clear even though its corner is in.
+        assertPixel(oracle("affine-solid-rect"), 64, 64, 48, 17, intArrayOf(0, 0, 0, 0))
+        assertPixel(oracle("scissored-radial-gradient"), 64, 64, 19, 12, intArrayOf(0, 0, 0, 0))
+        assertPixel(oracle("scissored-radial-gradient"), 64, 64, 20, 12, intArrayOf(54, 83, 191, 255))
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)

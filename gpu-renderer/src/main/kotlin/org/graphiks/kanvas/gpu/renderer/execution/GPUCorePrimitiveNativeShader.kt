@@ -300,12 +300,16 @@ private fun corePrimitiveGradientNativeWgsl(
         """.trimIndent()
     } else {
         """
-        let start_angle = gradient.angle_range.x * 0.0174532925199433;
-        let end_angle = gradient.angle_range.y * 0.0174532925199433;
         let angle = atan2(position.y - center.y, position.x - center.x);
-        let normalized_angle = fract((angle - start_angle) / 6.28318530718);
-        let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);
-        let t_raw = normalized_angle / span;
+        let sweep_degrees = gradient.angle_range.y - gradient.angle_range.x;
+        let span = max(sweep_degrees / 360.0, 0.000001);
+        let normalized_start_turn = fract(gradient.angle_range.x / 360.0);
+        let normalized_end_turn = fract(gradient.angle_range.y / 360.0);
+        var normalized_angle = fract(angle / 6.28318530718);
+        if ((normalized_end_turn < normalized_start_turn || sweep_degrees >= 360.0) && normalized_angle < normalized_start_turn) {
+            normalized_angle = normalized_angle + 1.0;
+        }
+        let t_raw = (normalized_angle - normalized_start_turn) / span;
         """.trimIndent()
     }
     val shapeFields = if (analytic) {

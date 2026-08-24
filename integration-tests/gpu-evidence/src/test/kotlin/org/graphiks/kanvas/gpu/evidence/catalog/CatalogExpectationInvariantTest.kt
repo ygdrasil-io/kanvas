@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceBackendPort
@@ -37,16 +38,16 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 class CatalogExpectationInvariantTest {
     @Test
     fun `every render case has exactly one oracle and every refusal has none`() {
-        assertEquals(10, GpuEvidenceCatalog.cases.size)
-        assertEquals(8, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(2, GpuEvidenceCatalog.refusalCases.size)
+        assertEquals(16, GpuEvidenceCatalog.cases.size)
+        assertEquals(12, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(4, GpuEvidenceCatalog.refusalCases.size)
         GpuEvidenceCatalog.renderCases.forEach { evidenceCase ->
             assertIs<org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram>(evidenceCase.program)
             assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
             assertNotNull(evidenceCase.oracle, evidenceCase.descriptor.id.value)
         }
         GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
-            assertIs<SceneProgram>(evidenceCase.program)
+            assertTrue(evidenceCase.program is SceneProgram || evidenceCase.program is org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram)
             when (evidenceCase.descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> error("refusalCases must not contain renders")
                 is EvidenceExpectation.ShouldRefuse -> assertEquals(null, evidenceCase.oracle, evidenceCase.descriptor.id.value)
@@ -67,7 +68,7 @@ class CatalogExpectationInvariantTest {
 
     @Test
     fun `fake renderer port runs each refusal contract before gate plumbing`() {
-        GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
+        GpuEvidenceCatalog.refusalCases.filter { it.program is SceneProgram }.forEach { evidenceCase ->
             val port = ExpectedOutcomePort()
             val observed = assertIs<EvidenceExecutionResult.Observed>(GPUPreparedEvidenceExecutor(port, "a".repeat(40)).execute(evidenceCase)).observation
             assertIs<EvidenceVerdict.Pass>(EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observed), evidenceCase.descriptor.id.value)
@@ -95,7 +96,7 @@ class CatalogExpectationInvariantTest {
     fun `unavailable fake product port cannot produce a pass for any catalog case`() {
         val executor = GPUPreparedEvidenceExecutor(UnavailablePort, "a".repeat(40))
 
-        GpuEvidenceCatalog.refusalCases.forEach { evidenceCase ->
+        GpuEvidenceCatalog.refusalCases.filter { it.program is SceneProgram }.forEach { evidenceCase ->
             val observed = assertIs<EvidenceExecutionResult.Observed>(executor.execute(evidenceCase)).observation
             assertIs<SceneObservation.Unavailable>(observed)
             assertIs<EvidenceVerdict.Unavailable>(EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observed))

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -152,7 +153,8 @@ class GPUCorePrimitiveNativeShaderTest {
                 assertContains(source, "let distance = length(position - center);")
             } else {
                 assertContains(source, "let angle = atan2(position.y - center.y, position.x - center.x);")
-                assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
+                assertContains(source, "let normalized_start_turn = fract(gradient.angle_range.x / 360.0);")
+                assertContains(source, "var normalized_angle = fract(angle / 6.28318530718);")
             }
             assertContains(source, "clamp(t_raw, 0.0, 1.0)")
             assertContains(source, "sample_stops_at")
@@ -181,18 +183,51 @@ class GPUCorePrimitiveNativeShaderTest {
     }
 
     @Test
-    fun `sweep gradient shader normalizes negative angles before span math`() {
-        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
-            buildCorePrimitiveGradientNativeShader(
-                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
-            ),
-        ).plan.wgslSource
+    fun `direct and analytic sweep shaders keep full turns in degree space before unfolding`() {
+        listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
+        ).forEach { variant ->
+            val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+                buildCorePrimitiveGradientNativeShader(variant),
+            )
+            val source = ready.plan.wgslSource
 
-        assertContains(source, "let start_angle = gradient.angle_range.x * 0.0174532925199433;")
-        assertContains(source, "let end_angle = gradient.angle_range.y * 0.0174532925199433;")
-        assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
-        assertFalse(source.contains("normalized_angle = normalized_angle + 1.0"))
-        assertContains(source, "let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);")
+            assertTrue(requireNotNull(ready.plan.wgslReflection).report.validation.success)
+            assertContains(source, "let sweep_degrees = gradient.angle_range.y - gradient.angle_range.x;")
+            assertContains(source, "let span = max(sweep_degrees / 360.0, 0.000001);")
+            assertContains(source, "let normalized_start_turn = fract(gradient.angle_range.x / 360.0);")
+            assertContains(source, "let normalized_end_turn = fract(gradient.angle_range.y / 360.0);")
+            assertContains(source, "var normalized_angle = fract(angle / 6.28318530718);")
+            assertContains(
+                source,
+                "if ((normalized_end_turn < normalized_start_turn || sweep_degrees >= 360.0) && normalized_angle < normalized_start_turn) {",
+            )
+            assertContains(source, "normalized_angle = normalized_angle + 1.0;")
+            assertContains(source, "let t_raw = (normalized_angle - normalized_start_turn) / span;")
+            assertFalse(source.contains("fract((angle - start_angle) / 6.28318530718)"))
+        }
+
+        listOf(405f to 765f, -450f to -90f).forEach { (startDegrees, endDegrees) ->
+            assertTrue(
+                radianDerivedSpan(startDegrees, endDegrees) < 1f,
+                "Separate f32 degree-to-radian conversions lose this accepted full turn",
+            )
+            assertEquals(1f, (endDegrees - startDegrees) / 360f)
+        }
+        listOf(
+            SweepSample(45f, 315f, 0f, -1f / 6f, 0f),
+            SweepSample(45f, 315f, 90f, 1f / 6f, 1f / 6f),
+            SweepSample(45f, 315f, 315f, 1f, 1f),
+            SweepSample(315f, 405f, 0f, 1f / 2f, 1f / 2f),
+            SweepSample(45f, 405f, 0f, 7f / 8f, 7f / 8f),
+            SweepSample(405f, 765f, 0f, 7f / 8f, 7f / 8f),
+            SweepSample(-450f, -90f, 0f, 1f / 4f, 1f / 4f),
+        ).forEach { sample ->
+            val raw = degreeSpaceSweepRawT(sample.startDegrees, sample.endDegrees, sample.sampleDegrees)
+            assertEquals(sample.expectedRawT, raw, 1e-6f)
+            assertEquals(sample.expectedClampedT, raw.coerceIn(0f, 1f), 1e-6f)
+        }
     }
 
     @Test
@@ -802,4 +837,34 @@ class GPUCorePrimitiveNativeShaderTest {
         val bias = 1f - 0.5f * scale
         return (scale * (distance + bias)).coerceIn(0f, 1f)
     }
+
+    private data class SweepSample(
+        val startDegrees: Float,
+        val endDegrees: Float,
+        val sampleDegrees: Float,
+        val expectedRawT: Float,
+        val expectedClampedT: Float,
+    )
+
+    private fun radianDerivedSpan(startDegrees: Float, endDegrees: Float): Float {
+        val startRadians = startDegrees * 0.0174532925199433f
+        val endRadians = endDegrees * 0.0174532925199433f
+        return maxOf((endRadians - startRadians) / 6.28318530718f, 0.000001f)
+    }
+
+    private fun degreeSpaceSweepRawT(startDegrees: Float, endDegrees: Float, sampleDegrees: Float): Float {
+        val sweepDegrees = endDegrees - startDegrees
+        val span = maxOf(sweepDegrees / 360f, 0.000001f)
+        val normalizedStartTurn = positiveFract(startDegrees / 360f)
+        val normalizedEndTurn = positiveFract(endDegrees / 360f)
+        var normalizedSampleTurn = positiveFract(sampleDegrees / 360f)
+        if ((normalizedEndTurn < normalizedStartTurn || sweepDegrees >= 360f) &&
+            normalizedSampleTurn < normalizedStartTurn
+        ) {
+            normalizedSampleTurn += 1f
+        }
+        return (normalizedSampleTurn - normalizedStartTurn) / span
+    }
+
+    private fun positiveFract(value: Float): Float = value - floor(value.toDouble()).toFloat()
 }

@@ -21,10 +21,16 @@ object GpuEvidenceCatalog {
         linearGradientLanes(),
         radialSwatch(),
         sweepDisk(),
+        linearGradientThreeStops(),
+        sweepGradientPartialAngle(),
+        affineSolidRect(),
+        scissoredRadialGradient(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
+        repeatGradientRefusal(),
+        gradientStrokeRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -190,6 +196,54 @@ object GpuEvidenceCatalog {
         )
     }
 
+    private fun linearGradientThreeStops() = gradientCase(
+        "linear-gradient-three-stops", "Linear gradient three stops", "Public Kanvas Surface clamp linear gradient with three opaque sRGB stops.",
+        setOf("linear-gradient", "kanvas-surface"), "surface-srgb-gradient-linear-clamp", KanvasScenePrograms.linearGradientThreeStops(),
+        SurfaceSrgbGradientCpuOracle.linear(
+            SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f), SurfaceSrgbGradientCpuOracle.Point(8.5f, 32.5f), SurfaceSrgbGradientCpuOracle.Point(55.5f, 32.5f),
+            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56), SurfaceSrgbGradientCpuOracle.Stop(.5f, 56, 220, 120), SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255)),
+        ),
+    )
+
+    private fun sweepGradientPartialAngle() = gradientCase(
+        "sweep-gradient-partial-angle", "Sweep gradient partial angle", "Public Kanvas Surface clamp sweep gradient across a partial angle range.",
+        setOf("sweep-gradient", "kanvas-surface"), "surface-srgb-gradient-sweep-clamp", KanvasScenePrograms.sweepGradientPartialAngle(),
+        SurfaceSrgbGradientCpuOracle.sweep(
+            SurfaceSrgbGradientCpuOracle.Rect(8f, 8f, 56f, 56f), SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f), 45f, 315f,
+            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 64, 64), SurfaceSrgbGradientCpuOracle.Stop(1f, 64, 208, 255)),
+        ),
+    )
+
+    private fun affineSolidRect() = EvidenceCase(
+        EvidenceSceneDescriptor(EvidenceSceneId("affine-solid-rect"), "Affine solid rectangle", "Public Kanvas Canvas affine transform over an opaque solid rectangle.",
+            64, 64, 1L, setOf("solid-rect", "affine", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1), ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."), emptySet()),
+        KanvasScenePrograms.affineSolidRect(),
+        CpuOracle { width, height -> ByteArray(width * height * 4).also { pixels ->
+            for (y in 0 until height) for (x in 0 until width) {
+                val localX = x + .5 - .25 * (y + .5) - 4.0
+                if (localX >= 8.0 && localX < 40.0 && y + .5 >= 16.0 && y + .5 < 48.0) {
+                    val offset = (y * width + x) * 4
+                    pixels[offset] = 242.toByte(); pixels[offset + 1] = 135.toByte(); pixels[offset + 2] = 46.toByte(); pixels[offset + 3] = 255.toByte()
+                }
+            }
+        } },
+    )
+
+    private fun scissoredRadialGradient() = gradientCase(
+        "scissored-radial-gradient", "Scissored radial gradient", "Public Kanvas Surface clamp radial gradient constrained by a literal non-AA clip.",
+        setOf("radial-gradient", "scissor", "kanvas-surface"), "surface-srgb-gradient-radial-clamp", KanvasScenePrograms.scissoredRadialGradient(),
+        SurfaceSrgbGradientCpuOracle.radial(
+            SurfaceSrgbGradientCpuOracle.Rect(20f, 12f, 52f, 52f), SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f), 23.5f,
+            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 232, 72), SurfaceSrgbGradientCpuOracle.Stop(1f, 48, 80, 192)),
+        ),
+    )
+
+    private fun gradientCase(id: String, title: String, description: String, tags: Set<String>, oracleId: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram, oracle: CpuOracle) = EvidenceCase(
+        EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 64, 64, 1L, tags, EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu(oracleId, 2), ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet()), program, oracle,
+    )
+
     private fun unregisteredRuntimeEffectRefusal() = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId("custom-runtime-effect-unregistered-refusal"), "Unregistered runtime effect refusal", "Unknown custom runtime effect refuses before submission.",
@@ -208,5 +262,11 @@ object GpuEvidenceCatalog {
         ),
         RendererRefusalPrograms.aggregateMemoryBudget(),
         null,
+    )
+
+    private fun repeatGradientRefusal() = surfaceRefusal("repeat-gradient-refusal", "Repeat gradient refusal", "Public Kanvas Surface repeat gradient refuses before submission.", setOf("linear-gradient", "refusal", "kanvas-surface"), "unsupported.material.gradient_tile_mode_unsupported", KanvasScenePrograms.repeatGradientRefusal())
+    private fun gradientStrokeRefusal() = surfaceRefusal("gradient-stroke-refusal", "Gradient stroke refusal", "Public Kanvas Surface gradient stroke rectangle refuses before submission.", setOf("stroke-rect", "linear-gradient", "refusal", "kanvas-surface"), "unsupported.stroke.rect_material", KanvasScenePrograms.gradientStrokeRefusal())
+    private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
+        EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 16, 16, 1L, tags, EvidenceExpectation.ShouldRefuse(code), OraclePolicy.StableRefusal, null, emptySet()), program, null,
     )
 }

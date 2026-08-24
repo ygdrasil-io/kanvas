@@ -107,6 +107,24 @@ class EvidenceBundleVerifierStrictnessTest {
         assertIs<EvidenceBundleVerification.Invalid>(strict(submission, renderDescriptor()))
     }
 
+    @Test fun `rendered evidence requires exactly one structural runtime and diagnostic submission`() {
+        val path = bundle(renderDescriptor(), renderedObservation())
+        replaceAndRefresh(path, "route.json", "\"queue.submit\":1,\"render.draw\":1,\"render.pipelineBind\":1", "\"queue.submit\":2,\"render.draw\":1,\"render.pipelineBind\":1")
+        replaceAndRefresh(path, "route.json", "\"submissions\":1", "\"submissions\":2")
+        replaceAndRefresh(path, "diagnostics.json", "\"submissionDelta\":1", "\"submissionDelta\":2")
+
+        assertIs<EvidenceBundleVerification.Invalid>(strict(path, renderDescriptor()))
+    }
+
+    @Test fun `rendered evidence requires positive draw and pipeline bind counters`() {
+        listOf("render.draw", "render.pipelineBind").forEach { counter ->
+            val path = bundle(renderDescriptor(), renderedObservation())
+            replaceAndRefresh(path, "route.json", "\"$counter\":1", "\"$counter\":0")
+
+            assertIs<EvidenceBundleVerification.Invalid>(strict(path, renderDescriptor()), counter)
+        }
+    }
+
     @Test fun `verifier rejects route id mismatch after route hash refresh`() {
         val path = bundle(renderDescriptor(), renderedObservation())
         replaceAndRefresh(path, "route.json", "\"routeId\":\"route\"", "\"routeId\":\"forged-route\"")
@@ -132,9 +150,31 @@ class EvidenceBundleVerifierStrictnessTest {
         assertIs<EvidenceBundleVerification.Invalid>(strict(missing, renderDescriptor()))
 
         val blank = bundle(renderDescriptor(), renderedObservation())
-        replace(blank.resolve("environment.json"), "\"summary\":\"fake-adapter\"", "\"summary\":\" \"")
+        replace(blank.resolve("environment.json"), "\"summary\":\"test-adapter\"", "\"summary\":\" \"")
         refreshHash(blank, "environment.json")
         assertIs<EvidenceBundleVerification.Invalid>(strict(blank, renderDescriptor()))
+    }
+
+    @Test fun `available render and refusal evidence require a native nonfallback hardware identity`() {
+        listOf(
+            renderDescriptor() to renderedObservation(),
+            refusalDescriptor() to refusedObservation(),
+        ).forEach { (descriptor, observation) ->
+            listOf(
+                "\"capabilityImplementation\":\"native\"" to "\"capabilityImplementation\":\"software\"",
+                "\"capabilityImplementation\":\"native\"" to "\"capabilityImplementation\":\"\"",
+                "\"capabilityImplementation\":\"native\"" to "\"capabilityImplementation\":null",
+                "\"device\":\"test-device\"" to "\"device\":\" \"",
+                "\"device\":\"test-device\"" to "\"device\":null",
+                "\"isFallbackAdapter\":false" to "\"isFallbackAdapter\":true",
+                "\"isFallbackAdapter\":false" to "\"isFallbackAdapter\":null",
+            ).forEach { (from, to) ->
+                val path = bundle(descriptor, observation)
+                replaceAndRefresh(path, "environment.json", from, to)
+
+                assertIs<EvidenceBundleVerification.Invalid>(strict(path, descriptor), "$descriptor / $from")
+            }
+        }
     }
 
     @Test fun `coherent unavailable evidence with null adapter is verified as unavailable`() {
@@ -182,7 +222,7 @@ class EvidenceBundleVerifierStrictnessTest {
 
     @Test fun `quoted structural counter is invalid after hash refresh`() {
         val path = bundle(renderDescriptor(), renderedObservation())
-        replace(path.resolve("route.json"), "\"structuralCounters\":{\"queue.submit\":1}", "\"structuralCounters\":{\"queue.submit\":\"1\"}")
+        replace(path.resolve("route.json"), "\"queue.submit\":1", "\"queue.submit\":\"1\"")
         refreshHash(path, "route.json")
         assertIs<EvidenceBundleVerification.Invalid>(strict(path, renderDescriptor()))
     }
@@ -222,8 +262,8 @@ class EvidenceBundleVerifierStrictnessTest {
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
     private fun renderedObservation() = SceneObservation.Rendered(PIXEL, route("rendered", 1), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
     private fun refusedObservation() = SceneObservation.Refused("unsupported.example", "unsupported", 0, route("refused", 0), emptyList(), environment())
-    private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "Completed", outcome, emptyList(), emptyList(), if (submissions > 0L) mapOf("queue.submit" to submissions) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
-    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
+    private fun route(outcome: String, submissions: Long) = RouteEvidence("route", "attempt", "Completed", outcome, emptyList(), emptyList(), if (submissions > 0L) mapOf("queue.submit" to submissions, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = submissions))
+    private fun environment() = EvidenceEnvironment(COMMIT, "test", "1", "x86_64", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
     private fun replace(path: Path, from: String, to: String) { Files.writeString(path, Files.readString(path).replace(from, to)) }
     private fun replaceAndRefresh(path: Path, name: String, from: String, to: String) {
         replace(path.resolve(name), from, to)

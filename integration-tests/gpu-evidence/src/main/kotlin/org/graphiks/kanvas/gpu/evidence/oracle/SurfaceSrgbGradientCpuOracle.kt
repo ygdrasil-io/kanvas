@@ -2,11 +2,10 @@ package org.graphiks.kanvas.gpu.evidence.oracle
 
 import kotlin.math.PI
 import kotlin.math.atan2
-import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
- * Independent Surface-sRGB reference for the bounded two-stop gradient fixtures.
+ * Independent Surface-sRGB reference for bounded ordered multi-stop gradient fixtures.
  *
  * The geometry is evaluated at pixel centers. Stop colors are decoded to linear light,
  * premultiplied, interpolated without intermediate quantization, and encoded only when
@@ -46,16 +45,17 @@ class SurfaceSrgbGradientCpuOracle private constructor(
         }
     }
 
-    private val start: SurfaceSrgbOracleMath.LinearPremul
-    private val end: SurfaceSrgbOracleMath.LinearPremul
+    private val decodedStops: List<Pair<Float, SurfaceSrgbOracleMath.LinearPremul>>
 
     init {
-        require(stops.size == 2 && stops[0].position == 0f && stops[1].position == 1f) {
-            "oracle supports exactly two stops at positions zero and one"
+        require(stops.size in 1..16 && stops.all { it.position in 0f..1f } &&
+            (stops.size == 1 || (stops.first().position == 0f && stops.last().position == 1f &&
+                stops.zipWithNext().all { (left, right) -> left.position < right.position }))
+        ) {
+            "oracle requires one through sixteen ordered stops in the unit interval"
         }
         require(stops.all { it.alpha == 255 }) { "oracle requires opaque stops" }
-        start = stops[0].decode()
-        end = stops[1].decode()
+        decodedStops = stops.map { it.position to it.decode() }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -75,7 +75,19 @@ class SurfaceSrgbGradientCpuOracle private constructor(
         return output
     }
 
-    private fun interpolate(t: Double): SurfaceSrgbOracleMath.LinearPremul =
+    private fun interpolate(t: Double): SurfaceSrgbOracleMath.LinearPremul {
+        val upperIndex = decodedStops.indexOfFirst { (position, _) -> t <= position.toDouble() }.let { if (it < 0) decodedStops.lastIndex else it }
+        if (upperIndex == 0) return decodedStops.first().second
+        val (startPosition, start) = decodedStops[upperIndex - 1]
+        val (endPosition, end) = decodedStops[upperIndex]
+        return interpolate(start, end, ((t - startPosition) / (endPosition - startPosition)).coerceIn(0.0, 1.0))
+    }
+
+    private fun interpolate(
+        start: SurfaceSrgbOracleMath.LinearPremul,
+        end: SurfaceSrgbOracleMath.LinearPremul,
+        t: Double,
+    ): SurfaceSrgbOracleMath.LinearPremul =
         SurfaceSrgbOracleMath.LinearPremul(
             start.red + (end.red - start.red) * t,
             start.green + (end.green - start.green) * t,
@@ -120,15 +132,18 @@ class SurfaceSrgbGradientCpuOracle private constructor(
             require(startAngle.isFinite() && endAngle.isFinite()) { "sweep angles must be finite" }
             val sweep = endAngle.toDouble() - startAngle.toDouble()
             require(sweep in 0.0..360.0) { "sweep span must be in [0, 360] degrees" }
-            val startRadians = startAngle.toDouble() * PI / 180.0
+            val startDegrees = positiveDegrees(startAngle.toDouble())
+            val endDegrees = positiveDegrees(endAngle.toDouble())
+            val wrapsZero = sweep == 360.0 || (sweep > 0.0 && endDegrees < startDegrees)
             return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
                 if (sweep == 0.0 || (x == center.x.toDouble() && y == center.y.toDouble())) 0.0 else {
-                    val normalizedAngle = positiveFract((atan2(y - center.y, x - center.x) - startRadians) / (2.0 * PI))
-                    normalizedAngle / (sweep / 360.0)
+                    var degrees = positiveDegrees(atan2(y - center.y, x - center.x) * 180.0 / PI)
+                    if (wrapsZero && degrees < startDegrees) degrees += 360.0
+                    (degrees - startDegrees) / sweep
                 }
             }
         }
 
-        private fun positiveFract(value: Double): Double = value - floor(value)
+        private fun positiveDegrees(value: Double): Double = (value % 360.0 + 360.0) % 360.0
     }
 }
