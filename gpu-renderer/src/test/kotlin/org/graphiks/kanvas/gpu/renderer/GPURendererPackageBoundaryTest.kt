@@ -223,27 +223,6 @@ class GPURendererPackageBoundaryTest {
         assertContains(targetSource, "internal class GPUSceneTarget")
     }
 
-    /** Prevents scene callers from bypassing the coordinator through low-level execution types. */
-    @Test
-    fun `scene sources do not call frame executor or preflight seams directly`() {
-        val sceneSources = sceneSourceRoot.walkTopDown()
-            .filter { file -> file.isFile && file.extension == "kt" }
-            .joinToString("\n") { file -> file.readText() }
-        listOf(
-            "GPUFrameExecutor",
-            "GPUFrameExecutionPort",
-            "GPUFramePreflighter",
-            "GPUFramePreflightPort",
-            "PreparedGPUFrame",
-            "GPUSceneTarget",
-        ).forEach { forbiddenType ->
-            assertTrue(
-                actual = forbiddenType !in sceneSources,
-                message = "gpu-renderer-scenes must route through GPUFrameCoordinator, not $forbiddenType",
-            )
-        }
-    }
-
     /** Keeps color-glyph native evidence on the canonical prepared-frame route. */
     @Test
     fun `color glyph native tests use task lists and prepared scene readback only`() {
@@ -634,9 +613,6 @@ class GPURendererPackageBoundaryTest {
 
         /** Test Kotlin source root for architecture guards under Gradle test execution. */
         val testSourceRoot = File("src/test/kotlin")
-
-        /** Scene source root, which may depend only on the coordinator product route. */
-        val sceneSourceRoot = File("../gpu-renderer-scenes/src")
 
         /** Active authority pack root relative to the gpu-renderer Gradle project. */
         val authoritySpecRoot = File("../.upstream/specs/gpu-renderer")

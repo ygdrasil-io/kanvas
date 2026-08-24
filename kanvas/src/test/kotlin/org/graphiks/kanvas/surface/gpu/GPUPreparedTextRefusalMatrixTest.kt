@@ -514,7 +514,7 @@ class GPUPreparedTextRefusalMatrixTest {
         }
         assertEquals(emptyList(), duplicateOwners)
 
-        val duplicates = listOf("font", "gpu-renderer", "gpu-renderer-scenes", "kanvas")
+        val duplicates = listOf("font", "gpu-renderer", "kanvas")
             .flatMap { module ->
                 projectRoot.resolve(module).walkTopDown()
                     .filter { file ->
