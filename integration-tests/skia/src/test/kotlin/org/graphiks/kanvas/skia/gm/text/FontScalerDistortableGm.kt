@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/fontscalerdistortable.cpp::FontScalerDistortableGM`
@@ -48,7 +48,7 @@ class FontScalerDistortableGm : SkiaGm {
                 canvas.translate(-px, -py)
 
                 val barPaint = Paint()
-                val r = Rect.fromLTRB(x - 3f, 15f, x - 1f, 280f)
+                val r = RectF32.ofLTRB(x - 3f, 15f, x - 1f, 280f)
                 canvas.drawRect(r, barPaint)
 
                 var ps = 6

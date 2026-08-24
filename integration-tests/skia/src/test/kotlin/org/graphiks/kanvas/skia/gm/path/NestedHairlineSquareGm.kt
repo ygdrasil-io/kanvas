@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class NestedHairlineSquareGm : SkiaGm {
     override val name = "nested_hairline_square"
@@ -25,8 +25,8 @@ class NestedHairlineSquareGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val square = Path { moveTo(0f, 0f) }
-        square.addRect(Rect.fromLTRB(0f, 9f, 5f, 14f))
-        square.addRect(Rect.fromLTRB(1f, 10f, 4f, 13f))
+        square.addRect(RectF32.ofLTRB(0f, 9f, 5f, 14f))
+        square.addRect(RectF32.ofLTRB(1f, 10f, 4f, 13f))
 
         val paint = Paint(
             color = Color.fromRGBA(70f / 255f, 70f / 255f, 70f / 255f, 1f),

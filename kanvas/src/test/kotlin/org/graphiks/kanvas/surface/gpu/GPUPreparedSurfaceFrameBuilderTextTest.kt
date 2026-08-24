@@ -55,7 +55,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
@@ -89,7 +89,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `rect plus empty text builds only the core packet and no text resource`() {
         val rect = DisplayOp.DrawRect(
-            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.WHITE),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
@@ -256,7 +256,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `opaque DST_IN text is elided before atlas binding and native allocation`() {
         val rect = DisplayOp.DrawRect(
-            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.RED),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
@@ -305,7 +305,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `target empty destination read text remains terminal before mapping`() {
         val rect = DisplayOp.DrawRect(
-            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
             Paint.fill(Color.WHITE),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
@@ -313,7 +313,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val culledText = textOperation().copy(
             paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
             clip = ClipStack.DeviceRect(
-                rect = Rect.fromLTRB(80f, 80f, 96f, 96f),
+                rect = RectF32.ofLTRB(80f, 80f, 96f, 96f),
                 antiAlias = false,
             ),
         )
@@ -332,7 +332,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `prepared text AA device rect retains analytic coverage strategy`() {
         val operation = textOperation().copy(
             clip = ClipStack.DeviceRect(
-                rect = Rect.fromLTRB(16.5f, 0f, 40f, 64f),
+                rect = RectF32.ofLTRB(16.5f, 0f, 40f, 64f),
                 antiAlias = true,
             ),
         )
@@ -430,14 +430,14 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val clip = orderedCoverageMaskClip()
         val operations = listOf(
             DisplayOp.DrawRect(
-                rect = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                rect = RectF32.ofLTRB(0f, 0f, 8f, 8f),
                 paint = Paint.fill(Color.RED).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
             textOperation().copy(clip = clip),
             DisplayOp.DrawRect(
-                rect = Rect.fromLTRB(32f, 32f, 40f, 40f),
+                rect = RectF32.ofLTRB(32f, 32f, 40f, 40f),
                 paint = Paint.fill(Color.BLUE).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = clip,
@@ -489,12 +489,12 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val secondClip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(
-                    rect = Rect.fromLTRB(4f, 4f, 52f, 52f),
+                    rect = RectF32.ofLTRB(4f, 4f, 52f, 52f),
                     op = ClipOp.INTERSECT,
                     antiAlias = false,
                 ),
                 ClipStackOp.RectOp(
-                    rect = Rect.fromLTRB(20f, 8f, 24f, 56f),
+                    rect = RectF32.ofLTRB(20f, 8f, 24f, 56f),
                     op = ClipOp.DIFFERENCE,
                     antiAlias = false,
                 ),
@@ -661,7 +661,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `prepared A8 and COLRv0 packets retain semantic clip provenance scissor and blend authorities`() {
         val clip = ClipStack.DeviceRect(
-            rect = Rect.fromLTRB(2f, 3f, 40f, 45f),
+            rect = RectF32.ofLTRB(2f, 3f, 40f, 45f),
             antiAlias = false,
         )
         val textCapabilities = capabilities(
@@ -677,7 +677,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         )
         val operations = listOf(
             DisplayOp.Annotation(
-                Rect.fromLTRB(0f, 0f, 1f, 1f),
+                RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 GPU_FRAME_PROVENANCE_ANNOTATION_KEY,
                 GPUFrameProvenance.GmContent.annotationValue,
             ),
@@ -830,7 +830,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `core two A8 image and COLRv0 expand to five exact ordered commands`() {
         val operations = listOf(
             DisplayOp.Annotation(
-                Rect.fromLTRB(0f, 0f, 1f, 1f),
+                RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 GPU_FRAME_PROVENANCE_ANNOTATION_KEY,
                 GPUFrameProvenance.GmContent.annotationValue,
             ),
@@ -900,7 +900,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
                 ClipStack.WideOpen,
             ),
             DisplayOp.Annotation(
-                Rect.fromLTRB(0f, 0f, 1f, 1f),
+                RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 GPU_FRAME_PROVENANCE_ANNOTATION_KEY,
                 GPUFrameProvenance.GmContent.annotationValue,
             ),
@@ -960,12 +960,12 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     private fun orderedCoverageMaskClip(): ClipStack.Complex = ClipStack.Complex(
         listOf(
             ClipStackOp.RectOp(
-                rect = Rect.fromLTRB(8f, 8f, 56f, 56f),
+                rect = RectF32.ofLTRB(8f, 8f, 56f, 56f),
                 op = ClipOp.INTERSECT,
                 antiAlias = false,
             ),
             ClipStackOp.RectOp(
-                rect = Rect.fromLTRB(14f, 16f, 18f, 48f),
+                rect = RectF32.ofLTRB(14f, 16f, 18f, 48f),
                 op = ClipOp.DIFFERENCE,
                 antiAlias = false,
             ),
@@ -1055,8 +1055,8 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         )
         return DisplayOp.DrawImage(
             image = image,
-            src = Rect.fromLTRB(0f, 0f, 2f, 2f),
-            dst = Rect.fromLTRB(40f, 4f, 48f, 12f),
+            src = RectF32.ofLTRB(0f, 0f, 2f, 2f),
+            dst = RectF32.ofLTRB(40f, 4f, 48f, 12f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,

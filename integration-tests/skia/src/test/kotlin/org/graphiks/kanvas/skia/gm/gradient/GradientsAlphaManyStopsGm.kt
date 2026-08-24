@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::gradients_alpha_many_stops`.
@@ -53,6 +53,6 @@ class GradientsAlphaManyStopsGm : SkiaGm {
         )
 
         val paint = Paint(shader = shader)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), paint)
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), paint)
     }
 }

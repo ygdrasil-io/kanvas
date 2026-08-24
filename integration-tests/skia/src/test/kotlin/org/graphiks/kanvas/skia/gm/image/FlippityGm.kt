@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/flippity.cpp`.
  *  Tests flipped bitmap rendering — creates a radial-gradient bitmap then
@@ -69,16 +69,16 @@ class FlippityGm : SkiaGm {
         val image = bitmap.toImage()
         val surface = Surface(kImageSize, kImageSize)
         surface.canvas {
-            drawImage(image, Rect.fromXYWH(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
+            drawImage(image, RectF32.ofOriginSize(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
         }
         val result = surface.makeImageSnapshot()
         val surf2 = Surface(kImageSize, kImageSize)
         surf2.canvas {
-            drawImage(result, Rect.fromXYWH(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
+            drawImage(result, RectF32.ofOriginSize(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
             for (i in 0 until kNumLabels) {
                 val x = if (kPoints[i].x != 0f) kPoints[i].x - kLabelSize - kInset else kInset.toFloat()
                 val y = if (kPoints[i].y != 0f) kPoints[i].y - kLabelSize - kInset else kInset.toFloat()
-                drawImage(fLabels[i], Rect.fromXYWH(x, y, kLabelSize.toFloat(), kLabelSize.toFloat()))
+                drawImage(fLabels[i], RectF32.ofOriginSize(x, y, kLabelSize.toFloat(), kLabelSize.toFloat()))
             }
         }
         return surf2.makeImageSnapshot()
@@ -97,16 +97,16 @@ class FlippityGm : SkiaGm {
     private fun drawImageWithMatrix(canvas: GmCanvas, image: Image, matIndex: Int, drawSubset: Boolean, drawScaled: Boolean) {
         canvas.save()
         if (drawSubset) {
-            val src = Rect.fromXYWH(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat())
-            val dst = if (drawScaled) Rect.fromXYWH(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()) else src
+            val src = RectF32.ofOriginSize(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat())
+            val dst = if (drawScaled) RectF32.ofOriginSize(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()) else src
             canvas.drawImageRect(image, src, dst)
         } else {
-            canvas.drawImage(image, Rect.fromXYWH(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
+            canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, kImageSize.toFloat(), kImageSize.toFloat()))
         }
         for (i in 0 until kNumLabels) {
             val x = if (kPoints[i].x == 0f) (-kLabelSize).toFloat() else kPoints[i].x
             val y = if (kPoints[i].y == 0f) (-kLabelSize).toFloat() else kPoints[i].y
-            canvas.drawImage(fLabels[i], Rect.fromXYWH(x, y, kLabelSize.toFloat(), kLabelSize.toFloat()))
+            canvas.drawImage(fLabels[i], RectF32.ofOriginSize(x, y, kLabelSize.toFloat(), kLabelSize.toFloat()))
         }
         canvas.restore()
     }

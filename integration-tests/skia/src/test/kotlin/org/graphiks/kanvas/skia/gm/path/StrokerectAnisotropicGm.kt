@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class StrokerectAnisotropicGm : SkiaGm {
     override val name = "strokerect_anisotropic"
@@ -59,7 +59,7 @@ class StrokerectAnisotropicGm : SkiaGm {
         canvas.translate(tx, ty)
         canvas.scale(0.03f, 2f)
         canvas.drawPath(
-            Path { }.apply { addRect(Rect.fromLTRB(-500f, -10f, 500f, 10f)) },
+            Path { }.apply { addRect(RectF32.ofLTRB(-500f, -10f, 500f, 10f)) },
             p,
         )
         canvas.restore()

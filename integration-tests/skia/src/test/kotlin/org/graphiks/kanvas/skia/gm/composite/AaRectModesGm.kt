@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/aarectmodes.cpp`.
@@ -49,20 +49,20 @@ class AaRectModesGm : SkiaGm {
 
                 drawCheckerboard(canvas, cell)
 
-                canvas.saveLayer(Rect(0f, 0f, cell, cell), null)
+                canvas.saveLayer(RectF32(0f, 0f, cell, cell), null)
 
                 val a0 = alphaValues[alpha and 1]
                 val a1 = alphaValues[alpha and 2]
 
                 val inset = cell / 10f
-                val ovalRect = Rect(inset, inset, cell - inset, cell - inset)
+                val ovalRect = RectF32(inset, inset, cell - inset, cell - inset)
                 canvas.drawOval(ovalRect, Paint(
                     color = Color.fromRGBA(0f, 0f, 1f, a0 / 255f),
                     antiAlias = true,
                 ))
 
                 val offset = 1f / 3f
-                val redRect = Rect.fromLTRB(
+                val redRect = RectF32.ofLTRB(
                     cell / 4f + offset, cell / 4f + offset,
                     cell * 3f / 4f + offset, cell * 3f / 4f + offset,
                 )
@@ -91,7 +91,7 @@ class AaRectModesGm : SkiaGm {
             var x = 0f
             while (x < cell) {
                 val parity = (((x / tile).toInt() + (y / tile).toInt()) and 1)
-                canvas.drawRect(Rect(x, y, x + tile, y + tile), if (parity == 0) white else lightGray)
+                canvas.drawRect(RectF32(x, y, x + tile, y + tile), if (parity == 0) white else lightGray)
                 x += tile
             }
             y += tile

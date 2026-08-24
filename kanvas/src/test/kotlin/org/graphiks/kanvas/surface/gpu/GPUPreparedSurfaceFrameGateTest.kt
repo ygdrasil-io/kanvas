@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -195,8 +195,8 @@ class GPUPreparedSurfaceFrameGateTest {
     private fun visualRect(): DisplayOp.DrawRect = DisplayOp.DrawRect(RECT, PAINT, MATRIX, CLIP)
 
     private companion object {
-        val RECT = Rect.fromLTRB(0f, 0f, 8f, 8f)
-        val INNER_RECT = Rect.fromLTRB(2f, 2f, 6f, 6f)
+        val RECT = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val INNER_RECT = RectF32.ofLTRB(2f, 2f, 6f, 6f)
         val PAINT = Paint.fill(Color.RED)
         val MATRIX = Matrix3x3F32.Identity
         val CLIP = ClipStack.WideOpen

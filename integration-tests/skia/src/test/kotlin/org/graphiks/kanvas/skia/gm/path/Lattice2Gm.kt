@@ -11,7 +11,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/lattice.cpp` — `LatticeGM2`.
@@ -30,7 +30,7 @@ class Lattice2Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect.fromXYWH(300f, 0f, 300f, 800f),
+            RectF32.ofOriginSize(300f, 0f, 300f, 800f),
             Paint(color = Color(0x7F123456u), blendMode = BlendMode.SRC),
         )
 
@@ -58,11 +58,11 @@ class Lattice2Gm : SkiaGm {
         )
 
         canvas.save()
-        canvas.drawImage(image, Rect.fromXYWH(10f, 10f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(10f, 10f, image.width.toFloat(), image.height.toFloat()))
         canvas.drawImageLattice(
             image,
             lattice,
-            Rect.fromXYWH(100f, 100f, 200f, 200f),
+            RectF32.ofOriginSize(100f, 100f, 200f, 200f),
             paint,
             SamplingOptions.NEAREST,
         )
@@ -70,7 +70,7 @@ class Lattice2Gm : SkiaGm {
         canvas.drawImageLattice(
             image,
             lattice,
-            Rect.fromXYWH(100f, 100f, 200f, 200f),
+            RectF32.ofOriginSize(100f, 100f, 200f, 200f),
             paint.copy(color = Color(0x80000FFFu)),
             SamplingOptions.NEAREST,
         )
@@ -80,17 +80,17 @@ class Lattice2Gm : SkiaGm {
     private fun makeImage(): org.graphiks.kanvas.image.Image {
         val surface = Surface(80, 80)
         surface.canvas {
-            drawRect(Rect.fromXYWH(0f, 0f, 4f, 1f), Paint(color = Color.GREEN, antiAlias = false))
-            drawRect(Rect.fromXYWH(4f, 0f, 1f, 1f), Paint(color = Color.BLUE, antiAlias = false))
-            drawRect(Rect.fromXYWH(5f, 0f, 75f, 1f), Paint(color = Color.RED, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(0f, 0f, 4f, 1f), Paint(color = Color.GREEN, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(4f, 0f, 1f, 1f), Paint(color = Color.BLUE, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(5f, 0f, 75f, 1f), Paint(color = Color.RED, antiAlias = false))
 
-            drawRect(Rect.fromXYWH(0f, 1f, 4f, 1f), Paint(color = Color.RED, antiAlias = false))
-            drawRect(Rect.fromXYWH(4f, 1f, 1f, 1f), Paint(color = Color(0x880000FFu), antiAlias = false))
-            drawRect(Rect.fromXYWH(5f, 1f, 75f, 1f), Paint(color = Color.GREEN, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(0f, 1f, 4f, 1f), Paint(color = Color.RED, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(4f, 1f, 1f, 1f), Paint(color = Color(0x880000FFu), antiAlias = false))
+            drawRect(RectF32.ofOriginSize(5f, 1f, 75f, 1f), Paint(color = Color.GREEN, antiAlias = false))
 
-            drawRect(Rect.fromXYWH(0f, 2f, 4f, 78f), Paint(color = Color.GREEN, antiAlias = false))
-            drawRect(Rect.fromXYWH(4f, 2f, 1f, 78f), Paint(color = Color(0x88FF0000u), antiAlias = false))
-            drawRect(Rect.fromXYWH(5f, 2f, 75f, 78f), Paint(color = Color.BLUE, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(0f, 2f, 4f, 78f), Paint(color = Color.GREEN, antiAlias = false))
+            drawRect(RectF32.ofOriginSize(4f, 2f, 1f, 78f), Paint(color = Color(0x88FF0000u), antiAlias = false))
+            drawRect(RectF32.ofOriginSize(5f, 2f, 75f, 78f), Paint(color = Color.BLUE, antiAlias = false))
         }
         return surface.makeImageSnapshot()
     }

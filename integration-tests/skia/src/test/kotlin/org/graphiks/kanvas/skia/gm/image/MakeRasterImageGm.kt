@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/make_raster_image.cpp::makeRasterImage` (128 x 128).
@@ -24,7 +24,7 @@ class MakeRasterImageGm : SkiaGm {
         val bytes = this::class.java.classLoader?.getResourceAsStream("images/color_wheel.png")?.readBytes()
         if (bytes != null) {
             val img = Image.decode(bytes)
-            canvas.drawImage(img, Rect(0f, 0f, 128f, 128f))
+            canvas.drawImage(img, RectF32(0f, 0f, 128f, 128f))
         }
     }
 }

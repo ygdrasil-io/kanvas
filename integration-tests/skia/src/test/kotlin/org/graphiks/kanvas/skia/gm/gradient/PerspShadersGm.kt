@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/perspshaders.cpp::PerspShadersGM`.
@@ -83,7 +83,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
         val gradPaint1 = Paint(shader = linearGrad1, antiAlias = aa)
         val gradPaint2 = Paint(shader = linearGrad2, antiAlias = aa)
 
-        val r = Rect.fromXYWH(0f, 0f, kCellSize.toFloat(), kCellSize.toFloat())
+        val r = RectF32.ofOriginSize(0f, 0f, kCellSize.toFloat(), kCellSize.toFloat())
 
         canvas.save()
 

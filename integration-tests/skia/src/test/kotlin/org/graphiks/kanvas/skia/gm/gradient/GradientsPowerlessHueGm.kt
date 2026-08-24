@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients_no_texture.cpp` — powerless hue variant.
@@ -27,10 +27,10 @@ class GradientsPowerlessHueGm : SkiaGm {
         canvas.drawString("Powerless hue gradients", 20f, 40f,
             org.graphiks.kanvas.text.Font(Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!, 20f), Paint(color = Color.BLACK))
         val rects = listOf(
-            Rect.fromXYWH(20f, 60f, 200f, 80f),
-            Rect.fromXYWH(20f, 160f, 200f, 80f),
-            Rect.fromXYWH(20f, 260f, 200f, 80f),
-            Rect.fromXYWH(20f, 360f, 200f, 80f),
+            RectF32.ofOriginSize(20f, 60f, 200f, 80f),
+            RectF32.ofOriginSize(20f, 160f, 200f, 80f),
+            RectF32.ofOriginSize(20f, 260f, 200f, 80f),
+            RectF32.ofOriginSize(20f, 360f, 200f, 80f),
         )
         val colors = listOf(
             Color.fromRGBA(1f, 0f, 0f, 1f),
@@ -43,7 +43,7 @@ class GradientsPowerlessHueGm : SkiaGm {
         for (rect in rects) {
             for ((i, c) in colors.withIndex()) {
                 canvas.drawRect(
-                    Rect.fromXYWH(rect.left + i * 30f, rect.top, 28f, rect.height),
+                    RectF32.ofOriginSize(rect.left + i * 30f, rect.top, 28f, rect.height()),
                     Paint(color = c),
                 )
             }

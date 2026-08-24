@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/surface.cpp` (copy-on-write retain).
  *  Tests copy-on-write retain behaviour — creates a surface, snapshots it,
@@ -26,9 +26,9 @@ class CopyOnWriteRetainGm : SkiaGm {
         surf.canvas { clear(Color.RED) }
         val image = surf.makeImageSnapshot()
         surf.canvas {
-            clipRect(Rect.fromLTRB(0f, 0f, 128f, 256f))
+            clipRect(RectF32.ofLTRB(0f, 0f, 128f, 256f))
             clear(Color.BLUE)
         }
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 256f, 256f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 256f, 256f))
     }
 }

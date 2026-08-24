@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/userfont.cpp`.
  *  Draws text samples with a user-specified typeface to test custom
@@ -90,11 +90,11 @@ class UserTypefaceGm : SkiaGm {
             val font = Font(typeface, size = size, antiAlias = true)
             val blob = font.toTextBlob("Typeface", 0f, 0f)
             if (drawBaseline) {
-                canvas.drawRect(Rect.fromXYWH(x, y, width.toFloat(), 1f), Paint.fill(Color.fromArgb(255, 221, 221, 221)))
+                canvas.drawRect(RectF32.ofOriginSize(x, y, width.toFloat(), 1f), Paint.fill(Color.fromArgb(255, 221, 221, 221)))
             }
             val bounds = blob.computeBounds(typeface)
             canvas.drawRect(
-                Rect.fromLTRB(bounds.left + x + 20f, bounds.top + y, bounds.right + x + 20f, bounds.bottom + y),
+                RectF32.ofLTRB(bounds.left + x + 20f, bounds.top + y, bounds.right + x + 20f, bounds.bottom + y),
                 Paint(color = Color.fromArgb(255, 204, 204, 204), style = PaintStyle.STROKE),
             )
             // Draw outlines explicitly so both the default and the custom

@@ -48,7 +48,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedSurfaceFrameExecutorTest {
     @Test
@@ -127,7 +127,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                     clip = targetEmptyClip(),
                 ),
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(0f, 0f, 1f, 4f),
+                    RectF32.ofLTRB(0f, 0f, 1f, 4f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -221,7 +221,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
             listOf(
                 nonEmptyText(typeface = typeface, clip = targetEmptyClip()),
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(0f, 0f, 1f, 4f),
+                    RectF32.ofLTRB(0f, 0f, 1f, 4f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -270,8 +270,8 @@ class GPUPreparedSurfaceFrameExecutorTest {
             listOf(
                 DisplayOp.SetTransform(Matrix3x3F32.translation(1f, 2f)),
                 DisplayOp.SetClip(ClipStack.WideOpen),
-                DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "key", "value"),
-                DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+                DisplayOp.Annotation(RectF32.ofLTRB(0f, 0f, 1f, 1f), "key", "value"),
+                DisplayOp.FlushAndSnapshot(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
             ),
             width = 4,
             height = 4,
@@ -357,7 +357,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
             executor.execute(
                 textRequest(
                     BlendMode.DARKEN,
-                    ClipStack.DeviceRect(Rect.fromLTRB(6f, 6f, 14f, 14f), antiAlias = false),
+                    ClipStack.DeviceRect(RectF32.ofLTRB(6f, 6f, 14f, 14f), antiAlias = false),
                 ),
             ),
         )
@@ -747,7 +747,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         // The mixed destination-then-source shape is pinned by the fallback test below.
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                RectF32.ofLTRB(4f, 4f, 28f, 20f),
                 Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -787,13 +787,13 @@ class GPUPreparedSurfaceFrameExecutorTest {
         // pinned by GPUAllApiBlendSurfaceTest and GPUPathClipRegressionTest.
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                RectF32.ofLTRB(0f, 0f, 32f, 24f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
-                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                RectF32.ofLTRB(4f, 4f, 28f, 20f),
                 Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -821,13 +821,13 @@ class GPUPreparedSurfaceFrameExecutorTest {
     fun `deduplicated destination snapshot evidence allows multiple copy consumers`() {
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 32f, 24f),
+                RectF32.ofLTRB(0f, 0f, 32f, 24f),
                 Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
-                Rect.fromLTRB(4f, 4f, 28f, 20f),
+                RectF32.ofLTRB(4f, 4f, 28f, 20f),
                 Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -1023,7 +1023,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     private fun request(): GPUPreparedSurfaceExecutionRequest {
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 1f, 4f),
+                RectF32.ofLTRB(0f, 0f, 1f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -1057,7 +1057,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     ): GPUPreparedSurfaceExecutionRequest {
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 1f, 4f),
+                RectF32.ofLTRB(0f, 0f, 1f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -1109,7 +1109,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     )
 
     private fun targetEmptyClip(): ClipStack.DeviceRect = ClipStack.DeviceRect(
-        Rect.fromLTRB(40f, 0f, 48f, 8f),
+        RectF32.ofLTRB(40f, 0f, 48f, 8f),
         antiAlias = false,
     )
 

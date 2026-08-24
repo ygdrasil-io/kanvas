@@ -17,7 +17,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextNoFallbackTest {
@@ -159,6 +159,6 @@ class GPUPreparedTextNoFallbackTest {
     )
 
     private companion object {
-        val RECT = Rect.fromLTRB(0f, 0f, 1f, 1f)
+        val RECT = RectF32.ofLTRB(0f, 0f, 1f, 1f)
     }
 }

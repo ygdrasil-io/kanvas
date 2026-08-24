@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/lattice.cpp::ninepatch_edge_case_349428795` (500 × 150).
@@ -29,18 +29,18 @@ class NinepatchEdgeCase349428795Gm : SkiaGm {
         val nine = makeSymmetryTestImage()
 
         for (i in -1 until 6) {
-            val center = Rect(i.toFloat(), 2f, (i + 4).toFloat(), 6f)
+            val center = RectF32(i.toFloat(), 2f, (i + 4).toFloat(), 6f)
             // X-axis variant (top row)
             canvas.drawImageNine(
                 nine,
-                Rect.fromLTRB(center.left, center.top, center.right, center.bottom),
-                Rect.fromXYWH(i * 70f + 80f, 10f, 64f, 64f),
+                RectF32.ofLTRB(center.left, center.top, center.right, center.bottom),
+                RectF32.ofOriginSize(i * 70f + 80f, 10f, 64f, 64f),
             )
             // Y-axis variant (bottom row)
             canvas.drawImageNine(
                 nine,
-                Rect.fromLTRB(2f, i.toFloat(), 6f, (i + 4).toFloat()),
-                Rect.fromXYWH(i * 70f + 80f, 80f, 64f, 64f),
+                RectF32.ofLTRB(2f, i.toFloat(), 6f, (i + 4).toFloat()),
+                RectF32.ofOriginSize(i * 70f + 80f, 80f, 64f, 64f),
             )
         }
     }

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -36,7 +36,7 @@ class LinePathGm : SkiaGm {
             lineTo(75f, 15f)
         }
 
-        val cellRect = Rect(0f, 0f, 100f, 30f)
+        val cellRect = RectF32(0f, 0f, 100f, 30f)
         canvas.save()
         canvas.translate(10f, 30f)
 
@@ -76,12 +76,12 @@ class LinePathGm : SkiaGm {
                     )
                     canvas.drawRect(cellRect, rectPaint)
 
-                    x += cellRect.width + 40f
+                    x += cellRect.width() + 40f
                     if (x >= 300f) {
                         x = 0f
-                        canvas.translate(0f, cellRect.height + 40f)
+                        canvas.translate(0f, cellRect.height() + 40f)
                     } else {
-                        canvas.translate(cellRect.width + 40f, 0f)
+                        canvas.translate(cellRect.width() + 40f, 0f)
                     }
                 }
             }

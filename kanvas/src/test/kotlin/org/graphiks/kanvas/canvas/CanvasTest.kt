@@ -11,6 +11,7 @@ import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -25,23 +26,23 @@ class TestBuffer : DisplayListBuffer {
 }
 
 class CanvasTest {
-    @Test fun `Canvas records drawRect`() { val b = TestBuffer(); Canvas(b).drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(1, b.count()) }
-    @Test fun `Canvas save does not emit EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.save(); c.drawRect(Rect.fromLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().none { it is DisplayOp.EndLayer }) }
-    @Test fun `Canvas saveLayer emits EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.saveLayer(); c.drawRect(Rect.fromLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().any { it is DisplayOp.EndLayer }) }
+    @Test fun `Canvas records drawRect`() { val b = TestBuffer(); Canvas(b).drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(1, b.count()) }
+    @Test fun `Canvas save does not emit EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.save(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().none { it is DisplayOp.EndLayer }) }
+    @Test fun `Canvas saveLayer emits EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.saveLayer(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().any { it is DisplayOp.EndLayer }) }
     @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.tx); assertEquals(20f, c.matrix.ty) }
-    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
-    @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(Rect.fromLTRB(0f,0f,50f,50f)); assertEquals(Rect.fromLTRB(0f,0f,50f,50f), c.localClipBounds) }
+    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
+    @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(RectF32.ofLTRB(0f,0f,50f,50f)); assertEquals(RectF32.ofLTRB(0f,0f,50f,50f), c.localClipBounds) }
     @Test
     fun `clip geometry is frozen when captured not when a later draw occurs`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         canvas.translate(10f, 5f)
-        canvas.clipRect(Rect.fromXYWH(0f, 0f, 4f, 6f), antiAlias = false)
+        canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 4f, 6f), antiAlias = false)
         canvas.translate(100f, 100f)
 
         val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip
         assertEquals(
-            Rect.fromXYWH(10f, 5f, 4f, 6f),
+            RectF32.ofOriginSize(10f, 5f, 4f, 6f),
             assertIs<ClipStack.DeviceRect>(clip).rect,
         )
     }
@@ -51,7 +52,7 @@ class CanvasTest {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         canvas.rotate(45f)
-        canvas.clipRect(Rect(2f, 2f, 10f, 10f), antiAlias = true)
+        canvas.clipRect(RectF32(2f, 2f, 10f, 10f), antiAlias = true)
 
         val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip
         val element = assertIs<ClipStack.Complex>(clip).ops.single()
@@ -62,9 +63,9 @@ class CanvasTest {
     fun `saveLayer defers outer clip while nested layer records only inner clip`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
-        val outer = Rect(2f, 2f, 14f, 14f)
-        val inner = Rect(4f, 4f, 12f, 12f)
-        val draw = Rect(0f, 0f, 16f, 16f)
+        val outer = RectF32(2f, 2f, 14f, 14f)
+        val inner = RectF32(4f, 4f, 12f, 12f)
+        val draw = RectF32(0f, 0f, 16f, 16f)
 
         canvas.clipRect(outer, antiAlias = false)
         canvas.saveLayer()
@@ -94,9 +95,9 @@ class CanvasTest {
     fun `save restore freezes the ordered clip snapshot on each draw`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
-        val outer = Rect(1.25f, 2.5f, 15.75f, 16.5f)
-        val inner = RRect(Rect(3f, 4f, 13f, 14f), radius = 2f)
-        val draw = Rect(0f, 0f, 20f, 20f)
+        val outer = RectF32(1.25f, 2.5f, 15.75f, 16.5f)
+        val inner = RRect(RectF32(3f, 4f, 13f, 14f), radius = 2f)
+        val draw = RectF32(0f, 0f, 20f, 20f)
 
         canvas.clipRect(outer, antiAlias = true)
         canvas.save()

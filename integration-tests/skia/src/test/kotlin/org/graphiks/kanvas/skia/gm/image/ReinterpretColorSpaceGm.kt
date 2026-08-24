@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.color.TransferFunction
 
 /**
@@ -38,22 +38,22 @@ class ReinterpretColorSpaceGm : SkiaGm {
 
         val image = loadImage("images/color_wheel.png") ?: return
 
-        canvas.drawImage(image, Rect(0f, 0f, 128f, 128f))
-        canvas.drawImage(image.reinterpretColorSpace(spin), Rect(128f, 0f, 256f, 128f))
+        canvas.drawImage(image, RectF32(0f, 0f, 128f, 128f))
+        canvas.drawImage(image.reinterpretColorSpace(spin), RectF32(128f, 0f, 256f, 128f))
         val spun = image.reinterpretColorSpace(spin)
-        canvas.drawImage(spun.reinterpretColorSpace(srgb), Rect(256f, 0f, 384f, 128f))
+        canvas.drawImage(spun.reinterpretColorSpace(srgb), RectF32(256f, 0f, 384f, 128f))
 
         canvas.translate(0f, 128f)
 
-        canvas.drawImage(image, Rect(0f, 0f, 128f, 128f))
-        canvas.drawImage(image.reinterpretColorSpace(spin), Rect(128f, 0f, 256f, 128f))
-        canvas.drawImage(spun.reinterpretColorSpace(srgb), Rect(256f, 0f, 384f, 128f))
+        canvas.drawImage(image, RectF32(0f, 0f, 128f, 128f))
+        canvas.drawImage(image.reinterpretColorSpace(spin), RectF32(128f, 0f, 256f, 128f))
+        canvas.drawImage(spun.reinterpretColorSpace(srgb), RectF32(256f, 0f, 384f, 128f))
 
         canvas.translate(0f, 128f)
 
-        canvas.drawImage(image, Rect(0f, 0f, 128f, 128f))
-        canvas.drawImage(image.reinterpretColorSpace(spin), Rect(128f, 0f, 256f, 128f))
-        canvas.drawImage(spun.reinterpretColorSpace(srgb), Rect(256f, 0f, 384f, 128f))
+        canvas.drawImage(image, RectF32(0f, 0f, 128f, 128f))
+        canvas.drawImage(image.reinterpretColorSpace(spin), RectF32(128f, 0f, 256f, 128f))
+        canvas.drawImage(spun.reinterpretColorSpace(srgb), RectF32(256f, 0f, 384f, 128f))
     }
 
     private fun loadImage(path: String): Image? {

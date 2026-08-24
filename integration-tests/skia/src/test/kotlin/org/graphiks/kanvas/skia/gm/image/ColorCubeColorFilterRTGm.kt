@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp::ColorCubeColorFilterRT` (512x512).
@@ -35,7 +35,7 @@ class ColorCubeColorFilterRTGm : SkiaGm {
             val cx = (i % 2) * quadSize
             val cy = (i / 2) * quadSize
             val paint = Paint(color = colors[i])
-            canvas.drawRect(Rect(cx, cy, cx + quadSize, cy + quadSize), paint)
+            canvas.drawRect(RectF32(cx, cy, cx + quadSize, cy + quadSize), paint)
         }
     }
 }

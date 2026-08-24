@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /** Port of Skia's `gm/hittestpath.cpp`.
@@ -64,7 +64,7 @@ class HitTestPathGm : SkiaGm {
         path.fillType = FillType.EVEN_ODD
         val offsetPath = path.transform(Matrix3x3F32.translation(20f, 20f))
         val margin = 4f
-        val bounds = Rect.fromLTRB(minX + 20f, minY + 20f, maxX + 20f, maxY + 20f)
+        val bounds = RectF32.ofLTRB(minX + 20f, minY + 20f, maxX + 20f, maxY + 20f)
 
         testHittest(canvas, offsetPath, bounds, margin)
 
@@ -76,7 +76,7 @@ class HitTestPathGm : SkiaGm {
     private fun testHittest(
         canvas: GmCanvas,
         path: Path,
-        r: Rect,
+        r: RectF32,
         margin: Float,
     ) {
         val paint = Paint(color = Color.RED)

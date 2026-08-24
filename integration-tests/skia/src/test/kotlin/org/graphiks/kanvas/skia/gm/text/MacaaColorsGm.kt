@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -41,7 +41,7 @@ class MacaaColorsGm : SkiaGm {
         for ((textColor, bgColor) in colors) {
             canvas.save()
             val bgPaint = Paint(color = bgColor)
-            canvas.drawRect(Rect.fromLTRB(0f, 0f, colWidth, 500f), bgPaint)
+            canvas.drawRect(RectF32.ofLTRB(0f, 0f, colWidth, 500f), bgPaint)
 
             var y = 10f
             val x = 10f

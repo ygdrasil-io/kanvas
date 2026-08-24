@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/colorfilters.cpp.
@@ -26,7 +26,7 @@ class ColorFiltersGm : SkiaGm {
     override val height = 430
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, 600f, 50f)
+        val r = RectF32(0f, 0f, 600f, 50f)
 
         val paint = Paint(shader = makeShader(r))
 
@@ -46,11 +46,11 @@ class ColorFiltersGm : SkiaGm {
             val colorFilter = if (mul == null) null else lighting(mul, add)
             val currentPaint = paint.copy(colorFilter = colorFilter)
             canvas.drawRect(r, currentPaint)
-            canvas.translate(0f, r.height + 10f)
+            canvas.translate(0f, r.height() + 10f)
         }
     }
 
-    private fun makeShader(bounds: Rect): Shader {
+    private fun makeShader(bounds: RectF32): Shader {
         return Shader.LinearGradient(
             start = Point2F32(bounds.left, bounds.top),
             end = Point2F32(bounds.right, bounds.bottom),

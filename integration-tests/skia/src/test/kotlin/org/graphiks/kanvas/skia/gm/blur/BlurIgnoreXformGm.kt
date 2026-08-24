@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private data class MatrixScale(val scale: Float, val name: String)
 
@@ -47,8 +47,8 @@ private fun drawBlurIgnoreXform(canvas: GmCanvas, drawType: String) {
             canvas.scale(scale.scale, scale.scale)
             val kRadius = 20f
             val coord = 50f * 1f / scale.scale
-            val rect = Rect.fromXYWH(coord - kRadius, coord - kRadius, 2 * kRadius, 2 * kRadius)
-            val rrect = RRect(Rect(rect.left, rect.top, rect.right, rect.bottom), CornerRadii(kRadius / 2f, kRadius / 2f))
+            val rect = RectF32.ofOriginSize(coord - kRadius, coord - kRadius, 2 * kRadius, 2 * kRadius)
+            val rrect = RRect(RectF32(rect.left, rect.top, rect.right, rect.bottom), CornerRadii(kRadius / 2f, kRadius / 2f))
 
             for (j in 0 until 2) {
                 canvas.save()
@@ -101,7 +101,7 @@ class BlurIgnoreXformCircleGm : SkiaGm {
 
 /**
  * Port of Skia's `gm/blurignorexform.cpp::BlurIgnoreXformGM`.
- * Rect variant.
+ * RectF32 variant.
  * @see https://github.com/google/skia/blob/main/gm/blurignorexform.cpp
  */
 class BlurIgnoreXformRectGm : SkiaGm {

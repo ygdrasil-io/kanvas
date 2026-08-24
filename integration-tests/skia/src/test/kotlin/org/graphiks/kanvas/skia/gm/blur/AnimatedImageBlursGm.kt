@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -58,7 +58,7 @@ class AnimatedImageBlursGm : SkiaGm {
         for (n in nodes) {
             val layerPaint = Paint(imageFilter = ImageFilter.Blur(n.sigma, n.sigma))
             canvas.saveLayer(null, layerPaint)
-            val rect = Rect(
+            val rect = RectF32(
                 n.posX - n.size - 0.5f,
                 n.posY - n.size - 0.5f,
                 n.posX + n.size + 0.5f,

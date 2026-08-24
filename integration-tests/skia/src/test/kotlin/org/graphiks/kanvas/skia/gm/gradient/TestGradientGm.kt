@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/testgradient.cpp`.
@@ -30,7 +30,7 @@ class TestGradientGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(1f, 1f, 1f, 1f)
 
-        val rect = Rect(10f, 10f, 110f, 170f)
+        val rect = RectF32(10f, 10f, 110f, 170f)
 
         val gradPaint = Paint(
             style = PaintStyle.FILL,
@@ -48,14 +48,14 @@ class TestGradientGm : SkiaGm {
         )
         canvas.drawRect(rect, gradPaint)
 
-        val ovalRect = Rect(rect.left + 40f, rect.top + 80f, rect.right + 40f, rect.bottom + 80f)
+        val ovalRect = RectF32(rect.left + 40f, rect.top + 80f, rect.right + 40f, rect.bottom + 80f)
         val ovalPaint = Paint(style = PaintStyle.FILL, antiAlias = true, strokeWidth = 4f, color = Color(0xFFE6B89Cu))
         canvas.drawOval(ovalRect, ovalPaint)
 
         val solidPaint = Paint(style = PaintStyle.FILL, antiAlias = true, strokeWidth = 4f, color = Color(0xFF9CAFB7u))
         canvas.drawCircle(180f, 50f, 25f, solidPaint)
 
-        val offsetRect = Rect(rect.left + 80f, rect.top + 50f, rect.right + 80f, rect.bottom + 50f)
+        val offsetRect = RectF32(rect.left + 80f, rect.top + 50f, rect.right + 80f, rect.bottom + 50f)
         val strokePaint = Paint(
             antiAlias = true, strokeWidth = 4f,
             color = Color(0xFF4281A4u),

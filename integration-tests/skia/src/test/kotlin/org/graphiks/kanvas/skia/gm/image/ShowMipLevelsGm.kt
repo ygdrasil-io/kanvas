@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/showmiplevels.cpp` `showmiplevels_explicit` (1130 × 970).
@@ -54,7 +54,7 @@ class ShowMipLevelsGm : SkiaGm {
                 val paint = Paint(shader = shader)
                 canvas.save()
                 canvas.scale(scale, scale)
-                canvas.drawRect(Rect.fromXYWH(0f, 0f, 150f, 150f), paint)
+                canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 150f, 150f), paint)
                 canvas.restore()
                 canvas.translate(160f, 0f)
                 scale *= 0.7f

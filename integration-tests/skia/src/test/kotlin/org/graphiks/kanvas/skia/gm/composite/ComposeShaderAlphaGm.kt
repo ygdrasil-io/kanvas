@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of upstream Skia `gm/composeshader.cpp::ComposeShaderAlphaGM`.
@@ -35,7 +35,7 @@ class ComposeShaderAlphaGm : SkiaGm {
             makeShader(BlendMode.DST_IN),
             makeShader(BlendMode.SRC_OVER),
         )
-        val r = Rect.fromXYWH(5f, 5f, 100f, 100f)
+        val r = RectF32.ofOriginSize(5f, 5f, 100f, 100f)
 
         for (shader in shaders) {
             canvas.save()
@@ -50,11 +50,11 @@ class ComposeShaderAlphaGm : SkiaGm {
                 )
                 canvas.drawRect(r, overlayPaint)
 
-                canvas.translate(r.width + 5f, 0f)
+                canvas.translate(r.width() + 5f, 0f)
                 alpha -= 0x28
             }
             canvas.restore()
-            canvas.translate(0f, r.height + 5f)
+            canvas.translate(0f, r.height() + 5f)
         }
     }
 

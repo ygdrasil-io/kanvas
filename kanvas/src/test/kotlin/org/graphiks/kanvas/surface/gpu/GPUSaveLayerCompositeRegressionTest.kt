@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -37,9 +37,9 @@ class GPUSaveLayerCompositeRegressionTest {
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 Surface(width = 8, height = 8).run {
                     canvas {
-                        drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                        drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
                         saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                        drawRect(Rect(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+                        drawRect(RectF32(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
                         restore()
                     }
                     render()
@@ -60,16 +60,16 @@ class GPUSaveLayerCompositeRegressionTest {
 
         listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
             listOf(
-                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
-                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
+                OuterClip("scissor", RectF32(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", RectF32(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
             ).forEach { outerClip ->
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
                         canvas {
-                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
                             clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
                             saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                            drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                            drawRect(RectF32(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
                             restore()
                         }
                         render()
@@ -89,21 +89,21 @@ class GPUSaveLayerCompositeRegressionTest {
 
         listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
             val recorder = PictureRecorder()
-            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+            recorder.beginRecording(RectF32(0f, 0f, 32f, 32f)).apply {
                 saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                drawRect(RectF32(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
                 restore()
             }
             val picture = recorder.finishRecordingAsPicture()
 
             listOf(
-                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
-                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
+                OuterClip("scissor", RectF32(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", RectF32(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
             ).forEach { outerClip ->
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
                         canvas {
-                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
                             clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
                             drawPicture(picture)
                         }
@@ -128,18 +128,18 @@ class GPUSaveLayerCompositeRegressionTest {
 
         listOf(BlendMode.SRC, BlendMode.DST_IN).forEach { mode ->
             val recorder = PictureRecorder()
-            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
-                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+            recorder.beginRecording(RectF32(0f, 0f, 32f, 32f)).apply {
+                clipRect(RectF32(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
                 saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                drawRect(RectF32(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
                 restore()
             }
             val picture = recorder.finishRecordingAsPicture()
             val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                 Surface(width = 32, height = 32).run {
                     canvas {
-                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
-                        clipRect(Rect(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
+                        drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(RectF32(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
                         picture.playback(this)
                     }
                     render()
@@ -158,16 +158,16 @@ class GPUSaveLayerCompositeRegressionTest {
         listOf(
             MixedClipFixture(
                 name = "outer-AA-inner-hard",
-                pictureClip = Rect(8f, 8f, 23.5f, 24f),
+                pictureClip = RectF32(8f, 8f, 23.5f, 24f),
                 pictureClipAntiAlias = false,
-                hostClip = Rect(8.5f, 8f, 24f, 24f),
+                hostClip = RectF32(8.5f, 8f, 24f, 24f),
                 hostClipAntiAlias = true,
             ),
             MixedClipFixture(
                 name = "outer-hard-inner-AA",
-                pictureClip = Rect(8.5f, 8f, 24f, 24f),
+                pictureClip = RectF32(8.5f, 8f, 24f, 24f),
                 pictureClipAntiAlias = true,
-                hostClip = Rect(8f, 8f, 23.5f, 24f),
+                hostClip = RectF32(8f, 8f, 23.5f, 24f),
                 hostClipAntiAlias = false,
             ),
         ).forEach { fixture ->
@@ -176,7 +176,7 @@ class GPUSaveLayerCompositeRegressionTest {
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
                         canvas {
-                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
                             clipRect(fixture.hostClip, ClipOp.INTERSECT, fixture.hostClipAntiAlias)
                             picture.playback(this)
                         }
@@ -198,33 +198,33 @@ class GPUSaveLayerCompositeRegressionTest {
             RecordedClipFixture(
                 name = "outer-AA-inner-hard",
                 clips = listOf(
-                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
-                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
+                    RecordedClip(RectF32(8.5f, 8f, 24f, 24f), antiAlias = true),
+                    RecordedClip(RectF32(8f, 8f, 23.5f, 24f), antiAlias = false),
                 ),
             ),
             RecordedClipFixture(
                 name = "outer-hard-inner-AA",
                 clips = listOf(
-                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
-                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
+                    RecordedClip(RectF32(8f, 8f, 23.5f, 24f), antiAlias = false),
+                    RecordedClip(RectF32(8.5f, 8f, 24f, 24f), antiAlias = true),
                 ),
             ),
         ).forEach { fixture ->
             listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
                 val recorder = PictureRecorder()
-                recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                recorder.beginRecording(RectF32(0f, 0f, 32f, 32f)).apply {
                     fixture.clips.forEach { clip ->
                         clipRect(clip.rect, ClipOp.INTERSECT, clip.antiAlias)
                     }
                     saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-                    drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                    drawRect(RectF32(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
                     restore()
                 }
                 val picture = recorder.finishRecordingAsPicture()
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
                         canvas {
-                            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
                             drawPicture(picture)
                         }
                         render()
@@ -246,7 +246,7 @@ class GPUSaveLayerCompositeRegressionTest {
             drawCheckerboardRoot()
             saveLayer()
             drawRect(
-                Rect(1f, 1f, 7f, 3f),
+                RectF32(1f, 1f, 7f, 3f),
                 Paint(
                     color = translucentRed.toColor(),
                     antiAlias = false,
@@ -268,12 +268,12 @@ class GPUSaveLayerCompositeRegressionTest {
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
             drawRect(
-                Rect(0f, 0f, 8f, 8f),
+                RectF32(0f, 0f, 8f, 8f),
                 Paint(color = green.toColor(), antiAlias = false),
             )
             saveLayer()
             drawRect(
-                Rect(0f, 0f, 8f, 8f),
+                RectF32(0f, 0f, 8f, 8f),
                 Paint(
                     color = translucentRed.toColor(),
                     antiAlias = false,
@@ -281,7 +281,7 @@ class GPUSaveLayerCompositeRegressionTest {
             )
             saveLayer()
             drawRect(
-                Rect(2f, 2f, 6f, 6f),
+                RectF32(2f, 2f, 6f, 6f),
                 Paint(
                     color = translucentBlue.toColor(),
                     antiAlias = false,
@@ -303,10 +303,10 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = checkerGray.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = checkerGray.toColor(), antiAlias = false))
             saveLayer()
             save()
-            clipRect(Rect(1f, 1f, 7f, 7f))
+            clipRect(RectF32(1f, 1f, 7f, 7f))
             drawColor(translucentBackground.toColor(), BlendMode.SRC)
             restore()
             restore()
@@ -323,14 +323,14 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = checkerGray.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = checkerGray.toColor(), antiAlias = false))
             saveLayer()
             save()
-            clipRect(Rect(1f, 1f, 7f, 7f))
+            clipRect(RectF32(1f, 1f, 7f, 7f))
             drawColor(translucentBackground.toColor(), BlendMode.SRC)
             restore()
             drawRect(
-                Rect(5f, 5f, 7f, 7f),
+                RectF32(5f, 5f, 7f, 7f),
                 Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
             )
             restore()
@@ -347,27 +347,27 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val baseline = Surface(width = 8, height = 8)
         baseline.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             drawRect(
-                Rect(6f, 6f, 7f, 7f),
+                RectF32(6f, 6f, 7f, 7f),
                 Paint(color = translucentBlue.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
             )
             saveLayer()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
             restore()
         }
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             drawRect(
-                Rect(6f, 6f, 7f, 7f),
+                RectF32(6f, 6f, 7f, 7f),
                 Paint(color = translucentBlue.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
             )
             saveLayer()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
             drawRect(
-                Rect(6f, 6f, 7f, 7f),
+                RectF32(6f, 6f, 7f, 7f),
                 Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
             )
             restore()
@@ -383,16 +383,16 @@ class GPUSaveLayerCompositeRegressionTest {
         requireWebGpu()
 
         val recorder = PictureRecorder()
-        val pictureCanvas = recorder.beginRecording(Rect(0f, 0f, 8f, 8f))
-        pictureCanvas.drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+        val pictureCanvas = recorder.beginRecording(RectF32(0f, 0f, 8f, 8f))
+        pictureCanvas.drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
         pictureCanvas.saveLayer()
-        pictureCanvas.drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+        pictureCanvas.drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
         pictureCanvas.restore()
         val picture = recorder.finishRecordingAsPicture()
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
             drawPicture(picture)
         }
 
@@ -406,11 +406,11 @@ class GPUSaveLayerCompositeRegressionTest {
         requireWebGpu()
 
         val recorder = PictureRecorder()
-        recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).apply {
-            saveLayer(Rect(0f, 0f, 4f, 4f))
+        recorder.beginRecording(RectF32(0f, 0f, 8f, 8f)).apply {
+            saveLayer(RectF32(0f, 0f, 4f, 4f))
             save()
-            clipRect(Rect(1f, 1f, 4f, 4f), ClipOp.INTERSECT, antiAlias = false)
-            drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            clipRect(RectF32(1f, 1f, 4f, 4f), ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32(0f, 0f, 4f, 4f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
             restore()
         }
@@ -419,7 +419,7 @@ class GPUSaveLayerCompositeRegressionTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 8, height = 8).run {
             canvas {
-                drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
                 translate(2f, 1f)
                 drawPicture(picture)
             }
@@ -438,9 +438,9 @@ class GPUSaveLayerCompositeRegressionTest {
         requireWebGpu()
 
         val recorder = PictureRecorder()
-        val pictureCanvas = recorder.beginRecording(Rect(0f, 0f, 8f, 8f))
+        val pictureCanvas = recorder.beginRecording(RectF32(0f, 0f, 8f, 8f))
         pictureCanvas.drawRect(
-            Rect(0f, 0f, 8f, 8f),
+            RectF32(0f, 0f, 8f, 8f),
             Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.MULTIPLY),
         )
         val picture = recorder.finishRecordingAsPicture()
@@ -448,9 +448,9 @@ class GPUSaveLayerCompositeRegressionTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 8, height = 8).run {
             canvas {
-                drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
                 save()
-                clipRect(Rect(1f, 1f, 7f, 7f), ClipOp.INTERSECT, antiAlias = true)
+                clipRect(RectF32(1f, 1f, 7f, 7f), ClipOp.INTERSECT, antiAlias = true)
                 drawPicture(picture)
                 restore()
             }
@@ -485,9 +485,9 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
-            saveLayer(Rect(2f, 2f, 6f, 6f))
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            saveLayer(RectF32(2f, 2f, 6f, 6f))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -505,8 +505,8 @@ class GPUSaveLayerCompositeRegressionTest {
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
             drawCheckerboardRoot()
-            saveLayer(Rect(20f, 20f, 21f, 21f))
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            saveLayer(RectF32(20f, 20f, 21f, 21f))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -522,11 +522,11 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
             translate(2f, 1f)
-            saveLayer(Rect(0f, 0f, 4f, 4f))
+            saveLayer(RectF32(0f, 0f, 4f, 4f))
             resetMatrix()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -544,11 +544,11 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
             scale(2f, 2f)
-            saveLayer(Rect(1f, 1f, 3f, 3f))
+            saveLayer(RectF32(1f, 1f, 3f, 3f))
             resetMatrix()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -566,11 +566,11 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
             translate(-2f, 1f)
-            saveLayer(Rect(0f, 0f, 6f, 4f))
+            saveLayer(RectF32(0f, 0f, 6f, 4f))
             resetMatrix()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -589,8 +589,8 @@ class GPUSaveLayerCompositeRegressionTest {
         surface.canvas {
             drawCheckerboardRoot()
             concat(Matrix3x3F32.of(1f, 0f, Float.POSITIVE_INFINITY, 0f, 1f, 0f))
-            saveLayer(Rect(0f, 0f, 4f, 4f))
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            saveLayer(RectF32(0f, 0f, 4f, 4f))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
@@ -605,13 +605,13 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
             translate(1f, 0f)
-            saveLayer(Rect(0f, 0f, 5f, 6f))
+            saveLayer(RectF32(0f, 0f, 5f, 6f))
             translate(2f, 0f)
-            saveLayer(Rect(0f, 0f, 5f, 6f))
+            saveLayer(RectF32(0f, 0f, 5f, 6f))
             resetMatrix()
-            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
             restore()
         }
@@ -622,16 +622,16 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     private fun org.graphiks.kanvas.canvas.Canvas.drawCheckerboardRoot() {
-        drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = white.toColor(), antiAlias = false))
+        drawRect(RectF32(0f, 0f, 4f, 4f), Paint(color = white.toColor(), antiAlias = false))
         drawRect(
-            Rect(4f, 0f, 8f, 4f),
+            RectF32(4f, 0f, 8f, 4f),
             Paint(color = checkerGray.toColor(), antiAlias = false),
         )
         drawRect(
-            Rect(0f, 4f, 4f, 8f),
+            RectF32(0f, 4f, 4f, 8f),
             Paint(color = checkerGray.toColor(), antiAlias = false),
         )
-        drawRect(Rect(4f, 4f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+        drawRect(RectF32(4f, 4f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
     }
 
     private fun assertCheckerboard(pixels: UByteArray) {
@@ -713,16 +713,16 @@ class GPUSaveLayerCompositeRegressionTest {
 
     private data class OuterClip(
         val name: String,
-        val rect: Rect,
+        val rect: RectF32,
         val antiAlias: Boolean,
         val edge: Point2F32?,
     )
 
     private data class MixedClipFixture(
         val name: String,
-        val pictureClip: Rect,
+        val pictureClip: RectF32,
         val pictureClipAntiAlias: Boolean,
-        val hostClip: Rect,
+        val hostClip: RectF32,
         val hostClipAntiAlias: Boolean,
     )
 
@@ -732,7 +732,7 @@ class GPUSaveLayerCompositeRegressionTest {
     )
 
     private data class RecordedClip(
-        val rect: Rect,
+        val rect: RectF32,
         val antiAlias: Boolean,
     )
 
@@ -741,10 +741,10 @@ class GPUSaveLayerCompositeRegressionTest {
         Canvas(buffer).apply {
             clipRect(fixture.pictureClip, ClipOp.INTERSECT, fixture.pictureClipAntiAlias)
             saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
-            drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+            drawRect(RectF32(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
             restore()
         }
-        return Picture(Rect(0f, 0f, 32f, 32f), buffer.ops())
+        return Picture(RectF32(0f, 0f, 32f, 32f), buffer.ops())
     }
 
     private class DeferredPictureBuffer : DisplayListBuffer {

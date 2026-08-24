@@ -32,7 +32,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedImageGridLowererTest {
     @Test
@@ -44,8 +44,8 @@ class GPUPreparedImageGridLowererTest {
         )
         val operation = DisplayOp.DrawImageNine(
             image = image,
-            center = Rect.fromLTRB(2f, 2f, 4f, 4f),
-            dst = Rect.fromLTRB(10f, 20f, 28f, 38f),
+            center = RectF32.ofLTRB(2f, 2f, 4f, 4f),
+            dst = RectF32.ofLTRB(10f, 20f, 28f, 38f),
             paint = null,
             transform = transform,
             clip = ClipStack.WideOpen,
@@ -66,7 +66,7 @@ class GPUPreparedImageGridLowererTest {
             ),
             ready.commands.map {
                 val command = assertIs<NormalizedDrawCommand.DrawImageRect>(it.normalized)
-                Rect.fromLTRB(command.src.left, command.src.top, command.src.right, command.src.bottom)
+                RectF32.ofLTRB(command.src.left, command.src.top, command.src.right, command.src.bottom)
             },
         )
         val facts = ready.commands.map { requireNotNull(it.preparedImage) }
@@ -83,8 +83,8 @@ class GPUPreparedImageGridLowererTest {
     fun `nine refuses overlapping raw destination cells before filtered decomposition`() {
         val operation = DisplayOp.DrawImageNine(
             image = imageNine(),
-            center = Rect.fromLTRB(2f, 2f, 4f, 4f),
-            dst = Rect.fromLTRB(0f, 0f, 2f, 2f),
+            center = RectF32.ofLTRB(2f, 2f, 4f, 4f),
+            dst = RectF32.ofLTRB(0f, 0f, 2f, 2f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -112,7 +112,7 @@ class GPUPreparedImageGridLowererTest {
         val operation = DisplayOp.DrawImageLattice(
             image = image,
             lattice = Lattice(xDivs = divisions, yDivs = divisions),
-            dst = Rect.fromLTRB(0f, 0f, 64f, 64f),
+            dst = RectF32.ofLTRB(0f, 0f, 64f, 64f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -148,7 +148,7 @@ class GPUPreparedImageGridLowererTest {
                     LatticeFlags.TRANSPARENT,
                 ),
             ),
-            dst = Rect.fromLTRB(10f, 12f, 34f, 18f),
+            dst = RectF32.ofLTRB(10f, 12f, 34f, 18f),
             paint = Paint.fill(Color.fromArgb(128, 20, 30, 40)).copy(
                 antiAlias = false,
             ),
@@ -190,7 +190,7 @@ class GPUPreparedImageGridLowererTest {
                 colors = listOf(Color.GREEN, Color.BLUE),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
             paint = Paint.fill(Color.WHITE).copy(
                 blendMode = BlendMode.PLUS,
                 antiAlias = false,
@@ -219,7 +219,7 @@ class GPUPreparedImageGridLowererTest {
                 colors = listOf(Color.GREEN, Color.BLUE),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
             paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -245,7 +245,7 @@ class GPUPreparedImageGridLowererTest {
                 colors = listOf(Color.GREEN, Color.BLUE),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
             paint = Paint.fill(Color.WHITE).copy(
                 blendMode = BlendMode.SRC,
                 blender = Blender.Mode(BlendMode.PLUS),
@@ -273,7 +273,7 @@ class GPUPreparedImageGridLowererTest {
                 colors = listOf(Color.GREEN, Color.BLUE),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
             paint = Paint.fill(Color.WHITE).copy(
                 blender = Blender.Arithmetic(0f, 1f, 0f, 0f),
                 antiAlias = false,
@@ -305,7 +305,7 @@ class GPUPreparedImageGridLowererTest {
                     LatticeFlags.TRANSPARENT,
                 ),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 18f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 18f, 6f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -329,7 +329,7 @@ class GPUPreparedImageGridLowererTest {
                 colors = listOf(Color.GREEN, Color.TRANSPARENT),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.DEFAULT),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
             paint = Paint.fill(Color.WHITE).copy(
                 blendMode = BlendMode.MULTIPLY,
                 antiAlias = false,
@@ -350,13 +350,13 @@ class GPUPreparedImageGridLowererTest {
     fun `invalid nine lattice image sampling and transform use canonical refusals`() {
         val validNine = DisplayOp.DrawImageNine(
             imageNine(),
-            Rect.fromLTRB(2f, 2f, 4f, 4f),
-            Rect.fromLTRB(0f, 0f, 12f, 12f),
+            RectF32.ofLTRB(2f, 2f, 4f, 4f),
+            RectF32.ofLTRB(0f, 0f, 12f, 12f),
             null,
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
-        val invalidNine = validNine.copy(center = Rect.fromLTRB(4f, 2f, 2f, 4f))
+        val invalidNine = validNine.copy(center = RectF32.ofLTRB(4f, 2f, 2f, 4f))
         assertEquals(
             GPUPreparedImageRefusalCodes.NINE_GEOMETRY,
             assertIs<GPUPreparedImageGridLowering.Refused>(
@@ -386,7 +386,7 @@ class GPUPreparedImageGridLowererTest {
         val baseLattice = DisplayOp.DrawImageLattice(
             imageNine(),
             Lattice(xDivs = listOf(2), yDivs = emptyList()),
-            Rect.fromLTRB(0f, 0f, 12f, 6f),
+            RectF32.ofLTRB(0f, 0f, 12f, 6f),
             null,
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
@@ -406,7 +406,7 @@ class GPUPreparedImageGridLowererTest {
             GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
             assertIs<GPUPreparedImageGridLowering.Refused>(
                 GPUPreparedImageGridLowerer.lowerLattice(
-                    baseLattice.copy(dst = Rect.fromLTRB(0f, 0f, 2f, 6f)),
+                    baseLattice.copy(dst = RectF32.ofLTRB(0f, 0f, 2f, 6f)),
                     0,
                     0,
                     context(),
@@ -503,6 +503,6 @@ class GPUPreparedImageGridLowererTest {
         rendererFeatures = setOf(GPURendererFeature.RenderPass),
     )
 
-    private fun rect(left: Float, top: Float, right: Float, bottom: Float): Rect =
-        Rect.fromLTRB(left, top, right, bottom)
+    private fun rect(left: Float, top: Float, right: Float, bottom: Float): RectF32 =
+        RectF32.ofLTRB(left, top, right, bottom)
 }

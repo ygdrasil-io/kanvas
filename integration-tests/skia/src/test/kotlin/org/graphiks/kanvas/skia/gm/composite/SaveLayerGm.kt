@@ -4,7 +4,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -29,7 +29,7 @@ class SaveLayerGm : SkiaGm {
         val bytes = loadResource("images/mandrill_256.png")
             ?: return
         val image = Image.decode(bytes)
-        canvas.drawImage(image, Rect.fromXYWH(0f, 0f, 256f, 256f))
+        canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, 256f, 256f))
 
         val layerPaint = Paint(
             blendMode = BlendMode.PLUS,

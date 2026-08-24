@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeimagefilter.cpp::rtif_unsharp` (512 x 256).
@@ -40,13 +40,13 @@ class RtifUnsharpGm : SkiaGm {
         )
 
         // Left: raw
-        canvas.drawImage(img, Rect(0f, 0f, 256f, 256f))
+        canvas.drawImage(img, RectF32(0f, 0f, 256f, 256f))
 
         // Right: sharpened via saveLayer + ImageFilter.RuntimeEffect
         canvas.save()
         canvas.translate(256f, 0f)
-        canvas.saveLayer(Rect(0f, 0f, 256f, 256f), Paint(imageFilter = filter))
-        canvas.drawImage(img, Rect(0f, 0f, 256f, 256f))
+        canvas.saveLayer(RectF32(0f, 0f, 256f, 256f), Paint(imageFilter = filter))
+        canvas.drawImage(img, RectF32(0f, 0f, 256f, 256f))
         canvas.restore()
         canvas.restore()
     }

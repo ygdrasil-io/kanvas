@@ -20,7 +20,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
@@ -217,7 +217,7 @@ internal object GPUPreparedAtlasLowerer {
     }
 
     private fun validateSourceRect(
-        rect: Rect,
+        rect: RectF32,
         imageWidth: Int,
         imageHeight: Int,
         spriteIndex: Int,
@@ -450,10 +450,10 @@ internal object GPUPreparedAtlasLowerer {
                     fact.affectsValidity
             }
 
-    private fun Rect.isFiniteRect(): Boolean =
+    private fun RectF32.isFiniteRect(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
 
-    private fun Rect.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =
+    private fun RectF32.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =
         listOf(
             Point2F32(left, top),
             Point2F32(right, top),

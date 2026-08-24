@@ -10,7 +10,7 @@ import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private const val BYTES_PER_PIXEL: Int = 4
 private const val RENDER_FILE_NAME: String = "render.png"
@@ -163,7 +163,7 @@ private fun renderSolidRedRect(width: Int, height: Int): SceneRender {
     val canvas = surface.canvas()
 
     val red = Paint.fill(Color.fromRGBA(1f, 0f, 0f, 1f))
-    canvas.drawRect(Rect(50f, 50f, 270f, 190f), red)
+    canvas.drawRect(RectF32(50f, 50f, 270f, 190f), red)
 
     val result = surface.render()
     val scene = RectScene(left = 50, top = 50, right = 270, bottom = 190, r = 255, g = 0, b = 0, a = 255)
@@ -291,7 +291,7 @@ private fun renderSolidRRect(width: Int, height: Int): SceneRender {
     val canvas = surface.canvas()
 
     val blue = Paint.fill(Color.fromRGBA(0f, 0.5f, 1f, 1f))
-    canvas.drawRRect(RRect(Rect(50f, 50f, 270f, 190f), 20f), blue)
+    canvas.drawRRect(RRect(RectF32(50f, 50f, 270f, 190f), 20f), blue)
 
     val result = surface.render()
     val scene = RRectScene(

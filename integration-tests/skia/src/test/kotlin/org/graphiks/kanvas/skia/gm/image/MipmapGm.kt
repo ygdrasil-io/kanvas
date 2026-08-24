@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/mipmap.cpp`.
  *  Creates a gradient image and draws it at various scales to test
@@ -26,14 +26,14 @@ class MipmapGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = makeImage()
-        val dst = Rect.fromXYWH(0f, 0f, 177f, 15f)
+        val dst = RectF32.ofOriginSize(0f, 0f, 177f, 15f)
 
         canvas.translate(20f, 20f)
         for (i in 0 until 4) {
-            canvas.drawImageRect(img, Rect(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
+            canvas.drawImageRect(img, RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
             canvas.translate(0f, 20f)
         }
-        canvas.drawImage(img, Rect(20f, 20f, (20f + img.width), (20f + img.height)))
+        canvas.drawImage(img, RectF32(20f, 20f, (20f + img.width), (20f + img.height)))
     }
 
     private fun makeImage(): Image {

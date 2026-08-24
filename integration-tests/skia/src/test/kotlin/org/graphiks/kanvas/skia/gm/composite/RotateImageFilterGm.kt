@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `DEF_SIMPLE_GM(rotate_imagefilter, canvas, 500, 500)`
@@ -25,7 +25,7 @@ class RotateImageFilterGm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect.fromXYWH(50f, 50f, 100f, 100f)
+        val r = RectF32.ofOriginSize(50f, 50f, 100f, 100f)
 
         val filters = listOf<ImageFilter?>(
             null,

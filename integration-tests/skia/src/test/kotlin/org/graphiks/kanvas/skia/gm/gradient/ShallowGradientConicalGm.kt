@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/shallowgradient.cpp` (conical dither).
@@ -40,6 +40,6 @@ class ShallowGradientConicalGm : SkiaGm {
                 stops = stops, tileMode = TileMode.CLAMP,
             ),
         )
-        canvas.drawRect(Rect(0f, 0f, w, h), paint)
+        canvas.drawRect(RectF32(0f, 0f, w, h), paint)
     }
 }

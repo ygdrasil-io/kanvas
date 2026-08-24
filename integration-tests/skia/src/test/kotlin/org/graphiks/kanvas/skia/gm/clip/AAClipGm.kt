@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/aaclip.cpp` (DEF_SIMPLE_GM aaclip).
@@ -21,21 +21,21 @@ class AAClipGm : SkiaGm {
     override val width = 240
     override val height = 120
 
-    private fun draw(canvas: GmCanvas, target: Rect, x: Int, y: Int) {
+    private fun draw(canvas: GmCanvas, target: RectF32, x: Int, y: Int) {
         val borderPaint = Paint(color = Color.fromRGBA(0f, 0xDD / 255f, 0f, 1f), antiAlias = true)
         val backgroundPaint = Paint(color = Color.fromRGBA(0xDD / 255f, 0f, 0f, 1f), antiAlias = true)
         val foregroundPaint = Paint(color = Color.fromRGBA(0f, 0f, 0xDD / 255f, 1f), antiAlias = true)
 
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
-        var t = Rect.fromLTRB(
+        var t = RectF32.ofLTRB(
             target.left - 2f, target.top - 2f,
             target.right + 2f, target.bottom + 2f,
         )
         canvas.drawRect(t, borderPaint)
         canvas.drawRect(target, backgroundPaint)
         canvas.clipRect(target)
-        t = Rect.fromLTRB(
+        t = RectF32.ofLTRB(
             target.left - 4f, target.top - 4f,
             target.right + 4f, target.bottom + 4f,
         )
@@ -44,13 +44,13 @@ class AAClipGm : SkiaGm {
     }
 
     private fun drawSquare(canvas: GmCanvas, x: Int, y: Int) =
-        draw(canvas, Rect.fromLTRB(0f, 0f, 10f, 10f), x, y)
+        draw(canvas, RectF32.ofLTRB(0f, 0f, 10f, 10f), x, y)
 
     private fun drawColumn(canvas: GmCanvas, x: Int, y: Int) =
-        draw(canvas, Rect.fromLTRB(0f, 0f, 1f, 10f), x, y)
+        draw(canvas, RectF32.ofLTRB(0f, 0f, 1f, 10f), x, y)
 
     private fun drawBar(canvas: GmCanvas, x: Int, y: Int) =
-        draw(canvas, Rect.fromLTRB(0f, 0f, 10f, 1f), x, y)
+        draw(canvas, RectF32.ofLTRB(0f, 0f, 10f, 1f), x, y)
 
     private fun drawRectTests(canvas: GmCanvas) {
         drawSquare(canvas, 10, 10)

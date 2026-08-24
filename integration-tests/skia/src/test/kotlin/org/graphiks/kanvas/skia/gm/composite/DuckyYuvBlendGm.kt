@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/ducky_yuv_blend.cpp`.
  *  Tests YUV blend rendering — draws coloured bars with a test
@@ -30,9 +30,9 @@ class DuckyYuvBlendGm : SkiaGm {
 
         val kNumPerRow = 4
         val kPad = 10f
-        val kDstRect = Rect(0f, 0f, 130f, 130f)
-        val bgSrcRect = Rect(0f, 0f, duckyBG.width.toFloat(), duckyBG.height.toFloat())
-        val fgSrcRect = Rect(0f, 0f, duckyJpeg.width.toFloat(), duckyJpeg.height.toFloat())
+        val kDstRect = RectF32(0f, 0f, 130f, 130f)
+        val bgSrcRect = RectF32(0f, 0f, duckyBG.width.toFloat(), duckyBG.height.toFloat())
+        val fgSrcRect = RectF32(0f, 0f, duckyJpeg.width.toFloat(), duckyJpeg.height.toFloat())
 
         val separableAndHslModes = listOf(
             BlendMode.OVERLAY, BlendMode.DARKEN, BlendMode.LIGHTEN, BlendMode.COLOR_DODGE,
@@ -50,7 +50,7 @@ class DuckyYuvBlendGm : SkiaGm {
 
         fun newRow() {
             canvas.restore()
-            canvas.translate(0f, kDstRect.height + kPad)
+            canvas.translate(0f, kDstRect.height() + kPad)
             canvas.save()
             rowCnt = 0
         }
@@ -59,7 +59,7 @@ class DuckyYuvBlendGm : SkiaGm {
             for (bm in separableAndHslModes) {
                 canvas.drawImageRect(duckyBG, bgSrcRect, kDstRect)
                 canvas.drawImageRect(fg, fgSrcRect, kDstRect, Paint(blendMode = bm))
-                canvas.translate(kDstRect.width + kPad, 0f)
+                canvas.translate(kDstRect.width() + kPad, 0f)
                 if (++rowCnt == kNumPerRow) newRow()
             }
             newRow()
@@ -82,7 +82,7 @@ class DuckyYuvBlendGm : SkiaGm {
             for (x in 0 until width step size) {
                 val on = ((x / size) + (y / size)) % 2 == 0
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
                     Paint(color = if (on) c1 else c2),
                 )
             }

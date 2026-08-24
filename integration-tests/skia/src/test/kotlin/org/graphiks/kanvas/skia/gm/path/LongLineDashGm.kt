@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class LongLineDashGm : SkiaGm {
     override val name = "longlinedash"
@@ -30,6 +30,6 @@ class LongLineDashGm : SkiaGm {
             pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f), 0f),
             antiAlias = true,
         )
-        canvas.drawRect(Rect.fromXYWH(-10000f, 100f, 20000f, 20f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(-10000f, 100f, 20000f, 20f), paint)
     }
 }

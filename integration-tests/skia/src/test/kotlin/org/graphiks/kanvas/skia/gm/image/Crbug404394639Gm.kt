@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/image.cpp::crbug_404394639`.
@@ -41,15 +41,15 @@ class Crbug404394639Gm : SkiaGm {
                 tileMode = TileMode.CLAMP,
             )
             drawRect(
-                Rect.fromXYWH(0f, 0f, sourceWidth.toFloat(), sourceHeight.toFloat()),
+                RectF32.ofOriginSize(0f, 0f, sourceWidth.toFloat(), sourceHeight.toFloat()),
                 Paint(shader = shader),
             )
         }
         val largeImage = surf.makeImageSnapshot()
         canvas.drawImageRect(
             largeImage,
-            Rect.fromXYWH(0f, 0f, largeImage.width.toFloat(), largeImage.height.toFloat()),
-            Rect.fromXYWH(0f, 0f, 500f, 500f),
+            RectF32.ofOriginSize(0f, 0f, largeImage.width.toFloat(), largeImage.height.toFloat()),
+            RectF32.ofOriginSize(0f, 0f, 500f, 500f),
         )
     }
 }

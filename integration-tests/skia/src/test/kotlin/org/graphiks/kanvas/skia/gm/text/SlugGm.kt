@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/slug.cpp::SlugGM` (1000 × 480).
@@ -32,7 +32,7 @@ class SlugGm : SkiaGm {
         val font = Font(typeface, size = 16f)
         val paint = Paint(color = Color.BLACK)
 
-        canvas.clipRect(Rect.fromLTRB(40f, 50f, (width0 - 40).toFloat(), (height0 - 50).toFloat()))
+        canvas.clipRect(RectF32.ofLTRB(40f, 50f, (width0 - 40).toFloat(), (height0 - 50).toFloat()))
         canvas.scale(1.3f, 1.3f)
         canvas.translate(0.5f, 0.5f)
 

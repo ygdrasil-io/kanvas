@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pathfill.cpp::PathInverseFillGM` (450 × 220).
@@ -26,7 +26,7 @@ class PathInvFillGm : SkiaGm {
         val path = Path { }.apply { addCircle(50f, 50f, 40f) }
         path.fillType = FillType.INVERSE_WINDING
 
-        val clipR = Rect.fromLTRB(0f, 0f, 100f, 200f)
+        val clipR = RectF32.ofLTRB(0f, 0f, 100f, 200f)
         canvas.translate(10f, 10f)
 
         for (doclip in 0..1) {
@@ -36,10 +36,10 @@ class PathInvFillGm : SkiaGm {
                 canvas.save()
                 canvas.clipRect(clipR)
 
-                val clipPtr: Rect? = if (doclip != 0) clipR else null
+                val clipPtr: RectF32? = if (doclip != 0) clipR else null
 
-                show(canvas, path, paint, clipPtr, clipR.top, clipR.center.y)
-                show(canvas, path, paint, clipPtr, clipR.center.y, clipR.bottom)
+                show(canvas, path, paint, clipPtr, clipR.top, clipR.center().y)
+                show(canvas, path, paint, clipPtr, clipR.center().y, clipR.bottom)
 
                 canvas.restore()
                 canvas.translate(110f, 0f)
@@ -51,13 +51,13 @@ class PathInvFillGm : SkiaGm {
         canvas: GmCanvas,
         path: Path,
         paint: Paint,
-        clip: Rect?,
+        clip: RectF32?,
         top: Float,
         bottom: Float,
     ) {
         canvas.save()
         if (clip != null) {
-            val r = Rect.fromLTRB(clip.left, top, clip.right, bottom)
+            val r = RectF32.ofLTRB(clip.left, top, clip.right, bottom)
             canvas.clipRect(r)
         }
         canvas.drawPath(path, paint)

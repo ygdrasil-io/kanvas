@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pathfill.cpp` — `DEF_SIMPLE_GM(path_stroke_clip_crbug1070835, ...)`.
@@ -47,6 +47,6 @@ class PathStrokeClipCrbug1070835Gm : SkiaGm {
             }, paint)
         }
 
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 25f, 25f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 25f, 25f))
     }
 }

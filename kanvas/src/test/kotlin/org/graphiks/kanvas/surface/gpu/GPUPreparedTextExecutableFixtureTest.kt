@@ -53,7 +53,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -66,13 +66,13 @@ class GPUPreparedTextExecutableFixtureTest {
         )
         val affine = Matrix3x3F32.of(1f, 0.25f, 3f, -0.125f, 1f, 5f)
         val scissor = ClipStack.DeviceRect(
-            Rect.fromLTRB(2f, 3f, 29f, 31f),
+            RectF32.ofLTRB(2f, 3f, 29f, 31f),
             antiAlias = false,
         )
         val complexClip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(
-                    Rect.fromLTRB(2f, 2f, 30f, 30f),
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
                     ClipOp.INTERSECT,
                     antiAlias = false,
                 ),

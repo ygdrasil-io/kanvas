@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/offsetimagefilter.cpp::SimpleOffsetImageFilterGM`.
@@ -26,7 +26,7 @@ class SimpleOffsetImageFilterGm : SkiaGm {
     override val height = 200
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, 40f, 40f)
+        val r = RectF32(0f, 0f, 40f, 40f)
 
         canvas.translate(40f, 40f)
 
@@ -43,7 +43,7 @@ class SimpleOffsetImageFilterGm : SkiaGm {
 
         canvas.translate(100f, 0f)
         // Col 4: offset filter with different clip
-        val clipR2 = Rect(40f, 40f, 80f, 80f)
+        val clipR2 = RectF32(40f, 40f, 80f, 80f)
         doDraw(canvas, r, ImageFilter.Offset(20f, 20f, null), clipR = clipR2)
 
         canvas.translate(100f, 0f)
@@ -57,14 +57,14 @@ class SimpleOffsetImageFilterGm : SkiaGm {
 
     private fun doDraw(
         canvas: GmCanvas,
-        r: Rect,
+        r: RectF32,
         imgf: ImageFilter?,
-        clipR: Rect? = null,
+        clipR: RectF32? = null,
     ) {
         // Draw clip outline
         if (clipR != null) {
             val green = Paint(color = Color(0xFF00FF00u), style = PaintStyle.STROKE)
-            val inset = Rect(clipR.left + 0.5f, clipR.top + 0.5f, clipR.right - 0.5f, clipR.bottom - 0.5f)
+            val inset = RectF32(clipR.left + 0.5f, clipR.top + 0.5f, clipR.right - 0.5f, clipR.bottom - 0.5f)
             canvas.drawRect(inset, green)
         }
 

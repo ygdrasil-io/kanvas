@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmapfilters.cpp::FilterGM`.
@@ -56,14 +56,14 @@ class BitmapFiltersGm : SkiaGm {
         canvas.drawString(colorTypeName, 0f, (img.height * scale * 5 / 8).toFloat(), font, Paint())
 
         canvas.translate(48f, 0f)
-        val dst = Rect.fromXYWH(0f, 0f, (img.width * scale).toFloat(), (img.height * scale).toFloat())
+        val dst = RectF32.ofOriginSize(0f, 0f, (img.width * scale).toFloat(), (img.height * scale).toFloat())
         canvas.drawImage(img, dst)
 
-        val dst2 = Rect.fromXYWH(dst.right + dst.width / 4f, 0f, dst.width, dst.height)
+        val dst2 = RectF32.ofOriginSize(dst.right + dst.width() / 4f, 0f, dst.width(), dst.height())
         val p2 = Paint()
         canvas.drawImage(img, dst2, p2)
 
         canvas.restore()
-        return (dst.width * 2f / 3f)
+        return (dst.width() * 2f / 3f)
     }
 }

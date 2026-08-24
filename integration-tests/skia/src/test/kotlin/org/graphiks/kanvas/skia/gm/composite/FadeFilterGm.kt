@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/fadefilter.cpp`.
@@ -31,6 +31,6 @@ class FadeFilterGm : SkiaGm {
         val paint = Paint(
             colorFilter = ColorFilter.Matrix(matrix),
         )
-        canvas.drawRect(Rect.fromLTRB(64f, 64f, 192f, 192f), paint)
+        canvas.drawRect(RectF32.ofLTRB(64f, 64f, 192f, 192f), paint)
     }
 }

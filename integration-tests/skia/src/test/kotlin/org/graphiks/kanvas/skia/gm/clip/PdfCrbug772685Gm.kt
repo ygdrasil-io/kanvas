@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pdf_never_embed.cpp::pdf_crbug_772685` (612 x 792).
@@ -21,11 +21,11 @@ class PdfCrbug772685Gm : SkiaGm {
     override val height = 792
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.clipRect(Rect.fromLTRB(-1f, -1f, 613f, 793f))
+        canvas.clipRect(RectF32.ofLTRB(-1f, -1f, 613f, 793f))
         canvas.translate(-571f, 0f)
         canvas.scale(0.75f, 0.75f)
-        canvas.clipRect(Rect.fromLTRB(-1f, -1f, 613f, 793f))
+        canvas.clipRect(RectF32.ofLTRB(-1f, -1f, 613f, 793f))
         canvas.translate(0f, -816f)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 1224f, 1500f), Paint())
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1224f, 1500f), Paint())
     }
 }

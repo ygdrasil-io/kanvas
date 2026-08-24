@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clip_error.cpp::ClipErrorGM`.
@@ -39,13 +39,13 @@ class ClipErrorGm : SkiaGm {
 
         canvas.save()
         canvas.translate(0f, 0f)
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 800f, 256f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 800f, 256f))
         drawTextSlot(canvas, font, paint, blurPaint, clearPaint)
         canvas.restore()
 
         canvas.save()
         canvas.translate(0f, 256f)
-        canvas.clipRect(Rect.fromLTRB(0f, 256f, 800f, 510f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 256f, 800f, 510f))
         drawTextSlot(canvas, font, paint, blurPaint, clearPaint)
         canvas.restore()
     }
@@ -58,8 +58,8 @@ class ClipErrorGm : SkiaGm {
         clearPaint: Paint,
     ) {
         canvas.save()
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 1081f, 665f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 1081f, 665f), clearPaint)
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 1081f, 665f))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1081f, 665f), clearPaint)
         canvas.drawString("hambur", 0f, 256f, font, blurPaint)
         canvas.drawString("hambur", 0f, 477f, font, paint)
         canvas.restore()

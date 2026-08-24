@@ -39,7 +39,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -284,7 +284,7 @@ class GPUPreparedVerticesLowererTest {
         assertEquals("perspective", perspective.facts["reason"])
 
         val invalidBounds = lower(meshOperation(program = registeredMeshProgram()).copy(
-            mesh = Mesh(vertices(), registeredMeshProgram(), Rect(Float.NaN, 0f, 1f, 1f)),
+            mesh = Mesh(vertices(), registeredMeshProgram(), RectF32(Float.NaN, 0f, 1f, 1f)),
         )).refused()
         assertEquals(GPUPreparedVerticesRefusalCodes.MeshBounds, invalidBounds.code)
         assertEquals("mesh-bounds", invalidBounds.facts["stage"])
@@ -301,7 +301,7 @@ class GPUPreparedVerticesLowererTest {
 
     @Test
     fun `ready draw retains conservative transformed and scissor clipped bounds with clip identity`() {
-        val clip = ClipStack.DeviceRect(Rect.fromLTRB(4f, 6f, 12f, 14f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32.ofLTRB(4f, 6f, 12f, 14f), antiAlias = false)
         val draw = lower(DisplayOp.DrawVertices(
             vertices(), Paint.fill(Color.RED), Matrix3x3F32.translation(5f, 7f), clip,
         )).ready().draw
@@ -316,11 +316,11 @@ class GPUPreparedVerticesLowererTest {
     fun `different device clips have distinct identities and an empty scissor intersection remains explicit`() {
         val first = lower(DisplayOp.DrawVertices(
             vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity,
-            ClipStack.DeviceRect(Rect.fromLTRB(10f, 10f, 20f, 20f), antiAlias = false),
+            ClipStack.DeviceRect(RectF32.ofLTRB(10f, 10f, 20f, 20f), antiAlias = false),
         )).ready().draw
         val second = lower(DisplayOp.DrawVertices(
             vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity,
-            ClipStack.DeviceRect(Rect.fromLTRB(11f, 10f, 20f, 20f), antiAlias = false),
+            ClipStack.DeviceRect(RectF32.ofLTRB(11f, 10f, 20f, 20f), antiAlias = false),
         )).ready().draw
 
         assertNotEquals(first.clipSnapshot.identity, second.clipSnapshot.identity)
@@ -333,7 +333,7 @@ class GPUPreparedVerticesLowererTest {
         val refusal = GPUPreparedVerticesLowerer.lower(
             DisplayOp.DrawVertices(
                 vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity,
-                ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 2f, 2f), antiAlias = false),
+                ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), antiAlias = false),
             ),
             7,
             target(),
@@ -351,7 +351,7 @@ class GPUPreparedVerticesLowererTest {
                 vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity,
                 ClipStack.Complex(listOf(
                     ClipStackOp.PathOp(
-                        Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+                        Path().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
                         ClipOp.INTERSECT,
                         antiAlias = true,
                         perspectiveCaptureRefusal = true,
@@ -381,11 +381,11 @@ class GPUPreparedVerticesLowererTest {
     @Test
     fun `mask and analytic clip plans refuse with clip coverage code before semantic publication`() {
         val maskClip = ClipStack.Complex(listOf(
-            ClipStackOp.PathOp(Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT),
+            ClipStackOp.PathOp(Path().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT),
         ))
         val analyticClip = ClipStack.Complex(listOf(
-            ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 2f, 2f), ClipOp.INTERSECT, antiAlias = false),
-            ClipStackOp.RectOp(Rect.fromLTRB(1f, 1f, 3f, 3f), ClipOp.INTERSECT, antiAlias = false),
+            ClipStackOp.RectOp(RectF32.ofLTRB(0f, 0f, 2f, 2f), ClipOp.INTERSECT, antiAlias = false),
+            ClipStackOp.RectOp(RectF32.ofLTRB(1f, 1f, 3f, 3f), ClipOp.INTERSECT, antiAlias = false),
         ))
         listOf(
             maskClip to "mask_clip_unsupported",
@@ -442,14 +442,14 @@ class GPUPreparedVerticesLowererTest {
             GPUPreparedVerticesRefusalCodes.Transform to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix3x3F32.of(1f,0f,0f,0f,1f,0f,.1f,0f,1f), ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.Material to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED).copy(shader = hostileShader()), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.Budget to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(1_000_002) { Point2F32(it.toFloat(), 0f) }), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
-            GPUPreparedVerticesRefusalCodes.MeshBounds to { lower(meshOperation(program = registeredMeshProgram()).copy(mesh = Mesh(vertices(), registeredMeshProgram(), Rect(Float.NaN,0f,1f,1f)))).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshBounds to { lower(meshOperation(program = registeredMeshProgram()).copy(mesh = Mesh(vertices(), registeredMeshProgram(), RectF32(Float.NaN,0f,1f,1f)))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to { lower(meshOperation(program = MeshProgram(effect("missing")))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("cpu", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramAbi to { lower(meshOperation(program = registeredMeshProgram(uniforms = UniformBlock { }))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramChild to { lower(meshOperation(program = child)).refused() },
-            GPUPreparedVerticesRefusalCodes.ClipCoverage to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.Complex(listOf(ClipStackOp.PathOp(Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT))))).refused() },
+            GPUPreparedVerticesRefusalCodes.ClipCoverage to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.Complex(listOf(ClipStackOp.PathOp(Path().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT))))).refused() },
         )
         val reserved = GPUPreparedVerticesRefusalCoverage.classifications
             .filterValues { it.disposition == GPUPreparedVerticesRefusalDisposition.Reserved }
@@ -765,12 +765,12 @@ class GPUPreparedVerticesLowererTest {
     @Test
     fun `mesh snapshots vertices and clips before resolver can mutate caller objects`() {
         val positions = mutableListOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f))
-        val clip = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 4f, 4f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), antiAlias = false)
         val operation = meshOperation(program = registeredMeshProgram()).copy(
             mesh = Mesh(
                 Vertices(VertexMode.TRIANGLES, positions),
                 registeredMeshProgram(),
-                Rect.fromLTRB(0f, 0f, 2f, 2f),
+                RectF32.ofLTRB(0f, 0f, 2f, 2f),
             ),
             clip = clip,
         )
@@ -813,7 +813,7 @@ class GPUPreparedVerticesLowererTest {
         overrideBlend: BlendMode? = null,
         program: MeshProgram? = null,
     ): DisplayOp.DrawMesh = DisplayOp.DrawMesh(
-        mesh = Mesh(vertices(), program, Rect.fromLTRB(0f, 0f, 2f, 2f)),
+        mesh = Mesh(vertices(), program, RectF32.ofLTRB(0f, 0f, 2f, 2f)),
         paint = Paint.fill(Color.RED).copy(blendMode = paintBlend),
         blendMode = overrideBlend,
         transform = Matrix3x3F32.Identity,

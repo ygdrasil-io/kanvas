@@ -11,7 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** The public operation semantic retained by one handle-free prepared vertices draw. */
 enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
@@ -84,7 +84,7 @@ class GPUPreparedVerticesDraw private constructor(
     /** Null means the draw is wholly clipped and can be culled without restoring device bounds. */
     val clippedBounds: GPUBounds?,
     val culledByClip: Boolean,
-    meshBounds: Rect?,
+    meshBounds: RectF32?,
     val operationIndex: Int,
     val provenance: String,
     val paintAlphaApplicationCount: Int,
@@ -107,7 +107,7 @@ class GPUPreparedVerticesDraw private constructor(
         get() = clipState.snapshotForPreparedText()
 
     /** Returns a fresh copy of mesh bounds when this was a MeshProgram draw. */
-    val meshBounds: Rect?
+    val meshBounds: RectF32?
         get() = meshBoundsSnapshot?.copy()
 
     companion object {
@@ -125,7 +125,7 @@ class GPUPreparedVerticesDraw private constructor(
             deviceBounds: GPUBounds,
             clippedBounds: GPUBounds?,
             culledByClip: Boolean,
-            meshBounds: Rect?,
+            meshBounds: RectF32?,
             operationIndex: Int,
             provenance: String,
             paintAlphaApplicationCount: Int,

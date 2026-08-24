@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::gradients_hue_method` (285 x 155, gray BG).
@@ -32,11 +32,11 @@ class GradientsHueMethodGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val gray = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = gray))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = gray))
         canvas.translate(5f, 5f)
 
         val pts = Point2F32(0f, 0f) to Point2F32(200f, 0f)
-        val rect = Rect.fromXYWH(0f, 0f, 200f, 20f)
+        val rect = RectF32.ofOriginSize(0f, 0f, 200f, 20f)
         val font = Font(typeface, size = 12f)
 
         val repeatedColors = listOf(Color.RED, Color.GREEN, Color.RED, Color.RED)

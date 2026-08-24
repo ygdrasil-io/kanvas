@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::sweep_tiling`.
@@ -43,7 +43,7 @@ class SweepTilingGm : SkiaGm {
             -30f to 800f,
         )
 
-        val r = Rect.fromXYWH(0f, 0f, SIZE, SIZE)
+        val r = RectF32.ofOriginSize(0f, 0f, SIZE, SIZE)
 
         for (mode in modes) {
             canvas.save()

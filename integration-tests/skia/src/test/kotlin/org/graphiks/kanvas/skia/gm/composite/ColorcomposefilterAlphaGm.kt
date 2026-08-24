@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/composecolorfilter.cpp`.
@@ -36,7 +36,7 @@ class ColorcomposefilterAlphaGm : SkiaGm {
         )
 
         val filters = modes.flatMap { mode -> colors.map { color -> ColorFilter.Blend(color, mode) } }
-        val r = Rect(0f, 0f, 50f, 50f)
+        val r = RectF32(0f, 0f, 50f, 50f)
         val spacer = 10f
 
         canvas.translate(spacer, spacer)
@@ -46,27 +46,27 @@ class ColorcomposefilterAlphaGm : SkiaGm {
 
         for (i in filters.indices) {
             canvas.save()
-            canvas.translate((i + 1) * (r.width + spacer), 0f)
+            canvas.translate((i + 1) * (r.width() + spacer), 0f)
             canvas.drawRect(r, paint.copy(colorFilter = filters[i]))
             canvas.restore()
 
             canvas.save()
-            canvas.translate(0f, (i + 1) * (r.width + spacer))
+            canvas.translate(0f, (i + 1) * (r.width() + spacer))
             canvas.drawRect(r, paint.copy(colorFilter = filters[i]))
             canvas.restore()
         }
 
-        canvas.translate(r.width + spacer, r.width + spacer)
+        canvas.translate(r.width() + spacer, r.width() + spacer)
 
         for (y in filters.indices) {
             canvas.save()
             for (x in filters.indices) {
                 val composed = ColorFilter.Compose(filters[y], filters[x])
                 canvas.drawRect(r, paint.copy(colorFilter = composed))
-                canvas.translate(r.width + spacer, 0f)
+                canvas.translate(r.width() + spacer, 0f)
             }
             canvas.restore()
-            canvas.translate(0f, r.height + spacer)
+            canvas.translate(0f, r.height() + spacer)
         }
     }
 }

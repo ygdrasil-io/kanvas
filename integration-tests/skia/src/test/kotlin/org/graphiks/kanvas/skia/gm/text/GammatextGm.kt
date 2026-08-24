@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gammatext.cpp`.
@@ -42,7 +42,7 @@ class GammatextGm : SkiaGm {
             ),
             tileMode = TileMode.CLAMP,
         )
-        canvas.drawRect(Rect(0f, 0f, 1024f, 480f), Paint(shader = grad))
+        canvas.drawRect(RectF32(0f, 0f, 1024f, 480f), Paint(shader = grad))
 
         val fg = listOf(
             Color.WHITE, Color.fromRGBA(1f, 1f, 0f),

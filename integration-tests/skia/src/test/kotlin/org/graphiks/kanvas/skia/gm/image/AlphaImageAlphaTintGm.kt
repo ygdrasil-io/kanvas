@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/alpha_image.cpp` (alpha-tint variant).
@@ -40,10 +40,10 @@ class AlphaImageAlphaTintGm : SkiaGm {
         val paint = Paint(color = tint)
 
         canvas.translate(8f, 8f)
-        canvas.drawImage(image, Rect(0f, 0f, 64f, 64f), paint)
+        canvas.drawImage(image, RectF32(0f, 0f, 64f, 64f), paint)
 
         canvas.translate(72f, 0f)
         val shaderPaint = Paint(color = tint, shader = Shader.Image(image))
-        canvas.drawRect(Rect(0f, 0f, 64f, 64f), shaderPaint)
+        canvas.drawRect(RectF32(0f, 0f, 64f, 64f), shaderPaint)
     }
 }

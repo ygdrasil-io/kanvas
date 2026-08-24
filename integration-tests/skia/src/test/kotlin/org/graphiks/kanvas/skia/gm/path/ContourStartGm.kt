@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pathcontourstart.cpp`.
@@ -46,7 +46,7 @@ class ContourStartGm : SkiaGm {
             pathEffect = PathEffect.Dash(intervals.toFloatArray(), 0f),
         )
 
-        val rect = Rect(10f, 10f, 100f, 70f)
+        val rect = RectF32(10f, 10f, 100f, 70f)
         val zeroRadii = CornerRadii(0f, 0f)
         val rectCorners = listOf(Point2F32(rect.left, rect.top), Point2F32(rect.right, rect.top), Point2F32(rect.right, rect.bottom), Point2F32(rect.left, rect.bottom))
 

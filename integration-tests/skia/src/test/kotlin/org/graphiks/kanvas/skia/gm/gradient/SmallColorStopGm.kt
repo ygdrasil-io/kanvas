@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::small_color_stop`.
@@ -29,7 +29,7 @@ class SmallColorStopGm : SkiaGm {
     override val height = 150
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rect = Rect.fromXYWH(0f, 0f, 100f, 150f)
+        val rect = RectF32.ofOriginSize(0f, 0f, 100f, 150f)
 
         canvas.drawRect(rect, Paint(color = Color.fromRGBA(1f, 1f, 0f, 1f)))
 

@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class MaddashGm : SkiaGm {
     override val name = "maddash"
@@ -26,7 +26,7 @@ class MaddashGm : SkiaGm {
     override val height = 1600
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 1600f, 1600f), Paint())
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1600f, 1600f), Paint())
 
         val intervals = floatArrayOf(2.5f, 10f)
         var p = Paint(

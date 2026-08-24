@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -35,7 +35,7 @@ class GradientMatrixGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)),
         )
         drawGradients(canvas, ::makeLinearGradient, linearPts)
@@ -48,9 +48,9 @@ class GradientMatrixGm : SkiaGm {
         makeShader: (Array<Point2F32>) -> Shader,
         ptsArray: Array<Array<Point2F32>>,
     ) {
-        val rectGrad = Rect.fromLTRB(43f, 61f, 181f, 167f)
-        val tw = rectGrad.width
-        val th = rectGrad.height
+        val rectGrad = RectF32.ofLTRB(43f, 61f, 181f, 167f)
+        val tw = rectGrad.width()
+        val th = rectGrad.height()
         val tl = rectGrad.left
         val tt = rectGrad.top
 

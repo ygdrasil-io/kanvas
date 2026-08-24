@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -46,21 +46,21 @@ class AlphaGradientsGm : SkiaGm {
             blue to Color.fromRGBA(1f, 1f, 1f, 0f),
         )
 
-        val r = Rect(0f, 0f, 300f, 30f)
+        val r = RectF32(0f, 0f, 300f, 30f)
         canvas.translate(10f, 10f)
 
         for (col in 0..1) {
             canvas.save()
             for ((c0, c1) in pairs) {
                 drawGrad(canvas, r, c0, c1)
-                canvas.translate(0f, r.height + 8f)
+                canvas.translate(0f, r.height() + 8f)
             }
             canvas.restore()
-            canvas.translate(r.width + 10f, 0f)
+            canvas.translate(r.width() + 10f, 0f)
         }
     }
 
-    private fun drawGrad(canvas: GmCanvas, r: Rect, c0: Color, c1: Color) {
+    private fun drawGrad(canvas: GmCanvas, r: RectF32, c0: Color, c1: Color) {
         val stops = listOf(
             GradientStop(0f, c0),
             GradientStop(1f, c1),

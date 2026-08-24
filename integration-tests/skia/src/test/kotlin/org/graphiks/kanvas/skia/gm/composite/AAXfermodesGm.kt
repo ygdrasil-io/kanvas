@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.TextAlign
 import org.graphiks.kanvas.skia.portableFont
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.blueByte
@@ -85,7 +85,7 @@ class AAXfermodesGm : SkiaGm {
 
     private fun drawPass(canvas: GmCanvas, pass: Pass) {
         val clipExtent = (kShapeSize * 11 / 16).toFloat()
-        val cellClip = Rect(
+        val cellClip = RectF32(
             -clipExtent, -clipExtent,
             clipExtent, clipExtent,
         )
@@ -207,7 +207,7 @@ class AAXfermodesGm : SkiaGm {
                 ),
             )
             canvas.drawRect(
-                Rect(
+                RectF32(
                     -kShapeSpacing / 2f, -kShapeSpacing / 2f,
                     kShapeSpacing / 2f + 3f * kShapeTypeSpacing, kShapeSpacing / 2f,
                 ),
@@ -220,7 +220,7 @@ class AAXfermodesGm : SkiaGm {
                 blendMode = BlendMode.DST_IN,
             )
             canvas.drawRect(
-                Rect(
+                RectF32(
                     -kShapeSpacing / 2f, -kShapeSpacing / 2f,
                     kShapeSpacing / 2f + 3f * kShapeTypeSpacing, kShapeSpacing / 2f,
                 ),
@@ -236,7 +236,7 @@ class AAXfermodesGm : SkiaGm {
             blendMode = mode,
         )
         val s = kShapeSize / 2f
-        val rect = Rect(-s, -s, s, s)
+        val rect = RectF32(-s, -s, s, s)
         when (shapeIdx) {
             kSquare_Shape -> canvas.drawRect(rect, shapePaint)
             kDiamond_Shape -> {
@@ -272,7 +272,7 @@ class AAXfermodesGm : SkiaGm {
                     antiAlias = false,
                 )
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
                     solid,
                 )
                 x += size

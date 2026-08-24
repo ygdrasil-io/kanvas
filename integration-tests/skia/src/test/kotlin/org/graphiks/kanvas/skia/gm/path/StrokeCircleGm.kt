@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -31,7 +31,7 @@ class StrokeCircleGm : SkiaGm {
 
         val strokeWidth = 0.5f
         val delta = strokeWidth * 3f / 2f
-        var r = Rect.fromXYWH(-12f, -12f, 24f, 24f)
+        var r = RectF32.ofOriginSize(-12f, -12f, 24f, 24f)
         val rand = Random(0)
 
         while (r.width > strokeWidth * 2f) {
@@ -45,7 +45,7 @@ class StrokeCircleGm : SkiaGm {
             )
             canvas.drawOval(r, paint)
             canvas.restore()
-            r = Rect.fromLTRB(
+            r = RectF32.ofLTRB(
                 r.left + delta, r.top + delta,
                 r.right - delta, r.bottom - delta,
             )

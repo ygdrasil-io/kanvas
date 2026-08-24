@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
@@ -153,7 +153,7 @@ class BitmapTest {
     fun `eraseArea fills sub-region only`() {
         val bmp = Bitmap(4, 4)
         bmp.eraseColor(Color.BLUE)
-        bmp.eraseArea(Rect(1f, 1f, 3f, 3f), Color.RED)
+        bmp.eraseArea(RectF32(1f, 1f, 3f, 3f), Color.RED)
         assertEquals(Color.RED, bmp.getPixel(1, 1))
         assertEquals(Color.RED, bmp.getPixel(2, 2))
         assertEquals(Color.BLUE, bmp.getPixel(0, 0))
@@ -165,7 +165,7 @@ class BitmapTest {
         val bmp = Bitmap(4, 4)
         bmp.eraseColor(Color.RED)
         bmp.setPixel(0, 0, Color.BLUE)
-        val subset = bmp.extractSubset(Rect(0f, 0f, 2f, 2f))
+        val subset = bmp.extractSubset(RectF32(0f, 0f, 2f, 2f))
         assertEquals(2, subset.width)
         assertEquals(2, subset.height)
         assertEquals(Color.BLUE, subset.getPixel(0, 0))

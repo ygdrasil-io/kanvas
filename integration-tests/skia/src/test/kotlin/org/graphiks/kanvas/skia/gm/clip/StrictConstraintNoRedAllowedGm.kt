@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Tests strict constraint mode where red guard pixels outside the source
@@ -28,18 +28,18 @@ class StrictConstraintNoRedAllowedGm : SkiaGm {
         canvas.drawColor(0.5f, 0.5f, 0.5f)
 
         val image = makeGuardedImage()
-        val src = Rect.fromLTRB(1f, 1f, 5f, 5f)
+        val src = RectF32.ofLTRB(1f, 1f, 5f, 5f)
 
         // Strict: clip tightly to the green interior, no red guard visible
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(8f, 8f, 48f, 48f))
-        canvas.drawImageRect(image, src, Rect.fromXYWH(8f, 8f, 48f, 48f))
+        canvas.clipRect(RectF32.ofOriginSize(8f, 8f, 48f, 48f))
+        canvas.drawImageRect(image, src, RectF32.ofOriginSize(8f, 8f, 48f, 48f))
         canvas.restore()
 
         // Second column: draw full image with clip
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(72f, 8f, 48f, 48f))
-        canvas.drawImageRect(image, Rect.fromLTRB(1f, 1f, 5f, 5f), Rect.fromXYWH(72f, 8f, 48f, 48f))
+        canvas.clipRect(RectF32.ofOriginSize(72f, 8f, 48f, 48f))
+        canvas.drawImageRect(image, RectF32.ofLTRB(1f, 1f, 5f, 5f), RectF32.ofOriginSize(72f, 8f, 48f, 48f))
         canvas.restore()
     }
 

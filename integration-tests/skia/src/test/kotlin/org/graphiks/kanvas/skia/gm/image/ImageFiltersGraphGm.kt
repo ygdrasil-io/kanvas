@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 
 /**
@@ -32,9 +32,9 @@ class ImageFiltersGraphGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
         val fImage = makeStringImage(100, 100, Color.WHITE, 20f, 70f, 96f, "e")
-        val imgRect = Rect.fromXYWH(0f, 0f, fImage.width.toFloat(), fImage.height.toFloat())
+        val imgRect = RectF32.ofOriginSize(0f, 0f, fImage.width.toFloat(), fImage.height.toFloat())
 
         // 1 - Merge(Blur, ColorFilter(Erode(Blur)))
         run {
@@ -86,7 +86,7 @@ class ImageFiltersGraphGm : SkiaGm {
                 BlendMode.SRC_IN, ImageFilter.Blur(1f, 1f, input = null), blur,
             )
             canvas.save()
-            canvas.clipRect(Rect.fromXYWH(0f, 0f, 95f, 100f))
+            canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 95f, 100f))
             canvas.drawImage(fImage, imgRect, Paint(imageFilter = blend))
             canvas.restore()
             canvas.translate(100f, 0f)
@@ -116,7 +116,7 @@ class ImageFiltersGraphGm : SkiaGm {
             val cf1 = ImageFilter.ColorFilter(ColorFilter.Blend(Color.BLUE, BlendMode.SRC_IN), input = null)
             val cf2 = ImageFilter.ColorFilter(ColorFilter.Blend(Color.GREEN, BlendMode.SRC_IN), input = cf1)
             val paint = Paint(imageFilter = cf2, color = Color.RED)
-            canvas.drawRect(Rect.fromXYWH(0f, 0f, 100f, 100f), paint)
+            canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f), paint)
             canvas.translate(100f, 0f)
         }
     }

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeintrinsics.cpp`.
@@ -63,7 +63,7 @@ class IntrinsicsCommonGm : SkiaGm {
             val shader = effect.makeShader(uniforms)
             val x = (testCase % 4) * 128f
             val y = (testCase / 4) * 128f
-            canvas.drawRect(Rect(x, y, x + 128f, y + 128f), Paint(shader = shader))
+            canvas.drawRect(RectF32(x, y, x + 128f, y + 128f), Paint(shader = shader))
         }
     }
 }

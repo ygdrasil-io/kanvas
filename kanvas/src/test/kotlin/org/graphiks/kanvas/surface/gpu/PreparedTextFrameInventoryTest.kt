@@ -26,7 +26,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Named
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -1401,7 +1401,7 @@ class PreparedTextFrameInventoryTest {
             operationIndex = 2,
             glyphs = listOf(glyph(9)),
             clip = ClipStack.DeviceRect(
-                Rect.fromLTRB(1f, 2f, 12f, 13f),
+                RectF32.ofLTRB(1f, 2f, 12f, 13f),
                 antiAlias = false,
             ),
         )

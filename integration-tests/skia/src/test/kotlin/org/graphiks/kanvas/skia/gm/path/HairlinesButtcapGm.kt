@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/closedcappedhairlines.cpp::hairlines_buttcap`.
@@ -109,14 +109,14 @@ class HairlinesButtcapGm : SkiaGm {
         val pathImg = pathSurface.makeImageSnapshot()
         canvas.drawImage(
             pathImg,
-            Rect.fromXYWH(0f, 0f, GRID_WH.toFloat(), GRID_WH.toFloat()),
+            RectF32.ofOriginSize(0f, 0f, GRID_WH.toFloat(), GRID_WH.toFloat()),
         )
 
         canvas.save()
         canvas.scale(SCALE.toFloat(), SCALE.toFloat())
         canvas.drawImage(
             pathImg,
-            Rect.fromXYWH(15f, 0f, GRID_WH.toFloat(), GRID_WH.toFloat()),
+            RectF32.ofOriginSize(15f, 0f, GRID_WH.toFloat(), GRID_WH.toFloat()),
         )
         canvas.translate(15f, 0f)
         drawHairlineGrid(canvas)

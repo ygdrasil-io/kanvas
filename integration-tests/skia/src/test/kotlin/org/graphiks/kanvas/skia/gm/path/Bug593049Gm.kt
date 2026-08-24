@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/arcto.cpp` DEF_SIMPLE_GM(bug593049, ...).
@@ -28,7 +28,7 @@ class Bug593049Gm : SkiaGm {
 
         val yOffset = 122.88f
         val radius = 61.44f
-        val oval = Rect.fromXYWH(-radius, yOffset - radius, 2f * radius, 2f * radius)
+        val oval = RectF32.ofOriginSize(-radius, yOffset - radius, 2f * radius, 2f * radius)
 
         val paint = Paint(
             style = PaintStyle.STROKE,

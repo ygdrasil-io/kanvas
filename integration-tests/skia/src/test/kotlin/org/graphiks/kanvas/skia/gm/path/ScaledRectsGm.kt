@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/scaledrects.cpp::ScaledRectsGM`.
@@ -27,12 +27,12 @@ class ScaledRectsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0.8f, 0.8f, 0.8f)
 
-        canvas.clipRect(Rect.fromXYWH(10f, 50f, 100f, 10f))
+        canvas.clipRect(RectF32.ofOriginSize(10f, 50f, 100f, 10f))
 
         canvas.save()
         canvas.concat(makeMatrix(3.0f, -0.5f, -0.5f, -3.0f))
         canvas.drawRect(
-            Rect.fromXYWH(-1000f, -1000f, 2000f, 2000f),
+            RectF32.ofOriginSize(-1000f, -1000f, 2000f, 2000f),
             Paint(color = Color.BLUE),
         )
         canvas.restore()
@@ -40,7 +40,7 @@ class ScaledRectsGm : SkiaGm {
         canvas.save()
         canvas.concat(makeMatrix(3000.0f, -500.0f, -500.0f, -3000.0f))
         canvas.drawRect(
-            Rect.fromXYWH(-1f, -1f, 2f, 2f),
+            RectF32.ofOriginSize(-1f, -1f, 2f, 2f),
             Paint(color = Color.RED, blendMode = BlendMode.PLUS),
         )
         canvas.restore()

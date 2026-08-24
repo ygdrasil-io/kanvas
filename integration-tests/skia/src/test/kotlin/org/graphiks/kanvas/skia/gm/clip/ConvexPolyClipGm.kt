@@ -17,7 +17,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -42,7 +42,7 @@ class ConvexPolyClipGm : SkiaGm {
         setupClips()
         val image = makeImg(100, 100)
         val bgPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.08f))
-        canvas.drawImageRect(image, Rect.fromXYWH(0f, 0f, 100f, 100f), Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), bgPaint)
+        canvas.drawImageRect(image, RectF32.ofOriginSize(0f, 0f, 100f, 100f), RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), bgPaint)
         val font = Font(typeface, 23f)
         val txtPaint = Paint(color = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
         val kMargin = 10f
@@ -55,7 +55,7 @@ class ConvexPolyClipGm : SkiaGm {
                     if (doLayer == 1) canvas.saveLayer() else canvas.save()
                     canvas.translate(x, y)
                     clip.setOnCanvas(canvas, ClipOp.INTERSECT, aa == 1)
-                    canvas.drawImage(image, Rect.fromXYWH(0f, 0f, 100f, 100f))
+                    canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, 100f, 100f))
                     canvas.restore()
                     x += 100 + kMargin
                 }
@@ -103,7 +103,7 @@ class ConvexPolyClipGm : SkiaGm {
                 close()
             })
         })
-        clips.add(Clip().apply { setRect(Rect.fromXYWH(8.3f, 11.6f, 78.2f, 72.6f)) })
+        clips.add(Clip().apply { setRect(RectF32.ofOriginSize(8.3f, 11.6f, 78.2f, 72.6f)) })
         val cos23 = cos(Math.toRadians(23.0)).toFloat()
         val sin23 = sin(Math.toRadians(23.0)).toFloat()
         clips.add(Clip().apply {
@@ -132,12 +132,12 @@ class ConvexPolyClipGm : SkiaGm {
                 Color.fromRGBA(0f, 0f, 0.133f), Color.WHITE, Color.fromRGBA(0.667f, 0.733f, 0.8f))
             val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
             val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
-            var rect = Rect.fromXYWH(0f, 0f, wF, hF)
+            var rect = RectF32.ofOriginSize(0f, 0f, wF, hF)
             var mat = Matrix3x3F32.Identity
             for (i in 0 until 4) {
                 drawRect(rect, Paint(shader = Shader.WithLocalMatrix(Shader.RadialGradient(pt, radius, stops, TileMode.REPEAT), mat)))
                 val inset = wF / 8f
-                rect = Rect(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+                rect = RectF32(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
                 mat = Matrix3x3F32.translation(6f * wF, 6f * hF) * Matrix3x3F32.scaling(1f / 3f, 1f / 3f) * mat
             }
         }
@@ -148,9 +148,9 @@ class ConvexPolyClipGm : SkiaGm {
         enum class Type { NONE, PATH, RECT }
         var type: Type = Type.NONE
         var clipPath: Path = Path { }
-        var clipRect: Rect = Rect.fromXYWH(0f, 0f, 0f, 0f)
+        var clipRect: RectF32 = RectF32.ofOriginSize(0f, 0f, 0f, 0f)
         fun setPath(p: Path) { type = Type.PATH; clipPath = p }
-        fun setRect(r: Rect) { type = Type.RECT; clipRect = r }
+        fun setRect(r: RectF32) { type = Type.RECT; clipRect = r }
         fun setOnCanvas(canvas: GmCanvas, op: ClipOp, aa: Boolean) {
             when (type) {
                 Type.PATH -> canvas.clipPath(clipPath, op, aa)

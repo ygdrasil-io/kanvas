@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/animatedimageblurs.cpp::AnimatedBackdropBlur`.
@@ -64,10 +64,10 @@ class AnimatedBackdropBlurGm : SkiaGm {
 
         colorWheel?.let { image ->
             val destinationHeight = image.height * 128f / image.width
-            canvas.drawImage(image, Rect.fromXYWH(16f, 0f, 128f, destinationHeight))
+            canvas.drawImage(image, RectF32.ofOriginSize(16f, 0f, 128f, destinationHeight))
         }
 
-        val crop = Rect.fromLTRB(0f, 100f, 512f, 400f)
+        val crop = RectF32.ofLTRB(0f, 100f, 512f, 400f)
         canvas.saveLayer(
             SaveLayerRec(
                 backdrop = ImageFilter.Crop(

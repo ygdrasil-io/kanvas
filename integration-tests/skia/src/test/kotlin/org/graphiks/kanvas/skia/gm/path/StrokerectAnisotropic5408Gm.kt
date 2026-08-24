@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class StrokerectAnisotropic5408Gm : SkiaGm {
     override val name = "strokerect_anisotropic_5408"
@@ -28,6 +28,6 @@ class StrokerectAnisotropic5408Gm : SkiaGm {
             strokeWidth = 6f,
         )
         canvas.scale(10f, 1f)
-        canvas.drawRect(Rect.fromXYWH(5f, 20f, 10f, 10f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(5f, 20f, 10f, 10f), paint)
     }
 }

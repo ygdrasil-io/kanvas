@@ -7,7 +7,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * A raster surface that produces a [RenderResult] from [Canvas] drawing commands.
@@ -71,12 +71,12 @@ class Surface(
      * Equivalent to Skia's `surface.makeImageSnapshot(subset)`.
      * Returns null if [subset] is empty or lies outside the surface bounds.
      */
-    fun makeImageSnapshot(subset: Rect): Image? {
+    fun makeImageSnapshot(subset: RectF32): Image? {
         val result = render()
         val sx = subset.left.toInt().coerceIn(0, result.width)
         val sy = subset.top.toInt().coerceIn(0, result.height)
-        val sw = subset.width.toInt().coerceAtMost(result.width - sx)
-        val sh = subset.height.toInt().coerceAtMost(result.height - sy)
+        val sw = subset.width().toInt().coerceAtMost(result.width - sx)
+        val sh = subset.height().toInt().coerceAtMost(result.height - sy)
         if (sw <= 0 || sh <= 0) return null
         val pixels = ByteArray(sw * sh * 4)
         for (row in 0 until sh) {
@@ -99,12 +99,12 @@ class Surface(
      * @param dstBuffer pre-allocated buffer of size (src.width * src.height * 4)
      * @return true on success, false if the region is out of bounds
      */
-    fun readPixels(src: Rect, dstBuffer: UByteArray): Boolean {
+    fun readPixels(src: RectF32, dstBuffer: UByteArray): Boolean {
         val result = render()
         val sx = src.left.toInt().coerceIn(0, width)
         val sy = src.top.toInt().coerceIn(0, height)
-        val sw = src.width.toInt().coerceAtMost(width - sx)
-        val sh = src.height.toInt().coerceAtMost(height - sy)
+        val sw = src.width().toInt().coerceAtMost(width - sx)
+        val sh = src.height().toInt().coerceAtMost(height - sy)
         if (sw <= 0 || sh <= 0) return false
         val stride = 4
         val expectedSize = sw * sh * stride

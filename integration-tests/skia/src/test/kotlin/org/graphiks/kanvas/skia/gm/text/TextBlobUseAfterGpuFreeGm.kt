@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/textblobuseaftergpufree.cpp::TextBlobUseAfterGpuFree`
@@ -31,7 +31,7 @@ class TextBlobUseAfterGpuFreeGm : SkiaGm {
         val blob = font.toTextBlob(text, 0f, 0f)
 
         // White rect over top half
-        val rect = Rect(0f, 0f, width.toFloat(), height / 2f)
+        val rect = RectF32(0f, 0f, width.toFloat(), height / 2f)
         canvas.drawRect(rect, Paint(color = Color.WHITE))
         canvas.drawTextBlob(blob, 20f, 60f, Paint())
 

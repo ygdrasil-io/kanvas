@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurimagevmask.cpp::blur_image` (500 x 500).
@@ -49,8 +49,8 @@ class BlurImageGm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 4f),
         )
 
-        canvas.drawImage(image, Rect.fromXYWH(10f, 10f, imgW.toFloat(), imgH.toFloat()), paint)
+        canvas.drawImage(image, RectF32.ofOriginSize(10f, 10f, imgW.toFloat(), imgH.toFloat()), paint)
         canvas.scale(1.01f, 1.01f)
-        canvas.drawImage(image, Rect.fromXYWH(10f + imgW + 10f, 10f, imgW.toFloat(), imgH.toFloat()), paint)
+        canvas.drawImage(image, RectF32.ofOriginSize(10f + imgW + 10f, 10f, imgW.toFloat(), imgH.toFloat()), paint)
     }
 }

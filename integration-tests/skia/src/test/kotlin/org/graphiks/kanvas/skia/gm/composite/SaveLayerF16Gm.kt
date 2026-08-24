@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/savelayer.cpp::DEF_SIMPLE_GM(savelayer_f16, canvas, 900, 300)`.
@@ -31,7 +31,7 @@ class SaveLayerF16Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val n = 15
-        val r = Rect.fromXYWH(0f, 0f, 300f, 300f)
+        val r = RectF32.ofOriginSize(0f, 0f, 300f, 300f)
 
         val stops = listOf(
             GradientStop(0f, Color.RED),
@@ -41,7 +41,7 @@ class SaveLayerF16Gm : SkiaGm {
         )
         val sweepPaint = Paint(
             shader = Shader.SweepGradient(
-                center = r.center,
+                center = r.center(),
                 stops = stops,
                 tileMode = TileMode.CLAMP,
             ),
@@ -59,7 +59,7 @@ class SaveLayerF16Gm : SkiaGm {
         repeat(n) { canvas.drawOval(r, layerPaint) }
         canvas.restore()
 
-        canvas.translate(r.width, 0f)
+        canvas.translate(r.width(), 0f)
 
         // Pass 2: saveLayer with null paint
         canvas.saveLayer(r, null)

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ZeroLenStrokesGm : SkiaGm {
     override val name = "zeroPath"
@@ -59,8 +59,8 @@ class ZeroLenStrokesGm : SkiaGm {
         for (i in 0 until 3) {
             builders[0].addCircle(i * 10f, 0f, 5f)
             builders[1].addCircle(i * 10f, 0f, 10f)
-            builders[2].addRect(Rect(i * 10f - 4f, -2f, i * 10f + 4f, 6f))
-            builders[3].addRect(Rect(i * 10f - 10f, -10f, i * 10f + 10f, 10f))
+            builders[2].addRect(RectF32(i * 10f - 4f, -2f, i * 10f + 4f, 6f))
+            builders[3].addRect(RectF32(i * 10f - 10f, -10f, i * 10f + 10f, 10f))
         }
         builders.toList()
     }

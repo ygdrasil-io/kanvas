@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/perlinnoise.cpp::PerlinNoiseLayeredGM` (500 × 500).
@@ -27,7 +27,7 @@ class PerlinNoiseLayeredGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val shader = Shader.FractalNoise(0.3f, 0.3f, 1, 4, null)
         val noisePaint = Paint(shader = shader)
-        val fullRect = Rect(0f, 0f, width.toFloat(), height.toFloat())
+        val fullRect = RectF32(0f, 0f, width.toFloat(), height.toFloat())
 
         // First layer: explicit (default) paint
         canvas.saveLayer(null, Paint())

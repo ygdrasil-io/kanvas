@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/hairlines.cpp::squarehair_diffs`.
@@ -35,7 +35,7 @@ class SquareHairDiffsGm : SkiaGm {
 
         for (alias in aliases) {
             for (w in widths) {
-                canvas.drawRect(Rect.fromLTRB(120f, 0f, 600f, 100f), Paint(color = Color.BLACK))
+                canvas.drawRect(RectF32.ofLTRB(120f, 0f, 600f, 100f), Paint(color = Color.BLACK))
 
                 for (i in 0..2) {
                     val surface = Surface(120, 25)
@@ -50,11 +50,11 @@ class SquareHairDiffsGm : SkiaGm {
                         drawSquareHairTests(this, paint)
                     }
                     val img = surface.makeImageSnapshot()
-                    canvas.drawImage(img, Rect.fromXYWH(0f, 30f * i, 120f, 25f))
+                    canvas.drawImage(img, RectF32.ofOriginSize(0f, 30f * i, 120f, 25f))
 
                     canvas.save()
                     canvas.scale(4f, 4f)
-                    canvas.drawImage(img, Rect.fromXYWH(30f, 0f, 120f, 25f), Paint(blendMode = BlendMode.PLUS))
+                    canvas.drawImage(img, RectF32.ofOriginSize(30f, 0f, 120f, 25f), Paint(blendMode = BlendMode.PLUS))
                     canvas.restore()
                 }
 

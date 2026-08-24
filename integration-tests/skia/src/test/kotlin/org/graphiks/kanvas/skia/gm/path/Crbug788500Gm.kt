@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -24,7 +24,7 @@ class Crbug788500Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)),
         )
         val path = Path {

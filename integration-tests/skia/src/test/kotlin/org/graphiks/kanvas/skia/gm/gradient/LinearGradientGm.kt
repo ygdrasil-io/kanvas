@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -59,7 +59,7 @@ class LinearGradientGm : SkiaGm {
                 stops = stops, tileMode = TileMode.CLAMP,
             ))
             canvas.drawRect(
-                Rect(0f, i * kHeight, currentWidth, (i + 1) * kHeight),
+                RectF32(0f, i * kHeight, currentWidth, (i + 1) * kHeight),
                 paint
             )
         }

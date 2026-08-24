@@ -11,7 +11,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagesource.cpp::ImageSourceGM` (500 x 150).
@@ -29,14 +29,14 @@ class ImageSourceGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
 
         val image = makeStringImage(100, 100, 0xFFFFFFFFu.toInt(), 20f, 70f, 96f, "e")
 
-        val srcRect = Rect.fromXYWH(20f, 20f, 30f, 30f)
-        val dstRect = Rect.fromXYWH(0f, 10f, 60f, 60f)
-        val clipRect = Rect.fromXYWH(0f, 0f, 100f, 100f)
-        val bounds = Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val srcRect = RectF32.ofOriginSize(20f, 20f, 30f, 30f)
+        val dstRect = RectF32.ofOriginSize(0f, 10f, 60f, 60f)
+        val clipRect = RectF32.ofOriginSize(0f, 0f, 100f, 100f)
+        val bounds = RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat())
 
         // Panel 1 - full image, nearest sampler
         canvas.save()

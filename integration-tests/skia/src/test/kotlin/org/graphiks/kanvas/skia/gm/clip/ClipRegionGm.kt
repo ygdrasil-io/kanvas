@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clipdrawdraw.cpp::clip_region` (256 × 256).
@@ -26,14 +26,14 @@ class ClipRegionGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val region = Rect.fromLTRB(10f, 10f, 100f, 100f)
+        val region = RectF32.ofLTRB(10f, 10f, 100f, 100f)
 
         canvas.save()
         canvas.clipPath(Path { }.apply { addRect(region) })
         canvas.drawColor(1f, 0f, 0f)
         canvas.restore()
 
-        val bounds = Rect.fromLTRB(30f, 30f, 80f, 80f)
+        val bounds = RectF32.ofLTRB(30f, 30f, 80f, 80f)
         canvas.saveLayer(bounds, null)
         canvas.clipPath(Path { }.apply { addRect(region) })
         canvas.drawColor(0f, 0f, 1f)

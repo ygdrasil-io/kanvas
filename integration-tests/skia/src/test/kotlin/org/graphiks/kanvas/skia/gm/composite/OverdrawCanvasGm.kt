@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -44,7 +44,7 @@ class OverdrawCanvasGm : SkiaGm {
         for ((alpha, pos) in positions) {
             val pixels = ByteArray(100 * 100) { alpha.toByte() }
             val image = Image.fromPixels(100, 100, pixels, ColorType.ALPHA_8, "tile_$alpha")
-            canvas.drawImage(image, Rect(pos.first, pos.second, pos.first + 100f, pos.second + 100f), paint)
+            canvas.drawImage(image, RectF32(pos.first, pos.second, pos.first + 100f, pos.second + 100f), paint)
         }
 
         canvas.drawString("This is some text:", 180f, 300f, Font(typeface, size = 24f), Paint())

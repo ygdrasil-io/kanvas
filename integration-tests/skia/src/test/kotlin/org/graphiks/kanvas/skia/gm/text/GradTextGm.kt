@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradtext.cpp`.
@@ -34,7 +34,7 @@ class GradTextGm : SkiaGm {
         val textSize = 26f
         val font = Font(typeface, size = textSize)
 
-        canvas.drawRect(Rect(0f, 0f, 500f, 240f), Paint())
+        canvas.drawRect(RectF32(0f, 0f, 500f, 240f), Paint())
         canvas.translate(20f, textSize)
 
         val paints = arrayOf(

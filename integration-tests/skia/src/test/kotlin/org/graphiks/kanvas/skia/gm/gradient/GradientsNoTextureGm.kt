@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -39,7 +39,7 @@ class GradientsNoTextureGm : SkiaGm {
         val p0 = Point2F32(0f, 0f)
         val p1 = Point2F32(50f, 50f)
         val tm = TileMode.CLAMP
-        val rect = Rect.fromLTRB(0f, 0f, 50f, 50f)
+        val rect = RectF32.ofLTRB(0f, 0f, 50f, 50f)
 
         fun evenlyStopped(colors: List<Color>): List<GradientStop> =
             colors.mapIndexed { i, c -> GradientStop(if (colors.size > 1) i.toFloat() / (colors.size - 1) else 0f, c) }
@@ -95,10 +95,10 @@ class GradientsNoTextureGm : SkiaGm {
                     }
                 }
                 canvas.drawRect(rect, paint.copy(shader = shader))
-                canvas.translate(0f, rect.height + 20f)
+                canvas.translate(0f, rect.height() + 20f)
             }
             canvas.restore()
-            canvas.translate(rect.width + 20f, 0f)
+            canvas.translate(rect.width() + 20f, 0f)
         }
     }
 }

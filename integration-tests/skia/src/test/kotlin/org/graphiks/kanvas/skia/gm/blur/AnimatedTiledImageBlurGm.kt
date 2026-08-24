@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -50,7 +50,7 @@ class AnimatedTiledImageBlurGm : SkiaGm {
         val image = Image.fromPixels(imgW, imgH, pixels, ColorType.RGBA_8888, "synth")
 
         val sigma = 0.3f * 250f
-        val drawRect = Rect.fromXYWH(0f, 0f, 250f, 250f)
+        val drawRect = RectF32.ofOriginSize(0f, 0f, 250f, 250f)
 
         fun drawBlurredImage(tx: Float, ty: Float, tileMode: TileMode) {
             canvas.save()

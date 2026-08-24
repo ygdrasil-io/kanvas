@@ -8,7 +8,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -40,12 +40,12 @@ class GmCanvasTest {
     fun `restore removes path clip added after save`() {
         val surface = Surface(width = 20, height = 20)
         val canvas = GmCanvas(surface.canvas(), width = 20, height = 20)
-        val clip = Path { }.apply { addRect(Rect.fromLTRB(2f, 2f, 8f, 8f)) }
+        val clip = Path { }.apply { addRect(RectF32.ofLTRB(2f, 2f, 8f, 8f)) }
 
         canvas.save()
         canvas.clipPath(clip)
         canvas.restore()
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint())
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint())
 
         val draw = surface.snapshotOps().filterIsInstance<DisplayOp.DrawRect>().single()
         assertEquals(ClipStack.WideOpen, draw.clip)
@@ -55,7 +55,7 @@ class GmCanvasTest {
     fun `clip path follows adapter transform`() {
         val surface = Surface(width = 40, height = 40)
         val canvas = GmCanvas(surface.canvas(), width = 40, height = 40)
-        val clip = Path { }.apply { addRect(Rect.fromLTRB(1f, 2f, 5f, 6f)) }
+        val clip = Path { }.apply { addRect(RectF32.ofLTRB(1f, 2f, 5f, 6f)) }
 
         canvas.translate(10f, 20f)
         canvas.clipPath(clip)
@@ -71,12 +71,12 @@ class GmCanvasTest {
         val surface = Surface(width = 32, height = 32)
         val canvas = GmCanvas(surface.canvas(), width = 32, height = 32)
 
-        canvas.clipRect(Rect.fromLTRB(2f, 4f, 12f, 20f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 24f, 24f), Paint())
+        canvas.clipRect(RectF32.ofLTRB(2f, 4f, 12f, 20f))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 24f, 24f), Paint())
 
         val draw = surface.snapshotOps().filterIsInstance<DisplayOp.DrawRect>().single()
         assertEquals(
-            ClipStack.DeviceRect(Rect.fromLTRB(2f, 4f, 12f, 20f), antiAlias = false),
+            ClipStack.DeviceRect(RectF32.ofLTRB(2f, 4f, 12f, 20f), antiAlias = false),
             draw.clip,
         )
     }
@@ -87,7 +87,7 @@ class GmCanvasTest {
 
         surface.canvas {
             rotate(45f)
-            clipRect(Rect(2f, 2f, 10f, 10f), antiAlias = true)
+            clipRect(RectF32(2f, 2f, 10f, 10f), antiAlias = true)
         }
 
         val clip = surface.snapshotOps().filterIsInstance<DisplayOp.SetClip>().single().clip

@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.gradient
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -39,14 +39,14 @@ class LinearGradientRTGm : SkiaGm {
 
         canvas.save()
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.WHITE)
         )
         canvas.translate(5f, 5f)
 
         for (i in 0..1) {
             canvas.save()
-            canvas.drawRect(Rect(0f, 0f, 256f, 64f), paint)
+            canvas.drawRect(RectF32(0f, 0f, 256f, 64f), paint)
             canvas.restore()
             canvas.translate(0f, 64f + 5f)
         }

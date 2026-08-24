@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pathopsinverse.cpp::pathops_skbug_10155` (256 × 256).
@@ -37,7 +37,7 @@ class PathOpsSkbug10155Gm : SkiaGm {
 
         val r = computeBounds(listOf(path0, path1))
         canvas.translate(30f, 30f)
-        canvas.scale(200f / r.width, 200f / r.width)
+        canvas.scale(200f / r.width(), 200f / r.width())
         canvas.translate(-r.left, -r.top)
 
         val paint = Paint(
@@ -68,7 +68,7 @@ class PathOpsSkbug10155Gm : SkiaGm {
         close()
     }
 
-    private fun computeBounds(paths: List<Path>): Rect {
+    private fun computeBounds(paths: List<Path>): RectF32 {
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
         val allPts = listOf(
@@ -79,6 +79,6 @@ class PathOpsSkbug10155Gm : SkiaGm {
             if (x < minX) minX = x; if (x > maxX) maxX = x
             if (y < minY) minY = y; if (y > maxY) maxY = y
         }
-        return Rect(minX, minY, maxX, maxY)
+        return RectF32(minX, minY, maxX, maxY)
     }
 }

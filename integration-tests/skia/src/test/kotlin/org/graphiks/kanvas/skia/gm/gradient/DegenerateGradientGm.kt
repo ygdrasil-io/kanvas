@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/gradients_degenerate.cpp`.
  *  Tests degenerate gradient rendering — draws linear and radial
@@ -66,7 +66,7 @@ class DegenerateGradientGm : SkiaGm {
         )
         for (mode in TILE_MODES) {
             paint = paint.copy(shader = factory(mode))
-            canvas.drawRect(Rect.fromXYWH(0f, 0f, TILE_SIZE.toFloat(), TILE_SIZE.toFloat()), paint)
+            canvas.drawRect(RectF32.ofOriginSize(0f, 0f, TILE_SIZE.toFloat(), TILE_SIZE.toFloat()), paint)
             canvas.translate((TILE_SIZE + TILE_GAP).toFloat(), 0f)
         }
         canvas.restore()

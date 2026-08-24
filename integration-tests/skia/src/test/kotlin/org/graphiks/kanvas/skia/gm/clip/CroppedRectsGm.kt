@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/croppedrects.cpp` CroppedRectsGM.
@@ -28,7 +28,7 @@ class CroppedRectsGm : SkiaGm {
     override val width = 500
     override val height = 500
 
-    private val srcImageClip = Rect.fromLTRB(75f, 75f, 275f, 275f)
+    private val srcImageClip = RectF32.ofLTRB(75f, 75f, 275f, 275f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = createImage()
@@ -39,44 +39,44 @@ class CroppedRectsGm : SkiaGm {
         // (1) drawPaint with clip
         canvas.save()
         canvas.clipRect(srcImageClip)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
         canvas.restore()
 
         // (2) drawImageRect with src/dst cropping
         canvas.save()
-        val drawRect = Rect.fromXYWH(350f, 100f, 100f, 300f)
+        val drawRect = RectF32.ofOriginSize(350f, 100f, 100f, 300f)
         canvas.clipRect(drawRect)
         canvas.drawImageRect(
             img,
-            Rect.fromLTRB(
-                srcImageClip.left - 0.5f * srcImageClip.width,
-                srcImageClip.top - srcImageClip.height,
-                srcImageClip.right + 0.5f * srcImageClip.width,
-                srcImageClip.bottom + srcImageClip.height,
+            RectF32.ofLTRB(
+                srcImageClip.left - 0.5f * srcImageClip.width(),
+                srcImageClip.top - srcImageClip.height(),
+                srcImageClip.right + 0.5f * srcImageClip.width(),
+                srcImageClip.bottom + srcImageClip.height(),
             ),
-            Rect.fromLTRB(
-                drawRect.left - 0.5f * drawRect.width,
-                drawRect.top - drawRect.height,
-                drawRect.right + 0.5f * drawRect.width,
-                drawRect.bottom + drawRect.height,
+            RectF32.ofLTRB(
+                drawRect.left - 0.5f * drawRect.width(),
+                drawRect.top - drawRect.height(),
+                drawRect.right + 0.5f * drawRect.width(),
+                drawRect.bottom + drawRect.height(),
             ),
         )
         canvas.restore()
 
         // (3) drawPath with stroked-line shader
         canvas.save()
-        val cy = srcImageClip.center.y
+        val cy = srcImageClip.center().y
         val path = Path {
-            moveTo(srcImageClip.left - srcImageClip.width, cy)
-            lineTo(srcImageClip.right + 3f * srcImageClip.width, cy)
+            moveTo(srcImageClip.left - srcImageClip.width(), cy)
+            lineTo(srcImageClip.right + 3f * srcImageClip.width(), cy)
         }
         val strokePaint = Paint(
             style = PaintStyle.STROKE,
-            strokeWidth = 2f * srcImageClip.height,
+            strokeWidth = 2f * srcImageClip.height(),
             shader = shader,
         )
         canvas.translate(23f, 301f)
-        canvas.scale(300f / srcImageClip.width, 100f / srcImageClip.height)
+        canvas.scale(300f / srcImageClip.width(), 100f / srcImageClip.height())
         canvas.translate(-srcImageClip.left, -srcImageClip.top)
         canvas.clipRect(srcImageClip)
         canvas.drawPath(path, strokePaint)
@@ -92,7 +92,7 @@ class CroppedRectsGm : SkiaGm {
             drawRect(srcImageClip, greenFill)
 
             val strokeWidth = 10f
-            val inset = Rect(
+            val inset = RectF32(
                 srcImageClip.left + strokeWidth / 2f,
                 srcImageClip.top + strokeWidth / 2f,
                 srcImageClip.right - strokeWidth / 2f,

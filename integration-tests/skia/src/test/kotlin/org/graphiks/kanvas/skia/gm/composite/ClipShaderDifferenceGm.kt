@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -38,7 +38,7 @@ class ClipShaderDifferenceGm : SkiaGm {
         val image = Image.decode(bytes)
         canvas.drawColor(0.533f, 0.533f, 0.533f)
 
-        val rect = Rect.fromXYWH(0f, 0f, 256f, 256f)
+        val rect = RectF32.ofOriginSize(0f, 0f, 256f, 256f)
         val sx = 64f / image.width.toFloat()
         val sy = 64f / image.height.toFloat()
         val localMatrix = Matrix3x3F32.scaling(sx, sy)
@@ -80,7 +80,7 @@ class ClipShaderDifferenceGm : SkiaGm {
             close()
         }.apply {
             val d = 64f * 1.41421356f
-            addRect(Rect.fromLTRB(128f - d, 128f - d, 128f + d, 128f + d))
+            addRect(RectF32.ofLTRB(128f - d, 128f - d, 128f + d, 128f + d))
         }
         canvas.drawPath(path, paint)
         canvas.restore()

@@ -4,6 +4,7 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -34,13 +35,13 @@ class PathTest {
 
     @Test
     fun `Path addRect`() {
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 80f))
+        val path = Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 80f))
         assertTrue(path.verbs().size >= 5) // 4 lines + close
     }
 
     @Test
     fun `Path addOval`() {
-        val path = Path().addOval(Rect.fromLTRB(0f, 0f, 100f, 80f))
+        val path = Path().addOval(RectF32.ofLTRB(0f, 0f, 100f, 80f))
         assertTrue(path.verbs().size >= 5) // 4 cubics + close
     }
 
@@ -52,13 +53,13 @@ class PathTest {
 
     @Test
     fun `Path addRRect`() {
-        val path = Path().addRRect(RRect(Rect.fromLTRB(0f, 0f, 100f, 80f), 10f))
+        val path = Path().addRRect(RRect(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
         assertTrue(path.verbs().size >= 5) // multiple lines + arcs + close
     }
 
     @Test
     fun `Path transform`() {
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        val path = Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
         val moved = path.transform(5f, 5f, 1f, 1f)
         assertTrue(moved is Path)
     }

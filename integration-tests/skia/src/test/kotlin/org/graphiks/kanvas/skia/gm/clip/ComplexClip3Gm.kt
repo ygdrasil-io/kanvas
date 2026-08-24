@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/complexclip3.cpp::ComplexClip3GM`.
@@ -80,7 +80,7 @@ class ComplexClip3SimpleGm : SkiaGm {
                         canvas.clipPath(first, antiAlias = doAAA)
                         canvas.clipPath(second, op, doAAB)
 
-                        canvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), pathPaint)
+                        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), pathPaint)
                         canvas.restore()
 
                         val str = "${if (doAAA) "A" else "B"}${if (doInvA) "I" else "N"} $opName ${if (doAAB) "A" else "B"}${if (doInvB) "I" else "N"}"
@@ -163,7 +163,7 @@ class ComplexClip3ComplexGm : SkiaGm {
                         canvas.clipPath(first, antiAlias = doAAA)
                         canvas.clipPath(second, op, doAAB)
 
-                        canvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), pathPaint)
+                        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), pathPaint)
                         canvas.restore()
 
                         val str = "${if (doAAA) "A" else "B"}${if (doInvA) "I" else "N"} $opName ${if (doAAB) "A" else "B"}${if (doInvB) "I" else "N"}"

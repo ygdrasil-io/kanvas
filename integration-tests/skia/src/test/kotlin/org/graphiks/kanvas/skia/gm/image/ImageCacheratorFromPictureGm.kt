@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ImageCacheratorFromPictureGm : SkiaGm {
     override val name = "image-cacherator-from-picture"
@@ -34,7 +34,7 @@ class ImageCacheratorFromPictureGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (fImage == null) {
-            val bounds = Rect.fromXYWH(100f, 100f, 100f, 100f)
+            val bounds = RectF32.ofOriginSize(100f, 100f, 100f, 100f)
             val recorder = PictureRecorder()
             val rc = recorder.beginRecording(bounds)
             drawSomething(rc, bounds)
@@ -58,7 +58,7 @@ class ImageCacheratorFromPictureGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawSomething(c: Canvas, bounds: Rect) {
+    private fun drawSomething(c: Canvas, bounds: RectF32) {
         val paint = Paint(
             antiAlias = true,
             color = Color.RED,
@@ -88,8 +88,8 @@ class ImageCacheratorFromPictureGm : SkiaGm {
     }
 
     private fun drawSet(canvas: GmCanvas, img: Image) {
-        canvas.drawImage(img, Rect.fromXYWH(0f, 0f, img.width.toFloat(), img.height.toFloat()))
-        canvas.drawImage(img, Rect.fromXYWH(150f, 0f, img.width.toFloat(), img.height.toFloat()))
-        canvas.drawImage(img, Rect.fromXYWH(300f, 0f, img.width.toFloat(), img.height.toFloat()))
+        canvas.drawImage(img, RectF32.ofOriginSize(0f, 0f, img.width.toFloat(), img.height.toFloat()))
+        canvas.drawImage(img, RectF32.ofOriginSize(150f, 0f, img.width.toFloat(), img.height.toFloat()))
+        canvas.drawImage(img, RectF32.ofOriginSize(300f, 0f, img.width.toFloat(), img.height.toFloat()))
     }
 }

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefilters.cpp` (fast_slow_blurimagefilter).
@@ -26,7 +26,7 @@ class FastSlowBlurImageFilterGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val image = makeImage()
-        val r = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val r = RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat())
 
         canvas.translate(10f, 10f)
         var sigma = 8f
@@ -36,17 +36,17 @@ class FastSlowBlurImageFilterGm : SkiaGm {
             canvas.save()
             for (outset in 0..1) {
                 canvas.save()
-                val clipRect = Rect(
+                val clipRect = RectF32(
                     r.left - outset, r.top - outset,
                     r.right + outset, r.bottom + outset,
                 )
                 canvas.clipRect(clipRect)
                 canvas.drawImage(image, r, paint)
                 canvas.restore()
-                canvas.translate(0f, r.height + 20f)
+                canvas.translate(0f, r.height() + 20f)
             }
             canvas.restore()
-            canvas.translate(r.width + 20f, 0f)
+            canvas.translate(r.width() + 20f, 0f)
 
             sigma *= 2f
         }
@@ -55,7 +55,7 @@ class FastSlowBlurImageFilterGm : SkiaGm {
     private fun makeImage(): Image {
         val surface = Surface(100, 100)
         surface.canvas {
-            drawRect(Rect(25f, 25f, 75f, 75f), Paint(color = Color.BLACK))
+            drawRect(RectF32(25f, 25f, 75f, 75f), Paint(color = Color.BLACK))
         }
         return surface.makeImageSnapshot()
     }

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/crop_imagefilter.cpp`.
  *  Tests [ImageFilter] crop rect — renders a checkerboard through
@@ -45,7 +45,7 @@ class CropImageFilterGm : SkiaGm {
         for (filter in filters) {
             canvas.save()
             val paint = Paint(imageFilter = filter)
-            canvas.drawImage(image, Rect(0f, 0f, cellW, cellH), paint)
+            canvas.drawImage(image, RectF32(0f, 0f, cellW, cellH), paint)
             canvas.restore()
             canvas.translate(cellW + 10f, 0f)
         }
@@ -63,10 +63,10 @@ class CropImageFilterGm : SkiaGm {
                 while (x < 48) {
                     save()
                     translate(x.toFloat(), y.toFloat())
-                    drawRect(Rect.fromXYWH(0f, 0f, 8f, 8f), darkPaint)
-                    drawRect(Rect.fromXYWH(8f, 0f, 8f, 8f), lightPaint)
-                    drawRect(Rect.fromXYWH(0f, 8f, 8f, 8f), lightPaint)
-                    drawRect(Rect.fromXYWH(8f, 8f, 8f, 8f), darkPaint)
+                    drawRect(RectF32.ofOriginSize(0f, 0f, 8f, 8f), darkPaint)
+                    drawRect(RectF32.ofOriginSize(8f, 0f, 8f, 8f), lightPaint)
+                    drawRect(RectF32.ofOriginSize(0f, 8f, 8f, 8f), lightPaint)
+                    drawRect(RectF32.ofOriginSize(8f, 8f, 8f, 8f), darkPaint)
                     restore()
                     x += 16
                 }

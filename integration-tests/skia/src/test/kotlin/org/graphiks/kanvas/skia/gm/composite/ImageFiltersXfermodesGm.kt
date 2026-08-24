@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefilters.cpp` (xfermodes variant).
  *  Tests image filters with xfer modes — draws coloured rectangles
@@ -41,12 +41,12 @@ class ImageFiltersXfermodesGm : SkiaGm {
 
     private fun doDraw(canvas: GmCanvas, mode: BlendMode, imf: ImageFilter?) {
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 220f, 220f))
-        canvas.saveLayer(Rect(0f, 0f, 220f, 220f), null)
-        canvas.drawRect(Rect(0f, 0f, 220f, 220f), Paint(color = Color.GREEN))
+        canvas.clipRect(RectF32(0f, 0f, 220f, 220f))
+        canvas.saveLayer(RectF32(0f, 0f, 220f, 220f), null)
+        canvas.drawRect(RectF32(0f, 0f, 220f, 220f), Paint(color = Color.GREEN))
 
-        val r0 = Rect(10f, 60f, 210f, 160f)
-        val r1 = Rect(60f, 10f, 160f, 210f)
+        val r0 = RectF32(10f, 60f, 210f, 160f)
+        val r1 = RectF32(60f, 10f, 160f, 210f)
 
         canvas.drawOval(r0, Paint(color = Color.RED, antiAlias = true))
 

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -165,7 +165,7 @@ class DegenerateSegmentsGm : SkiaGm {
         val caps = arrayOf(StrokeCap.BUTT to StrokeJoin.BEVEL, StrokeCap.ROUND to StrokeJoin.ROUND, StrokeCap.SQUARE to StrokeJoin.BEVEL)
 
         val rand = Random(0)
-        val rect = Rect(0f, 0f, 220f, 50f)
+        val rect = RectF32(0f, 0f, 220f, 50f)
         canvas.save()
         canvas.translate(2f, 30f)
         canvas.save()

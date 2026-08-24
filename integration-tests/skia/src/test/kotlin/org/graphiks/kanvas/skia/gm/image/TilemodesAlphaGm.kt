@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/tilemodes_alpha.cpp`.
@@ -52,7 +52,7 @@ class TilemodesAlphaGm : SkiaGm {
 
         for (y in 0 until 4) {
             for (x in 0 until 4) {
-                val rect = Rect(128f * x + 1f, 128f * y + 1f, 128f * x + 127f, 128f * y + 127f)
+                val rect = RectF32(128f * x + 1f, 128f * y + 1f, 128f * x + 127f, 128f * y + 127f)
                 val localMatrix = Matrix3x3F32.translation(rect.left, rect.top)
                 val shader = org.graphiks.kanvas.paint.Shader.WithLocalMatrix(
                     image.makeShader(tileModeX = modes[x], tileModeY = modes[y]),

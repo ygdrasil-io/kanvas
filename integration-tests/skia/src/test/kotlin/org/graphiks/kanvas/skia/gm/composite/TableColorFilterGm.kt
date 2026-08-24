@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.sqrt
 
 /**
@@ -49,11 +49,11 @@ class TableColorFilterGm : SkiaGm {
             val yOffset = 120f * 9f / 8f
 
             var x = 0f
-            canvas.drawImage(image, Rect(x, y, x + 120f, y + 120f))
+            canvas.drawImage(image, RectF32(x, y, x + 120f, y + 120f))
             for (i in 1 until filterMakers.size) {
                 x += xOffset
                 val cf = filterMakers[i]()
-                canvas.drawImage(image, Rect(x, y, x + 120f, y + 120f), Paint(colorFilter = cf))
+                canvas.drawImage(image, RectF32(x, y, x + 120f, y + 120f), Paint(colorFilter = cf))
             }
 
             for (i in filterMakers.indices) {
@@ -82,10 +82,10 @@ class TableColorFilterGm : SkiaGm {
         paint: Paint,
     ) {
         if (paint.imageFilter == null) {
-            canvas.drawImage(image, Rect(x, y, x + 120f, y + 120f))
+            canvas.drawImage(image, RectF32(x, y, x + 120f, y + 120f))
             return
         }
-        val bounds = Rect(x, y, x + 120f, y + 120f)
+        val bounds = RectF32(x, y, x + 120f, y + 120f)
         canvas.saveLayer(bounds, paint)
         canvas.drawImage(image, bounds)
         canvas.restore()
@@ -94,7 +94,7 @@ class TableColorFilterGm : SkiaGm {
     private fun makeImage0(w: Int, h: Int): Image {
         val surface = Surface(w, h)
         surface.canvas {
-            drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), Paint(shader = makeShader0(w, h)))
+            drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(shader = makeShader0(w, h)))
         }
         return surface.makeImageSnapshot()
     }
@@ -121,7 +121,7 @@ class TableColorFilterGm : SkiaGm {
         surface.canvas {
             val cx = w / 2f
             val cy = h / 2f
-            drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = Color.TRANSPARENT))
             val path = org.graphiks.kanvas.geometry.Path { }.apply { addCircle(cx, cy, cx) }
             drawPath(path, Paint(shader = makeShader1(w, h), antiAlias = true))
         }

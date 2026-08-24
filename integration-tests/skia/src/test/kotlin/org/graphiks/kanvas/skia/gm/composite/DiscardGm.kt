@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -46,13 +46,13 @@ class DiscardGm : SkiaGm {
                         0 -> drawColor(color)
                         1 -> clear(color)
                         else -> drawRect(
-                            Rect(0f, 0f, cw.toFloat(), ch.toFloat()),
+                            RectF32(0f, 0f, cw.toFloat(), ch.toFloat()),
                             Paint(shader = Shader.SolidColor(color)),
                         )
                     }
                 }
                 val img = surf.makeImageSnapshot()
-                canvas.drawImage(img, Rect(10f * x, 10f * y, 10f * x + cw, 10f * y + ch))
+                canvas.drawImage(img, RectF32(10f * x, 10f * y, 10f * x + cw, 10f * y + ch))
             }
         }
     }

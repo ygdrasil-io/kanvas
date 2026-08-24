@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -49,7 +49,7 @@ open class TrickyCubicStrokesGm(
 
             val cellLeft = ((i % K_NUM_COLS) * K_CELL_SIZE).toFloat()
             val cellTop = ((i / K_NUM_COLS) * K_CELL_SIZE).toFloat()
-            val cellRect = Rect(cellLeft, cellTop, cellLeft + K_CELL_SIZE, cellTop + K_CELL_SIZE)
+            val cellRect = RectF32(cellLeft, cellTop, cellLeft + K_CELL_SIZE, cellTop + K_CELL_SIZE)
 
             val strokeBounds = if (numPts == 4) {
                 calcTightCubicBounds(p)
@@ -62,7 +62,7 @@ open class TrickyCubicStrokesGm(
                 )
                 calcTightCubicBounds(asCubic)
             }
-            val sb = Rect(
+            val sb = RectF32(
                 strokeBounds.left - K_STROKE_WIDTH,
                 strokeBounds.top - K_STROKE_WIDTH,
                 strokeBounds.right + K_STROKE_WIDTH,
@@ -111,18 +111,18 @@ open class TrickyCubicStrokesGm(
         }
     }
 
-    private fun calcTightCubicBounds(p: Array<Pair<Float, Float>>, depth: Int = 5): Rect {
+    private fun calcTightCubicBounds(p: Array<Pair<Float, Float>>, depth: Int = 5): RectF32 {
         if (depth <= 0) {
             val xs = p.map { it.first }
             val ys = p.map { it.second }
-            return Rect(xs.min(), ys.min(), xs.max(), ys.max())
+            return RectF32(xs.min(), ys.min(), xs.max(), ys.max())
         }
         val chopped = chopCubicAtHalf(p)
         val left = arrayOf(chopped[0], chopped[1], chopped[2], chopped[3])
         val right = arrayOf(chopped[3], chopped[4], chopped[5], chopped[6])
         val a = calcTightCubicBounds(left, depth - 1)
         val b = calcTightCubicBounds(right, depth - 1)
-        return Rect(
+        return RectF32(
             min(a.left, b.left), min(a.top, b.top),
             max(a.right, b.right), max(a.bottom, b.bottom),
         )
@@ -144,7 +144,7 @@ open class TrickyCubicStrokesGm(
     private fun lerp(a: Pair<Float, Float>, b: Pair<Float, Float>, t: Float) =
         Pair((b.first - a.first) * t + a.first, (b.second - a.second) * t + a.second)
 
-    private fun makeRectToRect(src: Rect, dst: Rect, fit: ScaleToFit): Matrix3x3F32 {
+    private fun makeRectToRect(src: RectF32, dst: RectF32, fit: ScaleToFit): Matrix3x3F32 {
         val sx = dst.width / src.width
         val sy = dst.height / src.height
         val s = when (fit) {

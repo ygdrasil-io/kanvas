@@ -4,12 +4,13 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.PI
 
 /** Draw an oval inscribed in [rect] filled/stroked with [paint]. */
-fun Canvas.drawOval(rect: Rect, paint: Paint) {
+fun Canvas.drawOval(rect: RectF32, paint: Paint) {
     this.drawPath(Path().addOval(rect), paint)
 }
 
@@ -25,10 +26,10 @@ fun Canvas.drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
  * @param sweepAngle Angular sweep in degrees (positive for clockwise).
  * @param useCenter  When true, draws a pie-slice shape (radii to center).
  */
-fun Canvas.drawArc(rect: Rect, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
+fun Canvas.drawArc(rect: RectF32, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
     val path = Path()
-    val cx = rect.center.x; val cy = rect.center.y
-    val rx = rect.width / 2f; val ry = rect.height / 2f
+    val cx = rect.center().x; val cy = rect.center().y
+    val rx = rect.width() / 2f; val ry = rect.height() / 2f
     val startRad = startAngle * PI.toFloat() / 180f
     val sweepRad = sweepAngle * PI.toFloat() / 180f
     val endRad = startRad + sweepRad
@@ -51,7 +52,7 @@ fun Canvas.drawLine(x0: Float, y0: Float, x1: Float, y1: Float, paint: Paint) {
 }
 
 /** Draw a rectangle with rounded corners using corner radii (rx, ry). */
-fun Canvas.drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint) {
+fun Canvas.drawRoundRect(rect: RectF32, rx: Float, ry: Float, paint: Paint) {
     val r = CornerRadii(rx, ry)
     drawRRect(RRect(rect, r, r, r, r), paint)
 }
@@ -140,7 +141,7 @@ private fun cubicAt(p0: Point2F32, p1: Point2F32, p2: Point2F32, p3: Point2F32, 
 
 /** Draw an [image] at position (x, y) using its natural dimensions. */
 fun Canvas.drawImage(image: Image, x: Float, y: Float, paint: Paint? = null) {
-    this.drawImage(image, Rect.fromXYWH(x, y, image.width.toFloat(), image.height.toFloat()), paint)
+    this.drawImage(image, RectF32.ofOriginSize(x, y, image.width.toFloat(), image.height.toFloat()), paint)
 }
 
 /**
@@ -158,7 +159,7 @@ inline fun Canvas.withSave(block: Canvas.() -> Unit) {
  * @param bounds Optional bounds for the layer surface.
  * @param paint  Optional compositing [Paint].
  */
-inline fun Canvas.withSaveLayer(bounds: Rect? = null, paint: Paint? = null, block: Canvas.() -> Unit) {
+inline fun Canvas.withSaveLayer(bounds: RectF32? = null, paint: Paint? = null, block: Canvas.() -> Unit) {
     this.saveLayer(bounds, paint); try { block() } finally { this.restore() }
 }
 
@@ -168,7 +169,7 @@ inline fun Canvas.withSaveLayer(rec: SaveLayerRec, block: Canvas.() -> Unit) {
 }
 
 /** Push an axis-aligned rectangular clip, execute [block], then restore the previous clip. */
-inline fun Canvas.withClipRect(rect: Rect, block: Canvas.() -> Unit) {
+inline fun Canvas.withClipRect(rect: RectF32, block: Canvas.() -> Unit) {
     save(); clipRect(rect); try { block() } finally { restore() }
 }
 
@@ -190,7 +191,7 @@ inline fun Canvas.withTransform(block: Canvas.() -> Unit) {
  * Execute [block] on a temporary picture recorded within [bounds],
  * then draw the resulting picture onto this canvas.
  */
-fun Canvas.withPicture(bounds: Rect, paint: Paint? = null, block: Canvas.() -> Unit) {
+fun Canvas.withPicture(bounds: RectF32, paint: Paint? = null, block: Canvas.() -> Unit) {
     val recorder = PictureRecorder()
     val pictureCanvas = recorder.beginRecording(bounds)
     pictureCanvas.block()

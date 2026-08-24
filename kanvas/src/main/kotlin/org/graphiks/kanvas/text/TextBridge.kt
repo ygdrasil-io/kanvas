@@ -7,7 +7,7 @@ import org.graphiks.kanvas.font.glyph.A8Rasterizer
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Bridges the :font module's shaping/rasterization pipeline into Kanvas types.
@@ -114,7 +114,7 @@ object TextBridge {
         val planner = GlyphAtlasUploadPlanner()
 
         val entries = mutableListOf<Pair<GlyphStrikeKey, A8Bitmap>>()
-        val entryBaselineRects = mutableListOf<Rect>()
+        val entryBaselineRects = mutableListOf<RectF32>()
         val glyphIndexToEntry = mutableMapOf<Int, Int>()
         val totalGlyphCount = blob.glyphRuns.sumOf { it.glyphs.size }
 
@@ -142,8 +142,8 @@ object TextBridge {
         val plan = planner.plan(entries)
         if (plan !is GlyphAtlasUploadPlan.Accepted) return null
 
-        val uvs = MutableList<Rect?>(totalGlyphCount) { null }
-        val glyphRects = MutableList<Rect?>(totalGlyphCount) { null }
+        val uvs = MutableList<RectF32?>(totalGlyphCount) { null }
+        val glyphRects = MutableList<RectF32?>(totalGlyphCount) { null }
 
         for ((entryIdx, placement) in plan.placements.withIndex()) {
             val (strikeKey, _) = entries[entryIdx]
@@ -152,9 +152,9 @@ object TextBridge {
             val v = r.y.toFloat() / plan.atlasHeight
             val u2 = (r.x + r.width).toFloat() / plan.atlasWidth
             val v2 = (r.y + r.height).toFloat() / plan.atlasHeight
-            val uv = Rect.fromLTRB(u, v, u2, v2)
+            val uv = RectF32.ofLTRB(u, v, u2, v2)
             val baselineRect = entryBaselineRects[entryIdx]
-            val rect = Rect.fromLTRB(
+            val rect = RectF32.ofLTRB(
                 baselineRect.left,
                 baselineRect.top,
                 baselineRect.left + r.width.toFloat(),
@@ -169,8 +169,8 @@ object TextBridge {
             }
         }
 
-        val finalUvs = uvs.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
-        val finalRects = glyphRects.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
+        val finalUvs = uvs.map { it ?: RectF32.ofLTRB(0f, 0f, 0f, 0f) }
+        val finalRects = glyphRects.map { it ?: RectF32.ofLTRB(0f, 0f, 0f, 0f) }
 
         return GpuTextBlob(blob, plan.atlasBytes, plan.atlasWidth, plan.atlasHeight, finalUvs, glyphRects = finalRects)
     }

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/emboss.cpp`.
@@ -49,8 +49,8 @@ class EmbossGm : SkiaGm {
         ))
         canvas.translate(110f, 0f)
 
-        canvas.drawRect(Rect.fromXYWH(0f, 40f, 50f, 30f), Paint(color = Color.RED))
-        canvas.drawRect(Rect.fromXYWH(0f, 80f, 50f, 30f), Paint(color = Color.GREEN))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 40f, 50f, 30f), Paint(color = Color.RED))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 80f, 50f, 30f), Paint(color = Color.GREEN))
     }
 
     private companion object {

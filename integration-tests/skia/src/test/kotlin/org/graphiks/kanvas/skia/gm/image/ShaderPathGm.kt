@@ -15,7 +15,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.geometry.Path
 
 /** Port of Skia's `gm/shaderpath.cpp`.
@@ -37,7 +37,7 @@ class ShaderPathGm : SkiaGm {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
         val bmpPaint = Paint(antiAlias = true, color = Color.fromRGBA(1f, 1f, 1f, 0.5f))
-        canvas.drawImage(bmp, Rect(5f, 5f, 80f, 80f), bmpPaint)
+        canvas.drawImage(bmp, RectF32(5f, 5f, 80f, 80f), bmpPaint)
 
         val outlinePaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)
 
@@ -93,13 +93,13 @@ class ShaderPathGm : SkiaGm {
                 start = Point2F32(0f, 0f), end = Point2F32(w, w),
                 stops = colors0, tileMode = TileMode.CLAMP,
             ))
-            drawRect(Rect(0f, 0f, w, w), paint)
+            drawRect(RectF32(0f, 0f, w, w), paint)
 
             val paint2 = Paint(shader = Shader.LinearGradient(
                 start = Point2F32(w / 2, 0f), end = Point2F32(w / 2, w),
                 stops = colors1, tileMode = TileMode.CLAMP,
             ))
-            drawRect(Rect(0f, 0f, w, w), paint2)
+            drawRect(RectF32(0f, 0f, w, w), paint2)
         }
         return surf.makeImageSnapshot()
     }

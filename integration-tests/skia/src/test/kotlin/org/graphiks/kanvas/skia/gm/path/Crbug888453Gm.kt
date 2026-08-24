@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -32,9 +32,9 @@ class Crbug888453Gm : SkiaGm {
         val y2 = 125f
         for (r in 2..20) {
             val rf = r.toFloat()
-            canvas.drawArc(Rect(x - rf, y0 - rf, x - rf + 2f * rf, y0 - rf + 2f * rf), 0f, 360f, false, fill)
-            canvas.drawArc(Rect(x - rf, y1 - rf, x - rf + 2f * rf, y1 - rf + 2f * rf), 0f, 360f, false, hairline)
-            canvas.drawArc(Rect(x - rf, y2 - rf, x - rf + 2f * rf, y2 - rf + 2f * rf), 0f, 360f, false, stroke)
+            canvas.drawArc(RectF32(x - rf, y0 - rf, x - rf + 2f * rf, y0 - rf + 2f * rf), 0f, 360f, false, fill)
+            canvas.drawArc(RectF32(x - rf, y1 - rf, x - rf + 2f * rf, y1 - rf + 2f * rf), 0f, 360f, false, hairline)
+            canvas.drawArc(RectF32(x - rf, y2 - rf, x - rf + 2f * rf, y2 - rf + 2f * rf), 0f, 360f, false, stroke)
             x += 2f * rf + 4f
         }
     }

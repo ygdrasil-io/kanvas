@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -28,16 +28,16 @@ class GradientManyColorsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val procs = listOf(::make0, ::make1, ::make2, ::make3)
         val pts = arrayOf(Point2F32(0f, 0f), Point2F32(K_W.toFloat(), 0f))
-        val r = Rect(0f, 0f, K_W.toFloat(), 30f)
+        val r = RectF32(0f, 0f, K_W.toFloat(), 30f)
 
         canvas.translate(40f, 20f)
 
         for (i in 0..8) {
-            val x = r.width * i.toFloat() / 8f
+            val x = r.width() * i.toFloat() / 8f
             canvas.drawLine(x, 0f, x, 10000f, Paint())
         }
 
-        val drawR = Rect.fromLTRB(r.left - 20f, r.top, r.right + 20f, r.bottom)
+        val drawR = RectF32.ofLTRB(r.left - 20f, r.top, r.right + 20f, r.bottom)
         for (proc in procs) {
             val rec = proc()
             val stops = rec.colors.mapIndexed { index, color ->
@@ -50,13 +50,13 @@ class GradientManyColorsGm : SkiaGm {
             canvas.drawRect(drawR, paint)
 
             canvas.save()
-            canvas.translate(r.width / 2, r.height + 4f)
+            canvas.translate(r.width() / 2, r.height() + 4f)
             canvas.scale(-1f, 1f)
-            canvas.translate(-r.width / 2, 0f)
+            canvas.translate(-r.width() / 2, 0f)
             canvas.drawRect(drawR, paint)
             canvas.restore()
 
-            canvas.translate(0f, r.height + 2 * r.height + 8f)
+            canvas.translate(0f, r.height() + 2 * r.height() + 8f)
         }
     }
 

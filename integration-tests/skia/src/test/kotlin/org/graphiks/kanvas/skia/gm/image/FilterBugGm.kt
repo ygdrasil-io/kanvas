@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/filterbug.cpp`.
  *  Regression test — renders a surface-snapshot image shader with skew
@@ -35,7 +35,7 @@ class FilterBugGm : SkiaGm {
         val doAA = true
 
         canvas.drawRect(
-            Rect(50f, 0f, 100f, 50f),
+            RectF32(50f, 0f, 100f, 50f),
             Paint(
                 antiAlias = doAA,
                 shader = Shader.WithLocalMatrix(
@@ -46,12 +46,12 @@ class FilterBugGm : SkiaGm {
         )
 
         canvas.drawRect(
-            Rect(50f, 50f, 100f, 86f),
+            RectF32(50f, 50f, 100f, 86f),
             Paint(color = Color.WHITE, antiAlias = doAA),
         )
 
         canvas.drawRect(
-            Rect(50f, 86f, 100f, 136f),
+            RectF32(50f, 86f, 100f, 136f),
             Paint(
                 antiAlias = doAA,
                 shader = Shader.WithLocalMatrix(
@@ -68,7 +68,7 @@ class FilterBugGm : SkiaGm {
             drawColor(Color.WHITE)
             val black = Paint(color = Color.BLACK)
             for (y in firstBlackRow until lastBlackRow) {
-                drawRect(Rect(0f, y.toFloat(), 25f, (y + 1).toFloat()), black)
+                drawRect(RectF32(0f, y.toFloat(), 25f, (y + 1).toFloat()), black)
             }
         }
         return surf.makeImageSnapshot()

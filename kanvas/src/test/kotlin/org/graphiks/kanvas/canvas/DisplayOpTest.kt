@@ -3,17 +3,18 @@ package org.graphiks.kanvas.canvas
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 
 class DisplayOpTest {
-    @Test fun `DrawRect op`() { assertTrue(DisplayOp.DrawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen) is DisplayOp.DrawRect) }
+    @Test fun `DrawRect op`() { assertTrue(DisplayOp.DrawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen) is DisplayOp.DrawRect) }
     @Test
     fun `DrawPath keeps its historical four component JVM data class ABI`() {
         val operation = DisplayOp.DrawPath(
-            Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)),
+            Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f)),
             Paint.fill(Color.BLUE),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
@@ -51,7 +52,7 @@ class DisplayOpTest {
     @Test
     fun `public data class copy sanitizes internal text provenance`() {
         val expanded = DisplayOp.DrawPath.withSourceOperation(
-            path = Path().addRect(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+            path = Path().addRect(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
             paint = Paint.fill(Color.BLUE),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,

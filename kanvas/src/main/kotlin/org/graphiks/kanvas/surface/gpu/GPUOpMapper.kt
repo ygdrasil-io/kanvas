@@ -82,7 +82,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.mapAxisAligned
 import org.graphiks.kanvas.types.mapAxisAlignedRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Color
@@ -2049,7 +2049,7 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
     PointMode.POINTS -> Path().also { path ->
         val halfWidth = paint.strokeWidth * 0.5f
         for (pt in this.points) {
-            path.addRect(Rect.fromLTRB(
+            path.addRect(RectF32.ofLTRB(
                 pt.x - halfWidth,
                 pt.y - halfWidth,
                 pt.x + halfWidth,
@@ -2231,8 +2231,8 @@ private fun intersect(first: GPURect, second: GPURect): GPURect = GPURect(
 // ────────────────────────────────────────────────────────────────────────────
 
 internal data class ImageCell(
-    val src: Rect,
-    val dst: Rect,
+    val src: RectF32,
+    val dst: RectF32,
     val color: Color? = null,
     val sourceIndex: Int = 0,
 )
@@ -2265,8 +2265,8 @@ internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
 
     for (row in 0 until 3) {
         for (col in 0 until 3) {
-            val src = Rect.fromLTRB(srcL[col], srcT[row], srcL[col + 1], srcT[row + 1])
-            val dst = Rect.fromLTRB(dstL[col], dstT[row], dstL[col + 1], dstT[row + 1])
+            val src = RectF32.ofLTRB(srcL[col], srcT[row], srcL[col + 1], srcT[row + 1])
+            val dst = RectF32.ofLTRB(dstL[col], dstT[row], dstL[col + 1], dstT[row + 1])
             if (!src.isEmpty && !dst.isEmpty) {
                 cells.add(ImageCell(src = src, dst = dst, sourceIndex = row * 3 + col))
             }
@@ -2311,7 +2311,7 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
             val dstRect = if (lat.rects != null && cellIndex < lat.rects.size) {
                 lat.rects[cellIndex]
             } else {
-                Rect.fromLTRB(
+                RectF32.ofLTRB(
                     dstColumns[c],
                     dstRows[r],
                     dstColumns[c + 1],
@@ -2330,7 +2330,7 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
                 null
             }
             cells.add(ImageCell(
-                src = Rect.fromLTRB(srcLeft, srcTop, srcRight, srcBottom),
+                src = RectF32.ofLTRB(srcLeft, srcTop, srcRight, srcBottom),
                 dst = dstRect,
                 color = color,
                 sourceIndex = cellIndex,
@@ -2486,10 +2486,10 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
     if (rectOps.any { it.op != org.graphiks.kanvas.pipeline.ClipOp.INTERSECT }) return null
     val antiAlias = rectOps.firstOrNull()?.antiAlias ?: return null
     if (rectOps.any { it.antiAlias != antiAlias }) return null
-    val intersection = rectOps.fold<ClipStackOp.RectOp, Rect?>(null) { current, op ->
+    val intersection = rectOps.fold<ClipStackOp.RectOp, RectF32?>(null) { current, op ->
         val rect = op.rect
         current?.let {
-            Rect.fromLTRB(
+            RectF32.ofLTRB(
                 maxOf(it.left, rect.left),
                 maxOf(it.top, rect.top),
                 minOf(it.right, rect.right),

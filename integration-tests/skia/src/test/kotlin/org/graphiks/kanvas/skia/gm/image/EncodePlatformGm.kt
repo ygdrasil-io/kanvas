@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/encode_platform.cpp::EncodePlatformGM`.
@@ -33,9 +33,9 @@ class EncodePlatformGm : SkiaGm {
 
         var x = 0f
         for (i in 0..4) {
-            canvas.drawImage(opaqueImg, Rect(x, 0f, x + 256f, 256f))
-            canvas.drawImage(roseImg, Rect(x, 256f, x + 256f, 512f))
-            canvas.drawImage(roseImg, Rect(x, 512f, x + 256f, 768f))
+            canvas.drawImage(opaqueImg, RectF32(x, 0f, x + 256f, 256f))
+            canvas.drawImage(roseImg, RectF32(x, 256f, x + 256f, 512f))
+            canvas.drawImage(roseImg, RectF32(x, 512f, x + 256f, 768f))
             x += 256f
         }
     }

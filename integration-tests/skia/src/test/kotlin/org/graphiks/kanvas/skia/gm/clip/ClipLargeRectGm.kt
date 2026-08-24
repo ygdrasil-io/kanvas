@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/scaledrects.cpp::cliplargerect` (DEF_SIMPLE_GM,
@@ -30,7 +30,7 @@ class ClipLargeRectGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 120f, 256f))
+        canvas.clipRect(RectF32(0f, 0f, 120f, 256f))
         canvas.save()
         canvas.translate(1e24f, 0f)
         canvas.drawColor(0f, 1f, 0f)

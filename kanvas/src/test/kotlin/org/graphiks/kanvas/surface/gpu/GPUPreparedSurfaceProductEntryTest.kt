@@ -35,7 +35,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedSurfaceProductEntryTest {
@@ -58,8 +58,8 @@ class GPUPreparedSurfaceProductEntryTest {
 
         val operation = DisplayOp.DrawImage(
             image = image,
-            src = Rect.fromLTRB(0f, 0f, 1f, 1f),
-            dst = Rect.fromLTRB(0f, 0f, 4f, 4f),
+            src = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            dst = RectF32.ofLTRB(0f, 0f, 4f, 4f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -221,7 +221,7 @@ class GPUPreparedSurfaceProductEntryTest {
             { renderPrepared(execution) },
             {
                 GPUPreparedSurfaceProductEntry.render(
-                    operations = listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 1f, 1f))),
+                    operations = listOf(DisplayOp.FlushAndSnapshot(RectF32.ofLTRB(0f, 0f, 1f, 1f))),
                     width = 1,
                     height = 1,
                     format = PixelFormat.RGBA8,
@@ -334,7 +334,7 @@ class GPUPreparedSurfaceProductEntryTest {
     )
 
     private companion object {
-        val RECT = Rect.fromLTRB(0f, 0f, 1f, 1f)
+        val RECT = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val EVIDENCE = GPUPreparedSurfaceExecutionEvidence(
             targetCreations = 1,
             targetCloses = 0,

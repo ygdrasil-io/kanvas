@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurrect.cpp`.
@@ -30,7 +30,7 @@ class BlurRectGm : SkiaGm {
     override val height = 820
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rect = Rect(0f, 0f, 100f, 50f)
+        val rect = RectF32(0f, 0f, 100f, 50f)
         val scales = floatArrayOf(1f, 0.6f)
 
         canvas.translate(STROKE_WIDTH * 1.5f, STROKE_WIDTH * 1.5f)
@@ -51,26 +51,26 @@ class BlurRectGm : SkiaGm {
                 canvas.save()
                 canvas.scale(scale, scale)
                 drawProcs(canvas, rect, paint, doClip = false)
-                canvas.translate(rect.width * 4f / 3f, 0f)
+                canvas.translate(rect.width() * 4f / 3f, 0f)
                 drawProcs(canvas, rect, radialPaint, doClip = false)
-                canvas.translate(rect.width * 4f / 3f, 0f)
+                canvas.translate(rect.width() * 4f / 3f, 0f)
                 drawProcs(canvas, rect, paint, doClip = true)
-                canvas.translate(rect.width * 4f / 3f, 0f)
+                canvas.translate(rect.width() * 4f / 3f, 0f)
                 drawProcs(canvas, rect, radialPaint, doClip = true)
                 canvas.restore()
 
-                canvas.translate(0f, PROC_COUNT * rect.height * 4f / 3f * scale)
+                canvas.translate(0f, PROC_COUNT * rect.height() * 4f / 3f * scale)
             }
             canvas.restore()
-            canvas.translate(4f * rect.width * 4f / 3f * scale, 0f)
+            canvas.translate(4f * rect.width() * 4f / 3f * scale, 0f)
         }
     }
 
-    private fun drawProcs(canvas: GmCanvas, rect: Rect, paint: Paint, doClip: Boolean) {
+    private fun drawProcs(canvas: GmCanvas, rect: RectF32, paint: Paint, doClip: Boolean) {
         canvas.save()
         for (proc in 0 until 3) {
             if (doClip) {
-                val clipRect = Rect.fromLTRB(
+                val clipRect = RectF32.ofLTRB(
                     rect.left + STROKE_WIDTH / 2f,
                     rect.top + STROKE_WIDTH / 2f,
                     rect.right - STROKE_WIDTH / 2f,
@@ -87,24 +87,24 @@ class BlurRectGm : SkiaGm {
             if (doClip) {
                 canvas.restore()
             }
-            canvas.translate(0f, rect.height * 4f / 3f)
+            canvas.translate(0f, rect.height() * 4f / 3f)
         }
         canvas.restore()
     }
 
-    private fun drawDonutSkewed(canvas: GmCanvas, rect: Rect, paint: Paint) {
+    private fun drawDonutSkewed(canvas: GmCanvas, rect: RectF32, paint: Paint) {
         val donut = makeDonut(rect)
-        val cx = rect.center.x
-        val cy = rect.center.y
+        val cx = rect.center().x
+        val cy = rect.center().y
         val skewed = donut.transform(
             Matrix3x3F32.translation(cx, cy) * Matrix3x3F32.skewing(0.35f, 0f) * Matrix3x3F32.translation(-cx, -cy),
         )
         canvas.drawPath(skewed, paint)
     }
 
-    private fun makeDonut(rect: Rect): Path {
+    private fun makeDonut(rect: RectF32): Path {
         val outer = rect
-        val inner = Rect.fromLTRB(
+        val inner = RectF32.ofLTRB(
             rect.left + STROKE_WIDTH,
             rect.top + STROKE_WIDTH,
             rect.right - STROKE_WIDTH,
@@ -116,12 +116,12 @@ class BlurRectGm : SkiaGm {
         }
     }
 
-    private fun makeRadial(rect: Rect): Shader.RadialGradient {
+    private fun makeRadial(rect: RectF32): Shader.RadialGradient {
         val colors = listOf(Color.WHITE, Color.TRANSPARENT, Color.BLACK)
         val positions = floatArrayOf(0f, 0.65f, 1f)
         return Shader.RadialGradient(
-            center = rect.center,
-            radius = rect.width * 0.5f,
+            center = rect.center(),
+            radius = rect.width() * 0.5f,
             stops = colors.indices.map { i ->
                 GradientStop(positions[i], colors[i])
             },

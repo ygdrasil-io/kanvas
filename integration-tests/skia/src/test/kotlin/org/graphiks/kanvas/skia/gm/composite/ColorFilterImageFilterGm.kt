@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/colorfilterimagefilter.cpp.
@@ -25,7 +25,7 @@ class ColorFilterImageFilterGm : SkiaGm {
     override val height = 120
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, FILTER_WIDTH, FILTER_HEIGHT)
+        val r = RectF32(0f, 0f, FILTER_WIDTH, FILTER_HEIGHT)
         val redPaint = Paint(color = Color.RED)
 
         canvas.save()
@@ -91,9 +91,9 @@ class ColorFilterImageFilterGm : SkiaGm {
         }
     }
 
-    private fun drawClippedRect(canvas: GmCanvas, r: Rect, paint: Paint, outset: Float) {
+    private fun drawClippedRect(canvas: GmCanvas, r: RectF32, paint: Paint, outset: Float) {
         canvas.save()
-        val clip = Rect(r.left - outset, r.top - outset, r.right + outset, r.bottom + outset)
+        val clip = RectF32(r.left - outset, r.top - outset, r.right + outset, r.bottom + outset)
         canvas.clipRect(clip)
         canvas.drawRect(r, paint)
         canvas.restore()

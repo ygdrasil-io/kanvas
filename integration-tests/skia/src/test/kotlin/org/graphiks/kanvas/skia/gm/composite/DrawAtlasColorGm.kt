@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/drawatlascolor.cpp`.
  *  Tests draw-atlas colour — renders sprite atlases with various blend
@@ -30,13 +30,13 @@ class DrawAtlasColorGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val target = Rect.fromXYWH(0f, 0f, kAtlasSize.toFloat(), kAtlasSize.toFloat())
+        val target = RectF32.ofOriginSize(0f, 0f, kAtlasSize.toFloat(), kAtlasSize.toFloat())
         val atlas = makeAtlas(kAtlasSize)
 
         val numModes = gModes.size
         val numColors = gColors.size
         val transforms = List(numColors) { i ->
-            Matrix3x3F32.translation(kPad.toFloat(), i * (target.width + kPad))
+            Matrix3x3F32.translation(kPad.toFloat(), i * (target.width() + kPad))
         }
         val texRects = List(numColors) { target }
         val quadColors = gColors.toList()
@@ -46,14 +46,14 @@ class DrawAtlasColorGm : SkiaGm {
 
         for (i in 0 until numModes) {
             val label = gModes[i].name
-            canvas.drawString(label, i * (target.width + kPad) + kPad, kTextPad.toFloat(), font, paint)
+            canvas.drawString(label, i * (target.width() + kPad) + kPad, kTextPad.toFloat(), font, paint)
         }
 
         for (i in 0 until numModes) {
             canvas.save()
-            canvas.translate(i * (target.height + kPad), (kTextPad + kPad).toFloat())
+            canvas.translate(i * (target.height() + kPad), (kTextPad + kPad).toFloat())
             canvas.drawAtlas(atlas, transforms, texRects, quadColors, gModes[i], null)
-            canvas.translate(0f, numColors * (target.height + kPad))
+            canvas.translate(0f, numColors * (target.height() + kPad))
             canvas.drawAtlas(atlas, transforms, texRects, quadColors, gModes[i], paint)
             canvas.restore()
         }

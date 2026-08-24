@@ -15,7 +15,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bigtileimagefilter.cpp` (tile-image-filter variant).
  *  Tests tiled image filter rendering — renders a gradient image with
@@ -46,13 +46,13 @@ class TileImageFilterGm : SkiaGm {
 
         for (i in 0 until 4) {
             val image: Image = if ((i and 0x01) != 0) checkerboard else stringImage
-            val srcRect = Rect(
+            val srcRect = RectF32(
                 (image.width / 4).toFloat(),
                 (image.height / 4).toFloat(),
                 (image.width / 4 + image.width / (i + 1)).toFloat(),
                 (image.height / 4 + image.height / (i + 1)).toFloat(),
             )
-            val dstRect = Rect(
+            val dstRect = RectF32(
                 (i * 8).toFloat(),
                 (i * 4).toFloat(),
                 (i * 8 + image.width - i * 12).toFloat(),
@@ -62,12 +62,12 @@ class TileImageFilterGm : SkiaGm {
             val tileFilter = ImageFilter.Tile(srcRect, dstRect, null)
             canvas.save()
             canvas.translate(x, y)
-            canvas.saveLayer(Rect(x, y, x + image.width, y + image.height), Paint(imageFilter = tileFilter))
-            canvas.drawImage(image, Rect(x, y, x + image.width.toFloat(), y + image.height.toFloat()))
+            canvas.saveLayer(RectF32(x, y, x + image.width, y + image.height), Paint(imageFilter = tileFilter))
+            canvas.drawImage(image, RectF32(x, y, x + image.width.toFloat(), y + image.height.toFloat()))
             canvas.restore()
 
-            canvas.drawRect(Rect(x + srcRect.left, y + srcRect.top, x + srcRect.right, y + srcRect.bottom), red)
-            canvas.drawRect(Rect(x + dstRect.left, y + dstRect.top, x + dstRect.right, y + dstRect.bottom), blue)
+            canvas.drawRect(RectF32(x + srcRect.left, y + srcRect.top, x + srcRect.right, y + srcRect.bottom), red)
+            canvas.drawRect(RectF32(x + dstRect.left, y + dstRect.top, x + dstRect.right, y + dstRect.bottom), blue)
             canvas.restore()
 
             x += image.width + MARGIN
@@ -78,24 +78,24 @@ class TileImageFilterGm : SkiaGm {
         }
 
         run {
-            val srcRect = Rect(0f, 0f, stringImage.width.toFloat(), stringImage.height.toFloat())
-            val dstRect = Rect(0f, 0f, (stringImage.width * 2).toFloat(), (stringImage.height * 2).toFloat())
+            val srcRect = RectF32(0f, 0f, stringImage.width.toFloat(), stringImage.height.toFloat())
+            val dstRect = RectF32(0f, 0f, (stringImage.width * 2).toFloat(), (stringImage.height * 2).toFloat())
             val tile = ImageFilter.Tile(srcRect, dstRect, null)
 
             canvas.save()
             canvas.translate(x, y)
-            canvas.clipRect(Rect(x, y, x + dstRect.width, y + dstRect.height))
-            canvas.saveLayer(Rect(x, y, x + dstRect.width, y + dstRect.height), Paint(imageFilter = tile))
-            canvas.drawImage(stringImage, Rect(x, y, x + stringImage.width.toFloat(), y + stringImage.height.toFloat()))
+            canvas.clipRect(RectF32(x, y, x + dstRect.width(), y + dstRect.height()))
+            canvas.saveLayer(RectF32(x, y, x + dstRect.width(), y + dstRect.height()), Paint(imageFilter = tile))
+            canvas.drawImage(stringImage, RectF32(x, y, x + stringImage.width.toFloat(), y + stringImage.height.toFloat()))
             canvas.restore()
-            canvas.drawRect(Rect(x + srcRect.left, y + srcRect.top, x + srcRect.right, y + srcRect.bottom), red)
-            canvas.drawRect(Rect(x + dstRect.left, y + dstRect.top, x + dstRect.right, y + dstRect.bottom), blue)
+            canvas.drawRect(RectF32(x + srcRect.left, y + srcRect.top, x + srcRect.right, y + srcRect.bottom), red)
+            canvas.drawRect(RectF32(x + dstRect.left, y + dstRect.top, x + dstRect.right, y + dstRect.bottom), blue)
             canvas.restore()
         }
 
         run {
-            val srcRect = Rect(0f, 0f, 50f, 50f)
-            val dstRect = Rect(0f, 0f, 100f, 100f)
+            val srcRect = RectF32(0f, 0f, 50f, 50f)
+            val dstRect = RectF32(0f, 0f, 100f, 100f)
 
             canvas.save()
             canvas.translate(0f, 100f)
@@ -103,7 +103,7 @@ class TileImageFilterGm : SkiaGm {
             val coloured = ImageFilter.ColorFilter(greenCF, null)
             val tileFilter = ImageFilter.Tile(srcRect, dstRect, coloured)
             val tilePaint = Paint(color = Color.fromRGBA(1f, 0f, 0f, 1f), imageFilter = tileFilter)
-            canvas.clipRect(Rect(0f, 0f, dstRect.width, dstRect.height))
+            canvas.clipRect(RectF32(0f, 0f, dstRect.width(), dstRect.height()))
             canvas.saveLayer(dstRect, tilePaint)
             canvas.restore()
             canvas.restore()
@@ -147,7 +147,7 @@ class TileImageFilterGm : SkiaGm {
                 var xx = (yy / size) % 2 * size
                 while (xx < w) {
                     drawRect(
-                        Rect(xx.toFloat(), yy.toFloat(), (xx + size).toFloat(), (yy + size).toFloat()),
+                        RectF32(xx.toFloat(), yy.toFloat(), (xx + size).toFloat(), (yy + size).toFloat()),
                         paint,
                     )
                     xx += 2 * size

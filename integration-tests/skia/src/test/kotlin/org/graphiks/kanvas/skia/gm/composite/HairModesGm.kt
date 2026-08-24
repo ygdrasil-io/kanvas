@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
@@ -68,7 +68,7 @@ class HairModesGm : SkiaGm {
 
     private fun drawCell(canvas: GmCanvas, mode: BlendMode, a0: Int, a1: Int) {
         drawCheckerboard(canvas)
-        val r = Rect(cellW / 10f, cellH / 10f, cellW - cellW / 10f, cellH - cellH / 10f)
+        val r = RectF32(cellW / 10f, cellH / 10f, cellW - cellW / 10f, cellH - cellH / 10f)
         val ovalPaint = Paint(color = colorWithAlpha(Color.BLUE, a0), antiAlias = true)
         canvas.drawOval(r, ovalPaint)
 
@@ -95,7 +95,7 @@ class HairModesGm : SkiaGm {
                 val cy = (y / cellSize).toInt()
                 val color = if (((cx + cy) and 1) == 0) white else gray
                 canvas.drawRect(
-                    Rect(x, y, (x + cellSize).coerceAtMost(cellW), (y + cellSize).coerceAtMost(cellH)),
+                    RectF32(x, y, (x + cellSize).coerceAtMost(cellW), (y + cellSize).coerceAtMost(cellH)),
                     Paint(color = intToColor(color)),
                 )
                 x += cellSize

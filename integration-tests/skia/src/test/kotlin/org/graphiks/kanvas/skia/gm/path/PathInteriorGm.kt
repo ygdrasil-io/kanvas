@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -33,8 +33,8 @@ class PathInteriorGm : SkiaGm {
         canvas.drawColor(0xDD.toFloat() / 255f, 0xDD.toFloat() / 255f, 0xDD.toFloat() / 255f)
         canvas.translate(8.5f, 8.5f)
 
-        val rect = Rect(0f, 0f, 80f, 80f)
-        val rad = CornerRadii(rect.width / 8f, rect.height / 8f)
+        val rect = RectF32(0f, 0f, 80f, 80f)
+        val rad = CornerRadii(rect.width() / 8f, rect.height() / 8f)
 
         var i = 0
         for (insetFirst in 0..1) {
@@ -61,8 +61,8 @@ class PathInteriorGm : SkiaGm {
                             builder.addRect(r)
                         }
 
-                        val dx = (i / 8) * rect.width * 6f / 5f
-                        val dy = (i % 8) * rect.height * 6f / 5f
+                        val dx = (i / 8) * rect.width() * 6f / 5f
+                        val dy = (i % 8) * rect.height() * 6f / 5f
                         i++
                         show(canvas, builder.transform(dx, dy, 1f, 1f))
                     }
@@ -85,9 +85,9 @@ class PathInteriorGm : SkiaGm {
         c.drawPath(path, strokePaint)
     }
 
-    private fun inset(r: Rect): Rect {
-        val ix = r.width / 8f
-        val iy = r.height / 8f
-        return Rect(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy)
+    private fun inset(r: RectF32): RectF32 {
+        val ix = r.width() / 8f
+        val iy = r.height() / 8f
+        return RectF32(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy)
     }
 }

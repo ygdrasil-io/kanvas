@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Manual (low-similarity) variant of FastConstraintRedIsAllowedGm. */
 class FastConstraintRedIsAllowedManualGm : SkiaGm {
@@ -21,31 +21,31 @@ class FastConstraintRedIsAllowedManualGm : SkiaGm {
         canvas.drawColor(0.5f, 0.5f, 0.5f)
 
         val image = makeGuardedImage()
-        val src = Rect.fromLTRB(1f, 1f, 5f, 5f)
+        val src = RectF32.ofLTRB(1f, 1f, 5f, 5f)
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(8f, 8f, 32f, 32f))
-        canvas.drawImageRect(image, src, Rect.fromXYWH(8f, 8f, 32f, 32f))
+        canvas.clipRect(RectF32.ofOriginSize(8f, 8f, 32f, 32f))
+        canvas.drawImageRect(image, src, RectF32.ofOriginSize(8f, 8f, 32f, 32f))
         canvas.restore()
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(56f, 8f, 32f, 32f))
-        canvas.drawImageRect(image, src, Rect.fromXYWH(56f, 8f, 32f, 32f))
+        canvas.clipRect(RectF32.ofOriginSize(56f, 8f, 32f, 32f))
+        canvas.drawImageRect(image, src, RectF32.ofOriginSize(56f, 8f, 32f, 32f))
         canvas.restore()
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(104f, 8f, 32f, 32f))
-        canvas.drawImageRect(image, Rect.fromLTRB(0f, 0f, 6f, 6f), Rect.fromXYWH(104f, 8f, 32f, 32f))
+        canvas.clipRect(RectF32.ofOriginSize(104f, 8f, 32f, 32f))
+        canvas.drawImageRect(image, RectF32.ofLTRB(0f, 0f, 6f, 6f), RectF32.ofOriginSize(104f, 8f, 32f, 32f))
         canvas.restore()
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(152f, 8f, 32f, 32f))
-        canvas.drawImageRect(image, Rect.fromLTRB(2f, 2f, 4f, 4f), Rect.fromXYWH(152f, 8f, 32f, 32f))
+        canvas.clipRect(RectF32.ofOriginSize(152f, 8f, 32f, 32f))
+        canvas.drawImageRect(image, RectF32.ofLTRB(2f, 2f, 4f, 4f), RectF32.ofOriginSize(152f, 8f, 32f, 32f))
         canvas.restore()
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(200f, 8f, 32f, 32f))
-        canvas.drawImageRect(image, Rect.fromLTRB(1f, 1f, 5f, 5f), Rect.fromXYWH(200f, 8f, 32f, 32f))
+        canvas.clipRect(RectF32.ofOriginSize(200f, 8f, 32f, 32f))
+        canvas.drawImageRect(image, RectF32.ofLTRB(1f, 1f, 5f, 5f), RectF32.ofOriginSize(200f, 8f, 32f, 32f))
         canvas.restore()
     }
 

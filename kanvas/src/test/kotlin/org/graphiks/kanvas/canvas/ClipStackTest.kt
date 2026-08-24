@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.canvas
 
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -9,9 +9,9 @@ import kotlin.test.assertIs
 
 class ClipStackTest {
     @Test fun `WideOpen is default`() { assertTrue(ClipStack.WideOpen is ClipStack) }
-    @Test fun `DeviceRect clip`() { assertTrue(ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 100f, 100f)) is ClipStack.DeviceRect) }
+    @Test fun `DeviceRect clip`() { assertTrue(ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 100f, 100f)) is ClipStack.DeviceRect) }
     @Test fun `Complex clip`() {
-        val rectOp: ClipStackOp = ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 50f, 50f), ClipOp.INTERSECT)
+        val rectOp: ClipStackOp = ClipStackOp.RectOp(RectF32.ofLTRB(0f, 0f, 50f, 50f), ClipOp.INTERSECT)
         val clip = ClipStack.Complex(listOf(rectOp))
         assertTrue(clip is ClipStack.Complex)
     }
@@ -20,34 +20,34 @@ class ClipStackTest {
     fun `intersection retains complex difference operations instead of collapsing bounds`() {
         val outer = ClipStack.Complex(
             listOf(
-                ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 80f, 80f), ClipOp.INTERSECT, antiAlias = true),
-                ClipStackOp.RectOp(Rect.fromLTRB(20f, 20f, 40f, 40f), ClipOp.DIFFERENCE, antiAlias = false),
+                ClipStackOp.RectOp(RectF32.ofLTRB(0f, 0f, 80f, 80f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(RectF32.ofLTRB(20f, 20f, 40f, 40f), ClipOp.DIFFERENCE, antiAlias = false),
             ),
         )
 
-        val combined = outer.intersectWith(ClipStack.DeviceRect(Rect.fromLTRB(10f, 10f, 60f, 60f), antiAlias = true))
+        val combined = outer.intersectWith(ClipStack.DeviceRect(RectF32.ofLTRB(10f, 10f, 60f, 60f), antiAlias = true))
 
         assertEquals(
-            outer.ops + ClipStackOp.RectOp(Rect.fromLTRB(10f, 10f, 60f, 60f), ClipOp.INTERSECT, antiAlias = true),
+            outer.ops + ClipStackOp.RectOp(RectF32.ofLTRB(10f, 10f, 60f, 60f), ClipOp.INTERSECT, antiAlias = true),
             assertIs<ClipStack.Complex>(combined).ops,
         )
     }
 
     @Test
     fun `intersection compacts overlapping device rectangles with matching AA`() {
-        val combined = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 50f, 50f), antiAlias = false)
-            .intersectWith(ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 80f, 80f), antiAlias = false))
+        val combined = ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 50f, 50f), antiAlias = false)
+            .intersectWith(ClipStack.DeviceRect(RectF32.ofLTRB(20f, 20f, 80f, 80f), antiAlias = false))
 
         assertEquals(
-            ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 50f, 50f), antiAlias = false),
+            ClipStack.DeviceRect(RectF32.ofLTRB(20f, 20f, 50f, 50f), antiAlias = false),
             combined,
         )
     }
 
     @Test
     fun `intersection keeps mixed AA device rectangles as ordered operations`() {
-        val outer = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 50f, 50f), antiAlias = true)
-        val inner = ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 80f, 80f), antiAlias = false)
+        val outer = ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 50f, 50f), antiAlias = true)
+        val inner = ClipStack.DeviceRect(RectF32.ofLTRB(20f, 20f, 80f, 80f), antiAlias = false)
 
         val combined = outer.intersectWith(inner)
 

@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -31,7 +31,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
     override val height = 404
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, 128f, 128f)
+        val r = RectF32(0f, 0f, 128f, 128f)
 
         val pos = listOf(
             Point2F32(r.left, r.top),
@@ -70,7 +70,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
 
         val cf: ColorFilter = ColorFilter.Luma
 
-        val size = r.width
+        val size = r.width()
 
         drawVertices(canvas, 0f, verts, cf, useCF = false, useShader = false)
         drawVertices(canvas, size + 10f, verts, cf, useCF = true, useShader = false)
@@ -101,7 +101,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
     }
 
     private fun drawAtlas(
-        canvas: GmCanvas, x: Float, atlas: Image, tex: Rect, cf: ColorFilter,
+        canvas: GmCanvas, x: Float, atlas: Image, tex: RectF32, cf: ColorFilter,
         useCF: Boolean,
     ) {
         canvas.save()

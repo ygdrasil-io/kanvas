@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/coloremoji.cpp` (COLRv0 variant only).
@@ -125,21 +125,21 @@ class ColorEmojiGm : SkiaGm {
         val textWidth = clipFont.measureText(text)
         val textHeight = 40f // approximate — Kanvas Font has no getMetrics
 
-        val bounds = Rect(0f, 0f, textWidth, textHeight)
+        val bounds = RectF32(0f, 0f, textWidth, textHeight)
         val boundsHalfWidth = bounds.width * 0.5f
         val boundsHalfHeight = bounds.height * 0.5f
         val boundsQuarterWidth = boundsHalfWidth * 0.5f
         val boundsQuarterHeight = boundsHalfHeight * 0.5f
 
-        val upperLeftClip = Rect(
+        val upperLeftClip = RectF32(
             bounds.left, bounds.top,
             bounds.left + boundsHalfWidth, bounds.top + boundsHalfHeight,
         )
-        val lowerRightClip = Rect(
+        val lowerRightClip = RectF32(
             bounds.left + boundsHalfWidth, bounds.top + boundsHalfHeight,
             bounds.right, bounds.bottom,
         )
-        val interiorClip = Rect(
+        val interiorClip = RectF32(
             bounds.left + boundsQuarterWidth, bounds.top + boundsQuarterHeight,
             bounds.right - boundsQuarterWidth, bounds.bottom - boundsQuarterHeight,
         )

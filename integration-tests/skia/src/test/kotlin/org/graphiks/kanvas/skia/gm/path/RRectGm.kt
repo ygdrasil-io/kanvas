@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rrect.cpp`. A 4-row x 4-column grid of stroked rrects,
@@ -36,7 +36,7 @@ class RRectGm : SkiaGm {
             ::inset0, ::inset1, ::inset2, ::inset3
         )
 
-        val r = Rect.fromLTRB(0f, 0f, 120f, 100f)
+        val r = RectF32.ofLTRB(0f, 0f, 120f, 100f)
         val radii = arrayOf(
             CornerRadii(0f, 0f),
             CornerRadii(30f, 1f),
@@ -46,7 +46,7 @@ class RRectGm : SkiaGm {
 
         val rrects = arrayOf(
             RRect(r, 0f),
-            RRect(r, CornerRadii(r.width / 2f, r.height / 2f)),
+            RRect(r, CornerRadii(r.width() / 2f, r.height() / 2f)),
             RRect(r, 20f),
             RRect(r, radii[0], radii[1], radii[2], radii[3]),
         )
@@ -94,7 +94,7 @@ class RRectGm : SkiaGm {
     // ----- inset procs -----
 
     private fun inset0(src: RRect, dx: Float, dy: Float): RRect {
-        val r = insetRect(src.rect, dx, dy) ?: return RRect(Rect(0f, 0f, 0f, 0f), 0f)
+        val r = insetRect(src.rect, dx, dy) ?: return RRect(RectF32(0f, 0f, 0f, 0f), 0f)
         return RRect(
             r,
             clampRadii(src.topLeft, dx, dy),
@@ -105,12 +105,12 @@ class RRectGm : SkiaGm {
     }
 
     private fun inset1(src: RRect, dx: Float, dy: Float): RRect {
-        val r = insetRect(src.rect, dx, dy) ?: return RRect(Rect(0f, 0f, 0f, 0f), 0f)
+        val r = insetRect(src.rect, dx, dy) ?: return RRect(RectF32(0f, 0f, 0f, 0f), 0f)
         return RRect(r, src.topLeft, src.topRight, src.bottomRight, src.bottomLeft)
     }
 
     private fun inset2(src: RRect, dx: Float, dy: Float): RRect {
-        val r = insetRect(src.rect, dx, dy) ?: return RRect(Rect(0f, 0f, 0f, 0f), 0f)
+        val r = insetRect(src.rect, dx, dy) ?: return RRect(RectF32(0f, 0f, 0f, 0f), 0f)
         return RRect(
             r,
             if (src.topLeft.x != 0f) CornerRadii(src.topLeft.x - dx, src.topLeft.y - dy) else CornerRadii(0f, 0f),
@@ -121,9 +121,9 @@ class RRectGm : SkiaGm {
     }
 
     private fun inset3(src: RRect, dx: Float, dy: Float): RRect {
-        val r = insetRect(src.rect, dx, dy) ?: return RRect(Rect(0f, 0f, 0f, 0f), 0f)
-        val ow = src.rect.width
-        val oh = src.rect.height
+        val r = insetRect(src.rect, dx, dy) ?: return RRect(RectF32(0f, 0f, 0f, 0f), 0f)
+        val ow = src.rect.width()
+        val oh = src.rect.height()
         val nw = r.width
         val nh = r.height
         return RRect(
@@ -138,8 +138,8 @@ class RRectGm : SkiaGm {
     private fun clampRadii(v: CornerRadii, dx: Float, dy: Float): CornerRadii =
         CornerRadii(maxOf(v.x - dx, 0f), maxOf(v.y - dy, 0f))
 
-    private fun insetRect(rect: Rect, dx: Float, dy: Float): Rect? {
-        val r = Rect.fromLTRB(rect.left + dx, rect.top + dy, rect.right - dx, rect.bottom - dy)
+    private fun insetRect(rect: RectF32, dx: Float, dy: Float): RectF32? {
+        val r = RectF32.ofLTRB(rect.left + dx, rect.top + dy, rect.right - dx, rect.bottom - dy)
         return if (r.left >= r.right || r.top >= r.bottom) null else r
     }
 

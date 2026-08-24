@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/xfermodes2.cpp`.
@@ -34,7 +34,7 @@ class Xfermodes2Gm : SkiaGm {
         var y = 0f
         val modes = BlendMode.entries
         for ((m, mode) in modes.withIndex()) {
-            val r = Rect.fromLTRB(x, y, x + w, y + h)
+            val r = RectF32.ofLTRB(x, y, x + w, y + h)
 
             // Background
             val dark = Color.fromRGBA(0x42 / 255f, 0x41 / 255f, 0x42 / 255f, 1f)
@@ -56,7 +56,7 @@ class Xfermodes2Gm : SkiaGm {
             canvas.restore()
 
             // Stroke frame
-            val frame = Rect.fromLTRB(
+            val frame = RectF32.ofLTRB(
                 r.left - 0.5f, r.top - 0.5f,
                 r.right + 0.5f, r.bottom + 0.5f,
             )

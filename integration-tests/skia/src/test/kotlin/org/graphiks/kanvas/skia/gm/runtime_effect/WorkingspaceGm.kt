@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/workingspace.cpp` (200 x 350).
@@ -25,7 +25,7 @@ class WorkingspaceGm : SkiaGm {
     override val height = 350
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
 
         val cellW = 40f
         val cellH = 40f
@@ -35,7 +35,7 @@ class WorkingspaceGm : SkiaGm {
         for (row in 0 until 7) {
             for (col in 0 until 4) {
                 canvas.drawRect(
-                    Rect(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH),
+                    RectF32(col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH),
                     paint,
                 )
             }

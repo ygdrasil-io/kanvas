@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -28,7 +28,7 @@ class ShaderMaskFilterGm : SkiaGm {
     override val height = 512
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect.fromLTRB(0f, 0f, 100f, 150f)
+        val r = RectF32.ofLTRB(0f, 0f, 100f, 150f)
 
         val shader = Shader.LinearGradient(
             start = Point2F32(r.left, r.top),

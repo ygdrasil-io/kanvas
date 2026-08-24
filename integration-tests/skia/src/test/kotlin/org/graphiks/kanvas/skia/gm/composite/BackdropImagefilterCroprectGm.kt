@@ -8,9 +8,9 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
-fun makeInvertFilter(crop: Rect?): ImageFilter {
+fun makeInvertFilter(crop: RectF32?): ImageFilter {
     val matrix = ColorFilter.Matrix(floatArrayOf(
         -1f, 0f, 0f, 0f, 1f,
         0f, -1f, 0f, 0f, 1f,
@@ -20,20 +20,20 @@ fun makeInvertFilter(crop: Rect?): ImageFilter {
     return ImageFilter.ColorFilter(matrix)
 }
 
-fun makeBlurFilter(crop: Rect?): ImageFilter =
+fun makeBlurFilter(crop: RectF32?): ImageFilter =
     ImageFilter.Blur(16f, 4f)
 
 fun drawBackdropFilterGm(
     canvas: GmCanvas,
     outsetX: Float,
     outsetY: Float,
-    factory: (Rect?) -> ImageFilter,
+    factory: (RectF32?) -> ImageFilter,
 ) {
     val originX = 150f
     val originY = 150f
-    val clipRect = Rect.fromLTRB(-50f, -50f, 350f, 100f)
-    val cropInLocal = Rect.fromLTRB(50f, 10f, 250f, 40f)
-    val cropRect = Rect(
+    val clipRect = RectF32.ofLTRB(-50f, -50f, 350f, 100f)
+    val cropInLocal = RectF32.ofLTRB(50f, 10f, 250f, 40f)
+    val cropRect = RectF32(
         cropInLocal.left - outsetX,
         cropInLocal.top - outsetY,
         cropInLocal.right + outsetX,
@@ -51,7 +51,7 @@ fun drawBackdropFilterGm(
             canvas.saveLayer(bounds = null, paint = Paint(imageFilter = imageFilter))
         }
 
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 1000f, 1000f), Paint(
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1000f, 1000f), Paint(
             color = if (i == 0) Color(0xFF00FFFFu) else Color(0xFFFF00FFu),
         ))
         canvas.drawRect(cropInLocal, Paint(

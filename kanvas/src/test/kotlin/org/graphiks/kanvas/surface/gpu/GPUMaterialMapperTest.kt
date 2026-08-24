@@ -39,7 +39,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -711,7 +711,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.WithWorkingColorSpace(solid, ColorSpaceInterpolation.OKLAB),
             ) to GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
             Paint(
-                shader = Shader.CoordClamp(solid, Rect.fromXYWH(0f, 0f, 1f, 1f)),
+                shader = Shader.CoordClamp(solid, RectF32.ofOriginSize(0f, 0f, 1f, 1f)),
             ) to GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
             Paint(
                 shader = Shader.PerlinNoise(1f, 2f, 3, 4, Size(8f, 8f)),

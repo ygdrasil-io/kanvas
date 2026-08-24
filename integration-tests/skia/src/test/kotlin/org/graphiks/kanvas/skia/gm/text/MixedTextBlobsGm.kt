@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.floor
 
 /**
@@ -86,9 +86,9 @@ class MixedTextBlobsGm : SkiaGm {
 
         val clipRects = listOf(
             blobBounds,
-            Rect(blobBounds.left, blobBounds.top, blobBounds.left + bHalfW, blobBounds.top + bHalfH),
-            Rect(blobBounds.left + bHalfW, blobBounds.top + bHalfH, blobBounds.right, blobBounds.bottom),
-            Rect(blobBounds.left + bQuarterW, blobBounds.top + bQuarterH, blobBounds.right - bQuarterW, blobBounds.bottom - bQuarterH),
+            RectF32(blobBounds.left, blobBounds.top, blobBounds.left + bHalfW, blobBounds.top + bHalfH),
+            RectF32(blobBounds.left + bHalfW, blobBounds.top + bHalfH, blobBounds.right, blobBounds.bottom),
+            RectF32(blobBounds.left + bQuarterW, blobBounds.top + bQuarterH, blobBounds.right - bQuarterW, blobBounds.bottom - bQuarterH),
         )
 
         val count = clipRects.size
@@ -105,7 +105,7 @@ class MixedTextBlobsGm : SkiaGm {
         }
     }
 
-    private fun drawBlob(canvas: GmCanvas, blob: TextBlob, clipRect: Rect) {
+    private fun drawBlob(canvas: GmCanvas, blob: TextBlob, clipRect: RectF32) {
         val clipHairline = Paint(color = Color.WHITE, style = PaintStyle.STROKE)
         val paint = Paint(color = Color.BLACK)
 
@@ -118,7 +118,7 @@ class MixedTextBlobsGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun computeBlobBounds(blob: TextBlob): Rect {
+    private fun computeBlobBounds(blob: TextBlob): RectF32 {
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE
@@ -132,6 +132,6 @@ class MixedTextBlobsGm : SkiaGm {
             }
         }
         val h = blob.fontSize * 1.2f
-        return Rect(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
+        return RectF32(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
     }
 }

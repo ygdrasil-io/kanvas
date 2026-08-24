@@ -6,13 +6,13 @@ import org.graphiks.kanvas.font.scaler.GlyphBounds
 import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.OutlineCommand
 import org.graphiks.kanvas.font.scaler.ScaledGlyph
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 sealed interface MappedGlyph {
     data object Empty : MappedGlyph
 
     data class Drawn(
-        val baselineRect: Rect,
+        val baselineRect: RectF32,
         val maskGlyph: ScaledGlyph,
         val outlineCommands: List<OutlineCommand>,
     ) : MappedGlyph
@@ -42,7 +42,7 @@ object GlyphCoordinateMapper {
         }
 
         return MappedGlyph.Drawn(
-            baselineRect = Rect.fromLTRB(minX, -maxY, minX + width, -maxY + height),
+            baselineRect = RectF32.ofLTRB(minX, -maxY, minX + width, -maxY + height),
             maskGlyph = glyph.copy(
                 bounds = GlyphBounds(0.0, 0.0, width.toDouble(), height.toDouble()),
                 commands = maskCommands,

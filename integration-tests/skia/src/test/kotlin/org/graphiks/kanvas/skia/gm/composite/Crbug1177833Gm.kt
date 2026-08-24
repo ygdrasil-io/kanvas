@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/crbug_1177833.cpp::Crbug1177833`.
@@ -24,7 +24,7 @@ class Crbug1177833Gm : SkiaGm {
     override val height = 400
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = Color.BLACK))
         canvas.translate(-700f, -700f)
 
         run {

@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -54,7 +54,7 @@ class StrokeRectsGm : SkiaGm {
         }
     }
 
-    private fun rndRect(rand: Random): Rect {
+    private fun rndRect(rand: Random): RectF32 {
         val x = rand.nextFloat() * W
         val y = rand.nextFloat() * H
         val w = rand.nextFloat() * (W shr 2)
@@ -64,7 +64,7 @@ class StrokeRectsGm : SkiaGm {
 
         val dx = -w / 2f + woffset
         val dy = -h / 2f + hoffset
-        return Rect.fromLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
+        return RectF32.ofLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
     }
 
     private companion object {

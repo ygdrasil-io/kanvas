@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/backdrop_imagefilter_croprect.cpp::DEF_SIMPLE_GM(backdrop_imagefilter_croprect_rotated, 600, 500)`.
@@ -66,7 +66,7 @@ class BackdropImagefilterCroprectNestedGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         canvas.translate(15f, 10f)
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 600f, 500f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 600f, 500f))
         canvas.saveLayer(bounds = null, paint = Paint(color = Color(0x80000000u)))
         drawBackdropFilterGm(canvas, 0f, 0f) { crop -> makeInvertFilter(crop) }
         canvas.restore()
@@ -97,13 +97,13 @@ class BackdropLayerTilemodeGm : SkiaGm {
 
     private fun drawBackdropTileMode(canvas: GmCanvas) {
         canvas.save()
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 128f, 128f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 128f, 128f))
         canvas.saveLayer(bounds = null, paint = null)
 
         var y = 0
         while (y < 128) {
             val fillColor = if (y % 16 != 0) Color.RED else Color.WHITE
-            canvas.drawRect(Rect.fromXYWH(0f, y.toFloat(), 128f, 8f), Paint(color = fillColor))
+            canvas.drawRect(RectF32.ofOriginSize(0f, y.toFloat(), 128f, 8f), Paint(color = fillColor))
             y += 8
         }
 

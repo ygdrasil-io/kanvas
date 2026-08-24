@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/badpaint.cpp`.
  *  Tests rendering with degenerate/invalid paint configurations — draws
@@ -55,7 +55,7 @@ class BadPaintGm : SkiaGm {
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rect = Rect.fromXYWH(10f, 10f, 80f, 80f)
+        val rect = RectF32.ofOriginSize(10f, 10f, 80f, 80f)
         for (paint in paints) {
             canvas.drawRect(rect, paint)
         }

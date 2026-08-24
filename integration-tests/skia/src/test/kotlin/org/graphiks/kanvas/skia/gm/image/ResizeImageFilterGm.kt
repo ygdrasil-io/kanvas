@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/resizeimagefilter.cpp`.
  *  Tests ImageFilter resize — draws checkerboard and gradient shapes
@@ -26,18 +26,18 @@ class ResizeImageFilterGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 1f)
 
-        val srcRect = Rect.fromXYWH(0f, 0f, 96f, 96f)
+        val srcRect = RectF32.ofOriginSize(0f, 0f, 96f, 96f)
         val ovalPath = Path { }
-        ovalPath.addOval(Rect.fromLTRB(4f, 4f, 92f, 92f))
+        ovalPath.addOval(RectF32.ofLTRB(4f, 4f, 92f, 92f))
 
         for (i in 0 until 5) {
             draw(canvas, srcRect, ovalPath)
-            canvas.translate(srcRect.width + 10f, 0f)
+            canvas.translate(srcRect.width() + 10f, 0f)
         }
 
         val surface = Surface(16, 16)
         val smallOvalPath = Path { }
-        smallOvalPath.addOval(Rect.fromLTRB(2f / 3f, 2f / 3f, 16f - 2f / 3f, 16f - 2f / 3f))
+        smallOvalPath.addOval(RectF32.ofLTRB(2f / 3f, 2f / 3f, 16f - 2f / 3f, 16f - 2f / 3f))
         surface.canvas {
             drawColor(Color.fromRGBA(0f, 0f, 0f, 0f))
             drawPath(smallOvalPath, Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f)))
@@ -54,7 +54,7 @@ class ResizeImageFilterGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun draw(canvas: GmCanvas, rect: Rect, ovalPath: Path) {
+    private fun draw(canvas: GmCanvas, rect: RectF32, ovalPath: Path) {
         val deviceScale = 16f / 96f
         canvas.save()
         canvas.translate(rect.left, rect.top)

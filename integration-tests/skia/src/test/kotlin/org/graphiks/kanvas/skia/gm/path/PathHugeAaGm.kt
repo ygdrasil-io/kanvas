@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/hugepath.cpp` (huge-AA variant).
  *  Tests anti-aliased rendering of huge paths — draws large rounded
@@ -35,14 +35,14 @@ class PathHugeAaGm : SkiaGm {
 
         val path = Path { }
         path.addRRect(RRect(
-            Rect.fromLTRB(4f, 4f, (w - 8).toFloat(), (h - 8).toFloat()),
+            RectF32.ofLTRB(4f, 4f, (w - 8).toFloat(), (h - 8).toFloat()),
             12f,
         ))
 
         canvas.save()
-        canvas.clipRect(Rect.fromLTRB(4f, 4f, 68f, 68f))
+        canvas.clipRect(RectF32.ofLTRB(4f, 4f, 68f, 68f))
         surface.canvas { drawPath(path, Paint()) }
-        canvas.drawImage(surface.makeImageSnapshot(), Rect(
+        canvas.drawImage(surface.makeImageSnapshot(), RectF32(
             (64 - w).toFloat(), 0f,
             (64 - w + w).toFloat(), h.toFloat(),
         ))
@@ -50,12 +50,12 @@ class PathHugeAaGm : SkiaGm {
 
         canvas.translate(80f, 0f)
         canvas.save()
-        canvas.clipRect(Rect.fromLTRB(4f, 4f, 68f, 68f))
+        canvas.clipRect(RectF32.ofLTRB(4f, 4f, 68f, 68f))
         surface.canvas {
             clear(Color.TRANSPARENT)
             drawPath(path, Paint(antiAlias = true))
         }
-        canvas.drawImage(surface.makeImageSnapshot(), Rect(
+        canvas.drawImage(surface.makeImageSnapshot(), RectF32(
             (64 - w).toFloat(), 0f,
             (64 - w + w).toFloat(), h.toFloat(),
         ))

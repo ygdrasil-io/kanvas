@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -35,7 +35,7 @@ class OvalGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rand = Random(1)
         canvas.translate(20f, 20f)
-        val kOval = Rect.fromLTRB(-20f, -30f, 20f, 30f)
+        val kOval = RectF32.ofLTRB(-20f, -30f, 20f, 30f)
 
         val kXStart = 60f
         val kYStart = 80f
@@ -70,7 +70,7 @@ class OvalGm : SkiaGm {
         }
 
         for (i in paints.indices) {
-            val oval = Rect.fromLTRB(-20f, -60f, 20f, 60f)
+            val oval = RectF32.ofLTRB(-20f, -60f, 20f, 60f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.55f + 0.25f, kYStart + kYStep * i + 0.75f)
             val paint = paints[i].copy(color = genColor(rand))
@@ -80,7 +80,7 @@ class OvalGm : SkiaGm {
         }
 
         for (i in paints.indices) {
-            val oval = Rect.fromLTRB(-80f, -30f, 80f, 30f)
+            val oval = RectF32.ofLTRB(-80f, -30f, 80f, 30f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 4 + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
             val paint = paints[i].copy(color = genColor(rand))
@@ -90,7 +90,7 @@ class OvalGm : SkiaGm {
         }
 
         for (i in paints.indices) {
-            val oval = Rect.fromLTRB(0f, -60f, 1f, 60f)
+            val oval = RectF32.ofLTRB(0f, -60f, 1f, 60f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 3.25f + 0.25f, kYStart + kYStep * i + 0.75f)
             val paint = paints[i].copy(color = genColor(rand))
@@ -99,7 +99,7 @@ class OvalGm : SkiaGm {
         }
 
         for (i in paints.indices) {
-            val oval = Rect.fromLTRB(-80f, -1f, 80f, 0f)
+            val oval = RectF32.ofLTRB(-80f, -1f, 80f, 0f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.5f + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
             val paint = paints[i].copy(color = genColor(rand))
@@ -108,7 +108,7 @@ class OvalGm : SkiaGm {
         }
 
         for (i in paints.indices) {
-            val oval = Rect.fromLTRB(-30f, -30f, 30f, 30f)
+            val oval = RectF32.ofLTRB(-30f, -30f, 30f, 30f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
             val paint = paints[i].copy(color = genColor(rand))

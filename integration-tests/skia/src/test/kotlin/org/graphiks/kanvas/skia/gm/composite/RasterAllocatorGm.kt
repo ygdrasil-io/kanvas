@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rasterhandleallocator.cpp::DEF_SIMPLE_GM(rasterallocator)`
@@ -33,19 +33,19 @@ class RasterAllocatorGm : SkiaGm {
         val greenPaint = Paint(color = Color.GREEN)
         val greyPaint = Paint(color = Color.fromRGBA(0.8f, 0.8f, 0.8f))
 
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 256f, 256f), redPaint)
-        canvas.drawRect(Rect.fromLTRB(30f, 30f, 60f, 60f), bluePaint)
-        canvas.drawOval(Rect.fromLTRB(40f, 40f, 50f, 50f), whitePaint)
-        canvas.saveLayer(Rect.fromLTRB(50f, 50f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
-        canvas.drawRect(Rect.fromLTRB(55f, 55f, 95f, 95f), greenPaint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 256f, 256f), redPaint)
+        canvas.drawRect(RectF32.ofLTRB(30f, 30f, 60f, 60f), bluePaint)
+        canvas.drawOval(RectF32.ofLTRB(40f, 40f, 50f, 50f), whitePaint)
+        canvas.saveLayer(RectF32.ofLTRB(50f, 50f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+        canvas.drawRect(RectF32.ofLTRB(55f, 55f, 95f, 95f), greenPaint)
         canvas.restore()
-        canvas.drawRect(Rect.fromLTRB(150f, 50f, 200f, 200f), greyPaint)
+        canvas.drawRect(RectF32.ofLTRB(150f, 50f, 200f, 200f), greyPaint)
 
         // Also draw the right-side copy
         canvas.translate(280f, 0f)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 256f, 256f), redPaint)
-        canvas.drawRect(Rect.fromLTRB(30f, 30f, 60f, 60f), bluePaint)
-        canvas.drawOval(Rect.fromLTRB(40f, 40f, 50f, 50f), whitePaint)
-        canvas.drawRect(Rect.fromLTRB(55f, 55f, 95f, 95f), greenPaint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 256f, 256f), redPaint)
+        canvas.drawRect(RectF32.ofLTRB(30f, 30f, 60f, 60f), bluePaint)
+        canvas.drawOval(RectF32.ofLTRB(40f, 40f, 50f, 50f), whitePaint)
+        canvas.drawRect(RectF32.ofLTRB(55f, 55f, 95f, 95f), greenPaint)
     }
 }

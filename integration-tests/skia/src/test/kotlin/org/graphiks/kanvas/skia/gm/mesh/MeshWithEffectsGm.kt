@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import kotlin.math.sin
@@ -74,15 +74,15 @@ class MeshWithEffectsGm : SkiaGm {
             (0 until kMeshSize).map { x ->
                 val xf = x.toFloat() / (kMeshSize - 1)
                 Point2F32(
-                    kRect.left + xf * kRect.width + xOff[y].toFloat(),
-                    kRect.top + yf * kRect.height + yOff[x].toFloat())
+                    kRect.left + xf * kRect.width() + xOff[y].toFloat(),
+                    kRect.top + yf * kRect.height() + yOff[x].toFloat())
             }
         }
         uvs = (0 until kMeshSize).flatMap { y ->
             val yf = y.toFloat() / (kMeshSize - 1)
             (0 until kMeshSize).map { x ->
                 val xf = x.toFloat() / (kMeshSize - 1)
-                Point2F32(kUv.left + xf * kUv.width, kUv.top + yf * kUv.height)
+                Point2F32(kUv.left + xf * kUv.width(), kUv.top + yf * kUv.height())
             }
         }
     }
@@ -92,8 +92,8 @@ class MeshWithEffectsGm : SkiaGm {
     }
 
     private companion object {
-        private val kRect = Rect(20f, 20f, 300f, 300f)
-        private val kUv = Rect(0f, 0f, 128f, 128f)
+        private val kRect = RectF32(20f, 20f, 300f, 300f)
+        private val kUv = RectF32(0f, 0f, 128f, 128f)
         private const val kMeshSize = 16
         private const val kRippleSize = 6.0
 

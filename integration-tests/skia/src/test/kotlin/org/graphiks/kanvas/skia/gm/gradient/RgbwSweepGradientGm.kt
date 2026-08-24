@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::rgbw_sweep_gradient` (DEF_SIMPLE_GM, 100 × 100).
@@ -42,6 +42,6 @@ class RgbwSweepGradientGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val paint = Paint(shader = shader)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 100f, 100f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f), paint)
     }
 }

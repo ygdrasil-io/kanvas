@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/emboss.cpp` (small emboss variant).
  *  Tests small emboss mask filter — renders a surface snapshot with
@@ -31,9 +31,9 @@ class SmallEmbossGm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f * 0.57735f + 0.5f),
         )
         val surf = Surface(50, 50)
-        surf.canvas { drawRect(Rect.fromXYWH(1f, 1f, 3f, 3f), paint) }
+        surf.canvas { drawRect(RectF32.ofOriginSize(1f, 1f, 3f, 3f), paint) }
 
         canvas.scale(30f, 30f)
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 50f, 50f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 50f, 50f))
     }
 }

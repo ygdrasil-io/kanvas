@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/localmatrixshader.cpp` LocalMatrixOrder (500 × 500).
@@ -55,7 +55,7 @@ class LocalmatrixOrderGm : SkiaGm {
         val blend = Shader.Blend(BlendMode.MODULATE, rotatedMandrill, rotGrad)
         val center = Matrix3x3F32.translation(250f, 250f) * Matrix3x3F32.rotation(30f) * Matrix3x3F32.translation(-250f, -250f)
         val finalShader = Shader.WithLocalMatrix(blend, center)
-        canvas.drawRect(Rect(0f, 0f, 500f, 500f), Paint(shader = finalShader))
+        canvas.drawRect(RectF32(0f, 0f, 500f, 500f), Paint(shader = finalShader))
     }
 
     private fun loadImage(path: String): Image? {

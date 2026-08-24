@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of `DEF_SIMPLE_GM(textureimage_and_shader, canvas, 100, 50)` from
@@ -27,13 +27,13 @@ class TextureimageAndShaderGm : SkiaGm {
         val greenImage = makeGreenImage(50, 50)
 
         // Left half: drawImage path
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 50f, 50f), Paint(color = Color.RED))
-        canvas.drawImage(greenImage, Rect.fromXYWH(0f, 0f, 50f, 50f))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 50f, 50f), Paint(color = Color.RED))
+        canvas.drawImage(greenImage, RectF32.ofOriginSize(0f, 0f, 50f, 50f))
 
         // Right half: image-shader path
-        canvas.drawRect(Rect.fromXYWH(50f, 0f, 50f, 50f), Paint(color = Color.RED))
+        canvas.drawRect(RectF32.ofOriginSize(50f, 0f, 50f, 50f), Paint(color = Color.RED))
         val shader = greenImage.makeShader()
-        canvas.drawRect(Rect.fromXYWH(50f, 0f, 50f, 50f), Paint(shader = shader))
+        canvas.drawRect(RectF32.ofOriginSize(50f, 0f, 50f, 50f), Paint(shader = shader))
     }
 
     private fun makeGreenImage(w: Int, h: Int): Image {

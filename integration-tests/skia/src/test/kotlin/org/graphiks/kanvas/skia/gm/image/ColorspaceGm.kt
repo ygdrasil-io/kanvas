@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/colorspace.cpp::DEF_SIMPLE_GM(colorspace, ...)`.
@@ -33,7 +33,7 @@ class ColorspaceGm : SkiaGm {
         val w = 128f
         val h = 128f
         val paint = Paint(color = Color(0xFF4080FFu))
-        val rect = Rect.fromXYWH(0f, 0f, w, h)
+        val rect = RectF32.ofOriginSize(0f, 0f, w, h)
 
         for (row in 0 until 5) {
             canvas.save()

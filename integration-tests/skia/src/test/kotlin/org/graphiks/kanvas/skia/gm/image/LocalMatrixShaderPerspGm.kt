@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/localmatrixshader.cpp` localmatrixshader_persp (542 × 266).
@@ -41,7 +41,7 @@ class LocalMatrixShaderPerspGm : SkiaGm {
 
         val draw = { canvas: GmCanvas, shader: Shader, advance: Boolean ->
             canvas.save()
-            canvas.drawRect(Rect(0f, 0f, fw, fh), Paint(shader = shader))
+            canvas.drawRect(RectF32(0f, 0f, fw, fh), Paint(shader = shader))
             canvas.restore()
             if (advance) canvas.translate(fw + 10f, 0f)
         }

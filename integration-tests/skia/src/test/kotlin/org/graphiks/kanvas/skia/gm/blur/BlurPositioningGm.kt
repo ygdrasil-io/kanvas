@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurpositioning.cpp::check_small_sigma_offset` (200 x 1200).
@@ -28,8 +28,8 @@ class BlurPositioningGm : SkiaGm {
         for (sigma in sigmas) {
             val border = kotlin.math.ceil((sigma * 3f).toDouble()).toInt()
 
-            val r = Rect.fromXYWH(50f, 50f, 100f, 50f)
-            val b = Rect.fromLTRB(
+            val r = RectF32.ofOriginSize(50f, 50f, 100f, 50f)
+            val b = RectF32.ofLTRB(
                 r.left - (border + 1) + 0.5f,
                 r.top - (border + 1) + 0.5f,
                 r.right + (border + 1) - 0.5f,

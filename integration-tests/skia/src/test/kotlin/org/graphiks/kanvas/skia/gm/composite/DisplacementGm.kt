@@ -14,7 +14,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
@@ -94,8 +94,8 @@ class DisplacementGm : SkiaGm {
     private fun drawClippedBitmap(canvas: GmCanvas, x: Int, y: Int, image: Image, paint: Paint?) {
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
-        canvas.clipRect(Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()))
-        canvas.drawImage(image, Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+        canvas.clipRect(RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
         canvas.restore()
     }
 

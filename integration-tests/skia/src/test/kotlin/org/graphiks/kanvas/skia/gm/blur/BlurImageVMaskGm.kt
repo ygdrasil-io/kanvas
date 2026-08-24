@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurimagevmask.cpp::DEF_SIMPLE_GM(blurimagevmask, ...)`.
@@ -37,7 +37,7 @@ class BlurImageVMaskGm : SkiaGm {
         canvas.drawString("image blur", 285f + 250f, 50f, font, paint)
 
         val sigmas = floatArrayOf(3f, 8f, 16f, 24f, 32f)
-        val r = Rect.fromLTRB(35f, 100f, 135f, 200f)
+        val r = RectF32.ofLTRB(35f, 100f, 135f, 200f)
 
         for (sigma in sigmas) {
             canvas.drawRect(r, paint)
@@ -53,7 +53,7 @@ class BlurImageVMaskGm : SkiaGm {
             )
             canvas.drawRect(r2, maskBlurPaint)
 
-            r2 = Rect.fromLTRB(r2.left + 250f, r2.top, r2.right + 250f, r2.bottom)
+            r2 = RectF32.ofLTRB(r2.left + 250f, r2.top, r2.right + 250f, r2.bottom)
             canvas.saveLayer(
                 bounds = null,
                 paint = Paint(imageFilter = ImageFilter.Blur(sigma, sigma)),

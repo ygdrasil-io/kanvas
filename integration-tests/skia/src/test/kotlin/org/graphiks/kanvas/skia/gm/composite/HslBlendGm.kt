@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.max
 import kotlin.math.min
 
@@ -50,7 +50,7 @@ class HslBlendGm : SkiaGm {
         )
 
         for (test in tests) {
-            val r = Rect.fromLTRB(20f, 20f, 80f, 80f)
+            val r = RectF32.ofLTRB(20f, 20f, 80f, 80f)
 
             canvas.save()
             canvas.drawRect(r, Paint(color = bgColor))

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefilterstransformed.cpp::ImageFilterComposedTransform` (512 × 512).
@@ -45,10 +45,10 @@ class ImageFilterComposedTransformGm : SkiaGm {
         val paint = Paint(imageFilter = filter)
         canvas.save()
         canvas.translate(tx, ty)
-        canvas.clipRect(Rect(0f, 0f, 256f, 256f))
+        canvas.clipRect(RectF32(0f, 0f, 256f, 256f))
         canvas.scale(0.5f, 0.5f)
         canvas.translate(128f, 128f)
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
         canvas.restore()
     }
 

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp` local_matrix_shader_rt (256 × 256).
@@ -33,7 +33,7 @@ class LocalMatrixShaderRTGm : SkiaGm {
         val fh = image.height.toFloat()
 
         val imgShader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP)
-        val r = Rect(0f, 0f, fw, fh)
+        val r = RectF32(0f, 0f, fw, fh)
 
         canvas.drawRect(r, Paint(shader = imgShader))
 

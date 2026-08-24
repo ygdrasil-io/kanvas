@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmapimage.cpp::BitmapImageGM`.
@@ -47,18 +47,18 @@ class BitmapImageGm : SkiaGm {
 
         val surfFlags = Surface(kSize * 2, kSize)
         surfFlags.canvas {
-            drawImage(image, Rect(0f, 0f, kSize.toFloat(), kSize.toFloat()))
-            drawImage(codecImage, Rect(kSize.toFloat(), 0f, (kSize * 2).toFloat(), kSize.toFloat()))
+            drawImage(image, RectF32(0f, 0f, kSize.toFloat(), kSize.toFloat()))
+            drawImage(codecImage, RectF32(kSize.toFloat(), 0f, (kSize * 2).toFloat(), kSize.toFloat()))
         }
-        canvas.drawImage(surfFlags.makeImageSnapshot(), Rect(0f, 0f, (kSize * 2).toFloat(), kSize.toFloat()))
+        canvas.drawImage(surfFlags.makeImageSnapshot(), RectF32(0f, 0f, (kSize * 2).toFloat(), kSize.toFloat()))
         canvas.translate(0f, kSize.toFloat())
 
         val surfSrgb = Surface(kSize * 2, kSize)
         surfSrgb.canvas {
-            drawImage(image, Rect(0f, 0f, kSize.toFloat(), kSize.toFloat()))
-            drawImage(codecImage, Rect(kSize.toFloat(), 0f, (kSize * 2).toFloat(), kSize.toFloat()))
+            drawImage(image, RectF32(0f, 0f, kSize.toFloat(), kSize.toFloat()))
+            drawImage(codecImage, RectF32(kSize.toFloat(), 0f, (kSize * 2).toFloat(), kSize.toFloat()))
         }
-        canvas.drawImage(surfSrgb.makeImageSnapshot(), Rect(0f, 0f, (kSize * 2).toFloat(), kSize.toFloat()))
+        canvas.drawImage(surfSrgb.makeImageSnapshot(), RectF32(0f, 0f, (kSize * 2).toFloat(), kSize.toFloat()))
     }
 
     private fun loadResource(path: String): ByteArray? {

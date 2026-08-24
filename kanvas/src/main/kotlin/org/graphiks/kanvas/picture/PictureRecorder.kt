@@ -3,7 +3,7 @@ package org.graphiks.kanvas.picture
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Records drawing commands into a [Picture].
@@ -11,7 +11,7 @@ import org.graphiks.kanvas.types.Rect
  * Usage:
  * ```kotlin
  * val recorder = PictureRecorder()
- * val canvas = recorder.beginRecording(Rect.fromLTRB(0, 0, 100, 100))
+ * val canvas = recorder.beginRecording(RectF32.ofLTRB(0, 0, 100, 100))
  * canvas.drawRect(..., paint)
  * val picture = recorder.finishRecordingAsPicture()
  * ```
@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class PictureRecorder {
     private var activeCanvas: Canvas? = null
     private var activeBuffer: DisplayListBuffer? = null
-    private var recordingBounds: Rect? = null
+    private var recordingBounds: RectF32? = null
 
     /**
      * Begin recording drawing commands for a picture with the given [bounds].
@@ -29,7 +29,7 @@ class PictureRecorder {
      *
      * @throws IllegalStateException if a recording is already in progress
      */
-    fun beginRecording(bounds: Rect): Canvas {
+    fun beginRecording(bounds: RectF32): Canvas {
         check(activeCanvas == null) { "Recording already in progress" }
         val buffer = object : DisplayListBuffer {
             private val ops = mutableListOf<DisplayOp>()

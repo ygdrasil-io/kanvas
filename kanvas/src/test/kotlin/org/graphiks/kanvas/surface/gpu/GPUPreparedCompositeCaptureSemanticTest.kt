@@ -17,7 +17,7 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import kotlin.test.Test
@@ -47,7 +47,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     @Test
     fun `different transforms produce different operation identities`() {
-        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val rect = RectF32.ofLTRB(0f, 0f, 10f, 10f)
 
         assertNotEquals(
             readyIdentity(DisplayOp.DrawRect(rect, black, Matrix3x3F32.translation(1f, 0f), open)),
@@ -57,7 +57,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     @Test
     fun `different device clips produce different operation identities`() {
-        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val rect = RectF32.ofLTRB(0f, 0f, 10f, 10f)
 
         assertNotEquals(
             readyIdentity(
@@ -65,7 +65,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
                     rect,
                     black,
                     identity,
-                    ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 5f, 5f)),
+                    ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 5f, 5f)),
                 ),
             ),
             readyIdentity(
@@ -73,7 +73,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
                     rect,
                     black,
                     identity,
-                    ClipStack.DeviceRect(Rect.fromLTRB(1f, 1f, 5f, 5f)),
+                    ClipStack.DeviceRect(RectF32.ofLTRB(1f, 1f, 5f, 5f)),
                 ),
             ),
         )
@@ -85,7 +85,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
         val result = capture(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(0f, 0f, 10f, 10f),
+                    RectF32.ofLTRB(0f, 0f, 10f, 10f),
                     paint,
                     identity,
                     open,
@@ -99,7 +99,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     @Test
     fun `save layer paint contributes to the final capture identity`() {
-        val body = DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), black, identity, open)
+        val body = DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), black, identity, open)
 
         val blackLayer = capture(
             listOf(DisplayOp.BeginLayer(SaveLayerRec(paint = black)), body, DisplayOp.EndLayer),
@@ -117,8 +117,8 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `painted picture paint contributes to the final capture identity`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), black, identity, open)),
         )
 
         val blackPicture = capture(
@@ -137,13 +137,13 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `unpainted picture expands inline with composed transform and clip`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
             listOf(
                 DisplayOp.DrawRect(
-                    rect = Rect.fromLTRB(0f, 0f, 5f, 5f),
+                    rect = RectF32.ofLTRB(0f, 0f, 5f, 5f),
                     paint = black,
                     transform = Matrix3x3F32.translation(2f, 0f),
-                    clip = ClipStack.DeviceRect(Rect.fromLTRB(2f, 0f, 10f, 10f)),
+                    clip = ClipStack.DeviceRect(RectF32.ofLTRB(2f, 0f, 10f, 10f)),
                 ),
             ),
         )
@@ -154,7 +154,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
                         picture = picture,
                         paint = null,
                         transform = Matrix3x3F32.translation(3f, 0f),
-                        clip = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 8f, 8f)),
+                        clip = ClipStack.DeviceRect(RectF32.ofLTRB(0f, 0f, 8f, 8f)),
                     ),
                 ),
             ),
@@ -176,7 +176,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `self-referential picture is refused without overflowing the stack`() {
         val operations = mutableListOf<DisplayOp>()
-        val picture = Picture(Rect.fromLTRB(0f, 0f, 10f, 10f), operations)
+        val picture = Picture(RectF32.ofLTRB(0f, 0f, 10f, 10f), operations)
         operations += DisplayOp.DrawPicture(picture, null, identity, open)
 
         val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(
@@ -188,7 +188,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `orphan end layer inside a picture is refused`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
             listOf(DisplayOp.EndLayer),
         )
 
@@ -205,7 +205,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
             capture(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(0f, 0f, 10f, 10f),
+                        RectF32.ofLTRB(0f, 0f, 10f, 10f),
                         black,
                         identity,
                         open,
@@ -233,7 +233,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
             listOf(
                 DisplayOp.BeginLayer(SaveLayerRec(backdrop = backdrop)),
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(0f, 0f, 10f, 10f),
+                    RectF32.ofLTRB(0f, 0f, 10f, 10f),
                     black,
                     identity,
                     open,
@@ -251,7 +251,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     @Test
     fun `saveLayer with backdrop and without backdrop produce different identities`() {
-        val body = DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), black, identity, open)
+        val body = DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), black, identity, open)
         val backdrop = org.graphiks.kanvas.paint.ImageFilter.Blur(
             sigmaX = 4f, sigmaY = 4f,
         )
@@ -274,7 +274,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
         val maskBlurPaint = black.copy(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 4f),
         )
-        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val rect = RectF32.ofLTRB(0f, 0f, 10f, 10f)
         val result = capture(
             listOf(
                 DisplayOp.DrawRect(rect, maskBlurPaint, identity, open),
@@ -294,7 +294,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
         val tableMaskPaint = black.copy(
             maskFilter = MaskFilter.Table(table = ubyteArrayOf(0u, 128u, 255u)),
         )
-        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val rect = RectF32.ofLTRB(0f, 0f, 10f, 10f)
         val result = capture(
             listOf(
                 DisplayOp.DrawRect(rect, tableMaskPaint, identity, open),
@@ -308,8 +308,8 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `draw picture with image filter creates FilterPictureSource scope`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), black, identity, open)),
         )
         val paintWithFilter = black.copy(imageFilter = ImageFilter.Blur(sigmaX = 4f, sigmaY = 4f))
 
@@ -327,8 +327,8 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `painted picture with image filter and without produce different identities`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), black, identity, open)),
         )
 
         val noFilter = capture(
@@ -359,12 +359,12 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `unpainted picture inside a saveLayer scope refuses instead of expanding`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), black, identity, open)),
         )
         val result = capture(
             listOf(
-                DisplayOp.BeginLayer(SaveLayerRec(bounds = Rect.fromLTRB(0f, 0f, 10f, 10f))),
+                DisplayOp.BeginLayer(SaveLayerRec(bounds = RectF32.ofLTRB(0f, 0f, 10f, 10f))),
                 DisplayOp.DrawPicture(picture, null, identity, open),
                 DisplayOp.EndLayer,
             ),
@@ -378,13 +378,13 @@ class GPUPreparedCompositeCaptureSemanticTest {
     @Test
     fun `saveLayer with mixed rect and unpainted picture children refuses`() {
         val picture = Picture(
-            Rect.fromLTRB(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), black, identity, open)),
         )
         val result = capture(
             listOf(
-                DisplayOp.BeginLayer(SaveLayerRec(bounds = Rect.fromLTRB(0f, 0f, 10f, 10f))),
-                DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 4f, 4f), black, identity, open),
+                DisplayOp.BeginLayer(SaveLayerRec(bounds = RectF32.ofLTRB(0f, 0f, 10f, 10f))),
+                DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), black, identity, open),
                 DisplayOp.DrawPicture(picture, null, identity, open),
                 DisplayOp.EndLayer,
             ),
@@ -417,7 +417,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
             listOf(
                 DisplayOp.DrawPicture(
                     picture = Picture(
-                        Rect.fromLTRB(0f, 0f, 10f, 10f),
+                        RectF32.ofLTRB(0f, 0f, 10f, 10f),
                         listOf(verticesOp),
                     ),
                     paint = null,

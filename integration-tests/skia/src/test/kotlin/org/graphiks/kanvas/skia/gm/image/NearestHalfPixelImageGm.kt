@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/nearesthalfpixelimage.cpp`.
  *  Tests nearest-neighbour half-pixel image rendering with sub-pixel
@@ -60,7 +60,7 @@ class NearestHalfPixelImageGm : SkiaGm {
         }
 
         canvas.scale(8f, 8f)
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 10f, 10f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 10f, 10f))
     }
 
     companion object {
@@ -81,11 +81,11 @@ class NearestHalfPixelImageGm : SkiaGm {
                 val s = Shader.Image(image)
                 if (alphaPaint != null) {
                     c.drawRect(
-                        Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+                        RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()),
                         alphaPaint.copy(shader = s),
                     )
                 } else {
-                    c.drawRect(Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()), Paint(shader = s))
+                    c.drawRect(RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), Paint(shader = s))
                 }
             } else {
                 if (doX) {
@@ -97,7 +97,7 @@ class NearestHalfPixelImageGm : SkiaGm {
                 }
                 c.drawImage(
                     image,
-                    Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+                    RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()),
                     alphaPaint,
                 )
             }

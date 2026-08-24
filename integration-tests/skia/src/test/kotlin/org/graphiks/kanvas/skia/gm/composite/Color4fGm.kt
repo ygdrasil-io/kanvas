@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/color4f.cpp`.
@@ -31,15 +31,15 @@ class Color4fGm : SkiaGm {
             val surface = Surface(1024, 100)
             drawIntoCanvas(surface)
             val image = surface.makeImageSnapshot()
-            canvas.drawImage(image, Rect(0f, 0f, 1024f, 100f))
+            canvas.drawImage(image, RectF32(0f, 0f, 1024f, 100f))
             canvas.translate(0f, 120f)
         }
     }
 
     private fun drawIntoCanvas(surface: Surface) {
         surface.canvas {
-            drawRect(Rect(0f, 0f, 1024f, 100f), Paint(color = Color.WHITE))
-            val r = Rect(0f, 0f, 50f, 100f)
+            drawRect(RectF32(0f, 0f, 1024f, 100f), Paint(color = Color.WHITE))
+            val r = RectF32(0f, 0f, 50f, 100f)
             val shaderColors = listOf(Color.RED, Color.fromRGBA(1f, 0f, 0f, 0.5f))
             val filters: List<ColorFilter?> = listOf(
                 null,
@@ -50,7 +50,7 @@ class Color4fGm : SkiaGm {
             var tx = 0f
             for (col in shaderColors) {
                 for (cf in filters) {
-                    drawRect(Rect(tx, 0f, tx + 50f, 100f), Paint(color = col, colorFilter = cf))
+                    drawRect(RectF32(tx, 0f, tx + 50f, 100f), Paint(color = col, colorFilter = cf))
                     tx += 60f
                 }
             }

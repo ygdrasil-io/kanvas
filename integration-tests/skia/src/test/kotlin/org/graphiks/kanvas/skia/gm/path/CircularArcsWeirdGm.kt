@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/circulararcs.cpp::circular_arcs_weird`
@@ -34,23 +34,23 @@ class CircularArcsWeirdGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val kS = 50f
 
-        data class Arc(val oval: Rect, val start: Float, val sweep: Float)
+        data class Arc(val oval: RectF32, val start: Float, val sweep: Float)
 
         val noDrawArcs = listOf(
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 0f, 0f),
-            Arc(Rect.fromXYWH(0f, 0f, -kS, kS), 0f, 90f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, -kS), 0f, 90f),
-            Arc(Rect.fromXYWH(0f, 0f, 0f, 0f), 0f, 90f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 0f, 0f),
+            Arc(RectF32.ofOriginSize(0f, 0f, -kS, kS), 0f, 90f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, -kS), 0f, 90f),
+            Arc(RectF32.ofOriginSize(0f, 0f, 0f, 0f), 0f, 90f),
         )
 
         val arcs = listOf(
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 810f, 90f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), -810f, 90f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 0f, 360f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 0f, -360f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 0f, 540f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 0f, -540f),
-            Arc(Rect.fromXYWH(0f, 0f, kS, kS), 1125f, 990f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 810f, 90f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), -810f, 90f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 0f, 360f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 0f, -360f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 0f, 540f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 0f, -540f),
+            Arc(RectF32.ofOriginSize(0f, 0f, kS, kS), 1125f, 990f),
         )
 
         val dashIntervals = floatArrayOf(kS / 15f, 2f * kS / 15f)

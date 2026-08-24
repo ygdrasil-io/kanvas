@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class RecordOptsGm : SkiaGm {
     override val name = "recordopts"
@@ -42,7 +42,7 @@ class RecordOptsGm : SkiaGm {
             canvas.translate((kSize + 1).toFloat(), 0f)
 
             val recorder = PictureRecorder()
-            val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat()))
+            val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat()))
             val tmp = GmCanvas(rc, kSize, kSize)
             seq(tmp, green)
             val pic = recorder.finishRecordingAsPicture()
@@ -61,7 +61,7 @@ class RecordOptsGm : SkiaGm {
                 canvas.translate((kSize + 1).toFloat(), 0f)
 
                 val recorder = PictureRecorder()
-                val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat()))
+                val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat()))
                 val tmp = GmCanvas(rc, kSize, kSize)
                 seq(tmp, alphaColor)
                 val pic = recorder.finishRecordingAsPicture()
@@ -74,7 +74,7 @@ class RecordOptsGm : SkiaGm {
     }
 
     private fun drawRectSequence(c: GmCanvas, color: Color) {
-        val rect = Rect.fromLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
+        val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
         val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.5f))
         c.saveLayer(rect, layerPaint)
         c.drawRect(rect, Paint(color = color))
@@ -85,10 +85,10 @@ class RecordOptsGm : SkiaGm {
         val surface = Surface(kSize, kSize)
         val sc = surface.canvas()
         sc.clear(color)
-        sc.drawRect(Rect.fromLTRB(0f, 0f, 7f, 7f), Paint(color = Color.WHITE))
+        sc.drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(color = Color.WHITE))
         val image: Image = surface.makeImageSnapshot()
 
-        val rect = Rect.fromLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
+        val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
         val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 129f / 255f))
         c.saveLayer(rect, layerPaint)
         c.drawImage(image, rect)
@@ -96,7 +96,7 @@ class RecordOptsGm : SkiaGm {
     }
 
     private fun drawSvgSequence(c: GmCanvas, color: Color) {
-        val rect = Rect.fromLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
+        val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
         val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 130f / 255f))
         c.saveLayer(rect, layerPaint)
         c.save()

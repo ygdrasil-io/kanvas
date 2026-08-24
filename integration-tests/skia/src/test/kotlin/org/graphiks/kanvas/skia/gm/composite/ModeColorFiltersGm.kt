@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/modecolorfilters.cpp` (registered "modecolorfilters").
@@ -62,7 +62,7 @@ class ModeColorFiltersGm : SkiaGm {
                     for (pc in paintColors.indices) {
                         val x = (idx % rectsPerRow).toFloat()
                         val y = (idx / rectsPerRow).toFloat()
-                        val rect = Rect.fromXYWH(
+                        val rect = RectF32.ofOriginSize(
                             x * K_RECT_WIDTH, y * K_RECT_HEIGHT,
                             K_RECT_WIDTH.toFloat(), K_RECT_HEIGHT.toFloat(),
                         )

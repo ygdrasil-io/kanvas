@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -36,14 +36,14 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
         return path
     }
 
-    private fun computeBounds(pts: Array<Pair<Float, Float>>): Rect {
+    private fun computeBounds(pts: Array<Pair<Float, Float>>): RectF32 {
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
         for ((x, y) in pts) {
             minX = minOf(minX, x); minY = minOf(minY, y)
             maxX = maxOf(maxX, x); maxY = maxOf(maxY, y)
         }
-        return Rect.fromLTRB(minX, minY, maxX, maxY)
+        return RectF32.ofLTRB(minX, minY, maxX, maxY)
     }
 
     private val gPoints: Array<Array<Pair<Float, Float>>> = arrayOf(
@@ -60,7 +60,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
         arrayOf(-10f to -50f, 10f to -50f, 50f to 31f, 40f to 50f, -40f to 50f, -50f to 31f),
     )
 
-    private val gPointBounds: List<Rect> = gPoints.map { computeBounds(it) }
+    private val gPointBounds: List<RectF32> = gPoints.map { computeBounds(it) }
 
     private fun createNgon(n: Int, width: Float, height: Float): Array<Pair<Float, Float>> {
         val angleStep = 360f / n
@@ -93,7 +93,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
         return createNgon(numPts, width, height)
     }
 
-    private fun computeNgonBounds(n: Int, width: Float, height: Float): Rect {
+    private fun computeNgonBounds(n: Int, width: Float, height: Float): RectF32 {
         val angleStep = 360f / n
         var angle = if (n % 2 == 1) angleStep / 2f else 0f
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
@@ -106,10 +106,10 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
             maxX = maxOf(maxX, x); maxY = maxOf(maxY, y)
             angle += angleStep
         }
-        return Rect.fromLTRB(minX, minY, maxX, maxY)
+        return RectF32.ofLTRB(minX, minY, maxX, maxY)
     }
 
-    private val nGonBounds: List<Rect> = (0 until (kNumPaths - gPoints.size)).map { i ->
+    private val nGonBounds: List<RectF32> = (0 until (kNumPaths - gPoints.size)).map { i ->
         val height: Float = kMaxPathHeight / 2f
         val width: Float
         val n: Int
@@ -127,14 +127,14 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
         computeNgonBounds(n, width, height)
     }
 
-    private fun getPathBounds(index: Int): Rect {
+    private fun getPathBounds(index: Int): RectF32 {
         if (index < gPointBounds.size) return gPointBounds[index]
         return nGonBounds[index - gPointBounds.size]
     }
 
     fun render(canvas: GmCanvas) {
         canvas.drawRect(
-            Rect.fromLTRB(0f, 0f, kGmWidth.toFloat(), kGmWidth.toFloat()),
+            RectF32.ofLTRB(0f, 0f, kGmWidth.toFloat(), kGmWidth.toFloat()),
             Paint(color = Color.WHITE),
         )
 
@@ -193,7 +193,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
 
     private fun drawPath(canvas: GmCanvas, index: Int, offset: FloatArray) {
         val anchorBounds = getPathBounds(index)
-        if (offset[0] + anchorBounds.width > kGmWidth) {
+        if (offset[0] + anchorBounds.width() > kGmWidth) {
             offset[0] = 0f
             offset[1] += kMaxPathHeight
             if (doStrokeAndFill) {
@@ -201,9 +201,9 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
                 offset[1] += kStrokeWidth / 2f
             }
         }
-        val centerX = offset[0] + 0.5f * anchorBounds.width
+        val centerX = offset[0] + 0.5f * anchorBounds.width()
         val centerY = offset[1]
-        offset[0] += anchorBounds.width
+        offset[0] += anchorBounds.width()
         if (doStrokeAndFill) offset[0] += kStrokeWidth
 
         val colors = arrayOf(Color.BLACK, Color.WHITE)

@@ -54,7 +54,7 @@ open class GiantBitmapGm(
 
         canvas.translate(50f, 50f)
         canvas.drawRect(
-            org.graphiks.kanvas.types.Rect(0f, 0f, 640f, 480f), paint,
+            org.graphiks.math.geometry.RectF32(0f, 0f, 640f, 480f), paint,
         )
     }
 

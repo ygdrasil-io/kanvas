@@ -4,7 +4,7 @@ import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 
@@ -198,7 +198,7 @@ class SvgRenderer(
         val effectiveFill = rect.fill ?: style.fill
         if (effectiveFill != null) {
             val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
-            val kanvasRect = Rect.fromXYWH(x, y, width, height)
+            val kanvasRect = RectF32.ofOriginSize(x, y, width, height)
             canvas.drawRect(kanvasRect, fillPaint)
         }
 
@@ -206,7 +206,7 @@ class SvgRenderer(
         val effectiveStrokeWidth = rect.strokeWidth ?: style.strokeWidth
         if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
             val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
-            val kanvasRect = Rect.fromXYWH(x, y, width, height)
+            val kanvasRect = RectF32.ofOriginSize(x, y, width, height)
             canvas.drawRect(kanvasRect, strokePaint)
         }
     }
@@ -284,7 +284,7 @@ class SvgRenderer(
         val ry = ellipse.ry * sy
 
         val path = Path { }
-        path.addOval(Rect.fromXYWH(cx - rx, cy - ry, rx * 2, ry * 2))
+        path.addOval(RectF32.ofOriginSize(cx - rx, cy - ry, rx * 2, ry * 2))
 
         val effectiveFill = ellipse.fill ?: style.fill
         if (effectiveFill != null) {

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -65,10 +65,10 @@ class PathEffectGm : SkiaGm {
         canvas.restore()
 
         // Column 2: Fill and discrete effects
-        val r = Rect(0f, 0f, 250f, 120f)
+        val r = RectF32(0f, 0f, 250f, 120f)
         val composite = Path { }.apply {
             addOval(r)
-            addRect(Rect(r.left + 50f, r.top + 50f, r.right - 50f, r.bottom - 50f))
+            addRect(RectF32(r.left + 50f, r.top + 50f, r.right - 50f, r.bottom - 50f))
         }
         
         canvas.translate(320f, 20f)

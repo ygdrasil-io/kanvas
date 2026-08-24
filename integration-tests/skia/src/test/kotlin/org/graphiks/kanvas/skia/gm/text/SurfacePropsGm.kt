@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/surface.cpp` (surface-props variant).
  *  Tests surface properties with text rendering — draws text strings
@@ -40,13 +40,13 @@ class SurfacePropsGm(
                 val paint = Paint(
                     shader = makeShader(),
                 )
-                drawRect(Rect(0f, 0f, W.toFloat(), H.toFloat()), paint)
+                drawRect(RectF32(0f, 0f, W.toFloat(), H.toFloat()), paint)
                 val textPaint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f))
                 val font = Font(typeface, size = 32f)
                 drawString(rec.label, W / 2f, H * 3f / 4f, font, textPaint)
             }
             val image = surface.makeImageSnapshot()
-            canvas.drawImage(image, Rect(0f, y.toFloat(), W.toFloat(), y + H.toFloat()))
+            canvas.drawImage(image, RectF32(0f, y.toFloat(), W.toFloat(), y + H.toFloat()))
             y += H.toFloat()
         }
     }

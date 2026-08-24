@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/composecolorfilter.cpp` — ComposeCFIF variant.
@@ -38,20 +38,20 @@ class ComposecfifGm : SkiaGm {
         val shader = Shader.PerlinNoise(0.01f, 0.01f, 2, 0, null)
 
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 200f, 200f))
-        canvas.drawRect(Rect(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
+        canvas.clipRect(RectF32(0f, 0f, 200f, 200f))
+        canvas.drawRect(RectF32(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
         canvas.restore()
 
         canvas.translate(202f, 0f)
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 200f, 200f))
-        canvas.drawRect(Rect(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
+        canvas.clipRect(RectF32(0f, 0f, 200f, 200f))
+        canvas.drawRect(RectF32(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
         canvas.restore()
 
         canvas.translate(202f, 0f)
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 200f, 200f))
-        canvas.drawRect(Rect(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
+        canvas.clipRect(RectF32(0f, 0f, 200f, 200f))
+        canvas.drawRect(RectF32(0f, 0f, 200f, 200f), Paint(shader = shader, colorFilter = cf))
         canvas.restore()
     }
 }

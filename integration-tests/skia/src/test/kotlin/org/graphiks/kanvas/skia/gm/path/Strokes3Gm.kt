@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/strokes.cpp::Strokes3GM` (`strokes3`, 1500 x 1500).
@@ -31,7 +31,7 @@ class Strokes3Gm : SkiaGm {
 
         canvas.translate(20f, 80f)
 
-        val bounds = Rect.fromXYWH(0f, 0f, 50f, 50f)
+        val bounds = RectF32.ofOriginSize(0f, 0f, 50f, 50f)
         val dx = bounds.width * 4f / 3f
         val dy = bounds.height * 5f
 
@@ -50,26 +50,26 @@ class Strokes3Gm : SkiaGm {
         }
     }
 
-    private fun makeProc(i: Int, bounds: Rect): Path = when (i) {
+    private fun makeProc(i: Int, bounds: RectF32): Path = when (i) {
         0 -> Path { }.apply { addRect(bounds); addRect(insetRect(bounds)) }
         1 -> Path { }.apply { addRect(bounds); addRect(insetRect(bounds)); fillType = FillType.EVEN_ODD }
         2 -> Path { }.apply { addOval(bounds); addOval(insetRect(bounds)) }
         3 -> Path { }.apply { addOval(bounds); addOval(insetRect(bounds)); fillType = FillType.EVEN_ODD }
         4 -> {
-            val r = Rect.fromLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
-            val ir = r.let { Rect.fromLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
+            val r = RectF32.ofLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            val ir = r.let { RectF32.ofLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
             Path { }.apply { addRect(bounds); addOval(ir) }
         }
         else -> {
-            val r = Rect.fromLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
-            val ir = r.let { Rect.fromLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
+            val r = RectF32.ofLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            val ir = r.let { RectF32.ofLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
             Path { }.apply { addRect(bounds); addOval(ir); fillType = FillType.EVEN_ODD }
         }
     }
 
-    private fun insetRect(r: Rect): Rect {
+    private fun insetRect(r: RectF32): RectF32 {
         val dw = r.width / 10f
         val dh = r.height / 10f
-        return Rect.fromLTRB(r.left + dw, r.top + dh, r.right - dw, r.bottom - dh)
+        return RectF32.ofLTRB(r.left + dw, r.top + dh, r.right - dw, r.bottom - dh)
     }
 }

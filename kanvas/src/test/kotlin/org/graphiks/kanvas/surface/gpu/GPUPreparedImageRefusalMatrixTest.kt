@@ -43,7 +43,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedImageRefusalMatrixTest {
@@ -396,7 +396,7 @@ class GPUPreparedImageRefusalMatrixTest {
             add(
                 RuntimeRefusalCase(
                     "atlas-geometry",
-                    atlas(image).copy(texRects = listOf(Rect.fromLTRB(-1f, 0f, 1f, 1f))),
+                    atlas(image).copy(texRects = listOf(RectF32.ofLTRB(-1f, 0f, 1f, 1f))),
                     GPUPreparedImageRefusalCodes.ATLAS_GEOMETRY,
                 ),
             )
@@ -405,8 +405,8 @@ class GPUPreparedImageRefusalMatrixTest {
                     "nine-geometry",
                     DisplayOp.DrawImageNine(
                         image = image,
-                        center = Rect.fromLTRB(3f, 0f, 2f, 2f),
-                        dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                        center = RectF32.ofLTRB(3f, 0f, 2f, 2f),
+                        dst = RectF32.ofLTRB(0f, 0f, 8f, 8f),
                         paint = null,
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
@@ -423,7 +423,7 @@ class GPUPreparedImageRefusalMatrixTest {
                             xDivs = listOf(image.width + 1),
                             yDivs = emptyList(),
                         ),
-                        dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                        dst = RectF32.ofLTRB(0f, 0f, 8f, 8f),
                         paint = null,
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
@@ -532,8 +532,8 @@ class GPUPreparedImageRefusalMatrixTest {
         shader: Shader.Image = Shader.Image(image, sampling = SamplingOptions.NEAREST),
     ) = DisplayOp.DrawImage(
         image = image,
-        src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
-        dst = Rect.fromLTRB(0f, 0f, 4f, 4f),
+        src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        dst = RectF32.ofLTRB(0f, 0f, 4f, 4f),
         paint = Paint.fill(Color.WHITE).copy(shader = shader),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
@@ -542,7 +542,7 @@ class GPUPreparedImageRefusalMatrixTest {
     private fun atlas(image: Image) = DisplayOp.DrawAtlas(
         atlas = image,
         transforms = listOf(Matrix3x3F32.Identity),
-        texRects = listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+        texRects = listOf(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
         colors = listOf(Color.WHITE),
         blendMode = BlendMode.SRC_OVER,
         paint = Paint.fill(Color.WHITE),

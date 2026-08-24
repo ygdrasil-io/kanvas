@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmapshader.cpp::BitmapShaderGM`.
@@ -42,8 +42,8 @@ class BitmapShaderGm : SkiaGm {
 
             val imageShader = image.makeShader().withLocalMatrix(localMatrix)
             var paint = Paint(shader = imageShader)
-            canvas.drawImage(mask, Rect(0f, 0f, 20f, 20f), paint)
-            canvas.drawImage(mask, Rect(30f, 0f, 50f, 20f), paint)
+            canvas.drawImage(mask, RectF32(0f, 0f, 20f, 20f), paint)
+            canvas.drawImage(mask, RectF32(30f, 0f, 50f, 20f), paint)
 
             canvas.translate(0f, 25f)
             canvas.drawCircle(10f, 10f, 10f, paint)
@@ -51,14 +51,14 @@ class BitmapShaderGm : SkiaGm {
 
             canvas.translate(0f, 25f)
             paint = Paint(color = Color.GREEN)
-            canvas.drawImage(mask, Rect(0f, 0f, 20f, 20f), paint)
-            canvas.drawImage(mask, Rect(30f, 0f, 50f, 20f), paint)
+            canvas.drawImage(mask, RectF32(0f, 0f, 20f, 20f), paint)
+            canvas.drawImage(mask, RectF32(30f, 0f, 50f, 20f), paint)
 
             canvas.translate(0f, 25f)
             val maskShader = mask.makeShader(TileMode.REPEAT, TileMode.REPEAT).withLocalMatrix(localMatrix)
             paint = Paint(color = Color.RED, shader = maskShader)
-            canvas.drawRect(Rect(0f, 0f, 20f, 20f), paint)
-            canvas.drawRect(Rect(30f, 0f, 50f, 20f), paint)
+            canvas.drawRect(RectF32(0f, 0f, 20f, 20f), paint)
+            canvas.drawRect(RectF32(30f, 0f, 50f, 20f), paint)
 
             canvas.restore()
             canvas.translate(60f, 0f)

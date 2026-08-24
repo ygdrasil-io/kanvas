@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/textblob.cpp::TextBlob` (640 × 480).
@@ -86,7 +86,7 @@ class TextBlobGm : SkiaGm {
             val boxPaint = Paint(color = Color.BLUE, style = PaintStyle.STROKE, antiAlias = false)
             val box = computeBlobBounds(blob)
             canvas.drawRect(
-                Rect(box.left + offsetX, box.top + offsetY, box.right + offsetX, box.bottom + offsetY),
+                RectF32(box.left + offsetX, box.top + offsetY, box.right + offsetX, box.bottom + offsetY),
                 boxPaint,
             )
         }
@@ -161,7 +161,7 @@ class TextBlobGm : SkiaGm {
         return TextBlob(glyphRuns = allRuns, typeface = typeface, fontSize = kFontSize)
     }
 
-    private fun computeBlobBounds(blob: TextBlob): Rect {
+    private fun computeBlobBounds(blob: TextBlob): RectF32 {
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE
@@ -176,8 +176,8 @@ class TextBlobGm : SkiaGm {
                 hasGlyphs = true
             }
         }
-        if (!hasGlyphs) return Rect.EMPTY
+        if (!hasGlyphs) return RectF32.Empty
         val h = blob.fontSize * 1.2f
-        return Rect(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
+        return RectF32(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
     }
 }

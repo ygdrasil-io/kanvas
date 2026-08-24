@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bug6643.cpp::bug6643`.
@@ -41,6 +41,6 @@ class Bug6643Gm : SkiaGm {
         )
 
         val paint = Paint(shader = gradient, antiAlias = true)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 200f, 200f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 200f, 200f), paint)
     }
 }

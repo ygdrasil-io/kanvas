@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp` lit_shader_linear_rt (512 × 256).
@@ -36,7 +36,7 @@ class LitShaderLinearRTGm : SkiaGm {
             ),
             tileMode = TileMode.CLAMP,
         )
-        canvas.drawRect(Rect(0f, 0f, 256f, 256f), Paint(shader = sphere))
-        canvas.drawRect(Rect(256f, 0f, 512f, 256f), Paint(shader = sphere))
+        canvas.drawRect(RectF32(0f, 0f, 256f, 256f), Paint(shader = sphere))
+        canvas.drawRect(RectF32(256f, 0f, 512f, 256f), Paint(shader = sphere))
     }
 }

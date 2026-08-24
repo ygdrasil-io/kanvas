@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -48,10 +48,10 @@ class CircularArcsStrokeButtGm : SkiaGm {
                 val p1 = Paint(color = alphaBlue, antiAlias = aa, style = style, strokeWidth = strokeWidth, strokeCap = cap)
                 c.drawArc(kRect, start, sweep, useCenter, p0)
                 c.drawArc(kRect, start, -(360f - sweep), useCenter, p1)
-                c.translate(kRect.width + pad, 0f)
+                c.translate(kRect.width() + pad, 0f)
             }
             c.restore()
-            c.translate(0f, kRect.height + pad)
+            c.translate(0f, kRect.height() + pad)
         }
         c.restore()
     }
@@ -61,6 +61,6 @@ class CircularArcsStrokeButtGm : SkiaGm {
         const val kH: Int = 1000
         val kStarts: FloatArray = floatArrayOf(0f, 10f, 30f, 45f, 90f, 165f, 180f, 270f)
         val kSweeps: FloatArray = floatArrayOf(1f, 45f, 90f, 130f, 180f, 184f, 300f, 355f)
-        val kRect: Rect = Rect.fromLTRB(0f, 0f, 40f, 40f)
+        val kRect: RectF32 = RectF32.ofLTRB(0f, 0f, 40f, 40f)
     }
 }

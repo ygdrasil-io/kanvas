@@ -32,7 +32,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Lattice
@@ -78,14 +78,14 @@ class GPUClipCoverageSurfaceTest {
         val surface = Surface(32, 32)
         surface.canvas {
             save()
-            clipRect(Rect(2f, 2f, 30f, 30f), ClipOp.INTERSECT, antiAlias = true)
-            clipRect(Rect(12f, 12f, 20f, 20f), ClipOp.DIFFERENCE, antiAlias = true)
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-            drawRect(Rect(2f, 2f, 12f, 12f), Paint.fill(Color.RED))
-            drawRRect(RRect(Rect(20f, 2f, 30f, 12f), radius = 2f), Paint.fill(Color.RED))
+            clipRect(RectF32(2f, 2f, 30f, 30f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(12f, 12f, 20f, 20f), ClipOp.DIFFERENCE, antiAlias = true)
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+            drawRect(RectF32(2f, 2f, 12f, 12f), Paint.fill(Color.RED))
+            drawRRect(RRect(RectF32(20f, 2f, 30f, 12f), radius = 2f), Paint.fill(Color.RED))
             drawPath(Path { moveTo(2f, 22f); lineTo(12f, 22f); lineTo(7f, 30f); close() }, Paint.fill(Color.RED))
-            drawRect(Rect(14f, 22f, 26f, 29f), Paint.stroke(Color.RED, 1f))
-            drawImage(bluePixel(), Rect(24f, 14f, 30f, 20f), Paint())
+            drawRect(RectF32(14f, 22f, 26f, 29f), Paint.stroke(Color.RED, 1f))
+            drawImage(bluePixel(), RectF32(24f, 14f, 30f, 20f), Paint())
             restore()
         }
 
@@ -101,8 +101,8 @@ class GPUClipCoverageSurfaceTest {
         val surface = Surface(16, 16)
         surface.canvas {
             save()
-            clipRect(Rect(3.5f, 2f, 12.5f, 14f), ClipOp.INTERSECT, antiAlias = true)
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
+            clipRect(RectF32(3.5f, 2f, 12.5f, 14f), ClipOp.INTERSECT, antiAlias = true)
+            drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
             restore()
         }
 
@@ -130,14 +130,14 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val evenOddHole = Path().apply {
             fillType = FillType.EVEN_ODD
-            addRect(Rect(3.5f, 3.5f, 28.5f, 28.5f))
-            addRect(Rect(11.5f, 11.5f, 20.5f, 20.5f))
+            addRect(RectF32(3.5f, 3.5f, 28.5f, 28.5f))
+            addRect(RectF32(11.5f, 11.5f, 20.5f, 20.5f))
         }
         val surface = Surface(32, 32)
         surface.canvas {
             save()
             clipPath(evenOddHole, ClipOp.INTERSECT, antiAlias = true)
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
             restore()
         }
 
@@ -152,13 +152,13 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val inverseRect = Path().apply {
             fillType = FillType.INVERSE_EVEN_ODD
-            addRect(Rect(8.5f, 8.5f, 23.5f, 23.5f))
+            addRect(RectF32(8.5f, 8.5f, 23.5f, 23.5f))
         }
         val surface = Surface(32, 32)
         surface.canvas {
             save()
             clipPath(inverseRect, ClipOp.DIFFERENCE, antiAlias = true)
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
             restore()
         }
 
@@ -226,7 +226,7 @@ class GPUClipCoverageSurfaceTest {
                         antiAlias = true,
                     )
                     drawRect(
-                        Rect(4f, 4f, 12f, 12f),
+                        RectF32(4f, 4f, 12f, 12f),
                         Paint.fill(Color.RED).copy(
                             blendMode = BlendMode.DARKEN,
                             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
@@ -250,9 +250,9 @@ class GPUClipCoverageSurfaceTest {
             Surface(16, 16).run {
                 requireWebGpu()
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
-                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
                     clipPath(
                         Path {
                             moveTo(5f, 4f)
@@ -266,7 +266,7 @@ class GPUClipCoverageSurfaceTest {
                         ClipOp.DIFFERENCE,
                         antiAlias = true,
                     )
-                    drawRect(Rect(2f, 2f, 14f, 14f), Paint.fill(Color.RED).copy(antiAlias = false))
+                    drawRect(RectF32(2f, 2f, 14f, 14f), Paint.fill(Color.RED).copy(antiAlias = false))
                     restore()
                 }
                 render()
@@ -292,12 +292,12 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val surface = Surface(16, 16).run {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                 save()
-                clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
-                clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                clipRect(RectF32(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
                 drawRect(
-                    Rect(2f, 2f, 5f, 5f),
+                    RectF32(2f, 2f, 5f, 5f),
                     Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
                 )
                 restore()
@@ -315,12 +315,12 @@ class GPUClipCoverageSurfaceTest {
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val surface = Surface(16, 16).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
-                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
-                    clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                    clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(RectF32(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
                     drawRect(
-                        Rect(2f, 2f, 14f, 14f),
+                        RectF32(2f, 2f, 14f, 14f),
                         Paint.fill(Color.RED).copy(blendMode = blendMode),
                     )
                     restore()
@@ -345,9 +345,9 @@ class GPUClipCoverageSurfaceTest {
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
-                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
                     drawText(
                         Font(typeface, 12f).toTextBlob("I", 7f, 12f),
                         0f,
@@ -371,12 +371,12 @@ class GPUClipCoverageSurfaceTest {
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val surface = Surface(16, 16).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
-                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
-                    clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                    clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(RectF32(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
                     drawRect(
-                        Rect(2f, 2f, 14f, 14f),
+                        RectF32(2f, 2f, 14f, 14f),
                         Paint.fill(Color.fromRGBA(1f, 0f, 0f, 0f)).copy(blendMode = blendMode),
                     )
                     restore()
@@ -403,9 +403,9 @@ class GPUClipCoverageSurfaceTest {
         ).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     drawRect(
-                        Rect(3.5f, 2f, 14f, 14f),
+                        RectF32(3.5f, 2f, 14f, 14f),
                         Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
                     )
                 }
@@ -441,11 +441,11 @@ class GPUClipCoverageSurfaceTest {
         listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
-                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                     save()
-                    clipRect(Rect(4f, 2f, 12f, 14f), ClipOp.INTERSECT, antiAlias = false)
+                    clipRect(RectF32(4f, 2f, 12f, 14f), ClipOp.INTERSECT, antiAlias = false)
                     drawRect(
-                        Rect(3.5f, 2f, 13.5f, 14f),
+                        RectF32(3.5f, 2f, 13.5f, 14f),
                         Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
                     )
                     restore()
@@ -467,9 +467,9 @@ class GPUClipCoverageSurfaceTest {
         // the fixed-function multi-key AA family stays refused with its stable code.
         val surface = Surface(16, 16).run {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                 drawRect(
-                    Rect(3.5f, 2f, 14f, 14f),
+                    RectF32(3.5f, 2f, 14f, 14f),
                     Paint.fill(Color.RED).copy(blendMode = BlendMode.DST_OVER, antiAlias = true),
                 )
             }
@@ -492,13 +492,13 @@ class GPUClipCoverageSurfaceTest {
         )
         val surface = Surface(16, 16).apply {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                 save()
-                clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
-                clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                clipRect(RectF32(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
                 drawImage(
                     transparentImage,
-                    Rect(2f, 2f, 14f, 14f),
+                    RectF32(2f, 2f, 14f, 14f),
                     Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR),
                 )
                 restore()
@@ -529,7 +529,7 @@ class GPUClipCoverageSurfaceTest {
         // over the transparent snapshot (DARKEN(src, transparent) = src = RED).
         val result = Surface(16, 16).run {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
             }
             render()
         }
@@ -547,7 +547,7 @@ class GPUClipCoverageSurfaceTest {
         // (CLEAR(src, transparent) = transparent; COLOR_DODGE(src, transparent) = src = RED).
         val clear = Surface(16, 16).run {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR))
             }
             render()
         }
@@ -556,7 +556,7 @@ class GPUClipCoverageSurfaceTest {
 
         val dodge = Surface(16, 16).run {
             canvas {
-                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.COLOR_DODGE))
+                drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.COLOR_DODGE))
             }
             render()
         }
@@ -569,13 +569,13 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
-                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
-                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
+                ClipStackOp.RectOp(RectF32(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(RectF32(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
             ),
         )
         val ops = listOf(
-            DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
-            DisplayOp.DrawRRect(RRect(Rect(20f, 2f, 28f, 10f), radius = 2f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
+            DisplayOp.DrawRect(RectF32(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
+            DisplayOp.DrawRRect(RRect(RectF32(20f, 2f, 28f, 10f), radius = 2f), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
             DisplayOp.DrawPath(
                 Path { moveTo(2f, 22f); lineTo(10f, 22f); lineTo(6f, 30f); close() },
                 Paint.fill(Color.RED),
@@ -584,8 +584,8 @@ class GPUClipCoverageSurfaceTest {
             ),
             DisplayOp.DrawImage(
                 bluePixel(),
-                Rect(0f, 0f, 1f, 1f),
-                Rect(22f, 22f, 30f, 30f),
+                RectF32(0f, 0f, 1f, 1f),
+                RectF32(22f, 22f, 30f, 30f),
                 Paint(),
                 Matrix3x3F32.Identity,
                 clip,
@@ -612,7 +612,7 @@ class GPUClipCoverageSurfaceTest {
         // before lowering, so an integer-scissor clip keeps the
         // textured-vertices material refusal reachable while the text draw still
         // renders prepared.
-        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 31f, 31f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(1f, 1f, 31f, 31f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
                 .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
@@ -658,7 +658,7 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `scissor destination read DrawText keeps exterior intact`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(6f, 6f, 14f, 14f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
                 .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
@@ -668,7 +668,7 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                        DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                        DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                         DisplayOp.DrawText(
                             blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
                             x = 0f,
@@ -693,12 +693,12 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `scissor destination read textured vertices are terminal`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(6f, 6f, 14f, 14f), antiAlias = false)
         val vertices = texturedScissorTriangle()
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                    DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = vertices,
                         paint = advancedBlackImagePaint(),
@@ -721,12 +721,12 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `scissor destination read textured mesh is terminal`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
-        val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
+        val clip = ClipStack.DeviceRect(RectF32(6f, 6f, 14f, 14f), antiAlias = false)
+        val mesh = Mesh(texturedScissorTriangle(), bounds = RectF32(1f, 1f, 15f, 15f))
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                    DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
                         paint = advancedBlackImagePaint(),
@@ -750,7 +750,7 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `empty scissor destination read DrawText remains terminal`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(20f, 20f, 24f, 24f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
                 .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
@@ -760,7 +760,7 @@ class GPUClipCoverageSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                    DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawText(
                         blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
                         x = 0f,
@@ -785,11 +785,11 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `empty scissor textured vertices are terminal`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(20f, 20f, 24f, 24f), antiAlias = false)
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                    DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = texturedScissorTriangle(),
                         paint = advancedBlackImagePaint(),
@@ -812,12 +812,12 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `empty scissor textured mesh is terminal`() {
         requireWebGpu()
-        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
-        val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
+        val clip = ClipStack.DeviceRect(RectF32(20f, 20f, 24f, 24f), antiAlias = false)
+        val mesh = Mesh(texturedScissorTriangle(), bounds = RectF32(1f, 1f, 15f, 15f))
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
                 operations = listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                    DisplayOp.DrawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
                         paint = advancedBlackImagePaint(),
@@ -910,8 +910,8 @@ class GPUClipCoverageSurfaceTest {
                     listOf(
                         DisplayOp.DrawImageNine(
                             image,
-                            Rect(1f, 1f, 2f, 2f),
-                            Rect(2f, 2f, 14f, 14f),
+                            RectF32(1f, 1f, 2f, 2f),
+                            RectF32(2f, 2f, 14f, 14f),
                             null,
                             Matrix3x3F32.Identity,
                             complexFullClip(),
@@ -938,7 +938,7 @@ class GPUClipCoverageSurfaceTest {
                         DisplayOp.DrawAtlas(
                             atlas = image,
                             transforms = listOf(Matrix3x3F32.translation(2f, 20f), Matrix3x3F32.translation(18f, 20f)),
-                            texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
+                            texRects = listOf(RectF32(0f, 0f, 3f, 3f), RectF32(0f, 0f, 3f, 3f)),
                             colors = null,
                             blendMode = BlendMode.SRC_OVER,
                             paint = null,
@@ -959,7 +959,7 @@ class GPUClipCoverageSurfaceTest {
     fun `mesh program is refused as unregistered rather than rendered as plain vertices`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+            listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val effect = simpleRuntimeEffect()
         val mesh = Mesh(
@@ -968,7 +968,7 @@ class GPUClipCoverageSurfaceTest {
                 listOf(Point2F32(2f, 2f), Point2F32(8f, 2f), Point2F32(2f, 8f)),
             ),
             program = MeshProgram(effect),
-            bounds = Rect(2f, 2f, 8f, 8f),
+            bounds = RectF32(2f, 2f, 8f, 8f),
         )
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
@@ -994,12 +994,12 @@ class GPUClipCoverageSurfaceTest {
     fun `nested picture with unsupported paint stays refused while captured child clips propagate through S G routing`() {
         requireWebGpu()
         val child = Picture(
-            Rect(0f, 0f, 8f, 8f),
-            listOf(DisplayOp.DrawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+            RectF32(0f, 0f, 8f, 8f),
+            listOf(DisplayOp.DrawRect(RectF32(1f, 1f, 7f, 7f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         val outerClip = complexFullClip()
         val painted = Picture(
-            Rect(0f, 0f, 8f, 8f),
+            RectF32(0f, 0f, 8f, 8f),
             listOf(DisplayOp.DrawPicture(child, Paint.stroke(Color.RED, 1f), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         // The painted picture frame is a documented prepared-route refusal: the composite
@@ -1013,7 +1013,7 @@ class GPUClipCoverageSurfaceTest {
         assertEquals("unsupported.composite.clip", paintFailure.diagnostic.code.value)
 
         val clipped = Picture(
-            Rect(0f, 0f, 8f, 8f),
+            RectF32(0f, 0f, 8f, 8f),
             listOf(DisplayOp.DrawPicture(child, null, Matrix3x3F32.Identity, outerClip)),
         )
         val clippedFailure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
@@ -1036,7 +1036,7 @@ class GPUClipCoverageSurfaceTest {
         val operations = listOf(
             DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
             DisplayOp.DrawMesh(
-                Mesh(vertices, bounds = Rect(2f, 2f, 8f, 8f)),
+                Mesh(vertices, bounds = RectF32(2f, 2f, 8f, 8f)),
                 Paint.fill(Color.WHITE),
                 null,
                 Matrix3x3F32.Identity,
@@ -1072,7 +1072,7 @@ class GPUClipCoverageSurfaceTest {
         // analytic-intersection clips with unsupported.vertices.clip_coverage
         // before lowering, so an integer-scissor clip keeps the transform and
         // material refusals reachable.
-        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(1f, 1f, 15f, 15f), antiAlias = false)
         val triangle = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f))
         val uvs = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))
         val paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel()))
@@ -1122,7 +1122,7 @@ class GPUClipCoverageSurfaceTest {
     fun `non textured vertices with colors and indices render through the prepared route`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+            listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val vertices = Vertices(
             VertexMode.TRIANGLES,
@@ -1155,7 +1155,7 @@ class GPUClipCoverageSurfaceTest {
         // analytic-intersection clips with unsupported.vertices.clip_coverage
         // before packing, so an integer-scissor clip keeps the index refusal
         // reachable.
-        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32(1f, 1f, 15f, 15f), antiAlias = false)
         val vertices = Vertices(
             VertexMode.TRIANGLES,
             positions = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f)),
@@ -1192,10 +1192,10 @@ class GPUClipCoverageSurfaceTest {
     fun `picture with unsupported paint is refused while its captured child clip uses the picture source route`() {
         requireWebGpu()
         val outerClip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+            listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val recorder = PictureRecorder()
-        recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).drawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED))
+        recorder.beginRecording(RectF32(0f, 0f, 8f, 8f)).drawRect(RectF32(1f, 1f, 7f, 7f), Paint.fill(Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
         // The painted picture frame is a documented prepared-route refusal: the composite
@@ -1215,7 +1215,7 @@ class GPUClipCoverageSurfaceTest {
     fun `outline text without a typeface is terminal`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+            listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             GPUPreparedSurfaceProductEntry.render(
@@ -1253,7 +1253,7 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
-                ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true),
             ),
         )
 
@@ -1283,13 +1283,13 @@ class GPUClipCoverageSurfaceTest {
     fun `alpha mask picture composes its child through S G source products`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+            listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val picture = Picture(
-            Rect(0f, 0f, 16f, 16f),
+            RectF32(0f, 0f, 16f, 16f),
             listOf(
                 DisplayOp.DrawRect(
-                    Rect(2f, 2f, 14f, 14f),
+                    RectF32(2f, 2f, 14f, 14f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -1317,8 +1317,8 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
-                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
-                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
+                ClipStackOp.RectOp(RectF32(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(RectF32(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
             ),
         )
         val image = opaqueImage(size = 3)
@@ -1327,23 +1327,23 @@ class GPUClipCoverageSurfaceTest {
             positions = listOf(Point2F32(2f, 2f), Point2F32(8f, 2f), Point2F32(2f, 8f)),
         )
         val picture = Picture(
-            Rect(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+            RectF32(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(RectF32(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         val ops = listOf(
             DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point2F32(3f, 3f), Point2F32(6f, 6f)), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
             DisplayOp.DrawDRRect(
-                RRect(Rect(2f, 20f, 10f, 28f), radius = 1f),
-                RRect(Rect(4f, 22f, 8f, 26f), radius = 1f),
+                RRect(RectF32(2f, 20f, 10f, 28f), radius = 1f),
+                RRect(RectF32(4f, 22f, 8f, 26f), radius = 1f),
                 Paint.fill(Color.RED),
                 Matrix3x3F32.Identity,
                 clip,
             ),
-            DisplayOp.DrawImageNine(image, Rect(1f, 1f, 2f, 2f), Rect(12f, 2f, 22f, 12f), null, Matrix3x3F32.Identity, clip),
+            DisplayOp.DrawImageNine(image, RectF32(1f, 1f, 2f, 2f), RectF32(12f, 2f, 22f, 12f), null, Matrix3x3F32.Identity, clip),
             DisplayOp.DrawImageLattice(
                 image,
                 Lattice(xDivs = listOf(1, 2), yDivs = listOf(1, 2)),
-                Rect(12f, 14f, 22f, 24f),
+                RectF32(12f, 14f, 22f, 24f),
                 null,
                 Matrix3x3F32.Identity,
                 clip,
@@ -1351,7 +1351,7 @@ class GPUClipCoverageSurfaceTest {
             DisplayOp.DrawAtlas(
                 atlas = image,
                 transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
-                texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
+                texRects = listOf(RectF32(0f, 0f, 3f, 3f), RectF32(0f, 0f, 3f, 3f)),
                 colors = null,
                 blendMode = BlendMode.SRC_OVER,
                 paint = null,
@@ -1436,9 +1436,9 @@ class GPUClipCoverageSurfaceTest {
     ) = Surface(16, 16).run {
         requireWebGpu()
         canvas {
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.fromArgb(128, 32, 64, 192)))
+            drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.fromArgb(128, 32, 64, 192)))
             save()
-            clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
             clipPath(
                 Path {
                     moveTo(5f + clipOffset, 4f)
@@ -1453,7 +1453,7 @@ class GPUClipCoverageSurfaceTest {
                 antiAlias = true,
             )
             drawRect(
-                Rect(4f, 4f, 12f, 12f),
+                RectF32(4f, 4f, 12f, 12f),
                 Paint.fill(Color.RED).copy(
                     blendMode = BlendMode.DARKEN,
                     maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
@@ -1517,16 +1517,16 @@ class GPUClipCoverageSurfaceTest {
     private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {
         canvas {
             save()
-            clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
-            clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
-            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = blendMode))
+            clipRect(RectF32(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+            drawRect(RectF32(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = blendMode))
             restore()
         }
         render()
     }
 
     private fun complexFullClip(): ClipStack = ClipStack.Complex(
-        listOf(ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)),
+        listOf(ClipStackOp.RectOp(RectF32(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)),
     )
 
     private fun bluePixel(): Image = Image.fromPixels(
@@ -1576,7 +1576,7 @@ class GPUClipCoverageSurfaceTest {
         blendMode = BlendMode.DARKEN,
     )
 
-    private fun assertWhiteOutsideClip(pixels: UByteArray, width: Int, clip: Rect) {
+    private fun assertWhiteOutsideClip(pixels: UByteArray, width: Int, clip: RectF32) {
         for (y in 0 until width) {
             for (x in 0 until width) {
                 if (
@@ -1592,7 +1592,7 @@ class GPUClipCoverageSurfaceTest {
         }
     }
 
-    private fun assertDarkenedInsideClip(pixels: UByteArray, width: Int, clip: Rect) {
+    private fun assertDarkenedInsideClip(pixels: UByteArray, width: Int, clip: RectF32) {
         val hasDarkenedPixel = (clip.top.toInt() until clip.bottom.toInt()).any { y ->
             (clip.left.toInt() until clip.right.toInt()).any { x ->
                 pixels[(y * width + x) * 4].toInt() < 255

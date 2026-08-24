@@ -36,7 +36,7 @@ import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.alphaByte
@@ -380,8 +380,8 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase("DrawDRRect", Point2F32(22f, 16f), Point2F32(7f, 16f), Point2F32(22f, 12f)) { mode ->
                 drawDRRect(
-                    RRect(Rect(4f, 4f, 28f, 28f), radius = 2f),
-                    RRect(Rect(10f, 10f, 22f, 22f), radius = 2f),
+                    RRect(RectF32(4f, 4f, 28f, 28f), radius = 2f),
+                    RRect(RectF32(10f, 10f, 22f, 22f), radius = 2f),
                     shapePaint(mode),
                 )
             },
@@ -391,9 +391,9 @@ class GPUAllApiBlendSurfaceTest {
                 Point2F32(7f, 16f),
                 Point2F32(16f, 12f),
                 legacySaveLayerDraw = { mode ->
-                    drawImageNine(legacyImage, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
+                    drawImageNine(legacyImage, RectF32(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
                 },
-            ) { mode -> drawImageNine(image, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode)) },
+            ) { mode -> drawImageNine(image, RectF32(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode)) },
             BlendCase(
                 "DrawImageLattice",
                 Point2F32(16f, 16f),
@@ -493,9 +493,9 @@ class GPUAllApiBlendSurfaceTest {
                 Matrix3x3F32.translation(14f, 12f),
             ),
             texRects = listOf(
-                Rect(0f, 0f, 4f, 4f),
-                Rect(0f, 0f, 4f, 4f),
-                Rect(0f, 0f, 4f, 4f),
+                RectF32(0f, 0f, 4f, 4f),
+                RectF32(0f, 0f, 4f, 4f),
+                RectF32(0f, 0f, 4f, 4f),
             ),
             blendMode = mode,
         )
@@ -736,7 +736,7 @@ class GPUAllApiBlendSurfaceTest {
         return result.pixels.copyOfRange(offset, offset + 4)
     }
 
-    private fun axisAlignedRectCoverage(rect: Rect, pixel: Point2F32): Float {
+    private fun axisAlignedRectCoverage(rect: RectF32, pixel: Point2F32): Float {
         val overlapWidth = (min(rect.right, pixel.x + 1f) - max(rect.left, pixel.x)).coerceAtLeast(0f)
         val overlapHeight = (min(rect.bottom, pixel.y + 1f) - max(rect.top, pixel.y)).coerceAtLeast(0f)
         return overlapWidth * overlapHeight
@@ -1020,10 +1020,10 @@ class GPUAllApiBlendSurfaceTest {
 
     private companion object {
         const val SURFACE_SIZE = 32
-        val SURFACE_RECT = Rect(0f, 0f, SURFACE_SIZE.toFloat(), SURFACE_SIZE.toFloat())
-        val SOURCE_RECT = Rect(6f, 6f, 26f, 26f)
-        val CLIP_RECT = Rect(12f, 12f, 24f, 24f)
-        val ALPHA_MASK_RECT = Rect(12.5f, 12.5f, 23.5f, 23.5f)
+        val SURFACE_RECT = RectF32(0f, 0f, SURFACE_SIZE.toFloat(), SURFACE_SIZE.toFloat())
+        val SOURCE_RECT = RectF32(6f, 6f, 26f, 26f)
+        val CLIP_RECT = RectF32(12f, 12f, 24f, 24f)
+        val ALPHA_MASK_RECT = RectF32(12.5f, 12.5f, 23.5f, 23.5f)
         val ALPHA_MASK_EDGE = Point2F32(12f, 16f)
         val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)

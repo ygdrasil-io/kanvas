@@ -34,7 +34,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
@@ -78,13 +78,13 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                         clip = when (context) {
                             PartialAlphaClipContext.UNCLIPPED -> ClipStack.WideOpen
                             PartialAlphaClipContext.SCISSOR -> ClipStack.DeviceRect(
-                                rect = Rect.fromLTRB(0f, 0f, 20f, 80f),
+                                rect = RectF32.ofLTRB(0f, 0f, 20f, 80f),
                                 antiAlias = false,
                             )
                         },
                     )
                     val destination = DisplayOp.DrawRect(
-                        rect = Rect.fromLTRB(0f, 0f, 40f, 80f),
+                        rect = RectF32.ofLTRB(0f, 0f, 40f, 80f),
                         paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
@@ -148,7 +148,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             Color.WHITE,
         ).copy(
             clip = ClipStack.DeviceRect(
-                rect = Rect.fromLTRB(16.5f, 0f, 40f, 80f),
+                rect = RectF32.ofLTRB(16.5f, 0f, 40f, 80f),
                 antiAlias = true,
             ),
         )
@@ -203,12 +203,12 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             clip = ClipStack.Complex(
                 listOf(
                     ClipStackOp.RectOp(
-                        rect = Rect.fromLTRB(8f, 0f, 32f, 80f),
+                        rect = RectF32.ofLTRB(8f, 0f, 32f, 80f),
                         op = ClipOp.INTERSECT,
                         antiAlias = false,
                     ),
                     ClipStackOp.RectOp(
-                        rect = Rect.fromLTRB(14f, 0f, 18f, 80f),
+                        rect = RectF32.ofLTRB(14f, 0f, 18f, 80f),
                         op = ClipOp.DIFFERENCE,
                         antiAlias = false,
                     ),
@@ -269,12 +269,12 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                 clip = ClipStack.Complex(
                     listOf(
                         ClipStackOp.RectOp(
-                            rect = Rect.fromLTRB(0f, 0f, 40f, 80f),
+                            rect = RectF32.ofLTRB(0f, 0f, 40f, 80f),
                             op = ClipOp.INTERSECT,
                             antiAlias = false,
                         ),
                         ClipStackOp.RectOp(
-                            rect = Rect.fromLTRB(35f, 0f, 38f, 80f),
+                            rect = RectF32.ofLTRB(35f, 0f, 38f, 80f),
                             op = ClipOp.DIFFERENCE,
                             antiAlias = false,
                         ),
@@ -362,13 +362,13 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         )
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 4f, 4f),
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, Color.WHITE),
-            drawImage(image, Rect.fromLTRB(48f, 0f, 50f, 2f)),
+            drawImage(image, RectF32.ofLTRB(48f, 0f, 50f, 2f)),
             text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 60, 58, Color.GREEN),
             text(typeface, GPUPreparedTextTestFixtures.COLOR_BASE_GLYPH_ID, 108, 58, Color.BLUE),
         )
@@ -471,7 +471,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         )
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(0f, 0f, 4f, 4f),
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
                 Paint.fill(Color.RED).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -511,7 +511,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         val result = execute(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(0f, 0f, 4f, 4f),
+                    RectF32.ofLTRB(0f, 0f, 4f, 4f),
                     Paint.fill(Color.RED).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -590,9 +590,9 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         clip = ClipStack.WideOpen,
     )
 
-    private fun drawImage(image: Image, dst: Rect): DisplayOp.DrawImage = DisplayOp.DrawImage(
+    private fun drawImage(image: Image, dst: RectF32): DisplayOp.DrawImage = DisplayOp.DrawImage(
         image = image,
-        src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = Paint.fill(Color.WHITE).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.NEAREST),

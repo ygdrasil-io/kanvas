@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurredclippedcircle.cpp`.
@@ -37,7 +37,7 @@ class BlurredClippedCircleGm : SkiaGm {
         )
 
         canvas.save()
-        val clipRect1 = Rect.fromLTRB(0f, 0f, kWidth.toFloat(), kHeight.toFloat())
+        val clipRect1 = RectF32.ofLTRB(0f, 0f, kWidth.toFloat(), kHeight.toFloat())
         canvas.clipRect(clipRect1)
 
         canvas.save()
@@ -45,10 +45,10 @@ class BlurredClippedCircleGm : SkiaGm {
         canvas.drawRect(clipRect1, whitePaint)
 
         canvas.save()
-        val clipRect2 = Rect.fromLTRB(8f, 8f, 288f, 288f)
+        val clipRect2 = RectF32.ofLTRB(8f, 8f, 288f, 288f)
         canvas.clipRect(clipRect2)
 
-        val r = Rect.fromLTRB(4f, 4f, 292f, 292f)
+        val r = RectF32.ofLTRB(4f, 4f, 292f, 292f)
         val path = Path { }.apply { addOval(r) }
 
         val paint = Paint(

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/morphology.cpp`.
  *  Tests ImageFilter morphology (dilate/erode) — draws rectangles with
@@ -24,14 +24,14 @@ class MorphologyGm : SkiaGm {
     override val height = 560
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, 700f, 560f), Paint(Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, 700f, 560f), Paint(Color.BLACK))
 
         val surf = Surface(135, 135)
         surf.canvas { drawColor(Color.BLACK) }
         val white = Paint(Color.WHITE)
         surf.canvas {
-            drawRect(Rect.fromXYWH(10f, 10f, 110f, 50f), white)
-            drawRect(Rect.fromXYWH(10f, 65f, 110f, 50f), white)
+            drawRect(RectF32.ofOriginSize(10f, 10f, 110f, 50f), white)
+            drawRect(RectF32.ofOriginSize(10f, 65f, 110f, 50f), white)
         }
         val image = surf.makeImageSnapshot()
 
@@ -49,8 +49,8 @@ class MorphologyGm : SkiaGm {
                 val paint = Paint(imageFilter = imageFilter)
                 canvas.save()
                 canvas.translate((i * 140).toFloat(), (j * 140).toFloat())
-                canvas.clipRect(Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()))
-                canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+                canvas.clipRect(RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+                canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
                 canvas.restore()
             }
         }

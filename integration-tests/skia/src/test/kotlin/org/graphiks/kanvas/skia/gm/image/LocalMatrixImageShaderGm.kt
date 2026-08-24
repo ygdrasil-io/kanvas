@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/localmatriximageshader.cpp::localmatriximageshader` (250 x 250).
@@ -37,7 +37,7 @@ class LocalMatrixImageShaderGm : SkiaGm {
             shader = Shader.Image(redImage, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
                 .let { Shader.WithLocalMatrix(it, redComposed) },
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 250f, 250f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
 
         val blueImage = makeImage(Color.BLUE)
         val blueComposed = rotate * translate
@@ -45,25 +45,25 @@ class LocalMatrixImageShaderGm : SkiaGm {
             shader = Shader.Image(blueImage, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
                 .let { Shader.WithLocalMatrix(it, blueComposed) },
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 250f, 250f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
 
         canvas.translate(100f, 0f)
         paint = paint.copy(
             shader = Shader.Image(redImage, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
                 .let { Shader.WithLocalMatrix(it, redComposed) },
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 250f, 250f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
         paint = paint.copy(
             shader = Shader.Image(blueImage, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
                 .let { Shader.WithLocalMatrix(it, blueComposed) },
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 250f, 250f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
     }
 
     private fun makeImage(color: Color): org.graphiks.kanvas.image.Image {
         val surface = Surface(100, 100)
         surface.canvas {
-            drawRect(Rect.fromXYWH(25f, 25f, 50f, 50f), Paint(antiAlias = true, color = color))
+            drawRect(RectF32.ofOriginSize(25f, 25f, 50f, 50f), Paint(antiAlias = true, color = color))
         }
         return surface.makeImageSnapshot()
     }

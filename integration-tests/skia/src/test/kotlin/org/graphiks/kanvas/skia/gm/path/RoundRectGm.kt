@@ -14,7 +14,7 @@ import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -35,7 +35,7 @@ class RoundRectGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rand = Random(1)
         canvas.translate(20f, 20f)
-        val kRect = Rect.fromLTRB(-20f, -30f, 20f, 30f)
+        val kRect = RectF32.ofLTRB(-20f, -30f, 20f, 30f)
         val circleRRect = RRect(kRect, 5f)
 
         val kXStart = 60f
@@ -91,7 +91,7 @@ class RoundRectGm : SkiaGm {
 
         // Tall and skinny
         for (i in paints.indices) {
-            val rect = Rect.fromLTRB(-20f, -60f, 20f, 60f)
+            val rect = RectF32.ofLTRB(-20f, -60f, 20f, 60f)
             val ellipseRect = RRect(rect, CornerRadii(5f, 10f), CornerRadii(5f, 10f), CornerRadii(5f, 10f), CornerRadii(5f, 10f))
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.55f + 0.25f, kYStart + kYStep * i + 0.75f)
@@ -103,7 +103,7 @@ class RoundRectGm : SkiaGm {
 
         // Wide and short
         for (i in paints.indices) {
-            val rect = Rect.fromLTRB(-80f, -30f, 80f, 30f)
+            val rect = RectF32.ofLTRB(-80f, -30f, 80f, 30f)
             val ellipseRect = RRect(rect, CornerRadii(20f, 5f), CornerRadii(20f, 5f), CornerRadii(20f, 5f), CornerRadii(20f, 5f))
             canvas.save()
             canvas.translate(kXStart + kXStep * 4 + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
@@ -115,7 +115,7 @@ class RoundRectGm : SkiaGm {
 
         // Super-skinny
         for (i in paints.indices) {
-            val rect = Rect.fromLTRB(0f, -60f, 1f, 60f)
+            val rect = RectF32.ofLTRB(0f, -60f, 1f, 60f)
             val circleRect = RRect(rect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 3.25f + 0.25f, kYStart + kYStep * i + 0.75f)
@@ -126,7 +126,7 @@ class RoundRectGm : SkiaGm {
 
         // Super-short
         for (i in paints.indices) {
-            val rect = Rect.fromLTRB(-80f, -1f, 80f, 0f)
+            val rect = RectF32.ofLTRB(-80f, -1f, 80f, 0f)
             val circleRect = RRect(rect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.5f + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
@@ -178,14 +178,14 @@ class RoundRectGm : SkiaGm {
             canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart + kYStep * 4 + 0.25f + 0.5f * kYStep)
             val color = genColor(rand)
             val p = Paint(color = color)
-            val oooRect = Rect.fromLTRB(20f, 30f, -20f, -30f)
+            val oooRect = RectF32.ofLTRB(20f, 30f, -20f, -30f)
             canvas.drawRRect(RRect(oooRect, 10f), p)
             canvas.restore()
         }
 
         // RRect with stroke > radius/2
         run {
-            val smallRect = Rect.fromLTRB(-30f, -20f, 30f, 20f)
+            val smallRect = RectF32.ofLTRB(-30f, -20f, 30f, 20f)
             val circleRect = RRect(smallRect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart - kYStep + 73f / 4f + 0.5f * kYStep)

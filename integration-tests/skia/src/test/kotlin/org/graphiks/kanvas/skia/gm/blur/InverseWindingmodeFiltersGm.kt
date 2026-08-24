@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/inversepaths.cpp::inverse_windingmode_filters` (256 x 100).
@@ -30,14 +30,14 @@ class InverseWindingmodeFiltersGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val path = Path { }.apply {
-            addRect(Rect.fromLTRB(10f, 10f, 30f, 30f))
-            addRect(Rect.fromLTRB(20f, 20f, 40f, 40f))
-            addRect(Rect.fromLTRB(10f, 60f, 30f, 80f))
-            addRect(Rect.fromLTRB(20f, 70f, 40f, 90f))
+            addRect(RectF32.ofLTRB(10f, 10f, 30f, 30f))
+            addRect(RectF32.ofLTRB(20f, 20f, 40f, 40f))
+            addRect(RectF32.ofLTRB(10f, 60f, 30f, 80f))
+            addRect(RectF32.ofLTRB(20f, 70f, 40f, 90f))
         }
 
         val strokePaint = Paint(style = PaintStyle.STROKE)
-        val clipRect = Rect.fromLTRB(0f, 0f, 51f, 99f)
+        val clipRect = RectF32.ofLTRB(0f, 0f, 51f, 99f)
         canvas.drawPath(path, strokePaint)
 
         val fillPaint = Paint(

@@ -6,6 +6,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,8 +61,8 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawDRRect emits DrawDRRect op`() {
         val (canvas, buffer) = testCanvas()
-        val outer = RRect(Rect.fromLTRB(0f, 0f, 100f, 100f), CornerRadii(10f, 10f))
-        val inner = RRect(Rect.fromLTRB(20f, 20f, 80f, 80f), CornerRadii(5f, 5f))
+        val outer = RRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), CornerRadii(10f, 10f))
+        val inner = RRect(RectF32.ofLTRB(20f, 20f, 80f, 80f), CornerRadii(5f, 5f))
         canvas.drawDRRect(outer, inner, Paint.fill(Color.GREEN))
         val op = buffer.ops().first() as DisplayOp.DrawDRRect
         assertEquals(outer, op.outer)
@@ -71,7 +72,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `isClipRect returns true for device rect clip`() {
         val (canvas, _) = testCanvas()
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         assertTrue(canvas.isClipRect)
     }
 
@@ -84,29 +85,29 @@ class ScaffoldCanvasTest {
     @Test
     fun `quickReject returns false for WideOpen clip`() {
         val (canvas, _) = testCanvas()
-        assertFalse(canvas.quickReject(Rect.fromLTRB(0f, 0f, 100f, 100f)))
+        assertFalse(canvas.quickReject(RectF32.ofLTRB(0f, 0f, 100f, 100f)))
     }
 
     @Test
     fun `quickReject returns true for rect fully outside device rect clip`() {
         val (canvas, _) = testCanvas()
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 50f, 50f))
-        assertTrue(canvas.quickReject(Rect.fromLTRB(60f, 60f, 100f, 100f)))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 50f, 50f))
+        assertTrue(canvas.quickReject(RectF32.ofLTRB(60f, 60f, 100f, 100f)))
     }
 
     @Test
     fun `quickReject returns false for overlapping rect`() {
         val (canvas, _) = testCanvas()
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 50f, 50f))
-        assertFalse(canvas.quickReject(Rect.fromLTRB(25f, 25f, 100f, 100f)))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 50f, 50f))
+        assertFalse(canvas.quickReject(RectF32.ofLTRB(25f, 25f, 100f, 100f)))
     }
 
     @Test
     fun `drawImageNine emits DrawImageNine op`() {
         val (canvas, buffer) = testCanvas()
         val img = dummyImage()
-        val center = Rect.fromLTRB(30f, 30f, 70f, 70f)
-        val dst = Rect.fromLTRB(0f, 0f, 200f, 200f)
+        val center = RectF32.ofLTRB(30f, 30f, 70f, 70f)
+        val dst = RectF32.ofLTRB(0f, 0f, 200f, 200f)
         canvas.drawImageNine(img, center, dst)
         val op = buffer.ops().first() as DisplayOp.DrawImageNine
         assertEquals(img, op.image)
@@ -118,7 +119,7 @@ class ScaffoldCanvasTest {
     fun `drawImageNine with paint emits op with paint`() {
         val (canvas, buffer) = testCanvas()
         val img = dummyImage()
-        canvas.drawImageNine(img, Rect.fromLTRB(30f, 30f, 70f, 70f), Rect.fromLTRB(0f, 0f, 200f, 200f), Paint.fill(Color.BLUE))
+        canvas.drawImageNine(img, RectF32.ofLTRB(30f, 30f, 70f, 70f), RectF32.ofLTRB(0f, 0f, 200f, 200f), Paint.fill(Color.BLUE))
         val op = buffer.ops().first() as DisplayOp.DrawImageNine
         assertNotNull(op.paint)
     }
@@ -127,11 +128,11 @@ class ScaffoldCanvasTest {
     fun `drawImageNine with empty center rect still emits op`() {
         val (canvas, buffer) = testCanvas()
         val img = dummyImage()
-        val empty = Rect.fromLTRB(0f, 0f, 0f, 0f)
-        canvas.drawImageNine(img, empty, Rect.fromLTRB(0f, 0f, 200f, 200f))
+        val empty = RectF32.ofLTRB(0f, 0f, 0f, 0f)
+        canvas.drawImageNine(img, empty, RectF32.ofLTRB(0f, 0f, 200f, 200f))
         val op = buffer.ops().first() as DisplayOp.DrawImageNine
-        assertEquals(0f, op.center.width)
-        assertEquals(0f, op.center.height)
+        assertEquals(0f, op.center.width())
+        assertEquals(0f, op.center.height())
     }
 
     @Test
@@ -139,7 +140,7 @@ class ScaffoldCanvasTest {
         val (canvas, buffer) = testCanvas()
         val img = dummyImage()
         val lattice = Lattice(xDivs = listOf(25, 75), yDivs = listOf(25, 75))
-        val dst = Rect.fromLTRB(0f, 0f, 200f, 200f)
+        val dst = RectF32.ofLTRB(0f, 0f, 200f, 200f)
         canvas.drawImageLattice(img, lattice, dst)
         val op = buffer.ops().first() as DisplayOp.DrawImageLattice
         assertEquals(img, op.image)
@@ -177,7 +178,7 @@ class ScaffoldCanvasTest {
         val (canvas, buffer) = testCanvas()
         val atlas = dummyImage()
         val transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(100f, 0f))
-        val texRects = listOf(Rect.fromLTRB(0f, 0f, 50f, 50f), Rect.fromLTRB(50f, 0f, 100f, 50f))
+        val texRects = listOf(RectF32.ofLTRB(0f, 0f, 50f, 50f), RectF32.ofLTRB(50f, 0f, 100f, 50f))
         canvas.drawAtlas(atlas, transforms, texRects)
         val op = buffer.ops().first() as DisplayOp.DrawAtlas
         assertEquals(atlas, op.atlas)
@@ -199,7 +200,7 @@ class ScaffoldCanvasTest {
         val (canvas, buffer) = testCanvas()
         val atlas = dummyImage()
         val transforms = listOf(Matrix3x3F32.Identity)
-        val texRects = listOf(Rect.fromLTRB(0f, 0f, 50f, 50f))
+        val texRects = listOf(RectF32.ofLTRB(0f, 0f, 50f, 50f))
         val colors = listOf(Color.RED)
         canvas.drawAtlas(atlas, transforms, texRects, colors, BlendMode.SRC_IN)
         val op = buffer.ops().first() as DisplayOp.DrawAtlas
@@ -247,7 +248,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawAnnotation emits Annotation op`() {
         val (canvas, buffer) = testCanvas()
-        val rect = Rect.fromLTRB(0f, 0f, 100f, 100f)
+        val rect = RectF32.ofLTRB(0f, 0f, 100f, 100f)
         canvas.drawAnnotation(rect, "author", "test-user")
         val op = buffer.ops().first() as DisplayOp.Annotation
         assertEquals(rect, op.rect)
@@ -258,7 +259,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawAnnotation with empty strings emits op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.drawAnnotation(Rect.fromLTRB(0f, 0f, 0f, 0f), "", "")
+        canvas.drawAnnotation(RectF32.ofLTRB(0f, 0f, 0f, 0f), "", "")
         val op = buffer.ops().first() as DisplayOp.Annotation
         assertEquals("", op.key)
         assertEquals("", op.value)

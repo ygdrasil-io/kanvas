@@ -26,7 +26,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedTextStrokeTest {
     @Test
@@ -244,7 +244,7 @@ class GPUPreparedTextStrokeTest {
             paint: Paint = Paint.stroke(Color.RED, 2f),
             transform: Matrix3x3F32 = Matrix3x3F32.translation(1f, 2f),
             clip: ClipStack = ClipStack.DeviceRect(
-                Rect.fromLTRB(1f, 2f, 40f, 50f),
+                RectF32.ofLTRB(1f, 2f, 40f, 50f),
                 antiAlias = false,
             ),
         ): String = assertIs<GPUPreparedTextFramePreparation.Ready>(
@@ -256,7 +256,7 @@ class GPUPreparedTextStrokeTest {
         val clipOne = inventoryHash()
         val clipTwo = inventoryHash(
             clip = ClipStack.DeviceRect(
-                Rect.fromLTRB(1f, 2f, 41f, 50f),
+                RectF32.ofLTRB(1f, 2f, 41f, 50f),
                 antiAlias = false,
             ),
         )

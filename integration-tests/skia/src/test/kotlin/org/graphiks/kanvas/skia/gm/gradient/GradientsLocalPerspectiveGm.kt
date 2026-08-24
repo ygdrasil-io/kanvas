@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/gradients.cpp` (local perspective variant).
  *  Tests gradient rendering with local perspective transforms — draws
@@ -28,7 +28,7 @@ class GradientsLocalPerspectiveGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val pts = arrayOf(Point2F32(0f, 0f), Point2F32(100f, 100f))
-        val r = Rect(0f, 0f, 100f, 100f)
+        val r = RectF32(0f, 0f, 100f, 100f)
         var paint = Paint(antiAlias = true)
 
         val base5 = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE, Color.BLACK)

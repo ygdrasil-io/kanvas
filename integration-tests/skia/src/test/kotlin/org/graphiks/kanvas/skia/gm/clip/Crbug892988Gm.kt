@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -30,14 +30,14 @@ class Crbug892988Gm : SkiaGm {
             strokeWidth = 1f,
             antiAlias = true,
         )
-        canvas.drawRect(Rect.fromLTRB(11.5f, 0.5f, 245.5f, 245.5f), paint1)
+        canvas.drawRect(RectF32.ofLTRB(11.5f, 0.5f, 245.5f, 245.5f), paint1)
 
-        canvas.clipRect(Rect.fromLTRB(12f, 1f, 244f, 244f))
+        canvas.clipRect(RectF32.ofLTRB(12f, 1f, 244f, 244f))
         val paint2 = Paint(
             color = Color.fromRGBA(240f / 255f, 1f, 1f),
             blendMode = BlendMode.SRC,
             antiAlias = true,
         )
-        canvas.drawRect(Rect.fromLTRB(12f, 1f, 244f, 244f), paint2)
+        canvas.drawRect(RectF32.ofLTRB(12f, 1f, 244f, 244f), paint2)
     }
 }

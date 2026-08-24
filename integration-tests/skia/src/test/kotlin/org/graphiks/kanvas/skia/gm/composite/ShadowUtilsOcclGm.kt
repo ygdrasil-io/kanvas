@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.max
 
 /**
@@ -28,10 +28,10 @@ class ShadowUtilsOcclGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paths = listOf(
-            Path { }.also { it.addRRect(RRect(Rect(0f, 0f, 50f, 50f), CornerRadii(10f, 10f))) },
-            Path { }.also { it.addRect(Rect(0f, 0f, 50f, 50f)) },
+            Path { }.also { it.addRRect(RRect(RectF32(0f, 0f, 50f, 50f), CornerRadii(10f, 10f))) },
+            Path { }.also { it.addRect(RectF32(0f, 0f, 50f, 50f)) },
             Path { }.also { it.addCircle(25f, 25f, 25f) },
-            Path { }.also { it.addOval(Rect(0f, 0f, 20f, 60f)) },
+            Path { }.also { it.addOval(RectF32(0f, 0f, 20f, 60f)) },
         )
 
         val concavePaths = listOf(
@@ -78,8 +78,8 @@ class ShadowUtilsOcclGm : SkiaGm {
 
         var pathCounter = 0
         for (path in paths) {
-            val postM = Rect(0f, 0f, 50f, 50f)
-            val w = postM.width + kHeight
+            val postM = RectF32(0f, 0f, 50f, 50f)
+            val w = postM.width() + kHeight
             val dx = w + kPad
             if (x + dx > width - 3f * kPad) {
                 canvas.restore()
@@ -96,7 +96,7 @@ class ShadowUtilsOcclGm : SkiaGm {
             canvas.restore()
             canvas.translate(dx, 0f)
             x += dx
-            dy = max(dy, postM.height + kPad + kHeight)
+            dy = max(dy, postM.height() + kPad + kHeight)
             ++pathCounter
         }
 
@@ -106,15 +106,15 @@ class ShadowUtilsOcclGm : SkiaGm {
         x = kPad
         dy = 0f
         for (path in concavePaths) {
-            val postM = Rect(0f, 0f, 50f, 50f)
-            val w = postM.width + kHeight
+            val postM = RectF32(0f, 0f, 50f, 50f)
+            val w = postM.width() + kHeight
             val dx = w + kPad
             canvas.save()
             canvas.drawPath(path, fillPaint)
             canvas.restore()
             canvas.translate(dx, 0f)
             x += dx
-            dy = max(dy, postM.height + kPad + kHeight)
+            dy = max(dy, postM.height() + kPad + kHeight)
         }
         canvas.restore()
     }

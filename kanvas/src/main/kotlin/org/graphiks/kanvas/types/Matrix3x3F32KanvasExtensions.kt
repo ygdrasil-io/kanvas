@@ -1,15 +1,17 @@
 package org.graphiks.kanvas.types
 
+import org.graphiks.math.geometry.RectF32
+
 import kotlin.math.abs
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 
 /** Maps an axis-aligned rectangle under a scale-plus-translation transform. */
-fun Matrix3x3F32.mapAxisAlignedRect(rect: Rect): Rect {
+fun Matrix3x3F32.mapAxisAlignedRect(rect: RectF32): RectF32 {
     require(isScaleTranslate()) { "mapAxisAlignedRect requires a scale-translate matrix" }
     val topLeft = transform(Point2F32(rect.left, rect.top))
     val bottomRight = transform(Point2F32(rect.right, rect.bottom))
-    return Rect.fromLTRB(
+    return RectF32.ofLTRB(
         minOf(topLeft.x, bottomRight.x),
         minOf(topLeft.y, bottomRight.y),
         maxOf(topLeft.x, bottomRight.x),

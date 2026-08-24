@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/complexclip4.cpp::ComplexClip4GM` (970 × 780).
@@ -38,16 +38,16 @@ open class ComplexClip4Gm(
         canvas.save()
 
         canvas.save()
-        greenIn(canvas, Rect.fromLTRB(100f, 100f, 300f, 300f))
+        greenIn(canvas, RectF32.ofLTRB(100f, 100f, 300f, 300f))
         canvas.clipPath(
-            Path { }.apply { addRect(Rect.fromLTRB(100f, 200f, 400f, 500f)) },
+            Path { }.apply { addRect(RectF32.ofLTRB(100f, 200f, 400f, 500f)) },
             antiAlias = doAAClip,
         )
-        canvas.drawRect(Rect.fromLTRB(100f, 200f, 400f, 500f), yellow)
+        canvas.drawRect(RectF32.ofLTRB(100f, 200f, 400f, 500f), yellow)
         canvas.restore()
 
         canvas.save()
-        greenIn(canvas, Rect.fromLTRB(500f, 100f, 800f, 300f))
+        greenIn(canvas, RectF32.ofLTRB(500f, 100f, 800f, 300f))
         val pathClip = Path {
             moveTo(650f, 200f)
             lineTo(900f, 300f)
@@ -56,24 +56,24 @@ open class ComplexClip4Gm(
             close()
         }
         canvas.clipPath(pathClip, antiAlias = doAAClip)
-        canvas.drawRect(Rect.fromLTRB(500f, 200f, 900f, 500f), yellow)
+        canvas.drawRect(RectF32.ofLTRB(500f, 200f, 900f, 500f), yellow)
         canvas.restore()
 
         canvas.save()
-        greenIn(canvas, Rect.fromLTRB(500f, 500f, 800f, 700f))
-        val rrect = RRect(Rect.fromLTRB(500f, 600f, 900f, 750f), radius = 0f).copy(
+        greenIn(canvas, RectF32.ofLTRB(500f, 500f, 800f, 700f))
+        val rrect = RRect(RectF32.ofLTRB(500f, 600f, 900f, 750f), radius = 0f).copy(
             topLeft = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
             topRight = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
             bottomLeft = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
             bottomRight = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
         )
         canvas.clipRRect(rrect, antiAlias = doAAClip)
-        canvas.drawRect(Rect.fromLTRB(500f, 600f, 900f, 750f), yellow)
+        canvas.drawRect(RectF32.ofLTRB(500f, 600f, 900f, 750f), yellow)
         canvas.restore()
 
         canvas.save()
         canvas.clipPath(
-            Path { }.apply { addRect(Rect.fromLTRB(100f, 400f, 300f, 750f)) },
+            Path { }.apply { addRect(RectF32.ofLTRB(100f, 400f, 300f, 750f)) },
             antiAlias = doAAClip,
         )
         canvas.drawColor(0f, 1f, 0f)
@@ -81,7 +81,7 @@ open class ComplexClip4Gm(
         canvas.translate(50f, 50f)
         canvas.save()
         canvas.clipPath(
-            Path { }.apply { addRect(Rect.fromLTRB(150f, 450f, 250f, 700f)) },
+            Path { }.apply { addRect(RectF32.ofLTRB(150f, 450f, 250f, 700f)) },
             antiAlias = doAAClip,
         )
         canvas.drawColor(1f, 1f, 0f)
@@ -91,7 +91,7 @@ open class ComplexClip4Gm(
         canvas.restore()
     }
 
-    private fun greenIn(canvas: GmCanvas, restrict: Rect) {
+    private fun greenIn(canvas: GmCanvas, restrict: RectF32) {
         canvas.save()
         canvas.clipPath(Path { }.apply { addRect(restrict) }, antiAlias = doAAClip)
         canvas.drawColor(0f, 1f, 0f)

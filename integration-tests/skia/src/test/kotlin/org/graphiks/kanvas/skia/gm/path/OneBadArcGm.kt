@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class OneBadArcGm : SkiaGm {
     override val name = "onebadarc"
@@ -39,6 +39,6 @@ class OneBadArcGm : SkiaGm {
         )
         canvas.translate(20f, 0f)
         canvas.drawPath(path, p0)
-        canvas.drawArc(Rect.fromLTRB(60f, 0f, 100f, 40f), 45f, 90f, useCenter = true, p0)
+        canvas.drawArc(RectF32.ofLTRB(60f, 0f, 100f, 40f), 45f, 90f, useCenter = true, p0)
     }
 }

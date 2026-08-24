@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -84,7 +84,7 @@ class HardstopGradientShaderGm : SkiaGm {
 
     private fun shadeRect(canvas: GmCanvas, shader: Shader, cellRow: Int, cellCol: Int) {
         val paint = Paint(shader = shader)
-        val rect = Rect.fromXYWH(
+        val rect = RectF32.ofOriginSize(
             (cellCol * CELL_WIDTH + PAD_WIDTH).toFloat(),
             (cellRow * CELL_HEIGHT + PAD_HEIGHT).toFloat(),
             RECT_WIDTH.toFloat(),

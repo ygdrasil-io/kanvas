@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/imagefilterscropped.cpp.
@@ -26,7 +26,7 @@ class ImageFiltersCroppedGm : SkiaGm {
     override val height = 960
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val drawProc: List<(GmCanvas, Rect, ImageFilter?) -> Unit> = listOf(
+        val drawProc: List<(GmCanvas, RectF32, ImageFilter?) -> Unit> = listOf(
             ::drawRectProc, ::drawCircleProc, ::drawColorProc, ::drawRectProc,
         )
 
@@ -50,10 +50,10 @@ class ImageFiltersCroppedGm : SkiaGm {
             ImageFilter.ColorFilter(cf, null),
         )
 
-        val r = Rect(0f, 0f, 64f, 64f)
+        val r = RectF32(0f, 0f, 64f, 64f)
         val margin = 16f
-        val dx = r.width + margin
-        val dy = r.height + margin
+        val dx = r.width() + margin
+        val dy = r.height() + margin
 
         canvas.translate(margin, margin)
         for (j in drawProc.indices) {
@@ -68,7 +68,7 @@ class ImageFiltersCroppedGm : SkiaGm {
         }
     }
 
-    private fun drawColorProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawColorProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
             color = Color.BLACK,
@@ -79,17 +79,17 @@ class ImageFiltersCroppedGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawCircleProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawCircleProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val magenta = Color.fromRGBA(1f, 0f, 1f, 1f)
         val paint = Paint(
             color = magenta,
             imageFilter = imf,
             antiAlias = true,
         )
-        canvas.drawCircle(r.center.x, r.center.y, r.width * 2f / 5f, paint)
+        canvas.drawCircle(r.center().x, r.center().y, r.width() * 2f / 5f, paint)
     }
 
-    private fun drawRectProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawRectProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
             color = Color.GREEN,
@@ -105,7 +105,7 @@ class ImageFiltersCroppedGm : SkiaGm {
                 val paint = Paint(color = color, antiAlias = false)
                 val cx = col * cell
                 val cy = row * cell
-                canvas.drawRect(Rect(cx, cy, cx + cell, cy + cell), paint)
+                canvas.drawRect(RectF32(cx, cy, cx + cell, cy + cell), paint)
             }
         }
     }

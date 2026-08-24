@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/stroke_rect_shader.cpp`.
@@ -28,7 +28,7 @@ class StrokeRectShaderGm : SkiaGm {
     override val height = 300
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rect = Rect.fromLTRB(0f, 0f, 100f, 100f)
+        val rect = RectF32.ofLTRB(0f, 0f, 100f, 100f)
         val stops = listOf(
             GradientStop(0f, Color.RED),
             GradientStop(1f, Color.BLUE),

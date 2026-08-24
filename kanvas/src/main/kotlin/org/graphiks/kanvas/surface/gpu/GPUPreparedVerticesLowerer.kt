@@ -258,7 +258,7 @@ object GPUPreparedVerticesLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         provenance: String,
-        meshBounds: org.graphiks.kanvas.types.Rect?,
+        meshBounds: org.graphiks.math.geometry.RectF32?,
         finalBlend: GPUBlendFacts,
         material: GPUPreparedMaterialProgram? = null,
     ): GPUPreparedVerticesLowering {

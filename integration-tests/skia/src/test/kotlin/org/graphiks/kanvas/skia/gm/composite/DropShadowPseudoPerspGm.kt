@@ -11,7 +11,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/dropshadowimagefilter.cpp` `DEF_SIMPLE_GM(dropshadow_pseudopersp, ...)` (155 × 155).
@@ -39,7 +39,7 @@ class DropShadowPseudoPerspGm : SkiaGm {
             0f, 0f, 1f,
         ))
 
-        val layerBounds = Rect(42.5f, 42.5f, 457.5f, 457.5f)
+        val layerBounds = RectF32(42.5f, 42.5f, 457.5f, 457.5f)
 
         val shadowColor = Color.fromRGBA(0.14902f, 0.215686f, 0.329412f, 0.666667f)
         val layerPaint = Paint(
@@ -47,7 +47,7 @@ class DropShadowPseudoPerspGm : SkiaGm {
         )
         canvas.saveLayer(bounds = layerBounds, paint = layerPaint)
 
-        val rrect = RRect(Rect(-250f, -250f, 250f, 250f), CornerRadii(45f, 45f))
+        val rrect = RRect(RectF32(-250f, -250f, 250f, 250f), CornerRadii(45f, 45f))
 
         canvas.concat(Matrix3x3F32.of(0.83f, 0f, 250f, 0f, 0.83f, 250f))
 

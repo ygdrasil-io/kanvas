@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -32,7 +32,7 @@ class ReadPixelsCodecGm : SkiaGm {
         for (col in 0 until 3) {
             canvas.save()
             for (row in 0 until 12) {
-                val rect = Rect.fromXYWH(0f, 0f, cellW.toFloat(), cellH.toFloat())
+                val rect = RectF32.ofOriginSize(0f, 0f, cellW.toFloat(), cellH.toFloat())
                 canvas.drawRect(rect, Paint(
                     color = Color.fromRGBA(rand.nextFloat(), rand.nextFloat(), rand.nextFloat()),
                 ))

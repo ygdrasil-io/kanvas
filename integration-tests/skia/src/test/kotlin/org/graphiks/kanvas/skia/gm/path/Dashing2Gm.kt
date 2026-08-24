@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -34,13 +34,13 @@ class Dashing2Gm : SkiaGm {
             floatArrayOf(2f, 2f),
         )
 
-        val procs: List<(Rect) -> Path> = listOf(
+        val procs: List<(RectF32) -> Path> = listOf(
             ::makePathLine, ::makePathRect, ::makePathOval, ::makePathStar,
         )
 
-        val bounds = Rect.fromXYWH(20f, 20f, 120f, 120f)
-        val dx = bounds.width * 4f / 3f
-        val dy = bounds.height * 4f / 3f
+        val bounds = RectF32.ofOriginSize(20f, 20f, 120f, 120f)
+        val dx = bounds.width() * 4f / 3f
+        val dy = bounds.height() * 4f / 3f
 
         for (y in patterns.indices) {
             val vals = patterns[y]
@@ -53,7 +53,7 @@ class Dashing2Gm : SkiaGm {
             )
 
             for (x in procs.indices) {
-                val r = Rect.fromLTRB(
+                val r = RectF32.ofLTRB(
                     bounds.left + x * dx, bounds.top + y * dy,
                     bounds.right + x * dx, bounds.bottom + y * dy,
                 )
@@ -63,19 +63,19 @@ class Dashing2Gm : SkiaGm {
     }
 
     private companion object {
-        fun makePathLine(b: Rect): Path =
+        fun makePathLine(b: RectF32): Path =
             Path { moveTo(b.left, b.top); lineTo(b.right, b.bottom) }
 
-        fun makePathRect(b: Rect): Path =
+        fun makePathRect(b: RectF32): Path =
             Path { }.also { it.addRect(b) }
 
-        fun makePathOval(b: Rect): Path =
+        fun makePathOval(b: RectF32): Path =
             Path { }.also { it.addOval(b) }
 
-        fun makePathStar(b: Rect): Path {
-            val cx = b.center.x
-            val cy = b.center.y
-            val r = min(b.width, b.height) / 2f
+        fun makePathStar(b: RectF32): Path {
+            val cx = b.center().x
+            val cy = b.center().y
+            val r = min(b.width(), b.height()) / 2f
             val n = 5
             var rad = -PI.toFloat() / 2f
             val drad = (n shr 1) * PI.toFloat() * 2f / n

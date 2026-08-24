@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefiltersscaled.cpp`.
  *  Tests scaled image filters — draws circles and paths with blur and
@@ -45,11 +45,11 @@ class ImageFiltersScaledGm : SkiaGm {
             Point2F32(2f, 2f),
         )
 
-        val r = Rect.fromXYWH(0f, 0f, 64f, 64f)
+        val r = RectF32.ofOriginSize(0f, 0f, 64f, 64f)
         val margin = 16f
 
         val circlePath = Path { }
-        circlePath.addCircle(r.center.x, r.center.y, r.width * 2f / 5f)
+        circlePath.addCircle(r.center().x, r.center().y, r.width() * 2f / 5f)
 
         for (j in scales.indices) {
             canvas.save()
@@ -63,10 +63,10 @@ class ImageFiltersScaledGm : SkiaGm {
                 }
                 canvas.drawPath(circlePath, paint)
                 canvas.restore()
-                canvas.translate(r.width * scales[j].x + margin, 0f)
+                canvas.translate(r.width() * scales[j].x + margin, 0f)
             }
             canvas.restore()
-            canvas.translate(0f, r.height * scales[j].y + margin)
+            canvas.translate(0f, r.height() * scales[j].y + margin)
         }
     }
 }

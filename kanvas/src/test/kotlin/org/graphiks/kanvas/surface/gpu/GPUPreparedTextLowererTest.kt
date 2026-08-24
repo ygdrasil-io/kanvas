@@ -58,7 +58,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -149,7 +149,7 @@ class GPUPreparedTextLowererTest {
         )
         val clipOps = mutableListOf<ClipStackOp>(
             ClipStackOp.RectOp(
-                rect = Rect.fromLTRB(0f, 0f, 48f, 48f),
+                rect = RectF32.ofLTRB(0f, 0f, 48f, 48f),
                 op = ClipOp.INTERSECT,
                 antiAlias = false,
             ),
@@ -596,14 +596,14 @@ class GPUPreparedTextLowererTest {
     fun `lowerer preserves every clip accepted by the common clip authority`() {
         val clips = listOf(
             ClipStack.DeviceRect(
-                Rect.fromLTRB(1f, 1f, 39f, 39f),
+                RectF32.ofLTRB(1f, 1f, 39f, 39f),
                 antiAlias = false,
             ),
             ClipStack.Complex(
                 Collections.unmodifiableList(
                     listOf(
                         ClipStackOp.RectOp(
-                            Rect.fromLTRB(0f, 0f, 40f, 40f),
+                            RectF32.ofLTRB(0f, 0f, 40f, 40f),
                             ClipOp.INTERSECT,
                             antiAlias = false,
                         ),
@@ -994,7 +994,7 @@ class GPUPreparedTextLowererTest {
     @Test
     fun `expanded text path source remains visible on the normalized GPU command`() {
         val operation = DisplayOp.DrawPath.withSourceOperation(
-            path = Path().addRect(Rect.fromLTRB(1f, 2f, 5f, 8f)),
+            path = Path().addRect(RectF32.ofLTRB(1f, 2f, 5f, 8f)),
             paint = Paint.fill(Color.BLACK),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,

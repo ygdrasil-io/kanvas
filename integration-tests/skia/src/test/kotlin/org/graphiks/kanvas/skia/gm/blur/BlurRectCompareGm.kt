@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -79,7 +79,7 @@ class BlurRectCompareGm : SkiaGm {
                     val img = masks[sigmaIdx][heightIdx][widthIdx]
                     canvas.drawImage(
                         img,
-                        Rect.fromXYWH(-pad.toFloat(), -pad.toFloat(), img.width.toFloat(), img.height.toFloat()),
+                        RectF32.ofOriginSize(-pad.toFloat(), -pad.toFloat(), img.width.toFloat(), img.height.toFloat()),
                     )
                     canvas.translate(SIZES[widthIdx] + MARGIN, 0f)
                 }

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rrects.cpp` (RRectGM with BW clip).
@@ -98,26 +98,26 @@ internal val gRadii: Array<Array<CornerRadii>> = arrayOf(
 
 internal fun buildRRects(): Array<RRect> {
     val rects = Array(kNumRRects) {
-        RRect(Rect(0f, 0f, 0f, 0f), 0f)
+        RRect(RectF32(0f, 0f, 0f, 0f), 0f)
     }
     val w = (kTileX - 2).toFloat()
     val h = (kTileY - 2).toFloat()
     val sq = (kTileY - 2).toFloat()
 
-    rects[0] = RRect(Rect(0f, 0f, w, h), 0f)
-    rects[1] = RRect(Rect(0f, 0f, w, h), CornerRadii(w / 2f, h / 2f))
-    rects[2] = RRect(Rect(0f, 0f, w, h), 10f)
-    rects[3] = RRect(Rect(0f, 0f, w, h), CornerRadii(10f, 5f))
-    rects[4] = RRect(Rect(0f, 0f, w, h), 1f)
-    rects[5] = RRect(Rect(0f, 0f, w, h), 0.5f)
-    rects[6] = RRect(Rect(0f, 0f, w, h), 0.2f)
+    rects[0] = RRect(RectF32(0f, 0f, w, h), 0f)
+    rects[1] = RRect(RectF32(0f, 0f, w, h), CornerRadii(w / 2f, h / 2f))
+    rects[2] = RRect(RectF32(0f, 0f, w, h), 10f)
+    rects[3] = RRect(RectF32(0f, 0f, w, h), CornerRadii(10f, 5f))
+    rects[4] = RRect(RectF32(0f, 0f, w, h), 1f)
+    rects[5] = RRect(RectF32(0f, 0f, w, h), 0.5f)
+    rects[6] = RRect(RectF32(0f, 0f, w, h), 0.2f)
 
-    rects[kNumSimpleCases] = RRect(Rect(0f, 0f, sq, sq), gRadii[0][0], gRadii[0][1], gRadii[0][2], gRadii[0][3])
+    rects[kNumSimpleCases] = RRect(RectF32(0f, 0f, sq, sq), gRadii[0][0], gRadii[0][1], gRadii[0][2], gRadii[0][3])
     for (i in 1 until kNumComplexCases) {
         val ri = gRadii[i]
-        rects[kNumSimpleCases + i] = RRect(Rect(0f, 0f, w, h), ri[0], ri[1], ri[2], ri[3])
+        rects[kNumSimpleCases + i] = RRect(RectF32(0f, 0f, w, h), ri[0], ri[1], ri[2], ri[3])
     }
 
-    rects[kNumRRects - 1] = RRect(Rect.fromLTRB(9f, 9f, 1699f, 1699f), CornerRadii(843.749f, 843.75f))
+    rects[kNumRRects - 1] = RRect(RectF32.ofLTRB(9f, 9f, 1699f, 1699f), CornerRadii(843.749f, 843.75f))
     return rects
 }

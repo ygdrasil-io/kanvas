@@ -10,7 +10,7 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import kotlin.test.Test
@@ -55,7 +55,7 @@ class GPUPreparedCompositeCaptureFinalTest {
 
     @Test
     fun `painted picture is counted exactly once`() {
-        val inner = recordPic { it.drawRect(Rect(0f, 0f, 10f, 10f), black) }
+        val inner = recordPic { it.drawRect(RectF32(0f, 0f, 10f, 10f), black) }
         val r = capture(listOf(DisplayOp.DrawPicture(inner, red, id33, ClipStack.WideOpen)))
         val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(r)
         val painted = ready.capture.scopes.values.filter { it.sourceKind == GPUPreparedCompositeScopeKind.PaintedPicture }
@@ -64,7 +64,7 @@ class GPUPreparedCompositeCaptureFinalTest {
 
     @Test
     fun `unpainted picture expands without creating synthetic scope`() {
-        val inner = recordPic { it.drawRect(Rect(0f, 0f, 1f, 1f), black) }
+        val inner = recordPic { it.drawRect(RectF32(0f, 0f, 1f, 1f), black) }
         val r = capture(listOf(DisplayOp.DrawPicture(inner, null, id33, ClipStack.WideOpen)))
         val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(r)
         assertEquals(
@@ -88,7 +88,7 @@ class GPUPreparedCompositeCaptureFinalTest {
     @Test
     fun `picture self-cycle is refused`() {
         val operations = mutableListOf<DisplayOp>()
-        val picture = Picture(Rect(0f, 0f, 1f, 1f), operations)
+        val picture = Picture(RectF32(0f, 0f, 1f, 1f), operations)
         operations += DisplayOp.DrawPicture(picture, null, id33, ClipStack.WideOpen)
 
         val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(
@@ -114,11 +114,11 @@ class GPUPreparedCompositeCaptureFinalTest {
         GPUPreparedCompositeCapturer.capture(ops, GPUPreparedCompositeCaptureLimits(maxExpandedOps = maxExpandedOps))
 
     private fun simpleRect(x: Float, y: Float, w: Float, h: Float, paint: Paint = black) =
-        DisplayOp.DrawRect(Rect(x, y, w, h), paint, id33, ClipStack.WideOpen)
+        DisplayOp.DrawRect(RectF32(x, y, w, h), paint, id33, ClipStack.WideOpen)
 
     private fun recordPic(block: (org.graphiks.kanvas.canvas.Canvas) -> Unit): Picture {
         val rec = PictureRecorder()
-        val c = rec.beginRecording(Rect(0f, 0f, 100f, 100f))
+        val c = rec.beginRecording(RectF32(0f, 0f, 100f, 100f))
         block(c)
         return rec.finishRecordingAsPicture()
     }

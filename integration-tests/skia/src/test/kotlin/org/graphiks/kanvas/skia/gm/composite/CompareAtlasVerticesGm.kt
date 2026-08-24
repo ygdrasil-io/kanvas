@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -32,7 +32,7 @@ class CompareAtlasVerticesGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         canvas.drawColor(r = 0.8f, g = 0.8f, b = 0.8f)
 
-        val tex = Rect.fromXYWH(0f, 0f, 128f, 128f)
+        val tex = RectF32.ofOriginSize(0f, 0f, 128f, 128f)
         val atlas = makeTestImage()
         val identity = Matrix3x3F32.Identity
         val colorList = listOf(Color.fromRGBA(0.53f, 0.27f, 0.53f, 0.53f))
@@ -80,7 +80,7 @@ class CompareAtlasVerticesGm : SkiaGm {
         return Image.fromPixels(w, h, pixels, ColorType.RGBA_8888, "test-atlas")
     }
 
-    private fun makeVertices(r: Rect, color: Color): Vertices {
+    private fun makeVertices(r: RectF32, color: Color): Vertices {
         val pos = listOf(Point2F32(r.left, r.top), Point2F32(r.right, r.top), Point2F32(r.right, r.bottom), Point2F32(r.left, r.bottom))
         val colors = List(4) { color }
         return Vertices(mode = VertexMode.TRIANGLE_FAN, positions = pos, texCoords = pos, colors = colors)

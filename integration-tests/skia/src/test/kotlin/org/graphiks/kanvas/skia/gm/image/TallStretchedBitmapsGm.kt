@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -33,11 +33,11 @@ class TallStretchedBitmapsGm : SkiaGm {
             val (bmp, itemCnt) = makeBm(rawH)
             val startItem = itemCnt - 10
             val itemHeight = bmp.height / itemCnt
-            val subRect = Rect.fromLTRB(
+            val subRect = RectF32.ofLTRB(
                 0f, (startItem * itemHeight).toFloat(),
                 bmp.width.toFloat(), bmp.height.toFloat(),
             )
-            val dstRect = Rect.fromXYWH(0f, 0f, bmp.width.toFloat(), (10f * itemHeight).toFloat())
+            val dstRect = RectF32.ofOriginSize(0f, 0f, bmp.width.toFloat(), (10f * itemHeight).toFloat())
             canvas.drawImageRect(bmp, subRect, dstRect)
             canvas.translate((bmp.width + 10).toFloat(), 0f)
         }
@@ -79,7 +79,7 @@ private fun makeBm(rawHeight: Int): Pair<org.graphiks.kanvas.image.Image, Int> {
                 antiAlias = true,
             )
             val radius = K_RADIUS - K_THICKNESS / 2f
-            val bounds = Rect.fromLTRB(-radius, -radius, radius, radius)
+            val bounds = RectF32.ofLTRB(-radius, -radius, radius, radius)
             drawArc(bounds, angle, K_SWEEP, useCenter = false, paint)
             restore()
             angle += K_DANGLE

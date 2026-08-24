@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class DistantClipGm : SkiaGm {
     override val name = "distantclip"
@@ -25,7 +25,7 @@ class DistantClipGm : SkiaGm {
         val kExtents = 1000f
         canvas.drawColor(1f, 0f, 0f, 1f)
         canvas.save()
-        val r = Rect(-kExtents, kExtents - kExtents, kExtents, kExtents + kExtents)
+        val r = RectF32(-kExtents, kExtents - kExtents, kExtents, kExtents + kExtents)
         canvas.clipRect(r)
         canvas.drawColor(0f, 1f, 0f, 1f)
         canvas.restore()

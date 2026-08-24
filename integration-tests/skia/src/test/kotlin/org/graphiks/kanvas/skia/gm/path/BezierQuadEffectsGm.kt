@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/beziereffects.cpp` — quad variant.
@@ -52,7 +52,7 @@ class BezierQuadEffectsGm : SkiaGm {
             val curvePath = Path { moveTo(x0, y0); quadTo(cx, cy, x2, y2) }
             canvas.drawPath(curvePath, Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 2f))
 
-            val boundsRect = Rect.fromLTRB(
+            val boundsRect = RectF32.ofLTRB(
                 minOf(x0, cx, x2), minOf(y0, cy, y2),
                 maxOf(x0, cx, x2), maxOf(y0, cy, y2),
             )

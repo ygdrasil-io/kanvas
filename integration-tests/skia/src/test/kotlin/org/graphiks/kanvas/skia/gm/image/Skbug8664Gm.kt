@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/skbug_8664.cpp`.
@@ -63,11 +63,11 @@ class Skbug8664Gm : SkiaGm {
             canvas.translate(xform.tx, xform.ty)
             canvas.scale(xform.sx, xform.sy)
 
-            val imgRect = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
+            val imgRect = RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat())
             canvas.drawImage(image, imgRect)
 
-            val inner = Rect(32f, 32f, 480f, 480f)
-            val outer = Rect(
+            val inner = RectF32(32f, 32f, 480f, 480f)
+            val outer = RectF32(
                 inner.left - 16f, inner.top - 16f,
                 inner.right + 16f, inner.bottom + 16f,
             )

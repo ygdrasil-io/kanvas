@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/poly2poly.cpp::Poly2PolyGM` (835 × 840).
@@ -66,7 +66,7 @@ class Poly2PolyGm : SkiaGm {
 
         val grayPaint = paint.copy(color = Color.fromRGBA(0.5f, 0.5f, 0.5f), style = PaintStyle.STROKE)
         val d = 64f
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, d, d), grayPaint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, d, d), grayPaint)
         canvas.drawLine(0f, 0f, d, d, grayPaint)
         canvas.drawLine(0f, d, d, 0f, grayPaint)
 

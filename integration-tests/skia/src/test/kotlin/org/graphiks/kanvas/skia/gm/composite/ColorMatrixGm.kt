@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/colormatrix.cpp`.
@@ -57,7 +57,7 @@ class ColorMatrixGm : SkiaGm {
             blendMode = BlendMode.SRC,
             colorFilter = ColorFilter.Matrix(matrix),
         )
-        canvas.drawImage(image, Rect(x, 0f, x + 64f, 64f), paint)
+        canvas.drawImage(image, RectF32(x, 0f, x + 64f, 64f), paint)
     }
 
     private fun createSolidBitmap(w: Int, h: Int): Image {
@@ -68,7 +68,7 @@ class ColorMatrixGm : SkiaGm {
                     val r = x * 255 / w
                     val g = y * 255 / h
                     val color = Color.fromRGBA(r / 255f, g / 255f, 0f, 1f)
-                    drawRect(Rect(x.toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat()), Paint(color = color))
+                    drawRect(RectF32(x.toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat()), Paint(color = color))
                 }
             }
         }
@@ -86,7 +86,7 @@ class ColorMatrixGm : SkiaGm {
                     GradientStop(1f, Color.WHITE),
                 ),
             )
-            drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), Paint(shader = shader))
+            drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(shader = shader))
         }
         return surface.makeImageSnapshot()
     }

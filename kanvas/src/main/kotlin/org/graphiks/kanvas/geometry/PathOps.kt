@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.geometry
 
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.abs
 import kotlin.math.max
@@ -11,8 +11,8 @@ enum class PathOp { DIFFERENCE, INTERSECT, UNION, XOR, REVERSE_DIFFERENCE }
 
 object PathOps {
     fun op(path1: Path, path2: Path, op: PathOp): Path? {
-        val r1 = Rect.EMPTY
-        val r2 = Rect.EMPTY
+        val r1 = RectF32.Empty
+        val r2 = RectF32.Empty
         if (path1.isRect(r1) && path2.isRect(r2)) {
             return rectOp(r1, r2, op)
         }
@@ -43,7 +43,7 @@ object PathOps {
         return null
     }
 
-    private fun rectOp(r1: Rect, r2: Rect, op: PathOp): Path {
+    private fun rectOp(r1: RectF32, r2: RectF32, op: PathOp): Path {
         val reg1 = Region(r1); val reg2 = Region(r2)
         val regionOp = when (op) {
             PathOp.DIFFERENCE -> RegionOp.DIFFERENCE
@@ -56,7 +56,7 @@ object PathOps {
         if (reg1.isEmpty) return Path()
         if (reg1.isRect) {
             val b = reg1.bounds
-            return Path().addRect(Rect.fromLTRB(b.left, b.top, b.right, b.bottom))
+            return Path().addRect(RectF32.ofLTRB(b.left, b.top, b.right, b.bottom))
         }
         val result = Path()
         for (rect in reg1.rects) result.addRect(rect)

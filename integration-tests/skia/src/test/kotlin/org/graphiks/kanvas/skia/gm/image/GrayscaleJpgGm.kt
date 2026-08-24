@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/grayscalejpg.cpp`.
  *  Decodes and renders a grayscale JPEG image.
@@ -23,7 +23,7 @@ class GrayscaleJpgGm : SkiaGm {
         val bytes = loadResource("images/grayscale.jpg") ?: return
         val image = Image.decode(bytes)
         if (image.width == 0) return
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
     }
 
     private fun loadResource(path: String): ByteArray? =

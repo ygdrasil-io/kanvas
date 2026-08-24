@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -33,7 +33,7 @@ class PathFillGm : SkiaGm {
         val paint = Paint(antiAlias = true)
 
         // Frame
-        val frameRect = Rect(10f, 10f, 630f, 470f)
+        val frameRect = RectF32(10f, 10f, 630f, 470f)
         val frameRRect = org.graphiks.kanvas.types.RRect(
             frameRect, 
             CornerRadii(15f, 15f),
@@ -55,13 +55,13 @@ class PathFillGm : SkiaGm {
         canvas.drawPath(triangle, paint)
         canvas.translate(0f, 30f)
 
-        // Rect
-        val rectPath = Path { }.also { it.addRect(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
+        // RectF32
+        val rectPath = Path { }.also { it.addRect(RectF32(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
         canvas.drawPath(rectPath, paint)
         canvas.translate(0f, 30f)
 
         // Oval
-        val ovalPath = Path { }.also { it.addOval(Rect(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
+        val ovalPath = Path { }.also { it.addOval(RectF32(10f, 10f, 30f, 30f)) }.transform(Matrix3x3F32.translation(10f, 0f))
         canvas.drawPath(ovalPath, paint)
         canvas.translate(0f, 30f)
 

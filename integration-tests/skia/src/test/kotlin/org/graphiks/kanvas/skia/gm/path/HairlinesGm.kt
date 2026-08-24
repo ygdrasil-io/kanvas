@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -38,7 +38,7 @@ private class BoundedPathBuilder {
 
     fun close(): BoundedPathBuilder { path.close(); return this }
 
-    fun detach(): Pair<Path, Rect> = path to Rect.fromLTRB(minX, minY, maxX, maxY)
+    fun detach(): Pair<Path, RectF32> = path to RectF32.ofLTRB(minX, minY, maxX, maxY)
 
     private fun include(x: Float, y: Float) {
         if (x < minX) minX = x; if (y < minY) minY = y
@@ -46,10 +46,10 @@ private class BoundedPathBuilder {
     }
 }
 
-private val boundedPaths: List<Pair<Path, Rect>> = buildBoundedPaths()
+private val boundedPaths: List<Pair<Path, RectF32>> = buildBoundedPaths()
 
-private fun buildBoundedPaths(): List<Pair<Path, Rect>> {
-    val out = mutableListOf<Pair<Path, Rect>>()
+private fun buildBoundedPaths(): List<Pair<Path, RectF32>> {
+    val out = mutableListOf<Pair<Path, RectF32>>()
 
     val lineAngles = BoundedPathBuilder()
     val numAngles = 15
@@ -161,7 +161,7 @@ class HairlinesGm : SkiaGm {
             for (a in alphaValue) {
                 for (aa in 0..1) {
                     for (w in widths) {
-                        val bw = bounds.width
+                        val bw = bounds.width()
 
                         if (x + bw > wrapX) {
                             canvas.restore()
@@ -182,7 +182,7 @@ class HairlinesGm : SkiaGm {
                         canvas.drawPath(p, paint)
                         canvas.restore()
 
-                        if (bounds.height > maxH) maxH = bounds.height
+                        if (bounds.height() > maxH) maxH = bounds.height()
                         val dx = bw + margin
                         x += dx
                         canvas.translate(dx, 0f)

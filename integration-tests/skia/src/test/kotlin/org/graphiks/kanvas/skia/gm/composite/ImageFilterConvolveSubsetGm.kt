@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 
 /** Port of Skia's `gm/imagefiltersclipped.cpp` (convolve subset variant).
@@ -31,7 +31,7 @@ class ImageFilterConvolveSubsetGm : SkiaGm {
         val refW = ref.width.toFloat()
         val refH = ref.height.toFloat()
 
-        val crop = Rect(10f, 10f, (ref.width - 10).toFloat(), (ref.height - 10).toFloat())
+        val crop = RectF32(10f, 10f, (ref.width - 10).toFloat(), (ref.height - 10).toFloat())
 
         val kernel = floatArrayOf(1f, 1f, 1f, 1f, -7f, 1f, 1f, 1f, 1f)
         val convFilter = ImageFilter.MatrixConvolution(
@@ -52,7 +52,7 @@ class ImageFilterConvolveSubsetGm : SkiaGm {
 
     private fun drawFilteredImage(canvas: GmCanvas, image: Image, filter: ImageFilter) {
         val paint = Paint(imageFilter = filter)
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
         canvas.translate(0f, image.height.toFloat())
     }
 

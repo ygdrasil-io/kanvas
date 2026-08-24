@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/aaa.cpp::analytic_antialias_convex`.
@@ -25,16 +25,16 @@ class AnalyticAntialiasConvexGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(antiAlias = true, color = Color.RED)
-        canvas.drawRect(Rect(0f, 0f, 800f, 800f), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, 800f, 800f), Paint(color = Color.WHITE))
 
-        canvas.drawRect(Rect(20f, 20f, 200f, 200f), paint)
+        canvas.drawRect(RectF32(20f, 20f, 200f, 200f), paint)
 
         var y = 200f
 
         canvas.save()
         canvas.translate(0f, y)
-        canvas.drawRect(Rect(20f, 20f, 20.2f, 200f), paint)
-        canvas.drawRect(Rect(20f, 200f, 200f, 200.1f), paint)
+        canvas.drawRect(RectF32(20f, 20f, 20.2f, 200f), paint)
+        canvas.drawRect(RectF32(20f, 200f, 200f, 200.1f), paint)
         canvas.drawCircle(100f, 100f, 30f, paint)
         canvas.restore()
 

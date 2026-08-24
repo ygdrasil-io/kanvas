@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -47,7 +47,7 @@ class GradientsDupColorStopsGm : SkiaGm {
             { stops -> Shader.SweepGradient(center = Point2F32(half, half), stops = stops, tileMode = TileMode.CLAMP) },
         )
 
-        val rect = Rect.fromXYWH(0f, 0f, SIZE.toFloat(), SIZE.toFloat())
+        val rect = RectF32.ofOriginSize(0f, 0f, SIZE.toFloat(), SIZE.toFloat())
         val dx = SIZE + 20f
         val dy = SIZE + 20f
 

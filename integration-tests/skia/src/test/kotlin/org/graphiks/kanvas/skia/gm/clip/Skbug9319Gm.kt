@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/skbug_9319.cpp` (256 × 512).
@@ -34,7 +34,7 @@ class Skbug9319Gm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
         )
 
-        val r = Rect.fromXYWH(10f, 10f, 100f, 100f)
+        val r = RectF32.ofOriginSize(10f, 10f, 100f, 100f)
 
         canvas.save()
         canvas.clipPath(Path { }.apply { addRect(r) }, ClipOp.DIFFERENCE)

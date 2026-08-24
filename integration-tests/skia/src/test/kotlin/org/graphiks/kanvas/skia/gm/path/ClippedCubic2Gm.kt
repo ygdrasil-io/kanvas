@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/cubicpaths.cpp:ClippedCubic2GM`.
@@ -52,28 +52,28 @@ class ClippedCubic2Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.save()
         canvas.translate(-2f, 120f)
-        drawOne(canvas, path, Rect(0f, 0f, 80f, 150f))
+        drawOne(canvas, path, RectF32(0f, 0f, 80f, 150f))
         canvas.translate(0f, 170f)
-        drawOne(canvas, path, Rect(0f, 0f, 80f, 100f))
+        drawOne(canvas, path, RectF32(0f, 0f, 80f, 100f))
         canvas.translate(0f, 170f)
-        drawOne(canvas, path, Rect(0f, 0f, 30f, 150f))
+        drawOne(canvas, path, RectF32(0f, 0f, 30f, 150f))
         canvas.translate(0f, 170f)
-        drawOne(canvas, path, Rect(0f, 0f, 10f, 150f))
+        drawOne(canvas, path, RectF32(0f, 0f, 10f, 150f))
         canvas.restore()
 
         canvas.save()
         canvas.translate(20f, -2f)
-        drawOne(canvas, flipped, Rect(0f, 0f, 150f, 80f))
+        drawOne(canvas, flipped, RectF32(0f, 0f, 150f, 80f))
         canvas.translate(170f, 0f)
-        drawOne(canvas, flipped, Rect(0f, 0f, 100f, 80f))
+        drawOne(canvas, flipped, RectF32(0f, 0f, 100f, 80f))
         canvas.translate(170f, 0f)
-        drawOne(canvas, flipped, Rect(0f, 0f, 150f, 30f))
+        drawOne(canvas, flipped, RectF32(0f, 0f, 150f, 30f))
         canvas.translate(170f, 0f)
-        drawOne(canvas, flipped, Rect(0f, 0f, 150f, 10f))
+        drawOne(canvas, flipped, RectF32(0f, 0f, 150f, 10f))
         canvas.restore()
     }
 
-    private fun drawOne(canvas: GmCanvas, p: Path, clip: Rect) {
+    private fun drawOne(canvas: GmCanvas, p: Path, clip: RectF32) {
         val frame = Paint(style = PaintStyle.STROKE)
         val fill = Paint()
         canvas.drawRect(clip, frame)

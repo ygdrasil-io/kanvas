@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/crbug_1162942.cpp::Crbug1162942`.
@@ -43,7 +43,7 @@ class Crbug1162942Gm : SkiaGm {
             Pair(Float.fromBits(0x3F39776F), Float.fromBits(0x4250000D)),
         )
 
-        canvas.drawRect(Rect(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = Color.WHITE))
 
         var color = Color.GREEN
         for (i in 0 until 6) {

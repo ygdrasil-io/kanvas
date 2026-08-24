@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Lattice
@@ -38,7 +38,7 @@ internal enum class DrawPathSourceOperation(internal val stableName: String) {
 sealed interface DisplayOp {
     /** Draw an axis-aligned rectangle. */
     data class DrawRect(
-        val rect: Rect, val paint: Paint,
+        val rect: RectF32, val paint: Paint,
         val transform: Matrix3x3F32, val clip: ClipStack,
     ) : DisplayOp
 
@@ -86,7 +86,7 @@ sealed interface DisplayOp {
 
     /** Draw a sub-region of an image, optionally modulated by [paint]. */
     data class DrawImage(
-        val image: Image, val src: Rect, val dst: Rect,
+        val image: Image, val src: RectF32, val dst: RectF32,
         val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack,
     ) : DisplayOp
 
@@ -107,9 +107,9 @@ sealed interface DisplayOp {
         val rec: SaveLayerRec,
         val transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ) : DisplayOp {
-        constructor(bounds: Rect?, paint: Paint?) : this(SaveLayerRec(bounds, paint), Matrix3x3F32.Identity)
+        constructor(bounds: RectF32?, paint: Paint?) : this(SaveLayerRec(bounds, paint), Matrix3x3F32.Identity)
 
-        val bounds: Rect? get() = rec.bounds
+        val bounds: RectF32? get() = rec.bounds
         val paint: Paint? get() = rec.paint
     }
 
@@ -132,13 +132,13 @@ sealed interface DisplayOp {
     data class DrawDRRect(val outer: RRect, val inner: RRect, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw a 9-patch image. */
-    data class DrawImageNine(val image: Image, val center: Rect, val dst: Rect, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawImageNine(val image: Image, val center: RectF32, val dst: RectF32, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw a lattice image. */
     data class DrawImageLattice(
         val image: Image,
         val lattice: Lattice,
-        val dst: Rect,
+        val dst: RectF32,
         val paint: Paint?,
         val transform: Matrix3x3F32,
         val clip: ClipStack,
@@ -159,11 +159,11 @@ sealed interface DisplayOp {
     ) : DisplayOp
 
     /** Batch-draw sprites from an atlas texture. */
-    data class DrawAtlas(val atlas: Image, val transforms: List<Matrix3x3F32>, val texRects: List<Rect>, val colors: List<Color>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawAtlas(val atlas: Image, val transforms: List<Matrix3x3F32>, val texRects: List<RectF32>, val colors: List<Color>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Metadata annotation (no visual output). */
-    data class Annotation(val rect: Rect, val key: String, val value: String) : DisplayOp
+    data class Annotation(val rect: RectF32, val key: String, val value: String) : DisplayOp
 
     /** Request a framebuffer capture — the render backend reads back and produces an Image. */
-    data class FlushAndSnapshot(val bounds: Rect) : DisplayOp
+    data class FlushAndSnapshot(val bounds: RectF32) : DisplayOp
 }

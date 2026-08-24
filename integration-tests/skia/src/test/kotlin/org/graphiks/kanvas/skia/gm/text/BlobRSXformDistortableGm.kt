@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -62,7 +62,7 @@ class BlobRSXformDistortableGm : SkiaGm {
         val blobBounds = computeBlobBounds(blob)
         val bgPaint = Paint(color = Color.fromRGBA(0.8f, 0.8f, 0.8f, 1f))
         canvas.drawRect(
-            Rect(blobBounds.left + offsetX, blobBounds.top + offsetY, blobBounds.right + offsetX, blobBounds.bottom + offsetY),
+            RectF32(blobBounds.left + offsetX, blobBounds.top + offsetY, blobBounds.right + offsetX, blobBounds.bottom + offsetY),
             bgPaint,
         )
 
@@ -70,7 +70,7 @@ class BlobRSXformDistortableGm : SkiaGm {
         canvas.drawTextBlob(blob, offsetX, offsetY, fgPaint)
     }
 
-    private fun computeBlobBounds(blob: TextBlob): Rect {
+    private fun computeBlobBounds(blob: TextBlob): RectF32 {
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE
@@ -84,6 +84,6 @@ class BlobRSXformDistortableGm : SkiaGm {
             }
         }
         val h = blob.fontSize * 1.2f
-        return Rect(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
+        return RectF32(minX, minY - h, maxX + blob.fontSize * 0.5f, maxY)
     }
 }

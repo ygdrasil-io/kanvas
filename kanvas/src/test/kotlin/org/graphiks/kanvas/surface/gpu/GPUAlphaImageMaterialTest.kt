@@ -38,7 +38,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
@@ -97,8 +97,8 @@ class GPUAlphaImageMaterialTest {
         val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f, 0.5f))
         val op = DisplayOp.DrawImage(
             image = alphaImage,
-            src = Rect(0f, 0f, 2f, 1f),
-            dst = Rect(0f, 0f, 2f, 1f),
+            src = RectF32(0f, 0f, 2f, 1f),
+            dst = RectF32(0f, 0f, 2f, 1f),
             paint = paint,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -122,8 +122,8 @@ class GPUAlphaImageMaterialTest {
         val preparedAlphaImage = alphaImage.copy(alphaType = AlphaType.PREMUL)
         val operation = DisplayOp.DrawImage(
             image = preparedAlphaImage,
-            src = Rect(0f, 0f, 2f, 1f),
-            dst = Rect(0f, 0f, 2f, 1f),
+            src = RectF32(0f, 0f, 2f, 1f),
+            dst = RectF32(0f, 0f, 2f, 1f),
             paint = Paint.fill(Color.RED).copy(
                 shader = Shader.Image(preparedAlphaImage, sampling = SamplingOptions.NEAREST),
             ),
@@ -148,8 +148,8 @@ class GPUAlphaImageMaterialTest {
     fun `draw image command uses black tint for alpha image without paint`() {
         val op = DisplayOp.DrawImage(
             image = alphaImage,
-            src = Rect(0f, 0f, 2f, 1f),
-            dst = Rect(0f, 0f, 2f, 1f),
+            src = RectF32(0f, 0f, 2f, 1f),
+            dst = RectF32(0f, 0f, 2f, 1f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -173,8 +173,8 @@ class GPUAlphaImageMaterialTest {
         val paint = Paint(color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.4f))
         val op = DisplayOp.DrawImage(
             image = rgbaImage,
-            src = Rect(0f, 0f, 1f, 1f),
-            dst = Rect(0f, 0f, 4f, 4f),
+            src = RectF32(0f, 0f, 1f, 1f),
+            dst = RectF32(0f, 0f, 4f, 4f),
             paint = paint,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -200,7 +200,7 @@ class GPUAlphaImageMaterialTest {
             shader = Shader.Image(alphaImage),
         ).toMaterial()
         val op = DisplayOp.DrawRect(
-            rect = Rect(0f, 0f, 2f, 1f),
+            rect = RectF32(0f, 0f, 2f, 1f),
             paint = Paint(shader = Shader.Image(alphaImage)),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -217,7 +217,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `legacy invalid gradient matrix dispatch emits typed local matrix refusal`() {
         val command = DisplayOp.DrawRect(
-            rect = Rect(0f, 0f, 8f, 8f),
+            rect = RectF32(0f, 0f, 8f, 8f),
             paint = Paint(
                 shader = Shader.WithLocalMatrix(
                     shader = Shader.RadialGradient(
@@ -270,11 +270,11 @@ class GPUAlphaImageMaterialTest {
         )
         val op = DisplayOp.DrawImage(
             image = alphaImage,
-            src = Rect(1f, 0f, 2f, 1f),
-            dst = Rect(4f, 5f, 8f, 7f),
+            src = RectF32(1f, 0f, 2f, 1f),
+            dst = RectF32(4f, 5f, 8f, 7f),
             paint = paint,
             transform = Matrix3x3F32.Identity,
-            clip = ClipStack.DeviceRect(Rect(5f, 5f, 7f, 7f)),
+            clip = ClipStack.DeviceRect(RectF32(5f, 5f, 7f, 7f)),
         )
         val command = op.toImageRectCommand(
             GPUDrawCommandID(10),
@@ -377,7 +377,7 @@ class GPUAlphaImageMaterialTest {
             shader = Shader.Image(alphaImage),
         )
         val path = Path().apply {
-            addRect(Rect(2f, 3f, 6f, 5f))
+            addRect(RectF32(2f, 3f, 6f, 5f))
             fillType = FillType.INVERSE_EVEN_ODD
         }
         val op = DisplayOp.DrawPath(
@@ -435,8 +435,8 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `path fill preserves contours and inverse even odd stencil configuration`() {
         val path = Path().apply {
-            addRect(Rect(2f, 2f, 14f, 14f))
-            addRect(Rect(5f, 5f, 11f, 11f))
+            addRect(RectF32(2f, 2f, 14f, 14f))
+            addRect(RectF32(5f, 5f, 11f, 11f))
             fillType = FillType.INVERSE_EVEN_ODD
         }
         val command = DisplayOp.DrawPath(
@@ -483,7 +483,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `path fill rejects non finite vertices before stencil fan creation`() {
         val command = DisplayOp.DrawPath(
-            path = Path().addRect(Rect(2f, 2f, 6f, 5f)),
+            path = Path().addRect(RectF32(2f, 2f, 6f, 5f)),
             paint = Paint.fill(Color.RED),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -521,7 +521,7 @@ class GPUAlphaImageMaterialTest {
             sourceId = "too-tall-alpha-mask",
         )
         val op = DisplayOp.DrawPath(
-            path = Path().addRect(Rect(2f, 3f, 6f, 5f)),
+            path = Path().addRect(RectF32(2f, 3f, 6f, 5f)),
             paint = Paint(shader = Shader.Image(image)),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -562,8 +562,8 @@ class GPUAlphaImageMaterialTest {
 
     private fun alphaImageCommand() = DisplayOp.DrawImage(
         image = alphaImage,
-        src = Rect(0f, 0f, 2f, 1f),
-        dst = Rect(0f, 0f, 2f, 1f),
+        src = RectF32(0f, 0f, 2f, 1f),
+        dst = RectF32(0f, 0f, 2f, 1f),
         paint = Paint(),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/colorwheel.cpp::DEF_SIMPLE_GM(colorwheel_alphatypes, canvas, 256, 128)`.
@@ -26,8 +26,8 @@ class ColorWheelAlphaTypesGm : SkiaGm {
         val bytes = loadResource("images/color_wheel.png") ?: return
         val img = Image.decode(bytes)
 
-        val srcRect = Rect.fromXYWH(12f, 102f, 8f, 8f)
-        val dstRect = Rect.fromXYWH(0f, 0f, 128f, 128f)
+        val srcRect = RectF32.ofOriginSize(12f, 102f, 8f, 8f)
+        val dstRect = RectF32.ofOriginSize(0f, 0f, 128f, 128f)
 
         canvas.drawImageRect(img, srcRect, dstRect)
         canvas.drawImageRect(img, srcRect, dstRect.copy(left = 128f, right = 256f))

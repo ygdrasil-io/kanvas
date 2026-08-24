@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/androidblendmodes.cpp.
@@ -56,7 +56,7 @@ class AndroidBlendModesGm : SkiaGm {
 
     private fun drawTile(canvas: GmCanvas, xOffset: Float, yOffset: Float, mode: BlendMode) {
         canvas.translate(xOffset, yOffset)
-        canvas.clipRect(Rect(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()))
+        canvas.clipRect(RectF32(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()))
         canvas.save()
 
         // Draw destination circle
@@ -72,7 +72,7 @@ class AndroidBlendModesGm : SkiaGm {
             blendMode = mode,
             antiAlias = true,
         )
-        canvas.drawRect(Rect(16f, 96f, 160f, 240f), srcPaint)
+        canvas.drawRect(RectF32(16f, 96f, 160f, 240f), srcPaint)
     }
 
     private fun drawCheckerboard(canvas: GmCanvas, c1: Int, c2: Int, size: Int) {
@@ -89,7 +89,7 @@ class AndroidBlendModesGm : SkiaGm {
                     antiAlias = false,
                 )
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
                     solid,
                 )
                 x += size

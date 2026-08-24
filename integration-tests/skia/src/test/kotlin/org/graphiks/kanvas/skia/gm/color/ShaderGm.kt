@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests shader-based color rendering with linear gradients in each quadrant. */
 class ShaderGm : SkiaGm {
@@ -39,9 +39,9 @@ class ShaderGm : SkiaGm {
             Point2F32(w2, h2), Point2F32(width.toFloat(), height.toFloat()),
             listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
         )
-        canvas.drawRect(Rect(0f, 0f, w2, h2), Paint(shader = grad1))
-        canvas.drawRect(Rect(w2, 0f, width.toFloat(), h2), Paint(shader = grad2))
-        canvas.drawRect(Rect(0f, h2, w2, height.toFloat()), Paint(shader = grad3))
-        canvas.drawRect(Rect(w2, h2, width.toFloat(), height.toFloat()), Paint(shader = grad4))
+        canvas.drawRect(RectF32(0f, 0f, w2, h2), Paint(shader = grad1))
+        canvas.drawRect(RectF32(w2, 0f, width.toFloat(), h2), Paint(shader = grad2))
+        canvas.drawRect(RectF32(0f, h2, w2, height.toFloat()), Paint(shader = grad3))
+        canvas.drawRect(RectF32(w2, h2, width.toFloat(), height.toFloat()), Paint(shader = grad4))
     }
 }

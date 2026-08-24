@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/crbug_905548.cpp`.
@@ -30,7 +30,7 @@ class Crbug905548Gm : SkiaGm {
         val offscreen = Surface(100, 100)
         offscreen.canvas { drawCircle(50f, 50f, 45f, Paint.fill(Color.BLACK)) }
         val circleImage = offscreen.makeImageSnapshot()
-        val rectBounds = Rect.fromXYWH(0f, 0f, 100f, 100f)
+        val rectBounds = RectF32.ofOriginSize(0f, 0f, 100f, 100f)
 
         val blurFilter = ImageFilter.Blur(sigmaX = 15f, sigmaY = 15f)
         val erodedFilter = ImageFilter.Erode(radiusX = 0f, radiusY = 0f, input = blurFilter)

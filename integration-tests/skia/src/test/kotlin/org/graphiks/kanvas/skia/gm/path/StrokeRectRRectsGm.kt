@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.min
 
 /**
@@ -105,10 +105,10 @@ class StrokeRectRRectsGm : SkiaGm {
         canvas.translate((cx * 110).toFloat(), (cy * 110).toFloat())
         val dx = if (cx % 2 != 0) 0.5f else 0f
         val dy = if (cy % 2 != 0) 0.5f else 0f
-        var rect = Rect.fromXYWH(0f, 0f, 50f, 40f)
-        rect = Rect.fromLTRB(rect.left + dx, rect.top + dy, rect.right + dx, rect.bottom + dy)
+        var rect = RectF32.ofOriginSize(0f, 0f, 50f, 40f)
+        rect = RectF32.ofLTRB(rect.left + dx, rect.top + dy, rect.right + dx, rect.bottom + dy)
         val finalRect = if (width < 0f) {
-            Rect.fromLTRB(rect.left - 25f, rect.top - 25f, rect.right + 25f, rect.bottom + 25f)
+            RectF32.ofLTRB(rect.left - 25f, rect.top - 25f, rect.right + 25f, rect.bottom + 25f)
         } else rect
 
         if (rrect) {
@@ -144,7 +144,7 @@ class StrokeRectRRectsGm : SkiaGm {
         )
         canvas.save()
         canvas.translate((cx * 110).toFloat(), (cy * 110).toFloat())
-        val rect = Rect.fromXYWH(0f, 0f,
+        val rect = RectF32.ofOriginSize(0f, 0f,
             if (cx % 2 != 0) 50f else (40f + stretch),
             if (cx % 2 != 0) (40f + stretch) else 50f,
         )
@@ -171,7 +171,7 @@ class StrokeRectRRectsGm : SkiaGm {
         )
         canvas.save()
         canvas.translate((cx * 110).toFloat(), (cy * 110).toFloat())
-        val rect = Rect.fromXYWH(0f, 0f,
+        val rect = RectF32.ofOriginSize(0f, 0f,
             if (cx % 2 != 0) 50f else (40f + stretch),
             if (cx % 2 != 0) (40f + stretch) else 50f,
         )

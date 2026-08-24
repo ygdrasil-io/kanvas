@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefiltersclipped.cpp::ImageFiltersClippedGM` (860 × 500).
@@ -40,30 +40,30 @@ class ImageFiltersClippedGm : SkiaGm {
         )
 
         val margin = 16f
-        val r = Rect(0f, 0f, 64f, 64f)
-        val bounds = Rect(0f, 0f, 64f, 64f)
+        val r = RectF32(0f, 0f, 64f, 64f)
+        val bounds = RectF32(0f, 0f, 64f, 64f)
 
         canvas.save()
         var xOffset = 0
         while (xOffset < 80) {
             canvas.save()
-            val b = Rect(xOffset.toFloat(), bounds.top, bounds.right, bounds.bottom)
+            val b = RectF32(xOffset.toFloat(), bounds.top, bounds.right, bounds.bottom)
             for (i in filters.indices) {
                 drawClippedFilter(canvas, filters[i], r, b)
-                canvas.translate(r.width + margin, 0f)
+                canvas.translate(r.width() + margin, 0f)
             }
             canvas.restore()
-            canvas.translate(0f, r.height + margin)
+            canvas.translate(0f, r.height() + margin)
             xOffset += 16
         }
         canvas.restore()
 
-        canvas.translate(filters.size * (r.width + margin), 0f)
+        canvas.translate(filters.size * (r.width() + margin), 0f)
         xOffset = 0
         while (xOffset < 80) {
-            val b = Rect(xOffset.toFloat(), bounds.top, bounds.right, bounds.bottom)
+            val b = RectF32(xOffset.toFloat(), bounds.top, bounds.right, bounds.bottom)
             drawClippedFilter(canvas, null, r, b)
-            canvas.translate(0f, r.height + margin)
+            canvas.translate(0f, r.height() + margin)
             xOffset += 16
         }
     }
@@ -71,13 +71,13 @@ class ImageFiltersClippedGm : SkiaGm {
     private fun drawClippedFilter(
         canvas: GmCanvas,
         filter: ImageFilter?,
-        primBounds: Rect,
-        clipBounds: Rect,
+        primBounds: RectF32,
+        clipBounds: RectF32,
     ) {
         val paint = Paint(color = Color.WHITE, imageFilter = filter, antiAlias = true)
         canvas.save()
         canvas.clipRect(clipBounds)
-        canvas.drawCircle(primBounds.center.x, primBounds.center.y, primBounds.width * 2f / 5f, paint)
+        canvas.drawCircle(primBounds.center().x, primBounds.center().y, primBounds.width() * 2f / 5f, paint)
         canvas.restore()
     }
 }

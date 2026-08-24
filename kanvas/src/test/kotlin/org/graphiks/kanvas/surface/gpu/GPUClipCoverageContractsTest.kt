@@ -20,7 +20,7 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Color
@@ -363,11 +363,11 @@ class GPUClipCoverageContractsTest {
     fun `complex clip mapper preserves order difference and inverse fill`() {
         val path = Path().apply {
             fillType = FillType.INVERSE_EVEN_ODD
-            addRect(Rect.fromLTRB(8f, 8f, 32f, 32f))
+            addRect(RectF32.ofLTRB(8f, 8f, 32f, 32f))
         }
         val clip = ClipStack.Complex(
             listOf(
-                ClipStackOp.RectOp(Rect.fromLTRB(2f, 3f, 60f, 61f), ClipOp.INTERSECT, antiAlias = false),
+                ClipStackOp.RectOp(RectF32.ofLTRB(2f, 3f, 60f, 61f), ClipOp.INTERSECT, antiAlias = false),
                 ClipStackOp.PathOp(path, ClipOp.DIFFERENCE, antiAlias = true),
             ),
         )
@@ -392,12 +392,12 @@ class GPUClipCoverageContractsTest {
     fun `path clip mapper retains even odd holes and inverse difference coverage semantics`() {
         val evenOddHole = Path().apply {
             fillType = FillType.EVEN_ODD
-            addRect(Rect.fromLTRB(3.5f, 3.5f, 28.5f, 28.5f))
-            addRect(Rect.fromLTRB(11.5f, 11.5f, 20.5f, 20.5f))
+            addRect(RectF32.ofLTRB(3.5f, 3.5f, 28.5f, 28.5f))
+            addRect(RectF32.ofLTRB(11.5f, 11.5f, 20.5f, 20.5f))
         }
         val inverseRect = Path().apply {
             fillType = FillType.INVERSE_EVEN_ODD
-            addRect(Rect.fromLTRB(8.5f, 8.5f, 23.5f, 23.5f))
+            addRect(RectF32.ofLTRB(8.5f, 8.5f, 23.5f, 23.5f))
         }
         val request = requireNotNull(
             ClipStack.Complex(
@@ -422,11 +422,11 @@ class GPUClipCoverageContractsTest {
 
     @Test
     fun `clip mapper keeps coverage requests only for non wide open clips`() {
-        val hardRect = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
-        val fractionalRect = ClipStack.DeviceRect(Rect.fromLTRB(2.5f, 3f, 10f, 11f), antiAlias = false)
-        val aaRect = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = true)
+        val hardRect = ClipStack.DeviceRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        val fractionalRect = ClipStack.DeviceRect(RectF32.ofLTRB(2.5f, 3f, 10f, 11f), antiAlias = false)
+        val aaRect = ClipStack.DeviceRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = true)
         val complex = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect.fromLTRB(2f, 3f, 10f, 11f), ClipOp.INTERSECT, antiAlias = false)),
+            listOf(ClipStackOp.RectOp(RectF32.ofLTRB(2f, 3f, 10f, 11f), ClipOp.INTERSECT, antiAlias = false)),
         )
         val config = RenderConfig()
 
@@ -448,10 +448,10 @@ class GPUClipCoverageContractsTest {
     @Test
     fun `perspective is refused before clip coverage planning`() {
         val command = DisplayOp.DrawRect(
-            rect = Rect.fromLTRB(2f, 3f, 10f, 11f),
+            rect = RectF32.ofLTRB(2f, 3f, 10f, 11f),
             paint = Paint.fill(Color.RED),
             transform = Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
-            clip = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false),
+            clip = ClipStack.DeviceRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false),
         ).toNormalizedCommand(cmdId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(0), target = target())
 
         assertEquals(GPUTransformType.Perspective, command.transform.type)
@@ -463,10 +463,10 @@ class GPUClipCoverageContractsTest {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         canvas.setMatrix(Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
-        canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        canvas.clipRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         canvas.resetMatrix()
-        canvas.clipRect(Rect.fromLTRB(3f, 4f, 9f, 10f), antiAlias = false)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
+        canvas.clipRect(RectF32.ofLTRB(3f, 4f, 9f, 10f), antiAlias = false)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
 
         val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
         val command = draw.toNormalizedCommand(
@@ -484,11 +484,11 @@ class GPUClipCoverageContractsTest {
         val clip = perspectiveClipAfterReset()
         val transform = Matrix3x3F32.Identity
         val operations = listOf<DisplayOp>(
-            DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED), transform, clip),
+            DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED), transform, clip),
             DisplayOp.DrawImage(
                 image = Image.placeholder(1, 1),
-                src = Rect.fromLTRB(0f, 0f, 1f, 1f),
-                dst = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                src = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                dst = RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 paint = null,
                 transform = transform,
                 clip = clip,
@@ -627,7 +627,7 @@ class GPUClipCoverageContractsTest {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         canvas.setMatrix(Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
-        canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        canvas.clipRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         canvas.resetMatrix()
         return buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip
     }

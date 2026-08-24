@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/circularclips.cpp` (800 × 200).
@@ -36,7 +36,7 @@ class CircularClipsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val ops = arrayOf(ClipOp.DIFFERENCE, ClipOp.INTERSECT)
-        val rect = Rect.fromLTRB(fX1 - fR, fY - fR, fX2 + fR, fY + fR)
+        val rect = RectF32.ofLTRB(fX1 - fR, fY - fR, fX2 + fR, fY + fR)
         var fillPaint = Paint(color = Color(0x80808080u))
 
         canvas.save()

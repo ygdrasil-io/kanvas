@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 internal fun imageBlurDraw(sigmaX: Float, sigmaY: Float, canvas: GmCanvas) {
@@ -26,7 +26,7 @@ internal fun imageBlurDraw(sigmaX: Float, sigmaY: Float, canvas: GmCanvas) {
         val color = Color.fromRGBA(r, g, b, 1f)
 
         val paint = Paint(color = color, imageFilter = blurPaint.imageFilter)
-        val rect = Rect.fromXYWH(x.toFloat(), y.toFloat(), 20f, 12f)
+        val rect = RectF32.ofOriginSize(x.toFloat(), y.toFloat(), 20f, 12f)
         canvas.drawRect(rect, paint)
     }
     canvas.restore()

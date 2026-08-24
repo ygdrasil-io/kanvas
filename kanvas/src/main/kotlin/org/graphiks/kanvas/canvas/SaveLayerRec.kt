@@ -2,11 +2,11 @@ package org.graphiks.kanvas.canvas
 
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Complete save-layer request, including the optional filter over parent content. */
 data class SaveLayerRec(
-    val bounds: Rect? = null,
+    val bounds: RectF32? = null,
     val paint: Paint? = null,
     val backdrop: ImageFilter? = null,
     /**

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/annotated_text.cpp` (512 × 512).
@@ -30,7 +30,7 @@ class AnnotatedTextGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
         canvas.save()
-        canvas.clipRect(Rect.fromLTRB(64f, 64f, 320f, 320f))
+        canvas.clipRect(RectF32.ofLTRB(64f, 64f, 320f, 320f))
         canvas.drawColor(r = 0xEE / 255f, g = 0xEE / 255f, b = 0xEE / 255f)
 
         val font = Font(typeface, size = 40f)
@@ -46,7 +46,7 @@ class AnnotatedTextGm : SkiaGm {
 
     private fun drawAnnotatedText(canvas: GmCanvas, text: String, x: Float, y: Float, font: Font) {
         val textWidth = font.measureText(text)
-        val bounds = Rect.fromLTRB(x, y - font.size * 0.8f, x + textWidth, y + font.size * 0.2f)
+        val bounds = RectF32.ofLTRB(x, y - font.size * 0.8f, x + textWidth, y + font.size * 0.2f)
         val shade = Paint(color = Color.fromRGBA(0x80 / 255f, 0x34 / 255f, 0x61 / 255f, 0x80 / 255f))
         canvas.drawRect(bounds, shade)
         canvas.drawString(text, x, y, font, Paint())

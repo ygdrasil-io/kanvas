@@ -28,7 +28,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUCorePrimitiveSemanticBuilderTest {
     @Test
@@ -313,7 +313,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
     ): GPUFramePathInventoryPlan = GPUFramePathApiInventory.plan(
         operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(2f, 3f, 12f, 11f),
+                RectF32.ofLTRB(2f, 3f, 12f, 11f),
                 paint,
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,

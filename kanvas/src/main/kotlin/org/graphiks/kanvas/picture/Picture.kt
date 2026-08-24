@@ -35,6 +35,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import java.io.ByteArrayInputStream
@@ -50,7 +51,7 @@ import java.io.IOException
  * via [Canvas.drawPicture] or replayed in full via [playback].
  */
 class Picture internal constructor(
-    val cullRect: Rect,
+    val cullRect: RectF32,
     internal val ops: List<DisplayOp>,
 ) {
     /** Unique identifier for this picture instance. */
@@ -138,11 +139,11 @@ class Picture internal constructor(
         tileX: TileMode = TileMode.CLAMP,
         tileY: TileMode = TileMode.CLAMP,
         sampling: SamplingOptions = SamplingOptions.NEAREST,
-        tile: Rect = cullRect,
+        tile: RectF32 = cullRect,
         matrix: Matrix3x3F32? = null,
     ): Shader {
-        val w = maxOf(1, ceil(tile.width).toInt())
-        val h = maxOf(1, ceil(tile.height).toInt())
+        val w = maxOf(1, ceil(tile.width()).toInt())
+        val h = maxOf(1, ceil(tile.height()).toInt())
         val surface = Surface(w, h)
         val c = surface.canvas()
         c.clear(Color.TRANSPARENT)
@@ -302,7 +303,7 @@ private class Writer {
     fun bytes(v: ByteArray) { dos.write(v) }
     fun result(): ByteArray = baos.toByteArray()
 
-    fun rect(r: Rect) { float(r.left); float(r.top); float(r.right); float(r.bottom) }
+    fun rect(r: RectF32) { float(r.left); float(r.top); float(r.right); float(r.bottom) }
     fun point2(p: Point2F32) { float(p.x); float(p.y) }
     fun vector2(v: Vector2F32) { float(v.x); float(v.y) }
     fun size(s: Size) { float(s.width); float(s.height) }
@@ -826,7 +827,7 @@ private class Reader(private val data: ByteArray) {
     fun string(): String { var v = ""; guard { v = dis.readUTF() }; return v }
     fun bytes(len: Int): ByteArray { val v = ByteArray(len); guard { if (valid) dis.readFully(v) }; return v }
 
-    fun rect(): Rect = Rect(float(), float(), float(), float())
+    fun rect(): RectF32 = RectF32(float(), float(), float(), float())
     fun point2(): Point2F32 = Point2F32(float(), float())
     fun vector2(): Vector2F32 = Vector2F32(float(), float())
     fun size(): Size = Size(float(), float())
@@ -1198,7 +1199,7 @@ private class Reader(private val data: ByteArray) {
             0 -> ClipStackOp.RectOp(rect(), clipOp(), aa)
             1 -> ClipStackOp.RRectOp(rrect(), clipOp(), aa)
             2 -> ClipStackOp.PathOp(path(), clipOp(), aa)
-            else -> { valid = false; ClipStackOp.RectOp(Rect.EMPTY, ClipOp.INTERSECT, aa) }
+            else -> { valid = false; ClipStackOp.RectOp(RectF32.Empty, ClipOp.INTERSECT, aa) }
         }
     }
 

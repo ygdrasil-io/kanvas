@@ -45,7 +45,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedDrawImageLowererTest {
 
@@ -138,8 +138,8 @@ class GPUPreparedDrawImageLowererTest {
 
     private fun drawImage(
         image: Image,
-        dst: Rect = Rect.fromLTRB(10f, 10f, 50f, 40f),
-        src: Rect = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        dst: RectF32 = RectF32.ofLTRB(10f, 10f, 50f, 40f),
+        src: RectF32 = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         paint: Paint? = null,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): DisplayOp.DrawImage = DisplayOp.DrawImage(
@@ -203,7 +203,7 @@ class GPUPreparedDrawImageLowererTest {
         )
         val result2 = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
-                drawImage(image, Rect.fromLTRB(20f, 20f, 60f, 50f)),
+                drawImage(image, RectF32.ofLTRB(20f, 20f, 60f, 50f)),
                 GPUDrawCommandID(1),
                 1,
                 GPUFrameProvenance.None,
@@ -308,7 +308,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `source rect and UV clamp exact`() {
         val image = rgbaImage(width = 8, height = 6)
-        val src = Rect.fromLTRB(1f, 2f, 5f, 4f)
+        val src = RectF32.ofLTRB(1f, 2f, 5f, 4f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, src = src),
@@ -336,7 +336,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `identity transform produces rect geometry with exact positions`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(10f, 20f, 30f, 40f)
+        val dst = RectF32.ofLTRB(10f, 20f, 30f, 40f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = Matrix3x3F32.Identity),
@@ -360,7 +360,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `translation transform produces rect geometry with shifted positions`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(0f, 0f, 20f, 20f)
+        val dst = RectF32.ofLTRB(0f, 0f, 20f, 20f)
         val tx = Matrix3x3F32.translation(5f, 10f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -383,7 +383,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `scale transform produces rect geometry with scaled positions`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(1f, 2f, 4f, 6f)
+        val dst = RectF32.ofLTRB(1f, 2f, 4f, 6f)
         val scale = Matrix3x3F32.scaling(2f, 3f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -406,7 +406,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `rotation transform preserves four transformed corners`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val dst = RectF32.ofLTRB(0f, 0f, 10f, 10f)
         val rotate = Matrix3x3F32.rotation(90f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -429,7 +429,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `reflection transform preserves four corners`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(1f, 2f, 5f, 8f)
+        val dst = RectF32.ofLTRB(1f, 2f, 5f, 8f)
         val reflectX = Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -452,7 +452,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `skew transform produces quad geometry with four corners preserved`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(10f, 10f, 30f, 30f)
+        val dst = RectF32.ofLTRB(10f, 10f, 30f, 30f)
         val skew = Matrix3x3F32.of(1f, 0.5f, 0f, 0f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -476,7 +476,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `composed transform order is scale then rotation then translation`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(1f, 2f, 3f, 4f)
+        val dst = RectF32.ofLTRB(1f, 2f, 3f, 4f)
         val transform =
             Matrix3x3F32.translation(10f, 20f) * Matrix3x3F32.rotation(90f) * Matrix3x3F32.scaling(2f, 3f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -673,7 +673,7 @@ class GPUPreparedDrawImageLowererTest {
     fun `integral device clip lowers to one exact prepared image scissor`() {
         val image = rgbaImage()
         val clip = ClipStack.DeviceRect(
-            Rect.fromLTRB(4f, 6f, 52f, 48f),
+            RectF32.ofLTRB(4f, 6f, 52f, 48f),
             antiAlias = false,
         )
         val operation = drawImage(image).copy(clip = clip)
@@ -706,7 +706,7 @@ class GPUPreparedDrawImageLowererTest {
         val clipped = ClipStack.Complex(
             listOf(
                 org.graphiks.kanvas.canvas.ClipStackOp.RectOp(
-                    Rect.fromLTRB(0f, 0f, 100f, 100f),
+                    RectF32.ofLTRB(0f, 0f, 100f, 100f),
                     org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
                     false,
                 ),
@@ -714,8 +714,8 @@ class GPUPreparedDrawImageLowererTest {
         )
         val op = DisplayOp.DrawImage(
             image = image,
-            src = Rect.fromLTRB(0f, 0f, 4f, 3f),
-            dst = Rect.fromLTRB(10f, 10f, 50f, 40f),
+            src = RectF32.ofLTRB(0f, 0f, 4f, 3f),
+            dst = RectF32.ofLTRB(10f, 10f, 50f, 40f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = clipped,
@@ -950,7 +950,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `cannot substitute with bounding box for skew`() {
         val image = commonRgbaImage()
-        val dst = Rect.fromLTRB(10f, 10f, 30f, 20f)
+        val dst = RectF32.ofLTRB(10f, 10f, 30f, 20f)
         val skew = Matrix3x3F32.of(1f, 0.5f, 0f, 0.3f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -967,7 +967,7 @@ class GPUPreparedDrawImageLowererTest {
         assertEquals(GPUPreparedImageGeometryClass.Quad, geometry.geometryClass)
 
         val positions = geometry.vertices.map { it.x to it.y }
-        val srcBbox = Rect.fromLTRB(10f, 10f, 30f, 20f)
+        val srcBbox = RectF32.ofLTRB(10f, 10f, 30f, 20f)
         val expectedCorner1 = skew.transform(Point2F32(srcBbox.left, srcBbox.top))
         val expectedCorner2 = skew.transform(Point2F32(srcBbox.right, srcBbox.top))
         val expectedCorner3 = skew.transform(Point2F32(srcBbox.right, srcBbox.bottom))

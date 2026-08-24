@@ -11,7 +11,7 @@ import kotlin.test.assertNotNull
 class CustomTypefaceTest {
     @Test
     fun `custom typeface preserves direct and drawable glyphs across serialization`() {
-        val direct = Path().addRect(org.graphiks.kanvas.types.Rect.fromXYWH(0f, 0f, 0.5f, 1f))
+        val direct = Path().addRect(org.graphiks.math.geometry.RectF32.ofOriginSize(0f, 0f, 0.5f, 1f))
         val drawable = Path().addCircle(0.5f, 0.5f, 0.5f)
         val typeface = CustomTypeface.Builder("test-user-typeface")
             .setMetrics(FontMetrics(ascent = 0.8f, descent = -0.2f, leading = 0.1f))

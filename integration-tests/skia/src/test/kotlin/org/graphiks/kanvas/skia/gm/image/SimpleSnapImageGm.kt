@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/surface.cpp` (simple-snap-image variant 1).
  *  Creates a red surface snapshot and draws it via drawImage.
@@ -23,6 +23,6 @@ class SimpleSnapImageGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(256, 256)
         surf.canvas { clear(Color.RED) }
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 256f, 256f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 256f, 256f))
     }
 }

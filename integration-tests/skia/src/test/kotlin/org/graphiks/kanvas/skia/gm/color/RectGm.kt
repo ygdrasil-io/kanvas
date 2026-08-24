@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests rectangular color rendering with a stepped diagonal of five colored squares. */
 class RectGm : SkiaGm {
@@ -25,7 +25,7 @@ class RectGm : SkiaGm {
         val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(1f, 1f, 0f, 1f), Color.fromRGBA(1f, 0f, 1f, 1f))
         for (i in 0 until steps) {
             canvas.drawRect(
-                Rect(inset + i * stepW, inset + i * stepH, inset + (i + 1) * stepW, inset + (i + 1) * stepH),
+                RectF32(inset + i * stepW, inset + i * stepH, inset + (i + 1) * stepW, inset + (i + 1) * stepH),
                 Paint(color = colors[i]),
             )
         }

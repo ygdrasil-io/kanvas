@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/subsetshader.cpp`.
  *  Extracts left/right subsets of a decoded PNG, then renders each with a
@@ -31,8 +31,8 @@ class BitmapSubsetShaderGm : SkiaGm {
         val source = Image.decode(COLOR_WHEEL_PNG)
         val src = Bitmap.fromImage(source)
 
-        val left = Rect.fromXYWH(0f, 0f, (src.width / 2).toFloat(), src.height.toFloat())
-        val right = Rect.fromXYWH((src.width / 2).toFloat(), 0f, (src.width / 2).toFloat(), src.height.toFloat())
+        val left = RectF32.ofOriginSize(0f, 0f, (src.width / 2).toFloat(), src.height.toFloat())
+        val right = RectF32.ofOriginSize((src.width / 2).toFloat(), 0f, (src.width / 2).toFloat(), src.height.toFloat())
         val leftBitmap = src.extractSubset(left)
         val rightBitmap = src.extractSubset(right)
 
@@ -40,11 +40,11 @@ class BitmapSubsetShaderGm : SkiaGm {
         val tm = TileMode.REPEAT
 
         canvas.drawRect(
-            Rect.fromLTRB(0f, 0f, 256f, 128f),
+            RectF32.ofLTRB(0f, 0f, 256f, 128f),
             Paint(shader = leftBitmap.makeShader(tm, tm, SamplingOptions.NEAREST, matrix)),
         )
         canvas.drawRect(
-            Rect.fromLTRB(0f, 128f, 256f, 256f),
+            RectF32.ofLTRB(0f, 128f, 256f, 256f),
             Paint(shader = rightBitmap.makeShader(tm, tm, SamplingOptions.NEAREST, matrix)),
         )
     }

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/tilemodes.cpp::Tiling2GM` (bitmap variant).
@@ -34,7 +34,7 @@ class Tiling2BitmapGm : SkiaGm {
 
         val w = 32f
         val h = 32f
-        val r = Rect(-w, -h, w * 2f, h * 2f)
+        val r = RectF32(-w, -h, w * 2f, h * 2f)
 
         val modes = listOf(TileMode.CLAMP, TileMode.REPEAT, TileMode.MIRROR)
         val modeNames = listOf("Clamp", "Repeat", "Mirror")
@@ -49,9 +49,9 @@ class Tiling2BitmapGm : SkiaGm {
         var x = 66f
         for (kx in modes.indices) {
             val tw = font.measureText(modeNames[kx])
-            val tx = x + r.width / 2f - tw / 2f
+            val tx = x + r.width() / 2f - tw / 2f
             canvas.drawString(modeNames[kx], tx, y, font, textPaint)
-            x += r.width * 4f / 3f
+            x += r.width() * 4f / 3f
         }
 
         y += 16f + h
@@ -73,9 +73,9 @@ class Tiling2BitmapGm : SkiaGm {
                 canvas.translate(x, y)
                 canvas.drawRect(r, paint)
                 canvas.restore()
-                x += r.width * 4f / 3f
+                x += r.width() * 4f / 3f
             }
-            y += r.height * 4f / 3f
+            y += r.height() * 4f / 3f
         }
     }
 
@@ -94,7 +94,7 @@ class Tiling2BitmapGm : SkiaGm {
                     ),
                     tileMode = TileMode.CLAMP,
                 ))
-                drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), paint)
+                drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), paint)
             }
             return Bitmap.fromImage(surf.makeImageSnapshot())
         }

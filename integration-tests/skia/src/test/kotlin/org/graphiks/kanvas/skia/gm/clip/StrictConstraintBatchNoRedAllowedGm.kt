@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Tests strict constraint in batch mode: multiple guarded-image draw
@@ -31,11 +31,11 @@ class StrictConstraintBatchNoRedAllowedGm : SkiaGm {
         // Batch of strict-clipped draws, all using the same guarded image
         // but different source rects — strict mode means no red guard bleeds
         val draws = listOf(
-            Rect.fromLTRB(1f, 1f, 5f, 5f) to Rect.fromXYWH(8f, 8f, 32f, 32f),
-            Rect.fromLTRB(0f, 1f, 6f, 5f) to Rect.fromXYWH(56f, 8f, 32f, 32f),
-            Rect.fromLTRB(1f, 0f, 5f, 6f) to Rect.fromXYWH(104f, 8f, 32f, 32f),
-            Rect.fromLTRB(2f, 2f, 4f, 4f) to Rect.fromXYWH(152f, 8f, 32f, 32f),
-            Rect.fromLTRB(1f, 1f, 5f, 5f) to Rect.fromXYWH(200f, 8f, 32f, 32f),
+            RectF32.ofLTRB(1f, 1f, 5f, 5f) to RectF32.ofOriginSize(8f, 8f, 32f, 32f),
+            RectF32.ofLTRB(0f, 1f, 6f, 5f) to RectF32.ofOriginSize(56f, 8f, 32f, 32f),
+            RectF32.ofLTRB(1f, 0f, 5f, 6f) to RectF32.ofOriginSize(104f, 8f, 32f, 32f),
+            RectF32.ofLTRB(2f, 2f, 4f, 4f) to RectF32.ofOriginSize(152f, 8f, 32f, 32f),
+            RectF32.ofLTRB(1f, 1f, 5f, 5f) to RectF32.ofOriginSize(200f, 8f, 32f, 32f),
         )
 
         for ((src, dst) in draws) {

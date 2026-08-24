@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/mipmap.cpp` — gray8 sRGB variant.
@@ -49,7 +49,7 @@ class MipmapGray8SrgbGm : SkiaGm {
         var h = img.height.toFloat() / 2f
         var x = 0f
         while (w > 5f) {
-            val dst = Rect.fromXYWH(x, 0f, w, h)
+            val dst = RectF32.ofOriginSize(x, 0f, w, h)
             canvas.drawImageRect(img, /*src=*/ dst, /*dst=*/ dst)
             x += w + 10f
             w /= 2f

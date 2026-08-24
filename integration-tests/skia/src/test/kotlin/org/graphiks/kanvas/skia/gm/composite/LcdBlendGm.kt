@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/lcdblendmodes.cpp::LcdBlendGM` (720 x 750).
@@ -38,7 +38,7 @@ class LcdBlendGm : SkiaGm {
         val checker = Paint(
             shader = checkerboardShader(Color.BLACK, Color.WHITE, 4),
         )
-        canvas.drawRect(Rect(0f, 0f, kWidth.toFloat(), kHeight.toFloat()), checker)
+        canvas.drawRect(RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()), checker)
 
         // Render into offscreen surface, then composite
         val surface = Surface(kWidth, kHeight)
@@ -52,7 +52,7 @@ class LcdBlendGm : SkiaGm {
             drawColumn(this, Color.fromRGBA(0f, 1f, 1f, 1f), argb(255, 255, 0, 255), useGrad = true)
         }
         val surfImage = surface.makeImageSnapshot()
-        canvas.drawImage(surfImage, Rect(0f, 0f, kWidth.toFloat(), kHeight.toFloat()))
+        canvas.drawImage(surfImage, RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()))
     }
 
     private fun drawColumn(canvas: Canvas, backgroundColor: Color, textColor: Color, useGrad: Boolean) {
@@ -73,14 +73,14 @@ class LcdBlendGm : SkiaGm {
             BlendMode.COLOR, BlendMode.LUMINOSITY,
         )
 
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, kColWidth.toFloat(), kHeight.toFloat()), Paint(color = backgroundColor))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, kColWidth.toFloat(), kHeight.toFloat()), Paint(color = backgroundColor))
 
         var y = fTextHeight
         for (mode in gModes) {
             var paint = Paint(color = textColor, blendMode = mode)
             val font = Font(typeface, size = fTextHeight)
             if (useGrad) {
-                val rr = Rect.fromXYWH(0f, y - fTextHeight, kColWidth.toFloat(), fTextHeight)
+                val rr = RectF32.ofOriginSize(0f, y - fTextHeight, kColWidth.toFloat(), fTextHeight)
                 paint = paint.copy(shader = makeShader(rr))
             }
             val s = mode.name.lowercase()
@@ -89,7 +89,7 @@ class LcdBlendGm : SkiaGm {
         }
     }
 
-    private fun makeShader(bounds: Rect): Shader = Shader.LinearGradient(
+    private fun makeShader(bounds: RectF32): Shader = Shader.LinearGradient(
         start = Point2F32(bounds.left, bounds.top),
         end = Point2F32(bounds.right, bounds.bottom),
         stops = listOf(

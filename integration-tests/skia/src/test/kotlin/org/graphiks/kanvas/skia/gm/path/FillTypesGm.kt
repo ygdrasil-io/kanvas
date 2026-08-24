@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -30,7 +30,7 @@ class FillTypesGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(223f / 255f, 223f / 255f, 223f / 255f, 1f)),
         )
 
@@ -63,13 +63,13 @@ class FillTypesGm : SkiaGm {
         scale: Float,
         paint: Paint,
     ) {
-        val rect = Rect(0f, 0f, 150f, 150f)
+        val rect = RectF32(0f, 0f, 150f, 150f)
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
         canvas.clipRect(rect)
         canvas.drawRect(rect, Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)))
-        val centerX = rect.left + rect.width / 2f
-        val centerY = rect.top + rect.height / 2f
+        val centerX = rect.left + rect.width() / 2f
+        val centerY = rect.top + rect.height() / 2f
         canvas.translate(centerX, centerY)
         canvas.scale(scale, scale)
         canvas.translate(-centerX, -centerY)

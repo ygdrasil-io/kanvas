@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/inversepaths.cpp::inverse_fill_filters` (384 x 128).
@@ -34,7 +34,7 @@ class InverseFillFiltersGm : SkiaGm {
             path.fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
 
             c.save()
-            c.clipRect(Rect.fromLTRB(0f, 0f, 128f, 128f))
+            c.clipRect(RectF32.ofLTRB(0f, 0f, 128f, 128f))
             c.drawPath(path, paint)
             c.restore()
 
@@ -42,7 +42,7 @@ class InverseFillFiltersGm : SkiaGm {
                 style = PaintStyle.STROKE,
                 color = Color.WHITE,
             )
-            c.drawRect(Rect.fromLTRB(0f, 0f, 128f, 128f), stroke)
+            c.drawRect(RectF32.ofLTRB(0f, 0f, 128f, 128f), stroke)
         }
 
         val paint = Paint(antiAlias = true)

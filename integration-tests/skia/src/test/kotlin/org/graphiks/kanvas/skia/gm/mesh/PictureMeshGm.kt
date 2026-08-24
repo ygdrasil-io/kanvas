@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -56,7 +56,7 @@ class PictureMeshGm : SkiaGm {
                 if (usePicture) {
                     val recorder = PictureRecorder()
                     val recCanvas = recorder.beginRecording(
-                        Rect(0f, 0f, rectW, rectH),
+                        RectF32(0f, 0f, rectW, rectH),
                     )
                     recCanvas.drawVertices(verts, paint)
                     val picture = recorder.finishRecordingAsPicture()

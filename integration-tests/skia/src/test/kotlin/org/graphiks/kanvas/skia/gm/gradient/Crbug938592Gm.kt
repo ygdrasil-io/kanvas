@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -54,7 +54,7 @@ class Crbug938592Gm : SkiaGm {
                 canvas.translate(mirrorX.toFloat(), 0f)
                 canvas.scale(-1f, 1f)
             }
-            canvas.drawRect(Rect.fromLTRB(0f, 0f, 150f, 30f), paint)
+            canvas.drawRect(RectF32.ofLTRB(0f, 0f, 150f, 30f), paint)
             canvas.restore()
         }
     }

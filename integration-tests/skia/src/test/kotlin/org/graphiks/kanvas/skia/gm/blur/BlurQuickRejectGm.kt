@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurquickreject.cpp::BlurQuickRejectGM` (300 × 300).
@@ -30,13 +30,13 @@ class BlurQuickRejectGm : SkiaGm {
         val kBlurRadius = 30f
         val sigma = 0.57735f * kBlurRadius + 0.5f
 
-        val clipRect = Rect(0f, 0f, kBoxSize, kBoxSize)
+        val clipRect = RectF32(0f, 0f, kBoxSize, kBoxSize)
 
         val blurRects = arrayOf(
-            Rect(-kBlurRadius - 1f, 0f, -1f, kBoxSize),
-            Rect(0f, -kBlurRadius - 1f, kBoxSize, -1f),
-            Rect(kBoxSize + 1f, 0f, kBoxSize + kBlurRadius + 1f, kBoxSize),
-            Rect(0f, kBoxSize + kBlurRadius + 1f, kBoxSize, 2 * kBoxSize + kBlurRadius + 1f),
+            RectF32(-kBlurRadius - 1f, 0f, -1f, kBoxSize),
+            RectF32(0f, -kBlurRadius - 1f, kBoxSize, -1f),
+            RectF32(kBoxSize + 1f, 0f, kBoxSize + kBlurRadius + 1f, kBoxSize),
+            RectF32(0f, kBoxSize + kBlurRadius + 1f, kBoxSize, 2 * kBoxSize + kBlurRadius + 1f),
         )
         val colors = arrayOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(1f, 1f, 0f, 1f))
 

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/spritebitmap.cpp` (draw-image-rect filter variant).
  *  Draws a checkerboard image at various positions with image shaders to
@@ -27,13 +27,13 @@ class DrawimagerectFilterGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = checkerboardImage(50, 50, 0xFFFFFFFFu.toInt(), 0xFF000000u.toInt(), 1)
         canvas.translate(5f, 5f)
-        canvas.drawImage(img, Rect(0.5f, 0.5f, 50.5f, 50.5f))
+        canvas.drawImage(img, RectF32(0.5f, 0.5f, 50.5f, 50.5f))
         canvas.translate(60f, 0f)
-        canvas.drawImageRect(img, Rect(0f, 0f, 50f, 50f), Rect(0.5f, 0.5f, 50.5f, 50.5f))
+        canvas.drawImageRect(img, RectF32(0f, 0f, 50f, 50f), RectF32(0.5f, 0.5f, 50.5f, 50.5f))
         canvas.translate(60f, 0f)
         val lm = Matrix3x3F32.translation(0.5f, 0.5f)
         val shader = Shader.WithLocalMatrix(img.makeShader(TileMode.CLAMP, TileMode.CLAMP), lm)
-        canvas.drawRect(Rect(0f, 0f, 50f, 50f), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 50f, 50f), Paint(shader = shader))
     }
 
     private fun checkerboardImage(w: Int, h: Int, c0: Int, c1: Int, size: Int): Image {

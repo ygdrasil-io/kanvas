@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -31,7 +31,7 @@ class AddArcGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(20f, 20f)
 
-        var r = Rect.fromLTRB(0f, 0f, 1000f, 1000f)
+        var r = RectF32.ofLTRB(0f, 0f, 1000f, 1000f)
 
         var paint = Paint(
             antiAlias = true,
@@ -44,7 +44,7 @@ class AddArcGm : SkiaGm {
         val rand = Random(0)
 
         var sign = 1f
-        while (r.width > paint.strokeWidth * 3f) {
+        while (r.width() > paint.strokeWidth * 3f) {
             val rInt = rand.nextInt(256)
             val gInt = rand.nextInt(256)
             val bInt = rand.nextInt(255)
@@ -53,7 +53,7 @@ class AddArcGm : SkiaGm {
 
             canvas.drawArc(r, startAngle, sweepAngle, useCenter = false, paint = paint)
 
-            r = Rect.fromLTRB(
+            r = RectF32.ofLTRB(
                 r.left + inset, r.top + inset,
                 r.right - inset, r.bottom - inset
             )

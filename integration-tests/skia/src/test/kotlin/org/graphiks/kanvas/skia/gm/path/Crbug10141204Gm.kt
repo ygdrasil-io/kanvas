@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -40,6 +40,6 @@ class Crbug10141204Gm : SkiaGm {
             color = Color.BLUE,
             antiAlias = true,
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 512f, 512f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 512f, 512f), paint)
     }
 }

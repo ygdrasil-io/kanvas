@@ -8,7 +8,7 @@ import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 object SkiaGmRenderer {
     private const val DEFAULT_WIDTH = 800
@@ -24,7 +24,7 @@ object SkiaGmRenderer {
         val tracer = if (config.debugLevel >= DebugLevel.TRACE) PipelineTracer() else null
         surface.renderOpListener = tracer
         val canvas = surface.canvas()
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()),
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)

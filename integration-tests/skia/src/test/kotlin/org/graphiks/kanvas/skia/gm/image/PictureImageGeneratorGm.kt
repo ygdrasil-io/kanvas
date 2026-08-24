@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class PictureImageGeneratorGm : SkiaGm {
     override val name = "pictureimagegenerator"
@@ -32,7 +32,7 @@ class PictureImageGeneratorGm : SkiaGm {
 
     private fun lazyInit() {
         if (picture == null) {
-            val rect = Rect.fromXYWH(0f, 0f, PICTURE_W, PICTURE_H)
+            val rect = RectF32.ofOriginSize(0f, 0f, PICTURE_W, PICTURE_H)
             val recorder = PictureRecorder()
             val canvas = recorder.beginRecording(rect)
             drawSimplifiedLogo(canvas, rect)
@@ -40,11 +40,11 @@ class PictureImageGeneratorGm : SkiaGm {
         }
     }
 
-    private fun drawSimplifiedLogo(canvas: Canvas, viewBox: Rect) {
+    private fun drawSimplifiedLogo(canvas: Canvas, viewBox: RectF32) {
         var paint = Paint(antiAlias = true)
-        val cx = viewBox.center.x
-        val cy = viewBox.center.y
-        val maxR = minOf(viewBox.width, viewBox.height) * 0.45f
+        val cx = viewBox.center().x
+        val cy = viewBox.center().y
+        val maxR = minOf(viewBox.width(), viewBox.height()) * 0.45f
         var r = maxR
         var i = 0
         while (r > 4f) {
@@ -53,7 +53,7 @@ class PictureImageGeneratorGm : SkiaGm {
                 else Color.fromRGBA(0xCCf / 255f, 0x41f / 255f, 0x41f / 255f)
             )
             canvas.drawRect(
-                Rect.fromLTRB(cx - r, cy - r * 0.5f, cx + r, cy + r * 0.5f),
+                RectF32.ofLTRB(cx - r, cy - r * 0.5f, cx + r, cy + r * 0.5f),
                 paint,
             )
             r *= 0.7f
@@ -118,12 +118,12 @@ class PictureImageGeneratorGm : SkiaGm {
 
             val bg = Paint(color = Color.fromRGBA(0xF0f / 255f, 0xF0f / 255f, 0xF0f / 255f))
             canvas.drawRect(
-                Rect.fromXYWH(x, y, image.width.toFloat(), image.height.toFloat()),
+                RectF32.ofOriginSize(x, y, image.width.toFloat(), image.height.toFloat()),
                 bg,
             )
             canvas.drawImage(
                 image,
-                Rect.fromXYWH(x, y, sw.toFloat(), sh.toFloat()),
+                RectF32.ofOriginSize(x, y, sw.toFloat(), sh.toFloat()),
             )
         }
     }

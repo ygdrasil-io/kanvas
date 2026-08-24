@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -126,6 +126,6 @@ class DrawTextRSXformGm : SkiaGm {
 
         // Draw the oval outline
         val outlinePaint = Paint(style = PaintStyle.STROKE)
-        canvas.drawOval(Rect.fromXYWH(cx - rx, cy - ry, 2f * rx, 2f * ry), outlinePaint)
+        canvas.drawOval(RectF32.ofOriginSize(cx - rx, cy - ry, 2f * rx, 2f * ry), outlinePaint)
     }
 }

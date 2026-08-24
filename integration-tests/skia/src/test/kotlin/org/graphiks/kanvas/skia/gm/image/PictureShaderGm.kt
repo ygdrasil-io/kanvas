@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 abstract class PictureShaderBaseGm(
     protected val tileSize: Float,
@@ -40,7 +40,7 @@ abstract class PictureShaderBaseGm(
     private fun lazyInit() {
         if (picture == null) {
             val recorder = PictureRecorder()
-            val pictureCanvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, tileSize, tileSize))
+            val pictureCanvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, tileSize, tileSize))
             drawTile(pictureCanvas)
             picture = recorder.finishRecordingAsPicture()
         }
@@ -102,7 +102,7 @@ abstract class PictureShaderBaseGm(
         val circle = Path { }.apply { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
         canvas.drawPath(circle, paint)
         canvas.drawRect(
-            Rect.fromXYWH(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),
+            RectF32.ofOriginSize(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),
             paint,
         )
         paint = paint.copy(color = Color.RED)
@@ -117,8 +117,8 @@ abstract class PictureShaderBaseGm(
 
         canvas.save()
         canvas.concat(matrix)
-        val sceneRect = Rect.fromLTRB(0f, 0f, sceneSize, sceneSize)
-        val rightSceneRect = Rect.fromXYWH(sceneSize * 1.1f, 0f, sceneSize, sceneSize)
+        val sceneRect = RectF32.ofLTRB(0f, 0f, sceneSize, sceneSize)
+        val rightSceneRect = RectF32.ofOriginSize(sceneSize * 1.1f, 0f, sceneSize, sceneSize)
         canvas.drawRect(sceneRect, fillPaint)
         canvas.drawRect(rightSceneRect, fillPaint)
 

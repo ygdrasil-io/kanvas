@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/jpg_color_cube.cpp::ColorCubeGM` (512 × 512).
@@ -40,7 +40,7 @@ class JpgColorCubeGm : SkiaGm {
                         val blue = (b * 4).coerceIn(0, 255)
                         val color = (a shl 24) or (red shl 16) or (green shl 8) or blue
                         drawRect(
-                            Rect(bX + r.toFloat(), bY + g.toFloat(), bX + r + 1f, bY + g + 1f),
+                            RectF32(bX + r.toFloat(), bY + g.toFloat(), bX + r + 1f, bY + g + 1f),
                             Paint(color = Color(color.toUInt())),
                         )
                     }
@@ -50,6 +50,6 @@ class JpgColorCubeGm : SkiaGm {
             }
         }
         val image = surface.makeImageSnapshot()
-        canvas.drawImage(image, Rect(0f, 0f, 512f, 512f))
+        canvas.drawImage(image, RectF32(0f, 0f, 512f, 512f))
     }
 }

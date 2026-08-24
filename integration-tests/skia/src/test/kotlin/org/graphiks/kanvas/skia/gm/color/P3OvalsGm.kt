@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests P3 color-space oval rendering with circles, ovals, and rotated ovals in red. */
 class P3OvalsGm : SkiaGm {
@@ -25,14 +25,14 @@ class P3OvalsGm : SkiaGm {
 
         canvas.translate(0f, 80f)
 
-        canvas.drawOval(Rect.fromLTRB(20f, 10f, 60f, 70f), Paint(color = red, antiAlias = true))
+        canvas.drawOval(RectF32.ofLTRB(20f, 10f, 60f, 70f), Paint(color = red, antiAlias = true))
 
         canvas.translate(0f, 80f)
 
         canvas.save()
         canvas.translate(40f, 40f)
         canvas.rotate(45f)
-        canvas.drawOval(Rect.fromLTRB(-20f, -30f, 20f, 30f), Paint(color = red, antiAlias = true))
+        canvas.drawOval(RectF32.ofLTRB(-20f, -30f, 20f, 30f), Paint(color = red, antiAlias = true))
         canvas.restore()
     }
 }
