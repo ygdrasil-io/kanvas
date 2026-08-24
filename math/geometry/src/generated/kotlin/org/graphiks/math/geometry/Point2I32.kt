@@ -44,3 +44,8 @@ public class Point2I32(
     public val Origin: Point2I32 = Point2I32(0, 0)
   }
 }
+
+/**
+ * Creates a 2D point.
+ */
+public fun pointOf(x: Int, y: Int): Point2I32 = Point2I32(x, y)

@@ -35,3 +35,8 @@ public class MutablePoint2F32(
    */
   public fun toImmutable(): Point2F32 = Point2F32(x, y)
 }
+
+/**
+ * Creates a mutable 2D point.
+ */
+public fun mutablePointOf(x: Float, y: Float): MutablePoint2F32 = MutablePoint2F32(x, y)

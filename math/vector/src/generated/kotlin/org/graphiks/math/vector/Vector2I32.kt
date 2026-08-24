@@ -73,4 +73,9 @@ public class Vector2I32(
   }
 }
 
+/**
+ * Creates a 2D vector.
+ */
+public fun vectorOf(x: Int, y: Int): Vector2I32 = Vector2I32(x, y)
+
 public operator fun Int.times(vector: Vector2I32): Vector2I32 = vector * this

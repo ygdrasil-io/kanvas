@@ -87,4 +87,14 @@ public class Vector4F32(
   }
 }
 
+/**
+ * Creates a 4D vector.
+ */
+public fun vectorOf(
+  x: Float,
+  y: Float,
+  z: Float,
+  w: Float,
+): Vector4F32 = Vector4F32(x, y, z, w)
+
 public operator fun Float.times(vector: Vector4F32): Vector4F32 = vector * this

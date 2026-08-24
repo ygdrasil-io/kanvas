@@ -35,3 +35,8 @@ public class MutablePoint2F64(
    */
   public fun toImmutable(): Point2F64 = Point2F64(x, y)
 }
+
+/**
+ * Creates a mutable 2D point.
+ */
+public fun mutablePointOf(x: Double, y: Double): MutablePoint2F64 = MutablePoint2F64(x, y)

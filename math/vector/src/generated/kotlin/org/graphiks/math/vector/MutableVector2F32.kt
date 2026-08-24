@@ -58,3 +58,8 @@ public class MutableVector2F32(
    */
   public fun toImmutable(): Vector2F32 = Vector2F32(x, y)
 }
+
+/**
+ * Creates a mutable 2D vector.
+ */
+public fun mutableVectorOf(x: Float, y: Float): MutableVector2F32 = MutableVector2F32(x, y)

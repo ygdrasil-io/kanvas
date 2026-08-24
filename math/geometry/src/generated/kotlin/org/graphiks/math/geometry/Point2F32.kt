@@ -82,4 +82,9 @@ public class Point2F32(
   }
 }
 
+/**
+ * Creates a 2D point.
+ */
+public fun pointOf(x: Float, y: Float): Point2F32 = Point2F32(x, y)
+
 public fun Point2F32.toPoint2F64(): Point2F64 = Point2F64(x.toDouble(), y.toDouble())

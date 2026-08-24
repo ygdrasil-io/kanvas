@@ -86,4 +86,9 @@ public class Vector2F64(
   }
 }
 
+/**
+ * Creates a 2D vector.
+ */
+public fun vectorOf(x: Double, y: Double): Vector2F64 = Vector2F64(x, y)
+
 public operator fun Double.times(vector: Vector2F64): Vector2F64 = vector * this

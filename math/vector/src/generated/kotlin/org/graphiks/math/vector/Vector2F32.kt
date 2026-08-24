@@ -86,4 +86,9 @@ public class Vector2F32(
   }
 }
 
+/**
+ * Creates a 2D vector.
+ */
+public fun vectorOf(x: Float, y: Float): Vector2F32 = Vector2F32(x, y)
+
 public operator fun Float.times(vector: Vector2F32): Vector2F32 = vector * this

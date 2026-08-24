@@ -80,3 +80,12 @@ public class Point3F32(
     public val Origin: Point3F32 = Point3F32(0f, 0f, 0f)
   }
 }
+
+/**
+ * Creates a 3D point.
+ */
+public fun pointOf(
+  x: Float,
+  y: Float,
+  z: Float,
+): Point3F32 = Point3F32(x, y, z)
