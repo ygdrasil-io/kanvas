@@ -33,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
@@ -93,6 +94,83 @@ class GPUPreparedSurfaceFrameBuilderTest {
             .flatMap(GPUTask.Render::drawPackets)
         assertEquals(listOf(0, 1, 2, 3), packets.map(GPUDrawPacket::commandIdValue))
         assertEquals(4, packets.size)
+    }
+
+    @Test
+    fun `public bounded gradient stroke records four gradient CorePrimitive packets without changing local axes`() {
+        val request = request(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(8.5f, 32.5f),
+                            Point2F32(55.5f, 32.5f),
+                            listOf(
+                                GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                                GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                            ),
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            capabilitiesWithLinearFact(),
+        ).copy(
+            targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            targetBounds = GPUPixelBounds(0, 0, 64, 64),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(request),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(listOf(0, 1, 2, 3), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(listOf(0, 1, 2, 3), packets.map(GPUDrawPacket::originalPaintOrder))
+        assertEquals(
+            List(4) { "layout.core-primitive.dynamic-uniform592-gradient-linear-v1" },
+            packets.map(GPUDrawPacket::bindingLayoutHash),
+        )
+        packets.forEach { packet ->
+            val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+            val material = assertIs<GPUCorePrimitiveMaterialPayload.LinearGradient>(semantic.material)
+            assertEquals(8.5f, material.startX)
+            assertEquals(32.5f, material.startY)
+            assertEquals(55.5f, material.endX)
+            assertEquals(32.5f, material.endY)
+            assertEquals(listOf(0f, 1f), material.positions)
+            assertEquals("clamp", material.tileMode)
+            assertEquals("srgb", material.interpolation)
+        }
+    }
+
+    @Test
+    fun `public DrawPath gradient stroke refuses before prepared packets are published`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawPath(
+                        Path().addRect(RectF32.ofLTRB(8f, 16f, 24f, 22f)),
+                        Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                            shader = Shader.LinearGradient(
+                                Point2F32(8.5f, 19.5f), Point2F32(23.5f, 19.5f),
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                            antiAlias = false,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                capabilitiesWithLinearFact(),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
+        assertEquals("unsupported.geometry.path_key_nondeterministic", refused.diagnostic.code.value)
     }
 
     @Test

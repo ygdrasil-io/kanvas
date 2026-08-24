@@ -141,6 +141,82 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `translated clamp linear gradient stroke refuses before packets while translated solid remains admitted`() {
+        val gradientOperation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = linearGradient(), antiAlias = false),
+            transform = Matrix3x3F32.translation(2f, 0f),
+        )
+
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+            GPUPreparedStrokeRectLowerer.lower(
+                gradientOperation,
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+        assertEquals("unsupported.stroke.rect_transform", lowered.code)
+        assertEquals("gradient_requires_identity", lowered.facts["transform"])
+
+        val mapping = GPUOpMapper.mapOperations(
+            listOf(gradientOperation), target(), RenderConfig.DEFAULT, capabilities(),
+        )
+        assertEquals("unsupported.stroke.rect_transform", mapping.preparedRefusal?.code)
+        assertTrue(mapping.visualCommands.isEmpty())
+        assertTrue(mapping.commandIdsByOperationIndex.isEmpty())
+
+        val solidMapping = GPUOpMapper.mapOperations(
+            listOf(strokeRect(transform = Matrix3x3F32.translation(2f, 0f))),
+            target(), RenderConfig.DEFAULT, capabilities(),
+        )
+        assertEquals(null, solidMapping.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), solidMapping.visualCommands.map { it.normalized.commandId.value })
+    }
+
+    @Test
+    fun `malformed linear gradient stroke boundaries refuse as material without throwing`() {
+        val validStops = gradientStops()
+        val cases = listOf(
+            "negative position" to Shader.LinearGradient(
+                Point2F32(8f, 32f), Point2F32(56f, 32f),
+                listOf(org.graphiks.kanvas.paint.GradientStop(-.1f, ColorARGB.Red), validStops.last()),
+            ),
+            "position above one" to Shader.LinearGradient(
+                Point2F32(8f, 32f), Point2F32(56f, 32f),
+                listOf(validStops.first(), org.graphiks.kanvas.paint.GradientStop(1.1f, ColorARGB.Blue)),
+            ),
+            "decreasing positions" to Shader.LinearGradient(
+                Point2F32(8f, 32f), Point2F32(56f, 32f),
+                listOf(org.graphiks.kanvas.paint.GradientStop(.75f, ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.25f, ColorARGB.Blue)),
+            ),
+            "identical endpoints" to Shader.LinearGradient(
+                Point2F32(8f, 32f), Point2F32(8f, 32f), validStops,
+            ),
+            "non finite endpoint" to Shader.LinearGradient(
+                Point2F32(Float.NaN, 32f), Point2F32(56f, 32f), validStops,
+            ),
+            "overflowed axis" to Shader.LinearGradient(
+                Point2F32(-Float.MAX_VALUE, 32f), Point2F32(Float.MAX_VALUE, 32f), validStops,
+            ),
+        )
+
+        cases.forEach { (name, shader) ->
+            val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = false)),
+                    GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT, capabilities(),
+                ),
+                name,
+            )
+            assertEquals("unsupported.stroke.rect_material", lowered.code, name)
+        }
+    }
+
+    @Test
     fun `bounded stroke inputs refuse before generic path lowering with stable codes`() {
         val cases = listOf(
             "anti alias" to strokeRect(paint = strokePaint.copy(antiAlias = true)) to

@@ -81,6 +81,13 @@ internal object GPUPreparedStrokeRectLowerer {
                     ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
             }
             is Shader.LinearGradient -> {
+                if (operation.transform != Matrix3x3F32.Identity) {
+                    return refused(
+                        "unsupported.stroke.rect_transform",
+                        operationIndex,
+                        mapOf("transform" to "gradient_requires_identity"),
+                    )
+                }
                 if (paint.colorFilter != null || !shader.isAdmittedStrokeGradient()) {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
                 }
@@ -285,15 +292,22 @@ private fun org.graphiks.kanvas.paint.Paint.hasFoldableSolidColorFilter(): Boole
     colorFilter?.isFoldableSolidColorFilter() ?: true
 
 /** The four-band route deliberately accepts only the exact material ABI executed by the prepared frame. */
-private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean =
-    tileMode == TileMode.CLAMP &&
+private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val lengthSquared = dx * dx + dy * dy
+    return tileMode == TileMode.CLAMP &&
         interpolation == ColorSpaceInterpolation.SRGB &&
         start.x.isFinite() && start.y.isFinite() && end.x.isFinite() && end.y.isFinite() &&
-        stops.size in 1..16 && stops.all { stop ->
-            stop.position.isFinite() &&
+        dx.isFinite() && dy.isFinite() && lengthSquared.isFinite() && lengthSquared > 0f &&
+        stops.size in 1..16 &&
+        stops.all { stop ->
+            stop.position.isFinite() && stop.position in 0f..1f &&
                 stop.color.r.isFinite() && stop.color.g.isFinite() &&
                 stop.color.b.isFinite() && stop.color.a.isFinite()
-        }
+        } &&
+        stops.zipWithNext().all { (left, right) -> left.position <= right.position }
+}
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {

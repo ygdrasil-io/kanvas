@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -62,7 +63,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
-    fun `public Surface render paints clamp gradient stroke annulus and preserves transparent center`() {
+    fun `public Surface render paints exact clamp gradient stroke RGB annulus and preserves transparent center`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
         GPUBackendRuntimeNativeFactory.dispose()
@@ -85,8 +86,8 @@ class GPUFramePathApiInventoryNativeSmokeTest {
 
             assertEquals(4, result.stats.opsDispatched)
             assertEquals(0, result.stats.opsRefused)
-            assertTrue(rgba(result.pixels, 8, 16, 64)[3] > 0)
-            assertTrue(rgba(result.pixels, 55, 47, 64)[3] > 0)
+            assertRgbaWithinOneLsb(listOf(255, 56, 56, 255), rgba(result.pixels, 8, 16, 64))
+            assertRgbaWithinOneLsb(listOf(56, 112, 255, 255), rgba(result.pixels, 55, 47, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 4, 4, 64))
         } finally {
@@ -229,4 +230,13 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val offset = (y * width + x) * 4
         return (0..3).map { channel -> bytes[offset + channel].toInt() }
     }
+}
+
+private fun assertRgbaWithinOneLsb(expected: List<Int>, actual: List<Int>) {
+    assertTrue(
+        expected.zip(actual).all { (expectedChannel, actualChannel) ->
+            abs(expectedChannel - actualChannel) <= 1
+        },
+        "expected RGBA within one LSB of $expected but was $actual",
+    )
 }

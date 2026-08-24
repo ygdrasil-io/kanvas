@@ -25,6 +25,10 @@ class SurfaceSrgbGradientCpuOracleTest {
         assertPixel(pixels, 64, 55, 16, intArrayOf(56, 112, 255, 255))
         assertPixel(pixels, 64, 8, 32, intArrayOf(255, 56, 56, 255))
         assertPixel(pixels, 64, 55, 32, intArrayOf(56, 112, 255, 255))
+        // Pixel center (32.5, 16.5) has t = (32.5 - 8.5) / (55.5 - 8.5) = 24/47.
+        // Linear-light interpolation of (255,56,56) to (56,112,255), then sRGB encoding,
+        // yields the independent interior band RGBA (189,90,192,255).
+        assertPixel(pixels, 64, 32, 16, intArrayOf(189, 90, 192, 255))
         assertPixel(pixels, 64, 32, 32, intArrayOf(0, 0, 0, 0))
     }
 

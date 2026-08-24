@@ -260,6 +260,26 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
+    fun `gradient stroke policy accepts one LSB but rejects two LSB at a band sample`() {
+        val evidenceCase = assertNotNull(
+            GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == "gradient-stroke-refusal" },
+        )
+        val policy = assertNotNull(evidenceCase.descriptor.comparison)
+        val oracle = assertNotNull(evidenceCase.oracle).render(64, 64)
+        val interiorRedChannel = (16 * 64 + 32) * 4
+        val comparator = EvidenceComparator()
+        val deltaOne = oracle.copyOf().also { pixels ->
+            pixels[interiorRedChannel] = (pixels[interiorRedChannel].toInt() + 1).toByte()
+        }
+        val deltaTwo = oracle.copyOf().also { pixels ->
+            pixels[interiorRedChannel] = (pixels[interiorRedChannel].toInt() + 2).toByte()
+        }
+
+        assertTrue(comparator.compare(deltaOne, oracle, 64, 64, policy).passed)
+        assertFalse(comparator.compare(deltaTwo, oracle, 64, 64, policy).passed)
+    }
+
+    @Test
     fun `public surface programs record only the requested Canvas operations`() {
         assertEquals(
             listOf(
