@@ -15,8 +15,8 @@ import validate_gpu_renderer_m9_readiness_pm_evidence_bundle as validator
 
 DASHBOARD_LINES = [
     "readiness-dashboard id=m9-gpu-renderer-readiness row=gpu-renderer.readiness classification=PolicyGated rows=5 readinessDelta=0.0 releaseBlocking=false productRouteActivated=false",
-    "readiness-row area=correctness state=evidence-present classification=PolicyGated source=reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
-    "readiness-row area=activation state=policy-gated classification=PolicyGated source=pipelinePmBundle readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
+    "readiness-row area=correctness state=evidence-present classification=PolicyGated source=gpuEvidenceVerification readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
+    "readiness-row area=activation state=policy-gated classification=PolicyGated source=headless-offscreen-only readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
     "readiness-row area=performance state=candidate-nonblocking classification=PolicyGated source=m9-frame-gate-policy readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
     "readiness-row area=cache state=observed-and-reporting classification=PolicyGated source=m9-cache-source-map readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
     "readiness-row area=release state=non-release-blocking classification=PolicyGated source=m9-frame-gate-policy readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
@@ -51,8 +51,8 @@ def write_fixture_bundle(root: Path) -> Path:
         "releaseBlocking": False,
         "productRouteActivated": False,
         "rows": [
-            {"area": "correctness", "state": "evidence-present", "source": "reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md"},
-            {"area": "activation", "state": "policy-gated", "source": "pipelinePmBundle"},
+            {"area": "correctness", "state": "evidence-present", "source": "gpuEvidenceVerification"},
+            {"area": "activation", "state": "policy-gated", "source": "headless-offscreen-only"},
             {"area": "performance", "state": "candidate-nonblocking", "source": "m9-frame-gate-policy"},
             {"area": "cache", "state": "observed-and-reporting", "source": "m9-cache-source-map"},
             {"area": "release", "state": "non-release-blocking", "source": "m9-frame-gate-policy"},
@@ -90,6 +90,11 @@ class GpuRendererM9ReadinessPmEvidenceValidatorTest(unittest.TestCase):
         self.assertEqual("gpuRendererM9ReadinessPmEvidence", entry["key"])
         self.assertEqual("PolicyGated", entry["status"])
         self.assertFalse(entry["releaseBlocking"])
+        self.assertEqual(
+            "rtk ./gradlew --no-daemon :gpu-renderer:gpuRendererM9ReadinessPmEvidenceBundle",
+            entry["pmPackageCommand"],
+        )
+        self.assertFalse(hasattr(validator, "inject_pm_bundle"))
 
     def test_validate_output_rejects_readiness_or_release_movement(self) -> None:
         unsafe_updates = [
@@ -144,92 +149,6 @@ class GpuRendererM9ReadinessPmEvidenceValidatorTest(unittest.TestCase):
 
                     with self.assertRaisesRegex(validator.ValidationError, message):
                         validator.validate_output(output_dir)
-
-    def test_inject_pm_bundle_copies_artifacts_and_updates_manifest(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            output_dir = write_fixture_bundle(root)
-            _, entry = validator.validate_output(output_dir)
-            bundle_dir = root / "build/reports/wgsl-pipeline-pm-bundle"
-            bundle_dir.mkdir(parents=True)
-            write_json(bundle_dir / "manifest.json", {"generatedBy": "pipelinePmBundle"})
-
-            validator.inject_pm_bundle(output_dir, bundle_dir, entry)
-
-            manifest = json.loads((bundle_dir / "manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(entry, manifest["gpuRendererM9ReadinessPmEvidence"])
-            self.assertTrue((bundle_dir / validator.RELEASE_DIR / validator.SUMMARY_ARTIFACT).is_file())
-            self.assertTrue((bundle_dir / validator.RELEASE_DIR / validator.OUTPUT_MANIFEST_ENTRY).is_file())
-
-    def test_inject_pm_bundle_preserves_existing_manifest_order_and_appends_m9_after_r6(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            output_dir = write_fixture_bundle(root)
-            _, entry = validator.validate_output(output_dir)
-            bundle_dir = root / "build/reports/wgsl-pipeline-pm-bundle"
-            bundle_dir.mkdir(parents=True)
-            (bundle_dir / "manifest.json").write_text(
-                "{\n"
-                '  "generatedBy": "pipelinePmBundle",\n'
-                '  "gpuRendererR6FirstRoutePmEvidence": {"releaseBlocking": false}\n'
-                "}\n",
-                encoding="utf-8",
-            )
-
-            validator.inject_pm_bundle(output_dir, bundle_dir, entry)
-
-            manifest_text = (bundle_dir / "manifest.json").read_text(encoding="utf-8")
-            self.assertLess(
-                manifest_text.index('"gpuRendererR6FirstRoutePmEvidence"'),
-                manifest_text.index('"gpuRendererM9ReadinessPmEvidence"'),
-            )
-
-    def test_inject_pm_bundle_reinserts_stale_m9_after_r6(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            output_dir = write_fixture_bundle(root)
-            _, entry = validator.validate_output(output_dir)
-            bundle_dir = root / "build/reports/wgsl-pipeline-pm-bundle"
-            bundle_dir.mkdir(parents=True)
-            (bundle_dir / "manifest.json").write_text(
-                "{\n"
-                '  "generatedBy": "pipelinePmBundle",\n'
-                '  "gpuRendererM9ReadinessPmEvidence": {"releaseBlocking": true},\n'
-                '  "gpuRendererR6FirstRoutePmEvidence": {"releaseBlocking": false}\n'
-                "}\n",
-                encoding="utf-8",
-            )
-
-            validator.inject_pm_bundle(output_dir, bundle_dir, entry)
-
-            manifest_text = (bundle_dir / "manifest.json").read_text(encoding="utf-8")
-            self.assertLess(
-                manifest_text.index('"gpuRendererR6FirstRoutePmEvidence"'),
-                manifest_text.index('"gpuRendererM9ReadinessPmEvidence"'),
-            )
-
-    def test_inject_pm_bundle_rejects_duplicate_target_manifest_keys(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            output_dir = write_fixture_bundle(root)
-            _, entry = validator.validate_output(output_dir)
-            bundle_dir = root / "bundle"
-            bundle_dir.mkdir()
-            (bundle_dir / "manifest.json").write_text(
-                "{\n"
-                '  "generatedBy": "pipelinePmBundle",\n'
-                '  "gpuRendererM9ReadinessPmEvidence": {"releaseBlocking": true},\n'
-                '  "gpuRendererM9ReadinessPmEvidence": {"releaseBlocking": false}\n'
-                "}\n",
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                validator.ValidationError,
-                "duplicate JSON key: gpuRendererM9ReadinessPmEvidence",
-            ):
-                validator.inject_pm_bundle(output_dir, bundle_dir, entry)
-
 
 if __name__ == "__main__":
     unittest.main()

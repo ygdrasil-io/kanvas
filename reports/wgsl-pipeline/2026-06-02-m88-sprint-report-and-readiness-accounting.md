@@ -60,7 +60,7 @@ PM bundle entry:
 Blocking or selected gates:
 
 - `pipelineSceneDashboardGate`: blocking correctness gate.
-- `pipelinePmBundle`: blocking PM bundle packaging gate.
+- `pipelineSceneDashboardGate`: blocking PM bundle packaging gate.
 - `:kadre-runtime:pipelineM88ReleaseCandidate2`: blocking RC2 evidence generation.
 - `pipelinePerformanceReleaseGate`: still blocks only the selected M59 measured rows.
 
@@ -89,7 +89,7 @@ real-time runtime capability, or measured performance/cache readiness.
 ```bash
 ./gradlew --no-daemon :kadre-runtime:test --tests org.skia.kadre.runtime.M88ReleaseCandidate2Test :kadre-runtime:pipelineM88ReleaseCandidate2
 ./gradlew --no-daemon :kadre-runtime:test --tests org.skia.kadre.runtime.M88ReleaseCandidate2Test :kadre-runtime:validateM88ReleaseCandidate2
-./gradlew --no-daemon pipelinePmBundle
+./gradlew --no-daemon pipelineSceneDashboardGate
 python3 -m json.tool reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json >/dev/null
 python3 -m json.tool reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json >/dev/null
 python3 -m json.tool reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json >/dev/null
@@ -101,10 +101,10 @@ The Gradle validation passed after initializing the Kadre submodule from
 
 Review follow-up:
 
-- independent review found that `pipelinePmBundle` did not validate M88 and
+- independent review found that `pipelineSceneDashboardGate` did not validate M88 and
   that M84/M85 could be treated as safe if their source files were absent;
 - fixed by adding `:kadre-runtime:validateM88ReleaseCandidate2`, making
-  `pipelinePmBundle` depend on it, and requiring expected M84/M85 pack/gate
+  `pipelineSceneDashboardGate` depend on it, and requiring expected M84/M85 pack/gate
   fields before M88 can report `pass`.
 
 ## Non-Claims

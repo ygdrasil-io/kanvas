@@ -13,8 +13,8 @@
             "purpose": "Generates the RC2 evidence package."
         },
         {
-            "name": "pipelinePmBundle",
-            "purpose": "Builds the portable PM dashboard/report bundle including M88."
+            "name": "validateM88ReleaseCandidate2",
+            "purpose": "Validates the checked-in M88 RC2 evidence package without native dependencies."
         },
         {
             "name": "pipelineSceneDashboardGate",

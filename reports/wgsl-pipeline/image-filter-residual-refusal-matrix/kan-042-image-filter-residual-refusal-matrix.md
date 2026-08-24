@@ -62,7 +62,7 @@ dependency-gated rows without adding renderer behavior.
 - `validateKan008ImageFilterDagRefusals`
 - `validateKan041ImageFilterDagBoundedV3`
 - `pipelineSceneDashboardGate`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

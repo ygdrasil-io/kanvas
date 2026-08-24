@@ -48,7 +48,7 @@ rendering path.
 ```bash
 rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRendererShadow*'
 rtk ./gradlew --no-daemon :gpu-renderer:check
-rtk rg -n 'productRouteActivated[=:][[:space:]]*true|Product route activated:[[:space:]]*`true`|releaseBlocking[=:][[:space:]]*true|Release blocking:[[:space:]]*`true`|readinessDelta[=:][[:space:]]*[1-9]|Readiness delta:[[:space:]]*`[1-9]' gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/GpuRendererShadowAdapter.kt gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GpuRendererShadowAdapterTest.kt .upstream/specs/gpu-renderer/tickets/M1-first-route-product-activation reports/gpu-renderer/2026-06-14-m1-003-controlled-first-route-flag.md reports/gpu-renderer/2026-06-14-m1-m2-ticket-wave.md
+rtk rg -n 'productRouteActivated[=:][[:space:]]*true|Product route activated:[[:space:]]*`true`|releaseBlocking[=:][[:space:]]*true|Release blocking:[[:space:]]*`true`|readinessDelta[=:][[:space:]]*[1-9]|Readiness delta:[[:space:]]*`[1-9]' gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/GpuRendererShadowAdapter.kt gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GpuRendererShadowAdapterTest.kt .upstream/specs/gpu-renderer/tickets/M1-first-route-product-activation reports/gpu-renderer/2026-06-14-m1-003-controlled-first-route-flag.md
 rtk git diff --check
 ```
 

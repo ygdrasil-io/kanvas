@@ -63,7 +63,7 @@ generated dashboard row. M52 does not claim broad Skia GM support.
 git diff --check
 ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate
 ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate
-./gradlew --no-daemon pipelinePmBundle
+./gradlew --no-daemon pipelineSceneDashboardGate
 ```
 
 Result: pass.

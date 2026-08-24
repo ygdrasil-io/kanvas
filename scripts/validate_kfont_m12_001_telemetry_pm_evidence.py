@@ -71,8 +71,8 @@ def task_block(build_gradle: str, marker: str) -> str:
     fail(f"unterminated Gradle block: {marker}")
 
 
-def pipeline_pm_bundle_block(build_gradle: str) -> str:
-    return task_block(build_gradle, 'tasks.register("pipelinePmBundle")')
+def telemetry_validator_block(build_gradle: str) -> str:
+    return task_block(build_gradle, f'tasks.register<Exec>("{TASK_NAME}")')
 
 
 def main() -> int:
@@ -99,7 +99,8 @@ def main() -> int:
     require(advisory.get("surfaceId") == "font-telemetry-schema", "surfaceId changed")
     require(advisory.get("classification") == "tracked-gap", "classification must remain tracked-gap")
     require(advisory.get("claimPromotionAllowed") is False, "claimPromotionAllowed must remain false")
-    require(advisory.get("pmBundleTask") == "pipelinePmBundle", "pmBundleTask must stay pipelinePmBundle")
+    require(advisory.get("validationTask") == TASK_NAME, "validationTask must stay pinned to the KFONT-M12 validator")
+    require("pmBundleTask" not in advisory, "advisory evidence must not claim a retired root packaging task")
     require(advisory.get("warningMode") == "advisory", "warningMode must stay advisory")
     require(advisory.get("sourceDashboardPath") == DASHBOARD_PATH, "sourceDashboardPath changed")
 
@@ -183,7 +184,7 @@ def main() -> int:
         all("PM bundle evidence" not in str(gate) for gate in remaining_gates),
         "remainingGates must not keep PM bundle evidence open after this slice",
     )
-    require("pipelinePmBundle" in advisory_md, "markdown report must mention pipelinePmBundle")
+    require(TASK_NAME in advisory_md, "markdown report must mention its standalone validator")
     require("warning-only" in advisory_md, "markdown report must mention warning-only status")
     require("tracked-gap" in advisory_md, "markdown report must mention tracked-gap classification")
     require("glyph-artifact-metrics.json" in advisory_md, "markdown report must mention glyph-artifact-metrics.json")
@@ -197,19 +198,21 @@ def main() -> int:
     require("remains open before `done`" not in advisory_md, "markdown report must not keep KFONT-M12-001 open before done")
 
     require(f'tasks.register<Exec>("{TASK_NAME}")' in build_gradle, "build.gradle.kts must register validateKfontM12001TelemetryPmEvidence")
-    pm_bundle_block = pipeline_pm_bundle_block(build_gradle)
-    require(f'"{TASK_NAME}"' in pm_bundle_block, "pipelinePmBundle must depend on validateKfontM12001TelemetryPmEvidence")
-    require("reports/pure-kotlin-text/parser-metrics.json" in pm_bundle_block, "pipelinePmBundle must include parser-metrics.json")
-    require("reports/pure-kotlin-text/scaler-metrics.json" in pm_bundle_block, "pipelinePmBundle must include scaler-metrics.json")
-    require("reports/pure-kotlin-text/glyph-artifact-metrics.json" in pm_bundle_block, "pipelinePmBundle must include glyph-artifact-metrics.json")
-    require("reports/pure-kotlin-text/glyph-cache-metrics.json" in pm_bundle_block, "pipelinePmBundle must include glyph-cache-metrics.json")
-    require("reports/pure-kotlin-text/glyph-atlas-occupancy.json" in pm_bundle_block, "pipelinePmBundle must include glyph-atlas-occupancy.json")
-    require(GPU_HANDOFF_PATH in pm_bundle_block, "pipelinePmBundle must include gpu-text-handoff-metrics.json")
-    require(GPU_UPLOAD_PATH in pm_bundle_block, "pipelinePmBundle must include draw-text-run-upload-plan.json")
-    require(GPU_REPORT_PATH in pm_bundle_block, "pipelinePmBundle must include the KFONT-M12-005 markdown report")
-    require("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md" in pm_bundle_block, "pipelinePmBundle must include the KFONT-M12-004 markdown report")
-    require(ADVISORY_JSON_PATH in pm_bundle_block, "pipelinePmBundle must include font-telemetry-pm-bundle.json")
-    require(ADVISORY_MD_PATH in pm_bundle_block, "pipelinePmBundle must include the telemetry PM markdown report")
+    validator_block = telemetry_validator_block(build_gradle)
+    require("reports/pure-kotlin-text/parser-metrics.json" in validator_block, "telemetry validator must include parser-metrics.json")
+    require("reports/pure-kotlin-text/scaler-metrics.json" in validator_block, "telemetry validator must include scaler-metrics.json")
+    require("reports/pure-kotlin-text/glyph-artifact-metrics.json" in validator_block, "telemetry validator must include glyph-artifact-metrics.json")
+    require("reports/pure-kotlin-text/glyph-cache-metrics.json" in validator_block, "telemetry validator must include glyph-cache-metrics.json")
+    require("reports/pure-kotlin-text/glyph-atlas-occupancy.json" in validator_block, "telemetry validator must include glyph-atlas-occupancy.json")
+    require(GPU_HANDOFF_PATH in validator_block, "telemetry validator must include gpu-text-handoff-metrics.json")
+    require(GPU_UPLOAD_PATH in validator_block, "telemetry validator must include draw-text-run-upload-plan.json")
+    require(GPU_REPORT_PATH in validator_block, "telemetry validator must include the KFONT-M12-005 markdown report")
+    require("reports/pure-kotlin-text/2026-06-19-kfont-m12-004-glyph-cache-metrics.md" in validator_block, "telemetry validator must include the KFONT-M12-004 markdown report")
+    require(ADVISORY_JSON_PATH in validator_block, "telemetry validator must include font-telemetry-pm-bundle.json")
+    require(ADVISORY_MD_PATH in validator_block, "telemetry validator must include the telemetry markdown report")
+
+    scene_gate_block = task_block(build_gradle, 'tasks.register("pipelineSceneDashboardGate")')
+    require(TASK_NAME in scene_gate_block, "scene dashboard gate must consume the KFONT-M12 validator")
 
     print("KFONT-M12-001 telemetry PM evidence validated")
     return 0

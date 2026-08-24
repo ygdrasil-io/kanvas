@@ -31,6 +31,6 @@ M87 promotes a selected registered runtime effect, `runtime.simple_rt`, into liv
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kadre-runtime:test :kadre-runtime:pipelineM87RuntimeEffectLiveEditing :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest pipelinePmBundle
+rtk ./gradlew --no-daemon :kadre-runtime:test :kadre-runtime:pipelineM87RuntimeEffectLiveEditing :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest pipelineSceneDashboardGate
 python3 -m json.tool reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json >/dev/null
 ```

@@ -1,8 +1,10 @@
-# M84 Native Frame Timing Candidate Gate
+# M84 Historical Native Frame Timing Candidate Evidence
 
 Status: `candidate-reporting-only`
 
-M84 turns native Kadre timing into a candidate/reporting payload with explicit eligibility, quarantine, and negative-fixture evidence.
+M84 preserves historical native Kadre timing as a candidate/reporting payload.
+The native source artifact was retired from the working tree; recover it from
+Git history only. This evidence is not a current runtime requirement.
 
 ## PM Outcome
 
@@ -29,6 +31,5 @@ M84 turns native Kadre timing into a candidate/reporting payload with explicit e
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kadre-runtime:test :kadre-runtime:pipelineM84NativeFrameTimingCandidate
 python3 -m json.tool reports/wgsl-pipeline/m84-native-frame-timing/evidence.json >/dev/null
 ```

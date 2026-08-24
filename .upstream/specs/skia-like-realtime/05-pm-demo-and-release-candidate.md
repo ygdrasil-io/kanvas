@@ -324,10 +324,10 @@ checks. Agent docs and PM scripts must state when to run:
 git submodule update --init --recursive external/poc-koreos
 ```
 
-Do not make `pipelinePmBundle` depend on native Kadre tasks unless the CI job
-explicitly provisions the submodule and native runtime. Missing native Kadre
-setup should be reported as `dependency-gated` or opt-in demo unavailable, not
-as an opaque release-gate failure.
+The retired root PM bundle must not be reintroduced as a dependency of native
+Kadre tasks. Missing native Kadre setup should be reported as
+`dependency-gated` or opt-in demo unavailable, not as an opaque release-gate
+failure.
 
 ## PM Language
 

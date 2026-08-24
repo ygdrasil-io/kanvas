@@ -229,8 +229,7 @@ parce que :
 1. La promotion gate est `false` — par construction (refusal-first).
 2. Le `productRouteActivated` est `false` — shadow mode uniquement.
 3. Le `readinessDelta` est `0.0`.
-4. La tâche `validateGpuRendererR6AdapterBackedPromotionReadinessBoundary` 
-   prouve que la frontière root/executed tient, mais ne l'active pas.
+4. Les validateurs R6 standalone confirment l’absence d’activation de route produit.
 
 C'est exactement l'état voulu par la roadmap §R6 : « make 'supported' a result
 of evidence, not an implementation claim. »

@@ -762,8 +762,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             assertContains(runJson, "performanceReadinessPromoted=false")
             assertContains(runJson, "missingGate=none")
             assertContains(runJson, "reportingOnlyGatesVisible=true")
-            assertContains(runJson, "pipelinePmBundleUpdated=true")
-            assertContains(runJson, "pmManifestKey=gpuRendererM9ReadinessPmEvidence")
+        assertContains(runJson, "standalonePmEvidenceBundleWritten=true")
+        assertContains(runJson, "pmEvidenceSidecar=gpuRendererM9ReadinessPmEvidence")
             assertContains(runJson, "nonClaims=no-product-activation,no-release-blocking-gate,no-readiness-delta,no-performance-readiness-from-correctness,no-dashboard-row-promotes-readiness,no-derived-cache-as-observed")
         }
         if (expectation.sceneId == "legacy-retirement-blocker-board") {

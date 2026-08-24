@@ -41,7 +41,7 @@ rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:test --tests org.graphiks.
 rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetrySourceMapTest --tests org.graphiks.kanvas.gpu.renderer.GPURendererLayoutSurfaceTest
 rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:check
 rtk ./gradlew --no-daemon :gpu-raster:gpuRendererR6ExecutedFirstRoutePmEvidenceBundle
-rtk python3 scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py .
+rtk python3 scripts/validate_gpu_renderer_m9_readiness_pm_evidence_bundle.py .
 rtk git diff --check
 ```
 

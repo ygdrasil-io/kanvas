@@ -26,11 +26,11 @@ parser-validated WGSL GPU modules.
 ## Reproduce
 
 ```bash
-rtk ./gradlew --no-daemon pipelinePmBundle
-python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard
+rtk ./gradlew --no-daemon validateM88ReleaseCandidate2
+rtk python3 scripts/validate_m88_rc2.py .
 ```
 
-The checked-in RC validator and `pipelinePmBundle` are headless CI gates and do
+The checked-in RC validator and `validateM88ReleaseCandidate2` are headless CI gates and do
 not require Kadre to be published or `external/poc-koreos` to be initialized.
 Only local native Kadre demos require:
 

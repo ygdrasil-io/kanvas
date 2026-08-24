@@ -135,7 +135,7 @@ rtk python3 scripts/validate_dash_hairline_stroke_dashboard_visibility.py
 rtk python3 scripts/validate_for267_round_cap_join_coverage_equivalence.py
 rtk python3 scripts/validate_kan026_hairlines_harness.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan026HairlinesHarness
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```
 

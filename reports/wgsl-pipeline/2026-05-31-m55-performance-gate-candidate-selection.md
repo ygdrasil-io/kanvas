@@ -41,7 +41,7 @@ M55 can move readiness to 95% only if:
 - measured rows use only existing measured payloads with host/JDK/backend,
   baseline owner, sample count, regression label, and reporting-only gate mode;
 - missing measured lanes are `deferred` or `warn`, never hidden as pass;
-- `pipelinePerformanceTrendWarnings` and `pipelinePmBundle` expose the M55
+- `pipelinePerformanceTrendWarnings` and `pipelineSceneDashboardGate` expose the M55
   candidate data;
 - dashboard gates remain 0 `tracked-gap` and 0 `fail`;
 - no release-blocking performance gate is enabled in M55.

@@ -234,7 +234,7 @@
     "validateKan044GlyphMaskAtlasOwnership",
     ":render-pipeline:pipelineConformanceTest -- includes GeometryCoverageContractsTest",
     ":gpu-raster:pipelineConformanceTest -- includes SkWebGpuGlyphAtlasTest and SimpleLatinLineSceneEvidenceTest",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "validationRows": [
     {

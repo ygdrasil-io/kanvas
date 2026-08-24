@@ -79,7 +79,7 @@ No new generated support row, Skia-comparable row, runtime capability, or measur
 ## Validation
 
 ```bash
-./gradlew --no-daemon pipelineM86FidelityBurndown pipelineSceneDashboardGate pipelinePmBundle
+./gradlew --no-daemon pipelineM86FidelityBurndown pipelineSceneDashboardGate pipelineSceneDashboardGate
 python3 -m json.tool reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json >/dev/null
 git diff --check
 ```

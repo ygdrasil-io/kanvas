@@ -46,7 +46,7 @@
     ]
   },
   "invalidationEvidence": {
-    "source": "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+    "source": "historical Git evidence (M82 resize artifact retired from the working tree)",
     "reconfigureCount": 2,
     "reconfigureFailureCount": 0,
     "generationsStrictlyAdvance": true,
@@ -60,7 +60,7 @@
     "m90NativeRouteAllocations": "observed-partial",
     "m90CacheHitsMisses": "derived",
     "for315HeadlessWebGpuSnapshot": "observed",
-    "broadKadreWgpu4kCacheCallbacks": "not-observable"
+    "retiredNativeWindowingCacheCallbacks": "not-observable"
   },
   "classificationRows": [
     {
@@ -85,10 +85,10 @@
       "gateTreatment": "reporting-only"
     },
     {
-      "id": "m92-broad-native-cache-callbacks",
+      "id": "retired-native-windowing-cache-callbacks",
       "sourceClass": "not-observable",
-      "source": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
-      "pmMeaning": "Broad Kadre/wgpu4k cache callbacks and native resource lifetime snapshots remain blockers.",
+      "source": ".upstream/target/skia-like-realtime-renderer-target.md",
+      "pmMeaning": "Native-windowing cache callbacks and resource lifetime snapshots are outside the current runtime scope.",
       "gateTreatment": "blocked-for-broad-promotion"
     }
   ],
@@ -155,7 +155,6 @@
     "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
     "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
     "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json",
-    "reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json",
-    "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"
+    "reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json"
   ]
 }

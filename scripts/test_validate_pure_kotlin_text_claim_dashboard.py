@@ -236,18 +236,5 @@ class PureKotlinTextClaimDashboardTest(unittest.TestCase):
             validator.validate_gradle_wiring(modified)
         self.assertIn("pipelineSceneDashboardGate must depend", str(gradle.exception))
 
-    def test_validator_rejects_commented_pm_bundle_dependency(self) -> None:
-        validator = load_validator()
-        build_text = validator.load_build_gradle_text(PROJECT_ROOT)
-        modified = build_text.replace(
-            '        "validatePureKotlinTextClaimDashboard",',
-            '        // "validatePureKotlinTextClaimDashboard",',
-        )
-
-        with self.assertRaises(validator.ValidationError) as gradle:
-            validator.validate_gradle_wiring(modified)
-        self.assertIn("pipelinePmBundle must depend", str(gradle.exception))
-
-
 if __name__ == "__main__":
     unittest.main()

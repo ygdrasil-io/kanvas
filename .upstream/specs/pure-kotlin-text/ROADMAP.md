@@ -608,7 +608,7 @@ rtk ./gradlew --no-daemon validateKan056GlyphAtlasRouteHardening
 Commande PM/dashboard avant promotion de claim:
 
 ```bash
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings
 ```
 
 ## Jalons de release recommandés

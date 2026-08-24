@@ -659,7 +659,7 @@
     "validateKan047CodecProvenanceMatrix",
     "checkCodecImageComplete",
     "pipelineConformance",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "nonClaims": [
     "KAN-047 does not add renderer, shader, threshold, codec runtime, JNI, ImageIO/AWT, or animated scene support.",

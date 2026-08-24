@@ -45,7 +45,7 @@ stable fallback reasons:
 
 `pipelineM66GmPromotionWave` materializes `data/m66-generated-scenes.json`
 and is wired into `pipelineGeneratedSceneExport`, `pipelineSceneDashboardGate`,
-and `pipelinePmBundle`. The dashboard gate counts M66 rows separately and
+and `pipelineSceneDashboardGate`. The dashboard gate counts M66 rows separately and
 validates M66 `referenceKind` presence so inventory rows cannot masquerade as
 support evidence.
 

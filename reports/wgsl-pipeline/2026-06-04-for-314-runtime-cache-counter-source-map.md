@@ -16,7 +16,7 @@ No renderer behavior, Gradle task, shader, threshold, scene status, fallback pol
 | Kanvas headless WebGPU | `kanvas-headless-webgpu-observed-candidate` bridged by `kanvas-headless-webgpu-observed` | `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`, `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt`, and `reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json` | FOR-315 names checked-in observed Kanvas headless WebGPU evidence; not a Kadre native callback claim. |
 | M85 ledger | `derived` | `reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json` | Deterministic selected-scene ledger only; not observed WebGPU runtime cache telemetry. |
 | M90 native route | `observed-partial-native-route-with-derived-ledger` | `reports/wgsl-pipeline/m90-runtime-interactive/evidence.json`, `reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json` | Native route creation/churn is observed-partial; cache hits/misses stay derived from M85. |
-| M92 Kadre blockers | `not-observable-kadre-blockers-with-observed-partial-creation-rows` | `reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json` | Broad Kadre/wgpu4k callbacks and native resource lifetime snapshots remain blocked. |
+| Retired native windowing | `retired-native-windowing-with-observed-partial-creation-rows` | `.upstream/target/skia-like-realtime-renderer-target.md` | Native-windowing callbacks and resource lifetime snapshots are outside the current runtime scope. |
 
 ## Kanvas Headless Candidate And FOR-315 Bridge
 

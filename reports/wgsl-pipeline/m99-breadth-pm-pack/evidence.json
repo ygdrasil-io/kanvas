@@ -135,7 +135,7 @@
     },
     {
       "id": "no-native-kadre-ci-requirement",
-      "text": "Headless validation and pipelinePmBundle do not require native Kadre window execution or an initialized external/poc-koreos submodule."
+      "text": "Headless validation and pipelineSceneDashboardGate do not require native Kadre window execution or an initialized external/poc-koreos submodule."
     },
     {
       "id": "no-dynamic-sksl-compilation",
@@ -172,7 +172,7 @@
     "manifestEntryJson": "release/m99-breadth-pm-pack/pm-bundle-manifest-entry.json",
     "nativeKadreCiRequired": false,
     "notice": "KAN-050 aggregates PM release-readiness support/refusal evidence from existing KAN-027..KAN-049 artifacts. It does not add renderer code, broaden support claims, weaken thresholds, require native Kadre CI, or promote reporting-only performance/cache data.",
-    "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "pmPackageCommand": "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
     "readinessDelta": 0.0,
     "releaseBlocking": false,
     "sourceTickets": [
@@ -198,7 +198,7 @@
   "rendererChanged": false,
   "requiredValidation": [
     "validateKan050PmBreadthSupportRefusalPack",
-    "pipelinePmBundle",
+    "pipelineSceneDashboardGate",
     "pipelineConformance",
     "git diff --check"
   ],

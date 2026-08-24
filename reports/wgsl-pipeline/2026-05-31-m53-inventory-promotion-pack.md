@@ -58,7 +58,7 @@ rows, and M53 generated rows before `pipelineSceneDashboard` and
 
 ## Gate And Bundle Metadata
 
-`pipelinePmBundle` now exposes `m53InventoryPromotion` in `manifest.json` with
+`pipelineSceneDashboardGate` now exposes `m53InventoryPromotion` in `manifest.json` with
 selected/promoted/rejected counts, promoted row details, source reports, and
 derivation contracts. The PM bundle validation fails a M53 row that lacks
 `inventoryId`, `generation.sourceReport`, `generation.derivationContract`,
@@ -81,7 +81,7 @@ stable non-`none` fallback reason for `expected-unsupported`.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate
 ```
 
 Result: pass.

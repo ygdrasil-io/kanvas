@@ -70,6 +70,6 @@ but missed the explicit 97% condition of at least two real
 ## Validation
 
 - `rtk git diff --check`
-- `rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle`
+- `rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate`
 - `rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate`
 - `rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings`

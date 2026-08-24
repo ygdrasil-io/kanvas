@@ -175,7 +175,7 @@ def validate_inventory(
     require(artifact.get("artifactId") == "facade-adapter-inventory", "artifactId changed")
     require(artifact.get("ticketId") == "KFONT-M13-001", "ticketId changed")
     require(artifact.get("dashboardSurfaceId") == SURFACE_ID, "dashboardSurfaceId changed")
-    require(artifact.get("pmBundleTask") == "pipelinePmBundle", "pmBundleTask changed")
+    require(artifact.get("pmBundleTask") == "pipelineSceneDashboardGate", "pmBundleTask changed")
     require(artifact.get("migrationCategories") == ALLOWED_MIGRATION_CATEGORIES, "migrationCategories changed")
     require_string_list(artifact.get("nonClaims"), "nonClaims")
     require("no-legacy-gate-retirement" in artifact["nonClaims"], "nonClaims must keep the no-legacy-gate-retirement guard")
@@ -252,19 +252,18 @@ def validate_inventory(
     require("text.paragraph" in namespaces and "text.shaping" in namespaces and "glyph.artifact" in namespaces, "taxonomy must keep paragraph, shaping, and glyph artifact namespaces")
 
     require("tracked-gap" in report, "markdown report must mention tracked-gap")
-    require("pipelinePmBundle" in report, "markdown report must mention pipelinePmBundle")
+    require("pipelineSceneDashboardGate" in report, "markdown report must mention pipelineSceneDashboardGate")
     require("org.skia.paragraph" in report, "markdown report must mention the missing public org.skia.paragraph facade")
     require("SkCanvas.drawString" in report, "markdown report must mention SkCanvas.drawString")
     require("pdf_never_embed" in report, "markdown report must mention pdf_never_embed")
 
     require(f'tasks.register<Exec>("{TASK_NAME}")' in build_gradle, "build.gradle.kts must register validateKfontM13001FacadeInventory")
     scene_block = task_block(build_gradle, 'tasks.register("pipelineSceneDashboardGate")')
-    pm_bundle_block = task_block(build_gradle, 'tasks.register("pipelinePmBundle")')
+    validator_block = task_block(build_gradle, f'tasks.register<Exec>("{TASK_NAME}")')
     require(f'"{TASK_NAME}"' in scene_block, "pipelineSceneDashboardGate must depend on validateKfontM13001FacadeInventory")
-    require(f'"{TASK_NAME}"' in pm_bundle_block, "pipelinePmBundle must depend on validateKfontM13001FacadeInventory")
-    require(ARTIFACT_PATH in pm_bundle_block, "pipelinePmBundle must include facade-adapter-inventory.json")
-    require(REPORT_PATH in pm_bundle_block, "pipelinePmBundle must include the markdown inventory report")
-    require(TAXONOMY_PATH in pm_bundle_block, "pipelinePmBundle must include font-diagnostic-taxonomy.json")
+    require(ARTIFACT_PATH in validator_block, "facade inventory validator must include facade-adapter-inventory.json")
+    require(REPORT_PATH in validator_block, "facade inventory validator must include the markdown inventory report")
+    require(TAXONOMY_PATH in validator_block, "facade inventory validator must include font-diagnostic-taxonomy.json")
 
 
 def main() -> int:

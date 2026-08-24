@@ -47,7 +47,7 @@ diagnostics.
 - `validateKan008ImageFilterDagRefusals`
 - `pipelineM61ImageFilterDagV2PromotionPack`
 - `pipelineSceneDashboardGate`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

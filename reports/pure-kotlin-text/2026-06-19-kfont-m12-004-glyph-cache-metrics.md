@@ -42,7 +42,7 @@
 rtk ./gradlew --no-daemon :font:core:test --tests '*FontTelemetrySchemaTest*'
 rtk ./gradlew --no-daemon validateKfontM12001TelemetryPmEvidence
 rtk ./gradlew --no-daemon pipelinePerformanceTrendWarnings
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_claim_dashboard.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_dump_index.py
 rtk env PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_pure_kotlin_text_fixture_manifest.py

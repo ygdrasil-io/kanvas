@@ -2,9 +2,10 @@
 
 ## Scope landed
 
-- `pipelinePmBundle` now carries a checked-in advisory telemetry evidence pack
-  for `KFONT-M12-001` alongside the existing pure Kotlin text dashboard and
-  schema dumps.
+- `validateKfontM12001TelemetryPmEvidence` validates the checked-in advisory
+  telemetry evidence pack for `KFONT-M12-001` alongside the existing pure
+  Kotlin text dashboard and schema dumps. `pipelineSceneDashboardGate` consumes
+  that standalone validator.
 - `reports/pure-kotlin-text/font-telemetry-pm-bundle.json` records one advisory
   row for each telemetry domain already covered by
   `font-telemetry-schema-fixture.json`, and the PM bundle now also ships the
@@ -18,8 +19,8 @@
 
 ## Evidence
 
-- The PM bundle report points at the checked-in dashboard row
-  `font-telemetry-schema` and preserves `pipelinePmBundle` as the packaging
+- The checked-in evidence pack points at the `font-telemetry-schema` dashboard
+  row and preserves `validateKfontM12001TelemetryPmEvidence` as its validation
   task instead of inventing a runtime telemetry gate.
 - Domain rows cover parser, scaler, shaping, paragraph, glyph artifact, and GPU
   text handoff samples with stable fixture IDs, sample counts, cache states,

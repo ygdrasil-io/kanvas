@@ -21,14 +21,14 @@ then validates that the claims remain narrow.
 
 ## Dashboard Link
 
-After `pipelinePmBundle`, open:
+After `pipelineSceneDashboardGate`, review the generated scene data:
 
 ```text
-build/reports/wgsl-pipeline-pm-bundle/dashboard/index.html
+build/reports/wgsl-pipeline-scenes/data/scenes.json
 ```
 
-The bundle manifest contains `m89FeatureBreadth` with links to the evidence
-JSON, Markdown report, source rows, validation rows, and non-claims.
+The checked-in M89 evidence contains the source rows, validation rows, and
+non-claims.
 
 ## Limits
 

@@ -43,6 +43,6 @@ This row is intentionally `expected-unsupported`: Kanvas currently has determini
 
 ```text
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkFont*'
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk git diff --check
 ```

@@ -30,7 +30,7 @@ Not included:
 
 CI/package note:
 
-- `pipelinePmBundle` and checked-in RC validation are headless and must not
+- `validateM88ReleaseCandidate2` and checked-in RC validation are headless and must not
   require unpublished Kadre dependency resolution.
 - Native Kadre demos are opt-in local evidence and require
   `git submodule update --init --recursive external/poc-koreos` when the

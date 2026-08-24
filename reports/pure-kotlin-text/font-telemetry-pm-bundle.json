@@ -7,7 +7,7 @@
   "surfaceId": "font-telemetry-schema",
   "classification": "tracked-gap",
   "claimPromotionAllowed": false,
-  "pmBundleTask": "pipelinePmBundle",
+  "validationTask": "validateKfontM12001TelemetryPmEvidence",
   "warningMode": "advisory",
   "sourceDashboardPath": "reports/pure-kotlin-text/font-claim-dashboard.json",
   "bundlePaths": [

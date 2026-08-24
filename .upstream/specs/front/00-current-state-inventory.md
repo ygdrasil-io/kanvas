@@ -53,10 +53,9 @@ M49 also adds two front-facing release surfaces:
 | Surface | Command | Output |
 |---|---|---|
 | Dashboard release gate | `rtk ./gradlew --no-daemon pipelineSceneDashboardGate` | `build/reports/wgsl-pipeline-scene-gate/` |
-| Portable PM bundle | `rtk ./gradlew --no-daemon pipelinePmBundle` | `build/reports/wgsl-pipeline-pm-bundle/` |
-
-The PM bundle contains a copied dashboard, data, artifacts, source reports,
-gate reports, a manifest, and local serve instructions.
+The historical portable PM bundle was retired from the working tree. Recover
+its historical artifacts from Git only; use the dashboard export and focused
+headless validators for current review.
 
 ## Current Data Volume
 
@@ -107,8 +106,7 @@ The M49 release workflow additionally provides:
 - `pipelineSceneDashboardGate` with machine-checkable dashboard invariants;
 - `pipelineSceneDashboardGateNegativeFixture` to prove unsafe support-claim
   regressions fail;
-- `pipelinePmBundle` with dashboard, data, artifacts, reports, gate output,
-  manifest, limitations, and serve instructions.
+- focused headless evidence validators owned by their respective report packs.
 
 ## Existing Front Inputs
 
@@ -145,7 +143,8 @@ The current front is useful but not final:
   scene registry directly;
 - no front-owned changelog that summarizes UI changes separately from rendering
   evidence;
-- no front-specific summary beyond the M49 PM bundle manifest.
+- no front-specific summary beyond the dashboard export and focused evidence
+  reports.
 
 ## Non-Goals
 
@@ -162,8 +161,6 @@ The current front baseline remains valid when:
 - `pipelineSceneDashboard` exports `build/reports/wgsl-pipeline-scenes/index.html`;
 - `pipelineSceneDashboardGate` validates the promoted dashboard without
   failures;
-- `pipelinePmBundle` exports `build/reports/wgsl-pipeline-pm-bundle/` with a
-  manifest and no unavailable dashboard references;
 - scene rows render without script errors;
 - expected unsupported rows are visible by default;
 - filters update the visible set and aggregate counts;
