@@ -2,11 +2,10 @@ package org.graphiks.kanvas.gpu.evidence.oracle
 
 import kotlin.math.PI
 import kotlin.math.atan2
-import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
- * Independent Surface-sRGB reference for the bounded two-stop gradient fixtures.
+ * Independent Surface-sRGB reference for bounded ordered multi-stop gradient fixtures.
  *
  * The geometry is evaluated at pixel centers. Stop colors are decoded to linear light,
  * premultiplied, interpolated without intermediate quantization, and encoded only when
@@ -133,15 +132,18 @@ class SurfaceSrgbGradientCpuOracle private constructor(
             require(startAngle.isFinite() && endAngle.isFinite()) { "sweep angles must be finite" }
             val sweep = endAngle.toDouble() - startAngle.toDouble()
             require(sweep in 0.0..360.0) { "sweep span must be in [0, 360] degrees" }
-            val startRadians = startAngle.toDouble() * PI / 180.0
+            val startDegrees = positiveDegrees(startAngle.toDouble())
+            val endDegrees = positiveDegrees(endAngle.toDouble())
+            val wrapsZero = sweep > 0.0 && endDegrees < startDegrees
             return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
                 if (sweep == 0.0 || (x == center.x.toDouble() && y == center.y.toDouble())) 0.0 else {
-                    val normalizedAngle = positiveFract((atan2(y - center.y, x - center.x) - startRadians) / (2.0 * PI))
-                    normalizedAngle / (sweep / 360.0)
+                    var degrees = positiveDegrees(atan2(y - center.y, x - center.x) * 180.0 / PI)
+                    if (wrapsZero && degrees < startDegrees) degrees += 360.0
+                    (degrees - startDegrees) / sweep
                 }
             }
         }
 
-        private fun positiveFract(value: Double): Double = value - floor(value)
+        private fun positiveDegrees(value: Double): Double = (value % 360.0 + 360.0) % 360.0
     }
 }

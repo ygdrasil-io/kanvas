@@ -342,9 +342,96 @@ class GpuEvidenceCatalogTest {
         )
     }
 
+    @Test
+    fun `wave two public Surface programs record the approved literal operations`() {
+        val red = ColorARGB.of(255, 255, 56, 56)
+        val green = ColorARGB.of(255, 56, 220, 120)
+        val blue = ColorARGB.of(255, 56, 112, 255)
+        val sweepRed = ColorARGB.of(255, 255, 64, 64)
+        val sweepBlue = ColorARGB.of(255, 64, 208, 255)
+        val yellow = ColorARGB.of(255, 255, 232, 72)
+        val radialBlue = ColorARGB.of(255, 48, 80, 192)
+        val orange = ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)
+        val linearAxisStart = Point2F32(8.5f, 32.5f)
+        val linearAxisEnd = Point2F32(55.5f, 32.5f)
+        val linearStops = listOf(GradientStop(0f, red), GradientStop(1f, blue))
+
+        assertEquals(
+            listOf(DisplayOp.DrawRect(
+                RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                Paint(shader = Shader.LinearGradient(
+                    linearAxisStart, linearAxisEnd,
+                    listOf(GradientStop(0f, red), GradientStop(.5f, green), GradientStop(1f, blue)), TileMode.CLAMP,
+                ), antiAlias = false),
+                Matrix3x3F32.Identity, ClipStack.WideOpen,
+            )),
+            ops("linear-gradient-three-stops"),
+        )
+        assertEquals(
+            listOf(DisplayOp.DrawRect(
+                RectF32.ofLTRB(8f, 8f, 56f, 56f),
+                Paint(shader = Shader.SweepGradient(
+                    Point2F32(32.5f, 32.5f), 45f, 315f,
+                    listOf(GradientStop(0f, sweepRed), GradientStop(1f, sweepBlue)), TileMode.CLAMP,
+                ), antiAlias = false),
+                Matrix3x3F32.Identity, ClipStack.WideOpen,
+            )),
+            ops("sweep-gradient-partial-angle"),
+        )
+        val affine = Matrix3x3F32(sx = 1f, kx = .25f, tx = 4f, sy = 1f)
+        assertEquals(
+            listOf(
+                DisplayOp.SetTransform(affine),
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(8f, 16f, 40f, 48f), Paint.fill(orange).copy(antiAlias = false), affine, ClipStack.WideOpen,
+                ),
+            ),
+            ops("affine-solid-rect"),
+        )
+        val scissor = ClipStack.DeviceRect(RectF32.ofLTRB(20f, 12f, 52f, 52f), false)
+        assertEquals(
+            listOf(
+                DisplayOp.SetClip(scissor),
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(8f, 8f, 56f, 56f),
+                    Paint(shader = Shader.RadialGradient(
+                        Point2F32(32.5f, 32.5f), 23.5f,
+                        listOf(GradientStop(0f, yellow), GradientStop(1f, radialBlue)), TileMode.CLAMP,
+                    ), antiAlias = false),
+                    Matrix3x3F32.Identity, scissor,
+                ),
+            ),
+            ops("scissored-radial-gradient"),
+        )
+        assertEquals(
+            listOf(DisplayOp.DrawRect(
+                RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                Paint(shader = Shader.LinearGradient(linearAxisStart, linearAxisEnd, linearStops, TileMode.REPEAT), antiAlias = false),
+                Matrix3x3F32.Identity, ClipStack.WideOpen,
+            )),
+            refusalOps("repeat-gradient-refusal"),
+        )
+        assertEquals(
+            listOf(DisplayOp.DrawRect(
+                RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                    shader = Shader.LinearGradient(linearAxisStart, linearAxisEnd, linearStops, TileMode.CLAMP), antiAlias = false,
+                ),
+                Matrix3x3F32.Identity, ClipStack.WideOpen,
+            )),
+            refusalOps("gradient-stroke-refusal"),
+        )
+    }
+
     private fun ops(id: String): List<DisplayOp> {
         val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == id }.program)
         val session = assertIs<KanvasSurfaceRecordedSession>(program.openSession(64, 64))
+        return session.snapshotOps()
+    }
+
+    private fun refusalOps(id: String): List<DisplayOp> {
+        val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.refusalCases.first { it.descriptor.id.value == id }.program)
+        val session = assertIs<KanvasSurfaceRecordedSession>(program.openSession(16, 16))
         return session.snapshotOps()
     }
 
