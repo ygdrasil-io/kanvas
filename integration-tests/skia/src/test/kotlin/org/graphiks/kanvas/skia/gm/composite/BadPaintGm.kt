@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -27,7 +27,7 @@ class BadPaintGm : SkiaGm {
     override val height = 100
 
     private val paints by lazy {
-        val green = Color.fromRGBA(0f, 1f, 0f, 1f)
+        val green = ColorARGB.fromRGBA(0f, 1f, 0f, 1f)
 
         val emptyPixels = ByteArray(4)
         val emptyImage = Image.fromPixels(1, 1, emptyPixels, ColorType.RGBA_8888)

@@ -24,7 +24,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -138,7 +138,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
 
     fun refusalCases(): List<RefusalCase> {
         val triangle = triangleVertices()
-        val validPaint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val validPaint = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
         return listOf(
             RefusalCase(
                 name = "non finite positions",
@@ -230,7 +230,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                 operations = listOf(
                     DisplayOp.DrawVertices(
                         vertices = triangle,
-                        paint = Paint.fill(Color.RED).copy(shader = hostileShader()),
+                        paint = Paint.fill(ColorARGB.Red).copy(shader = hostileShader()),
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     ),
@@ -261,7 +261,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                 operations = listOf(
                     DisplayOp.DrawVertices(
                         vertices = triangle,
-                        paint = Paint.fill(Color.WHITE).copy(
+                        paint = Paint.fill(ColorARGB.White).copy(
                             shader = Shader.Image(
                                 image = Image(
                                     width = 1,
@@ -335,12 +335,12 @@ class GPUPreparedVerticesRefusalMatrixTest {
     }
 
     private fun hostileShader(): Shader {
-        var shader: Shader = Shader.SolidColor(Color.RED)
+        var shader: Shader = Shader.SolidColor(ColorARGB.Red)
         repeat(66) {
             shader = Shader.Blend(
                 org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
                 shader,
-                Shader.SolidColor(Color.BLUE),
+                Shader.SolidColor(ColorARGB.Blue),
             )
         }
         return shader

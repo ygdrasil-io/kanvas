@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.PI
@@ -32,8 +32,8 @@ class SharedCornersGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0x1A / 255f, 0x65 / 255f, 0xD7 / 255f)
 
-        val fillPaint = Paint(color = Color.WHITE, antiAlias = true)
-        val wirePaint = Paint(color = Color.WHITE, antiAlias = true, style = PaintStyle.STROKE)
+        val fillPaint = Paint(color = ColorARGB.White, antiAlias = true)
+        val wirePaint = Paint(color = ColorARGB.White, antiAlias = true, style = PaintStyle.STROKE)
 
         canvas.translate(kPadSize.toFloat(), kPadSize.toFloat())
         canvas.save()

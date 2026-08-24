@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -50,7 +50,7 @@ class AddArcMeasGm : SkiaGm {
 
         val measPaint = Paint(
             antiAlias = true,
-            color = Color.RED
+            color = ColorARGB.Red
         )
 
         val oval = RectF32.ofLTRB(-R, -R, R, R)

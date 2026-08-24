@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import kotlin.random.Random
@@ -81,7 +81,7 @@ class GetPosTextPathGm : SkiaGm {
     private fun strokePath(canvas: GmCanvas, path: Path) {
         canvas.drawPath(
             path,
-            Paint(antiAlias = true, color = Color.RED, style = PaintStyle.STROKE),
+            Paint(antiAlias = true, color = ColorARGB.Red, style = PaintStyle.STROKE),
         )
     }
 

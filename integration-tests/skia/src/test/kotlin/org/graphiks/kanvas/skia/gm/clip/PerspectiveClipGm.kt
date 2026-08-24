@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import kotlin.random.Random
@@ -31,7 +31,7 @@ class PerspectiveClipGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val path = makePath()
 
-        val greyPaint = Paint(color = Color.fromRGBA(0.75f, 0.75f, 0.75f))
+        val greyPaint = Paint(color = ColorARGB.fromRGBA(0.75f, 0.75f, 0.75f))
         canvas.drawPath(path, greyPaint)
 
         // Crazy perspective matrix derived from halfplanes3
@@ -41,7 +41,7 @@ class PerspectiveClipGm : SkiaGm {
             -0.0047f, -0.0015f, 2.1485f,
         )
 
-        val shaderPaint = Paint(color = Color.fromRGBA(0.5f, 0.7f, 0.9f))
+        val shaderPaint = Paint(color = ColorARGB.fromRGBA(0.5f, 0.7f, 0.9f))
         canvas.save()
         canvas.concat(mx)
         canvas.drawPath(path, shaderPaint)

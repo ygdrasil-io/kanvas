@@ -2,6 +2,11 @@
 
 package org.graphiks.kanvas.picture
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
@@ -35,9 +40,11 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.geometry.SizeF32
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -146,7 +153,7 @@ class Picture internal constructor(
         val h = maxOf(1, ceil(tile.height()).toInt())
         val surface = Surface(w, h)
         val c = surface.canvas()
-        c.clear(Color.TRANSPARENT)
+        c.clear(ColorARGB.Transparent)
         if (tile.left != 0f || tile.top != 0f) {
             c.translate(-tile.left, -tile.top)
         }
@@ -172,7 +179,7 @@ class Picture internal constructor(
     ): Image {
         val surface = Surface(width, height)
         val c = surface.canvas()
-        c.clear(Color.TRANSPARENT)
+        c.clear(ColorARGB.Transparent)
         playback(c)
         return surface.makeImageSnapshot()
     }
@@ -306,8 +313,8 @@ private class Writer {
     fun rect(r: RectF32) { float(r.left); float(r.top); float(r.right); float(r.bottom) }
     fun point2(p: Point2F32) { float(p.x); float(p.y) }
     fun vector2(v: Vector2F32) { float(v.x); float(v.y) }
-    fun size(s: Size) { float(s.width); float(s.height) }
-    fun color(c: Color) { int(c.packed.toInt()) }
+    fun size(s: SizeF32) { float(s.width); float(s.height) }
+    fun color(c: ColorARGB) { int(c.value.toInt()) }
     fun samplingOptions(sampling: SamplingOptions) {
         when (sampling) {
             SamplingOptions.NEAREST -> byte(0)
@@ -315,7 +322,7 @@ private class Writer {
             is SamplingOptions.Cubic -> { byte(2); float(sampling.B); float(sampling.C) }
         }
     }
-    fun cornerRadii(c: CornerRadii) { float(c.x); float(c.y) }
+    fun cornerRadii(c: CornerRadiiF32) { float(c.x); float(c.y) }
 
     fun matrix33(m: Matrix3x3F32) {
         float(m.sx); float(m.kx); float(m.tx)
@@ -323,7 +330,7 @@ private class Writer {
         float(m.persp0); float(m.persp1); float(m.persp2)
     }
 
-    fun rrect(r: RRect) {
+    fun rrect(r: RRectF32) {
         rect(r.rect); cornerRadii(r.topLeft); cornerRadii(r.topRight)
         cornerRadii(r.bottomRight); cornerRadii(r.bottomLeft)
     }
@@ -440,7 +447,7 @@ private class Writer {
         for (st in stops) { float(st.position); color(st.color) }
     }
 
-    private fun sizeOrNull(s: Size?) {
+    private fun sizeOrNull(s: SizeF32?) {
         if (s == null) { bool(false); return }
         bool(true); size(s)
     }
@@ -531,7 +538,11 @@ private class Writer {
     fun colorFilter(cf: ColorFilter?) {
         if (cf == null) { byte(0xFF.toByte()); return }
         when (cf) {
-            is ColorFilter.Matrix -> { byte(0); int(cf.values.size); for (f in cf.values) float(f) }
+            is ColorFilter.Matrix -> {
+                byte(0)
+                int(20)
+                for (index in 0 until 20) float(cf.matrix[index])
+            }
             is ColorFilter.Blend -> { byte(1); color(cf.color); blendMode(cf.mode) }
             is ColorFilter.Compose -> { byte(2); colorFilter(cf.outer); colorFilter(cf.inner) }
             is ColorFilter.Table -> { byte(3); int(cf.table.size); for (b in cf.table) byte(b.toByte()) }
@@ -830,15 +841,15 @@ private class Reader(private val data: ByteArray) {
     fun rect(): RectF32 = RectF32(float(), float(), float(), float())
     fun point2(): Point2F32 = Point2F32(float(), float())
     fun vector2(): Vector2F32 = Vector2F32(float(), float())
-    fun size(): Size = Size(float(), float())
-    fun color(): Color = Color(int().toUInt())
+    fun size(): SizeF32 = SizeF32.of(float(), float())
+    fun color(): ColorARGB = ColorARGB.fromPackedUInt(int().toUInt())
     fun samplingOptions(): SamplingOptions = when (byte().toInt()) {
         0 -> SamplingOptions.NEAREST
         1 -> SamplingOptions.LINEAR
         2 -> SamplingOptions.Cubic(float(), float())
         else -> { valid = false; SamplingOptions.LINEAR }
     }
-    fun cornerRadii(): CornerRadii = CornerRadii(float(), float())
+    fun cornerRadii(): CornerRadiiF32 = CornerRadiiF32.of(float(), float())
 
     fun matrix33(): Matrix3x3F32 {
         val floats = FloatArray(9) { float() }
@@ -850,8 +861,8 @@ private class Reader(private val data: ByteArray) {
         )
     }
 
-    fun rrect(): RRect {
-        return RRect(rect(), cornerRadii(), cornerRadii(), cornerRadii(), cornerRadii())
+    fun rrect(): RRectF32 {
+        return RRectF32.of(rect(), cornerRadii(), cornerRadii(), cornerRadii(), cornerRadii())
     }
 
     fun path(): Path {
@@ -965,7 +976,7 @@ private class Reader(private val data: ByteArray) {
         val n = int(); return List(n) { GradientStop(float(), color()) }
     }
 
-    private fun readSizeOrNull(): Size? = if (bool()) size() else null
+    private fun readSizeOrNull(): SizeF32? = if (bool()) size() else null
 
     private fun readShaderMap(): Map<String, Shader> {
         val n = int()
@@ -1055,7 +1066,7 @@ private class Reader(private val data: ByteArray) {
         val disc = byte()
         if (disc == 0xFF.toByte()) return null
         return when (disc.toInt()) {
-            0 -> ColorFilter.Matrix(FloatArray(int()) { float() })
+            0 -> ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(int()) { float() }))
             1 -> ColorFilter.Blend(color(), blendMode())
             2 -> ColorFilter.Compose(colorFilter()!!, colorFilter()!!)
             3 -> ColorFilter.Table(UByteArray(int()) { byte().toUByte() })

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.VertexMode
@@ -28,8 +28,8 @@ import org.graphiks.kanvas.types.Vertices
 class PreparedVerticesFrameInventoryTest {
     @Test
     fun `identical immutable geometry deduplicates while draw state and source order remain distinct`() {
-        val first = draw(operationIndex = 4, transform = Matrix3x3F32.translation(2f, 3f), color = Color.RED)
-        val second = draw(operationIndex = 9, transform = Matrix3x3F32.translation(8f, 5f), color = Color.BLUE)
+        val first = draw(operationIndex = 4, transform = Matrix3x3F32.translation(2f, 3f), color = ColorARGB.Red)
+        val second = draw(operationIndex = 9, transform = Matrix3x3F32.translation(8f, 5f), color = ColorARGB.Blue)
 
         val inventory = buildReady(listOf(first, second))
 
@@ -49,7 +49,7 @@ class PreparedVerticesFrameInventoryTest {
     fun `different bytes or structural layout never deduplicate and forced key collision refuses`() {
         val positionOnly = draw(0)
         val differentBytes = draw(1, positions = points(scale = 2f))
-        val differentStructure = draw(2, colors = listOf(Color.RED, Color.GREEN, Color.BLUE))
+        val differentStructure = draw(2, colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue))
 
         val ready = buildReady(listOf(positionOnly, differentBytes, differentStructure))
         assertEquals(3, ready.artifactsByKey.size)
@@ -68,8 +68,8 @@ class PreparedVerticesFrameInventoryTest {
 
     @Test
     fun `forced material bucket collision is refused by material structural authority`() {
-        val first = draw(0, color = Color.RED)
-        val second = draw(1, color = Color.BLUE)
+        val first = draw(0, color = ColorARGB.Red)
+        val second = draw(1, color = ColorARGB.Blue)
         val collision = PreparedVerticesFrameInventoryBuilder.build(
             draws = listOf(first, second), limits = limits(), capabilities = capabilities(),
             artifactKeySelector = { it.key },
@@ -84,7 +84,7 @@ class PreparedVerticesFrameInventoryTest {
 
     @Test
     fun `frame command and inventory reject material keys or programs outside their snapshots`() {
-        val inventory = buildReady(listOf(draw(0, color = Color.RED)))
+        val inventory = buildReady(listOf(draw(0, color = ColorARGB.Red)))
         val command = inventory.commands.single()
 
         assertFailsWith<IllegalArgumentException> {
@@ -98,7 +98,7 @@ class PreparedVerticesFrameInventoryTest {
             )
         }
 
-        val differentMaterial = draw(1, color = Color.BLUE).material
+        val differentMaterial = draw(1, color = ColorARGB.Blue).material
         listOf(
             emptyMap(),
             mapOf(command.materialKey to differentMaterial),
@@ -384,9 +384,9 @@ class PreparedVerticesFrameInventoryTest {
     private fun draw(
         operationIndex: Int,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        color: Color = Color.WHITE,
+        color: ColorARGB = ColorARGB.White,
         positions: List<Point2F32> = points(),
-        colors: List<Color>? = null,
+        colors: List<ColorARGB>? = null,
         indices: List<Int>? = null,
     ): GPUPreparedVerticesDraw {
         val operation = DisplayOp.DrawVertices(

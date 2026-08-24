@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -36,8 +36,8 @@ class SurfaceUnderdrawGm : SkiaGm {
                 start = Point2F32(0f, 0f),
                 end = Point2F32(40f, 50f),
                 stops = listOf(
-                    GradientStop(0f, Color.RED),
-                    GradientStop(1f, Color.BLUE),
+                    GradientStop(0f, ColorARGB.Red),
+                    GradientStop(1f, ColorARGB.Blue),
                 ),
                 tileMode = TileMode.REPEAT,
             )
@@ -49,7 +49,7 @@ class SurfaceUnderdrawGm : SkiaGm {
         surf.canvas {
             drawRect(subset, Paint(blendMode = BlendMode.CLEAR))
 
-            val stripePaint = Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f))
+            val stripePaint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f))
             var r = RectF32(0f, 10f, 256f, 35f)
             while (r.bottom < 256f) {
                 drawRect(r, stripePaint)
@@ -61,8 +61,8 @@ class SurfaceUnderdrawGm : SkiaGm {
                 start = Point2F32(subset.left, 0f),
                 end = Point2F32(subset.right, 0f),
                 stops = listOf(
-                    GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 1f)),
-                    GradientStop(1f, Color.fromRGBA(0f, 0f, 0f, 0f)),
+                    GradientStop(0f, ColorARGB.fromRGBA(0f, 0f, 0f, 1f)),
+                    GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 0f, 0f)),
                 ),
             )
             val fadePaint = Paint(shader = fadeShader, blendMode = BlendMode.DST_IN)

@@ -7,9 +7,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.max
 
@@ -28,7 +28,7 @@ class ShadowUtilsOcclGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paths = listOf(
-            Path { }.also { it.addRRect(RRect(RectF32(0f, 0f, 50f, 50f), CornerRadii(10f, 10f))) },
+            Path { }.also { it.addRRect(RRectF32.of(RectF32(0f, 0f, 50f, 50f), CornerRadiiF32.of(10f, 10f))) },
             Path { }.also { it.addRect(RectF32(0f, 0f, 50f, 50f)) },
             Path { }.also { it.addCircle(25f, 25f, 25f) },
             Path { }.also { it.addOval(RectF32(0f, 0f, 20f, 60f)) },
@@ -66,12 +66,12 @@ class ShadowUtilsOcclGm : SkiaGm {
         var dy = 0f
 
         val fillPaint = Paint(
-            color = Color.fromRGBA(0xBF / 255f, 0xBF / 255f, 0xBF / 255f, 1f),
+            color = ColorARGB.fromRGBA(0xBF / 255f, 0xBF / 255f, 0xBF / 255f, 1f),
             style = PaintStyle.FILL,
             antiAlias = true,
         )
         val fillPaint500 = Paint(
-            color = Color.fromRGBA(0xBF / 255f, 0xBF / 255f, 0xBF / 255f, 0.5f),
+            color = ColorARGB.fromRGBA(0xBF / 255f, 0xBF / 255f, 0xBF / 255f, 0.5f),
             style = PaintStyle.FILL,
             antiAlias = true,
         )

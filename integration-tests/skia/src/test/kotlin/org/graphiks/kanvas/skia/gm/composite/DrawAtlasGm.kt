@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
@@ -50,7 +50,7 @@ class DrawAtlasGm : SkiaGm {
             Matrix3x3F32.of(scos, -ssin, r.tx, ssin, scos, r.ty)
         }
         val tex = List(n) { target }
-        val colors = List(n) { Color.fromRGBA(0.5f, 1f, 0f, 0f) } // colors currently ignored by Kanvas drawAtlas
+        val colors = List(n) { ColorARGB.fromRGBA(0.5f, 1f, 0f, 0f) } // colors currently ignored by Kanvas drawAtlas
 
         val paint = Paint()
 

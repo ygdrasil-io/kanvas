@@ -9,7 +9,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 
@@ -121,7 +121,7 @@ class GPUPreparedEmojiTextTest {
             ),
             x = 0f,
             y = 0f,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )

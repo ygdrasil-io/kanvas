@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -53,7 +53,7 @@ class CubicPathGm : SkiaGm {
     override val height = 390
 
     private fun drawPathCell(
-        path: Path, canvas: GmCanvas, color: Color,
+        path: Path, canvas: GmCanvas, color: ColorARGB,
         clip: RectF32,
         cap: StrokeCap, join: StrokeJoin,
         style: PaintStyle, fill: FillType,
@@ -117,7 +117,7 @@ class CubicPathGm : SkiaGm {
                 for (styleIdx in styles.indices) {
                     if (styleIdx > 0) canvas.translate(rect.width() + 40f, 0f)
 
-                    val cellColor = Color.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
+                    val cellColor = ColorARGB.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
                     drawPathCell(
                         path, canvas, cellColor, rect,
                         caps[capIdx].cap, caps[capIdx].join,
@@ -127,7 +127,7 @@ class CubicPathGm : SkiaGm {
 
                     // Hairline rect outline
                     val rectPaint = Paint(
-                        color = Color.BLACK,
+                        color = ColorARGB.Black,
                         style = PaintStyle.STROKE,
                         strokeWidth = 0f,
                         antiAlias = true

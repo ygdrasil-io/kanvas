@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -37,17 +37,17 @@ class GammatextGm : SkiaGm {
             start = Point2F32(0f, 0f),
             end = Point2F32(0f, 480f),
             stops = listOf(
-                GradientStop(0f, Color.BLACK),
-                GradientStop(1f, Color.WHITE),
+                GradientStop(0f, ColorARGB.Black),
+                GradientStop(1f, ColorARGB.White),
             ),
             tileMode = TileMode.CLAMP,
         )
         canvas.drawRect(RectF32(0f, 0f, 1024f, 480f), Paint(shader = grad))
 
         val fg = listOf(
-            Color.WHITE, Color.fromRGBA(1f, 1f, 0f),
-            Color.fromRGBA(1f, 0f, 1f), Color.fromRGBA(0f, 1f, 1f),
-            Color.RED, Color.GREEN, Color.BLUE, Color.BLACK,
+            ColorARGB.White, ColorARGB.fromRGBA(1f, 1f, 0f),
+            ColorARGB.fromRGBA(1f, 0f, 1f), ColorARGB.fromRGBA(0f, 1f, 1f),
+            ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.Black,
         )
 
         val text = "Hamburgefons"

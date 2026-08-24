@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -37,7 +37,7 @@ class ClipLargeRectGm : SkiaGm {
         canvas.restore()
         canvas.restore()
 
-        val line = Paint(style = PaintStyle.STROKE, color = Color.BLACK)
+        val line = Paint(style = PaintStyle.STROKE, color = ColorARGB.Black)
         canvas.drawLine(120f, 0f, 120f, 256f, line)
     }
 }

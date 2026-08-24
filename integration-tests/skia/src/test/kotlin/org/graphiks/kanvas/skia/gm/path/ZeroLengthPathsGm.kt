@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.toImage
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -71,7 +71,7 @@ abstract class ZeroLengthPathsGm(
         for (cap in listOf(StrokeCap.BUTT, StrokeCap.ROUND, StrokeCap.SQUARE)) {
             for ((strokeWidthIndex, strokeWidth) in strokeWidths.withIndex()) {
                 val paint = Paint(
-                    color = Color.WHITE,
+                    color = ColorARGB.White,
                     antiAlias = antiAlias,
                     style = PaintStyle.STROKE,
                     strokeCap = cap,
@@ -159,15 +159,15 @@ private fun drawValidationCell(
 ) {
     val surface = Surface(ZeroLengthPathLayout.cellWidth, ZeroLengthPathLayout.cellHeight)
     surface.canvas {
-        clear(Color.TRANSPARENT)
+        clear(ColorARGB.Transparent)
         drawPath(path, paint)
     }
     val result = surface.render()
     val actualCaps = countMiddleRowBlobs(result)
     val overlay = when {
-        actualCaps == expectedCaps -> Color(0x7F007F00u)
-        actualCaps > expectedCaps -> Color(0x7F7F7F00u)
-        else -> Color(0x7F7F0000u)
+        actualCaps == expectedCaps -> ColorARGB.fromPackedUInt(0x7F007F00u)
+        actualCaps > expectedCaps -> ColorARGB.fromPackedUInt(0x7F7F7F00u)
+        else -> ColorARGB.fromPackedUInt(0x7F7F0000u)
     }
     canvas.drawImage(
         result.toImage(sourceId),

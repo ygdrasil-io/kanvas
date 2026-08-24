@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -28,8 +28,8 @@ class ColorCubeColorFilterRTGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val quadSize = 256f
         val colors = listOf(
-            Color.RED, Color.fromRGBA(0.6f, 0.3f, 0.1f, 1f),
-            Color.fromRGBA(0.5f, 0.3f, 0.8f, 1f), Color.fromRGBA(0.4f, 0.2f, 0.1f, 1f)
+            ColorARGB.Red, ColorARGB.fromRGBA(0.6f, 0.3f, 0.1f, 1f),
+            ColorARGB.fromRGBA(0.5f, 0.3f, 0.8f, 1f), ColorARGB.fromRGBA(0.4f, 0.2f, 0.1f, 1f)
         )
         for (i in 0 until 4) {
             val cx = (i % 2) * quadSize

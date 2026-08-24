@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/skbug1719.cpp` (300 × 100).
@@ -69,9 +69,9 @@ class Skbug1719Gm : SkiaGm {
 
         val paint = Paint(
             antiAlias = true,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.78867501f),
-            colorFilter = ColorFilter.Blend(Color(0xBFFFFFFFu), BlendMode.SRC_IN),
+            colorFilter = ColorFilter.Blend(ColorARGB.fromPackedUInt(0xBFFFFFFFu), BlendMode.SRC_IN),
         )
 
         canvas.clipPath(clipPath, antiAlias = true)

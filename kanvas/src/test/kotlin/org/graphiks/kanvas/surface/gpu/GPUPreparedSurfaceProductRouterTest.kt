@@ -44,7 +44,7 @@ import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
@@ -239,7 +239,7 @@ class GPUPreparedSurfaceProductRouterTest {
     @Test
     fun `vertices and mesh frames choose prepared product routing`() {
         val triangle = verticesTriangle()
-        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
         val operations = listOf(
             DisplayOp.DrawVertices(triangle, paint, Matrix3x3F32.Identity, ClipStack.WideOpen),
             DisplayOp.DrawMesh(
@@ -280,7 +280,7 @@ class GPUPreparedSurfaceProductRouterTest {
     @Test
     fun `vertices and mesh refuse with the exact composite code before native work`() {
         val triangle = verticesTriangle()
-        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
         val verticesOp = DisplayOp.DrawVertices(
             vertices = triangle,
             paint = paint,
@@ -308,7 +308,7 @@ class GPUPreparedSurfaceProductRouterTest {
 
     @Test
     fun `unsupported vertices and mesh return their exact terminal code before native work`() {
-        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
         val cases = listOf(
             listOf(
                 DisplayOp.DrawVertices(
@@ -367,7 +367,7 @@ class GPUPreparedSurfaceProductRouterTest {
     fun `no accepted or refused vertices or mesh command increments legacy counters`() {
         val accepted = DisplayOp.DrawVertices(
             vertices = verticesTriangle(),
-            paint = Paint.fill(Color.RED).copy(antiAlias = false),
+            paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
@@ -388,7 +388,7 @@ class GPUPreparedSurfaceProductRouterTest {
                 VertexMode.TRIANGLES,
                 listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
             ),
-            paint = Paint.fill(Color.RED).copy(antiAlias = false),
+            paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
@@ -417,7 +417,7 @@ class GPUPreparedSurfaceProductRouterTest {
                 rect(),
                 DisplayOp.DrawVertices(
                     vertices = verticesTriangle(),
-                    paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
+                    paint = Paint.fill(ColorARGB.Green).copy(antiAlias = false),
                     transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
                 ),
@@ -589,7 +589,7 @@ class GPUPreparedSurfaceProductRouterTest {
 
     private fun rect() = DisplayOp.DrawRect(
         RECT,
-        Paint.fill(Color.RED).copy(antiAlias = false),
+        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
@@ -743,9 +743,9 @@ internal fun preparedProductImageOperations(
             image,
             listOf(Matrix3x3F32.Identity),
             listOf(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
-            listOf(Color.WHITE),
+            listOf(ColorARGB.White),
             BlendMode.SRC_OVER,
-            paint ?: Paint.fill(Color.WHITE),
+            paint ?: Paint.fill(ColorARGB.White),
             Matrix3x3F32.Identity,
             clip,
         ) to 1,

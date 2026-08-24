@@ -1,10 +1,12 @@
 package org.graphiks.kanvas.pipeline
 
+import org.graphiks.math.color.ColorARGB
+
 data class ColorAttachment(
     val texture: GPUHandle,
     val loadOp: LoadOp = LoadOp.CLEAR,
     val storeOp: StoreOp = StoreOp.STORE,
-    val clearColor: org.graphiks.kanvas.types.Color = org.graphiks.kanvas.types.Color.TRANSPARENT,
+    val clearColor: ColorARGB = ColorARGB.Transparent,
 )
 
 data class DepthStencilAttachment(val texture: GPUHandle)

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -29,7 +29,7 @@ class TestExtractAlphaGm : SkiaGm {
         canvas.drawImage(blueCircle, RectF32.ofOriginSize(10f, 10f, 100f, 100f))
 
         val alphaImage = makeAlphaImage()
-        val redPaint = Paint(color = Color.RED)
+        val redPaint = Paint(color = ColorARGB.Red)
         canvas.drawImage(alphaImage, RectF32.ofOriginSize(120f, 10f, 100f, 100f), redPaint)
     }
 

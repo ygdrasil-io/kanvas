@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -40,9 +40,9 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
             Point2F32(r.left, r.bottom),
         )
         val kColors = listOf(
-            Color.BLUE, Color.GREEN,
-            Color.fromRGBA(0f, 1f, 1f, 1f),    // cyan
-            Color.fromRGBA(1f, 1f, 0f, 1f),    // yellow
+            ColorARGB.Blue, ColorARGB.Green,
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),    // cyan
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),    // yellow
         )
         val verts = Vertices(
             mode = VertexMode.TRIANGLE_FAN,
@@ -109,7 +109,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
         val paint = Paint(colorFilter = if (useCF) cf else null)
         canvas.drawAtlas(
             atlas, listOf(Matrix3x3F32.Identity), listOf(tex),
-            colors = listOf(Color.WHITE), blendMode = BlendMode.MODULATE, paint = paint,
+            colors = listOf(ColorARGB.White), blendMode = BlendMode.MODULATE, paint = paint,
         )
         canvas.restore()
     }

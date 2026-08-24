@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -30,7 +32,7 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
@@ -49,8 +51,8 @@ class GPUPreparedMeshProgramMapperTest {
             0f, 0f, 0f, 1f, 0f,
         )
         val mutableEntries = mutableListOf(
-            MeshChildren.Entry("shader", ShaderChild(Shader.SolidColor(Color.RED))),
-            MeshChildren.Entry("filter", ColorFilterChild(ColorFilter.Matrix(colorMatrix))),
+            MeshChildren.Entry("shader", ShaderChild(Shader.SolidColor(ColorARGB.Red))),
+            MeshChildren.Entry("filter", ColorFilterChild(ColorFilter.Matrix(ColorMatrixF32.of(colorMatrix)))),
             MeshChildren.Entry("blender", BlenderChild(Blender.Mode(BlendMode.PLUS))),
         )
         val program = MeshProgram(
@@ -141,7 +143,7 @@ class GPUPreparedMeshProgramMapperTest {
     @Test
     fun `mesh program child roles are part of descriptor identity`() {
         val shader = program(
-            MeshChildren.of("child" to ShaderChild(Shader.SolidColor(Color.RED))),
+            MeshChildren.of("child" to ShaderChild(Shader.SolidColor(ColorARGB.Red))),
         )
         val filter = program(
             MeshChildren.of("child" to ColorFilterChild(identityMatrixFilter())),
@@ -159,7 +161,7 @@ class GPUPreparedMeshProgramMapperTest {
             MeshChildren(
                 listOf(
                     MeshChildren.Entry("same", ColorFilterChild(ColorFilter.Luma)),
-                    MeshChildren.Entry("same", ShaderChild(Shader.SolidColor(Color.RED))),
+                    MeshChildren.Entry("same", ShaderChild(Shader.SolidColor(ColorARGB.Red))),
                 ),
             ),
         ).toPreparedMeshProgramMappingResult(1f)
@@ -179,10 +181,10 @@ class GPUPreparedMeshProgramMapperTest {
         )
         val children = MeshChildren.of(
             "matrix" to ColorFilterChild(identityMatrixFilter()),
-            "blend" to ColorFilterChild(ColorFilter.Blend(Color.BLUE, BlendMode.MULTIPLY)),
+            "blend" to ColorFilterChild(ColorFilter.Blend(ColorARGB.Blue, BlendMode.MULTIPLY)),
             "compose" to ColorFilterChild(
                 ColorFilter.Compose(
-                    outer = ColorFilter.Blend(Color.RED, BlendMode.PLUS),
+                    outer = ColorFilter.Blend(ColorARGB.Red, BlendMode.PLUS),
                     inner = nestedRuntime,
                 ),
             ),
@@ -221,7 +223,7 @@ class GPUPreparedMeshProgramMapperTest {
         @OptIn(ExperimentalUnsignedTypes::class)
         val unsupported = listOf<ColorFilter>(
             ColorFilter.Table(UByteArray(256) { it.toUByte() }),
-            ColorFilter.Lighting(Color.WHITE, Color.BLACK),
+            ColorFilter.Lighting(ColorARGB.White, ColorARGB.Black),
             ColorFilter.SRGBToLinear,
             ColorFilter.LinearToSRGB,
             ColorFilter.HSLAMatrix(FloatArray(20)),
@@ -292,7 +294,7 @@ class GPUPreparedMeshProgramMapperTest {
                     "shader" to ShaderChild(
                         Shader.Blend(
                             mode = BlendMode.SRC_OVER,
-                            dst = Shader.SolidColor(Color.RED),
+                            dst = Shader.SolidColor(ColorARGB.Red),
                             src = Shader.PerlinNoise(0f, 1f, 1, 7, null),
                         ),
                     ),
@@ -430,14 +432,14 @@ class GPUPreparedMeshProgramMapperTest {
     )
 
     private fun identityMatrixFilter(): ColorFilter.Matrix =
-        ColorFilter.Matrix(
+        ColorFilter.Matrix(ColorMatrixF32.of(
             floatArrayOf(
                 1f, 0f, 0f, 0f, 0f,
                 0f, 1f, 0f, 0f, 0f,
                 0f, 0f, 1f, 0f, 0f,
                 0f, 0f, 0f, 1f, 0f,
             ),
-        )
+        ))
 
     private fun filter(
         descriptor: GPUMaterialDescriptor.RuntimeEffect,
@@ -459,7 +461,7 @@ class GPUPreparedMeshProgramMapperTest {
             program = program(),
             bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f),
         ),
-        paint = Paint(color = Color.WHITE, blendMode = paintBlendMode),
+        paint = Paint(color = ColorARGB.White, blendMode = paintBlendMode),
         blendMode = blendMode,
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,

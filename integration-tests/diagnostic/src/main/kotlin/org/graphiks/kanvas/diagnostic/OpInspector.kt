@@ -2,7 +2,7 @@ package org.graphiks.kanvas.diagnostic
 
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
@@ -171,7 +171,7 @@ object OpInspector {
         val surface = Surface(width, height, config = RenderConfig.DEFAULT)
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         for (i in 0 until count.coerceAtMost(ops.size)) {
             replayOp(canvas, ops[i])
         }

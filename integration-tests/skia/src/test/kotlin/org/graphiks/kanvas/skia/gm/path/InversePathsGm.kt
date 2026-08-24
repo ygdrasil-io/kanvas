@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -74,7 +74,7 @@ class InversePathsGm : SkiaGm {
             strokeWidth = 2f,
         )
         val outlinePaint = Paint(
-            color = Color.fromRGBA(0f, 0f, 0f, 0.25f),
+            color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.25f),
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
         )
@@ -84,7 +84,7 @@ class InversePathsGm : SkiaGm {
                 canvas.save()
                 for (sw in strokeWidths) {
                     val paint = Paint(
-                        color = Color.fromRGBA(0f, 0.439f, 0f, 1f),
+                        color = ColorARGB.fromRGBA(0f, 0.439f, 0f, 1f),
                         strokeWidth = sw,
                         style = style.paintStyle,
                         pathEffect = style.pathEffect,

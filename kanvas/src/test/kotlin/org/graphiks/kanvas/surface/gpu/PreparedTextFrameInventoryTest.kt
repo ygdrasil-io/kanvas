@@ -23,7 +23,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -249,7 +249,7 @@ class PreparedTextFrameInventoryTest {
         val blurred = draw(
             operationIndex = 0,
             glyphs = listOf(glyph(6)),
-            paint = Paint.fill(Color.RED).copy(
+            paint = Paint.fill(ColorARGB.Red).copy(
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
             ),
         )
@@ -393,7 +393,7 @@ class PreparedTextFrameInventoryTest {
         val materialChanged = draw(
             operationIndex = 1,
             glyphs = listOf(glyph(3)),
-            paint = Paint.fill(Color.BLUE),
+            paint = Paint.fill(ColorARGB.Blue),
         )
         val transformChanged = draw(
             2,
@@ -603,7 +603,7 @@ class PreparedTextFrameInventoryTest {
                 draw(
                     operationIndex = 0,
                     glyphs = listOf(glyph(7)),
-                    paint = Paint.fill(Color.RED).copy(
+                    paint = Paint.fill(ColorARGB.Red).copy(
                         maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, Float.MAX_VALUE),
                     ),
                 ),
@@ -636,7 +636,7 @@ class PreparedTextFrameInventoryTest {
                         draw(
                             operationIndex = 0,
                             glyphs = listOf(glyph(7)),
-                            paint = Paint.fill(Color.RED).copy(
+                            paint = Paint.fill(ColorARGB.Red).copy(
                                 maskFilter = MaskFilter.Blur(style, 0f),
                             ),
                         ),
@@ -670,7 +670,7 @@ class PreparedTextFrameInventoryTest {
                 draw(
                     operationIndex = 0,
                     glyphs = listOf(glyph(7)),
-                    paint = Paint.fill(Color.RED).copy(
+                    paint = Paint.fill(ColorARGB.Red).copy(
                         maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
                     ),
                 ),
@@ -722,7 +722,7 @@ class PreparedTextFrameInventoryTest {
                     draw(
                         operationIndex = 0,
                         glyphs = listOf(glyph(7)),
-                        paint = Paint.fill(Color.RED).copy(
+                        paint = Paint.fill(ColorARGB.Red).copy(
                             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
                         ),
                     ),
@@ -783,7 +783,7 @@ class PreparedTextFrameInventoryTest {
                     draw(
                         operationIndex = 0,
                         glyphs = listOf(glyph(7), glyph(8), glyph(9)),
-                        paint = Paint.fill(Color.RED).copy(
+                        paint = Paint.fill(ColorARGB.Red).copy(
                             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
                         ),
                     ),
@@ -987,7 +987,7 @@ class PreparedTextFrameInventoryTest {
         val repeated = draw(
             operationIndex = 0,
             glyphs = listOf(glyph(8), glyph(8), glyph(8)),
-            paint = Paint.fill(Color.RED).copy(
+            paint = Paint.fill(ColorARGB.Red).copy(
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
             ),
         )
@@ -1395,7 +1395,7 @@ class PreparedTextFrameInventoryTest {
         val plus = draw(
             operationIndex = 1,
             glyphs = listOf(glyph(8)),
-            paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.PLUS),
+            paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.PLUS),
         )
         val clipped = draw(
             operationIndex = 2,
@@ -1627,7 +1627,7 @@ class PreparedTextFrameInventoryTest {
         glyphs: List<GPUPreparedGlyphInput>,
         faceIndex: Int = 0,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        paint: Paint = Paint.fill(Color.RED),
+        paint: Paint = Paint.fill(ColorARGB.Red),
         clip: ClipStack = ClipStack.WideOpen,
     ): GPUPreparedTextDraw {
         val operation = operation(
@@ -1674,7 +1674,7 @@ class PreparedTextFrameInventoryTest {
         glyphs = glyphs,
         faceIndex = 0,
         transform = Matrix3x3F32.Identity,
-        paint = Paint.fill(Color.RED),
+        paint = Paint.fill(ColorARGB.Red),
     )
 
     private fun glyph(glyphId: Int): GPUPreparedGlyphInput {
@@ -1704,7 +1704,7 @@ class PreparedTextFrameInventoryTest {
         positions: List<Point2F32>,
         transform: Matrix3x3F32,
         typeface: org.graphiks.kanvas.text.FontTypeface = liberationTypeface(),
-        paint: Paint = Paint.fill(Color.RED),
+        paint: Paint = Paint.fill(ColorARGB.Red),
         clip: ClipStack = ClipStack.WideOpen,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(

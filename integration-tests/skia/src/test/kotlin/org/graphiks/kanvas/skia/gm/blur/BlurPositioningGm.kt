@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -37,13 +37,13 @@ class BlurPositioningGm : SkiaGm {
             )
 
             val outlinePaint = Paint(
-                color = Color.RED,
+                color = ColorARGB.Red,
                 style = PaintStyle.STROKE,
             )
             canvas.drawRect(b, outlinePaint)
 
             val fillPaint = Paint(
-                color = Color.BLACK,
+                color = ColorARGB.Black,
                 imageFilter = ImageFilter.Blur(sigma, sigma),
             )
             canvas.drawRect(r, fillPaint)

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/filltypespersp.cpp`.
@@ -38,10 +38,10 @@ class FillTypePerspGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bgCenter = org.graphiks.math.geometry.Point2F32(100f, 100f)
         val bgStops = listOf(
-            GradientStop(0f, Color.BLACK),
-            GradientStop(0.25f, Color.fromRGBA(0f, 1f, 1f, 1f)),
-            GradientStop(0.75f, Color.fromRGBA(1f, 1f, 0f, 1f)),
-            GradientStop(1f, Color.WHITE),
+            GradientStop(0f, ColorARGB.Black),
+            GradientStop(0.25f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)),
+            GradientStop(0.75f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
+            GradientStop(1f, ColorARGB.White),
         )
         val bgPaint = Paint(
             shader = Shader.RadialGradient(bgCenter, 1000f, bgStops, TileMode.CLAMP),
@@ -67,9 +67,9 @@ class FillTypePerspGm : SkiaGm {
     private fun showFour(canvas: GmCanvas, scale: Float, aa: Boolean) {
         val center = org.graphiks.math.geometry.Point2F32(100f, 100f)
         val stops = listOf(
-            GradientStop(0f, Color.BLUE),
-            GradientStop(0.5f, Color.RED),
-            GradientStop(1f, Color.GREEN),
+            GradientStop(0f, ColorARGB.Blue),
+            GradientStop(0.5f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Green),
         )
         val paint = Paint(
             shader = Shader.RadialGradient(center, 100f, stops, TileMode.CLAMP),
@@ -88,7 +88,7 @@ class FillTypePerspGm : SkiaGm {
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
         canvas.clipRect(r)
-        canvas.drawRect(r, Paint(color = Color.WHITE))
+        canvas.drawRect(r, Paint(color = ColorARGB.White))
         val withFill = fPath
         canvas.translate(r.left + r.width() / 2f, r.top + r.height() / 2f)
         canvas.scale(scale, scale)

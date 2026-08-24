@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -22,12 +22,12 @@ class MultipleFiltersGm : SkiaGm {
     override val width = 415
     override val height = 210
 
-    private fun intToColor(value: Int): Color {
+    private fun intToColor(value: Int): ColorARGB {
         val a = (value ushr 24) and 0xFF
         val r = (value ushr 16) and 0xFF
         val g = (value ushr 8) and 0xFF
         val b = value and 0xFF
-        return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+        return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
@@ -42,7 +42,7 @@ class MultipleFiltersGm : SkiaGm {
     }
 
     private fun drawFilteredLayer(canvas: GmCanvas) {
-        val restorePaint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 0.5f))
+        val restorePaint = Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f))
         canvas.save()
         canvas.clipRect(RectF32(0f, 0f, 200f, 200f))
         canvas.save()
@@ -50,7 +50,7 @@ class MultipleFiltersGm : SkiaGm {
         val circlePaint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 20f,
-            color = Color.GREEN,
+            color = ColorARGB.Green,
         )
         canvas.drawCircle(100f, 100f, 70f, circlePaint)
         canvas.restore()

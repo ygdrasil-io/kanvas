@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -29,7 +29,7 @@ class ImageSourceGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.Black))
 
         val image = makeStringImage(100, 100, 0xFFFFFFFFu.toInt(), 20f, 70f, 96f, "e")
 
@@ -77,11 +77,11 @@ class ImageSourceGm : SkiaGm {
         return surface.makeImageSnapshot()
     }
 
-    private fun fromArgb(argb: Int): Color {
+    private fun fromArgb(argb: Int): ColorARGB {
         val a = (argb ushr 24) and 0xFF
         val r = (argb ushr 16) and 0xFF
         val g = (argb ushr 8) and 0xFF
         val b = argb and 0xFF
-        return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+        return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
     }
 }

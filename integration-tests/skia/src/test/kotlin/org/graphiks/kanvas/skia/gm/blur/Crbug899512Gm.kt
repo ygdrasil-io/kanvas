@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -31,7 +31,7 @@ class Crbug899512Gm : SkiaGm {
         canvas.concat(matrix)
         val paint = Paint(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 6.2735f),
-            colorFilter = ColorFilter.Blend(Color.BLACK, BlendMode.SRC_IN),
+            colorFilter = ColorFilter.Blend(ColorARGB.Black, BlendMode.SRC_IN),
         )
         canvas.drawRect(RectF32.ofOriginSize(0f, 10f, 200f, 200f), paint)
     }

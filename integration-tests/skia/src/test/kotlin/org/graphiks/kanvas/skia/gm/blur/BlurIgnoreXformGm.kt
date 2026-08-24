@@ -10,9 +10,9 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 private data class MatrixScale(val scale: Float, val name: String)
@@ -34,7 +34,7 @@ private val font = Font(
 
 private fun drawBlurIgnoreXform(canvas: GmCanvas, drawType: String) {
     val blurFilter2 = MaskFilter.Blur(BlurStyle.NORMAL, convertRadiusToSigma(20f))
-    val basePaint = Paint(antiAlias = true, color = Color.BLACK)
+    val basePaint = Paint(antiAlias = true, color = ColorARGB.Black)
 
     canvas.translate(10f, 25f)
     canvas.save()
@@ -48,7 +48,7 @@ private fun drawBlurIgnoreXform(canvas: GmCanvas, drawType: String) {
             val kRadius = 20f
             val coord = 50f * 1f / scale.scale
             val rect = RectF32.ofOriginSize(coord - kRadius, coord - kRadius, 2 * kRadius, 2 * kRadius)
-            val rrect = RRect(RectF32(rect.left, rect.top, rect.right, rect.bottom), CornerRadii(kRadius / 2f, kRadius / 2f))
+            val rrect = RRectF32.of(RectF32(rect.left, rect.top, rect.right, rect.bottom), CornerRadiiF32.of(kRadius / 2f, kRadius / 2f))
 
             for (j in 0 until 2) {
                 canvas.save()
@@ -119,7 +119,7 @@ class BlurIgnoreXformRectGm : SkiaGm {
 
 /**
  * Port of Skia's `gm/blurignorexform.cpp::BlurIgnoreXformGM`.
- * RRect variant.
+ * RRectF32 variant.
  * @see https://github.com/google/skia/blob/main/gm/blurignorexform.cpp
  */
 class BlurIgnoreXformRRectGm : SkiaGm {

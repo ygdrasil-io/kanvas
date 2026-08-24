@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ZeroLenStrokesGm : SkiaGm {
@@ -93,17 +93,17 @@ class ZeroLenStrokesGm : SkiaGm {
             canvas.drawPath(fRefPath[i * 2], fillPaint)
 
             canvas.translate(0f, 50f)
-            canvas.drawPath(fMoveHfPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fMoveHfPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.translate(0f, 30f)
-            canvas.drawPath(fMoveZfPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fMoveZfPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.translate(0f, 30f)
-            canvas.drawPath(fRefPath[1 + i * 2], fillPaint.copy(color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fRefPath[1 + i * 2], fillPaint.copy(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.translate(0f, 30f)
-            canvas.drawPath(fCubicPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fCubicPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.translate(0f, 30f)
-            canvas.drawPath(fQuadPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fQuadPath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.translate(0f, 30f)
-            canvas.drawPath(fLinePath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+            canvas.drawPath(fLinePath, strokePaint.copy(strokeWidth = 20f, strokeCap = cap, color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
             canvas.restore()
         }
     }

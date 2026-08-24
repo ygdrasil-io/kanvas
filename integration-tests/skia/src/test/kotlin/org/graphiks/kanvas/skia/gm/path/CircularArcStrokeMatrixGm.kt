@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -96,8 +96,8 @@ class CircularArcStrokeMatrixGm : SkiaGm {
         var x = 0
         var y = 0
 
-        val red = Color.fromRGBA(1f, 0f, 0f, 0.5f)
-        val blue = Color.fromRGBA(0f, 0f, 1f, 0.5f)
+        val red = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f)
+        val blue = ColorARGB.fromRGBA(0f, 0f, 1f, 0.5f)
 
         for (cap in listOf(StrokeCap.ROUND, StrokeCap.BUTT, StrokeCap.SQUARE)) {
             for (m in matrices) {

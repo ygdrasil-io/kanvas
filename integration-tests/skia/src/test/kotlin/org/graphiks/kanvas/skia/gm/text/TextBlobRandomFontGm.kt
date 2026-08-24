@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -27,7 +27,7 @@ class TextBlobRandomFontGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
 
-        val paint = Paint(antiAlias = true, color = Color.fromRGBA(1f, 0f, 1f, 1f))
+        val paint = Paint(antiAlias = true, color = ColorARGB.fromRGBA(1f, 0f, 1f, 1f))
 
         canvas.save()
         canvas.rotate(-0.05f)

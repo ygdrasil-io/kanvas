@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.MutablePoint2F32
 import org.graphiks.math.vector.MutableVector2F32
 import org.graphiks.math.geometry.RectF32
@@ -67,7 +67,7 @@ class OverStrokeGm : SkiaGm {
     }
 
     private val normalPaint: Paint get() = Paint(
-        color = Color.BLUE,
+        color = ColorARGB.Blue,
         antiAlias = true,
         style = PaintStyle.STROKE,
         strokeWidth = 3f,
@@ -80,7 +80,7 @@ class OverStrokeGm : SkiaGm {
     )
 
     private val ribsPaint: Paint get() = Paint(
-        color = Color.GREEN,
+        color = ColorARGB.Green,
         antiAlias = true,
         style = PaintStyle.STROKE,
         strokeWidth = 1f,

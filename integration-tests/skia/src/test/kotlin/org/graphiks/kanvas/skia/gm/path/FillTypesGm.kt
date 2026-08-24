@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -31,7 +31,7 @@ class FillTypesGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(223f / 255f, 223f / 255f, 223f / 255f, 1f)),
+            Paint(color = ColorARGB.fromRGBA(223f / 255f, 223f / 255f, 223f / 255f, 1f)),
         )
 
         canvas.translate(20f, 20f)
@@ -67,7 +67,7 @@ class FillTypesGm : SkiaGm {
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
         canvas.clipRect(rect)
-        canvas.drawRect(rect, Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f)))
         val centerX = rect.left + rect.width() / 2f
         val centerY = rect.top + rect.height() / 2f
         canvas.translate(centerX, centerY)

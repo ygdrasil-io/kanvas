@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
@@ -28,7 +30,7 @@ class ColorFilterImageFilterLayerGm : SkiaGm {
             0.2126f, 0.7152f, 0.0722f, 0f, 0f,
             0f, 0f, 0f, 1f, 0f,
         )
-        val cf = ColorFilter.Matrix(matrix)
+        val cf = ColorFilter.Matrix(ColorMatrixF32.of(matrix))
         val paint = Paint(imageFilter = ImageFilter.ColorFilter(cf, null))
         canvas.saveLayer(null, paint)
         canvas.drawColor(1f, 0f, 0f, 1f)

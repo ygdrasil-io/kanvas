@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -48,7 +48,7 @@ class ComposeShaderBitmap2Gm : SkiaGm {
         val colorImage = Image.fromPixels(w, h, colorPixels, ColorType.RGBA_8888)
         val maskImage = Image.fromPixels(w, h, maskPixels, ColorType.ALPHA_8)
 
-        val bgPaint = Paint(color = Color.BLUE)
+        val bgPaint = Paint(color = ColorARGB.Blue)
         val r = RectF32(0f, 0f, w.toFloat(), h.toFloat())
         canvas.drawRect(r, bgPaint)
 

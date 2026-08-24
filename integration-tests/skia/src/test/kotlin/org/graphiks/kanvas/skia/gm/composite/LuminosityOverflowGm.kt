@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.composite
 
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -30,7 +30,7 @@ class LuminosityOverflowGm : SkiaGm {
         for (r in rgbs) {
             for (g in rgbs) {
                 for (b in rgbs) {
-                    val paint = Paint(color = Color.fromRGBA(r / 255f, g / 255f, b / 255f, 1f))
+                    val paint = Paint(color = ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, 1f))
                     canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 4f, 256f), paint)
                     canvas.translate(4f, 0f)
                 }
@@ -40,7 +40,7 @@ class LuminosityOverflowGm : SkiaGm {
 
         for (a in 1..16) {
             val paint = Paint(
-                color = Color.fromRGBA(1f, 1f, 1f, a / 255f),
+                color = ColorARGB.fromRGBA(1f, 1f, 1f, a / 255f),
                 blendMode = BlendMode.LUMINOSITY,
             )
             canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 256f, 16f), paint)

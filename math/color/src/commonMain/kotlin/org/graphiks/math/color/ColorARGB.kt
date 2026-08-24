@@ -26,6 +26,24 @@ public value class ColorARGB internal constructor(public val value: UInt) {
     /** Blue component in `[0, 255]`. */
     public val blue: Int get() = (value and 0xFFu).toInt()
 
+    /** Alpha component normalized to `[0, 1]`. */
+    public val alphaNormalized: Float get() = alpha / 255f
+    /** Red component normalized to `[0, 1]`. */
+    public val redNormalized: Float get() = red / 255f
+    /** Green component normalized to `[0, 1]`. */
+    public val greenNormalized: Float get() = green / 255f
+    /** Blue component normalized to `[0, 1]`. */
+    public val blueNormalized: Float get() = blue / 255f
+
+    /** Normalized red channel. */
+    public val r: Float get() = redNormalized
+    /** Normalized green channel. */
+    public val g: Float get() = greenNormalized
+    /** Normalized blue channel. */
+    public val b: Float get() = blueNormalized
+    /** Normalized alpha channel. */
+    public val a: Float get() = alphaNormalized
+
     /** Returns the packed signed `Int` representation used by ARGB pixel buffers. */
     public fun toPackedInt(): Int = value.toInt()
 
@@ -89,6 +107,22 @@ public value class ColorARGB internal constructor(public val value: UInt) {
 
         /** Creates a color from a packed signed `Int` in `AARRGGBB` order. */
         public fun fromPackedInt(packed: Int): ColorARGB = ColorARGB(packed.toUInt())
+
+        /** Creates a color from packed `AARRGGBB` bits. */
+        public fun fromPackedUInt(packed: UInt): ColorARGB = ColorARGB(packed)
+
+        /**
+         * Creates a color from normalized RGBA components.
+         *
+         * Components are clamped to `[0, 1]` then rounded to their nearest
+         * 8-bit representation.
+         */
+        public fun fromRGBA(
+            red: Float,
+            green: Float,
+            blue: Float,
+            alpha: Float = 1f,
+        ): ColorARGB = ColorF32.of(red, green, blue, alpha).toColorARGB()
     }
 }
 

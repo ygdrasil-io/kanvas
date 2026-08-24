@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -40,7 +40,7 @@ class InverseFillFiltersGm : SkiaGm {
 
             val stroke = Paint(
                 style = PaintStyle.STROKE,
-                color = Color.WHITE,
+                color = ColorARGB.White,
             )
             c.drawRect(RectF32.ofLTRB(0f, 0f, 128f, 128f), stroke)
         }

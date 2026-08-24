@@ -7,8 +7,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/blurroundrect.cpp` (large rrects variant).
@@ -30,13 +30,13 @@ class BlurLargeRRectsGm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
         )
         val rect = RectF32.ofLTRB(5f, -20000f, 240f, 25f)
-        val rrect = RRect(rect, 40f)
+        val rrect = RRectF32.of(rect, 40f)
         for (i in 0 until 4) {
             val r = if ((i and 1) != 0) 0xFF else 0
             val g = if ((i and 2) != 0) 0xFF else 0
             val b = if (i < 2) 0xFF else 0
             canvas.drawRRect(rrect, paint.copy(
-                color = Color.fromRGBA(r / 255f, g / 255f, b / 255f, 1f),
+                color = ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, 1f),
             ))
             canvas.translate(150f, 150f)
             canvas.rotate(90f)

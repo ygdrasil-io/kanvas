@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -41,7 +41,7 @@ class PathOpsSkbug10155Gm : SkiaGm {
         canvas.translate(-r.left, -r.top)
 
         val paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
@@ -50,7 +50,7 @@ class PathOpsSkbug10155Gm : SkiaGm {
         canvas.drawPath(path0, paint)
         canvas.drawPath(path1, paint)
 
-        val bluePaint = paint.copy(color = Color.BLUE)
+        val bluePaint = paint.copy(color = ColorARGB.Blue)
         canvas.drawPath(resultPath, bluePaint)
     }
 

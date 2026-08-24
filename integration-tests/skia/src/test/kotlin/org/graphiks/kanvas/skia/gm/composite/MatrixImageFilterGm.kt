@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -52,8 +52,8 @@ class MatrixImageFilterGm : SkiaGm {
 
     private fun makeCheckerboard(): Image {
         val surf = Surface(64, 64)
-        val dark = Paint(color = Color.fromRGBA(64f / 255f, 64f / 255f, 64f / 255f))
-        val light = Paint(color = Color.fromRGBA(160f / 255f, 160f / 255f, 160f / 255f))
+        val dark = Paint(color = ColorARGB.fromRGBA(64f / 255f, 64f / 255f, 64f / 255f))
+        val light = Paint(color = ColorARGB.fromRGBA(160f / 255f, 160f / 255f, 160f / 255f))
         surf.canvas {
             var y = 0
             while (y < 64) {

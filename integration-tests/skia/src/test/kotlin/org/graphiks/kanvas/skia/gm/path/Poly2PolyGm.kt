@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -64,13 +64,13 @@ class Poly2PolyGm : SkiaGm {
         canvas.save()
         canvas.concat(mx)
 
-        val grayPaint = paint.copy(color = Color.fromRGBA(0.5f, 0.5f, 0.5f), style = PaintStyle.STROKE)
+        val grayPaint = paint.copy(color = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f), style = PaintStyle.STROKE)
         val d = 64f
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, d, d), grayPaint)
         canvas.drawLine(0f, 0f, d, d, grayPaint)
         canvas.drawLine(0f, d, d, 0f, grayPaint)
 
-        val redPaint = paint.copy(color = Color.RED, style = PaintStyle.FILL)
+        val redPaint = paint.copy(color = ColorARGB.Red, style = PaintStyle.FILL)
         canvas.drawString("X", d / 2f - 10f, d / 2f + 10f, font, redPaint)
 
         canvas.restore()

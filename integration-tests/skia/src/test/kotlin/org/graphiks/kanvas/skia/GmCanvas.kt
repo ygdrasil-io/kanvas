@@ -10,12 +10,12 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.pipeline.ClipOp
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
@@ -28,7 +28,6 @@ import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.math.color.ColorARGB
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -157,7 +156,7 @@ class GmCanvas(
         inner.clipPath(transformedPath, op, antiAlias)
     }
 
-    fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+    fun clipRRect(rrect: RRectF32, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         inner.clipRRect(rrect, op, antiAlias)
     }
 
@@ -236,7 +235,7 @@ class GmCanvas(
     ) {
         drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(r, g, b, a)),
+            Paint(color = ColorARGB.fromRGBA(r, g, b, a)),
         )
     }
 
@@ -248,20 +247,16 @@ class GmCanvas(
         mode: BlendMode,
     ) {
         withClip {
-            inner.drawColor(Color.fromRGBA(r, g, b, a), mode)
+            inner.drawColor(ColorARGB.fromRGBA(r, g, b, a), mode)
         }
     }
 
-    fun clear(color: Color) {
+    fun clear(color: ColorARGB) {
         inner.clear(color)
     }
 
     fun clear(color: Int) {
-        clear(Color.fromArgbInt(color))
-    }
-
-    fun clear(color: ColorARGB) {
-        clear(color.toPackedInt())
+        clear(ColorARGB.fromPackedInt(color))
     }
 
     fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
@@ -302,7 +297,7 @@ class GmCanvas(
         drawPath(path, paint)
     }
 
-    fun drawRRect(rrect: RRect, paint: Paint) {
+    fun drawRRect(rrect: RRectF32, paint: Paint) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawRRect(rrect, paint)
@@ -314,7 +309,7 @@ class GmCanvas(
         }
     }
 
-    fun drawDRRect(outer: RRect, innerRect: RRect, paint: Paint) {
+    fun drawDRRect(outer: RRectF32, innerRect: RRectF32, paint: Paint) {
         withClip {
             if (currentTransform.isIdentity()) {
                 this.inner.drawDRRect(outer, innerRect, paint)
@@ -440,7 +435,7 @@ class GmCanvas(
         atlas: Image,
         transforms: List<Matrix3x3F32>,
         texRects: List<RectF32>,
-        colors: List<Color>? = null,
+        colors: List<ColorARGB>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint? = null,
     ) {
@@ -543,7 +538,7 @@ class GmCanvas(
      */
     fun drawPatch(
         cubics: List<Point2F32>,
-        colors: List<Color>? = null,
+        colors: List<ColorARGB>? = null,
         texCoords: List<Point2F32>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint,
@@ -558,7 +553,7 @@ class GmCanvas(
         )
         val divisions = 20
         val verts = mutableListOf<Point2F32>()
-        val vertColors = mutableListOf<Color>()
+        val vertColors = mutableListOf<ColorARGB>()
         val vertTexCoords = mutableListOf<Point2F32>()
         val indices = mutableListOf<Int>()
 
@@ -629,12 +624,12 @@ class GmCanvas(
         )
     }
 
-    private fun Color.rf(): Float = ((packed shr 16) and 0xFFu).toFloat() / 255f
-    private fun Color.gf(): Float = ((packed shr 8) and 0xFFu).toFloat() / 255f
-    private fun Color.bf(): Float = (packed and 0xFFu).toFloat() / 255f
-    private fun Color.af(): Float = ((packed shr 24) and 0xFFu).toFloat() / 255f
+    private fun ColorARGB.rf(): Float = ((value shr 16) and 0xFFu).toFloat() / 255f
+    private fun ColorARGB.gf(): Float = ((value shr 8) and 0xFFu).toFloat() / 255f
+    private fun ColorARGB.bf(): Float = (value and 0xFFu).toFloat() / 255f
+    private fun ColorARGB.af(): Float = ((value shr 24) and 0xFFu).toFloat() / 255f
 
-    private fun bilinearInterp(u: Float, v: Float, colors: List<Color>): Color {
+    private fun bilinearInterp(u: Float, v: Float, colors: List<ColorARGB>): ColorARGB {
         val c00 = colors[0]; val c10 = colors[1]
         val c01 = colors[3]; val c11 = colors[2]
         val a = (1 - u) * (1 - v) * c00.af() + u * (1 - v) * c10.af() +
@@ -645,7 +640,7 @@ class GmCanvas(
                 (1 - u) * v * c01.gf() + u * v * c11.gf()
         val b = (1 - u) * (1 - v) * c00.bf() + u * (1 - v) * c10.bf() +
                 (1 - u) * v * c01.bf() + u * v * c11.bf()
-        return Color.fromRGBA(r, g, b, a)
+        return ColorARGB.fromRGBA(r, g, b, a)
     }
 
     private fun bilinearInterp(u: Float, v: Float, texCoords: List<Point2F32>): Point2F32 {

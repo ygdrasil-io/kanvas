@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
@@ -8,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -55,13 +57,13 @@ class ColorFiltersGm : SkiaGm {
             start = Point2F32(bounds.left, bounds.top),
             end = Point2F32(bounds.right, bounds.bottom),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),   // red
-                GradientStop(1f/6f, Color.fromRGBA(0f, 1f, 0f, 1f)),   // green
-                GradientStop(2f/6f, Color.fromRGBA(0f, 0f, 1f, 1f)),   // blue
-                GradientStop(3f/6f, Color.fromRGBA(0f, 0f, 0f, 1f)),   // black
-                GradientStop(4f/6f, Color.fromRGBA(0f, 1f, 1f, 1f)),   // cyan
-                GradientStop(5f/6f, Color.fromRGBA(1f, 0f, 1f, 1f)),   // magenta
-                GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),   // yellow
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),   // red
+                GradientStop(1f/6f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),   // green
+                GradientStop(2f/6f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),   // blue
+                GradientStop(3f/6f, ColorARGB.fromRGBA(0f, 0f, 0f, 1f)),   // black
+                GradientStop(4f/6f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)),   // cyan
+                GradientStop(5f/6f, ColorARGB.fromRGBA(1f, 0f, 1f, 1f)),   // magenta
+                GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),   // yellow
             ),
         )
     }
@@ -79,6 +81,6 @@ class ColorFiltersGm : SkiaGm {
             0f,   0f,   mulB / 255f, 0f, addB / 255f,
             0f,   0f,   0f,   1f, 0f,
         )
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 }

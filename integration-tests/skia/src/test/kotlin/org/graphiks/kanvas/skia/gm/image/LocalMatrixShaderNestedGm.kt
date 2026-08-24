@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -39,7 +39,7 @@ class LocalMatrixShaderNestedGm : SkiaGm {
         val inner = Matrix3x3F32.translation(20f, 20f)
 
         val rect = RectF32(0f, 0f, fw * 2f + 40f, fh * 2f + 40f)
-        val border = Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 1f)
+        val border = Paint(color = ColorARGB.Black, style = PaintStyle.STROKE, strokeWidth = 1f)
         val empty = Paint()
         val baseShader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP)
         val shaders = listOf(
@@ -47,12 +47,12 @@ class LocalMatrixShaderNestedGm : SkiaGm {
             Shader.WithLocalMatrix(Shader.WithLocalMatrix(baseShader, inner), outer),
             Shader.Blend(
                 org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
-                Shader.SolidColor(Color.TRANSPARENT),
+                Shader.SolidColor(ColorARGB.Transparent),
                 Shader.WithLocalMatrix(baseShader, inner),
             ).let { Shader.WithLocalMatrix(it, outer) },
             Shader.Blend(
                 org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
-                Shader.SolidColor(Color.TRANSPARENT),
+                Shader.SolidColor(ColorARGB.Transparent),
                 Shader.WithLocalMatrix(baseShader, inner),
             ).let { Shader.WithLocalMatrix(it, outer) },
         )
@@ -79,13 +79,13 @@ class LocalMatrixShaderNestedGm : SkiaGm {
         surf.canvas {
             val circlePath = Path { }
             circlePath.addCircle(25f, 25f, 25f)
-            drawPath(circlePath, Paint(color = Color.GREEN))
+            drawPath(circlePath, Paint(color = ColorARGB.Green))
 
             val hLine = Path { moveTo(12.5f, 25f); lineTo(37.5f, 25f) }
-            drawPath(hLine, Paint(color = Color.RED, strokeWidth = 2f, style = PaintStyle.STROKE))
+            drawPath(hLine, Paint(color = ColorARGB.Red, strokeWidth = 2f, style = PaintStyle.STROKE))
 
             val vLine = Path { moveTo(25f, 12.5f); lineTo(25f, 37.5f) }
-            drawPath(vLine, Paint(color = Color.RED, strokeWidth = 2f, style = PaintStyle.STROKE))
+            drawPath(vLine, Paint(color = ColorARGB.Red, strokeWidth = 2f, style = PaintStyle.STROKE))
         }
         return surf.makeImageSnapshot()
     }

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -31,8 +31,8 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     private val identity = Matrix3x3F32.Identity
     private val open = ClipStack.WideOpen
-    private val black = Paint(color = Color.BLACK)
-    private val red = Paint(color = Color.RED)
+    private val black = Paint(color = ColorARGB.Black)
+    private val red = Paint(color = ColorARGB.Red)
 
     @Test
     fun `different paths cannot share one placeholder identity`() {
@@ -81,7 +81,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
     @Test
     fun `paint effects are refused instead of published as incomplete facts`() {
-        val paint = black.copy(shader = Shader.SolidColor(Color.WHITE))
+        val paint = black.copy(shader = Shader.SolidColor(ColorARGB.White))
         val result = capture(
             listOf(
                 DisplayOp.DrawRect(

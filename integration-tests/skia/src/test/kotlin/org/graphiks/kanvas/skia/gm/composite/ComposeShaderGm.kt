@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,7 +28,7 @@ class ComposeShaderGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val shader = makeShader(BlendMode.DST_IN)
-        val paint = Paint(color = Color.GREEN)
+        val paint = Paint(color = ColorARGB.Green)
         val r = RectF32(0f, 0f, 100f, 100f)
         canvas.drawRect(r, paint)
         val shaderPaint = Paint(shader = shader)
@@ -39,15 +39,15 @@ class ComposeShaderGm : SkiaGm {
         val shaderA = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(100f, 0f),
-            stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+            stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
             tileMode = TileMode.CLAMP,
         )
         val shaderB = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(0f, 100f),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 0f, 0x80 / 255f)),
+                GradientStop(0f, ColorARGB.fromRGBA(0f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 0f, 0x80 / 255f)),
             ),
             tileMode = TileMode.CLAMP,
         )

@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -44,7 +44,7 @@ class ArcCircleGapGm : SkiaGm {
             moveTo(288.88884710654133f, -280.26680862609f)
             arcTo(0f, 0f, -39.00216443306411f, false, true, 400.6058925796476f, radius)
         }
-        paint = paint.copy(color = Color.fromRGBA(0f, 127f / 255f, 0f, 1f))
+        paint = paint.copy(color = ColorARGB.fromRGBA(0f, 127f / 255f, 0f, 1f))
         canvas.drawPath(path, paint)
     }
 }

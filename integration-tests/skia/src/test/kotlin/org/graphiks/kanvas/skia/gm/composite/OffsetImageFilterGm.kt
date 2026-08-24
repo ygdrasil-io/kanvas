@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -29,8 +29,8 @@ class OffsetImageFilterGm : SkiaGm {
     override val width = 600
     override val height = 100
 
-    private val bitmap: Image by lazy { makeStringImage(80, 80, Color(0xFFD000D0u), "e") }
-    private val checkerboard: Image by lazy { makeCheckerboardImage(80, 80, Color(0xFFA0A0A0u), Color(0xFF404040u), 8) }
+    private val bitmap: Image by lazy { makeStringImage(80, 80, ColorARGB.fromPackedUInt(0xFFD000D0u), "e") }
+    private val checkerboard: Image by lazy { makeCheckerboardImage(80, 80, ColorARGB.fromPackedUInt(0xFFA0A0A0u), ColorARGB.fromPackedUInt(0xFF404040u), 8) }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 1f)
@@ -67,11 +67,11 @@ class OffsetImageFilterGm : SkiaGm {
         canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
         canvas.restore()
 
-        val strokePaint = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 2f)
+        val strokePaint = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE, strokeWidth = 2f)
         canvas.drawRect(cropRect, strokePaint)
     }
 
-    private fun makeStringImage(w: Int, h: Int, color: Color, str: String): Image {
+    private fun makeStringImage(w: Int, h: Int, color: ColorARGB, str: String): Image {
         val surf = org.graphiks.kanvas.surface.Surface(w, h)
         surf.canvas {
             val font = Font(typeface, size = 96f)
@@ -81,7 +81,7 @@ class OffsetImageFilterGm : SkiaGm {
         return surf.makeImageSnapshot()
     }
 
-    private fun makeCheckerboardImage(w: Int, h: Int, c1: Color, c2: Color, size: Int): Image {
+    private fun makeCheckerboardImage(w: Int, h: Int, c1: ColorARGB, c2: ColorARGB, size: Int): Image {
         val surf = org.graphiks.kanvas.surface.Surface(w, h)
         surf.canvas {
             val paint = Paint(color = c2)

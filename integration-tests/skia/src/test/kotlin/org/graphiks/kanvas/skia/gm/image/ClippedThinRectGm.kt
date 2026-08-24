@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/thinrects.cpp` (clipped variant).
@@ -24,7 +24,7 @@ class ClippedThinRectGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(10, 10)
-        val paint = Paint(color = Color.RED, antiAlias = true)
+        val paint = Paint(color = ColorARGB.Red, antiAlias = true)
         surf.canvas {
             save()
             clipRect(RectF32.ofOriginSize(0f, 5f, 256f, 10f), antiAlias = true)

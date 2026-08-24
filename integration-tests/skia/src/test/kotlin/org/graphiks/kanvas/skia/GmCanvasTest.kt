@@ -6,10 +6,9 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -21,9 +20,9 @@ class GmCanvasTest {
         val surface = Surface(width = 10, height = 10)
         val canvas = GmCanvas(surface.canvas(), width = 10, height = 10)
 
-        canvas.clear(Color.RED)
+        canvas.clear(ColorARGB.Red)
 
-        assertEquals(listOf(DisplayOp.Clear(Color.RED)), surface.snapshotOps())
+        assertEquals(listOf(DisplayOp.Clear(ColorARGB.Red)), surface.snapshotOps())
     }
 
     @Test
@@ -33,7 +32,7 @@ class GmCanvasTest {
 
         canvas.clear(ColorARGB.Gray.toPackedInt())
 
-        assertEquals(listOf(DisplayOp.Clear(Color.fromArgbInt(ColorARGB.Gray.toPackedInt()))), surface.snapshotOps())
+        assertEquals(listOf(DisplayOp.Clear(ColorARGB.fromPackedInt(ColorARGB.Gray.toPackedInt()))), surface.snapshotOps())
     }
 
     @Test

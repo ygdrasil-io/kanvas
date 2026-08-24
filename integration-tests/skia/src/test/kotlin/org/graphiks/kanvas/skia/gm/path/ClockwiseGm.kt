@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,7 +25,7 @@ class ClockwiseGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.BLACK),
+            Paint(color = ColorARGB.Black),
         )
 
         for (col in 0 until 3) {
@@ -39,8 +39,8 @@ class ClockwiseGm : SkiaGm {
     }
 
     private fun drawCell(canvas: GmCanvas, x: Int, y: Int, flipWinding: Boolean) {
-        val cwColor = if (flipWinding) Color.fromRGBA(1f, 0f, 0f, 1f) else Color.fromRGBA(0f, 1f, 0f, 1f)
-        val ccwColor = if (flipWinding) Color.fromRGBA(0f, 1f, 0f, 1f) else Color.fromRGBA(1f, 0f, 0f, 1f)
+        val cwColor = if (flipWinding) ColorARGB.fromRGBA(1f, 0f, 0f, 1f) else ColorARGB.fromRGBA(0f, 1f, 0f, 1f)
+        val ccwColor = if (flipWinding) ColorARGB.fromRGBA(0f, 1f, 0f, 1f) else ColorARGB.fromRGBA(1f, 0f, 0f, 1f)
 
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())

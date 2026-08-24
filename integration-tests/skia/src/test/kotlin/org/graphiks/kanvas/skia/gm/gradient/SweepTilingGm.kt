@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -29,9 +29,9 @@ class SweepTilingGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val stops = listOf(
-            GradientStop(0f, Color.BLUE),
-            GradientStop(0.25f, Color.fromRGBA(1f, 1f, 0f, 1f)),
-            GradientStop(0.50f, Color.GREEN),
+            GradientStop(0f, ColorARGB.Blue),
+            GradientStop(0.25f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
+            GradientStop(0.50f, ColorARGB.Green),
         )
 
         val modes = arrayOf(TileMode.CLAMP, TileMode.REPEAT, TileMode.MIRROR)

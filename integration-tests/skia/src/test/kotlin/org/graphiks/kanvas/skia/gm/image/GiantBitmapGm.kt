@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawLine
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 open class GiantBitmapGm(
@@ -63,8 +63,8 @@ open class GiantBitmapGm(
         val H = 161
         val surf = Surface(W, H)
         surf.canvas {
-            drawColor(Color.WHITE)
-            val colors = arrayOf(Color.BLUE, Color.RED, Color.BLACK, Color.GREEN)
+            drawColor(ColorARGB.White)
+            val colors = arrayOf(ColorARGB.Blue, ColorARGB.Red, ColorARGB.Black, ColorARGB.Green)
             var x = -W
             while (x < W) {
                 val paint = Paint(

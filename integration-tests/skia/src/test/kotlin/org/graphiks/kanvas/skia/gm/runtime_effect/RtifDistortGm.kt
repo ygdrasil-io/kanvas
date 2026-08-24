@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
@@ -76,7 +76,7 @@ class RtifDistortGm : SkiaGm {
             val g = rand.nextInt(256)
             val b = rand.nextInt(256)
             val font = Font(typeface, size = fontSize)
-            canvas.drawString(str, x, y, font, Paint(color = Color.fromRGBA(r / 255f, g / 255f, b / 255f)))
+            canvas.drawString(str, x, y, font, Paint(color = ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f)))
         }
         canvas.restore()
         canvas.restore()

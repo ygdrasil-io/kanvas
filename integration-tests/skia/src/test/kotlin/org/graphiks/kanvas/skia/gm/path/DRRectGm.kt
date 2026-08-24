@@ -7,13 +7,13 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/drrect.cpp`.
- * A 4 × 5 grid of double-rounded-rectangles (donuts) mixing outer/inner RRect types.
+ * A 4 × 5 grid of double-rounded-rectangles (donuts) mixing outer/inner RRectF32 types.
  * @see https://github.com/google/skia/blob/main/gm/drrect.cpp
  */
 class DRRectGm : SkiaGm {
@@ -27,24 +27,24 @@ class DRRectGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(antiAlias = true)
         var r = RectF32(0f, 0f, 100f, 100f)
-        val radii = listOf(CornerRadii(0f, 0f), CornerRadii(30f, 1f), CornerRadii(10f, 40f), CornerRadii(40f, 40f))
+        val radii = listOf(CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(30f, 1f), CornerRadiiF32.of(10f, 40f), CornerRadiiF32.of(40f, 40f))
         val dx = r.width() + 16f
         val dy = r.height() + 16f
 
         val outers = listOf(
-            RRect(r, CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f)),
-            RRect(r, CornerRadii(r.width() / 2f, r.height() / 2f)),
-            RRect(r, 20f),
-            RRect(r, radii[0], radii[1], radii[2], radii[3]),
+            RRectF32.of(r, CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f)),
+            RRectF32.of(r, CornerRadiiF32.of(r.width() / 2f, r.height() / 2f)),
+            RRectF32.of(r, 20f),
+            RRectF32.of(r, radii[0], radii[1], radii[2], radii[3]),
         )
 
         r = RectF32(r.left + 25f, r.top + 25f, r.right - 25f, r.bottom - 25f)
         val inners = listOf(
             null,
-            RRect(r, CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f)),
-            RRect(r, CornerRadii(r.width() / 2f, r.height() / 2f)),
-            RRect(r, 20f),
-            RRect(r, radii[0], radii[1], radii[2], radii[3]),
+            RRectF32.of(r, CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(0f, 0f)),
+            RRectF32.of(r, CornerRadiiF32.of(r.width() / 2f, r.height() / 2f)),
+            RRectF32.of(r, 20f),
+            RRectF32.of(r, radii[0], radii[1], radii[2], radii[3]),
         )
 
         canvas.translate(16f, 16f)

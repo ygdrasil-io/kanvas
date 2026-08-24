@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/xfermodeimagefilter.cpp`.
@@ -67,8 +67,8 @@ class XfermodeImageFilterGm : SkiaGm {
         run {
             val surface = Surface(stringImage.width, stringImage.height)
             surface.canvas {
-                drawColor(Color.fromRGBA(1f, 1f, 1f, 1f))
-                val checkPaint = Paint(color = Color.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
+                drawColor(ColorARGB.fromRGBA(1f, 1f, 1f, 1f))
+                val checkPaint = Paint(color = ColorARGB.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
                 drawRect(RectF32(0f, 0f, cellW, cellH), checkPaint)
             }
             val checkImage = surface.makeImageSnapshot()
@@ -101,7 +101,7 @@ class XfermodeImageFilterGm : SkiaGm {
     private fun makeStringImage(w: Int, h: Int, color: Int, x: Int, y: Int, textSize: Int, str: String): Image {
         val surface = Surface(w, h)
         surface.canvas {
-            val paint = Paint(color = Color.fromRGBA(
+            val paint = Paint(color = ColorARGB.fromRGBA(
                 ((color shr 16) and 0xFF) / 255f,
                 ((color shr 8) and 0xFF) / 255f,
                 (color and 0xFF) / 255f,
@@ -116,14 +116,14 @@ class XfermodeImageFilterGm : SkiaGm {
     private fun makeCheckerboardImage(w: Int, h: Int, c1: Int, c2: Int, size: Int): Image {
         val surface = Surface(w, h)
         surface.canvas {
-            val bgColor = Color.fromRGBA(
+            val bgColor = ColorARGB.fromRGBA(
                 ((c1 shr 16) and 0xFF) / 255f,
                 ((c1 shr 8) and 0xFF) / 255f,
                 (c1 and 0xFF) / 255f,
                 ((c1 shr 24) and 0xFF) / 255f,
             )
             drawColor(bgColor)
-            val fgColor = Color.fromRGBA(
+            val fgColor = ColorARGB.fromRGBA(
                 ((c2 shr 16) and 0xFF) / 255f,
                 ((c2 shr 8) and 0xFF) / 255f,
                 (c2 and 0xFF) / 255f,

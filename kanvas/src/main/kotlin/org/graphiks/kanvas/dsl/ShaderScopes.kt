@@ -3,7 +3,7 @@ package org.graphiks.kanvas.dsl
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 @KanvasDsl
@@ -12,7 +12,7 @@ class LinearGradientScope {
     var end: Point2F32 = Point2F32.Origin
     var tileMode: TileMode = TileMode.CLAMP
     private val stops = mutableListOf<GradientStop>()
-    fun stop(position: Float, color: Color) { stops.add(GradientStop(position, color)) }
+    fun stop(position: Float, color: ColorARGB) { stops.add(GradientStop(position, color)) }
     internal fun build() = Shader.LinearGradient(start, end, stops.toList(), tileMode)
 }
 
@@ -26,7 +26,7 @@ class RadialGradientScope {
     var radius: Float = 0f
     var tileMode: TileMode = TileMode.CLAMP
     private val stops = mutableListOf<GradientStop>()
-    fun stop(position: Float, color: Color) { stops.add(GradientStop(position, color)) }
+    fun stop(position: Float, color: ColorARGB) { stops.add(GradientStop(position, color)) }
     internal fun build() = Shader.RadialGradient(center, radius, stops.toList(), tileMode)
 }
 

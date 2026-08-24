@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.clip
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -34,7 +34,7 @@ class Crbug892988Gm : SkiaGm {
 
         canvas.clipRect(RectF32.ofLTRB(12f, 1f, 244f, 244f))
         val paint2 = Paint(
-            color = Color.fromRGBA(240f / 255f, 1f, 1f),
+            color = ColorARGB.fromRGBA(240f / 255f, 1f, 1f),
             blendMode = BlendMode.SRC,
             antiAlias = true,
         )

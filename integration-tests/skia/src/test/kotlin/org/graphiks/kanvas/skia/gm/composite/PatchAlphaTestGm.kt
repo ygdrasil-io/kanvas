@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.geometry.Point2F32
 
@@ -38,7 +38,7 @@ class PatchAlphaTestGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(-75f, -75f)
 
-        val translucentRed = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+        val translucentRed = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f)
         val colors = listOf(translucentRed, translucentRed, translucentRed, translucentRed)
         val paint = Paint()
         canvas.drawPatch(GCubics, colors, null, BlendMode.DST, paint)

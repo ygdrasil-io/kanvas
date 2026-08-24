@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -47,12 +47,12 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
         val kMaxSrcRectSize = 1 shl (nextLog2(gBmpSize) + 2)
         val kPadX = 30; val kPadY = 40
 
-        val alphaPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.125f))
+        val alphaPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.125f))
         canvas.drawImageRect(image, RectF32.ofOriginSize(0f, 0f, gBmpSize.toFloat(), gBmpSize.toFloat()), RectF32.ofOriginSize(0f, 0f, gSize.toFloat(), gSize.toFloat()), alphaPaint)
         canvas.translate((kPadX / 2).toFloat(), (kPadY / 2).toFloat())
 
         val font = Font(typeface, 24f)
-        canvas.drawString("Bitmap size: $gBmpSize x $gBmpSize", 0f, 24f, font, Paint(color = Color.BLACK, antiAlias = true))
+        canvas.drawString("Bitmap size: $gBmpSize x $gBmpSize", 0f, 24f, font, Paint(color = ColorARGB.Black, antiAlias = true))
         canvas.translate(0f, (kPadY / 2).toFloat() + 24f)
         var rowCount = 0; canvas.save()
         var w = 1
@@ -61,8 +61,8 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
             while (h <= kMaxSrcRectSize) {
                 val srcRect = RectF32.ofOriginSize(((gBmpSize - w) / 2).toFloat(), ((gBmpSize - h) / 2).toFloat(), w.toFloat(), h.toFloat())
                 runProc(canvas, image, bitmap, srcRect, dstRect, null)
-                canvas.drawString("$w x $h", 0f, dstRect.height() + 13f, Font(typeface, 10f), Paint(color = Color.BLACK, antiAlias = true))
-                canvas.drawRect(dstRect, Paint(color = Color.BLACK, antiAlias = false, style = PaintStyle.STROKE, strokeWidth = 1f))
+                canvas.drawString("$w x $h", 0f, dstRect.height() + 13f, Font(typeface, 10f), Paint(color = ColorARGB.Black, antiAlias = true))
+                canvas.drawRect(dstRect, Paint(color = ColorARGB.Black, antiAlias = false, style = PaintStyle.STROKE, strokeWidth = 1f))
                 canvas.translate(dstRect.width() + kPadX, 0f)
                 rowCount++
                 if ((dstRect.width() + kPadX) * rowCount > gSize) {
@@ -111,7 +111,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
 
         fun makeChessBm(w: Int, h: Int): Bitmap {
             val bm = Bitmap(w, h)
-            for (y in 0 until h) for (x in 0 until w) bm.setPixel(x, y, if (((x + y) and 1) != 0) Color.WHITE else Color.BLACK)
+            for (y in 0 until h) for (x in 0 until w) bm.setPixel(x, y, if (((x + y) and 1) != 0) ColorARGB.White else ColorARGB.Black)
             return bm
         }
 
@@ -120,7 +120,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
             surface.canvas {
                 val wF = w.toFloat(); val hF = h.toFloat()
                 val pt = Point2F32(wF / 2f, hF / 2f); val radius = 4f * maxOf(wF, hF)
-                val colors = listOf(Color.RED, Color.fromRGBA(1f, 1f, 0f), Color.GREEN, Color.fromRGBA(1f, 0f, 1f), Color.BLUE, Color.fromRGBA(0f, 1f, 1f), Color.RED)
+                val colors = listOf(ColorARGB.Red, ColorARGB.fromRGBA(1f, 1f, 0f), ColorARGB.Green, ColorARGB.fromRGBA(1f, 0f, 1f), ColorARGB.Blue, ColorARGB.fromRGBA(0f, 1f, 1f), ColorARGB.Red)
                 val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
                 val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
                 var rect = RectF32.ofOriginSize(0f, 0f, wF, hF)

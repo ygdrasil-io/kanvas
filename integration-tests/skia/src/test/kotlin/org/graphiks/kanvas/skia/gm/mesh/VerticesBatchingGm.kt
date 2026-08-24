@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
@@ -47,13 +47,13 @@ class VerticesBatchingGm : SkiaGm {
             start = Point2F32(K_SHADER_SIZE / 4f, 0f),
             end = Point2F32(3f * K_SHADER_SIZE / 4f, K_SHADER_SIZE),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f / 6f, Color(0xFF00FFFFu)),
-                GradientStop(2f / 6f, Color.GREEN),
-                GradientStop(3f / 6f, Color.WHITE),
-                GradientStop(4f / 6f, Color(0xFFFF00FFu)),
-                GradientStop(5f / 6f, Color.BLUE),
-                GradientStop(1f, Color(0xFFFFFF00u)),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f / 6f, ColorARGB.fromPackedUInt(0xFF00FFFFu)),
+                GradientStop(2f / 6f, ColorARGB.Green),
+                GradientStop(3f / 6f, ColorARGB.White),
+                GradientStop(4f / 6f, ColorARGB.fromPackedUInt(0xFFFF00FFu)),
+                GradientStop(5f / 6f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0xFFFFFF00u)),
             ),
             tileMode = TileMode.MIRROR,
         )
@@ -65,7 +65,7 @@ class VerticesBatchingGm : SkiaGm {
                 for (matrix in matrices) {
                     canvas.save()
                     canvas.concat(matrix)
-                    val paint = if (useShader) Paint(shader = shader) else Paint(color = Color.WHITE)
+                    val paint = if (useShader) Paint(shader = shader) else Paint(color = ColorARGB.White)
                     val verts = Vertices(
                         mode = VertexMode.TRIANGLES,
                         positions = MESH_POSITIONS,

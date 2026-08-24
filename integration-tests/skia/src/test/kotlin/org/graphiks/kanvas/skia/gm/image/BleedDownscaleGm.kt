@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -51,9 +51,9 @@ class BleedDownscaleGm : SkiaGm {
         val n = 10 + 2 + 8 + 2 + 10
         val surf = Surface(n, n)
         surf.canvas {
-            drawRect(RectF32(0f, 0f, n.toFloat(), n.toFloat()), Paint(color = Color.RED))
+            drawRect(RectF32(0f, 0f, n.toFloat(), n.toFloat()), Paint(color = ColorARGB.Red))
             val inner = RectF32.ofLTRB(10f, 10f, (n - 10).toFloat(), (n - 10).toFloat())
-            drawRect(inner, Paint(color = Color.BLUE))
+            drawRect(inner, Paint(color = ColorARGB.Blue))
         }
         val image = surf.makeImageSnapshot()
         val srcRect = RectF32.ofLTRB(12f, 12f, (n - 12).toFloat(), (n - 12).toFloat())

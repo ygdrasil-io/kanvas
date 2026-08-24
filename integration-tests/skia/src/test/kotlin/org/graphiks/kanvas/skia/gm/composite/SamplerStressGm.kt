@@ -15,8 +15,8 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -58,12 +58,12 @@ class SamplerStressGm : SkiaGm {
         )
         val font = Font(typeface, size = 72f)
         val temp = RectF32.ofLTRB(115f, 75f, 144f, 110f)
-        val path = Path { }.apply { addRRect(RRect(temp, 5f)) }
+        val path = Path { }.apply { addRRect(RRectF32.of(temp, 5f)) }
         canvas.clipPath(path, antiAlias = true)
         canvas.drawString("M", 100f, 100f, font, paint)
         canvas.restore()
 
-        val outline = Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 1f)
+        val outline = Paint(color = ColorARGB.Black, style = PaintStyle.STROKE, strokeWidth = 1f)
         canvas.drawString("M", 100f, 100f, font, outline)
     }
 }

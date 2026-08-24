@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -27,10 +27,10 @@ class GradientsInterestingGm : SkiaGm {
     override val height = 1300
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val yellow = Color.fromRGBA(1f, 1f, 0f)
-        val colors2 = listOf(Color.RED, Color.BLUE)
-        val colors3 = listOf(Color.RED, yellow, Color.BLUE)
-        val colors4 = listOf(Color.RED, yellow, yellow, Color.BLUE)
+        val yellow = ColorARGB.fromRGBA(1f, 1f, 0f)
+        val colors2 = listOf(ColorARGB.Red, ColorARGB.Blue)
+        val colors3 = listOf(ColorARGB.Red, yellow, ColorARGB.Blue)
+        val colors4 = listOf(ColorARGB.Red, yellow, yellow, ColorARGB.Blue)
 
         val configs = listOf(
             colors2.zip(listOf(0f, 1f)) { c, p -> GradientStop(p, c) },

@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class InverseClipGm : SkiaGm {
@@ -34,7 +34,7 @@ class InverseClipGm : SkiaGm {
             close()
         }.apply { fillType = FillType.INVERSE_WINDING }
         canvas.clipRect(RectF32(0f, 0f, 400f, 400f))
-        canvas.drawRect(RectF32(0f, 0f, 400f, 400f), Paint(color = Color.BLUE))
-        canvas.drawPath(clip, Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, 400f, 400f), Paint(color = ColorARGB.Blue))
+        canvas.drawPath(clip, Paint(color = ColorARGB.White))
     }
 }

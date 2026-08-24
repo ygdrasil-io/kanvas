@@ -25,7 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -309,7 +309,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
     }
 
     private fun inventory(
-        paint: Paint = Paint.fill(Color.RED).copy(antiAlias = false),
+        paint: Paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
     ): GPUFramePathInventoryPlan = GPUFramePathApiInventory.plan(
         operations = listOf(
             DisplayOp.DrawRect(

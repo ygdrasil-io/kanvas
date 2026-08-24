@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -24,7 +24,7 @@ class Crbug1177833Gm : SkiaGm {
     override val height = 400
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, this.width.toFloat(), this.height.toFloat()), Paint(color = ColorARGB.Black))
         canvas.translate(-700f, -700f)
 
         run {
@@ -133,8 +133,8 @@ class Crbug1177833Gm : SkiaGm {
         }
     }
 
-    private fun floatBitsToColor(rBits: Int, gBits: Int, bBits: Int, aBits: Int): Color {
-        return Color.fromRGBA(
+    private fun floatBitsToColor(rBits: Int, gBits: Int, bBits: Int, aBits: Int): ColorARGB {
+        return ColorARGB.fromRGBA(
             Float.fromBits(rBits),
             Float.fromBits(gBits),
             Float.fromBits(bBits),

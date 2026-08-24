@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -91,7 +91,7 @@ class DrawImageSetRectToRectGm : SkiaGm {
                     )
                     val alpha = if (ti % 3 == 0) 0.4f else 1f
                     canvas.drawImageRect(backingImage, tile.src, sd,
-                        Paint(color = Color.fromRGBA(1f, 1f, 1f, alpha)))
+                        Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha)))
                 }
                 canvas.restore()
                 canvas.translate(kTranslate, 0f)
@@ -121,8 +121,8 @@ class DrawImageSetRectToRectGm : SkiaGm {
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {
-        val black = Paint(color = Color.BLACK)
-        val white = Paint(color = Color.WHITE)
+        val black = Paint(color = ColorARGB.Black)
+        val white = Paint(color = ColorARGB.White)
         val tile = 50
         val totalW = 1250; val totalH = 850
         var y = 0

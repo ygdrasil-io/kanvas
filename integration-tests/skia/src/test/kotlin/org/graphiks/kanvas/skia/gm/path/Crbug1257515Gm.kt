@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -26,7 +26,7 @@ class Crbug1257515Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         var paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             strokeWidth = 2f,
             style = PaintStyle.STROKE,
             strokeCap = StrokeCap.ROUND,
@@ -67,7 +67,7 @@ class Crbug1257515Gm : SkiaGm {
             lineTo(1056.028f, 613.8181f)
         }
         paint = paint.copy(
-            color = Color.fromRGBA(47f / 255f, 136f / 255f, 1f),
+            color = ColorARGB.fromRGBA(47f / 255f, 136f / 255f, 1f),
             strokeWidth = 3f,
             strokeCap = StrokeCap.BUTT,
             strokeJoin = StrokeJoin.BEVEL,

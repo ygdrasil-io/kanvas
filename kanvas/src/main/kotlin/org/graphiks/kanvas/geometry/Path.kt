@@ -1,10 +1,10 @@
 package org.graphiks.kanvas.geometry
 
 import org.graphiks.kanvas.dsl.PathScope
-import org.graphiks.kanvas.types.Line
+import org.graphiks.math.geometry.MutableLine2F32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
@@ -75,7 +75,7 @@ class Path internal constructor() {
 
     fun addCircle(cx: Float, cy: Float, r: Float): Path = addOval(RectF32.ofLTRB(cx - r, cy - r, cx + r, cy + r))
 
-    fun addRRect(rrect: RRect): Path {
+    fun addRRect(rrect: RRectF32): Path {
         val r = rrect.rect
         val (tl, tr, br, bl) = normalizedRadii(rrect)
         moveTo(r.left + tl.x, r.top)
@@ -91,7 +91,7 @@ class Path internal constructor() {
         return this
     }
 
-    private fun normalizedRadii(rrect: RRect): Array<CornerRadii> {
+    private fun normalizedRadii(rrect: RRectF32): Array<CornerRadiiF32> {
         val width = rrect.rect.width().coerceAtLeast(0f)
         val height = rrect.rect.height().coerceAtLeast(0f)
         val tl = rrect.topLeft.nonNegative()
@@ -117,11 +117,11 @@ class Path internal constructor() {
     private fun ratioOrOne(limit: Float, sum: Float): Float =
         if (sum > limit && sum > 0f) limit / sum else 1f
 
-    private fun CornerRadii.nonNegative(): CornerRadii =
-        CornerRadii(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
+    private fun CornerRadiiF32.nonNegative(): CornerRadiiF32 =
+        CornerRadiiF32.of(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
 
-    private fun CornerRadii.scaled(scale: Float): CornerRadii =
-        CornerRadii(x * scale, y * scale)
+    private fun CornerRadiiF32.scaled(scale: Float): CornerRadiiF32 =
+        CornerRadiiF32.of(x * scale, y * scale)
 
     fun addPath(path: Path): Path {
         commands.addAll(path.commands)
@@ -281,7 +281,7 @@ class Path internal constructor() {
         return true
     }
 
-    fun isRRect(rrect: RRect? = null): Boolean {
+    fun isRRect(rrect: RRectF32? = null): Boolean {
         if (commands.size < 9) return false
         if (commands[0] !is PathCommand.Move) return false
         val hasClose = commands.last() is PathCommand.Close
@@ -305,13 +305,13 @@ class Path internal constructor() {
         return true
     }
 
-    fun isLine(line: Line? = null): Boolean {
+    fun isLine(line: MutableLine2F32? = null): Boolean {
         if (commands.size != 2) return false
         val start = commands[0] as? PathCommand.Move ?: return false
         val end = commands[1] as? PathCommand.Line ?: return false
         line?.let {
-            it.p1 = start.point
-            it.p2 = end.endpoint
+            it.start = start.point
+            it.end = end.endpoint
         }
         return true
     }

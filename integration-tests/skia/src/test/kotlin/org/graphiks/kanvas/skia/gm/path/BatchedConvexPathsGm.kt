@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.geometry.Path
 import kotlin.math.PI
 import kotlin.math.cos
@@ -64,7 +64,7 @@ class BatchedConvexPathsGm : SkiaGm {
             val g = ((raw ushr 8) and 0xFF) / 255f
             val b = (raw and 0xFF) / 255f
 
-            val paint = Paint(color = Color.fromRGBA(r, g, b, 0.3f), antiAlias = true)
+            val paint = Paint(color = ColorARGB.fromRGBA(r, g, b, 0.3f), antiAlias = true)
             canvas.drawPath(path, paint)
             canvas.restore()
         }

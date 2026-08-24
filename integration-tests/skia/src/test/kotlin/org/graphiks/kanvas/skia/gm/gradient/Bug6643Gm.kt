@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,9 +33,9 @@ class Bug6643Gm : SkiaGm {
         val gradient = Shader.SweepGradient(
             center = Point2F32(100f, 100f),
             stops = listOf(
-                GradientStop(0f, Color.TRANSPARENT),
-                GradientStop(0.5f, Color.GREEN),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.Transparent),
+                GradientStop(0.5f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
             tileMode = TileMode.CLAMP,
         )

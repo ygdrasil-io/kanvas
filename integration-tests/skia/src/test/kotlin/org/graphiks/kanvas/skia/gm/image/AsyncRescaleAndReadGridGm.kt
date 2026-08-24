@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -42,11 +42,11 @@ class AsyncRescaleAndReadGridGm : SkiaGm {
     private fun makeSource(): Image {
         val surface = Surface(410, 410)
         surface.canvas {
-            drawRect(RectF32(0f, 0f, 410f, 410f), Paint(color = Color.WHITE))
-            drawRect(RectF32(0f, 0f, 205f, 205f), Paint(color = Color(0xFFFF5555u)))
-            drawRect(RectF32(205f, 0f, 410f, 205f), Paint(color = Color(0xFF55FF55u)))
-            drawRect(RectF32(0f, 205f, 205f, 410f), Paint(color = Color(0xFF5555FFu)))
-            drawRect(RectF32(205f, 205f, 410f, 410f), Paint(color = Color(0xFFFFFF55u)))
+            drawRect(RectF32(0f, 0f, 410f, 410f), Paint(color = ColorARGB.White))
+            drawRect(RectF32(0f, 0f, 205f, 205f), Paint(color = ColorARGB.fromPackedUInt(0xFFFF5555u)))
+            drawRect(RectF32(205f, 0f, 410f, 205f), Paint(color = ColorARGB.fromPackedUInt(0xFF55FF55u)))
+            drawRect(RectF32(0f, 205f, 205f, 410f), Paint(color = ColorARGB.fromPackedUInt(0xFF5555FFu)))
+            drawRect(RectF32(205f, 205f, 410f, 410f), Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF55u)))
         }
         return surface.makeImageSnapshot()
     }

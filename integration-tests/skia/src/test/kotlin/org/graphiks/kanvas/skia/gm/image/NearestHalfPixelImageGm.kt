@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/nearesthalfpixelimage.cpp`.
@@ -36,7 +36,7 @@ class NearestHalfPixelImageGm : SkiaGm {
 
         val surf = Surface(80, 80)
         surf.canvas {
-            drawColor(Color.WHITE)
+            drawColor(ColorARGB.White)
 
             val kOffAxisScale = 4f
 
@@ -69,7 +69,7 @@ class NearestHalfPixelImageGm : SkiaGm {
             image: Image, shader: Boolean, doX: Boolean, mirror: Boolean, alpha: Int, kOffAxisScale: Float,
         ) {
             c.save()
-            val alphaPaint = if (alpha < 0xFF) Paint(color = Color.fromRGBA(1f, 1f, 1f, alpha / 255f)) else null
+            val alphaPaint = if (alpha < 0xFF) Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha / 255f)) else null
             if (shader) {
                 if (doX) {
                     c.scale(if (mirror) -1f else 1f, kOffAxisScale)

@@ -14,9 +14,9 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.SkiaRandom
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 class StrokesGm : SkiaGm {
@@ -45,9 +45,9 @@ class StrokesGm : SkiaGm {
                 ))
 
                 val (r2, c2) = rndRect(rand)
-                val cr = CornerRadii(r2.width / 4f, r2.height / 4f)
+                val cr = CornerRadiiF32.of(r2.width / 4f, r2.height / 4f)
                 canvas.drawPath(
-                    Path { }.apply { addRRect(RRect(r2, cr, cr, cr, cr)) },
+                    Path { }.apply { addRRect(RRectF32.of(r2, cr, cr, cr, cr)) },
                     Paint(
                         style = PaintStyle.STROKE,
                         strokeWidth = 9f / 2f,
@@ -62,7 +62,7 @@ class StrokesGm : SkiaGm {
         }
     }
 
-    private fun rndRect(rand: SkiaRandom): Pair<RectF32, Color> {
+    private fun rndRect(rand: SkiaRandom): Pair<RectF32, ColorARGB> {
         val x = rand.nextF() * W
         val y = rand.nextF() * H
         val w = rand.nextF() * (W shr 2)
@@ -75,7 +75,7 @@ class StrokesGm : SkiaGm {
         val r = RectF32.ofLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
 
         val c32 = rand.nextS()
-        val color = Color.fromRGBA(
+        val color = ColorARGB.fromRGBA(
             ((c32 ushr 16) and 0xFF) / 255f,
             ((c32 ushr 8) and 0xFF) / 255f,
             (c32 and 0xFF) / 255f,

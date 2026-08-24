@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -56,7 +56,7 @@ class ConicalGradients2ptInsideGm : SkiaGm {
     }
 
     private data class GradData(
-        val colors: List<Color>,
+        val colors: List<ColorARGB>,
         val positions: List<Float>,
     )
 
@@ -157,14 +157,14 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         ::makeInsideCenterReversed,
     )
 
-    private val baseColors = listOf(Color.RED, Color.fromRGBA(0f, 1f, 0f), Color.BLUE, Color.WHITE, Color.BLACK)
+    private val baseColors = listOf(ColorARGB.Red, ColorARGB.fromRGBA(0f, 1f, 0f), ColorARGB.Blue, ColorARGB.White, ColorARGB.Black)
 
     private val gradData: List<GradData> = listOf(
         GradData(baseColors.take(2), listOf(0f, 1f)),
         GradData(baseColors.take(2), listOf(0.25f, 0.75f)),
         GradData(baseColors.take(5), listOf(0f, 0.125f, 0.5f, 0.875f, 1f)),
         GradData(
-            listOf(Color.RED, Color.fromRGBA(0f, 1f, 0f), Color.fromRGBA(0f, 1f, 0f), Color.BLUE),
+            listOf(ColorARGB.Red, ColorARGB.fromRGBA(0f, 1f, 0f), ColorARGB.fromRGBA(0f, 1f, 0f), ColorARGB.Blue),
             listOf(0f, 0f, 1f, 1f),
         ),
     )

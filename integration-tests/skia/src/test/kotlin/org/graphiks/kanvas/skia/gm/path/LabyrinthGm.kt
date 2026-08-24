@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/labyrinth.cpp`. Repro for
@@ -84,7 +84,7 @@ private object LabyrinthHelper {
         val paint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 0.1f,
-            color = Color(0xFF406060u),
+            color = ColorARGB.fromPackedUInt(0xFF406060u),
             antiAlias = true,
             strokeCap = cap,
         )

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,18 +31,18 @@ class DropShadowImageFilterGm : SkiaGm {
             ::drawBitmap, ::drawPath, ::drawPaint, ::drawTextSubstitute,
         )
 
-        val cf = ColorFilter.Blend(Color.fromRGBA(1f, 0f, 1f, 1f), BlendMode.SRC_IN)
+        val cf = ColorFilter.Blend(ColorARGB.fromRGBA(1f, 0f, 1f, 1f), BlendMode.SRC_IN)
         val cfif = ImageFilter.ColorFilter(cf, null)
 
         val filters: List<ImageFilter?> = listOf(
             null,
-            ImageFilter.DropShadow(7f, 0f, 0f, 3f, Color.BLUE, null),
-            ImageFilter.DropShadow(0f, 7f, 3f, 0f, Color.BLUE, null),
-            ImageFilter.DropShadow(7f, 7f, 3f, 3f, Color.BLUE, null),
-            ImageFilter.DropShadow(7f, 7f, 3f, 3f, Color.BLUE, cfif),
-            ImageFilter.DropShadow(7f, 7f, 3f, 3f, Color.fromRGBA(0f, 0.5f, 0f, 1f), null),
-            ImageFilter.DropShadow(7f, 7f, 3f, 3f, Color.BLUE, null),
-            ImageFilter.DropShadow(7f, 7f, 3f, 3f, Color.BLUE, null),
+            ImageFilter.DropShadow(7f, 0f, 0f, 3f, ColorARGB.Blue, null),
+            ImageFilter.DropShadow(0f, 7f, 3f, 0f, ColorARGB.Blue, null),
+            ImageFilter.DropShadow(7f, 7f, 3f, 3f, ColorARGB.Blue, null),
+            ImageFilter.DropShadow(7f, 7f, 3f, 3f, ColorARGB.Blue, cfif),
+            ImageFilter.DropShadow(7f, 7f, 3f, 3f, ColorARGB.fromRGBA(0f, 0.5f, 0f, 1f), null),
+            ImageFilter.DropShadow(7f, 7f, 3f, 3f, ColorARGB.Blue, null),
+            ImageFilter.DropShadow(7f, 7f, 3f, 3f, ColorARGB.Blue, null),
         )
 
         val r = RectF32(0f, 0f, 64f, 64f)
@@ -65,7 +65,7 @@ class DropShadowImageFilterGm : SkiaGm {
     private fun drawPaint(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
         )
         canvas.save()
         canvas.clipRect(r)
@@ -75,7 +75,7 @@ class DropShadowImageFilterGm : SkiaGm {
 
     private fun drawPath(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
-            color = Color.fromRGBA(0f, 1f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f),
             imageFilter = imf,
             antiAlias = true,
         )
@@ -87,7 +87,7 @@ class DropShadowImageFilterGm : SkiaGm {
 
     private fun drawTextSubstitute(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
-            color = Color.fromRGBA(0f, 1f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f),
             imageFilter = imf,
             antiAlias = true,
         )
@@ -106,11 +106,11 @@ class DropShadowImageFilterGm : SkiaGm {
     private fun drawBitmap(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val surf = Surface(r.width().toInt(), r.height().toInt())
         surf.canvas {
-            drawRect(RectF32(0f, 0f, r.width(), r.height()), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, r.width(), r.height()), Paint(color = ColorARGB.Transparent))
             val cx = r.width() / 2f
             val cy = r.height() / 2f
             val path = org.graphiks.kanvas.geometry.Path { }.apply { addCircle(cx, cy, cx / 2f) }
-            drawPath(path, Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f), antiAlias = true))
+            drawPath(path, Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f), antiAlias = true))
         }
         val image = surf.makeImageSnapshot()
         val paint = Paint(imageFilter = imf)

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -29,7 +29,7 @@ private fun dqsDrawGradientTilesLocal(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
             val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
-            val color = if ((i * kColCount + j) % 2 == 0) Color.BLUE else Color.WHITE
+            val color = if ((i * kColCount + j) % 2 == 0) ColorARGB.Blue else ColorARGB.White
             canvas.drawRect(tile, Paint(color = color))
         }
     }
@@ -39,7 +39,7 @@ private fun dqsDrawGradientTilesAligned(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
             val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
-            canvas.drawRect(tile, Paint(color = Color.BLUE))
+            canvas.drawRect(tile, Paint(color = ColorARGB.Blue))
         }
     }
 }
@@ -48,7 +48,7 @@ private fun dqsDrawColorTilesGreen(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
             val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
-            val color = Color.fromRGBA(51f / 255f, 204f / 255f, 77f / 255f, 1f)
+            val color = ColorARGB.fromRGBA(51f / 255f, 204f / 255f, 77f / 255f, 1f)
             canvas.drawRect(tile, Paint(color = color))
         }
     }
@@ -60,7 +60,7 @@ private fun dqsDrawColorTilesMulticolor(canvas: GmCanvas) {
             val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
             val r = (i + 1f) / kRowCount
             val g = (j + 1f) / kColCount
-            val color = Color.fromRGBA(r, g, 0.4f, 1f)
+            val color = ColorARGB.fromRGBA(r, g, 0.4f, 1f)
             canvas.drawRect(tile, Paint(color = color))
         }
     }
@@ -123,7 +123,7 @@ val m4 = Matrix3x3F32.Identity
     }
 
     private fun drawTileBoundaries(canvas: GmCanvas, local: Matrix3x3F32) {
-        val paint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
+        val paint = Paint(color = ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
         for (x in 1 until kColCount) {
             val p1 = local.transform(Point2F32(x * kTileWidth, 0f))
             val p2 = local.transform(Point2F32(x * kTileWidth, kRowCount * kTileHeight))

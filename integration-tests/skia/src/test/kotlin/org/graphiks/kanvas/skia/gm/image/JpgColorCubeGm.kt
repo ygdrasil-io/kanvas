@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -41,7 +41,7 @@ class JpgColorCubeGm : SkiaGm {
                         val color = (a shl 24) or (red shl 16) or (green shl 8) or blue
                         drawRect(
                             RectF32(bX + r.toFloat(), bY + g.toFloat(), bX + r + 1f, bY + g + 1f),
-                            Paint(color = Color(color.toUInt())),
+                            Paint(color = ColorARGB.fromPackedUInt(color.toUInt())),
                         )
                     }
                 }

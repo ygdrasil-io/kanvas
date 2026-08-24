@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -30,7 +30,7 @@ class EmptyStrokeGm : SkiaGm {
             strokeWidth = 21f,
             strokeCap = StrokeCap.SQUARE,
         )
-        val dotPaint = Paint(color = Color.RED, strokeWidth = 7f)
+        val dotPaint = Paint(color = ColorARGB.Red, strokeWidth = 7f)
 
         val procs = listOf<(Path) -> Unit>(
             { path ->

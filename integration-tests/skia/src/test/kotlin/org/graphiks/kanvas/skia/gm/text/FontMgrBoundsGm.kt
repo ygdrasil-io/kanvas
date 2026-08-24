@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/fontmgr.cpp` (font-mgr bounds variant).
  *  Tests font bounding-box calculations with various skew and scaleX
@@ -34,7 +34,7 @@ class FontMgrBoundsGm(
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val font = Font(typeface, 100f)
         canvas.translate(10f, 120f)
-        val paint = Paint(color = Color.RED, style = PaintStyle.STROKE, antiAlias = true)
+        val paint = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE, antiAlias = true)
         canvas.drawString("Liberation Sans", 0f, 0f, font, paint)
     }
 

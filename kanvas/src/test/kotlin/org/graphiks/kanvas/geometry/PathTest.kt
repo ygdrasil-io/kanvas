@@ -1,9 +1,13 @@
 package org.graphiks.kanvas.geometry
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
@@ -53,7 +57,7 @@ class PathTest {
 
     @Test
     fun `Path addRRect`() {
-        val path = Path().addRRect(RRect(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
+        val path = Path().addRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
         assertTrue(path.verbs().size >= 5) // multiple lines + arcs + close
     }
 

@@ -20,7 +20,7 @@ import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class AnimatedImageOwnershipTest {
@@ -272,7 +272,7 @@ class AnimatedImageOwnershipTest {
     private fun bluePostProcess() = PictureRecorder().let { recorder ->
         recorder.beginRecording(RectF32.ofOriginSize(0f, 0f, 1f, 1f)).drawRect(
             RectF32.ofOriginSize(0f, 0f, 1f, 1f),
-            Paint(color = Color.BLUE),
+            Paint(color = ColorARGB.Blue),
         )
         recorder.finishRecordingAsPicture()
     }

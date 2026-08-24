@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ReadPixelsPictureGm : SkiaGm {
@@ -47,13 +47,13 @@ class ReadPixelsPictureGm : SkiaGm {
 
     private fun drawContents(c: Canvas) {
         val strokePaint = Paint(style = PaintStyle.STROKE, strokeWidth = 20f)
-        val c1 = strokePaint.copy(color = Color.fromRGBA(0.5f, 0f, 0f))
+        val c1 = strokePaint.copy(color = ColorARGB.fromRGBA(0.5f, 0f, 0f))
         val p1 = Path { }; p1.addCircle(40f, 40f, 35f)
         c.drawPath(p1, c1)
-        val c2 = strokePaint.copy(color = Color.fromRGBA(0f, 0.5f, 0f))
+        val c2 = strokePaint.copy(color = ColorARGB.fromRGBA(0f, 0.5f, 0f))
         val p2 = Path { }; p2.addCircle(50f, 50f, 35f)
         c.drawPath(p2, c2)
-        val c3 = strokePaint.copy(color = Color.fromRGBA(0f, 0f, 0.5f))
+        val c3 = strokePaint.copy(color = ColorARGB.fromRGBA(0f, 0f, 0.5f))
         val p3 = Path { }; p3.addCircle(60f, 60f, 35f)
         c.drawPath(p3, c3)
     }
@@ -65,7 +65,7 @@ class ReadPixelsPictureGm : SkiaGm {
         val picture = recorder.finishRecordingAsPicture()
         val surface = Surface(kCellWidth, kCellHeight)
         val sc = surface.canvas()
-        sc.clear(Color.TRANSPARENT)
+        sc.clear(ColorARGB.Transparent)
         picture.playback(sc)
         return surface.makeImageSnapshot()
     }

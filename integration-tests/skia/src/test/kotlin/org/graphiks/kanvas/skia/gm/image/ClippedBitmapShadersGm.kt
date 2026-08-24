@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,7 +31,7 @@ class ClippedBitmapShadersGm : SkiaGm {
             for (j in 0 until 3) {
                 if (i == 1 && j == 1) continue
                 val xOrigin = slideSize / 3f * j + margin
-                val colors = listOf(Color.RED, Color.GREEN, Color.BLACK, Color.BLUE)
+                val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Black, ColorARGB.Blue)
                 val idx = (i * 3 + j) % 4
                 canvas.drawRect(RectF32(xOrigin, yOrigin, xOrigin + rectSize, yOrigin + rectSize), Paint(color = colors[idx]))
             }

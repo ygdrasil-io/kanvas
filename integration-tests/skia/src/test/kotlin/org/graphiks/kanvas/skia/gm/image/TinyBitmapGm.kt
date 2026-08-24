@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/tinybitmap.cpp`.
@@ -35,7 +35,7 @@ class TinyBitmapGm : SkiaGm {
         )
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            paint.copy(color = Color.fromRGBA(1f, 1f, 1f, 0.5f)),
+            paint.copy(color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f)),
         )
     }
 }

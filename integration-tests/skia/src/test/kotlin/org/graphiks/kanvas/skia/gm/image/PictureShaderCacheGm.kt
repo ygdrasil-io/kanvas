@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class PictureShaderCacheGm : SkiaGm {
@@ -52,7 +52,7 @@ class PictureShaderCacheGm : SkiaGm {
     }
 
     private fun drawTile(canvas: Canvas) {
-        var paint = Paint(color = Color.GREEN, antiAlias = true)
+        var paint = Paint(color = ColorARGB.Green, antiAlias = true)
 
         val circle = Path { }.apply { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
         canvas.drawPath(circle, paint)
@@ -61,7 +61,7 @@ class PictureShaderCacheGm : SkiaGm {
             paint,
         )
 
-        paint = paint.copy(color = Color.RED)
+        paint = paint.copy(color = ColorARGB.Red)
         canvas.drawPath(Path { moveTo(tileSize / 2f, tileSize * 1f / 3f); lineTo(tileSize / 2f, tileSize * 2f / 3f) }, paint)
         canvas.drawPath(Path { moveTo(tileSize * 1f / 3f, tileSize / 2f); lineTo(tileSize * 2f / 3f, tileSize / 2f) }, paint)
     }

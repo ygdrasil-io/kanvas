@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.RectF32
@@ -31,13 +31,13 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.clipRect(RectF32.ofLTRB(0f, 0f, 500f, 500f))
 
-        val indigo = Color.fromRGBA(0x4b / 255f, 0f, 0x82 / 255f, 1f)
-        val violet = Color.fromRGBA(0xee / 255f, 0x82 / 255f, 0xee / 255f, 1f)
+        val indigo = ColorARGB.fromRGBA(0x4b / 255f, 0f, 0x82 / 255f, 1f)
+        val violet = ColorARGB.fromRGBA(0xee / 255f, 0x82 / 255f, 0xee / 255f, 1f)
         val stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(2f / 6f, Color(0xFFFFFF00u)),
-            GradientStop(3f / 6f, Color.GREEN),
-            GradientStop(4f / 6f, Color.BLUE),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(2f / 6f, ColorARGB.fromPackedUInt(0xFFFFFF00u)),
+            GradientStop(3f / 6f, ColorARGB.Green),
+            GradientStop(4f / 6f, ColorARGB.Blue),
             GradientStop(5f / 6f, indigo),
             GradientStop(1f, violet),
         )
@@ -58,7 +58,7 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
         val white = Paint(
             antiAlias = true,
             strokeCap = StrokeCap.SQUARE,
-            color = Color.WHITE,
+            color = ColorARGB.White,
         )
 
         fun drawLine(x0: Float, y0: Float, x1: Float, y1: Float, w: Float) {

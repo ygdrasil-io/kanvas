@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -39,7 +39,7 @@ class DiscardGm : SkiaGm {
                 val r = ((random.nextInt(192) + 64) and 0xFF) / 255f
                 val g = ((random.nextInt(192) + 64) and 0xFF) / 255f
                 val b = ((random.nextInt(192) + 64) and 0xFF) / 255f
-                val color = Color.fromRGBA(r, g, b)
+                val color = ColorARGB.fromRGBA(r, g, b)
 
                 surf.canvas {
                     when (random.nextInt(3)) {

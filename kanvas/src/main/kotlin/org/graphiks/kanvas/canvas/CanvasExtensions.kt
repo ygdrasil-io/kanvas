@@ -1,9 +1,13 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.geometry.Point2F32
@@ -53,8 +57,8 @@ fun Canvas.drawLine(x0: Float, y0: Float, x1: Float, y1: Float, paint: Paint) {
 
 /** Draw a rectangle with rounded corners using corner radii (rx, ry). */
 fun Canvas.drawRoundRect(rect: RectF32, rx: Float, ry: Float, paint: Paint) {
-    val r = CornerRadii(rx, ry)
-    drawRRect(RRect(rect, r, r, r, r), paint)
+    val r = CornerRadiiF32.of(rx, ry)
+    drawRRect(RRectF32.of(rect, r, r, r, r), paint)
 }
 
 /**
@@ -67,14 +71,14 @@ fun Canvas.drawRoundRect(rect: RectF32, rx: Float, ry: Float, paint: Paint) {
  */
 fun Canvas.drawPatch(
     cubics: List<Point2F32>,
-    colors: List<Color>? = null,
+    colors: List<ColorARGB>? = null,
     texCoords: List<Point2F32>? = null,
     paint: Paint,
 ) {
     // Tessellate Coons patch into a triangle mesh (4x4 subdivision = 32 triangles)
     val w = 4
     val positions = mutableListOf<Point2F32>()
-    val vColors = colors?.let { mutableListOf<Color>() }
+    val vColors = colors?.let { mutableListOf<ColorARGB>() }
     val vTexs = texCoords?.let { mutableListOf<Point2F32>() }
     val tl = colors?.getOrNull(0); val tr = colors?.getOrNull(1)
     val br = colors?.getOrNull(2); val bl = colors?.getOrNull(3)
@@ -86,11 +90,11 @@ fun Canvas.drawPatch(
             val uu = u.toFloat() / w
             positions.add(evalCubicPatch(cubics, uu, vv))
             if (tl != null && tr != null && br != null && bl != null) {
-                val ctl = Color.fromRGBA(tl.r, tl.g, tl.b, tl.a)
-                val ctr = Color.fromRGBA(tr.r, tr.g, tr.b, tr.a)
-                val cbr = Color.fromRGBA(br.r, br.g, br.b, br.a)
-                val cbl = Color.fromRGBA(bl.r, bl.g, bl.b, bl.a)
-                vColors!!.add(Color.fromRGBA(
+                val ctl = ColorARGB.fromRGBA(tl.r, tl.g, tl.b, tl.a)
+                val ctr = ColorARGB.fromRGBA(tr.r, tr.g, tr.b, tr.a)
+                val cbr = ColorARGB.fromRGBA(br.r, br.g, br.b, br.a)
+                val cbl = ColorARGB.fromRGBA(bl.r, bl.g, bl.b, bl.a)
+                vColors!!.add(ColorARGB.fromRGBA(
                     lerp(lerp(ctl.r, ctr.r, uu), lerp(cbl.r, cbr.r, uu), vv),
                     lerp(lerp(ctl.g, ctr.g, uu), lerp(cbl.g, cbr.g, uu), vv),
                     lerp(lerp(ctl.b, ctr.b, uu), lerp(cbl.b, cbr.b, uu), vv),

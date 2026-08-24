@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -56,7 +56,7 @@ class PictureShaderPerspGm : SkiaGm {
         for (strategy in DrawStrategy.entries) {
             canvas.save()
             val outline = Paint(
-                color = Color.WHITE,
+                color = ColorARGB.White,
                 style = PaintStyle.STROKE,
                 strokeWidth = 1f,
             )
@@ -70,11 +70,11 @@ class PictureShaderPerspGm : SkiaGm {
     }
 
     private fun drawTileContent(c: Canvas) {
-        val paint = Paint(antiAlias = true, color = Color.GREEN)
+        val paint = Paint(antiAlias = true, color = ColorARGB.Green)
         c.drawRect(RectF32.ofOriginSize(10f, 10f, 40f, 40f), paint)
         val fill = Paint(
             antiAlias = true,
-            color = Color.fromRGBA(0f, 0f, 1f, 0.5f),
+            color = ColorARGB.fromRGBA(0f, 0f, 1f, 0.5f),
         )
         val circle = Path { }
         circle.addCircle(70f, 70f, 20f)

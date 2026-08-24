@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -35,7 +35,7 @@ class LargeOvalsGm : SkiaGm {
             r.right - 15f, r.bottom - 15f,
         )
         val paint2 = Paint(
-            color = Color.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
+            color = ColorARGB.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
             antiAlias = true,
@@ -50,7 +50,7 @@ class LargeOvalsGm : SkiaGm {
             r.right + 55f, r.bottom + 55f,
         )
         val paint3 = Paint(
-            color = Color.fromRGBA(0x88 / 255f, 0x88 / 255f, 0x88 / 255f, 1f),
+            color = ColorARGB.fromRGBA(0x88 / 255f, 0x88 / 255f, 0x88 / 255f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 100f,
             antiAlias = true,
@@ -61,7 +61,7 @@ class LargeOvalsGm : SkiaGm {
             r.right - 15f, r.bottom - 15f,
         )
         val paint4 = Paint(
-            color = Color.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
+            color = ColorARGB.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
             antiAlias = true,

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,7 +33,7 @@ class BmpFilterQualityRepeatGm : SkiaGm {
     )
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1000f, 400f), Paint(color = Color(0xFFCCBBAAu)))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1000f, 400f), Paint(color = ColorARGB.fromPackedUInt(0xFFCCBBAAu)))
         val checkerboard = buildCheckerboard()
         drawAll(canvas, checkerboard, 2.5f)
         canvas.translate(0f, 250f)

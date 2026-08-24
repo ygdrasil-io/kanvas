@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -30,19 +30,19 @@ class GradientsAlphaManyStopsGm : SkiaGm {
 
         val kG = 34f / 255f
         val stops = listOf(
-            GradientStop(0f, Color.fromRGBA(kG, kG, kG, 1f)),
-            GradientStop(0.19f, Color.fromRGBA(kG, kG, kG, 0.738f)),
-            GradientStop(0.34f, Color.fromRGBA(kG, kG, kG, 0.541f)),
-            GradientStop(0.47f, Color.fromRGBA(kG, kG, kG, 0.382f)),
-            GradientStop(0.565f, Color.fromRGBA(kG, kG, kG, 0.278f)),
-            GradientStop(0.65f, Color.fromRGBA(kG, kG, kG, 0.194f)),
-            GradientStop(0.73f, Color.fromRGBA(kG, kG, kG, 0.126f)),
-            GradientStop(0.802f, Color.fromRGBA(kG, kG, kG, 0.075f)),
-            GradientStop(0.861f, Color.fromRGBA(kG, kG, kG, 0.042f)),
-            GradientStop(0.91f, Color.fromRGBA(kG, kG, kG, 0.021f)),
-            GradientStop(0.952f, Color.fromRGBA(kG, kG, kG, 0.008f)),
-            GradientStop(0.982f, Color.fromRGBA(kG, kG, kG, 0.002f)),
-            GradientStop(1f, Color.fromRGBA(kG, kG, kG, 0f)),
+            GradientStop(0f, ColorARGB.fromRGBA(kG, kG, kG, 1f)),
+            GradientStop(0.19f, ColorARGB.fromRGBA(kG, kG, kG, 0.738f)),
+            GradientStop(0.34f, ColorARGB.fromRGBA(kG, kG, kG, 0.541f)),
+            GradientStop(0.47f, ColorARGB.fromRGBA(kG, kG, kG, 0.382f)),
+            GradientStop(0.565f, ColorARGB.fromRGBA(kG, kG, kG, 0.278f)),
+            GradientStop(0.65f, ColorARGB.fromRGBA(kG, kG, kG, 0.194f)),
+            GradientStop(0.73f, ColorARGB.fromRGBA(kG, kG, kG, 0.126f)),
+            GradientStop(0.802f, ColorARGB.fromRGBA(kG, kG, kG, 0.075f)),
+            GradientStop(0.861f, ColorARGB.fromRGBA(kG, kG, kG, 0.042f)),
+            GradientStop(0.91f, ColorARGB.fromRGBA(kG, kG, kG, 0.021f)),
+            GradientStop(0.952f, ColorARGB.fromRGBA(kG, kG, kG, 0.008f)),
+            GradientStop(0.982f, ColorARGB.fromRGBA(kG, kG, kG, 0.002f)),
+            GradientStop(1f, ColorARGB.fromRGBA(kG, kG, kG, 0f)),
         )
 
         val shader = Shader.LinearGradient(

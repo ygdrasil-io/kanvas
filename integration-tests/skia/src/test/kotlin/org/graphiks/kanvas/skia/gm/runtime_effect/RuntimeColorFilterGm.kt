@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -56,7 +56,7 @@ class RuntimeColorFilterGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val cell = 256f
 
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.White))
 
         drawCell(canvas, 0, 0, ColorFilterNoopWgsl, UniformBlock {})
         drawCell(canvas, 1, 0, ColorFilterLumaToAlphaWgsl, UniformBlock {
@@ -82,7 +82,7 @@ class RuntimeColorFilterGm : SkiaGm {
         val x = col * 256f
         val y = row * 256f
         canvas.drawRect(RectF32(x, y, x + 256f, y + 256f), Paint(
-            color = Color.fromRGBA(1f, 1f, 1f, 1f),
+            color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f),
             colorFilter = colorFilter,
         ))
     }

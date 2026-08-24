@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/strokes.cpp` (DEF_SIMPLE_GM b_340982297).
@@ -25,9 +25,9 @@ class B340982297Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)),
+            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f)),
         )
-        val paint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f))
 
         val p1 = Path {
             moveTo(30.23983f, 48.5674667f)

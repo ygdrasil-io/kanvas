@@ -8,8 +8,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.min
 
@@ -114,19 +114,19 @@ class StrokeRectRRectsGm : SkiaGm {
         if (rrect) {
             val cornerScale = min(finalRect.width, finalRect.height)
             val strokeRadii = arrayOf(
-                CornerRadii(0.25f * cornerScale, 0.25f * cornerScale),
-                CornerRadii(0f, 0f),
-                CornerRadii(0.50f * cornerScale, 0.50f * cornerScale),
-                CornerRadii(0.75f * cornerScale, 0.75f * cornerScale),
+                CornerRadiiF32.of(0.25f * cornerScale, 0.25f * cornerScale),
+                CornerRadiiF32.of(0f, 0f),
+                CornerRadiiF32.of(0.50f * cornerScale, 0.50f * cornerScale),
+                CornerRadiiF32.of(0.75f * cornerScale, 0.75f * cornerScale),
             )
             val outerRadii = arrayOf(
-                CornerRadii(0.25f * cornerScale, 0.75f * cornerScale),
-                CornerRadii(0f, 0f),
-                CornerRadii(0.50f * cornerScale, 0.50f * cornerScale),
-                CornerRadii(0.75f * cornerScale, 0.25f * cornerScale),
+                CornerRadiiF32.of(0.25f * cornerScale, 0.75f * cornerScale),
+                CornerRadiiF32.of(0f, 0f),
+                CornerRadiiF32.of(0.50f * cornerScale, 0.50f * cornerScale),
+                CornerRadiiF32.of(0.75f * cornerScale, 0.25f * cornerScale),
             )
             val radii = if (width >= 0f) strokeRadii else outerRadii
-            val rr = RRect(finalRect, radii[0], radii[1], radii[2], radii[3])
+            val rr = RRectF32.of(finalRect, radii[0], radii[1], radii[2], radii[3])
             val path = Path { }.apply { addRRect(rr) }
             canvas.drawPath(path, paint)
         } else {
@@ -148,15 +148,15 @@ class StrokeRectRRectsGm : SkiaGm {
             if (cx % 2 != 0) 50f else (40f + stretch),
             if (cx % 2 != 0) (40f + stretch) else 50f,
         )
-        val bigCorner = CornerRadii(30f, 30f)
-        val rectCorner = CornerRadii(0f, 0f)
+        val bigCorner = CornerRadiiF32.of(30f, 30f)
+        val rectCorner = CornerRadiiF32.of(0f, 0f)
         val strokeRadii = arrayOf(
             if (cy % 2 != 0) rectCorner else bigCorner,
             if (cy % 2 != 0) bigCorner else rectCorner,
             if (cy % 2 != 0) rectCorner else bigCorner,
             if (cy % 2 != 0) bigCorner else rectCorner,
         )
-        val rr = RRect(rect, strokeRadii[0], strokeRadii[1], strokeRadii[2], strokeRadii[3])
+        val rr = RRectF32.of(rect, strokeRadii[0], strokeRadii[1], strokeRadii[2], strokeRadii[3])
         val path = Path { }.apply { addRRect(rr) }
         canvas.drawPath(path, paint)
         canvas.restore()
@@ -175,15 +175,15 @@ class StrokeRectRRectsGm : SkiaGm {
             if (cx % 2 != 0) 50f else (40f + stretch),
             if (cx % 2 != 0) (40f + stretch) else 50f,
         )
-        val bigCorner = CornerRadii(30f, 30f)
-        val rectCorner = CornerRadii(0f, 0f)
+        val bigCorner = CornerRadiiF32.of(30f, 30f)
+        val rectCorner = CornerRadiiF32.of(0f, 0f)
         val strokeRadii = arrayOf(
             if (cx % 2 != 0) rectCorner else bigCorner,
             if ((cx % 2) xor (cy % 2) != 0) bigCorner else rectCorner,
             if (cx % 2 != 0) bigCorner else rectCorner,
             if ((cx % 2) xor (cy % 2) != 0) rectCorner else bigCorner,
         )
-        val rr = RRect(rect, strokeRadii[0], strokeRadii[1], strokeRadii[2], strokeRadii[3])
+        val rr = RRectF32.of(rect, strokeRadii[0], strokeRadii[1], strokeRadii[2], strokeRadii[3])
         val path = Path { }.apply { addRRect(rr) }
         canvas.drawPath(path, paint)
         canvas.restore()

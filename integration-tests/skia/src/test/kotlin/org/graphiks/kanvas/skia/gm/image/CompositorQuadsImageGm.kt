@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,7 +32,7 @@ class CompositorQuadsImageGm : SkiaGm {
             canvas.save()
             canvas.translate(0f, 40f)
             for (row in 0 until 4) {
-                val paint = Paint(color = Color(0x80000000u))
+                val paint = Paint(color = ColorARGB.fromPackedUInt(0x80000000u))
                 canvas.drawImageRect(
                     image = image,
                     src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),

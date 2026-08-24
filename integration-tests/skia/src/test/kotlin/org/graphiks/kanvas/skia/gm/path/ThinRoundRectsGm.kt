@@ -12,9 +12,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 class ThinRoundRectsGm : SkiaGm {
@@ -27,8 +27,8 @@ class ThinRoundRectsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 1f)
-        val white = Paint(color = Color.WHITE, antiAlias = true)
-        val green = Paint(color = Color.GREEN, antiAlias = true)
+        val white = Paint(color = ColorARGB.White, antiAlias = true)
+        val green = Paint(color = ColorARGB.Green, antiAlias = true)
 
         for (i in 0 until 8) {
             canvas.save()
@@ -56,10 +56,10 @@ class ThinRoundRectsGm : SkiaGm {
 
     private fun drawVertRects(c: GmCanvas, p: Paint) {
         val radii = listOf(
-            CornerRadii(1f / 32f, 2f / 32f),
-            CornerRadii(3f / 32f, 1f / 32f),
-            CornerRadii(2f / 32f, 3f / 32f),
-            CornerRadii(1f / 32f, 3f / 32f),
+            CornerRadiiF32.of(1f / 32f, 2f / 32f),
+            CornerRadiiF32.of(3f / 32f, 1f / 32f),
+            CornerRadiiF32.of(2f / 32f, 3f / 32f),
+            CornerRadiiF32.of(1f / 32f, 3f / 32f),
         )
         val rects = arrayOf(
             RectF32(1f, 1f, 5.0f, 21f),
@@ -71,7 +71,7 @@ class ThinRoundRectsGm : SkiaGm {
             RectF32(29f, 1f, 29.0f, 21f),
         )
         for (r in rects) {
-            val rrect = RRect(r, radii[0], radii[1], radii[2], radii[3])
+            val rrect = RRectF32.of(r, radii[0], radii[1], radii[2], radii[3])
             c.drawPath(Path { }.apply { addRRect(rrect) }, p)
         }
     }
@@ -87,11 +87,11 @@ class ThinRoundRectsGm : SkiaGm {
             RectF32(1f, 29f, 21f, 29.0f),
         )
         for (r in rects) {
-            val rrect = RRect(r,
-                CornerRadii(1f / 32f, 2f / 32f),
-                CornerRadii(3f / 32f, 2f / 32f),
-                CornerRadii(3f / 32f, 4f / 32f),
-                CornerRadii(1f / 32f, 4f / 32f),
+            val rrect = RRectF32.of(r,
+                CornerRadiiF32.of(1f / 32f, 2f / 32f),
+                CornerRadiiF32.of(3f / 32f, 2f / 32f),
+                CornerRadiiF32.of(3f / 32f, 4f / 32f),
+                CornerRadiiF32.of(1f / 32f, 4f / 32f),
             )
             c.drawPath(Path { }.apply { addRRect(rrect) }, p)
         }
@@ -108,11 +108,11 @@ class ThinRoundRectsGm : SkiaGm {
             RectF32(29f, 29f, 29.0f, 29.0f),
         )
         for (r in rects) {
-            val rrect = RRect(r,
-                CornerRadii(1f / 32f, 2f / 32f),
-                CornerRadii(1f / 32f, 2f / 32f),
-                CornerRadii(1f / 32f, 2f / 32f),
-                CornerRadii(1f / 32f, 2f / 32f),
+            val rrect = RRectF32.of(r,
+                CornerRadiiF32.of(1f / 32f, 2f / 32f),
+                CornerRadiiF32.of(1f / 32f, 2f / 32f),
+                CornerRadiiF32.of(1f / 32f, 2f / 32f),
+                CornerRadiiF32.of(1f / 32f, 2f / 32f),
             )
             c.drawPath(Path { }.apply { addRRect(rrect) }, p)
         }

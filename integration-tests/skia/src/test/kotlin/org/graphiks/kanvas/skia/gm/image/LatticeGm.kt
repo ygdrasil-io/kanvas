@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.geometry.RectF32
@@ -78,9 +78,9 @@ class LatticeGm : SkiaGm {
         flags[12] = LatticeFlags.TRANSPARENT
         flags[19] = LatticeFlags.TRANSPARENT
 
-        val colors = MutableList<Color>(36) { Color.TRANSPARENT }
+        val colors = MutableList<ColorARGB>(36) { ColorARGB.Transparent }
         for (rectNum in 0 until 3) {
-            colors[fixedColorY[rectNum] * 6 + fixedColorX[rectNum]] = Color.BLACK
+            colors[fixedColorY[rectNum] * 6 + fixedColorX[rectNum]] = ColorARGB.Black
         }
 
         val lattice2 = Lattice(
@@ -131,21 +131,21 @@ class LatticeGm : SkiaGm {
             val strokeWidth = 6f
             val radius = kCap - strokeWidth / 2f
 
-            drawRoundRect(r, radius, radius, Paint(color = Color(0xFFFFFF00u), antiAlias = true))
+            drawRoundRect(r, radius, radius, Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF00u), antiAlias = true))
 
             var stripe = RectF32.ofOriginSize(kCap.toFloat(), 0f, kMid.toFloat(), kSize.toFloat())
-            drawRect(stripe, Paint(color = Color(0x8800FF00u)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x8800FF00u)))
             stripe = RectF32.ofOriginSize((kCap + kMid).toFloat(), 0f, kMid.toFloat(), kSize.toFloat())
-            drawRect(stripe, Paint(color = Color(0x880000FFu)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x880000FFu)))
             stripe = RectF32.ofOriginSize((kCap + 2 * kMid).toFloat(), 0f, kMid.toFloat(), kSize.toFloat())
-            drawRect(stripe, Paint(color = Color(0x88FF00FFu)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x88FF00FFu)))
 
             stripe = RectF32.ofOriginSize(0f, kCap.toFloat(), kSize.toFloat(), kMid.toFloat())
-            drawRect(stripe, Paint(color = Color(0x8800FF00u)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x8800FF00u)))
             stripe = RectF32.ofOriginSize(0f, (kCap + kMid).toFloat(), kSize.toFloat(), kMid.toFloat())
-            drawRect(stripe, Paint(color = Color(0x880000FFu)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x880000FFu)))
             stripe = RectF32.ofOriginSize(0f, (kCap + 2 * kMid).toFloat(), kSize.toFloat(), kMid.toFloat())
-            drawRect(stripe, Paint(color = Color(0x88FF00FFu)))
+            drawRect(stripe, Paint(color = ColorARGB.fromPackedUInt(0x88FF00FFu)))
         }
         return surf.makeImageSnapshot()
     }

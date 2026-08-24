@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.math.floor
@@ -867,7 +869,7 @@ private class PreparedTextPaintSnapshotter {
         }
         colorFilterSnapshots[filter]?.let { return it }
         val snapshot = when (filter) {
-            is ColorFilter.Matrix -> ColorFilter.Matrix(filter.values.copyOf())
+            is ColorFilter.Matrix -> ColorFilter.Matrix(ColorMatrixF32.of(filter.matrix.toFloatArray()))
             is ColorFilter.Blend -> filter.copy()
             is ColorFilter.Compose -> filter.copy(
                 outer = snapshotColorFilter(filter.outer, depth + 1),

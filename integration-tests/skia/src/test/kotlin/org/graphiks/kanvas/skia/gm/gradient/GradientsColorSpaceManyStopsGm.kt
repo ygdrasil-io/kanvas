@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -28,7 +28,7 @@ class GradientsColorSpaceManyStopsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f))
+            Paint(color = ColorARGB.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f))
         )
         
         val stopCount = 200
@@ -41,7 +41,7 @@ class GradientsColorSpaceManyStopsGm : SkiaGm {
             val b = (255 + (0 - 255) * t + 0.5f).toInt().coerceIn(0, 255)
             stops.add(GradientStop(
                 i.toFloat() / (stopCount - 1).toFloat(),
-                Color.fromRGBA(r / 255f, g / 255f, b / 255f, 1f)
+                ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, 1f)
             ))
         }
         

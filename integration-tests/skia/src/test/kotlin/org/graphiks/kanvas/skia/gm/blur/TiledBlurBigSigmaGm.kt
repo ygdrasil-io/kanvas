@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -40,7 +40,7 @@ class TiledBlurBigSigmaGm : SkiaGm {
                     ((y + 1) * kTileHeight).toFloat(),
                 ))
 
-                val inner = ImageFilter.ColorFilter(ColorFilter.Blend(Color.BLACK, BlendMode.SRC), null)
+                val inner = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Black, BlendMode.SRC), null)
                 val blur = ImageFilter.Blur(206f, 206f, tileMode = TileMode.CLAMP, input = inner)
 
                 val p = Paint(imageFilter = blur)
@@ -48,7 +48,7 @@ class TiledBlurBigSigmaGm : SkiaGm {
                 canvas.clipRect(RectF32(0f, 0f, 1970f, 1223f))
                 canvas.saveLayer(null, p)
 
-                val fill = Paint(color = Color.BLUE)
+                val fill = Paint(color = ColorARGB.Blue)
                 canvas.drawCircle(600f, 150f, 350f, fill)
 
                 canvas.restore()

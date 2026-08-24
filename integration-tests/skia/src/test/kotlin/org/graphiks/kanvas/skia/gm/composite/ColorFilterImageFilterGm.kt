@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
@@ -8,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -26,7 +28,7 @@ class ColorFilterImageFilterGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val r = RectF32(0f, 0f, FILTER_WIDTH, FILTER_HEIGHT)
-        val redPaint = Paint(color = Color.RED)
+        val redPaint = Paint(color = ColorARGB.Red)
 
         canvas.save()
         var b = -1.0f
@@ -106,7 +108,7 @@ class ColorFilterImageFilterGm : SkiaGm {
             0f, 0f, 1f, 0f, brightness,
             0f, 0f, 0f, 1f, 0f,
         )
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 
     private fun cfMakeGrayscale(): ColorFilter {
@@ -115,10 +117,10 @@ class ColorFilterImageFilterGm : SkiaGm {
         matrix[5] = 0.2126f; matrix[6] = 0.7152f; matrix[7] = 0.0722f
         matrix[10] = 0.2126f; matrix[11] = 0.7152f; matrix[12] = 0.0722f
         matrix[18] = 1.0f
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 
-    private fun cfMakeColorize(color: Color): ColorFilter =
+    private fun cfMakeColorize(color: ColorARGB): ColorFilter =
         ColorFilter.Blend(color, BlendMode.SRC)
 
     private fun makeBrightness(amount: Float, input: ImageFilter?): ImageFilter =
@@ -128,7 +130,7 @@ class ColorFilterImageFilterGm : SkiaGm {
         ImageFilter.ColorFilter(cfMakeGrayscale(), input)
 
     private fun makeModeBlue(input: ImageFilter?): ImageFilter =
-        ImageFilter.ColorFilter(cfMakeColorize(Color.BLUE), input)
+        ImageFilter.ColorFilter(cfMakeColorize(ColorARGB.Blue), input)
 
     private fun makeBlur(amount: Float, input: ImageFilter?): ImageFilter =
         ImageFilter.Blur(amount, amount, input = input)

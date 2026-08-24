@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -26,15 +26,15 @@ class MeshUpdateGm : SkiaGm {
     override val height = 490
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        drawStrip(canvas, 20f, Color(0xFF0055FFu), 15f, 95f, 45f, 125f, false)
-        drawStrip(canvas, 170f, Color(0xFFFF6A00u), 15f, 95f, 45f, 125f, true)
-        drawStrip(canvas, 320f, Color(0xFF0A9F43u), 15f, 95f, 45f, 125f, true, indexSwap = true)
+        drawStrip(canvas, 20f, ColorARGB.fromPackedUInt(0xFF0055FFu), 15f, 95f, 45f, 125f, false)
+        drawStrip(canvas, 170f, ColorARGB.fromPackedUInt(0xFFFF6A00u), 15f, 95f, 45f, 125f, true)
+        drawStrip(canvas, 320f, ColorARGB.fromPackedUInt(0xFF0A9F43u), 15f, 95f, 45f, 125f, true, indexSwap = true)
     }
 
     private fun drawStrip(
         canvas: GmCanvas,
         yOffset: Float,
-        color: Color,
+        color: ColorARGB,
         leftStart: Float,
         rightStart: Float,
         leftUpdated: Float,

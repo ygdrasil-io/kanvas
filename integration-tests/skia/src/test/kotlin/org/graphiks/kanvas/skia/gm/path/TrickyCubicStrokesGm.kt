@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
@@ -87,7 +87,7 @@ open class TrickyCubicStrokesGm(
             canvas.concat(matrix)
 
             val rgba = rand.nextInt() or -0x807F80
-            val color = Color.fromRGBA(
+            val color = ColorARGB.fromRGBA(
                 ((rgba shr 16) and 0xFF).toFloat() / 255f,
                 ((rgba shr 8) and 0xFF).toFloat() / 255f,
                 (rgba and 0xFF).toFloat() / 255f,

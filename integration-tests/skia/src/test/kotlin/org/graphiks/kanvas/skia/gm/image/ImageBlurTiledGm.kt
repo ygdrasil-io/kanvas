@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -53,10 +53,10 @@ class ImageBlurTiledGm(
     private fun makeTextImage(): Image {
         val textSurface = Surface(128, 128)
         textSurface.canvas {
-            drawRect(RectF32(0f, 0f, 128f, 128f), Paint(color = Color.WHITE))
+            drawRect(RectF32(0f, 0f, 128f, 128f), Paint(color = ColorARGB.White))
             for (i in 0 until 4) {
                 val y = 15f + i * 30f
-                drawRect(RectF32(10f, y, 118f, y + 22f), Paint(color = Color.BLACK))
+                drawRect(RectF32(10f, y, 118f, y + 22f), Paint(color = ColorARGB.Black))
             }
         }
         return textSurface.makeImageSnapshot()

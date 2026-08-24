@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/fontregen.cpp::FontRegenGM`.
@@ -32,9 +32,9 @@ class FontRegenGm : SkiaGm {
         val b1 = font162.toTextBlob("ABCDEFGHI", 0f, 0f)
         val b2 = font162.toTextBlob("NOPQRSTUV", 0f, 0f)
 
-        canvas.drawTextBlob(b0, 10f, 80f, Paint(color = Color.BLACK))
-        canvas.drawTextBlob(b1, 10f, 225f, Paint(color = Color.BLACK))
-        canvas.drawTextBlob(b0, 10f, 305f, Paint(color = Color(0xFF010101u)))
-        canvas.drawTextBlob(b2, 10f, 465f, Paint(color = Color(0xFF010101u)))
+        canvas.drawTextBlob(b0, 10f, 80f, Paint(color = ColorARGB.Black))
+        canvas.drawTextBlob(b1, 10f, 225f, Paint(color = ColorARGB.Black))
+        canvas.drawTextBlob(b0, 10f, 305f, Paint(color = ColorARGB.fromPackedUInt(0xFF010101u)))
+        canvas.drawTextBlob(b2, 10f, 465f, Paint(color = ColorARGB.fromPackedUInt(0xFF010101u)))
     }
 }

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -28,7 +28,7 @@ class GradientsNoTextureGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val baseColors = listOf(Color.RED, Color.fromRGBA(0f, 1f, 0f), Color.BLUE, Color.WHITE)
+        val baseColors = listOf(ColorARGB.Red, ColorARGB.fromRGBA(0f, 1f, 0f), ColorARGB.Blue, ColorARGB.White)
         val gradData = listOf(
             listOf(baseColors[0]),
             baseColors.take(2),
@@ -41,7 +41,7 @@ class GradientsNoTextureGm : SkiaGm {
         val tm = TileMode.CLAMP
         val rect = RectF32.ofLTRB(0f, 0f, 50f, 50f)
 
-        fun evenlyStopped(colors: List<Color>): List<GradientStop> =
+        fun evenlyStopped(colors: List<ColorARGB>): List<GradientStop> =
             colors.mapIndexed { i, c -> GradientStop(if (colors.size > 1) i.toFloat() / (colors.size - 1) else 0f, c) }
 
         val paint = Paint(antiAlias = true)

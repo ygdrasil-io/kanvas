@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -65,13 +65,13 @@ class ImageBlurRepeatUnclippedGm : SkiaGm {
         canvas.drawImage(img, RectF32.ofOriginSize(0f, 0f, bmpW.toFloat(), bmpH.toFloat()), paint)
         canvas.restore()
 
-        val line = Paint(color = Color.BLACK, style = PaintStyle.STROKE)
+        val line = Paint(color = ColorARGB.Black, style = PaintStyle.STROKE)
         canvas.drawRect(RectF32.ofOriginSize(0f, -30f, 99f, 9f), line)
     }
 
     private fun drawCheckerboard(canvas: GmCanvas, w: Int, h: Int, checkSize: Int) {
-        val c1 = Color.fromRGBA(0.753f, 0.753f, 0.753f, 1f)
-        val c2 = Color.fromRGBA(0.502f, 0.502f, 0.502f, 1f)
+        val c1 = ColorARGB.fromRGBA(0.753f, 0.753f, 0.753f, 1f)
+        val c2 = ColorARGB.fromRGBA(0.502f, 0.502f, 0.502f, 1f)
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = c1))
         var y = 0
         while (y < h) {

@@ -8,8 +8,8 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 private const val BYTES_PER_PIXEL: Int = 4
@@ -73,8 +73,8 @@ private fun renderSolidRRect(width: Int, height: Int): Pair<RenderResult, SceneD
     val surface = Surface(width = width, height = height)
     val canvas = surface.canvas()
 
-    val blue = Paint.fill(Color.fromRGBA(0f, 0.5f, 1f, 1f))
-    canvas.drawRRect(RRect(RectF32(50f, 50f, 270f, 190f), 20f), blue)
+    val blue = Paint.fill(ColorARGB.fromRGBA(0f, 0.5f, 1f, 1f))
+    canvas.drawRRect(RRectF32.of(RectF32(50f, 50f, 270f, 190f), 20f), blue)
 
     val result = surface.render()
     return Pair(result, SceneDescription(width, height))
@@ -84,7 +84,7 @@ private fun renderSolidStarPath(width: Int, height: Int): Pair<RenderResult, Sce
     val surface = Surface(width = width, height = height)
     val canvas = surface.canvas()
 
-    val magenta = Paint.fill(Color.fromRGBA(1f, 0f, 1f, 1f))
+    val magenta = Paint.fill(ColorARGB.fromRGBA(1f, 0f, 1f, 1f))
     val path = Path {
         moveTo(160f, 20f)
         lineTo(180f, 80f)
@@ -108,7 +108,7 @@ private fun renderSolidPath(width: Int, height: Int): Pair<RenderResult, SceneDe
     val surface = Surface(width = width, height = height)
     val canvas = surface.canvas()
 
-    val green = Paint.fill(Color.fromRGBA(0f, 1f, 0f, 1f))
+    val green = Paint.fill(ColorARGB.fromRGBA(0f, 1f, 0f, 1f))
     val path = Path {
         moveTo(80f, 50f)
         lineTo(240f, 50f)
@@ -125,7 +125,7 @@ private fun renderSolidRedRect(width: Int, height: Int): Pair<RenderResult, Scen
     val surface = Surface(width = width, height = height)
     val canvas = surface.canvas()
 
-    val red = Paint.fill(Color.fromRGBA(1f, 0f, 0f, 1f))
+    val red = Paint.fill(ColorARGB.fromRGBA(1f, 0f, 0f, 1f))
     canvas.drawRect(RectF32(50f, 50f, 270f, 190f), red)
 
     val result = surface.render()

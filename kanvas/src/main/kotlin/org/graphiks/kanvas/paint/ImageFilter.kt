@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.paint
 
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 
@@ -23,7 +23,7 @@ sealed interface ImageFilter {
     data class DropShadow(
         val dx: Float, val dy: Float,
         val sigmaX: Float, val sigmaY: Float,
-        val color: Color,
+        val color: ColorARGB,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class ColorFilter(val filter: org.graphiks.kanvas.paint.ColorFilter, val input: ImageFilter? = null) : ImageFilter
@@ -35,29 +35,29 @@ sealed interface ImageFilter {
     data class Dilate(val radiusX: Float, val radiusY: Float, val input: ImageFilter? = null) : ImageFilter
     data class Erode(val radiusX: Float, val radiusY: Float, val input: ImageFilter? = null) : ImageFilter
     data class DistantLitDiffuse(
-        val direction: Vector2F32, val lightColor: Color, val surfaceScale: Float, val kd: Float,
+        val direction: Vector2F32, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class PointLitDiffuse(
-        val location: Point2F32, val lightColor: Color, val surfaceScale: Float, val kd: Float,
+        val location: Point2F32, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class SpotLitDiffuse(
         val location: Point2F32, val target: Point2F32, val specularExponent: Float, val cutoffAngle: Float,
-        val lightColor: Color, val surfaceScale: Float, val kd: Float,
+        val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class DistantLitSpecular(
-        val direction: Vector2F32, val lightColor: Color, val surfaceScale: Float, val ks: Float, val shininess: Float,
+        val direction: Vector2F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class PointLitSpecular(
-        val location: Point2F32, val lightColor: Color, val surfaceScale: Float, val ks: Float, val shininess: Float,
+        val location: Point2F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class SpotLitSpecular(
         val location: Point2F32, val target: Point2F32, val specularExponent: Float, val cutoffAngle: Float,
-        val lightColor: Color, val surfaceScale: Float, val ks: Float, val shininess: Float,
+        val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float,
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class Offset(val dx: Float, val dy: Float, val input: ImageFilter? = null) : ImageFilter
@@ -70,7 +70,7 @@ sealed interface ImageFilter {
     data class Picture(val picture: org.graphiks.kanvas.picture.Picture, val src: RectF32? = null) : ImageFilter
     data class Magnifier(val src: RectF32, val zoom: Float, val inset: Float, val input: ImageFilter? = null) : ImageFilter
     data class MatrixConvolution(
-        val kernelSize: Size, val kernel: FloatArray, val gain: Float, val bias: Float,
+        val kernelSize: SizeF32, val kernel: FloatArray, val gain: Float, val bias: Float,
         val kernelOffset: Vector2F32, val tileMode: TileMode, val convolveAlpha: Boolean,
         val input: ImageFilter? = null,
     ) : ImageFilter {

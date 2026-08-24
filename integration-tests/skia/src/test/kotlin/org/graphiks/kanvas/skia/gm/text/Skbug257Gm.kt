@@ -14,12 +14,12 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/skbug_257.cpp`.
@@ -45,7 +45,7 @@ class Skbug257Gm : SkiaGm {
         canvas.scale(scale, scale)
 
         canvas.save()
-        val paint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f))
+        val paint = Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f))
 
         canvas.drawColor(0.8078f, 0.8118f, 0.8078f, 1f)
         val translate = 225364f
@@ -57,7 +57,7 @@ class Skbug257Gm : SkiaGm {
         canvas.drawRect(rect, checkPaint)
 
         canvas.translate(size, 0f)
-        val rrect = RRect(rect, CornerRadii(40f, 40f), CornerRadii(40f, 40f), CornerRadii(40f, 40f), CornerRadii(40f, 40f))
+        val rrect = RRectF32.of(rect, CornerRadiiF32.of(40f, 40f), CornerRadiiF32.of(40f, 40f), CornerRadiiF32.of(40f, 40f), CornerRadiiF32.of(40f, 40f))
         canvas.drawRRect(rrect, checkPaint)
 
         canvas.translate(-size, size)
@@ -83,7 +83,7 @@ class Skbug257Gm : SkiaGm {
 
         canvas.restore()
 
-        val refStroke = Paint(color = Color.fromRGBA(0f, 1f, 1f, 1f), style = PaintStyle.STROKE, strokeWidth = 5f)
+        val refStroke = Paint(color = ColorARGB.fromRGBA(0f, 1f, 1f, 1f), style = PaintStyle.STROKE, strokeWidth = 5f)
         canvas.drawCircle(mid, mid, mid - 10f, refStroke)
         canvas.drawCircle(3f * mid, mid, mid - 10f, refStroke)
         canvas.drawCircle(mid, 384f, mid - 10f, refStroke)
@@ -98,8 +98,8 @@ class Skbug257Gm : SkiaGm {
         val bmSize = 2 * tileSize
         val surface = Surface(bmSize, bmSize)
         surface.canvas {
-            drawColor(Color.fromRGBA(1f, 1f, 1f, 1f))
-            val fill = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f))
+            drawColor(ColorARGB.fromRGBA(1f, 1f, 1f, 1f))
+            val fill = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f))
             for (yy in 0 until tileSize) {
                 for (xx in 0 until tileSize) {
                     val r = RectF32(xx.toFloat(), yy.toFloat(), (xx + 1).toFloat(), (yy + 1).toFloat())

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.image
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ColorFilter
@@ -14,7 +16,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -34,12 +36,12 @@ class ImageFiltersCropExpandGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val checkerboard = makeCheckerboard()
 
-        val cfAlphaTrans = ColorFilter.Matrix(floatArrayOf(
+        val cfAlphaTrans = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
             0f, 1f, 0f, 0f, 1f,
             0f, 0f, 1f, 0f, 0f,
             0f, 0f, 0f, 1f, 32f / 255f,
-        ))
+        )))
 
         val margin = 12f
         val pointLocation = Point2F32(0f, 0f)
@@ -62,9 +64,9 @@ class ImageFiltersCropExpandGm : SkiaGm {
             draw(canvas, checkerboard, bigRect, ImageFilter.Blur(8f, 8f, TileMode.DECAL, null))
             draw(canvas, checkerboard, bigRect, ImageFilter.Dilate(2f, 2f, null))
             draw(canvas, checkerboard, bigRect, ImageFilter.Erode(2f, 2f, null))
-            draw(canvas, checkerboard, bigRect, ImageFilter.DropShadow(10f, 10f, 3f, 3f, Color.BLUE, null))
+            draw(canvas, checkerboard, bigRect, ImageFilter.DropShadow(10f, 10f, 3f, 3f, ColorARGB.Blue, null))
             draw(canvas, checkerboard, bigRect, ImageFilter.Offset(-8f, 16f, null))
-            draw(canvas, checkerboard, bigRect, ImageFilter.PointLitDiffuse(pointLocation, Color.WHITE, 1f, 2f, null))
+            draw(canvas, checkerboard, bigRect, ImageFilter.PointLitDiffuse(pointLocation, ColorARGB.White, 1f, 2f, null))
 
             canvas.restore()
             canvas.translate(0f, 80f)
@@ -78,7 +80,7 @@ class ImageFiltersCropExpandGm : SkiaGm {
         canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
         canvas.restore()
 
-        val strokePaint = Paint(color = Color.RED, style = PaintStyle.STROKE)
+        val strokePaint = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE)
         canvas.drawRect(layerRect, strokePaint)
 
         canvas.translate(80f, 0f)
@@ -87,9 +89,9 @@ class ImageFiltersCropExpandGm : SkiaGm {
     private fun makeCheckerboard(): Image {
         val surface = Surface(64, 64)
         surface.canvas {
-            drawColor(Color.fromRGBA(1f, 0f, 0f, 1f))
-            val darkPaint = Paint(color = Color.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
-            val lightPaint = Paint(color = Color.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
+            drawColor(ColorARGB.fromRGBA(1f, 0f, 0f, 1f))
+            val darkPaint = Paint(color = ColorARGB.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
+            val lightPaint = Paint(color = ColorARGB.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
             var y = 8
             while (y < 48) {
                 var x = 8

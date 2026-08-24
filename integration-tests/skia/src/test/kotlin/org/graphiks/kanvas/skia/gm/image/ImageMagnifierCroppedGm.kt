@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,7 +25,7 @@ class ImageMagnifierCroppedGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.Black))
 
         val source = makeBlueGridImage()
         val wh = width.toFloat()
@@ -45,7 +45,7 @@ class ImageMagnifierCroppedGm : SkiaGm {
         val wh = 256f
         val surface = Surface(wh.toInt(), wh.toInt())
         surface.canvas {
-            val paint = Paint(color = Color.BLUE)
+            val paint = Paint(color = ColorARGB.Blue)
             var pos = 0f
             while (pos < wh) {
                 drawRect(RectF32(0f, pos, wh, pos + 1f), paint)

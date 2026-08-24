@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bigtileimagefilter.cpp`.
@@ -29,8 +29,8 @@ class BigTileImageFilterGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 1f)
 
-        val redImage = createCircleTexture(kBitmapSize, Color.RED)
-        val greenImage = createCircleTexture(kBitmapSize, Color.GREEN)
+        val redImage = createCircleTexture(kBitmapSize, ColorARGB.Red)
+        val greenImage = createCircleTexture(kBitmapSize, ColorARGB.Green)
 
         val bound = RectF32.ofOriginSize(0f, 0f, kWidth.toFloat(), kHeight.toFloat())
         val tileRed: ImageFilter = ImageFilter.Tile(
@@ -56,12 +56,12 @@ class BigTileImageFilterGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun createCircleTexture(size: Int, color: Color): Image {
+    private fun createCircleTexture(size: Int, color: ColorARGB): Image {
         val surface = Surface(size, size)
         val path = Path { }
         path.addCircle(size / 2f, size / 2f, size / 2f)
         surface.canvas {
-            drawColor(Color.fromRGBA(0f, 0f, 0f, 1f))
+            drawColor(ColorARGB.fromRGBA(0f, 0f, 0f, 1f))
             drawPath(path, Paint(color = color, style = PaintStyle.STROKE, strokeWidth = 3f))
         }
         return surface.makeImageSnapshot()

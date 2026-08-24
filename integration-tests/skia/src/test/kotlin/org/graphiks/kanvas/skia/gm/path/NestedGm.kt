@@ -6,8 +6,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -29,7 +29,7 @@ class NestedGm : SkiaGm {
     private fun addShape(path: Path, rect: RectF32, shape: Shape) {
         when (shape) {
             Shape.RECT -> path.addRect(rect)
-            Shape.ROUND_RECT -> path.addRRect(RRect(rect, 5f))
+            Shape.ROUND_RECT -> path.addRRect(RRectF32.of(rect, 5f))
             Shape.OVAL -> path.addOval(rect)
         }
     }
@@ -40,7 +40,7 @@ class NestedGm : SkiaGm {
             for (x in 0 until width step 10) {
                 val r = RectF32.ofOriginSize(x.toFloat(), y.toFloat(), 10f, 10f)
                 val c = rng.nextInt() or 0xFF000000.toInt()
-                canvas.drawRect(r, Paint(color = Color.fromArgbInt(c)))
+                canvas.drawRect(r, Paint(color = ColorARGB.fromPackedInt(c)))
             }
         }
         val outerRect = RectF32.ofOriginSize(0f, 0f, 40f, 40f)
@@ -48,7 +48,7 @@ class NestedGm : SkiaGm {
             RectF32.ofLTRB(10f, 10f, 30f, 30f),
             RectF32.ofLTRB(0.5f, 18f, 4.5f, 22f),
         )
-        val shapePaint = Paint(color = Color.BLACK, antiAlias = true)
+        val shapePaint = Paint(color = ColorARGB.Black, antiAlias = true)
         var xOff = 2f; var yOff = 2f
         for (outerShape in Shape.entries) {
             for (innerShape in Shape.entries) {

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -72,7 +72,7 @@ private fun makeBm(rawHeight: Int): Pair<org.graphiks.kanvas.image.Image, Int> {
             val g = ((colorInt ushr 8) and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
             val paint = Paint(
-                color = Color.fromRGBA(r, g, b),
+                color = ColorARGB.fromRGBA(r, g, b),
                 style = PaintStyle.STROKE,
                 strokeWidth = K_THICKNESS,
                 strokeCap = StrokeCap.ROUND,

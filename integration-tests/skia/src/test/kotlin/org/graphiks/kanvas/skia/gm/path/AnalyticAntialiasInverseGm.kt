@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/aaa.cpp::analytic_antialias_inverse`.
@@ -24,7 +24,7 @@ class AnalyticAntialiasInverseGm : SkiaGm {
     override val height = 800
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(antiAlias = true, color = Color.RED)
+        val paint = Paint(antiAlias = true, color = ColorARGB.Red)
         canvas.save()
         val path = Path { }.also { it.addCircle(100f, 100f, 30f) }
         path.fillType = FillType.INVERSE_WINDING

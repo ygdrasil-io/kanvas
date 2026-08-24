@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -71,7 +71,7 @@ abstract class GlyphPosGm(
 
     private fun drawTestCase(canvas: GmCanvas, textScale: Float, drawRef: Boolean) {
         var paint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             strokeWidth = strokeWidth,
             style = strokeStyle,
@@ -83,18 +83,18 @@ abstract class GlyphPosGm(
             paint = paint.copy(
                 style = PaintStyle.STROKE,
                 strokeWidth = 0f,
-                color = Color.GREEN,
+                color = ColorARGB.Green,
             )
             val bounds = RectF32(0f, -font.size * 0.3f, font.size * kText.length * 0.6f, font.size * 0.3f)
             canvas.drawRect(bounds, paint)
 
             val advance = font.size * kText.length * 0.45f
-            paint = paint.copy(color = Color.RED)
+            paint = paint.copy(color = ColorARGB.Red)
             canvas.drawLine(0f, 0f, advance, 0f, paint)
         }
 
         paint = paint.copy(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             strokeWidth = strokeWidth,
             style = strokeStyle,
         )
@@ -104,7 +104,7 @@ abstract class GlyphPosGm(
             paint = paint.copy(
                 style = PaintStyle.STROKE,
                 strokeWidth = 0f,
-                color = Color(0xFFFF00FFu),
+                color = ColorARGB.fromPackedUInt(0xFFFF00FFu),
             )
             var w = 0f
             for (i in kText.indices) {

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -36,7 +36,7 @@ class PictureCullRectGm : SkiaGm {
     private fun makePicture(): Picture {
         val rec = PictureRecorder()
         val recCanvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
-        val paint = Paint(color = Color(0x800000FFu))
+        val paint = Paint(color = ColorARGB.fromPackedUInt(0x800000FFu))
         val rect = RectF32.ofLTRB(0f, 80f, 100f, 100f)
         recCanvas.drawRect(rect, paint)
         val oval = Path { }

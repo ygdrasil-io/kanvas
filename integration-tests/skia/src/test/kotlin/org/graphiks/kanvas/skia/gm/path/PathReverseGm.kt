@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -64,7 +64,7 @@ class PathReverseGm : SkiaGm {
         val strokePaint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.RED,
+            color = ColorARGB.Red,
         )
         canvas.drawPath(path, strokePaint)
     }

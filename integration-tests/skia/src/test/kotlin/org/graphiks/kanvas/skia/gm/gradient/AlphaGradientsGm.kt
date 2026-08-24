@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -27,23 +27,23 @@ class AlphaGradientsGm : SkiaGm {
     override val height = 480
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val white = Color.fromRGBA(1f, 1f, 1f, 1f)
-        val red = Color.fromRGBA(1f, 0f, 0f, 1f)
-        val blue = Color.fromRGBA(0f, 0f, 1f, 1f)
+        val white = ColorARGB.fromRGBA(1f, 1f, 1f, 1f)
+        val red = ColorARGB.fromRGBA(1f, 0f, 0f, 1f)
+        val blue = ColorARGB.fromRGBA(0f, 0f, 1f, 1f)
 
         val pairs = listOf(
-            white to Color.fromRGBA(0f, 0f, 0f, 0f),
-            white to Color.fromRGBA(1f, 0f, 0f, 0f),
-            white to Color.fromRGBA(1f, 1f, 0f, 0f),
-            white to Color.fromRGBA(1f, 1f, 1f, 0f),
-            red to Color.fromRGBA(0f, 0f, 0f, 0f),
-            red to Color.fromRGBA(1f, 0f, 0f, 0f),
-            red to Color.fromRGBA(1f, 1f, 0f, 0f),
-            red to Color.fromRGBA(1f, 1f, 1f, 0f),
-            blue to Color.fromRGBA(0f, 0f, 0f, 0f),
-            blue to Color.fromRGBA(1f, 0f, 0f, 0f),
-            blue to Color.fromRGBA(1f, 1f, 0f, 0f),
-            blue to Color.fromRGBA(1f, 1f, 1f, 0f),
+            white to ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
+            white to ColorARGB.fromRGBA(1f, 0f, 0f, 0f),
+            white to ColorARGB.fromRGBA(1f, 1f, 0f, 0f),
+            white to ColorARGB.fromRGBA(1f, 1f, 1f, 0f),
+            red to ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
+            red to ColorARGB.fromRGBA(1f, 0f, 0f, 0f),
+            red to ColorARGB.fromRGBA(1f, 1f, 0f, 0f),
+            red to ColorARGB.fromRGBA(1f, 1f, 1f, 0f),
+            blue to ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
+            blue to ColorARGB.fromRGBA(1f, 0f, 0f, 0f),
+            blue to ColorARGB.fromRGBA(1f, 1f, 0f, 0f),
+            blue to ColorARGB.fromRGBA(1f, 1f, 1f, 0f),
         )
 
         val r = RectF32(0f, 0f, 300f, 30f)
@@ -60,7 +60,7 @@ class AlphaGradientsGm : SkiaGm {
         }
     }
 
-    private fun drawGrad(canvas: GmCanvas, r: RectF32, c0: Color, c1: Color) {
+    private fun drawGrad(canvas: GmCanvas, r: RectF32, c0: ColorARGB, c1: ColorARGB) {
         val stops = listOf(
             GradientStop(0f, c0),
             GradientStop(1f, c1),
@@ -70,7 +70,7 @@ class AlphaGradientsGm : SkiaGm {
             stops = stops, tileMode = TileMode.CLAMP,
         ))
         canvas.drawRect(r, paint)
-        val strokePaint = Paint(color = Color.BLACK, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
+        val strokePaint = Paint(color = ColorARGB.Black, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
         canvas.drawRect(r, strokePaint)
     }
 }

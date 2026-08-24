@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -68,7 +68,7 @@ class DrawImageSetGm : SkiaGm {
         for (filterLinear in booleanArrayOf(false, true)) {
             for (mi in matrices.indices) {
                 val mat = matrices[mi] ?: continue
-                val redPaint = Paint(color = Color.RED, antiAlias = true, strokeWidth = 0f)
+                val redPaint = Paint(color = ColorARGB.Red, antiAlias = true, strokeWidth = 0f)
 
                 for (x in 1 until kM) {
                     val p1 = mat.transform(Point2F32(x * kTileW.toFloat(), 0f))

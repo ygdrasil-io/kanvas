@@ -23,7 +23,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -46,7 +46,7 @@ class GPUPreparedTextStrokeTest {
                 prepare(
                     listOf(
                         text(
-                            Paint.stroke(Color.RED, style.width).copy(
+                            Paint.stroke(ColorARGB.Red, style.width).copy(
                                 strokeCap = style.cap,
                                 strokeJoin = style.join,
                                 strokeMiter = style.miter,
@@ -76,9 +76,9 @@ class GPUPreparedTextStrokeTest {
 
     @Test
     fun `supported text dash is expanded once by the common stroke authority`() {
-        val solid = preparedPaths(Paint.stroke(Color.BLUE, 3f))
+        val solid = preparedPaths(Paint.stroke(ColorARGB.Blue, 3f))
         val dashed = preparedPaths(
-            Paint.stroke(Color.BLUE, 3f).copy(
+            Paint.stroke(ColorARGB.Blue, 3f).copy(
                 strokeCap = StrokeCap.ROUND,
                 pathEffect = PathEffect.Dash(floatArrayOf(4f, 2f), phase = 1f),
             ),
@@ -96,16 +96,16 @@ class GPUPreparedTextStrokeTest {
     @Test
     fun `miter limit and join remain semantic inputs to common stroke expansion`() {
         val bevel = preparedPaths(
-            Paint.stroke(Color.GREEN, 5f).copy(strokeJoin = StrokeJoin.BEVEL),
+            Paint.stroke(ColorARGB.Green, 5f).copy(strokeJoin = StrokeJoin.BEVEL),
         )
         val shortMiter = preparedPaths(
-            Paint.stroke(Color.GREEN, 5f).copy(
+            Paint.stroke(ColorARGB.Green, 5f).copy(
                 strokeJoin = StrokeJoin.MITER,
                 strokeMiter = 1f,
             ),
         )
         val longMiter = preparedPaths(
-            Paint.stroke(Color.GREEN, 5f).copy(
+            Paint.stroke(ColorARGB.Green, 5f).copy(
                 strokeJoin = StrokeJoin.MITER,
                 strokeMiter = 8f,
             ),
@@ -152,7 +152,7 @@ class GPUPreparedTextStrokeTest {
             prepare(
                 listOf(
                     text(
-                        Paint.stroke(Color.RED, 2f).copy(
+                        Paint.stroke(ColorARGB.Red, 2f).copy(
                             pathEffect = PathEffect.Corner(radius = 3f),
                         ),
                     ),
@@ -167,9 +167,9 @@ class GPUPreparedTextStrokeTest {
     fun `later stroke refusal publishes no earlier prepared visual`() {
         val result = prepare(
             listOf(
-                text(Paint.stroke(Color.RED, 2f)),
+                text(Paint.stroke(ColorARGB.Red, 2f)),
                 text(
-                    Paint.stroke(Color.BLUE, 2f).copy(
+                    Paint.stroke(ColorARGB.Blue, 2f).copy(
                         pathEffect = PathEffect.Corner(radius = 3f),
                     ),
                 ),
@@ -188,7 +188,7 @@ class GPUPreparedTextStrokeTest {
             prepare(
                 listOf(
                     text(
-                        Paint.stroke(Color.RED, 2f).copy(
+                        Paint.stroke(ColorARGB.Red, 2f).copy(
                             pathEffect = PathEffect.Dash(intervals, phase = 0.5f),
                         ),
                     ),
@@ -205,7 +205,7 @@ class GPUPreparedTextStrokeTest {
 
     @Test
     fun `prepared stroke path key seals exact geometry and verb count seals every contour`() {
-        val style = Paint.stroke(Color.RED, 2f).copy(
+        val style = Paint.stroke(ColorARGB.Red, 2f).copy(
             strokeCap = StrokeCap.SQUARE,
             strokeJoin = StrokeJoin.BEVEL,
             pathEffect = PathEffect.Dash(floatArrayOf(4f, 2f), phase = 1f),
@@ -241,7 +241,7 @@ class GPUPreparedTextStrokeTest {
     @Test
     fun `stroke inventory identity seals exact transform clip material blend and mask filter`() {
         fun inventoryHash(
-            paint: Paint = Paint.stroke(Color.RED, 2f),
+            paint: Paint = Paint.stroke(ColorARGB.Red, 2f),
             transform: Matrix3x3F32 = Matrix3x3F32.translation(1f, 2f),
             clip: ClipStack = ClipStack.DeviceRect(
                 RectF32.ofLTRB(1f, 2f, 40f, 50f),
@@ -260,21 +260,21 @@ class GPUPreparedTextStrokeTest {
                 antiAlias = false,
             ),
         )
-        val red = inventoryHash(paint = Paint.stroke(Color.RED, 2f))
-        val blue = inventoryHash(paint = Paint.stroke(Color.BLUE, 2f))
+        val red = inventoryHash(paint = Paint.stroke(ColorARGB.Red, 2f))
+        val blue = inventoryHash(paint = Paint.stroke(ColorARGB.Blue, 2f))
         val srcOver = inventoryHash(
-            paint = Paint.stroke(Color.RED, 2f).copy(blendMode = BlendMode.SRC_OVER),
+            paint = Paint.stroke(ColorARGB.Red, 2f).copy(blendMode = BlendMode.SRC_OVER),
         )
         val plus = inventoryHash(
-            paint = Paint.stroke(Color.RED, 2f).copy(blendMode = BlendMode.PLUS),
+            paint = Paint.stroke(ColorARGB.Red, 2f).copy(blendMode = BlendMode.PLUS),
         )
         val sigmaOne = inventoryHash(
-            paint = Paint.stroke(Color.RED, 2f).copy(
+            paint = Paint.stroke(ColorARGB.Red, 2f).copy(
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 1f),
             ),
         )
         val sigmaTwo = inventoryHash(
-            paint = Paint.stroke(Color.RED, 2f).copy(
+            paint = Paint.stroke(ColorARGB.Red, 2f).copy(
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 2f),
             ),
         )

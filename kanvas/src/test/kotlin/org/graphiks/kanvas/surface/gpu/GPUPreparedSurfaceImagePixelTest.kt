@@ -30,7 +30,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
@@ -91,7 +91,7 @@ class GPUPreparedSurfaceImagePixelTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 rect = RectF32.ofLTRB(60f, 28f, 64f, 32f),
-                paint = Paint.fill(Color.RED).copy(antiAlias = false),
+                paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
@@ -101,7 +101,7 @@ class GPUPreparedSurfaceImagePixelTest {
                 coverage,
                 RectF32.ofLTRB(6f, 0f, 9f, 1f),
                 SamplingOptions.NEAREST,
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
             ),
             drawImage(linear, RectF32.ofLTRB(10f, 0f, 11f, 1f), SamplingOptions.LINEAR),
             DisplayOp.DrawImageNine(
@@ -119,7 +119,7 @@ class GPUPreparedSurfaceImagePixelTest {
                     yDivs = emptyList(),
                 ),
                 dst = RectF32.ofLTRB(20f, 4f, 38f, 10f),
-                paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+                paint = Paint.fill(ColorARGB.White).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
                 sampling = SamplingOptions.NEAREST,
@@ -138,9 +138,9 @@ class GPUPreparedSurfaceImagePixelTest {
                     quadrant(0, 1),
                     quadrant(1, 1),
                 ),
-                colors = listOf(Color.BLUE, Color.RED, Color.GREEN, Color.WHITE),
+                colors = listOf(ColorARGB.Blue, ColorARGB.Red, ColorARGB.Green, ColorARGB.White),
                 blendMode = BlendMode.SRC,
-                paint = Paint.fill(Color.WHITE),
+                paint = Paint.fill(ColorARGB.White),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
@@ -309,7 +309,7 @@ class GPUPreparedSurfaceImagePixelTest {
         image: Image,
         dst: RectF32,
         sampling: SamplingOptions,
-        paint: Paint = Paint.fill(Color.WHITE),
+        paint: Paint = Paint.fill(ColorARGB.White),
     ) = DisplayOp.DrawImage(
         image = image,
         src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),

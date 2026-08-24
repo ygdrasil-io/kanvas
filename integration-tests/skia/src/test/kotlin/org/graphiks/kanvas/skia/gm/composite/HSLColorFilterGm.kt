@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
@@ -10,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
@@ -92,7 +94,7 @@ class HSLColorFilterGm : SkiaGm {
                         0f, 0f, lScale, 0f, lBias,
                         0f, 0f, 0f, 1f, 0f,
                     )
-                    paint = paint.copy(colorFilter = ColorFilter.Matrix(cm))
+                    paint = paint.copy(colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(cm)))
                     canvas.translate(K_WHEEL_SIZE * 0.1f, 0f)
                     canvas.drawRect(rect, paint)
                     canvas.translate(K_WHEEL_SIZE * 1.1f, 0f)
@@ -119,10 +121,10 @@ class HSLColorFilterGm : SkiaGm {
     }
 }
 
-private fun argbToColor(argb: Int): Color {
+private fun argbToColor(argb: Int): ColorARGB {
     val a = (argb ushr 24) and 0xFF
     val r = (argb ushr 16) and 0xFF
     val g = (argb ushr 8) and 0xFF
     val b = argb and 0xFF
-    return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+    return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 }

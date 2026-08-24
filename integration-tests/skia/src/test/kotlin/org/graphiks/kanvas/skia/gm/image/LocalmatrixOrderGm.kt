@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -40,8 +40,8 @@ class LocalmatrixOrderGm : SkiaGm {
         val gradShader = Shader.RadialGradient(
             center = org.graphiks.math.geometry.Point2F32(128f, 128f), radius = 128f,
             stops = listOf(
-                org.graphiks.kanvas.paint.GradientStop(0f, Color.WHITE),
-                org.graphiks.kanvas.paint.GradientStop(1f, Color.BLACK),
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.White),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Black),
             ),
             tileMode = TileMode.REPEAT,
         )

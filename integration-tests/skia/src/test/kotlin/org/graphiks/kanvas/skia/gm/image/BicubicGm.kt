@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawLine
 import org.graphiks.kanvas.canvas.drawCircle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bicubic.cpp`.
@@ -49,8 +49,8 @@ class BicubicGm : SkiaGm {
     private fun makeImage(): Image {
         val surf = Surface(7, 7)
         surf.canvas {
-            drawColor(Color.BLACK)
-            val paint = Paint(color = Color.WHITE, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
+            drawColor(ColorARGB.Black)
+            val paint = Paint(color = ColorARGB.White, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
             drawLine(3.5f, 0f, 3.5f, 8f, paint)
         }
         return surf.makeImageSnapshot()

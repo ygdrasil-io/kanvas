@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/blurs.cpp::DEF_SIMPLE_GM_BG(blurs, ...)`.
@@ -40,7 +40,7 @@ class BlursGm : SkiaGm {
             Rec(BlurStyle.OUTER,    1,  0),
         )
 
-        val paint = Paint(antiAlias = true, color = Color(0xFF0000FFu))
+        val paint = Paint(antiAlias = true, color = ColorARGB.fromPackedUInt(0xFF0000FFu))
 
         canvas.translate(-40f, 0f)
 
@@ -60,13 +60,13 @@ class BlursGm : SkiaGm {
         var x = 70f
         var y = 400f
         var textPaint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, convertRadiusToSigma(4f)),
         )
         canvas.drawString("Hamburgefons Style", x, y, font, textPaint)
         canvas.drawString("Hamburgefons Style", x, y + 50f, font, textPaint)
 
-        textPaint = Paint(color = Color.WHITE)
+        textPaint = Paint(color = ColorARGB.White)
         x -= 2f
         y -= 2f
         canvas.drawString("Hamburgefons Style", x, y, font, textPaint)

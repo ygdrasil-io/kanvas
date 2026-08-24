@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -34,10 +34,10 @@ class SaveLayerF16Gm : SkiaGm {
         val r = RectF32.ofOriginSize(0f, 0f, 300f, 300f)
 
         val stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(1f / 3f, Color.GREEN),
-            GradientStop(2f / 3f, Color.BLUE),
-            GradientStop(1f, Color.RED),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f / 3f, ColorARGB.Green),
+            GradientStop(2f / 3f, ColorARGB.Blue),
+            GradientStop(1f, ColorARGB.Red),
         )
         val sweepPaint = Paint(
             shader = Shader.SweepGradient(
@@ -50,7 +50,7 @@ class SaveLayerF16Gm : SkiaGm {
 
         val alpha = 1.0f / n
         val layerPaint = Paint(
-            color = Color.fromRGBA(0f, 0f, 0f, alpha),
+            color = ColorARGB.fromRGBA(0f, 0f, 0f, alpha),
             blendMode = BlendMode.PLUS,
         )
 

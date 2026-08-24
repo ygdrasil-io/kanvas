@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -45,7 +45,7 @@ class LcdOverlapGm : SkiaGm {
         mode: BlendMode,
         mode2: BlendMode,
     ) {
-        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color(0xFFFFFF00u), Color(0xFF00FFFFu), Color(0xFFFF00FFu))
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.fromPackedUInt(0xFFFFFF00u), ColorARGB.fromPackedUInt(0xFF00FFFFu), ColorARGB.fromPackedUInt(0xFFFF00FFu))
         for (i in colors.indices) {
             canvas.save()
             canvas.translate(x, y)

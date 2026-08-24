@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.sqrt
 
@@ -32,9 +32,9 @@ class CTMPathEffectGm : SkiaGm {
         val p0 = Point2F32(100f, 100f)
         val p1 = Point2F32(200f, 200f)
 
-        val inflatedPaint = Paint(color = Color.BLUE, antiAlias = true)
+        val inflatedPaint = Paint(color = ColorARGB.Blue, antiAlias = true)
         val strokePaint = Paint(
-            color = Color.GREEN,
+            color = ColorARGB.Green,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = strokeWidth,

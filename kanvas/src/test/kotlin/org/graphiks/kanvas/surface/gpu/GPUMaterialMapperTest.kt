@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
@@ -35,16 +37,12 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
+import org.graphiks.math.geometry.SizeF32
 import org.junit.jupiter.api.Test
 
 class GPUMaterialMapperTest {
@@ -56,11 +54,11 @@ class GPUMaterialMapperTest {
             end = Point2F32(10f, 10f),
             endRadius = 10f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
-        val src = Shader.SolidColor(Color.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
+        val src = Shader.SolidColor(ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
         val paint = Paint(
             shader = Shader.Blend(
                 mode = BlendMode.SRC_OVER,
@@ -86,7 +84,7 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared solid mapping represents paint color alpha exactly once`() {
         val mapping = Paint(
-            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.5f),
+            color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.5f),
         ).toPreparedMaterialMapping()
         val solid = assertIs<GPUMaterialDescriptor.SolidColor>(mapping.descriptor)
 
@@ -100,12 +98,12 @@ class GPUMaterialMapperTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(10f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 0.25f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0.75f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 0.25f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 0.75f)),
             ),
         )
         val mapping = Paint(
-            color = Color.fromRGBA(1f, 1f, 1f, 0.5f),
+            color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f),
             shader = gradient,
         ).toPreparedMaterialMapping()
         val descriptor = assertIs<GPUMaterialDescriptor.LinearGradient>(mapping.descriptor)
@@ -337,14 +335,14 @@ class GPUMaterialMapperTest {
                         ),
                         ColorSpaceInterpolation.OKLAB,
                     ),
-                    filter = ColorFilter.Matrix(
+                    filter = ColorFilter.Matrix(ColorMatrixF32.of(
                         floatArrayOf(
                             0f, 0f, 1f, 0f, 0f,
                             0f, 1f, 0f, 0f, 0f,
                             1f, 0f, 0f, 0f, 0f,
                             0f, 0f, 0f, 1f, 0f,
                         ),
-                    ),
+                    )),
                 ),
             ).toMaterial(),
         )
@@ -462,14 +460,14 @@ class GPUMaterialMapperTest {
                         ),
                         Matrix3x3F32.translation(3f, 4f),
                     ),
-                    filter = ColorFilter.Matrix(
+                    filter = ColorFilter.Matrix(ColorMatrixF32.of(
                         floatArrayOf(
                             1f, 0f, 0f, 0f, 0f,
                             0f, 1f, 0f, 0f, 0f,
                             0f, 0f, 1f, 0f, 0f,
                             0f, 0f, 0f, 1f, 0f,
                         ),
-                    ),
+                    )),
                 ),
             ).toPreparedMaterialMapping().descriptor,
         )
@@ -480,7 +478,7 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared alpha image keeps tint RGB and moves caller alpha to paint modulation`() {
         val mapping = Paint(
-            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f),
+            color = ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f),
             shader = imageShader(
                 sourceId = "mask",
                 pixels = byteArrayOf(0x80.toByte()),
@@ -520,7 +518,7 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared solid product path converts sRGB before one premultiplication`() {
         val mapping = Paint(
-            color = Color.fromArgb(a = 128, r = 128, g = 128, b = 128),
+            color = ColorARGB.of(alpha = 128, red = 128, green = 128, blue = 128),
         ).toPreparedMaterialMapping()
         val program = compilePrepared(mapping)
         val uniform = program.uniformFloats()
@@ -538,8 +536,8 @@ class GPUMaterialMapperTest {
         val mapping = Paint(
             shader = Shader.Blend(
                 mode = BlendMode.SRC_OVER,
-                dst = Shader.SolidColor(Color.fromArgb(a = 128, r = 128, g = 128, b = 128)),
-                src = Shader.SolidColor(Color.fromArgb(a = 64, r = 128, g = 128, b = 128)),
+                dst = Shader.SolidColor(ColorARGB.of(alpha = 128, red = 128, green = 128, blue = 128)),
+                src = Shader.SolidColor(ColorARGB.of(alpha = 64, red = 128, green = 128, blue = 128)),
             ),
         ).toPreparedMaterialMapping()
         val uniform = compilePrepared(mapping).uniformFloats()
@@ -553,7 +551,7 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared A8 product tint converts sRGB and keeps caller alpha separate`() {
         val mapping = Paint(
-            color = Color.fromArgb(a = 128, r = 128, g = 128, b = 128),
+            color = ColorARGB.of(alpha = 128, red = 128, green = 128, blue = 128),
             shader = imageShader(
                 sourceId = "midtone-mask",
                 pixels = byteArrayOf(0xff.toByte()),
@@ -577,7 +575,7 @@ class GPUMaterialMapperTest {
     fun `prepared runtime mapping snapshots exact uniform payload and child facts`() {
         val matrixValues = FloatArray(16) { index -> index.toFloat() }
         val childMap = linkedMapOf<String, Shader>(
-            "input" to Shader.SolidColor(Color.RED),
+            "input" to Shader.SolidColor(ColorARGB.Red),
         )
         val shader = Shader.RuntimeEffect(
             effect = RuntimeEffect(
@@ -612,15 +610,15 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared mapping preserves legacy supported color filter behavior`() {
         val paint = Paint(
-            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.8f),
-            colorFilter = ColorFilter.Matrix(
+            color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.8f),
+            colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(
                 floatArrayOf(
                     1f, 0f, 0f, 0f, 0f,
                     0f, 1f, 0f, 0f, 0f,
                     0f, 0f, 1f, 0f, 0f,
                     0f, 0f, 0f, 0.5f, 0f,
                 ),
-            ),
+            )),
         )
 
         assertEquals(paint.toMaterial(), paint.toPreparedMaterialMapping().descriptor)
@@ -632,11 +630,11 @@ class GPUMaterialMapperTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(1f, 1f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.BLUE),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Blue),
             ),
         )
-        val solid = Shader.SolidColor(Color.RED)
+        val solid = Shader.SolidColor(ColorARGB.Red)
         val cases = listOf(
             Paint(
                 shader = imageShader(
@@ -714,7 +712,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.CoordClamp(solid, RectF32.ofOriginSize(0f, 0f, 1f, 1f)),
             ) to GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
             Paint(
-                shader = Shader.PerlinNoise(1f, 2f, 3, 4, Size(8f, 8f)),
+                shader = Shader.PerlinNoise(1f, 2f, 3, 4, SizeF32.of(8f, 8f)),
             ) to GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
             Paint(
                 shader = Shader.FractalNoise(1f, 2f, 3, 4, null),
@@ -735,7 +733,7 @@ class GPUMaterialMapperTest {
 
     @Test
     fun `prepared runtime color filter retains its base and refuses filter placement`() {
-        val base = Shader.SolidColor(Color.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
+        val base = Shader.SolidColor(ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
         val filter = ColorFilter.RuntimeEffect(
             effect = testRuntimeEffect("runtime.filter"),
             uniforms = UniformBlock { float4("gColor", 1f, 0f, 0f, 1f) },
@@ -759,8 +757,8 @@ class GPUMaterialMapperTest {
         val childMatrix = FloatArray(20) { index -> index.toFloat() / 10f }
         val childMap = linkedMapOf<String, ColorFilter>(
             "input" to ColorFilter.Compose(
-                outer = ColorFilter.Matrix(childMatrix),
-                inner = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_OVER),
+                outer = ColorFilter.Matrix(ColorMatrixF32.of(childMatrix)),
+                inner = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_OVER),
             ),
         )
         val filter = ColorFilter.RuntimeEffect(
@@ -779,10 +777,10 @@ class GPUMaterialMapperTest {
             },
             children = mapOf(
                 "input" to ColorFilter.Compose(
-                    outer = ColorFilter.Matrix(
+                    outer = ColorFilter.Matrix(ColorMatrixF32.of(
                         FloatArray(20) { index -> index.toFloat() / 10f },
-                    ),
-                    inner = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_OVER),
+                    )),
+                    inner = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_OVER),
                 ),
             ),
         )
@@ -850,7 +848,7 @@ class GPUMaterialMapperTest {
             amount = 0.25f,
             childName = "input",
             child = ColorFilter.Compose(
-                outer = ColorFilter.Matrix(FloatArray(20) { it.toFloat() }),
+                outer = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20) { it.toFloat() })),
                 inner = ColorFilter.Luma,
             ),
         )
@@ -859,7 +857,7 @@ class GPUMaterialMapperTest {
             amount = 0.25f,
             childName = "input",
             child = ColorFilter.Compose(
-                outer = ColorFilter.Matrix(FloatArray(20) { it.toFloat() }),
+                outer = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20) { it.toFloat() })),
                 inner = ColorFilter.Overdraw,
             ),
         )
@@ -897,7 +895,7 @@ class GPUMaterialMapperTest {
         val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
             Paint(
                 shader = Shader.WithLocalMatrix(
-                    Shader.SolidColor(Color.RED),
+                    Shader.SolidColor(ColorARGB.Red),
                     Matrix3x3F32.Identity,
                 ),
                 colorFilter = filter,
@@ -936,8 +934,8 @@ class GPUMaterialMapperTest {
                         start = Point2F32(0f, 0f),
                         end = Point2F32(10f, 0f),
                         stops = listOf(
-                            GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 0.25f)),
-                            GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0.75f)),
+                            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 0.25f)),
+                            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 0.75f)),
                         ),
                     ),
                     colorFilter = runtimeFilter(),
@@ -1019,7 +1017,7 @@ class GPUMaterialMapperTest {
                 Paint(
                     shader = Shader.Blend(
                         mode = BlendMode.SRC_OVER,
-                        dst = Shader.SolidColor(Color.BLACK),
+                        dst = Shader.SolidColor(ColorARGB.Black),
                         src = cyclic,
                     ),
                 ).toPreparedMaterialMapping().descriptor,
@@ -1102,7 +1100,7 @@ class GPUMaterialMapperTest {
         )
 
         val shared = ColorFilter.Compose(
-            outer = ColorFilter.Matrix(FloatArray(20) { index -> index.toFloat() }),
+            outer = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20) { index -> index.toFloat() })),
             inner = ColorFilter.Luma,
         )
         val dag = ColorFilter.RuntimeEffect(
@@ -1580,7 +1578,7 @@ class GPUMaterialMapperTest {
         val legacyWrapped = assertIs<GPUMaterialDescriptor.SolidColor>(
             Paint(
                 shader = Shader.WithLocalMatrix(
-                    Shader.SolidColor(Color.RED),
+                    Shader.SolidColor(ColorARGB.Red),
                     Matrix3x3F32.Identity,
                 ),
             ).toMaterial(),
@@ -1594,7 +1592,7 @@ class GPUMaterialMapperTest {
             byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte()),
             legacyA8.rgbaPixels,
         )
-        assertEquals(Color.RED.r, legacyWrapped.r)
+        assertEquals(ColorARGB.Red.r, legacyWrapped.r)
         assertEquals(0f, legacyNoise.a)
     }
 
@@ -1624,9 +1622,9 @@ class GPUMaterialMapperTest {
         )
 
     private fun threeGradientStops(): List<GradientStop> = listOf(
-        GradientStop(0f, Color.fromRGBA(1f, 0.1f, 0.2f, 0.9f)),
-        GradientStop(0.35f, Color.fromRGBA(0.3f, 0.4f, 0.5f, 0.6f)),
-        GradientStop(1f, Color.fromRGBA(0.7f, 0.8f, 0.9f, 1f)),
+        GradientStop(0f, ColorARGB.fromRGBA(1f, 0.1f, 0.2f, 0.9f)),
+        GradientStop(0.35f, ColorARGB.fromRGBA(0.3f, 0.4f, 0.5f, 0.6f)),
+        GradientStop(1f, ColorARGB.fromRGBA(0.7f, 0.8f, 0.9f, 1f)),
     )
 
     private fun threeGradientColors(): FloatArray =
@@ -1644,7 +1642,7 @@ class GPUMaterialMapperTest {
 
     private fun shaderRuntimeChain(activeDepth: Int): Shader {
         require(activeDepth >= 1)
-        var shader: Shader = Shader.SolidColor(Color.RED)
+        var shader: Shader = Shader.SolidColor(ColorARGB.Red)
         repeat(activeDepth - 1) { index ->
             val child = shader
             shader = Shader.RuntimeEffect(
@@ -1727,7 +1725,7 @@ class GPUMaterialMapperTest {
     }
 
     private fun shaderRuntimeDiamond(depth: Int): Shader {
-        var shader: Shader = Shader.SolidColor(Color.RED)
+        var shader: Shader = Shader.SolidColor(ColorARGB.Red)
         repeat(depth) { index ->
             val sharedChild = shader
             shader = Shader.RuntimeEffect(
@@ -1743,7 +1741,7 @@ class GPUMaterialMapperTest {
     }
 
     private fun layeredRuntimeShaderDag(): Shader.RuntimeEffect {
-        var previous = listOf<Shader>(Shader.SolidColor(Color.RED))
+        var previous = listOf<Shader>(Shader.SolidColor(ColorARGB.Red))
         val width = 3
         repeat(4) { layer ->
             previous = List(width) { node ->

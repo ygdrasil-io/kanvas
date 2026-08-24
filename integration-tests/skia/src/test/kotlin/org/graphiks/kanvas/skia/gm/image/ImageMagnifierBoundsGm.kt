@@ -9,8 +9,8 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -50,9 +50,9 @@ class ImageMagnifierBoundsGm : SkiaGm {
         drawContent(c, 32f, 350)
         c.saveLayer(kOutBounds, Paint(imageFilter = magnifier))
         c.restore()
-        drawBorder(c, widgetBounds, Color.BLACK, 2f, 0f)
+        drawBorder(c, widgetBounds, ColorARGB.Black, 2f, 0f)
         if (inset > 0f) {
-            drawBorder(c, kOutBounds, Color.RED, 2f, inset)
+            drawBorder(c, kOutBounds, ColorARGB.Red, 2f, inset)
         }
         c.restore()
 
@@ -63,9 +63,9 @@ class ImageMagnifierBoundsGm : SkiaGm {
         c.saveLayer(kOutBounds, Paint(imageFilter = magnifier))
         drawContent(c, 32f, 350)
         c.restore()
-        drawBorder(c, widgetBounds, Color.BLACK, 2f, 0f)
+        drawBorder(c, widgetBounds, ColorARGB.Black, 2f, 0f)
         if (inset > 0f) {
-            drawBorder(c, kOutBounds, Color.RED, 2f, inset)
+            drawBorder(c, kOutBounds, ColorARGB.Red, 2f, inset)
         }
         c.restore()
 
@@ -74,16 +74,16 @@ class ImageMagnifierBoundsGm : SkiaGm {
         c.translate(512f, 0f)
         c.clipRect(kOutBounds)
         drawContent(c, 32f, 350)
-        drawBorder(c, widgetBounds, Color.BLACK, 2f, 0f)
+        drawBorder(c, widgetBounds, ColorARGB.Black, 2f, 0f)
         c.restore()
     }
 
-    private fun drawBorder(c: GmCanvas, rect: RectF32, color: Color, width: Float, borderInset: Float) {
+    private fun drawBorder(c: GmCanvas, rect: RectF32, color: ColorARGB, width: Float, borderInset: Float) {
         val r = RectF32(
             rect.left + borderInset, rect.top + borderInset,
             rect.right - borderInset, rect.bottom - borderInset,
         )
-        val rr = RRect(r, borderInset)
+        val rr = RRectF32.of(r, borderInset)
         c.drawRRect(rr, Paint(style = PaintStyle.STROKE, strokeWidth = width, color = color))
     }
 
@@ -94,7 +94,7 @@ class ImageMagnifierBoundsGm : SkiaGm {
         repeat(count) {
             val x = rng.nextInt(500)
             val y = rng.nextInt(500)
-            val color = Color.fromRGBA(
+            val color = ColorARGB.fromRGBA(
                 rng.nextInt(256) / 255f,
                 rng.nextInt(256) / 255f,
                 rng.nextInt(256) / 255f,

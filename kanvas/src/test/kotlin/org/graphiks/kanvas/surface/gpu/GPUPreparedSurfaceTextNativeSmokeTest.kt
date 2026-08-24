@@ -31,7 +31,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -53,7 +53,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                         GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
                         "Task 14 partial-alpha ${blendMode.name}/${context.name}",
                     )
-                    val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+                    val shaderColor = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f)
                     val shader = Shader.LinearGradient(
                         start = Point2F32(0f, 0f),
                         end = Point2F32(40f, 0f),
@@ -62,7 +62,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                             GradientStop(1f, shaderColor),
                         ),
                     )
-                    val paint = Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
+                    val paint = Paint.fill(ColorARGB.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
                         shader = shader,
                         blendMode = blendMode,
                     )
@@ -71,7 +71,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                         GPUPreparedTextTestFixtures.A8_GLYPH_ID,
                         4,
                         58,
-                        Color.WHITE,
+                        ColorARGB.White,
                         paint,
                     ).copy(
                         x = 4.5f,
@@ -85,7 +85,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                     )
                     val destination = DisplayOp.DrawRect(
                         rect = RectF32.ofLTRB(0f, 0f, 40f, 80f),
-                        paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+                        paint = Paint.fill(ColorARGB.White).copy(antiAlias = false),
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.WideOpen,
                     )
@@ -145,7 +145,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             GPUPreparedTextTestFixtures.A8_GLYPH_ID,
             4,
             58,
-            Color.WHITE,
+            ColorARGB.White,
         ).copy(
             clip = ClipStack.DeviceRect(
                 rect = RectF32.ofLTRB(16.5f, 0f, 40f, 80f),
@@ -198,7 +198,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             GPUPreparedTextTestFixtures.A8_GLYPH_ID,
             4,
             58,
-            Color.WHITE,
+            ColorARGB.White,
         ).copy(
             clip = ClipStack.Complex(
                 listOf(
@@ -264,7 +264,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                 GPUPreparedTextTestFixtures.A8_GLYPH_ID,
                 4,
                 58,
-                Color.WHITE,
+                ColorARGB.White,
             ).copy(
                 clip = ClipStack.Complex(
                     listOf(
@@ -363,14 +363,14 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 4f, 4f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
-            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, Color.WHITE),
+            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, ColorARGB.White),
             drawImage(image, RectF32.ofLTRB(48f, 0f, 50f, 2f)),
-            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 60, 58, Color.GREEN),
-            text(typeface, GPUPreparedTextTestFixtures.COLOR_BASE_GLYPH_ID, 108, 58, Color.BLUE),
+            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 60, 58, ColorARGB.Green),
+            text(typeface, GPUPreparedTextTestFixtures.COLOR_BASE_GLYPH_ID, 108, 58, ColorARGB.Blue),
         )
         var captured: GPUPreparedSurfaceFrameBuildResult.Ready? = null
         val executor = GPUPreparedSurfaceFrameExecutor(
@@ -463,7 +463,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
             "Task 13 stroke counters",
         )
-        val stroke = Paint.stroke(Color.WHITE, 3f).copy(
+        val stroke = Paint.stroke(ColorARGB.White, 3f).copy(
             antiAlias = false,
             strokeCap = StrokeCap.ROUND,
             strokeJoin = StrokeJoin.BEVEL,
@@ -472,7 +472,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 4f, 4f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -481,7 +481,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                 GPUPreparedTextTestFixtures.A8_GLYPH_ID,
                 12,
                 58,
-                Color.WHITE,
+                ColorARGB.White,
                 stroke,
             ),
         )
@@ -512,7 +512,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(0f, 0f, 4f, 4f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -569,7 +569,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         glyphId: Int,
         x: Int,
         baselineY: Int,
-        color: Color,
+        color: ColorARGB,
         paint: Paint = Paint.fill(color),
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
@@ -594,7 +594,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         image = image,
         src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
-        paint = Paint.fill(Color.WHITE).copy(
+        paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.NEAREST),
         ),
         transform = Matrix3x3F32.Identity,

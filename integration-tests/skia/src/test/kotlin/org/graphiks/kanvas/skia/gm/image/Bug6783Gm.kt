@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,8 +28,8 @@ class Bug6783Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(100, 100)
         surf.canvas {
-            clear(Color.fromRGBA(1f, 1f, 0f))
-            drawRect(RectF32.ofLTRB(0f, 0f, 50f, 100f), Paint(Color.BLUE))
+            clear(ColorARGB.fromRGBA(1f, 1f, 0f))
+            drawRect(RectF32.ofLTRB(0f, 0f, 50f, 100f), Paint(ColorARGB.Blue))
         }
         val img = surf.makeImageSnapshot()
         val shader = Shader.WithLocalMatrix(

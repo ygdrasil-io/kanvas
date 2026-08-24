@@ -50,7 +50,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -90,8 +90,8 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
         )
         val stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(1f, Color.BLUE),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Blue),
         )
         val image = Image(
             width = 1,
@@ -108,7 +108,7 @@ class GPUPreparedTextExecutableFixtureTest {
             children = emptyList(),
         )
         val materials = linkedMapOf(
-            "solid" to Paint.fill(Color.RED),
+            "solid" to Paint.fill(ColorARGB.Red),
             "linear" to Paint(shader = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(16f, 0f), stops)),
             "radial" to Paint(shader = Shader.RadialGradient(Point2F32(8f, 8f), 8f, stops)),
             "sweep" to Paint(shader = Shader.SweepGradient(Point2F32(8f, 8f), stops = stops)),
@@ -133,7 +133,7 @@ class GPUPreparedTextExecutableFixtureTest {
         )
 
         val scissored = assertIs<GPUPreparedTextLowering.Ready>(
-            lower(text(typeface, listOf(7), Paint.fill(Color.WHITE), affine, scissor)),
+            lower(text(typeface, listOf(7), Paint.fill(ColorARGB.White), affine, scissor)),
         )
         assertEquals(affine, scissored.draw.transform)
         assertEquals(scissor, scissored.draw.clip)
@@ -472,17 +472,17 @@ class GPUPreparedTextExecutableFixtureTest {
             "task13-stroke-blur-matrix",
         )
         val strokes = listOf(
-            Paint.stroke(Color.RED, 3f).copy(
+            Paint.stroke(ColorARGB.Red, 3f).copy(
                 strokeCap = StrokeCap.BUTT,
                 strokeJoin = StrokeJoin.MITER,
                 pathEffect = PathEffect.Dash(floatArrayOf(4f, 2f)),
             ),
-            Paint.stroke(Color.GREEN, 3f).copy(
+            Paint.stroke(ColorARGB.Green, 3f).copy(
                 strokeCap = StrokeCap.ROUND,
                 strokeJoin = StrokeJoin.ROUND,
                 pathEffect = PathEffect.Dash(floatArrayOf(3f, 1f)),
             ),
-            Paint.stroke(Color.BLUE, 3f).copy(
+            Paint.stroke(ColorARGB.Blue, 3f).copy(
                 strokeCap = StrokeCap.SQUARE,
                 strokeJoin = StrokeJoin.BEVEL,
             ),
@@ -507,7 +507,7 @@ class GPUPreparedTextExecutableFixtureTest {
                 text(
                     typeface,
                     listOf(7),
-                    Paint.fill(Color.WHITE).copy(
+                    Paint.fill(ColorARGB.White).copy(
                         maskFilter = MaskFilter.Blur(style, sigma = 0.75f),
                     ),
                 ),
@@ -524,7 +524,7 @@ class GPUPreparedTextExecutableFixtureTest {
         assertEquals(listOf(0, 1), faces.map(FontTypeface::faceIndex))
         faces.forEachIndexed { index, face ->
             val ready = assertIs<GPUPreparedTextLowering.Ready>(
-                lower(text(face, listOf(7), Paint.fill(Color.WHITE)), operationIndex = index),
+                lower(text(face, listOf(7), Paint.fill(ColorARGB.White)), operationIndex = index),
             )
             assertEquals(index, ready.draw.face.faceIndex)
         }
@@ -572,7 +572,7 @@ class GPUPreparedTextExecutableFixtureTest {
         )
         val glyphIds = GPUPreparedTextTestFixtures.repeatedGlyphPageSharing()
         val lowered = assertIs<GPUPreparedTextLowering.Ready>(
-            lower(text(typeface, glyphIds, Paint.fill(Color.WHITE))),
+            lower(text(typeface, glyphIds, Paint.fill(ColorARGB.White))),
         )
         val diagonal = GPUPreparedTextTestFixtures.diagonalAntialiasedGlyph()
         val result = assertIs<PreparedTextFrameInventoryResult.Ready>(

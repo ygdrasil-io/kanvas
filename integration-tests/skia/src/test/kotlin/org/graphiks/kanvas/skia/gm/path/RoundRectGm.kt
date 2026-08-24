@@ -9,11 +9,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -36,7 +36,7 @@ class RoundRectGm : SkiaGm {
         val rand = Random(1)
         canvas.translate(20f, 20f)
         val kRect = RectF32.ofLTRB(-20f, -30f, 20f, 30f)
-        val circleRRect = RRect(kRect, 5f)
+        val circleRRect = RRectF32.of(kRect, 5f)
 
         val kXStart = 60f
         val kYStart = 80f
@@ -47,7 +47,7 @@ class RoundRectGm : SkiaGm {
         val rectPaint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.fromRGBA(204f / 255f, 204f / 255f, 204f / 255f),
+            color = ColorARGB.fromRGBA(204f / 255f, 204f / 255f, 204f / 255f),
         )
 
         val paints: List<(Random) -> Paint> = listOf(
@@ -92,7 +92,7 @@ class RoundRectGm : SkiaGm {
         // Tall and skinny
         for (i in paints.indices) {
             val rect = RectF32.ofLTRB(-20f, -60f, 20f, 60f)
-            val ellipseRect = RRect(rect, CornerRadii(5f, 10f), CornerRadii(5f, 10f), CornerRadii(5f, 10f), CornerRadii(5f, 10f))
+            val ellipseRect = RRectF32.of(rect, CornerRadiiF32.of(5f, 10f), CornerRadiiF32.of(5f, 10f), CornerRadiiF32.of(5f, 10f), CornerRadiiF32.of(5f, 10f))
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.55f + 0.25f, kYStart + kYStep * i + 0.75f)
             val paint = paints[i](rand).copy(color = genColor(rand))
@@ -104,7 +104,7 @@ class RoundRectGm : SkiaGm {
         // Wide and short
         for (i in paints.indices) {
             val rect = RectF32.ofLTRB(-80f, -30f, 80f, 30f)
-            val ellipseRect = RRect(rect, CornerRadii(20f, 5f), CornerRadii(20f, 5f), CornerRadii(20f, 5f), CornerRadii(20f, 5f))
+            val ellipseRect = RRectF32.of(rect, CornerRadiiF32.of(20f, 5f), CornerRadiiF32.of(20f, 5f), CornerRadiiF32.of(20f, 5f), CornerRadiiF32.of(20f, 5f))
             canvas.save()
             canvas.translate(kXStart + kXStep * 4 + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
             val paint = paints[i](rand).copy(color = genColor(rand))
@@ -116,7 +116,7 @@ class RoundRectGm : SkiaGm {
         // Super-skinny
         for (i in paints.indices) {
             val rect = RectF32.ofLTRB(0f, -60f, 1f, 60f)
-            val circleRect = RRect(rect, 5f)
+            val circleRect = RRectF32.of(rect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 3.25f + 0.25f, kYStart + kYStep * i + 0.75f)
             val paint = paints[i](rand).copy(color = genColor(rand))
@@ -127,7 +127,7 @@ class RoundRectGm : SkiaGm {
         // Super-short
         for (i in paints.indices) {
             val rect = RectF32.ofLTRB(-80f, -1f, 80f, 0f)
-            val circleRect = RRect(rect, 5f)
+            val circleRect = RRectF32.of(rect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 2.5f + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
             val paint = paints[i](rand).copy(color = genColor(rand))
@@ -139,9 +139,9 @@ class RoundRectGm : SkiaGm {
         val gradient = Shader.RadialGradient(
             center = Point2F32(0f, 0f), radius = 20f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(0f, 0f, 1f)),
-                GradientStop(0.5f, Color.fromRGBA(1f, 0f, 0f)),
-                GradientStop(1f, Color.fromRGBA(0f, 1f, 0f)),
+                GradientStop(0f, ColorARGB.fromRGBA(0f, 0f, 1f)),
+                GradientStop(0.5f, ColorARGB.fromRGBA(1f, 0f, 0f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 1f, 0f)),
             ),
             tileMode = TileMode.CLAMP,
         )
@@ -162,7 +162,7 @@ class RoundRectGm : SkiaGm {
             val strokeWidths = floatArrayOf(20f, 10f, 20f, 40f)
             for (i in 0 until 4) {
                 val (rx, ry) = radii[i]
-                val circleRect = RRect(kRect, CornerRadii(rx, ry), CornerRadii(rx, ry), CornerRadii(rx, ry), CornerRadii(rx, ry))
+                val circleRect = RRectF32.of(kRect, CornerRadiiF32.of(rx, ry), CornerRadiiF32.of(rx, ry), CornerRadiiF32.of(rx, ry), CornerRadiiF32.of(rx, ry))
                 canvas.save()
                 canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart + kYStep * i + 0.75f + 0.5f * kYStep)
                 val color = genColor(rand)
@@ -172,21 +172,21 @@ class RoundRectGm : SkiaGm {
             }
         }
 
-        // OOO rect via drawRoundRect (RRect with ooo rect)
+        // OOO rect via drawRoundRect (RRectF32 with ooo rect)
         run {
             canvas.save()
             canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart + kYStep * 4 + 0.25f + 0.5f * kYStep)
             val color = genColor(rand)
             val p = Paint(color = color)
             val oooRect = RectF32.ofLTRB(20f, 30f, -20f, -30f)
-            canvas.drawRRect(RRect(oooRect, 10f), p)
+            canvas.drawRRect(RRectF32.of(oooRect, 10f), p)
             canvas.restore()
         }
 
-        // RRect with stroke > radius/2
+        // RRectF32 with stroke > radius/2
         run {
             val smallRect = RectF32.ofLTRB(-30f, -20f, 30f, 20f)
-            val circleRect = RRect(smallRect, 5f)
+            val circleRect = RRectF32.of(smallRect, 5f)
             canvas.save()
             canvas.translate(kXStart + kXStep * 5 + 0.25f, kYStart - kYStep + 73f / 4f + 0.5f * kYStep)
             val color = genColor(rand)
@@ -196,14 +196,14 @@ class RoundRectGm : SkiaGm {
         }
     }
 
-    private fun genColor(rand: Random): Color {
+    private fun genColor(rand: Random): ColorARGB {
         val h = rand.nextFloat() * 360f
         val s = rand.nextFloat() * 0.25f + 0.75f
         val v = rand.nextFloat() * 0.25f + 0.75f
         return hsvToColor(h, s, v)
     }
 
-    private fun hsvToColor(h: Float, s: Float, v: Float): Color {
+    private fun hsvToColor(h: Float, s: Float, v: Float): ColorARGB {
         val hi = (h / 60f).toInt() % 6
         val f = h / 60f - hi
         val p = v * (1f - s)
@@ -214,6 +214,6 @@ class RoundRectGm : SkiaGm {
             2 -> Triple(p, v, t); 3 -> Triple(p, q, v)
             4 -> Triple(t, p, v); else -> Triple(v, p, q)
         }
-        return Color.fromRGBA(r, g, bl)
+        return ColorARGB.fromRGBA(r, g, bl)
     }
 }

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -33,10 +33,10 @@ class AyncYUVNoScaleGm : SkiaGm {
     private fun makeSource(): Image {
         val surface = Surface(400, 300)
         surface.canvas {
-            drawRect(RectF32(0f, 0f, 400f, 300f), Paint(color = Color.WHITE))
-            drawRect(RectF32(30f, 20f, 170f, 100f), Paint(color = Color.RED))
-            drawRect(RectF32(200f, 30f, 320f, 130f), Paint(color = Color.GREEN))
-            drawRect(RectF32(100f, 150f, 340f, 270f), Paint(color = Color.BLUE))
+            drawRect(RectF32(0f, 0f, 400f, 300f), Paint(color = ColorARGB.White))
+            drawRect(RectF32(30f, 20f, 170f, 100f), Paint(color = ColorARGB.Red))
+            drawRect(RectF32(200f, 30f, 320f, 130f), Paint(color = ColorARGB.Green))
+            drawRect(RectF32(100f, 150f, 340f, 270f), Paint(color = ColorARGB.Blue))
         }
         return surface.makeImageSnapshot()
     }

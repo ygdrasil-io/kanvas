@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
@@ -33,7 +33,7 @@ class TableMaskFilterGm : SkiaGm {
 
         val paint = Paint(
             style = PaintStyle.FILL,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             maskFilter = MaskFilter.Table(table),
         )
 

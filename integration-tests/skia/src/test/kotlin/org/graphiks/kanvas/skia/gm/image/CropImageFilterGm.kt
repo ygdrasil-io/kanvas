@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/crop_imagefilter.cpp`.
@@ -35,7 +35,7 @@ class CropImageFilterGm : SkiaGm {
             null,
             ImageFilter.Blur(2f, 2f),
             ImageFilter.Blur(4f, 4f),
-            ImageFilter.DropShadow(5f, 5f, 3f, 3f, Color.BLUE),
+            ImageFilter.DropShadow(5f, 5f, 3f, 3f, ColorARGB.Blue),
             ImageFilter.Offset(10f, 10f),
         )
 
@@ -54,9 +54,9 @@ class CropImageFilterGm : SkiaGm {
     private fun makeCheckerboard(): Image {
         val surface = Surface(64, 64)
         surface.canvas {
-            drawColor(Color.fromRGBA(1f, 0f, 0f, 1f))
-            val darkPaint = Paint(color = Color.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
-            val lightPaint = Paint(color = Color.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
+            drawColor(ColorARGB.fromRGBA(1f, 0f, 0f, 1f))
+            val darkPaint = Paint(color = ColorARGB.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
+            val lightPaint = Paint(color = ColorARGB.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
             var y = 8
             while (y < 48) {
                 var x = 8

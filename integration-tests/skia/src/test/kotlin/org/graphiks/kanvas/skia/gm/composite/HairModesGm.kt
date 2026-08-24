@@ -13,11 +13,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.b
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -69,10 +66,10 @@ class HairModesGm : SkiaGm {
     private fun drawCell(canvas: GmCanvas, mode: BlendMode, a0: Int, a1: Int) {
         drawCheckerboard(canvas)
         val r = RectF32(cellW / 10f, cellH / 10f, cellW - cellW / 10f, cellH - cellH / 10f)
-        val ovalPaint = Paint(color = colorWithAlpha(Color.BLUE, a0), antiAlias = true)
+        val ovalPaint = Paint(color = colorWithAlpha(ColorARGB.Blue, a0), antiAlias = true)
         canvas.drawOval(r, ovalPaint)
 
-        val linesPaint = Paint(color = colorWithAlpha(Color.RED, a1), blendMode = mode, style = PaintStyle.STROKE)
+        val linesPaint = Paint(color = colorWithAlpha(ColorARGB.Red, a1), blendMode = mode, style = PaintStyle.STROKE)
         for (angle in 0 until 24) {
             val theta = angle * (2.0 * PI) / 24.0
             val dx = (cos(theta) * cellW).toFloat()
@@ -104,15 +101,15 @@ class HairModesGm : SkiaGm {
         }
     }
 
-    private fun intToColor(value: Int): Color {
+    private fun intToColor(value: Int): ColorARGB {
         val a = (value ushr 24) and 0xFF
         val r = (value ushr 16) and 0xFF
         val g = (value ushr 8) and 0xFF
         val b = value and 0xFF
-        return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+        return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
     }
 
-    private fun colorWithAlpha(color: Color, alpha: Int): Color {
-        return Color.fromRGBA(color.r, color.g, color.b, alpha / 255f)
+    private fun colorWithAlpha(color: ColorARGB, alpha: Int): ColorARGB {
+        return ColorARGB.fromRGBA(color.r, color.g, color.b, alpha / 255f)
     }
 }

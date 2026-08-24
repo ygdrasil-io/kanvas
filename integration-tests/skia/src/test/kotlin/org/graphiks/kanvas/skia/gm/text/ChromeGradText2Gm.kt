@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -32,17 +32,17 @@ class ChromeGradText2Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val font = Font(typeface, size = 24f, antiAlias = false)
 
-        canvas.drawString("Normal Fill Text", 0f, 50f, font, Paint(color = Color.BLACK))
+        canvas.drawString("Normal Fill Text", 0f, 50f, font, Paint(color = ColorARGB.Black))
         canvas.drawString("Normal Stroke Text", 0f, 100f, font, Paint(
-            color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 1f,
+            color = ColorARGB.Black, style = PaintStyle.STROKE, strokeWidth = 1f,
         ))
 
         val shader = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(1f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.GREEN),
-                GradientStop(1f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Green),
             ),
             tileMode = TileMode.CLAMP,
         )

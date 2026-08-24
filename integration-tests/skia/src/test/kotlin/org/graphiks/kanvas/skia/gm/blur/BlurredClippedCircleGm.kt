@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,7 +32,7 @@ class BlurredClippedCircleGm : SkiaGm {
         canvas.scale(2f, 2f)
 
         val whitePaint = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             blendMode = BlendMode.SRC,
         )
 
@@ -53,7 +53,7 @@ class BlurredClippedCircleGm : SkiaGm {
 
         val paint = Paint(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.366025f),
-            colorFilter = ColorFilter.Blend(Color.RED, BlendMode.SRC_IN),
+            colorFilter = ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC_IN),
         )
         canvas.drawPath(path, paint)
         canvas.restore()

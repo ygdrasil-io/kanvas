@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -41,7 +41,7 @@ class DrawAtlasColorGm : SkiaGm {
         val texRects = List(numColors) { target }
         val quadColors = gColors.toList()
 
-        val paint = Paint(color = Color.BLACK, antiAlias = true)
+        val paint = Paint(color = ColorARGB.Black, antiAlias = true)
         val font = Font(typeface, kTextPad.toFloat())
 
         for (i in 0 until numModes) {
@@ -62,25 +62,25 @@ class DrawAtlasColorGm : SkiaGm {
     private fun makeAtlas(atlasSize: Int): Image {
         val kBlockSize = atlasSize / 2
         val bitmap = Bitmap(atlasSize, atlasSize)
-        bitmap.eraseColor(Color.TRANSPARENT)
+        bitmap.eraseColor(ColorARGB.Transparent)
         for (x in 0 until kBlockSize) {
             for (y in 0 until kBlockSize) {
-                bitmap.setPixel(x, y, Color.WHITE)
+                bitmap.setPixel(x, y, ColorARGB.White)
             }
         }
         for (x in kBlockSize until atlasSize) {
             for (y in 0 until kBlockSize) {
-                bitmap.setPixel(x, y, Color.RED)
+                bitmap.setPixel(x, y, ColorARGB.Red)
             }
         }
         for (x in 0 until kBlockSize) {
             for (y in kBlockSize until atlasSize) {
-                bitmap.setPixel(x, y, Color.GREEN)
+                bitmap.setPixel(x, y, ColorARGB.Green)
             }
         }
         for (x in kBlockSize until atlasSize) {
             for (y in kBlockSize until atlasSize) {
-                bitmap.setPixel(x, y, Color.TRANSPARENT)
+                bitmap.setPixel(x, y, ColorARGB.Transparent)
             }
         }
         return bitmap.toImage()
@@ -97,7 +97,7 @@ class DrawAtlasColorGm : SkiaGm {
             BlendMode.DIFFERENCE, BlendMode.EXCLUSION, BlendMode.MULTIPLY,
             BlendMode.HUE, BlendMode.SATURATION, BlendMode.COLOR, BlendMode.LUMINOSITY,
         )
-        val gColors = listOf(Color.WHITE, Color.RED, Color.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f), Color.fromRGBA(0f, 0f, 0.5f, 0.5f))
+        val gColors = listOf(ColorARGB.White, ColorARGB.Red, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f), ColorARGB.fromRGBA(0f, 0f, 0.5f, 0.5f))
         const val kNumXferModes = 29
         const val kNumColors = 4
         const val kAtlasSize = 30

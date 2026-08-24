@@ -2,8 +2,8 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -34,12 +34,12 @@ class PathFillGm : SkiaGm {
 
         // Frame
         val frameRect = RectF32(10f, 10f, 630f, 470f)
-        val frameRRect = org.graphiks.kanvas.types.RRect(
+        val frameRRect = org.graphiks.math.geometry.RRectF32.of(
             frameRect, 
-            CornerRadii(15f, 15f),
-            CornerRadii(15f, 15f),
-            CornerRadii(15f, 15f),
-            CornerRadii(15f, 15f)
+            CornerRadiiF32.of(15f, 15f),
+            CornerRadiiF32.of(15f, 15f),
+            CornerRadiiF32.of(15f, 15f),
+            CornerRadiiF32.of(15f, 15f)
         )
         val framePath = Path { }.also { it.addRRect(frameRRect) }
         canvas.drawPath(framePath, paint)

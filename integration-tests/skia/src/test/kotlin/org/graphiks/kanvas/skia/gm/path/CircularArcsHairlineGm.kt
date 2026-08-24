@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -28,17 +28,17 @@ class CircularArcsHairlineGm : SkiaGm {
         drawGrid(canvas, 0f, kH / 2f, useCenter = false, aa = true, style = PaintStyle.STROKE, strokeWidth = 0f)
         drawGrid(canvas, kW / 2f, kH / 2f, useCenter = true, aa = true, style = PaintStyle.STROKE, strokeWidth = 0f)
 
-        val linePaint = Paint(antiAlias = true, color = Color.BLACK)
+        val linePaint = Paint(antiAlias = true, color = ColorARGB.Black)
         canvas.drawLine(kW / 2f, 0f, kW / 2f, kH.toFloat(), linePaint)
         canvas.drawLine(0f, kH / 2f, kW.toFloat(), kH / 2f, linePaint)
     }
 
     private fun drawGrid(c: GmCanvas, x: Float, y: Float, useCenter: Boolean, aa: Boolean, style: PaintStyle, strokeWidth: Float) {
         val pad = 20f
-        val p0 = Paint(color = Color.RED, antiAlias = aa, style = style, strokeWidth = strokeWidth)
-        val p1 = Paint(color = Color.BLUE, antiAlias = aa, style = style, strokeWidth = strokeWidth)
-        val alphaRed = Color.fromRGBA(1f, 0f, 0f, 100f / 255f)
-        val alphaBlue = Color.fromRGBA(0f, 0f, 1f, 100f / 255f)
+        val p0 = Paint(color = ColorARGB.Red, antiAlias = aa, style = style, strokeWidth = strokeWidth)
+        val p1 = Paint(color = ColorARGB.Blue, antiAlias = aa, style = style, strokeWidth = strokeWidth)
+        val alphaRed = ColorARGB.fromRGBA(1f, 0f, 0f, 100f / 255f)
+        val alphaBlue = ColorARGB.fromRGBA(0f, 0f, 1f, 100f / 255f)
 
         c.save()
         c.translate(pad + x, pad + y)

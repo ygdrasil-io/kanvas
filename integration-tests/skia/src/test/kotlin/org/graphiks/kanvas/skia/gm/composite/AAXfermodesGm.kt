@@ -9,16 +9,8 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.TextAlign
 import org.graphiks.kanvas.skia.portableFont
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.redByte
-import org.graphiks.kanvas.types.alphaByte
 
 /**
  * Port of Skia's gm/aaxfermodes.cpp.
@@ -179,31 +171,31 @@ class AAXfermodesGm : SkiaGm {
         )
     }
 
-    private fun setupShapePaint(canvas: GmCanvas, color: Color, mode: BlendMode): Paint {
+    private fun setupShapePaint(canvas: GmCanvas, color: ColorARGB, mode: BlendMode): Paint {
         var paint = Paint(color = color)
         if (mode != BlendMode.PLUS) return paint
 
         // Detect overflow on any channel
         val maxSum = maxOf(
-            kBGColor.alphaByte + color.alphaByte,
-            kBGColor.redByte + color.redByte,
-            kBGColor.greenByte + color.greenByte,
-            kBGColor.blueByte + color.blueByte,
+            kBGColor.alpha + color.alpha,
+            kBGColor.red + color.red,
+            kBGColor.green + color.green,
+            kBGColor.blue + color.blue,
         )
         if (maxSum <= 255) return paint
 
-        if (color.alphaByte != 0xFF) {
+        if (color.alpha != 0xFF) {
             val dimPaint = Paint(
-                color = Color.fromArgb(255 * 255 / maxSum, 0, 0, 0),
+                color = ColorARGB.of(255 * 255 / maxSum, 0, 0, 0),
                 antiAlias = false,
                 blendMode = BlendMode.DST_IN,
             )
             paint = paint.copy(
-                color = Color.fromArgb(
-                    255 * color.alphaByte / maxSum,
-                    color.redByte,
-                    color.greenByte,
-                    color.blueByte,
+                color = ColorARGB.of(
+                    255 * color.alpha / maxSum,
+                    color.red,
+                    color.green,
+                    color.blue,
                 ),
             )
             canvas.drawRect(
@@ -215,7 +207,7 @@ class AAXfermodesGm : SkiaGm {
             )
         } else {
             val dimPaint = Paint(
-                color = Color.TRANSPARENT,
+                color = ColorARGB.Transparent,
                 antiAlias = false,
                 blendMode = BlendMode.DST_IN,
             )
@@ -317,12 +309,12 @@ class AAXfermodesGm : SkiaGm {
         )
         internal val upstreamCoeffSplit: Int = upstreamBlendModes.indexOf(BlendMode.SCREEN) + 1
 
-        fun intToColor(value: Int): Color {
+        fun intToColor(value: Int): ColorARGB {
             val a = (value ushr 24) and 0xFF
             val r = (value ushr 16) and 0xFF
             val g = (value ushr 8) and 0xFF
             val b = value and 0xFF
-            return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+            return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
         }
 
         internal const val kShapeSize: Int = 22
@@ -380,6 +372,6 @@ private val BlendMode.upstreamName: String
         BlendMode.EXCLUSION -> "Exclusion"
         BlendMode.HUE -> "Hue"
         BlendMode.SATURATION -> "Saturation"
-        BlendMode.COLOR -> "Color"
+        BlendMode.COLOR -> "ColorARGB"
         BlendMode.LUMINOSITY -> "Luminosity"
     }

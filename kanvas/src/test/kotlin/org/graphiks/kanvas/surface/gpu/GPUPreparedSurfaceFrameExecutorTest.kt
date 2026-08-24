@@ -45,7 +45,7 @@ import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -128,7 +128,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 ),
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(0f, 0f, 1f, 4f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -222,7 +222,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 nonEmptyText(typeface = typeface, clip = targetEmptyClip()),
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(0f, 0f, 1f, 4f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -748,7 +748,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(4f, 4f, 28f, 20f),
-                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -788,13 +788,13 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 32f, 24f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(4f, 4f, 28f, 20f),
-                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -822,13 +822,13 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 32f, 24f),
-                Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(4f, 4f, 28f, 20f),
-                Paint.fill(Color.BLUE).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -1024,7 +1024,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 1f, 4f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -1058,7 +1058,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 1f, 4f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -1079,7 +1079,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         ),
         x = 4f,
         y = 24f,
-        paint = Paint.fill(Color.WHITE),
+        paint = Paint.fill(ColorARGB.White),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
@@ -1103,7 +1103,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
         ),
         x = 4f,
         y = 24f,
-        paint = Paint.fill(Color.WHITE).copy(blendMode = blendMode),
+        paint = Paint.fill(ColorARGB.White).copy(blendMode = blendMode),
         transform = Matrix3x3F32.Identity,
         clip = clip,
     )
@@ -1132,7 +1132,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 ),
                 x = 4f,
                 y = 24f,
-                paint = Paint.fill(Color.WHITE).copy(blendMode = blendMode),
+                paint = Paint.fill(ColorARGB.White).copy(blendMode = blendMode),
                 transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),

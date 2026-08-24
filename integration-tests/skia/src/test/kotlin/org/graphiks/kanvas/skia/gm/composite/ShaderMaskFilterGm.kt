@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -34,8 +34,8 @@ class ShaderMaskFilterGm : SkiaGm {
             start = Point2F32(r.left, r.top),
             end = Point2F32(r.right, r.bottom),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 0f)),
-                GradientStop(1f, Color.WHITE),
+                GradientStop(0f, ColorARGB.fromRGBA(0f, 0f, 0f, 0f)),
+                GradientStop(1f, ColorARGB.White),
             ),
             tileMode = TileMode.REPEAT,
         )
@@ -46,7 +46,7 @@ class ShaderMaskFilterGm : SkiaGm {
 
         val paint = Paint(
             maskFilter = mf,
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
         )
         canvas.drawOval(r, paint)

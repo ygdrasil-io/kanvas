@@ -42,7 +42,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -536,7 +536,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `NEAREST sampling conserved`() {
         val image = rgbaImage()
-        val paint = Paint.fill(Color.WHITE).copy(
+        val paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.NEAREST),
         )
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -556,7 +556,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `LINEAR sampling conserved`() {
         val image = rgbaImage()
-        val paint = Paint.fill(Color.WHITE).copy(
+        val paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.LINEAR),
         )
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -576,7 +576,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `cubic sampling refused`() {
         val image = rgbaImage()
-        val paint = Paint.fill(Color.WHITE).copy(
+        val paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.Cubic.Mitchell),
         )
         val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
@@ -596,7 +596,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `tint A8 uses paint color channels`() {
         val image = commonA8Image()
-        val red = Color.fromArgb(255, 255, 0, 0)
+        val red = ColorARGB.of(255, 255, 0, 0)
         val paint = Paint.fill(red)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -619,7 +619,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `paint alpha applied to RGBA tint once`() {
         val image = rgbaImage()
-        val semiTransparent = Color.fromArgb(128, 255, 255, 255)
+        val semiTransparent = ColorARGB.of(128, 255, 255, 255)
         val paint = Paint.fill(semiTransparent)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -644,8 +644,8 @@ class GPUPreparedDrawImageLowererTest {
     fun `RGBA paint RGB is neutral while equal nontrivial alpha stays exact`() {
         val image = rgbaImage()
         val paints = listOf(
-            Paint.fill(Color.fromArgb(192, 128, 64, 160)),
-            Paint.fill(Color.fromArgb(192, 32, 224, 96)),
+            Paint.fill(ColorARGB.of(192, 128, 64, 160)),
+            Paint.fill(ColorARGB.of(192, 32, 224, 96)),
         )
 
         val tints = paints.mapIndexed { index, paint ->
@@ -738,7 +738,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `blend mode unsupported by native image pipeline is refused before recording`() {
         val image = rgbaImage()
-        val multiplyPaint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.MULTIPLY)
+        val multiplyPaint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.MULTIPLY)
         val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, paint = multiplyPaint),
@@ -761,7 +761,7 @@ class GPUPreparedDrawImageLowererTest {
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(
                     rgbaImage(),
-                    paint = Paint.fill(Color.WHITE).copy(
+                    paint = Paint.fill(ColorARGB.White).copy(
                         blendMode = BlendMode.MULTIPLY,
                         blender = Blender.Mode(BlendMode.SRC_OVER),
                     ),
@@ -784,7 +784,7 @@ class GPUPreparedDrawImageLowererTest {
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(
                     rgbaImage(),
-                    paint = Paint.fill(Color.WHITE).copy(
+                    paint = Paint.fill(ColorARGB.White).copy(
                         blendMode = BlendMode.SRC_OVER,
                         blender = Blender.Mode(BlendMode.MULTIPLY),
                     ),
@@ -815,7 +815,7 @@ class GPUPreparedDrawImageLowererTest {
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(
                     rgbaImage(),
-                    paint = Paint.fill(Color.WHITE).copy(
+                    paint = Paint.fill(ColorARGB.White).copy(
                         blender = Blender.Arithmetic(0f, 1f, 1f, 0f),
                     ),
                 ),

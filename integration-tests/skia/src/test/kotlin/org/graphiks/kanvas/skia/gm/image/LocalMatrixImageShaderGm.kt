@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,7 +28,7 @@ class LocalMatrixImageShaderGm : SkiaGm {
     override val height = 250
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val redImage = makeImage(Color.RED)
+        val redImage = makeImage(ColorARGB.Red)
         val translate = Matrix3x3F32.translation(100f, 0f)
         val rotate = Matrix3x3F32.rotation(45f)
 
@@ -39,7 +39,7 @@ class LocalMatrixImageShaderGm : SkiaGm {
         )
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
 
-        val blueImage = makeImage(Color.BLUE)
+        val blueImage = makeImage(ColorARGB.Blue)
         val blueComposed = rotate * translate
         paint = paint.copy(
             shader = Shader.Image(blueImage, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.NEAREST)
@@ -60,7 +60,7 @@ class LocalMatrixImageShaderGm : SkiaGm {
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 250f, 250f), paint)
     }
 
-    private fun makeImage(color: Color): org.graphiks.kanvas.image.Image {
+    private fun makeImage(color: ColorARGB): org.graphiks.kanvas.image.Image {
         val surface = Surface(100, 100)
         surface.canvas {
             drawRect(RectF32.ofOriginSize(25f, 25f, 50f, 50f), Paint(antiAlias = true, color = color))

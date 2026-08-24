@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/typeface.cpp::typeface_styling` (710 × 360).
@@ -55,6 +55,6 @@ class TypefaceStylingGm : SkiaGm {
         // Row 1 — normal
         canvas.drawString("A", 20f, 120f * 1, font, paint)
         // Row 3 overlay — yellow
-        canvas.drawString("A", 20f, 120f * 3, font, paint.copy(color = Color.fromRGBA(1f, 1f, 0f, 1f)))
+        canvas.drawString("A", 20f, 120f * 3, font, paint.copy(color = ColorARGB.fromRGBA(1f, 1f, 0f, 1f)))
     }
 }

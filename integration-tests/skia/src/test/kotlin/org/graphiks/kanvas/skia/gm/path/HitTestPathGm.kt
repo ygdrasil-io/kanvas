@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
@@ -79,7 +79,7 @@ class HitTestPathGm : SkiaGm {
         r: RectF32,
         margin: Float,
     ) {
-        val paint = Paint(color = Color.RED)
+        val paint = Paint(color = ColorARGB.Red)
         canvas.drawPath(path, paint)
 
         val hits = ArrayList<Point2F32>()
@@ -98,7 +98,7 @@ class HitTestPathGm : SkiaGm {
             canvas.drawPoints(
                 PointMode.POINTS, hits,
                 Paint(
-                    color = Color(0x800000FFu),
+                    color = ColorARGB.fromPackedUInt(0x800000FFu),
                     style = PaintStyle.STROKE,
                     strokeWidth = 0f,
                 ),

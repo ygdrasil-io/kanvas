@@ -1,9 +1,9 @@
 package org.graphiks.kanvas.paint
 
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 data class Paint(
-    val color: Color = Color.BLACK,
+    val color: ColorARGB = ColorARGB.Black,
     val shader: Shader? = null,
     val blendMode: BlendMode = BlendMode.SRC_OVER,
     val colorFilter: ColorFilter? = null,
@@ -19,8 +19,8 @@ data class Paint(
     val antiAlias: Boolean = true,
 ) {
     companion object {
-        fun fill(color: Color) = Paint(color = color)
-        fun stroke(color: Color, width: Float) = Paint(
+        fun fill(color: ColorARGB) = Paint(color = color)
+        fun stroke(color: ColorARGB, width: Float) = Paint(
             color = color, style = PaintStyle.STROKE, strokeWidth = width,
         )
     }

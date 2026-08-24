@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -35,7 +35,7 @@ class GradientManyStopsGm : SkiaGm {
                 3 -> Triple(0f, 0f, 1f)
                 else -> Triple(1f, 0f, 0f)
             }
-            GradientStop(i.toFloat() / (kStopCount - 1), Color.fromRGBA(r, g, b, 1f))
+            GradientStop(i.toFloat() / (kStopCount - 1), ColorARGB.fromRGBA(r, g, b, 1f))
         }
 
         val paint = Paint(shader = Shader.LinearGradient(

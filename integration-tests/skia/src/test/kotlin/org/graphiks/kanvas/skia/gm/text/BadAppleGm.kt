@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/fontregen.cpp::BadAppleGM`.
@@ -26,7 +26,7 @@ class BadAppleGm : SkiaGm {
             typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!,
             size = 256f,
         )
-        val paint = Paint(color = Color(0xFF111111u))
+        val paint = Paint(color = ColorARGB.fromPackedUInt(0xFF111111u))
         canvas.drawString("Meet", 10f, 260f, font, paint)
         canvas.drawString("iPad Pro", 10f, 500f, font, paint)
     }

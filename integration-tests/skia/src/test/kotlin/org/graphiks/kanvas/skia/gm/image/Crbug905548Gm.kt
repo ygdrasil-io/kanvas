@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -28,7 +28,7 @@ class Crbug905548Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val offscreen = Surface(100, 100)
-        offscreen.canvas { drawCircle(50f, 50f, 45f, Paint.fill(Color.BLACK)) }
+        offscreen.canvas { drawCircle(50f, 50f, 45f, Paint.fill(ColorARGB.Black)) }
         val circleImage = offscreen.makeImageSnapshot()
         val rectBounds = RectF32.ofOriginSize(0f, 0f, 100f, 100f)
 

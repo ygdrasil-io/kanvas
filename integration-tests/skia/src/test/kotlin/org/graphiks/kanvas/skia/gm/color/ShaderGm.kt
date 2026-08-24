@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -25,19 +25,19 @@ class ShaderGm : SkiaGm {
         val h2 = height / 2f
         val grad1 = Shader.LinearGradient(
             Point2F32(0f, 0f), Point2F32(w2, h2),
-            listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
         )
         val grad2 = Shader.LinearGradient(
             Point2F32(w2, 0f), Point2F32(width.toFloat(), h2),
-            listOf(GradientStop(0f, Color.GREEN), GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f))),
+            listOf(GradientStop(0f, ColorARGB.Green), GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f))),
         )
         val grad3 = Shader.LinearGradient(
             Point2F32(0f, h2), Point2F32(w2, height.toFloat()),
-            listOf(GradientStop(0f, Color.fromRGBA(0f, 1f, 1f, 1f)), GradientStop(1f, Color.fromRGBA(1f, 0f, 1f, 1f))),
+            listOf(GradientStop(0f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)), GradientStop(1f, ColorARGB.fromRGBA(1f, 0f, 1f, 1f))),
         )
         val grad4 = Shader.LinearGradient(
             Point2F32(w2, h2), Point2F32(width.toFloat(), height.toFloat()),
-            listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
+            listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Black)),
         )
         canvas.drawRect(RectF32(0f, 0f, w2, h2), Paint(shader = grad1))
         canvas.drawRect(RectF32(w2, 0f, width.toFloat(), h2), Paint(shader = grad2))

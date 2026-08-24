@@ -5,16 +5,16 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.min
 import kotlin.random.Random
 
 /**
  * Port of Skia's `gm/shapes.cpp::InnerShapesGM` (500 × 500).
- * 9 RRect cells, each using an outer shape and an inner shape
+ * 9 RRectF32 cells, each using an outer shape and an inner shape
  * picked via `(i*7 + 11) % simpleShapeCount` — scaled and translated to fit inside.
  * @see https://github.com/google/skia/blob/main/gm/shapes.cpp
  */
@@ -26,42 +26,42 @@ open class InnerShapesGm(private val antialias: Boolean) : SkiaGm {
     override val width = 500
     override val height = 500
 
-    private val shapes: List<RRect>
+    private val shapes: List<RRectF32>
     private val rotations: FloatArray
     private val simpleShapeCount: Int
 
     init {
-        val s = mutableListOf<RRect>()
+        val s = mutableListOf<RRectF32>()
         val r = mutableListOf<Float>()
 
-        s.add(RRect(RectF32(-5f, 25f, 195f, 125f),
-            CornerRadii(100f, 50f), CornerRadii(100f, 50f), CornerRadii(100f, 50f), CornerRadii(100f, 50f)))
+        s.add(RRectF32.of(RectF32(-5f, 25f, 195f, 125f),
+            CornerRadiiF32.of(100f, 50f), CornerRadiiF32.of(100f, 50f), CornerRadiiF32.of(100f, 50f), CornerRadiiF32.of(100f, 50f)))
         r.add(21f)
-        s.add(RRect(RectF32(95f, 75f, 220f, 175f)))
+        s.add(RRectF32.of(RectF32(95f, 75f, 220f, 175f)))
         r.add(94f)
-        s.add(RRect(RectF32(0f, 75f, 150f, 175f), CornerRadii(1e-5f, 1e-5f)))
+        s.add(RRectF32.of(RectF32(0f, 75f, 150f, 175f), CornerRadiiF32.of(1e-5f, 1e-5f)))
         r.add(132f)
-        s.add(RRect(RectF32(15f, -20f, 115f, 80f), CornerRadii(20f, 15f)))
+        s.add(RRectF32.of(RectF32(15f, -20f, 115f, 80f), CornerRadiiF32.of(20f, 15f)))
         r.add(282f)
 
         simpleShapeCount = s.size
 
-        s.add(RRect(RectF32(140f, -50f, 230f, 60f),
-            CornerRadii(10f, 5f), CornerRadii(25f, 35f), CornerRadii(10f, 5f), CornerRadii(25f, 35f)))
+        s.add(RRectF32.of(RectF32(140f, -50f, 230f, 60f),
+            CornerRadiiF32.of(10f, 5f), CornerRadiiF32.of(25f, 35f), CornerRadiiF32.of(10f, 5f), CornerRadiiF32.of(25f, 35f)))
         r.add(0f)
-        s.add(RRect(RectF32(160f, -60f, 220f, 30f),
-            CornerRadii(10f, 60f), CornerRadii(50f, 30f), CornerRadii(10f, 60f), CornerRadii(50f, 30f)))
+        s.add(RRectF32.of(RectF32(160f, -60f, 220f, 30f),
+            CornerRadiiF32.of(10f, 60f), CornerRadiiF32.of(50f, 30f), CornerRadiiF32.of(10f, 60f), CornerRadiiF32.of(50f, 30f)))
         r.add(-35f)
-        s.add(RRect(RectF32(220f, -120f, 280f, -30f),
-            CornerRadii(1f, 89f), CornerRadii(59f, 1f), CornerRadii(1f, 89f), CornerRadii(59f, 1f)))
+        s.add(RRectF32.of(RectF32(220f, -120f, 280f, -30f),
+            CornerRadiiF32.of(1f, 89f), CornerRadiiF32.of(59f, 1f), CornerRadiiF32.of(1f, 89f), CornerRadiiF32.of(59f, 1f)))
         r.add(65f)
 
-        s.add(RRect(RectF32(150f, -129f, 230f, 31f),
-            CornerRadii(4f, 6f), CornerRadii(12f, 8f), CornerRadii(24f, 16f), CornerRadii(32f, 48f)))
+        s.add(RRectF32.of(RectF32(150f, -129f, 230f, 31f),
+            CornerRadiiF32.of(4f, 6f), CornerRadiiF32.of(12f, 8f), CornerRadiiF32.of(24f, 16f), CornerRadiiF32.of(32f, 48f)))
         r.add(265f)
 
-        s.add(RRect(RectF32(180f, -30f, 260f, 30f),
-            CornerRadii(0f, 0f), CornerRadii(80f, 60f), CornerRadii(0f, 0f), CornerRadii(80f, 60f)))
+        s.add(RRectF32.of(RectF32(180f, -30f, 260f, 30f),
+            CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(80f, 60f), CornerRadiiF32.of(0f, 0f), CornerRadiiF32.of(80f, 60f)))
         r.add(295f)
 
         shapes = s
@@ -101,7 +101,7 @@ open class InnerShapesGm(private val antialias: Boolean) : SkiaGm {
             val rgba = (rand.nextInt() and 0x7F7F7F) or (0x80 shl 24)
             val paint = Paint(
                 antiAlias = antialias,
-                color = Color(rgba.toUInt()),
+                color = ColorARGB.fromPackedUInt(rgba.toUInt()),
             )
             canvas.save()
             canvas.rotate(rotations[i])
@@ -111,7 +111,7 @@ open class InnerShapesGm(private val antialias: Boolean) : SkiaGm {
         canvas.restore()
     }
 
-    private fun scaleRRect(inner: RRect, cx: Float, cy: Float, scale: Float): RRect {
+    private fun scaleRRect(inner: RRectF32, cx: Float, cy: Float, scale: Float): RRectF32 {
         val rect = inner.rect
         val newW = rect.width() * scale
         val newH = rect.height() * scale
@@ -122,20 +122,20 @@ open class InnerShapesGm(private val antialias: Boolean) : SkiaGm {
             inner.bottomLeft.x == 0f && inner.bottomLeft.y == 0f
         val isOval = inner.topLeft.x >= inner.rect.width() / 2f && inner.topLeft.y >= inner.rect.height() / 2f
         if (isSimpleRect) {
-            return RRect(newRect)
+            return RRectF32.of(newRect)
         }
         if (isOval) {
-            return RRect(newRect,
-                CornerRadii(newW / 2f, newH / 2f),
-                CornerRadii(newW / 2f, newH / 2f),
-                CornerRadii(newW / 2f, newH / 2f),
-                CornerRadii(newW / 2f, newH / 2f))
+            return RRectF32.of(newRect,
+                CornerRadiiF32.of(newW / 2f, newH / 2f),
+                CornerRadiiF32.of(newW / 2f, newH / 2f),
+                CornerRadiiF32.of(newW / 2f, newH / 2f),
+                CornerRadiiF32.of(newW / 2f, newH / 2f))
         }
-        return RRect(newRect,
-            CornerRadii(inner.topLeft.x * scale, inner.topLeft.y * scale),
-            CornerRadii(inner.topRight.x * scale, inner.topRight.y * scale),
-            CornerRadii(inner.bottomRight.x * scale, inner.bottomRight.y * scale),
-            CornerRadii(inner.bottomLeft.x * scale, inner.bottomLeft.y * scale))
+        return RRectF32.of(newRect,
+            CornerRadiiF32.of(inner.topLeft.x * scale, inner.topLeft.y * scale),
+            CornerRadiiF32.of(inner.topRight.x * scale, inner.topRight.y * scale),
+            CornerRadiiF32.of(inner.bottomRight.x * scale, inner.bottomRight.y * scale),
+            CornerRadiiF32.of(inner.bottomLeft.x * scale, inner.bottomLeft.y * scale))
     }
 }
 

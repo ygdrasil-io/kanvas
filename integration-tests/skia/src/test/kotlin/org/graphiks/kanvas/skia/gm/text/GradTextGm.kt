@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -61,9 +61,9 @@ class GradTextGm : SkiaGm {
         start = Point2F32(0f, 0f),
         end = Point2F32(width, 0f),
         stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 0f)),
-            GradientStop(1f, Color.BLUE),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 0f)),
+            GradientStop(1f, ColorARGB.Blue),
         ),
         tileMode = TileMode.MIRROR,
     )
@@ -72,9 +72,9 @@ class GradTextGm : SkiaGm {
         start = Point2F32(0f, 0f),
         end = Point2F32(width, 0f),
         stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(0.5f, Color.GREEN),
-            GradientStop(1f, Color.BLUE),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(0.5f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Blue),
         ),
         tileMode = TileMode.MIRROR,
     )

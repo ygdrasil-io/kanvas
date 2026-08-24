@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ColorFilter
@@ -48,7 +50,7 @@ class SrgbGm : SkiaGm {
             0f, 0f, 1f, 0f, 0f,
             -1f, 0f, 0f, 1f, 0f,
         )
-        val cf0 = ColorFilter.Matrix(array)
+        val cf0 = ColorFilter.Matrix(ColorMatrixF32.of(array))
         val cf1 = ColorFilter.LinearToSRGB
         val cf2 = ColorFilter.SRGBToLinear
 

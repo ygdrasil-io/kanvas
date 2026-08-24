@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/bigtext.cpp` (bigtext_crbug_1370488).
@@ -29,6 +29,6 @@ class BigTextCrbug1370488Gm : SkiaGm {
         val font = Font(typeface, size = 12f)
         canvas.translate(-1800f, 1800f)
         canvas.scale(437.5f, 437.5f)
-        canvas.drawString("H", 0f, 0f, font, Paint(antiAlias = true, color = Color.BLACK))
+        canvas.drawString("H", 0f, 0f, font, Paint(antiAlias = true, color = ColorARGB.Black))
     }
 }

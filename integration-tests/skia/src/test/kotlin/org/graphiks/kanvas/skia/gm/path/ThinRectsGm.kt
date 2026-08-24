@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ThinRectsGm : SkiaGm {
@@ -24,8 +24,8 @@ class ThinRectsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 1f)
-        val white = Paint(color = Color.WHITE, antiAlias = true)
-        val green = Paint(color = Color.GREEN, antiAlias = true)
+        val white = Paint(color = ColorARGB.White, antiAlias = true)
+        val green = Paint(color = ColorARGB.Green, antiAlias = true)
 
         for (i in 0 until 8) {
             canvas.save()

@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
@@ -45,7 +45,7 @@ class Xfermodes3Gm : SkiaGm {
         val bgShader = makeBgShader()
         val bmpShader = makeBmpShader()
 
-        val solidColors = listOf(Color.TRANSPARENT, Color.fromRGBA(0f, 0f, 1f, 1f), Color.fromRGBA(0.5f, 0.5f, 0f, 0.5f))
+        val solidColors = listOf(ColorARGB.Transparent, ColorARGB.fromRGBA(0f, 0f, 1f, 1f), ColorARGB.fromRGBA(0.5f, 0.5f, 0f, 0.5f))
         val bmpAlphas = listOf(0xFF, 0x80)
 
         val strokes = listOf(
@@ -79,7 +79,7 @@ class Xfermodes3Gm : SkiaGm {
                     val alpha = if (bmpAlphas[a] == 0xFF) 1f else 0.5f
                     val modePaint = Paint(
                         blendMode = mode,
-                        color = Color.fromRGBA(1f, 1f, 1f, alpha),
+                        color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha),
                         shader = bmpShader,
                         style = style,
                         strokeWidth = strokeWidth,
@@ -120,8 +120,8 @@ class Xfermodes3Gm : SkiaGm {
     private fun makeBgShader(): Shader {
         val bg = Surface(2, 2)
         bg.canvas {
-            val dark = Color.fromRGBA(0.259f, 0.255f, 0.259f, 1f)
-            val light = Color.fromRGBA(0.839f, 0.827f, 0.839f, 1f)
+            val dark = ColorARGB.fromRGBA(0.259f, 0.255f, 0.259f, 1f)
+            val light = ColorARGB.fromRGBA(0.839f, 0.827f, 0.839f, 1f)
             clear(dark)
             drawRect(RectF32(1f, 0f, 2f, 1f), Paint(color = light))
             drawRect(RectF32(0f, 1f, 1f, 2f), Paint(color = light))
@@ -136,10 +136,10 @@ class Xfermodes3Gm : SkiaGm {
     private fun makeBmpShader(): Shader {
         val center = Point2F32(kSize / 2f, kSize / 2f)
         val colors = listOf<GradientStop>(
-            GradientStop(0f, Color.TRANSPARENT),
-            GradientStop(0.5f, Color.fromRGBA(0.5f, 0f, 0f, 0.5f)),
-            GradientStop(0.75f, Color.fromRGBA(0.94f, 0.12f, 0.38f, 0.94f)),
-            GradientStop(1f, Color.fromRGBA(1f, 1f, 1f, 1f)),
+            GradientStop(0f, ColorARGB.Transparent),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0.5f, 0f, 0f, 0.5f)),
+            GradientStop(0.75f, ColorARGB.fromRGBA(0.94f, 0.12f, 0.38f, 0.94f)),
+            GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 1f, 1f)),
         )
         return Shader.RadialGradient(center, 3f * kSize / 4f, colors, TileMode.REPEAT)
     }

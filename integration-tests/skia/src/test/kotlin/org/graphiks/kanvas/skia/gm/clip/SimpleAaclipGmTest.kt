@@ -4,7 +4,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -19,7 +19,7 @@ class SimpleAaclipGmTest {
 
         val rects = surface.snapshotOps().filterIsInstance<DisplayOp.DrawRect>()
         assertEquals(RectF32.ofLTRB(0f, 0f, 500f, 240f), rects.first().rect)
-        assertEquals(Color(0xFFDDDDDDu), rects.first().paint.color)
+        assertEquals(ColorARGB.fromPackedUInt(0xFFDDDDDDu), rects.first().paint.color)
 
         val outlines = rects.filter { it.paint.style == PaintStyle.STROKE }
         assertEquals(RectF32.ofLTRB(100.65f, 100.65f, 150.65f, 150.65f), outlines[0].rect)

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.geometry.RectF32
@@ -36,15 +36,15 @@ class LightingGm : SkiaGm {
     override fun onOnceBeforeDraw(canvas: GmCanvas) {
         val surf = Surface(100, 100)
         surf.canvas {
-            drawRect(RectF32(0f, 0f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0f)))
-            drawRect(RectF32.ofOriginSize(20f, 20f, 60f, 60f), Paint(color = Color.WHITE))
+            drawRect(RectF32(0f, 0f, 100f, 100f), Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0f)))
+            drawRect(RectF32.ofOriginSize(20f, 20f, 60f, 60f), Paint(color = ColorARGB.White))
         }
         fBitmap = surf.makeImageSnapshot()
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0.063f, 0.063f, 0.063f, 1f)))
+            Paint(color = ColorARGB.fromRGBA(0.063f, 0.063f, 0.063f, 1f)))
 
         drawChecker(canvas)
 
@@ -70,7 +70,7 @@ class LightingGm : SkiaGm {
         val shininess = 8f
         val surfaceScale = 1f
         val surfaceScaleSmall = 0.1f
-        val greenYellow = Color.fromRGBA(173f / 255f, 255f / 255f, 47f / 255f)
+        val greenYellow = ColorARGB.fromRGBA(173f / 255f, 255f / 255f, 47f / 255f)
         val spotExponent1 = 1f
         val spotExponent10 = 10f
         val cutoffAngleSmall = 15f
@@ -79,27 +79,27 @@ class LightingGm : SkiaGm {
         var y = 0
 
         var paint = Paint(
-            imageFilter = ImageFilter.PointLitDiffuse(pointLocation, Color.WHITE, surfaceScale, kd, null),
+            imageFilter = ImageFilter.PointLitDiffuse(pointLocation, ColorARGB.White, surfaceScale, kd, null),
         )
         drawClipped(canvas, paint, 0, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.DistantLitDiffuse(distantDirection, Color.WHITE, surfaceScale, kd, null),
+            imageFilter = ImageFilter.DistantLitDiffuse(distantDirection, ColorARGB.White, surfaceScale, kd, null),
         )
         drawClipped(canvas, paint, 110, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent1, cutoffAngleSmall, Color.WHITE, surfaceScale, kd, null),
+            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent1, cutoffAngleSmall, ColorARGB.White, surfaceScale, kd, null),
         )
         drawClipped(canvas, paint, 220, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent10, cutoffAngleNone, Color.WHITE, surfaceScale, kd, null),
+            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent10, cutoffAngleNone, ColorARGB.White, surfaceScale, kd, null),
         )
         drawClipped(canvas, paint, 330, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent1, cutoffAngleNone, Color.WHITE, surfaceScaleSmall, kd, null),
+            imageFilter = ImageFilter.SpotLitDiffuse(spotLocation, spotTarget, spotExponent1, cutoffAngleNone, ColorARGB.White, surfaceScaleSmall, kd, null),
         )
         drawClipped(canvas, paint, 440, y)
 
@@ -111,27 +111,27 @@ class LightingGm : SkiaGm {
         y += 110
 
         paint = paint.copy(
-            imageFilter = ImageFilter.PointLitSpecular(pointLocation, Color.WHITE, surfaceScale, ks, shininess, null),
+            imageFilter = ImageFilter.PointLitSpecular(pointLocation, ColorARGB.White, surfaceScale, ks, shininess, null),
         )
         drawClipped(canvas, paint, 0, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.DistantLitSpecular(distantDirection, Color.WHITE, surfaceScale, ks, shininess, null),
+            imageFilter = ImageFilter.DistantLitSpecular(distantDirection, ColorARGB.White, surfaceScale, ks, shininess, null),
         )
         drawClipped(canvas, paint, 110, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent1, cutoffAngleSmall, Color.WHITE, surfaceScale, ks, shininess, null),
+            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent1, cutoffAngleSmall, ColorARGB.White, surfaceScale, ks, shininess, null),
         )
         drawClipped(canvas, paint, 220, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent10, cutoffAngleNone, Color.WHITE, surfaceScale, ks, shininess, null),
+            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent10, cutoffAngleNone, ColorARGB.White, surfaceScale, ks, shininess, null),
         )
         drawClipped(canvas, paint, 330, y)
 
         paint = paint.copy(
-            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent1, cutoffAngleNone, Color.WHITE, surfaceScaleSmall, ks, shininess, null),
+            imageFilter = ImageFilter.SpotLitSpecular(spotLocation, spotTarget, spotExponent1, cutoffAngleNone, ColorARGB.White, surfaceScaleSmall, ks, shininess, null),
         )
         drawClipped(canvas, paint, 440, y)
 
@@ -150,7 +150,7 @@ class LightingGm : SkiaGm {
     }
 
     private fun drawChecker(canvas: GmCanvas) {
-        val checkPaint = Paint(color = Color.fromRGBA(0.125f, 0.125f, 0.125f, 1f))
+        val checkPaint = Paint(color = ColorARGB.fromRGBA(0.125f, 0.125f, 0.125f, 1f))
         for (yy in 0 until HEIGHT step 16) {
             for (xx in 0 until WIDTH step 16) {
                 canvas.save()

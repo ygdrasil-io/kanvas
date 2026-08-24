@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.ReferenceStatusEntry
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -43,12 +43,12 @@ class CustomMeshUniformsGm : SkiaGm {
         )
 
         // Uniform = (0.8, 0.35, 0.9, 0.85) multiplied with per-vertex colors
-        fun applyUniform(r: Int, g: Int, b: Int, a: Int): Color {
+        fun applyUniform(r: Int, g: Int, b: Int, a: Int): ColorARGB {
             val ur = (r * 0.8f + 0.5f).toInt().coerceIn(0, 255)
             val ug = (g * 0.35f + 0.5f).toInt().coerceIn(0, 255)
             val ub = (b * 0.9f + 0.5f).toInt().coerceIn(0, 255)
             val ua = (a * 0.85f + 0.5f).toInt().coerceIn(0, 255)
-            return Color((ua.toUInt() shl 24) or (ur.toUInt() shl 16) or (ug.toUInt() shl 8) or ub.toUInt())
+            return ColorARGB.fromPackedUInt((ua.toUInt() shl 24) or (ur.toUInt() shl 16) or (ug.toUInt() shl 8) or ub.toUInt())
         }
 
         val vertexColors = listOf(
@@ -63,6 +63,6 @@ class CustomMeshUniformsGm : SkiaGm {
             positions = positions,
             colors = vertexColors,
         )
-        canvas.drawVertices(verts, Paint(color = Color.WHITE))
+        canvas.drawVertices(verts, Paint(color = ColorARGB.White))
     }
 }

@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
@@ -52,7 +52,7 @@ open class ManyPathAtlasesGm(private val maxAtlasSize: Int) : SkiaGm {
             cubicTo(20f, 20f, 20f, 20f, 20f, 0f)
         }
 
-        val teal = Paint(antiAlias = true, color = Color.fromRGBA(0.03f, 0.91f, 0.87f, 1f))
+        val teal = Paint(antiAlias = true, color = ColorARGB.fromRGBA(0.03f, 0.91f, 0.87f, 1f))
         canvas.drawPath(path, teal)
     }
 }

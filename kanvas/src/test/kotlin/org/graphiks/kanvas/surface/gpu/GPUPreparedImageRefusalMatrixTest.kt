@@ -39,7 +39,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -435,7 +435,7 @@ class GPUPreparedImageRefusalMatrixTest {
                 RuntimeRefusalCase(
                     "native-binding",
                     atlas(image).copy(
-                        paint = Paint.fill(Color.WHITE).copy(
+                        paint = Paint.fill(ColorARGB.White).copy(
                             blender = Blender.Arithmetic(0f, 1f, 1f, 0f),
                         ),
                     ),
@@ -534,7 +534,7 @@ class GPUPreparedImageRefusalMatrixTest {
         image = image,
         src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = RectF32.ofLTRB(0f, 0f, 4f, 4f),
-        paint = Paint.fill(Color.WHITE).copy(shader = shader),
+        paint = Paint.fill(ColorARGB.White).copy(shader = shader),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
@@ -543,9 +543,9 @@ class GPUPreparedImageRefusalMatrixTest {
         atlas = image,
         transforms = listOf(Matrix3x3F32.Identity),
         texRects = listOf(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
-        colors = listOf(Color.WHITE),
+        colors = listOf(ColorARGB.White),
         blendMode = BlendMode.SRC_OVER,
-        paint = Paint.fill(Color.WHITE),
+        paint = Paint.fill(ColorARGB.White),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )

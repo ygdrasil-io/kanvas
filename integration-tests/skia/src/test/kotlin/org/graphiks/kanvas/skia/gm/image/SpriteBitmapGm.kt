@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawCircle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/spritebitmap.cpp`.
@@ -67,8 +67,8 @@ class SpriteBitmapGm : SkiaGm {
     private fun makeBm(): Image {
         val surf = Surface(100, 100)
         surf.canvas {
-            drawColor(Color.BLUE)
-            val paint = Paint(color = Color.RED, antiAlias = true)
+            drawColor(ColorARGB.Blue)
+            val paint = Paint(color = ColorARGB.Red, antiAlias = true)
             drawCircle(50f, 50f, 50f, paint)
         }
         return surf.makeImageSnapshot()

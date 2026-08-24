@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/conicpaths.cpp::ConicPathsGM`.
@@ -35,7 +35,7 @@ class ConicPathsGm : SkiaGm {
                     for (fh in 0 until 2) {
                         val style = if (fh != 0) PaintStyle.STROKE else PaintStyle.FILL
                         val paint = Paint(
-                            color = Color.fromRGBA(0f, 0f, 0f, alpha / 255f),
+                            color = ColorARGB.fromRGBA(0f, 0f, 0f, alpha / 255f),
                             antiAlias = aa != 0,
                             style = style,
                         )

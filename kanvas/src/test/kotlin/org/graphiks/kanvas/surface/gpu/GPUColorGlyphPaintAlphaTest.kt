@@ -10,14 +10,9 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.redByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -68,7 +63,7 @@ class GPUColorGlyphPaintAlphaTest {
             partial.pixels,
             interior,
             premultipliedSrgb(
-                modulateCpalLayerAlpha(fixture.cpalColor, Color.fromArgb(128, 255, 255, 255)),
+                modulateCpalLayerAlpha(fixture.cpalColor, ColorARGB.of(128, 255, 255, 255)),
             ),
             tolerance = 2,
         )
@@ -122,7 +117,7 @@ class GPUColorGlyphPaintAlphaTest {
         assertPixelNear(
             result.pixels,
             clippedPixel,
-            Color.TRANSPARENT,
+            ColorARGB.Transparent,
             tolerance = 2,
         )
         assertPixelNear(
@@ -136,7 +131,7 @@ class GPUColorGlyphPaintAlphaTest {
     private data class FixtureGlyph(
         val typeface: FontTypeface,
         val glyphId: Int,
-        val cpalColor: Color,
+        val cpalColor: ColorARGB,
     )
 
     private fun loadSkiaColrV0Fixture(): FixtureGlyph {
@@ -159,7 +154,7 @@ class GPUColorGlyphPaintAlphaTest {
         return FixtureGlyph(
             typeface = typeface,
             glyphId = 2,
-            cpalColor = Color.fromArgb(255, 255, 42, 42),
+            cpalColor = ColorARGB.of(255, 255, 42, 42),
         )
     }
 
@@ -205,7 +200,7 @@ class GPUColorGlyphPaintAlphaTest {
                     ),
                     0f,
                     0f,
-                    Paint.fill(Color.fromArgb(paintAlpha, 255, 255, 255)).copy(
+                    Paint.fill(ColorARGB.of(paintAlpha, 255, 255, 255)).copy(
                         blendMode = BlendMode.COLOR_DODGE,
                     ),
                 )
@@ -214,18 +209,18 @@ class GPUColorGlyphPaintAlphaTest {
             render()
         }
 
-    private fun findOpaquePalettePixel(pixels: UByteArray, expected: Color): Int =
+    private fun findOpaquePalettePixel(pixels: UByteArray, expected: ColorARGB): Int =
         (0 until FIXTURE_DIMENSION * FIXTURE_DIMENSION).firstOrNull { index ->
             val offset = index * 4
-            (pixels[offset].toInt() and 0xFF) == expected.redByte &&
-                (pixels[offset + 1].toInt() and 0xFF) == expected.greenByte &&
-                (pixels[offset + 2].toInt() and 0xFF) == expected.blueByte &&
-                (pixels[offset + 3].toInt() and 0xFF) == expected.alphaByte
+            (pixels[offset].toInt() and 0xFF) == expected.red &&
+                (pixels[offset + 1].toInt() and 0xFF) == expected.green &&
+                (pixels[offset + 2].toInt() and 0xFF) == expected.blue &&
+                (pixels[offset + 3].toInt() and 0xFF) == expected.alpha
         } ?: error("fixture glyph produced no opaque CPAL pixel for $expected")
 
     private fun findOpaquePalettePixelOutside(
         pixels: UByteArray,
-        expected: Color,
+        expected: ColorARGB,
         excluded: RectF32,
     ): Int =
         (0 until FIXTURE_DIMENSION * FIXTURE_DIMENSION).firstOrNull { index ->
@@ -237,16 +232,16 @@ class GPUColorGlyphPaintAlphaTest {
                 y + 0.5f >= excluded.bottom
             val offset = index * 4
             outside &&
-                (pixels[offset].toInt() and 0xFF) == expected.redByte &&
-                (pixels[offset + 1].toInt() and 0xFF) == expected.greenByte &&
-                (pixels[offset + 2].toInt() and 0xFF) == expected.blueByte &&
-                (pixels[offset + 3].toInt() and 0xFF) == expected.alphaByte
+                (pixels[offset].toInt() and 0xFF) == expected.red &&
+                (pixels[offset + 1].toInt() and 0xFF) == expected.green &&
+                (pixels[offset + 2].toInt() and 0xFF) == expected.blue &&
+                (pixels[offset + 3].toInt() and 0xFF) == expected.alpha
         } ?: error("fixture glyph produced no surviving opaque CPAL pixel outside $excluded")
 
-    private fun assertPixelNear(pixels: UByteArray, index: Int, expected: Color, tolerance: Int) {
+    private fun assertPixelNear(pixels: UByteArray, index: Int, expected: ColorARGB, tolerance: Int) {
         val offset = index * 4
         val actual = List(4) { channel -> pixels[offset + channel].toInt() and 0xFF }
-        val wanted = listOf(expected.redByte, expected.greenByte, expected.blueByte, expected.alphaByte)
+        val wanted = listOf(expected.red, expected.green, expected.blue, expected.alpha)
         actual.zip(wanted).forEachIndexed { channel, (value, target) ->
             assertTrue(
                 kotlin.math.abs(value - target) <= tolerance,
@@ -272,15 +267,15 @@ class GPUColorGlyphPaintAlphaTest {
     }
 
     /** Oracle mirror of the retired CPAL modulation: paint alpha scales the layer alpha only. */
-    private fun modulateCpalLayerAlpha(layer: Color, paint: Color): Color = Color.fromArgb(
-        layer.alphaByte * paint.alphaByte / 255,
-        layer.redByte,
-        layer.greenByte,
-        layer.blueByte,
+    private fun modulateCpalLayerAlpha(layer: ColorARGB, paint: ColorARGB): ColorARGB = ColorARGB.of(
+        layer.alpha * paint.alpha / 255,
+        layer.red,
+        layer.green,
+        layer.blue,
     )
 
     /** RGBA8 sRGB readback stores premultiplied linear color, then transfers it to sRGB. */
-    private fun premultipliedSrgb(color: Color): Color {
+    private fun premultipliedSrgb(color: ColorARGB): ColorARGB {
         fun srgbToLinear(component: Int): Float {
             val normalized = component / 255f
             return if (normalized <= 0.04045f) normalized / 12.92f
@@ -292,11 +287,11 @@ class GPUColorGlyphPaintAlphaTest {
             else 1.055f * normalized.pow(1f / 2.4f) - 0.055f
             return (srgb * 255f).toInt().coerceIn(0, 255)
         }
-        return Color.fromArgb(
-            color.alphaByte,
-            linearToSrgb(srgbToLinear(color.redByte) * color.a),
-            linearToSrgb(srgbToLinear(color.greenByte) * color.a),
-            linearToSrgb(srgbToLinear(color.blueByte) * color.a),
+        return ColorARGB.of(
+            color.alpha,
+            linearToSrgb(srgbToLinear(color.red) * color.a),
+            linearToSrgb(srgbToLinear(color.green) * color.a),
+            linearToSrgb(srgbToLinear(color.blue) * color.a),
         )
     }
 

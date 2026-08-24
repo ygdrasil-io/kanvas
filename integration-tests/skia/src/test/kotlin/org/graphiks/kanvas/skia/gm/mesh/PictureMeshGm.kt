@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
@@ -38,10 +38,10 @@ class PictureMeshGm : SkiaGm {
             startAngle = 0f,
             endAngle = 360f,
             stops = listOf(
-                GradientStop(0f, Color(0xFFE91E63u)),
-                GradientStop(0.33f, Color(0xFF00BCD4u)),
-                GradientStop(0.66f, Color(0xFFFFEB3Bu)),
-                GradientStop(1f, Color(0xFFE91E63u)),
+                GradientStop(0f, ColorARGB.fromPackedUInt(0xFFE91E63u)),
+                GradientStop(0.33f, ColorARGB.fromPackedUInt(0xFF00BCD4u)),
+                GradientStop(0.66f, ColorARGB.fromPackedUInt(0xFFFFEB3Bu)),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0xFFE91E63u)),
             ),
         )
 

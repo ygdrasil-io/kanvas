@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.image.ColorType
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
 import org.graphiks.kanvas.codec.test.CodecTestFixtures.decodePixels
 import java.util.ServiceLoader
@@ -99,9 +99,9 @@ class CodecAllKotlinAssemblyTest {
         assertEquals(ColorType.RGBA_8888, info.colorType)
         assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
-        assertEquals(Color.fromArgbInt(CodecTestFixtures.RED), bitmap!!.getPixel(0, 0))
-        assertEquals(Color.fromArgbInt(CodecTestFixtures.GREEN), bitmap.getPixel(1, 0))
-        assertEquals(Color.fromArgbInt(CodecTestFixtures.BLUE), bitmap.getPixel(0, 1))
-        assertEquals(Color.fromArgbInt(CodecTestFixtures.WHITE), bitmap.getPixel(1, 1))
+        assertEquals(ColorARGB.fromPackedInt(CodecTestFixtures.RED), bitmap!!.getPixel(0, 0))
+        assertEquals(ColorARGB.fromPackedInt(CodecTestFixtures.GREEN), bitmap.getPixel(1, 0))
+        assertEquals(ColorARGB.fromPackedInt(CodecTestFixtures.BLUE), bitmap.getPixel(0, 1))
+        assertEquals(ColorARGB.fromPackedInt(CodecTestFixtures.WHITE), bitmap.getPixel(1, 1))
     }
 }

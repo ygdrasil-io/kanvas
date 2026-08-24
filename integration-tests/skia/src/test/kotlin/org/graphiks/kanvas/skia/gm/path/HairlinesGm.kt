@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
@@ -172,7 +172,7 @@ class HairlinesGm : SkiaGm {
                         }
 
                         val paint = Paint(
-                            color = Color.fromRGBA(0f, 0f, 0f, a / 255f),
+                            color = ColorARGB.fromRGBA(0f, 0f, 0f, a / 255f),
                             antiAlias = aa != 0,
                             style = PaintStyle.STROKE,
                             strokeWidth = w,

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -47,7 +47,7 @@ class FilterBugGm : SkiaGm {
 
         canvas.drawRect(
             RectF32(50f, 50f, 100f, 86f),
-            Paint(color = Color.WHITE, antiAlias = doAA),
+            Paint(color = ColorARGB.White, antiAlias = doAA),
         )
 
         canvas.drawRect(
@@ -65,8 +65,8 @@ class FilterBugGm : SkiaGm {
     private fun makeImage(firstBlackRow: Int, lastBlackRow: Int): Image {
         val surf = Surface(25, 27)
         surf.canvas {
-            drawColor(Color.WHITE)
-            val black = Paint(color = Color.BLACK)
+            drawColor(ColorARGB.White)
+            val black = Paint(color = ColorARGB.Black)
             for (y in firstBlackRow until lastBlackRow) {
                 drawRect(RectF32(0f, y.toFloat(), 25f, (y + 1).toFloat()), black)
             }

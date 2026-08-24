@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -45,7 +45,7 @@ class ClipDrawDrawGm : SkiaGm {
         canvas.drawRect(RectF32(0f, 0f, 600f, 600f), paint)
         canvas.restore()
 
-        val whitePaint = paint.copy(color = Color.WHITE)
+        val whitePaint = paint.copy(color = ColorARGB.White)
         canvas.drawRect(rect, whitePaint)
         canvas.restore()
     }

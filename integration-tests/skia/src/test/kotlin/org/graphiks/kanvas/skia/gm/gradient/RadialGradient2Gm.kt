@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -26,21 +26,21 @@ class RadialGradient2Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val sweepColors = listOf(
-            Color.fromRGBA(1f, 0f, 0f, 1f),
-            Color.fromRGBA(1f, 1f, 0f, 1f),
-            Color.fromRGBA(0f, 1f, 0f, 1f),
-            Color.fromRGBA(0f, 1f, 1f, 1f),
-            Color.fromRGBA(0f, 0f, 1f, 1f),
-            Color.fromRGBA(1f, 0f, 1f, 1f),
-            Color.fromRGBA(1f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 0f, 1f),
         )
         val colors1 = listOf(
-            Color.fromRGBA(1f, 1f, 1f, 1f),
-            Color.fromRGBA(0f, 0f, 0f, 0f),
+            ColorARGB.fromRGBA(1f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
         )
         val colors2 = listOf(
-            Color.fromRGBA(0f, 0f, 0f, 1f),
-            Color.fromRGBA(0f, 0f, 0f, 0f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
         )
 
         val cx = 200f

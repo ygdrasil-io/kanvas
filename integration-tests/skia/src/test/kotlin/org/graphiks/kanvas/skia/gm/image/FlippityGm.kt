@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -65,7 +65,7 @@ class FlippityGm : SkiaGm {
 
     private fun makeReferenceImage(): Image {
         val bitmap = Bitmap(kImageSize, kImageSize)
-        bitmap.eraseColor(Color.WHITE)
+        bitmap.eraseColor(ColorARGB.White)
         val image = bitmap.toImage()
         val surface = Surface(kImageSize, kImageSize)
         surface.canvas {
@@ -111,7 +111,7 @@ class FlippityGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun makeTextImage(text: String, color: Color): Image {
+    private fun makeTextImage(text: String, color: ColorARGB): Image {
         val surf = Surface(kLabelSize, kLabelSize)
         surf.canvas {
             val font = Font(typeface, 20f)
@@ -128,6 +128,6 @@ class FlippityGm : SkiaGm {
 
         val kPoints = listOf(Point2F32(0f, kImageSize.toFloat()), Point2F32(kImageSize.toFloat(), kImageSize.toFloat()), Point2F32(0f, 0f), Point2F32(kImageSize.toFloat(), 0f))
         val kLabelText = arrayOf("LL", "LR", "UL", "UR")
-        val kLabelColors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(0f, 1f, 1f))
+        val kLabelColors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.fromRGBA(0f, 1f, 1f))
     }
 }

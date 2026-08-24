@@ -25,10 +25,9 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.a
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class GPUPreparedColorGlyphSourceNativeOracleTest {
@@ -43,14 +42,14 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         backend!!
         try {
             val typeface = FontTypeface(source.fontBytes, "Task 11 source COLRv0 currentColor")
-            val foreground = Color.fromRGBA(
+            val foreground = ColorARGB.fromRGBA(
                 CURRENT_COLOR_REQUESTED_R,
                 CURRENT_COLOR_REQUESTED_G,
                 CURRENT_COLOR_REQUESTED_B,
                 PAINT_ALPHA_REQUESTED,
             )
             val operations = listOf(
-                textOperation(typeface, A8_GLYPH_ID, A8_ORIGIN_X, BASELINE_Y, Color.WHITE),
+                textOperation(typeface, A8_GLYPH_ID, A8_ORIGIN_X, BASELINE_Y, ColorARGB.White),
                 textOperation(typeface, BASE_GLYPH_ID, COLOR_ORIGIN_X_0, BASELINE_Y, foreground),
                 textOperation(typeface, BASE_GLYPH_ID, COLOR_ORIGIN_X_1, BASELINE_Y, foreground),
             )
@@ -288,7 +287,7 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         glyphId: Int,
         x: Int,
         baselineY: Int,
-        color: Color,
+        color: ColorARGB,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(

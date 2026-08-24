@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -52,18 +52,18 @@ class BackdropHintrectClippingGm : SkiaGm {
 
 private fun makeSweepShader(cx: Float, cy: Float): Shader {
     val stops = listOf(
-        GradientStop(0f / 6f, Color(0xFFFF0000u)),
-        GradientStop(1f / 6f, Color(0xFFFF0000u)),
-        GradientStop(1f / 6f, Color(0xFF0000FFu)),
-        GradientStop(2f / 6f, Color(0xFF0000FFu)),
-        GradientStop(2f / 6f, Color(0xFF00FF00u)),
-        GradientStop(3f / 6f, Color(0xFF00FF00u)),
-        GradientStop(3f / 6f, Color(0xFFFF0000u)),
-        GradientStop(4f / 6f, Color(0xFFFF0000u)),
-        GradientStop(4f / 6f, Color(0xFF0000FFu)),
-        GradientStop(5f / 6f, Color(0xFF0000FFu)),
-        GradientStop(5f / 6f, Color(0xFF00FF00u)),
-        GradientStop(6f / 6f, Color(0xFF00FF00u)),
+        GradientStop(0f / 6f, ColorARGB.fromPackedUInt(0xFFFF0000u)),
+        GradientStop(1f / 6f, ColorARGB.fromPackedUInt(0xFFFF0000u)),
+        GradientStop(1f / 6f, ColorARGB.fromPackedUInt(0xFF0000FFu)),
+        GradientStop(2f / 6f, ColorARGB.fromPackedUInt(0xFF0000FFu)),
+        GradientStop(2f / 6f, ColorARGB.fromPackedUInt(0xFF00FF00u)),
+        GradientStop(3f / 6f, ColorARGB.fromPackedUInt(0xFF00FF00u)),
+        GradientStop(3f / 6f, ColorARGB.fromPackedUInt(0xFFFF0000u)),
+        GradientStop(4f / 6f, ColorARGB.fromPackedUInt(0xFFFF0000u)),
+        GradientStop(4f / 6f, ColorARGB.fromPackedUInt(0xFF0000FFu)),
+        GradientStop(5f / 6f, ColorARGB.fromPackedUInt(0xFF0000FFu)),
+        GradientStop(5f / 6f, ColorARGB.fromPackedUInt(0xFF00FF00u)),
+        GradientStop(6f / 6f, ColorARGB.fromPackedUInt(0xFF00FF00u)),
     )
     return Shader.SweepGradient(
         center = Point2F32(cx, cy),
@@ -96,7 +96,7 @@ private fun drawOne(canvas: GmCanvas, useClip: Boolean, useHintRect: Boolean) {
     // we apply the blur as the layer's image filter instead.
     canvas.saveLayer(bounds = backdropBounds, paint = Paint(imageFilter = blur))
 
-    val fillPaint = Paint(color = Color(0xFFFFFF00u))
+    val fillPaint = Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF00u))
     canvas.drawCircle(cx, cy, 30f, fillPaint)
     canvas.restore()
 

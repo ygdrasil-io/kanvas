@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.SkiaRandom
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -80,7 +80,7 @@ class PolygonsGm : SkiaGm {
         val alpha = if (width == 40f) 0xA0 else 0xFF
         val adjusted = (raw and 0x00FFFFFF) or (alpha shl 24)
         return Paint(
-            color = Color.fromRGBA(
+            color = ColorARGB.fromRGBA(
                 ((adjusted shr 16) and 0xFF) / 255f,
                 ((adjusted shr 8) and 0xFF) / 255f,
                 (adjusted and 0xFF) / 255f,

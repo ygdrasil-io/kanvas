@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -36,7 +36,7 @@ class ColorWheelGm : SkiaGm {
                 val c = (0xFF shl 24) or (gray shl 16) or (gray shl 8) or gray
                 canvas.drawRect(
                     RectF32.ofOriginSize(x.toFloat(), y.toFloat(), tileSize.toFloat(), tileSize.toFloat()),
-                    Paint(color = Color(c.toUInt())),
+                    Paint(color = ColorARGB.fromPackedUInt(c.toUInt())),
                 )
             }
         }

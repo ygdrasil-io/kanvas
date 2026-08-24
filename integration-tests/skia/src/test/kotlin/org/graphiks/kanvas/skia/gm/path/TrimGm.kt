@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 class TrimGm : SkiaGm {
     override val name = "trimpatheffect"
@@ -55,10 +55,10 @@ class TrimGm : SkiaGm {
         )
         val normalPaint = hairlinePaint.copy(
             strokeWidth = 10f,
-            color = Color.fromRGBA(0f, 1f, 0f, 0.5f),
+            color = ColorARGB.fromRGBA(0f, 1f, 0f, 0.5f),
         )
         val invertedPaint = normalPaint.copy(
-            color = Color.fromRGBA(1f, 0f, 0f, 0.5f),
+            color = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f),
         )
 
         for (offset in OFFSETS) {

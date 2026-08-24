@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 class FoundationTypesTest {
@@ -29,7 +30,7 @@ class FoundationTypesTest {
             VertexMode.TRIANGLE_STRIP,
             listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f), Point2F32(1f, 1f)),
             texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f), Point2F32(1f, 1f)),
-            colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE),
+            colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.White),
             indices = listOf(0, 1, 2, 1, 3, 2),
         )
         assertEquals(4, v.positions.size)

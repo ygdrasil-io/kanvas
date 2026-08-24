@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -46,8 +46,8 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
             start = Point2F32(0f, 0f),
             end = Point2F32(SQUARE_LENGTH.toFloat(), 0f),
             stops = listOf(
-                GradientStop(0f, Color.BLUE),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0f)),
+                GradientStop(0f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 0f)),
             ),
             tileMode = TileMode.CLAMP,
         )
@@ -67,7 +67,7 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
             var alpha = 0xFF
             while (alpha > 0) {
                 val paint = Paint(
-                    color = Color.fromRGBA(1f, 1f, 0f, alpha / 255f),
+                    color = ColorARGB.fromRGBA(1f, 1f, 0f, alpha / 255f),
                     shader = shader,
                 )
                 canvas.drawRect(r, paint)

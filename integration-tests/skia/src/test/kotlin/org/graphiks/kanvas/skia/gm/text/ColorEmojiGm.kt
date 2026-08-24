@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.text
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.ImageFilter
@@ -13,7 +15,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -145,17 +147,17 @@ class ColorEmojiGm : SkiaGm {
         )
 
         val clipRects = arrayOf(bounds, upperLeftClip, lowerRightClip, interiorClip)
-        val clipHairline = Paint(color = Color.WHITE, style = PaintStyle.STROKE, strokeWidth = 1f)
+        val clipHairline = Paint(color = ColorARGB.White, style = PaintStyle.STROKE, strokeWidth = 1f)
 
         canvas.translate(10f, savedY)
         for (clipRect in clipRects) {
             canvas.translate(0f, textHeight)
             canvas.save()
             canvas.drawRect(clipRect, clipHairline)
-            val dimTextPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.125f))
+            val dimTextPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.125f))
             canvas.drawSimpleText(text, 0f, 0f, clipFont, dimTextPaint)
             canvas.clipRect(clipRect)
-            canvas.drawSimpleText(text, 0f, 0f, clipFont, Paint(color = Color.BLACK))
+            canvas.drawSimpleText(text, 0f, 0f, clipFont, Paint(color = ColorARGB.Black))
             canvas.restore()
             canvas.translate(0f, 25f)
         }
@@ -167,9 +169,9 @@ class ColorEmojiGm : SkiaGm {
         start = Point2F32(0f, 0f),
         end = Point2F32(32f, 32f),
         stops = listOf(
-            GradientStop(0f, Color.fromRGBA(0.5f, 0f, 0.5f, 0.5f)),
-            GradientStop(0.5f, Color.fromRGBA(0.94f, 0.94f, 0f, 0.94f)),
-            GradientStop(1f, Color.fromRGBA(0f, 0.5f, 0.94f, 0.5f)),
+            GradientStop(0f, ColorARGB.fromRGBA(0.5f, 0f, 0.5f, 0.5f)),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0.94f, 0.94f, 0f, 0.94f)),
+            GradientStop(1f, ColorARGB.fromRGBA(0f, 0.5f, 0.94f, 0.5f)),
         ),
         tileMode = TileMode.CLAMP,
     )
@@ -181,14 +183,14 @@ class ColorEmojiGm : SkiaGm {
             0.2126f, 0.7152f, 0.0722f, 0f, 0f,
             0f, 0f, 0f, 1f, 0f,
         )
-        return ImageFilter.ColorFilter(ColorFilter.Matrix(matrix), input)
+        return ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.of(matrix)), input)
     }
 
     private fun makeBlur(amount: Float, input: ImageFilter?): ImageFilter =
         ImageFilter.Blur(amount, amount, input = input)
 
     private fun makeColorFilter(): ColorFilter = ColorFilter.Lighting(
-        mul = Color.fromRGBA(0f, 0.502f, 1f, 1f),
-        add = Color.fromRGBA(1f, 0.125f, 0f, 1f),
+        mul = ColorARGB.fromRGBA(0f, 0.502f, 1f, 1f),
+        add = ColorARGB.fromRGBA(1f, 0.125f, 0f, 1f),
     )
 }

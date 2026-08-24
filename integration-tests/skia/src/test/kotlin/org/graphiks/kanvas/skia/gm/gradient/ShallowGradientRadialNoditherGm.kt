@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,8 +33,8 @@ class ShallowGradientRadialNoditherGm : SkiaGm {
         val w = width.toFloat()
         val h = height.toFloat()
         val stops = listOf(
-            GradientStop(0f, Color.fromRGBA(0x55 / 255f, 0x55 / 255f, 0x55 / 255f, 1f)),
-            GradientStop(1f, Color.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f)),
+            GradientStop(0f, ColorARGB.fromRGBA(0x55 / 255f, 0x55 / 255f, 0x55 / 255f, 1f)),
+            GradientStop(1f, ColorARGB.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f)),
         )
         val paint = Paint(
             shader = Shader.RadialGradient(

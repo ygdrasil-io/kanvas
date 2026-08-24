@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/surface.cpp` (copy-on-write savelayer).
@@ -24,12 +24,12 @@ class CopyOnWriteSavelayerGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(256, 256)
-        surf.canvas { clear(Color.RED) }
+        surf.canvas { clear(ColorARGB.Red) }
         val image = surf.makeImageSnapshot()
-        val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.25f))
+        val layerPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.25f))
         surf.canvas {
             saveLayer(RectF32(0f, 0f, 256f, 256f), layerPaint)
-            clear(Color.BLUE)
+            clear(ColorARGB.Blue)
             restore()
         }
         canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 256f, 256f))

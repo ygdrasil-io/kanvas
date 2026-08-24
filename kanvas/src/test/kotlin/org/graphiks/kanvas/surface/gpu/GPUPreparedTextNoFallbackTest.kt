@@ -15,7 +15,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -103,7 +103,7 @@ class GPUPreparedTextNoFallbackTest {
 
         val failure = kotlin.runCatching {
             GPUPreparedSurfaceProductEntry.render(
-                operations = listOf(text(Paint.fill(Color.RED).copy(imageFilter = ImageFilter.Blur(1f, 1f)))),
+                operations = listOf(text(Paint.fill(ColorARGB.Red).copy(imageFilter = ImageFilter.Blur(1f, 1f)))),
                 width = 1,
                 height = 1,
                 format = PixelFormat.RGBA8,
@@ -118,7 +118,7 @@ class GPUPreparedTextNoFallbackTest {
         assertEquals(refusal, terminal.diagnostic)
     }
 
-    private fun text(paint: Paint = Paint.fill(Color.RED)) = DisplayOp.DrawText(
+    private fun text(paint: Paint = Paint.fill(ColorARGB.Red)) = DisplayOp.DrawText(
         TextBlob(emptyList()),
         0f,
         0f,

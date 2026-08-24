@@ -17,11 +17,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 class SimpleBlurRoundRectGm : SkiaGm {
     override val name = "simpleblurroundrect"
@@ -44,11 +44,11 @@ class SimpleBlurRoundRectGm : SkiaGm {
             canvas.translate(0f, (r.height() + 50f) * row)
             for (pair in cornerRadii.indices) {
                 val paint = Paint(
-                    color = Color.BLACK,
+                    color = ColorARGB.Black,
                     maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.57735f * blurRadii[row] + 0.5f),
                 )
                 val cr = cornerRadii[pair]
-                val rrect = RRect(r, CornerRadii(cr, cr), CornerRadii(cr, cr), CornerRadii(cr, cr), CornerRadii(cr, cr))
+                val rrect = RRectF32.of(r, CornerRadiiF32.of(cr, cr), CornerRadiiF32.of(cr, cr), CornerRadiiF32.of(cr, cr), CornerRadiiF32.of(cr, cr))
                 canvas.drawPath(Path { }.apply { addRRect(rrect) }, paint)
                 canvas.translate(r.width() + 50f, 0f)
 
@@ -61,7 +61,7 @@ class SimpleBlurRoundRectGm : SkiaGm {
     }
 
     private fun makeRadial(): Shader.ConicalGradient {
-        val colors = listOf(Color.RED, Color.GREEN)
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green)
         val positions = floatArrayOf(0.25f, 0.75f)
         return Shader.ConicalGradient(
             start = Point2F32(60f, 25f),

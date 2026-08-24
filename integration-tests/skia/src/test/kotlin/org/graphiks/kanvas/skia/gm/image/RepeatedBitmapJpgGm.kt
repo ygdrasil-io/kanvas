@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.min
 
@@ -33,10 +33,10 @@ class RepeatedBitmapJpgGm : SkiaGm {
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        drawCheckerboard(canvas, Color.fromRGBA(156f / 255f, 154f / 255f, 156f / 255f, 1f), Color.WHITE, 12)
+        drawCheckerboard(canvas, ColorARGB.fromRGBA(156f / 255f, 154f / 255f, 156f / 255f, 1f), ColorARGB.White, 12)
         val img = image ?: return
 
-        val bgPaint = Paint(color = Color.fromRGBA(49f / 255f, 48f / 255f, 49f / 255f, 1f))
+        val bgPaint = Paint(color = ColorARGB.fromRGBA(49f / 255f, 48f / 255f, 49f / 255f, 1f))
         val bgRect = RectF32.ofLTRB(-68f, -68f, 68f, 68f)
         val scale = min(128f / img.width, 128f / img.height)
 
@@ -54,7 +54,7 @@ class RepeatedBitmapJpgGm : SkiaGm {
         }
     }
 
-    private fun drawCheckerboard(canvas: GmCanvas, color1: Color, color2: Color, size: Int) {
+    private fun drawCheckerboard(canvas: GmCanvas, color1: ColorARGB, color2: ColorARGB, size: Int) {
         for (y in 0 until 576 step size) {
             for (x in 0 until 576 step size) {
                 val isEven = (x / size + y / size) % 2 == 0

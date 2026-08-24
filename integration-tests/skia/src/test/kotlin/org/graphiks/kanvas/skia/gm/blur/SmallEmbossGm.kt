@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/emboss.cpp` (small emboss variant).
@@ -26,7 +26,7 @@ class SmallEmbossGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f * 0.57735f + 0.5f),
         )

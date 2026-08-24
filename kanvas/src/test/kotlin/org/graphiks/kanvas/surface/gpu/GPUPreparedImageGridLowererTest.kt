@@ -28,7 +28,7 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -141,7 +141,7 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2, 4),
                 yDivs = emptyList(),
-                colors = listOf(Color.TRANSPARENT, Color.fromArgb(128, 255, 0, 0), Color.TRANSPARENT),
+                colors = listOf(ColorARGB.Transparent, ColorARGB.of(128, 255, 0, 0), ColorARGB.Transparent),
                 flags = listOf(
                     LatticeFlags.DEFAULT,
                     LatticeFlags.FIXED_COLOR,
@@ -149,7 +149,7 @@ class GPUPreparedImageGridLowererTest {
                 ),
             ),
             dst = RectF32.ofLTRB(10f, 12f, 34f, 18f),
-            paint = Paint.fill(Color.fromArgb(128, 20, 30, 40)).copy(
+            paint = Paint.fill(ColorARGB.of(128, 20, 30, 40)).copy(
                 antiAlias = false,
             ),
             transform = Matrix3x3F32.translation(2f, 3f),
@@ -187,11 +187,11 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.BLUE),
+                colors = listOf(ColorARGB.Green, ColorARGB.Blue),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
-            paint = Paint.fill(Color.WHITE).copy(
+            paint = Paint.fill(ColorARGB.White).copy(
                 blendMode = BlendMode.PLUS,
                 antiAlias = false,
             ),
@@ -216,7 +216,7 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.BLUE),
+                colors = listOf(ColorARGB.Green, ColorARGB.Blue),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
@@ -242,11 +242,11 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.BLUE),
+                colors = listOf(ColorARGB.Green, ColorARGB.Blue),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
-            paint = Paint.fill(Color.WHITE).copy(
+            paint = Paint.fill(ColorARGB.White).copy(
                 blendMode = BlendMode.SRC,
                 blender = Blender.Mode(BlendMode.PLUS),
                 antiAlias = false,
@@ -270,11 +270,11 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.BLUE),
+                colors = listOf(ColorARGB.Green, ColorARGB.Blue),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
-            paint = Paint.fill(Color.WHITE).copy(
+            paint = Paint.fill(ColorARGB.White).copy(
                 blender = Blender.Arithmetic(0f, 1f, 0f, 0f),
                 antiAlias = false,
             ),
@@ -326,11 +326,11 @@ class GPUPreparedImageGridLowererTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.TRANSPARENT),
+                colors = listOf(ColorARGB.Green, ColorARGB.Transparent),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.DEFAULT),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 12f, 6f),
-            paint = Paint.fill(Color.WHITE).copy(
+            paint = Paint.fill(ColorARGB.White).copy(
                 blendMode = BlendMode.MULTIPLY,
                 antiAlias = false,
             ),

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -12,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -55,7 +57,7 @@ class ColorMatrixGm : SkiaGm {
     ) {
         val paint = Paint(
             blendMode = BlendMode.SRC,
-            colorFilter = ColorFilter.Matrix(matrix),
+            colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(matrix)),
         )
         canvas.drawImage(image, RectF32(x, 0f, x + 64f, 64f), paint)
     }
@@ -67,7 +69,7 @@ class ColorMatrixGm : SkiaGm {
                 for (x in 0 until w) {
                     val r = x * 255 / w
                     val g = y * 255 / h
-                    val color = Color.fromRGBA(r / 255f, g / 255f, 0f, 1f)
+                    val color = ColorARGB.fromRGBA(r / 255f, g / 255f, 0f, 1f)
                     drawRect(RectF32(x.toFloat(), y.toFloat(), (x + 1).toFloat(), (y + 1).toFloat()), Paint(color = color))
                 }
             }
@@ -82,8 +84,8 @@ class ColorMatrixGm : SkiaGm {
                 start = Point2F32(0f, 0f),
                 end = Point2F32(w.toFloat(), h.toFloat()),
                 stops = listOf(
-                    GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 0f)),
-                    GradientStop(1f, Color.WHITE),
+                    GradientStop(0f, ColorARGB.fromRGBA(0f, 0f, 0f, 0f)),
+                    GradientStop(1f, ColorARGB.White),
                 ),
             )
             drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(shader = shader))

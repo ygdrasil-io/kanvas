@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -39,11 +39,11 @@ class BlurRectGm : SkiaGm {
             canvas.save()
             for (style in BlurStyle.entries) {
                 val paint = Paint(
-                    color = Color.BLACK,
+                    color = ColorARGB.Black,
                     maskFilter = MaskFilter.Blur(style, blurSigma),
                 )
                 val radialPaint = Paint(
-                    color = Color.BLACK,
+                    color = ColorARGB.Black,
                     maskFilter = MaskFilter.Blur(style, blurSigma),
                     shader = makeRadial(rect),
                 )
@@ -117,7 +117,7 @@ class BlurRectGm : SkiaGm {
     }
 
     private fun makeRadial(rect: RectF32): Shader.RadialGradient {
-        val colors = listOf(Color.WHITE, Color.TRANSPARENT, Color.BLACK)
+        val colors = listOf(ColorARGB.White, ColorARGB.Transparent, ColorARGB.Black)
         val positions = floatArrayOf(0f, 0.65f, 1f)
         return Shader.RadialGradient(
             center = rect.center(),

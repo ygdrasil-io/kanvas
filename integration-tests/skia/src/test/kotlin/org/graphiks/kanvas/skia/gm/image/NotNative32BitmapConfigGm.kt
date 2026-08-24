@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontEdging
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -43,7 +43,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
                 val dark = ((x / CHECK_SIZE) + (y / CHECK_SIZE)) % 2 == 0
                 canvas.drawRect(
                     RectF32.ofOriginSize(x.toFloat(), y.toFloat(), CHECK_SIZE.toFloat(), CHECK_SIZE.toFloat()),
-                    Paint(color = if (dark) Color(0xFFCCCCCCu) else Color.WHITE, antiAlias = false),
+                    Paint(color = if (dark) ColorARGB.fromPackedUInt(0xFFCCCCCCu) else ColorARGB.White, antiAlias = false),
                 )
             }
         }
@@ -59,14 +59,14 @@ class NotNative32BitmapConfigGm : SkiaGm {
             edging = FontEdging.ALIAS,
         )
         wheel.canvas {
-            drawCircle(SCALE / 2f, SCALE / 2f, SCALE / 2f, Paint(color = Color.WHITE))
-            drawCenteredLetter("K", 0f, 0f, font, Color.BLACK)
-            drawCenteredLetter("R", 0f, 0.3f * SCALE, font, Color.RED)
-            drawCenteredLetter("G", -0.3f * SCALE * SQRT_3_OVER_2, -0.15f * SCALE, font, Color.GREEN)
-            drawCenteredLetter("B", 0.3f * SCALE * SQRT_3_OVER_2, -0.15f * SCALE, font, Color.BLUE)
-            drawCenteredLetter("C", 0f, -0.3f * SCALE, font, Color(0xFF00FFFFu))
-            drawCenteredLetter("M", 0.3f * SCALE * SQRT_3_OVER_2, 0.15f * SCALE, font, Color(0xFFFF00FFu))
-            drawCenteredLetter("Y", -0.3f * SCALE * SQRT_3_OVER_2, 0.15f * SCALE, font, Color(0xFFFFFF00u))
+            drawCircle(SCALE / 2f, SCALE / 2f, SCALE / 2f, Paint(color = ColorARGB.White))
+            drawCenteredLetter("K", 0f, 0f, font, ColorARGB.Black)
+            drawCenteredLetter("R", 0f, 0.3f * SCALE, font, ColorARGB.Red)
+            drawCenteredLetter("G", -0.3f * SCALE * SQRT_3_OVER_2, -0.15f * SCALE, font, ColorARGB.Green)
+            drawCenteredLetter("B", 0.3f * SCALE * SQRT_3_OVER_2, -0.15f * SCALE, font, ColorARGB.Blue)
+            drawCenteredLetter("C", 0f, -0.3f * SCALE, font, ColorARGB.fromPackedUInt(0xFF00FFFFu))
+            drawCenteredLetter("M", 0.3f * SCALE * SQRT_3_OVER_2, 0.15f * SCALE, font, ColorARGB.fromPackedUInt(0xFFFF00FFu))
+            drawCenteredLetter("Y", -0.3f * SCALE * SQRT_3_OVER_2, 0.15f * SCALE, font, ColorARGB.fromPackedUInt(0xFFFFFF00u))
         }
 
         val rendered = wheel.render()
@@ -77,7 +77,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
                     bitmap.setPixel(
                         x,
                         y,
-                        Color.fromRGBA(
+                        ColorARGB.fromRGBA(
                             (rendered.pixels[offset].toInt() and 0xFF) / 255f,
                             (rendered.pixels[offset + 1].toInt() and 0xFF) / 255f,
                             (rendered.pixels[offset + 2].toInt() and 0xFF) / 255f,
@@ -94,7 +94,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
         relativeX: Float,
         relativeY: Float,
         font: Font,
-        color: Color,
+        color: ColorARGB,
     ) {
         val glyphId = font.typeface.glyphIdForCodepoint(letter.codePointAt(0))
         val path = font.typeface.getGlyphPath(glyphId, font.size) ?: return

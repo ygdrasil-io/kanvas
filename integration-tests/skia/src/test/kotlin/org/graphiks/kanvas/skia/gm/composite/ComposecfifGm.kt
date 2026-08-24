@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -7,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,7 +34,7 @@ class ComposecfifGm : SkiaGm {
             0f, 0f, 0f, (bHi - bLo) / 255f, bLo / 255f,
             0f, 0f, 0f, (aHi - aLo) / 255f, aLo / 255f,
         )
-        val outer = ColorFilter.Matrix(tintMatrix)
+        val outer = ColorFilter.Matrix(ColorMatrixF32.of(tintMatrix))
         val inner = ColorFilter.Luma
         val cf = ColorFilter.Compose(outer, inner)
         val shader = Shader.PerlinNoise(0.01f, 0.01f, 2, 0, null)

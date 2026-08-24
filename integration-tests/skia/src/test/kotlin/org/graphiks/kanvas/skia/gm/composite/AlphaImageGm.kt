@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.pipeline.BlurStyle
@@ -10,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -40,7 +42,7 @@ class AlphaImageGm : SkiaGm {
         canvas.drawImage(
             image, RectF32(144f, 16f, 240f, 112f),
             Paint(
-                color = Color.fromRGBA(0f, 1f, 1f, 1f),
+                color = ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 10f),
             ),
         )
@@ -48,7 +50,7 @@ class AlphaImageGm : SkiaGm {
         canvas.drawImage(
             image, RectF32(16f, 144f, 112f, 240f),
             Paint(
-                color = Color.fromRGBA(0f, 1f, 1f, 1f),
+                color = ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
                 colorFilter = makeColorFilter(),
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 10f),
             ),
@@ -77,6 +79,6 @@ class AlphaImageGm : SkiaGm {
             0f, 0f, 0.5f, 0.5f, 0f,
             0f, 0f, 0.5f, 0.5f, 0f,
         )
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 }

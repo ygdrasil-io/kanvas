@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class RecordOptsGm : SkiaGm {
@@ -29,13 +29,13 @@ class RecordOptsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 0f, 0f)
 
-        val sequences: List<(GmCanvas, Color) -> Unit> = listOf(
+        val sequences: List<(GmCanvas, ColorARGB) -> Unit> = listOf(
             { c, color -> drawRectSequence(c, color) },
             { c, color -> drawBitmapSequence(c, color) },
             { c, color -> drawSvgSequence(c, color) },
         )
 
-        val green = Color.fromRGBA(0f, 1f, 0f)
+        val green = ColorARGB.fromRGBA(0f, 1f, 0f)
         for (seq in sequences) {
             canvas.save()
             seq(canvas, green)
@@ -56,7 +56,7 @@ class RecordOptsGm : SkiaGm {
         for (alphaMul in alphaValues) {
             for (seq in sequences) {
                 canvas.save()
-                val alphaColor = Color.fromRGBA(0f, alphaMul / 255f, 0f)
+                val alphaColor = ColorARGB.fromRGBA(0f, alphaMul / 255f, 0f)
                 seq(canvas, alphaColor)
                 canvas.translate((kSize + 1).toFloat(), 0f)
 
@@ -73,31 +73,31 @@ class RecordOptsGm : SkiaGm {
         }
     }
 
-    private fun drawRectSequence(c: GmCanvas, color: Color) {
+    private fun drawRectSequence(c: GmCanvas, color: ColorARGB) {
         val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
-        val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.5f))
+        val layerPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f))
         c.saveLayer(rect, layerPaint)
         c.drawRect(rect, Paint(color = color))
         c.restore()
     }
 
-    private fun drawBitmapSequence(c: GmCanvas, color: Color) {
+    private fun drawBitmapSequence(c: GmCanvas, color: ColorARGB) {
         val surface = Surface(kSize, kSize)
         val sc = surface.canvas()
         sc.clear(color)
-        sc.drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(color = Color.WHITE))
+        sc.drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(color = ColorARGB.White))
         val image: Image = surface.makeImageSnapshot()
 
         val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
-        val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 129f / 255f))
+        val layerPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 129f / 255f))
         c.saveLayer(rect, layerPaint)
         c.drawImage(image, rect)
         c.restore()
     }
 
-    private fun drawSvgSequence(c: GmCanvas, color: Color) {
+    private fun drawSvgSequence(c: GmCanvas, color: ColorARGB) {
         val rect = RectF32.ofLTRB(0f, 0f, kSize.toFloat(), kSize.toFloat())
-        val layerPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 130f / 255f))
+        val layerPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 130f / 255f))
         c.saveLayer(rect, layerPaint)
         c.save()
         c.clipRect(rect)

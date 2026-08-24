@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -55,7 +55,7 @@ class ImageGm : SkiaGm {
         testSurface(canvas, surf1)
     }
 
-    private fun drawContents(surface: Surface, fill: Color) {
+    private fun drawContents(surface: Surface, fill: ColorARGB) {
         val w = K_W.toFloat()
         val h = K_H.toFloat()
         val stroke = w / 10f
@@ -69,7 +69,7 @@ class ImageGm : SkiaGm {
         }
 
         val strokePaint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             style = PaintStyle.STROKE,
             strokeWidth = stroke,
         )
@@ -80,11 +80,11 @@ class ImageGm : SkiaGm {
     }
 
     private fun testSurface(canvas: GmCanvas, surf: Surface) {
-        drawContents(surf, Color.RED)
+        drawContents(surf, ColorARGB.Red)
         val imgR = surf.makeImageSnapshot()
-        drawContents(surf, Color.GREEN)
+        drawContents(surf, ColorARGB.Green)
         val imgG = surf.makeImageSnapshot()
-        drawContents(surf, Color.BLUE)
+        drawContents(surf, ColorARGB.Blue)
 
         val sampling = SamplingOptions.NEAREST
         val paint: Paint? = null

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -95,16 +95,16 @@ class AnalyticGradientShaderGm : SkiaGm {
             intArrayOf(9, 16, 12, 13),
         )
 
-        val COLORS: List<Color> = listOf(
-            Color.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
-            Color.fromRGBA(1f, 0f, 0f, 1f),
-            Color.fromRGBA(1f, 1f, 0f, 1f),
-            Color.fromRGBA(0f, 1f, 0f, 1f),
-            Color.fromRGBA(0f, 1f, 1f, 1f),
-            Color.fromRGBA(0f, 0f, 1f, 1f),
-            Color.fromRGBA(1f, 0f, 1f, 1f),
-            Color.fromRGBA(0f, 0f, 0f, 1f),
-            Color.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
+        val COLORS: List<ColorARGB> = listOf(
+            ColorARGB.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
         )
     }
 }

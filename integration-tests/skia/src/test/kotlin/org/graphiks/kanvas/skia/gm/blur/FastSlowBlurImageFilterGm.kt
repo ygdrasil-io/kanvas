@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -55,7 +55,7 @@ class FastSlowBlurImageFilterGm : SkiaGm {
     private fun makeImage(): Image {
         val surface = Surface(100, 100)
         surface.canvas {
-            drawRect(RectF32(25f, 25f, 75f, 75f), Paint(color = Color.BLACK))
+            drawRect(RectF32(25f, 25f, 75f, 75f), Paint(color = ColorARGB.Black))
         }
         return surface.makeImageSnapshot()
     }

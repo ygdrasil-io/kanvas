@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,7 +25,7 @@ class BigBitmapRectIGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = makeBigBitmap()
-        val paint = Paint(blendMode = BlendMode.XOR, color = Color.fromRGBA(1f, 1f, 1f, 0.5f))
+        val paint = Paint(blendMode = BlendMode.XOR, color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f))
 
         val srcR1 = RectF32.ofLTRB(0.0f, 0.0f, 4096.0f, 2040.0f)
         val dstR1 = RectF32.ofLTRB(10.1f, 10.1f, 629.9f, 400.9f)

@@ -7,8 +7,8 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -86,15 +86,15 @@ class NinePatchStretchGm : SkiaGm {
             val strokeWidth = 6f
             val radius = kFixed.toFloat() - strokeWidth / 2f
 
-            val paint = Paint(antiAlias = true, color = Color.RED)
-            drawRRect(RRect(r, radius), paint)
+            val paint = Paint(antiAlias = true, color = ColorARGB.Red)
+            drawRRect(RRectF32.of(r, radius), paint)
 
             r = RectF32.ofOriginSize(kFixed.toFloat(), 0f, kStretchy.toFloat(), sizeF)
-            val paint2 = Paint(color = Color.fromRGBA(136f / 255f, 1f, 0f))
+            val paint2 = Paint(color = ColorARGB.fromRGBA(136f / 255f, 1f, 0f))
             drawRect(r, paint2)
 
             r = RectF32.ofOriginSize(0f, kFixed.toFloat(), sizeF, kStretchy.toFloat())
-            val paint3 = Paint(color = Color.fromRGBA(136f / 255f, 0f, 1f))
+            val paint3 = Paint(color = ColorARGB.fromRGBA(136f / 255f, 0f, 1f))
             drawRect(r, paint3)
         }
         return surf.makeImageSnapshot()

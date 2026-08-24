@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
@@ -61,13 +61,13 @@ class BlobRSXformGm : SkiaGm {
         val offsetX = 20f
         val offsetY = 70f
 
-        val bgPaint = Paint(color = Color.fromRGBA(0.8f, 0.8f, 0.8f, 1f))
+        val bgPaint = Paint(color = ColorARGB.fromRGBA(0.8f, 0.8f, 0.8f, 1f))
         canvas.drawRect(
             RectF32(blobBounds.left + offsetX, blobBounds.top + offsetY, blobBounds.right + offsetX, blobBounds.bottom + offsetY),
             bgPaint,
         )
 
-        val fgPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f))
+        val fgPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f))
         canvas.drawTextBlob(blob, offsetX, offsetY, fgPaint)
     }
 

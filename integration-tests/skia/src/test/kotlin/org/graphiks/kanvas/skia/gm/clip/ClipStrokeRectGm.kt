@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class ClipStrokeRectGm : SkiaGm {
     override val height = 400
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        var paint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
+        var paint = Paint(color = ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
 
         val r1 = RectF32.ofOriginSize(20f, 20f, 100f, 100f)
         val rect1 = RectF32.ofOriginSize(20f, 0f, 100f, 20f)
@@ -40,10 +40,10 @@ class ClipStrokeRectGm : SkiaGm {
         canvas.drawRect(r1, paint)
         canvas.restore()
 
-        paint = paint.copy(color = Color.BLUE, strokeWidth = 2f)
+        paint = paint.copy(color = ColorARGB.Blue, strokeWidth = 2f)
         canvas.drawRect(rect1, paint)
 
-        paint = paint.copy(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
+        paint = paint.copy(color = ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
 
         val r2 = RectF32.ofOriginSize(20f, 140f, 100f, 100f)
         val rect2 = RectF32.ofOriginSize(20f, 120f, 100f, 19f)
@@ -53,7 +53,7 @@ class ClipStrokeRectGm : SkiaGm {
         canvas.drawRect(r2, paint)
         canvas.restore()
 
-        paint = paint.copy(color = Color.BLUE, strokeWidth = 2f)
+        paint = paint.copy(color = ColorARGB.Blue, strokeWidth = 2f)
         canvas.drawRect(rect2, paint)
     }
 }

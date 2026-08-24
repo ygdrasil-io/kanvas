@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -33,10 +33,10 @@ class HardstopGradientsManyGm : SkiaGm {
             val stops = mutableListOf<GradientStop>()
             for (k in 0 until row) {
                 val place = k.toFloat() / row.toFloat()
-                stops.add(GradientStop(place, Color.BLUE))
-                stops.add(GradientStop(place, Color.WHITE))
+                stops.add(GradientStop(place, ColorARGB.Blue))
+                stops.add(GradientStop(place, ColorARGB.White))
             }
-            stops.add(GradientStop(1f, Color.WHITE))
+            stops.add(GradientStop(1f, ColorARGB.White))
 
             val paint = Paint(shader = Shader.LinearGradient(
                 start = p0, end = p1,

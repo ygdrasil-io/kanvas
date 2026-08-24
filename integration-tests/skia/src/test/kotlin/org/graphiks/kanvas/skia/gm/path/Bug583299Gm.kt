@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -35,7 +35,7 @@ class Bug583299Gm : SkiaGm {
             style = PaintStyle.STROKE,
             strokeWidth = 100f,
             antiAlias = true,
-            color = Color.fromRGBA(0f, 0x82 / 255f, 0f),
+            color = ColorARGB.fromRGBA(0f, 0x82 / 255f, 0f),
             strokeCap = StrokeCap.SQUARE,
             pathEffect = PathEffect.Dash(floatArrayOf(0f, 1000f), 0f),
         )

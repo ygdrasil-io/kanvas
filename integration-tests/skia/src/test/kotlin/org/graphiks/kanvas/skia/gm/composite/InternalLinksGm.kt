@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -26,7 +26,7 @@ class InternalLinksGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val bg = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)
+        val bg = ColorARGB.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = bg))
 
         // Panel 1 - "Link to A"
@@ -43,8 +43,8 @@ class InternalLinksGm : SkiaGm {
     }
 
     private fun drawLabeledRect(canvas: GmCanvas, text: String, x: Float, y: Float) {
-        canvas.drawRect(RectF32.ofOriginSize(x, y, 50f, 20f), Paint(color = Color.BLUE))
+        canvas.drawRect(RectF32.ofOriginSize(x, y, 50f, 20f), Paint(color = ColorARGB.Blue))
         val font = Font(typeface, size = 25f)
-        canvas.drawString(text, x, y, font, Paint(color = Color.BLACK))
+        canvas.drawString(text, x, y, font, Paint(color = ColorARGB.Black))
     }
 }

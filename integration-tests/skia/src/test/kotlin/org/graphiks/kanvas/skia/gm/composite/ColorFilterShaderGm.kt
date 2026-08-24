@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
@@ -10,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -31,7 +33,7 @@ class ColorFilterShaderGm : SkiaGm {
         val filters: List<ColorFilter> = listOf(
             cfMakeBrightness(0.5f),
             cfMakeGrayscale(),
-            cfMakeColorize(Color.BLUE),
+            cfMakeColorize(ColorARGB.Blue),
         )
 
         val shaders: List<Shader> = listOf(
@@ -40,7 +42,7 @@ class ColorFilterShaderGm : SkiaGm {
             Shader.ConicalGradient(
                 start = Point2F32(0f, 0f), startRadius = 50f,
                 end = Point2F32(0f, 0f), endRadius = 150f,
-                stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                 tileMode = TileMode.CLAMP,
             ),
         )
@@ -70,7 +72,7 @@ class ColorFilterShaderGm : SkiaGm {
             0f, 0f, 1f, 0f, brightness,
             0f, 0f, 0f, 1f, 0f,
         )
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 
     private fun cfMakeGrayscale(): ColorFilter {
@@ -79,19 +81,19 @@ class ColorFilterShaderGm : SkiaGm {
         matrix[5] = 0.2126f; matrix[6] = 0.7152f; matrix[7] = 0.0722f
         matrix[10] = 0.2126f; matrix[11] = 0.7152f; matrix[12] = 0.0722f
         matrix[18] = 1.0f
-        return ColorFilter.Matrix(matrix)
+        return ColorFilter.Matrix(ColorMatrixF32.of(matrix))
     }
 
-    private fun cfMakeColorize(color: Color): ColorFilter =
+    private fun cfMakeColorize(color: ColorARGB): ColorFilter =
         ColorFilter.Blend(color, BlendMode.SRC)
 
     private fun shMakeLinearGradient0(): Shader = Shader.LinearGradient(
         start = Point2F32(0f, 0f),
         end = Point2F32(100f, 100f),
         stops = listOf(
-            GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-            GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-            GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
         ),
         tileMode = TileMode.REPEAT,
     )
@@ -100,9 +102,9 @@ class ColorFilterShaderGm : SkiaGm {
         start = Point2F32(0f, 0f),
         end = Point2F32(100f, 100f),
         stops = listOf(
-            GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-            GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 0f)),
-            GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 0f)),
+            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
         ),
         tileMode = TileMode.REPEAT,
     )

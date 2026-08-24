@@ -31,15 +31,10 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesPackingLimit
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesPackingResult
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.redByte
 import org.graphiks.kanvas.surface.RenderConfig
 
 private const val PREPARED_VERTICES_MATERIAL_DICTIONARY_VERSION =
@@ -163,7 +158,7 @@ object GPUPreparedVerticesLowerer {
         // The MeshProgram material replaces the paint entirely: the paint
         // contributes only its color alpha and blend mode, and its shader must
         // never be visited (it is unused; a hostile shader in the paint is not
-        // part of the mesh program). Color and BlendMode are immutable value
+        // part of the mesh program). ColorARGB and BlendMode are immutable value
         // fields, so this shader-free paint is the single source for alpha and
         // blend.
         val programPaint = org.graphiks.kanvas.paint.Paint(
@@ -437,12 +432,12 @@ private fun Vertices.toArtifactInput(provenance: String): GPUPreparedVerticesArt
         provenance = provenance,
     )
 
-private fun List<Color>.toRgba8(): ByteArray = ByteArray(size * 4).also { output ->
+private fun List<ColorARGB>.toRgba8(): ByteArray = ByteArray(size * 4).also { output ->
     forEachIndexed { index, color ->
-        output[index * 4] = color.redByte.toByte()
-        output[index * 4 + 1] = color.greenByte.toByte()
-        output[index * 4 + 2] = color.blueByte.toByte()
-        output[index * 4 + 3] = color.alphaByte.toByte()
+        output[index * 4] = color.red.toByte()
+        output[index * 4 + 1] = color.green.toByte()
+        output[index * 4 + 2] = color.blue.toByte()
+        output[index * 4 + 3] = color.alpha.toByte()
     }
 }
 

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -54,13 +54,13 @@ class DegenerateGradientGm : SkiaGm {
 
     private fun drawRow(canvas: GmCanvas, desc: String, factory: (TileMode) -> Shader?) {
         canvas.save()
-        val text = Paint(color = Color.BLACK, antiAlias = true)
+        val text = Paint(color = ColorARGB.Black, antiAlias = true)
         val font = Font(typeface, 12f)
         canvas.translate(0f, TILE_GAP.toFloat())
         canvas.drawString(desc, 0f, 0f, font, text)
         canvas.translate(0f, TILE_GAP.toFloat())
         var paint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             style = PaintStyle.STROKE_AND_FILL,
             strokeWidth = 2f,
         )
@@ -100,7 +100,7 @@ class DegenerateGradientGm : SkiaGm {
     )
 
     private companion object {
-        val COLORS = listOf(Color.RED, Color.WHITE, Color.BLUE, Color.BLACK, Color.GREEN)
+        val COLORS = listOf(ColorARGB.Red, ColorARGB.White, ColorARGB.Blue, ColorARGB.Black, ColorARGB.Green)
         val POS = floatArrayOf(0.0f, 0.0f, 0.5f, 1.0f, 1.0f)
         val TILE_MODES = arrayOf(TileMode.DECAL, TileMode.REPEAT, TileMode.MIRROR, TileMode.CLAMP)
         val TILE_NAMES = arrayOf("decal", "repeat", "mirror", "clamp")

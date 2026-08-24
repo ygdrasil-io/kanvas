@@ -14,7 +14,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 
@@ -23,7 +23,7 @@ class GPUPreparedTextFilterBoundaryTest {
     @Test
     fun `text image filter is terminal until FP-07`() {
         val operation = text(
-            Paint.fill(Color.RED).copy(
+            Paint.fill(ColorARGB.Red).copy(
                 imageFilter = ImageFilter.Blur(sigmaX = 2f, sigmaY = 3f),
             ),
         )
@@ -46,12 +46,12 @@ class GPUPreparedTextFilterBoundaryTest {
     @Test
     fun `unsupported text mask filters use the common terminal code without legacy`() {
         val filters = listOf<MaskFilter>(
-            MaskFilter.Shader(Shader.SolidColor(Color.WHITE)),
+            MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
             MaskFilter.Table(UByteArray(256) { it.toUByte() }),
         )
 
         filters.forEach { filter ->
-            val operation = text(Paint.fill(Color.RED).copy(maskFilter = filter))
+            val operation = text(Paint.fill(ColorARGB.Red).copy(maskFilter = filter))
             val result = GPUPreparedTextFramePreparer.prepare(
                 operations = listOf(operation),
                 target = target(),

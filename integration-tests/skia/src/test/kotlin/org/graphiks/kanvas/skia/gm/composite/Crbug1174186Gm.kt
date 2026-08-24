@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
@@ -42,7 +42,7 @@ class Crbug1174186Gm : SkiaGm {
             Pair(Float.fromBits(0x3f800000), Float.fromBits(0x43130f8c)),
         )
 
-        var color = Color.GREEN
+        var color = ColorARGB.Green
         canvas.translate(-500f, 0f)
         for (i in 0 until 10) {
             for (flags in 0 until 15) {
@@ -65,10 +65,10 @@ class Crbug1174186Gm : SkiaGm {
         }
     }
 
-    private fun nibbleRotate(color: Color): Color {
-        val packed = color.packed
+    private fun nibbleRotate(color: ColorARGB): ColorARGB {
+        val packed = color.value
         val rgb = packed and 0x00FFFFFFu
         val rotated = (rgb shl 4) or (rgb shr 20)
-        return Color(0xFF000000u or (rotated and 0x00FFFFFFu))
+        return ColorARGB.fromPackedUInt(0xFF000000u or (rotated and 0x00FFFFFFu))
     }
 }

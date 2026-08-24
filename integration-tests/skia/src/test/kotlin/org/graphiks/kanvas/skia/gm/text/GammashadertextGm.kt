@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -27,15 +27,15 @@ class GammashadertextGm : SkiaGm {
     override val height = 300
 
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
-    private val baseColors = listOf(Color.BLACK, Color.RED, Color.BLUE)
+    private val baseColors = listOf(ColorARGB.Black, ColorARGB.Red, ColorARGB.Blue)
     private val shaders = baseColors.map { color ->
         Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(240f, 0f),
             stops = listOf(
                 GradientStop(0f, color),
-                GradientStop(1f, Color.fromRGBA(
-                    color.packed.toFloat(), 0f, 0f, 0f,
+                GradientStop(1f, ColorARGB.fromRGBA(
+                    color.value.toFloat(), 0f, 0f, 0f,
                 )),
             ),
             tileMode = TileMode.CLAMP,

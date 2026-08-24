@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -42,7 +42,7 @@ class DashBigRectsGm : SkiaGm {
         // Clear to black - use a fill rect
         canvas.drawRect(
             RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.BLACK)
+            Paint(color = ColorARGB.Black)
         )
 
         var paint = Paint(
@@ -74,7 +74,7 @@ class DashBigRectsGm : SkiaGm {
             val r = (colorInt shr 16 and 0xFF) / 255f
             val g = (colorInt shr 8 and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
-            paint = paint.copy(color = Color.fromRGBA(r, g, b, 1f))
+            paint = paint.copy(color = ColorARGB.fromRGBA(r, g, b, 1f))
             val offset = (2 * i * kHalfStrokeWidth + kHalfStrokeWidth).toFloat()
             canvas.drawRect(
                 RectF32.ofOriginSize(offset, offset, gWidthHeights[i], gWidthHeights[i]),

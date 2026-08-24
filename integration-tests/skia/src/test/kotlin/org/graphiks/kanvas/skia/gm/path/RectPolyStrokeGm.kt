@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -51,9 +51,9 @@ class RectPolyStrokeGm : SkiaGm {
         )
         val degrees = floatArrayOf(0f, -30f)
         val joins = arrayOf(StrokeJoin.MITER, StrokeJoin.ROUND, StrokeJoin.BEVEL)
-        val procs: Array<Pair<(GmCanvas, RectF32, Paint) -> Unit, Color>> = arrayOf(
-            { c: GmCanvas, r: RectF32, p: Paint -> c.drawRect(r, p) } to Color.BLACK,
-            { c: GmCanvas, r: RectF32, p: Paint -> c.drawPath(Path { }.apply { addRect(r) }, p) } to Color.fromRGBA(0f, 0f, 0x88f / 255f, 1f),
+        val procs: Array<Pair<(GmCanvas, RectF32, Paint) -> Unit, ColorARGB>> = arrayOf(
+            { c: GmCanvas, r: RectF32, p: Paint -> c.drawRect(r, p) } to ColorARGB.Black,
+            { c: GmCanvas, r: RectF32, p: Paint -> c.drawPath(Path { }.apply { addRect(r) }, p) } to ColorARGB.fromRGBA(0f, 0f, 0x88f / 255f, 1f),
         )
 
         canvas.translate(30f, 50f)
@@ -77,7 +77,7 @@ class RectPolyStrokeGm : SkiaGm {
                         paint = paint.copy(strokeWidth = THICKNESS, color = color)
                         proc(canvas, r, paint)
 
-                        paint = paint.copy(strokeWidth = 0f, color = Color.GREEN)
+                        paint = paint.copy(strokeWidth = 0f, color = ColorARGB.Green)
                         proc(canvas, r, paint)
                         canvas.restore()
                         canvas.translate(0f, SPACING)

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -46,7 +46,7 @@ class OvalGm : SkiaGm {
         val rectPaint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
+            color = ColorARGB.fromRGBA(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f),
         )
 
         var testCount = 0
@@ -130,12 +130,12 @@ class OvalGm : SkiaGm {
         }
     }
 
-    private fun genColor(rand: Random): Color {
+    private fun genColor(rand: Random): ColorARGB {
         val h = rand.nextFloat() * 360f
         val s = rand.nextFloat() * 0.25f + 0.75f
         val v = rand.nextFloat() * 0.25f + 0.75f
         val (r, g, b) = hsvToRgb(h, s, v)
-        return Color.fromRGBA(r, g, b, 1f)
+        return ColorARGB.fromRGBA(r, g, b, 1f)
     }
 
     private fun hsvToRgb(h: Float, s: Float, v: Float): Triple<Float, Float, Float> {

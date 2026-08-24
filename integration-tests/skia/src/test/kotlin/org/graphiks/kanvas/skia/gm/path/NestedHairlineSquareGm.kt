@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class NestedHairlineSquareGm : SkiaGm {
@@ -29,7 +29,7 @@ class NestedHairlineSquareGm : SkiaGm {
         square.addRect(RectF32.ofLTRB(1f, 10f, 4f, 13f))
 
         val paint = Paint(
-            color = Color.fromRGBA(70f / 255f, 70f / 255f, 70f / 255f, 1f),
+            color = ColorARGB.fromRGBA(70f / 255f, 70f / 255f, 70f / 255f, 1f),
             antiAlias = true,
         )
 

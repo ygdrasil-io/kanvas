@@ -16,7 +16,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 
@@ -228,8 +228,8 @@ class GPUPreparedTextPixelTest {
             "Task 13 cold-frame COLRv0",
         )
         val operations = listOf(
-            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 4, 58, Color.WHITE),
-            text(typeface, GPUPreparedTextTestFixtures.COLOR_BASE_GLYPH_ID, 36, 58, Color.BLUE),
+            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 4, 58, ColorARGB.White),
+            text(typeface, GPUPreparedTextTestFixtures.COLOR_BASE_GLYPH_ID, 36, 58, ColorARGB.Blue),
         )
         val inventoryIdentities = java.util.IdentityHashMap<PreparedTextFrameInventory, Boolean>()
         val pageIdentities =
@@ -291,7 +291,7 @@ class GPUPreparedTextPixelTest {
         glyphId: Int,
         x: Int,
         baselineY: Int,
-        color: Color,
+        color: ColorARGB,
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(

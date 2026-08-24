@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ImageCacheratorFromPictureGm : SkiaGm {
@@ -61,14 +61,14 @@ class ImageCacheratorFromPictureGm : SkiaGm {
     private fun drawSomething(c: Canvas, bounds: RectF32) {
         val paint = Paint(
             antiAlias = true,
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 10f,
         )
         c.drawRect(bounds, paint)
         val ovalFill = Paint(
             antiAlias = true,
-            color = Color.BLUE,
+            color = ColorARGB.Blue,
             style = PaintStyle.FILL,
         )
         val ovalPath = Path { }
@@ -79,7 +79,7 @@ class ImageCacheratorFromPictureGm : SkiaGm {
     private fun materialise(picture: Picture, size: Int): Image {
         val surface = Surface(size, size)
         val c = surface.canvas()
-        c.clear(Color.TRANSPARENT)
+        c.clear(ColorARGB.Transparent)
         c.save()
         c.translate(-100f, -100f)
         picture.playback(c)

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -37,10 +37,10 @@ class GradientsDegenerate2PointGm : SkiaGm {
             start = c0, startRadius = r0,
             end = c1, endRadius = r1,
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(0.01f, Color.GREEN),
-                GradientStop(0.99f, Color.GREEN),
-                GradientStop(1f, Color.RED),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(0.01f, ColorARGB.Green),
+                GradientStop(0.99f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Red),
             ),
             tileMode = TileMode.CLAMP,
         )

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,7 +31,7 @@ class AlphaImageShaderRTGm : SkiaGm {
         val uniforms = UniformBlock { float4("gColor", 0.5f, 0f, 0.5f, 1f) }
         val shader = effect.makeShader(uniforms)
 
-        val paint = Paint(color = Color.fromRGBA(0.5f, 0f, 0.5f, 1f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0.5f, 0f, 0.5f, 1f))
         canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint)
         canvas.translate(50f, 0f)
 

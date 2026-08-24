@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
@@ -8,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,18 +35,18 @@ class MixercfGm : SkiaGm {
         val sweep = Shader.SweepGradient(
             Point2F32(tileSize / 2f, tileHeight / 2f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(0.33f, Color.GREEN),
-                GradientStop(0.66f, Color.BLUE),
-                GradientStop(1f, Color.RED),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(0.33f, ColorARGB.Green),
+                GradientStop(0.66f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.Red),
             ),
         )
 
         val cf0 = makeTintColorFilter(0xff300000.toInt(), 0xffa00000.toInt())
         val cf1 = makeTintColorFilter(0xff003000.toInt(), 0xff00a000.toInt())
-        val noop = ColorFilter.Matrix(
+        val noop = ColorFilter.Matrix(ColorMatrixF32.of(
             floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)
-        )
+        ))
 
         mixRow(canvas, sweep, tileSize, tileHeight, tileCount, noop, cf1)
         mixRow(canvas, sweep, tileSize, tileHeight, tileCount, cf0, noop)
@@ -63,7 +65,7 @@ class MixercfGm : SkiaGm {
             0f, 0f, 0f, (aHi - aLo) / 255f, aLo / 255f,
         )
         val inner = ColorFilter.Luma
-        val outer = ColorFilter.Matrix(tintMatrix)
+        val outer = ColorFilter.Matrix(ColorMatrixF32.of(tintMatrix))
         return ColorFilter.Compose(outer, inner)
     }
 
@@ -73,10 +75,10 @@ class MixercfGm : SkiaGm {
         cf0: ColorFilter, cf1: ColorFilter,
     ) {
         val paintColors = listOf(
-            Color.fromRGBA(1f, 1f, 1f, 1f),
-            Color.fromRGBA(1f, 1f, 1f, 0.5f),
-            Color.fromRGBA(0.5f, 0.5f, 1f, 1f),
-            Color.fromRGBA(0.5f, 0.5f, 1f, 0.5f),
+            ColorARGB.fromRGBA(1f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f),
+            ColorARGB.fromRGBA(0.5f, 0.5f, 1f, 1f),
+            ColorARGB.fromRGBA(0.5f, 0.5f, 1f, 0.5f),
         )
 
         canvas.translate(0f, tileHeight * 0.1f)

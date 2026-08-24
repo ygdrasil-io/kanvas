@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -26,8 +26,8 @@ class GradientMatrixGm : SkiaGm {
     override val width = 800
     override val height = 800
 
-    private val red = Color.fromRGBA(1f, 0f, 0f, 1f)
-    private val yellow = Color.fromRGBA(1f, 1f, 0f, 1f)
+    private val red = ColorARGB.fromRGBA(1f, 0f, 0f, 1f)
+    private val yellow = ColorARGB.fromRGBA(1f, 1f, 0f, 1f)
     private val gradStops = listOf(
         GradientStop(0f, red),
         GradientStop(1f, yellow),
@@ -36,7 +36,7 @@ class GradientMatrixGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)),
+            Paint(color = ColorARGB.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)),
         )
         drawGradients(canvas, ::makeLinearGradient, linearPts)
         canvas.translate(0f, TESTGRID_Y)

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,8 +33,8 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val generation = backend.deviceGeneration
         val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
         val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.rect-affine")
-        val halfRed = Color.fromRGBA(1f, 0f, 0f, 0.5f)
-        val halfGreen = Color.fromRGBA(0f, 1f, 0f, 0.5f)
+        val halfRed = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f)
+        val halfGreen = ColorARGB.fromRGBA(0f, 1f, 0f, 0.5f)
         val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
             RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
         )

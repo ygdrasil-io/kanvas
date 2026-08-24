@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -57,7 +57,7 @@ class AaRectModesGm : SkiaGm {
                 val inset = cell / 10f
                 val ovalRect = RectF32(inset, inset, cell - inset, cell - inset)
                 canvas.drawOval(ovalRect, Paint(
-                    color = Color.fromRGBA(0f, 0f, 1f, a0 / 255f),
+                    color = ColorARGB.fromRGBA(0f, 0f, 1f, a0 / 255f),
                     antiAlias = true,
                 ))
 
@@ -67,7 +67,7 @@ class AaRectModesGm : SkiaGm {
                     cell * 3f / 4f + offset, cell * 3f / 4f + offset,
                 )
                 canvas.drawRect(redRect, Paint(
-                    color = Color.fromRGBA(1f, 0f, 0f, a1 / 255f),
+                    color = ColorARGB.fromRGBA(1f, 0f, 0f, a1 / 255f),
                     blendMode = modes[i],
                     antiAlias = true,
                 ))
@@ -84,8 +84,8 @@ class AaRectModesGm : SkiaGm {
 
     private fun drawCheckerboard(canvas: GmCanvas, cell: Float) {
         val tile = 12f
-        val white = Paint(Color.WHITE)
-        val lightGray = Paint(Color.fromRGBA(0xCE / 255f, 0xCF / 255f, 0xCE / 255f, 1f))
+        val white = Paint(ColorARGB.White)
+        val lightGray = Paint(ColorARGB.fromRGBA(0xCE / 255f, 0xCF / 255f, 0xCE / 255f, 1f))
         var y = 0f
         while (y < cell) {
             var x = 0f

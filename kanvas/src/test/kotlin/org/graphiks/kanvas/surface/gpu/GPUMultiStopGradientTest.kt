@@ -4,7 +4,7 @@ import java.io.File
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
@@ -36,9 +36,9 @@ class GPUMultiStopGradientTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(100f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
         val material = shader.toMaterial() as GPUMaterialDescriptor.LinearGradient
@@ -70,9 +70,9 @@ class GPUMultiStopGradientTest {
             center = Point2F32(50f, 50f),
             radius = 100f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
         val material = shader.toMaterial() as GPUMaterialDescriptor.RadialGradient
@@ -104,9 +104,9 @@ class GPUMultiStopGradientTest {
             startAngle = 0f,
             endAngle = 360f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
         val material = shader.toMaterial() as GPUMaterialDescriptor.SweepGradient
@@ -137,8 +137,8 @@ class GPUMultiStopGradientTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(100f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
         val material = shader.toMaterial() as GPUMaterialDescriptor.LinearGradient
@@ -178,8 +178,8 @@ class GPUMultiStopGradientTest {
             start = Point2F32(0f, 0f), startRadius = 0f,
             end = Point2F32(100f, 0f), endRadius = 50f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
         val material = shader.toMaterial() as GPUMaterialDescriptor.ConicalGradient

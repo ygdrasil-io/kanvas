@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,16 +27,16 @@ class RasterAllocatorGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         // Simplified approximation of the upstream layout
-        val redPaint = Paint(color = Color.RED)
-        val bluePaint = Paint(color = Color.BLUE)
-        val whitePaint = Paint(color = Color.WHITE)
-        val greenPaint = Paint(color = Color.GREEN)
-        val greyPaint = Paint(color = Color.fromRGBA(0.8f, 0.8f, 0.8f))
+        val redPaint = Paint(color = ColorARGB.Red)
+        val bluePaint = Paint(color = ColorARGB.Blue)
+        val whitePaint = Paint(color = ColorARGB.White)
+        val greenPaint = Paint(color = ColorARGB.Green)
+        val greyPaint = Paint(color = ColorARGB.fromRGBA(0.8f, 0.8f, 0.8f))
 
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, 256f, 256f), redPaint)
         canvas.drawRect(RectF32.ofLTRB(30f, 30f, 60f, 60f), bluePaint)
         canvas.drawOval(RectF32.ofLTRB(40f, 40f, 50f, 50f), whitePaint)
-        canvas.saveLayer(RectF32.ofLTRB(50f, 50f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.5f)))
+        canvas.saveLayer(RectF32.ofLTRB(50f, 50f, 100f, 100f), Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f)))
         canvas.drawRect(RectF32.ofLTRB(55f, 55f, 95f, 95f), greenPaint)
         canvas.restore()
         canvas.drawRect(RectF32.ofLTRB(150f, 50f, 200f, 200f), greyPaint)

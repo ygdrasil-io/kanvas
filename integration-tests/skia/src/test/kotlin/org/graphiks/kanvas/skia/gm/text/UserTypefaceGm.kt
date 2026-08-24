@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.FontHinting
 import org.graphiks.kanvas.text.FontMetrics
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -76,7 +76,7 @@ class UserTypefaceGm : SkiaGm {
                     codepoint,
                     advance,
                     path,
-                    Paint.fill(Color.fromArgb(255, 0, 128, 0)),
+                    Paint.fill(ColorARGB.of(255, 0, 128, 0)),
                 )
             }
         }
@@ -90,12 +90,12 @@ class UserTypefaceGm : SkiaGm {
             val font = Font(typeface, size = size, antiAlias = true)
             val blob = font.toTextBlob("Typeface", 0f, 0f)
             if (drawBaseline) {
-                canvas.drawRect(RectF32.ofOriginSize(x, y, width.toFloat(), 1f), Paint.fill(Color.fromArgb(255, 221, 221, 221)))
+                canvas.drawRect(RectF32.ofOriginSize(x, y, width.toFloat(), 1f), Paint.fill(ColorARGB.of(255, 221, 221, 221)))
             }
             val bounds = blob.computeBounds(typeface)
             canvas.drawRect(
                 RectF32.ofLTRB(bounds.left + x + 20f, bounds.top + y, bounds.right + x + 20f, bounds.bottom + y),
-                Paint(color = Color.fromArgb(255, 204, 204, 204), style = PaintStyle.STROKE),
+                Paint(color = ColorARGB.of(255, 204, 204, 204), style = PaintStyle.STROKE),
             )
             // Draw outlines explicitly so both the default and the custom
             // face take the same GPU route. `GmCanvas.drawGlyphs` preserves
@@ -105,7 +105,7 @@ class UserTypefaceGm : SkiaGm {
                     run.glyphs.map { it.toInt() },
                     run.positions.map { position -> Point2F32(position.x + x + 20f, position.y + y) },
                     font,
-                    Paint.fill(Color.BLACK),
+                    Paint.fill(ColorARGB.Black),
                 )
             }
             val metrics = requireNotNull(font.getMetrics())

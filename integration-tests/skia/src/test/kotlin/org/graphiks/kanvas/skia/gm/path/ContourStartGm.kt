@@ -8,10 +8,10 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -39,7 +39,7 @@ class ContourStartGm : SkiaGm {
         }
 
         val dashPaint = Paint(
-            color = Color.fromRGBA(0f, 0x80 / 255f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0x80 / 255f, 0f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 6f,
             antiAlias = true,
@@ -47,7 +47,7 @@ class ContourStartGm : SkiaGm {
         )
 
         val rect = RectF32(10f, 10f, 100f, 70f)
-        val zeroRadii = CornerRadii(0f, 0f)
+        val zeroRadii = CornerRadiiF32.of(0f, 0f)
         val rectCorners = listOf(Point2F32(rect.left, rect.top), Point2F32(rect.right, rect.top), Point2F32(rect.right, rect.bottom), Point2F32(rect.left, rect.bottom))
 
         fun rectPath(cw: Boolean, startIndex: Int): Path {
@@ -65,8 +65,8 @@ class ContourStartGm : SkiaGm {
 
         drawDirs(canvas, dashPaint, ::rectPath)
         drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addOval(rect) } }
-        drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addRRect(RRect(rect, 15f)) } }
-        drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addRRect(RRect(rect, zeroRadii, zeroRadii, zeroRadii, zeroRadii)) } }
+        drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addRRect(RRectF32.of(rect, 15f)) } }
+        drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addRRect(RRectF32.of(rect, zeroRadii, zeroRadii, zeroRadii, zeroRadii)) } }
         drawDirs(canvas, dashPaint) { _, _ -> Path { }.apply { addOval(rect) } }
     }
 

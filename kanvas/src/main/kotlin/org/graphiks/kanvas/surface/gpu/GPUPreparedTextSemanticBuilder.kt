@@ -17,10 +17,6 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedColorGlyphPayloadInp
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextA8PayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
 import org.graphiks.math.matrix.Matrix3x3F32
 
 internal sealed interface GPUPreparedTextSemanticGatherResult {

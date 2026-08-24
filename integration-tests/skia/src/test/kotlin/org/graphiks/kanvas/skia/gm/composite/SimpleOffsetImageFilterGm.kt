@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -63,13 +63,13 @@ class SimpleOffsetImageFilterGm : SkiaGm {
     ) {
         // Draw clip outline
         if (clipR != null) {
-            val green = Paint(color = Color(0xFF00FF00u), style = PaintStyle.STROKE)
+            val green = Paint(color = ColorARGB.fromPackedUInt(0xFF00FF00u), style = PaintStyle.STROKE)
             val inset = RectF32(clipR.left + 0.5f, clipR.top + 0.5f, clipR.right - 0.5f, clipR.bottom - 0.5f)
             canvas.drawRect(inset, green)
         }
 
         // Blue source rect
-        val blue = Paint(color = Color(0x660000FFu))
+        val blue = Paint(color = ColorARGB.fromPackedUInt(0x660000FFu))
         canvas.drawRect(r, blue)
 
         // Clip + draw red offset rect
@@ -78,9 +78,9 @@ class SimpleOffsetImageFilterGm : SkiaGm {
             canvas.clipRect(clipR)
         }
             val red = if (imgf != null) {
-            Paint(color = Color(0x66FF0000u), imageFilter = imgf)
+            Paint(color = ColorARGB.fromPackedUInt(0x66FF0000u), imageFilter = imgf)
         } else {
-            Paint(color = Color(0x66FF0000u))
+            Paint(color = ColorARGB.fromPackedUInt(0x66FF0000u))
         }
         canvas.drawRect(r, red)
         if (clipR != null) {

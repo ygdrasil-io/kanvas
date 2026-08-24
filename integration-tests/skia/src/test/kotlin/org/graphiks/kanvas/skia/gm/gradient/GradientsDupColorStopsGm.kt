@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -27,10 +27,10 @@ class GradientsDupColorStopsGm : SkiaGm {
     override val height = 564
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val preColor = Color.RED
-        val postColor = Color.BLUE
-        val color0 = Color.BLACK
-        val color1 = Color.GREEN
+        val preColor = ColorARGB.Red
+        val postColor = ColorARGB.Blue
+        val color0 = ColorARGB.Black
+        val color1 = ColorARGB.Green
 
         val runs = listOf(
             listOf(GradientStop(0f, color0), GradientStop(1f, color1)),

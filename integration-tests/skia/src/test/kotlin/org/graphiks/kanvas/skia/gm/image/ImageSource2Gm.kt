@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Tests image source creation — creates a red surface, snapshots it,
@@ -25,13 +25,13 @@ class ImageSource2Gm : SkiaGm {
         canvas.drawColor(1f, 1f, 1f, 1f)
 
         val colors = listOf(
-            Color.RED, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.GREEN, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.BLUE, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.fromRGBA(0f, 1f, 1f, 1f), Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.fromRGBA(1f, 0f, 1f, 1f), Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.fromRGBA(1f, 1f, 0f, 1f), Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.WHITE, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.Red, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.Green, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.Blue, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f), ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f), ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f), ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.White, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
         )
 
         val surface = Surface(kImageSize, kImageSize)

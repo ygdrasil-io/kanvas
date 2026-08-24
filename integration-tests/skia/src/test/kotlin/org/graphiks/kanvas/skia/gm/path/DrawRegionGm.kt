@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,11 +27,11 @@ class DrawRegionGm : SkiaGm {
 
         val fillPaint = Paint(
             style = PaintStyle.FILL,
-            color = Color.MAGENTA,
+            color = ColorARGB.MAGENTA,
         )
         canvas.drawRect(RectF32.ofLTRB(50f, 50f, 250f, 250f), fillPaint)
 
-        val regionPaint = Paint(color = Color.CYAN)
+        val regionPaint = Paint(color = ColorARGB.CYAN)
         var x = 50
         while (x < 250) {
             var y = 50
@@ -44,7 +44,7 @@ class DrawRegionGm : SkiaGm {
     }
 
     private companion object {
-        val Color.Companion.MAGENTA get() = Color.fromRGBA(1f, 0f, 1f)
-        val Color.Companion.CYAN get() = Color.fromRGBA(0f, 1f, 1f)
+        val ColorARGB.Companion.MAGENTA get() = ColorARGB.fromRGBA(1f, 0f, 1f)
+        val ColorARGB.Companion.CYAN get() = ColorARGB.fromRGBA(0f, 1f, 1f)
     }
 }

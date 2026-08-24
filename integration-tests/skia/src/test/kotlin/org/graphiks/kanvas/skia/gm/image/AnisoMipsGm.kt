@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/anisotropic.cpp` (aniso-mips variant).
@@ -26,7 +26,7 @@ class AnisoMipsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surface = Surface(kImageSize, kImageSize)
         val kScales = floatArrayOf(1f, 0.5f, 0.25f, 0.125f)
-        val kColors = listOf(Color.fromRGBA(0.94f, 0.94f, 0.94f, 1f), Color.BLUE, Color.GREEN, Color.RED)
+        val kColors = listOf(ColorARGB.fromRGBA(0.94f, 0.94f, 0.94f, 1f), ColorARGB.Blue, ColorARGB.Green, ColorARGB.Red)
 
         for (shaderPass in listOf(false, true)) {
             var ci = 0
@@ -58,10 +58,10 @@ class AnisoMipsGm : SkiaGm {
         }
     }
 
-    private fun updateImage(surf: Surface, color: Color): Image {
+    private fun updateImage(surf: Surface, color: ColorARGB): Image {
         surf.canvas {
             drawColor(color)
-            val innerColor = Color.fromRGBA(
+            val innerColor = ColorARGB.fromRGBA(
                 0.06f, 0.06f, 0.06f, 1f,
             )
             val rect = RectF32.ofLTRB(

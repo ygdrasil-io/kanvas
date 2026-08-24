@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -29,12 +29,12 @@ class ImageFiltersScaledGm : SkiaGm {
 
         val filters: List<ImageFilter?> = listOf(
             ImageFilter.Blur(4f, 4f),
-            ImageFilter.DropShadow(5f, 10f, 3f, 3f, Color.fromRGBA(1f, 1f, 0f, 1f), null),
+            ImageFilter.DropShadow(5f, 10f, 3f, 3f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f), null),
             ImageFilter.Dilate(1f, 1f, null),
             ImageFilter.Erode(1f, 1f, null),
             ImageFilter.Offset(32f, 0f, null),
-            ImageFilter.PointLitDiffuse(Point2F32(0f, 0f), Color.WHITE, 1f, 2f, null),
-            ImageFilter.SpotLitDiffuse(Point2F32(-10f, -10f), Point2F32(40f, 40f), 1f, 15f, Color.WHITE, 1f, 2f, null),
+            ImageFilter.PointLitDiffuse(Point2F32(0f, 0f), ColorARGB.White, 1f, 2f, null),
+            ImageFilter.SpotLitDiffuse(Point2F32(-10f, -10f), Point2F32(40f, 40f), 1f, 15f, ColorARGB.White, 1f, 2f, null),
         )
 
         val scales = listOf(
@@ -54,7 +54,7 @@ class ImageFiltersScaledGm : SkiaGm {
         for (j in scales.indices) {
             canvas.save()
             for (i in filters.indices) {
-                val paint = Paint(color = Color.BLUE, imageFilter = filters[i], antiAlias = true)
+                val paint = Paint(color = ColorARGB.Blue, imageFilter = filters[i], antiAlias = true)
                 canvas.save()
                 canvas.scale(scales[j].x, scales[j].y)
                 canvas.clipRect(r)

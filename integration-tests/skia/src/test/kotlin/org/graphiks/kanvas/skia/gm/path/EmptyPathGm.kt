@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.random.Random
 
 /**
@@ -30,7 +30,7 @@ class EmptyPathGm : SkiaGm {
         val rand = Random(0)
         val rect = RectF32(0f, 0f, 100f, 30f)
         val borderPaint = Paint(
-            color = Color.fromRGBA(0f, 0f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
         )
@@ -51,7 +51,7 @@ class EmptyPathGm : SkiaGm {
                 val b = (colorInt and 0xFF) / 255f
 
                 val path = Path { }.also { it.fillType = fill }
-                val paint = Paint(color = Color.fromRGBA(r, g, b, a), style = style)
+                val paint = Paint(color = ColorARGB.fromRGBA(r, g, b, a), style = style)
 
                 canvas.save()
                 canvas.translate(x, y)

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -50,7 +50,7 @@ class FatPathFillGm : SkiaGm {
     private fun drawFatpath(canvas: GmCanvas, surface: Surface, path: Path) {
         val fillPaint = Paint()
         surface.canvas {
-            drawRect(RectF32(0f, 0f, smallW.toFloat(), smallH.toFloat()), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, smallW.toFloat(), smallH.toFloat()), Paint(color = ColorARGB.Transparent))
             drawPath(path, fillPaint)
         }
         val image = surface.makeImageSnapshot()
@@ -59,7 +59,7 @@ class FatPathFillGm : SkiaGm {
         val strokePaint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
         )
         canvas.drawPath(path, strokePaint)
@@ -68,7 +68,7 @@ class FatPathFillGm : SkiaGm {
 
     private fun drawPixelCenters(canvas: GmCanvas) {
         val paint = Paint(
-            color = Color.fromRGBA(0f, 0.53f, 1f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0.53f, 1f, 1f),
             antiAlias = true,
         )
         for (y in 0 until smallH) {

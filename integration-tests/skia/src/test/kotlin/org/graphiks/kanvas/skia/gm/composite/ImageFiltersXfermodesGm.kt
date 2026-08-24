@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefilters.cpp` (xfermodes variant).
@@ -43,15 +43,15 @@ class ImageFiltersXfermodesGm : SkiaGm {
         canvas.save()
         canvas.clipRect(RectF32(0f, 0f, 220f, 220f))
         canvas.saveLayer(RectF32(0f, 0f, 220f, 220f), null)
-        canvas.drawRect(RectF32(0f, 0f, 220f, 220f), Paint(color = Color.GREEN))
+        canvas.drawRect(RectF32(0f, 0f, 220f, 220f), Paint(color = ColorARGB.Green))
 
         val r0 = RectF32(10f, 60f, 210f, 160f)
         val r1 = RectF32(60f, 10f, 160f, 210f)
 
-        canvas.drawOval(r0, Paint(color = Color.RED, antiAlias = true))
+        canvas.drawOval(r0, Paint(color = ColorARGB.Red, antiAlias = true))
 
         val paint = Paint(
-            color = Color.fromRGBA(0f, 0f, 1f, 0.4f),
+            color = ColorARGB.fromRGBA(0f, 0f, 1f, 0.4f),
             imageFilter = imf,
             blendMode = mode,
             antiAlias = true,

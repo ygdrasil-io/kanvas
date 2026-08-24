@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
@@ -559,7 +559,7 @@ private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
     val text = firstVisual as? DisplayOp.DrawText ?: return this
     if (text.paint.blendMode !in PREPARED_DST_READ_TEXT_BLEND_MODES) return this
     return listOf(
-        DisplayOp.Clear(Color.TRANSPARENT),
+        DisplayOp.Clear(ColorARGB.Transparent),
     ) + this
 }
 

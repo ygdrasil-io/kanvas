@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -37,18 +37,18 @@ class Xfermodes2Gm : SkiaGm {
             val r = RectF32.ofLTRB(x, y, x + w, y + h)
 
             // Background
-            val dark = Color.fromRGBA(0x42 / 255f, 0x41 / 255f, 0x42 / 255f, 1f)
-            val light = Color.fromRGBA(0xD6 / 255f, 0xD3 / 255f, 0xD6 / 255f, 1f)
+            val dark = ColorARGB.fromRGBA(0x42 / 255f, 0x41 / 255f, 0x42 / 255f, 1f)
+            val light = ColorARGB.fromRGBA(0xD6 / 255f, 0xD3 / 255f, 0xD6 / 255f, 1f)
             val bgColor = if ((m / 6 + m) % 2 == 0) dark else light
             canvas.drawRect(r, Paint(color = bgColor))
 
             // Draw source blend
             canvas.save()
             val dstPaint = Paint(
-                color = Color.fromRGBA(0f, 1f, 0.5f, 0.6f),
+                color = ColorARGB.fromRGBA(0f, 1f, 0.5f, 0.6f),
             )
             val srcPaint = Paint(
-                color = Color.fromRGBA(0.5f, 0f, 0.8f, 0.6f),
+                color = ColorARGB.fromRGBA(0.5f, 0f, 0.8f, 0.6f),
                 blendMode = mode,
             )
             canvas.drawRect(r, dstPaint)

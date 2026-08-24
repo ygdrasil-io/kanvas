@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -70,13 +70,13 @@ class QuadClosePathGm : SkiaGm {
                     if (styleIdx > 0) {
                         canvas.translate(cellRect.width() + 40f, 0f)
                     }
-                    val cellColor = Color.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
+                    val cellColor = ColorARGB.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
                     drawCell(
                         canvas, shape, cellColor, cellRect,
                         cap.first, cap.second, style.first, fill.first, 10f,
                     )
                     val rectPaint = Paint(
-                        color = Color.BLACK,
+                        color = ColorARGB.Black,
                         style = PaintStyle.STROKE,
                         strokeWidth = 0f,
                         antiAlias = true,
@@ -94,7 +94,7 @@ class QuadClosePathGm : SkiaGm {
     private fun drawCell(
         canvas: GmCanvas,
         srcPath: Path,
-        solidColor: Color,
+        solidColor: ColorARGB,
         clip: RectF32,
         cap: StrokeCap,
         join: StrokeJoin,

@@ -1,11 +1,15 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.math.geometry.Point2F32
 
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
@@ -25,7 +29,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawColor emits DrawColor op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.drawColor(Color.RED)
+        canvas.drawColor(ColorARGB.Red)
         val ops = buffer.ops()
         assertEquals(1, ops.size)
         assertTrue(ops[0] is DisplayOp.DrawColor)
@@ -34,7 +38,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `clear emits Clear op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.clear(Color.WHITE)
+        canvas.clear(ColorARGB.White)
         val ops = buffer.ops()
         assertEquals(1, ops.size)
         assertTrue(ops[0] is DisplayOp.Clear)
@@ -43,7 +47,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawPoint emits DrawPoint op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.drawPoint(5f, 7f, Paint.fill(Color.BLUE))
+        canvas.drawPoint(5f, 7f, Paint.fill(ColorARGB.Blue))
         val op = buffer.ops().first() as DisplayOp.DrawPoint
         assertEquals(5f, op.x)
         assertEquals(7f, op.y)
@@ -52,7 +56,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawPoints emits DrawPoints op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.drawPoints(PointMode.LINES, listOf(Point2F32(0f, 0f), Point2F32(10f, 10f)), Paint.fill(Color.RED))
+        canvas.drawPoints(PointMode.LINES, listOf(Point2F32(0f, 0f), Point2F32(10f, 10f)), Paint.fill(ColorARGB.Red))
         val op = buffer.ops().first() as DisplayOp.DrawPoints
         assertEquals(PointMode.LINES, op.mode)
         assertEquals(2, op.points.size)
@@ -61,9 +65,9 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawDRRect emits DrawDRRect op`() {
         val (canvas, buffer) = testCanvas()
-        val outer = RRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), CornerRadii(10f, 10f))
-        val inner = RRect(RectF32.ofLTRB(20f, 20f, 80f, 80f), CornerRadii(5f, 5f))
-        canvas.drawDRRect(outer, inner, Paint.fill(Color.GREEN))
+        val outer = RRectF32.of(RectF32.ofLTRB(0f, 0f, 100f, 100f), CornerRadiiF32.of(10f, 10f))
+        val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 80f, 80f), CornerRadiiF32.of(5f, 5f))
+        canvas.drawDRRect(outer, inner, Paint.fill(ColorARGB.Green))
         val op = buffer.ops().first() as DisplayOp.DrawDRRect
         assertEquals(outer, op.outer)
         assertEquals(inner, op.inner)
@@ -119,7 +123,7 @@ class ScaffoldCanvasTest {
     fun `drawImageNine with paint emits op with paint`() {
         val (canvas, buffer) = testCanvas()
         val img = dummyImage()
-        canvas.drawImageNine(img, RectF32.ofLTRB(30f, 30f, 70f, 70f), RectF32.ofLTRB(0f, 0f, 200f, 200f), Paint.fill(Color.BLUE))
+        canvas.drawImageNine(img, RectF32.ofLTRB(30f, 30f, 70f, 70f), RectF32.ofLTRB(0f, 0f, 200f, 200f), Paint.fill(ColorARGB.Blue))
         val op = buffer.ops().first() as DisplayOp.DrawImageNine
         assertNotNull(op.paint)
     }
@@ -154,7 +158,7 @@ class ScaffoldCanvasTest {
         val (canvas, buffer) = testCanvas()
         val positions = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(50f, 100f))
         val vertices = Vertices(VertexMode.TRIANGLES, positions)
-        canvas.drawVertices(vertices, Paint.fill(Color.RED))
+        canvas.drawVertices(vertices, Paint.fill(ColorARGB.Red))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
         assertEquals(VertexMode.TRIANGLES, op.vertices.mode)
         assertEquals(3, op.vertices.positions.size)
@@ -164,10 +168,10 @@ class ScaffoldCanvasTest {
     fun `drawVertices with colors and indices emits DrawVertices op`() {
         val (canvas, buffer) = testCanvas()
         val positions = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(50f, 100f))
-        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE)
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue)
         val indices = listOf(0, 1, 2)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors, indices = indices)
-        canvas.drawVertices(vertices, Paint.fill(Color.WHITE))
+        canvas.drawVertices(vertices, Paint.fill(ColorARGB.White))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
         assertEquals(3, op.vertices.colors?.size)
         assertEquals(3, op.vertices.indices?.size)
@@ -201,7 +205,7 @@ class ScaffoldCanvasTest {
         val atlas = dummyImage()
         val transforms = listOf(Matrix3x3F32.Identity)
         val texRects = listOf(RectF32.ofLTRB(0f, 0f, 50f, 50f))
-        val colors = listOf(Color.RED)
+        val colors = listOf(ColorARGB.Red)
         canvas.drawAtlas(atlas, transforms, texRects, colors, BlendMode.SRC_IN)
         val op = buffer.ops().first() as DisplayOp.DrawAtlas
         assertEquals(BlendMode.SRC_IN, op.blendMode)
@@ -216,7 +220,7 @@ class ScaffoldCanvasTest {
             Point2F32(100f, 33f), Point2F32(100f, 66f), Point2F32(100f, 100f), Point2F32(100f, 100f),
             Point2F32(66f, 100f), Point2F32(33f, 100f), Point2F32(0f, 100f), Point2F32(0f, 100f),
         )
-        canvas.drawPatch(cubics, paint = Paint.fill(Color.GREEN))
+        canvas.drawPatch(cubics, paint = Paint.fill(ColorARGB.Green))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
         assertEquals(VertexMode.TRIANGLES, op.vertices.mode)
         assertTrue(op.vertices.indices?.isNotEmpty() == true)
@@ -230,8 +234,8 @@ class ScaffoldCanvasTest {
             Point2F32(100f, 33f), Point2F32(100f, 66f), Point2F32(100f, 100f), Point2F32(100f, 100f),
             Point2F32(66f, 100f), Point2F32(33f, 100f), Point2F32(0f, 100f), Point2F32(0f, 100f),
         )
-        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE)
-        canvas.drawPatch(cubics, colors = colors, paint = Paint.fill(Color.GREEN))
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.White)
+        canvas.drawPatch(cubics, colors = colors, paint = Paint.fill(ColorARGB.Green))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
         assertEquals(25, op.vertices.colors?.size)
     }
@@ -241,7 +245,7 @@ class ScaffoldCanvasTest {
         val (canvas, _) = testCanvas()
         val short = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(100f, 100f), Point2F32(0f, 100f))
         assertFailsWith<IndexOutOfBoundsException> {
-            canvas.drawPatch(short, paint = Paint.fill(Color.RED))
+            canvas.drawPatch(short, paint = Paint.fill(ColorARGB.Red))
         }
     }
 

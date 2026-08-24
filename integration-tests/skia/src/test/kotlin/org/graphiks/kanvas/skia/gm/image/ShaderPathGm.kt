@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -36,7 +36,7 @@ class ShaderPathGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val bmpPaint = Paint(antiAlias = true, color = Color.fromRGBA(1f, 1f, 1f, 0.5f))
+        val bmpPaint = Paint(antiAlias = true, color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f))
         canvas.drawImage(bmp, RectF32(5f, 5f, 80f, 80f), bmpPaint)
 
         val outlinePaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)
@@ -79,14 +79,14 @@ class ShaderPathGm : SkiaGm {
             val w = 75f
             val pos = listOf(0f, 0.5f, 1f)
             val colors0 = listOf(
-                GradientStop(0f, Color(0x80F00080u)),
-                GradientStop(0.5f, Color(0xF0F08000u)),
-                GradientStop(1f, Color(0x800080F0u)),
+                GradientStop(0f, ColorARGB.fromPackedUInt(0x80F00080u)),
+                GradientStop(0.5f, ColorARGB.fromPackedUInt(0xF0F08000u)),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0x800080F0u)),
             )
             val colors1 = listOf(
-                GradientStop(0f, Color(0xF08000F0u)),
-                GradientStop(0.5f, Color(0x8080F000u)),
-                GradientStop(1f, Color(0xF000F080u)),
+                GradientStop(0f, ColorARGB.fromPackedUInt(0xF08000F0u)),
+                GradientStop(0.5f, ColorARGB.fromPackedUInt(0x8080F000u)),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0xF000F080u)),
             )
 
             val paint = Paint(shader = Shader.LinearGradient(

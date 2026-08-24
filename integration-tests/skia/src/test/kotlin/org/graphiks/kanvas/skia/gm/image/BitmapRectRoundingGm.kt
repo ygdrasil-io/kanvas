@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -36,7 +36,7 @@ class BitmapRectRoundingGm : SkiaGm {
         val r = RectF32.ofOriginSize(1f, 1f, 110f, 114f)
         canvas.scale(0.9f, 0.9f)
 
-        canvas.drawRect(r, Paint(color = Color.RED))
+        canvas.drawRect(r, Paint(color = ColorARGB.Red))
         canvas.drawImageRect(
             image,
             RectF32.ofOriginSize(0f, 0f, 10f, 10f),

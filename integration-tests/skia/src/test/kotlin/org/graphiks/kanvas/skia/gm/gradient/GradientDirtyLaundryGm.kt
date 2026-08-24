@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -28,10 +28,10 @@ class GradientDirtyLaundryGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)),
+            Paint(color = ColorARGB.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)),
         )
 
-        val basePattern = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE, Color.BLACK)
+        val basePattern = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.White, ColorARGB.Black)
         val colors = List(40) { basePattern[it % basePattern.size] }
         val stops = colors.indices.map { i ->
             GradientStop(i.toFloat() / (colors.size - 1), colors[i])

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import java.util.Collections
 import kotlin.test.assertContentEquals
 import kotlin.test.Test
@@ -55,11 +57,10 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.a
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextLowererTest {
@@ -103,7 +104,7 @@ class GPUPreparedTextLowererTest {
         val opaqueSource = assertIs<GPUPreparedTextLowering.Ready>(
             GPUPreparedTextLowerer.lower(
                 operation = validOperation().copy(
-                    paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
+                    paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.SRC),
                 ),
                 operationIndex = 0,
                 target = target(),
@@ -113,7 +114,7 @@ class GPUPreparedTextLowererTest {
         val translucentSource = assertIs<GPUPreparedTextLowering.Ready>(
             GPUPreparedTextLowerer.lower(
                 operation = validOperation().copy(
-                    paint = Paint.fill(Color.fromRGBA(1f, 0f, 0f, 0.5f))
+                    paint = Paint.fill(ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f))
                         .copy(blendMode = BlendMode.SRC),
                 ),
                 operationIndex = 1,
@@ -144,8 +145,8 @@ class GPUPreparedTextLowererTest {
         val positions = mutableListOf(Point2F32(1.25f, 2f), Point2F32(7.5f, 2f))
         val variations = linkedMapOf("wght" to 500f)
         val stops = mutableListOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(1f, Color.BLUE),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Blue),
         )
         val clipOps = mutableListOf<ClipStackOp>(
             ClipStackOp.RectOp(
@@ -174,8 +175,8 @@ class GPUPreparedTextLowererTest {
             ),
             x = 3f,
             y = 4f,
-            paint = Paint.fill(Color.WHITE).copy(
-                color = Color.fromRGBA(1f, 1f, 1f, 0.5f),
+            paint = Paint.fill(ColorARGB.White).copy(
+                color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f),
                 shader = Shader.LinearGradient(
                     start = Point2F32(0f, 0f),
                     end = Point2F32(32f, 0f),
@@ -224,7 +225,7 @@ class GPUPreparedTextLowererTest {
 
         glyphs[0] = 10u
         positions[0] = Point2F32(99f, 99f)
-        stops[0] = GradientStop(0f, Color.GREEN)
+        stops[0] = GradientStop(0f, ColorARGB.Green)
         clipOps.clear()
         variations["wght"] = 700f
         typeface.fontBytes.fill(0)
@@ -232,7 +233,7 @@ class GPUPreparedTextLowererTest {
         assertEquals(listOf(5, 9), ready.draw.glyphs.map { it.glyphId })
         assertEquals(listOf(1.25f, 7.5f), ready.draw.glyphs.map { it.positionX })
         assertEquals(2, (ready.draw.clip as ClipStack.Complex).ops.size)
-        assertEquals(Color.RED, (ready.draw.paint.shader as Shader.LinearGradient).stops.first().color)
+        assertEquals(ColorARGB.Red, (ready.draw.paint.shader as Shader.LinearGradient).stops.first().color)
         assertEquals(mapOf("wght" to 500f), ready.draw.glyphs.first().strikeKey.variationCoordinates)
         assertTrue(ready.draw.face.bytes.any { it != 0 })
         assertNotSame(operation.paint, ready.draw.paint)
@@ -319,20 +320,20 @@ class GPUPreparedTextLowererTest {
             values[18] = 1f
         }
         val operation = validOperation().copy(
-            paint = Paint.fill(Color.RED).copy(
-                colorFilter = ColorFilter.Matrix(sourceMatrix),
+            paint = Paint.fill(ColorARGB.Red).copy(
+                colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(sourceMatrix)),
             ),
         )
         val ready = assertIs<GPUPreparedTextLowering.Ready>(lower(operation))
 
         sourceMatrix[0] = 99f
-        val firstValues = assertIs<ColorFilter.Matrix>(ready.draw.paint.colorFilter).values
-        assertEquals(1f, firstValues[0])
+        val firstMatrix = assertIs<ColorFilter.Matrix>(ready.draw.paint.colorFilter).matrix
+        assertEquals(1f, firstMatrix[0])
 
-        firstValues[0] = 77f
-        val secondValues = assertIs<ColorFilter.Matrix>(ready.draw.paint.colorFilter).values
-        assertEquals(1f, secondValues[0])
-        assertNotSame(firstValues, secondValues)
+        firstMatrix.setRowMajor(FloatArray(20) { index -> if (index == 0) 77f else 0f })
+        val secondMatrix = assertIs<ColorFilter.Matrix>(ready.draw.paint.colorFilter).matrix
+        assertEquals(1f, secondMatrix[0])
+        assertNotSame(firstMatrix, secondMatrix)
     }
 
     @Test
@@ -345,7 +346,7 @@ class GPUPreparedTextLowererTest {
         }
         val sourceTable = UByteArray(256) { index -> index.toUByte() }
         val draw = preparedDrawWithPaint(
-            Paint.fill(Color.RED).copy(
+            Paint.fill(ColorARGB.Red).copy(
                 colorFilter = ColorFilter.Compose(
                     outer = ColorFilter.HSLAMatrix(sourceHsl),
                     inner = ColorFilter.Table(sourceTable),
@@ -376,7 +377,7 @@ class GPUPreparedTextLowererTest {
     fun `prepared draw paint getter isolates mask filter table arrays`() {
         val sourceTable = UByteArray(256) { index -> index.toUByte() }
         val draw = preparedDrawWithPaint(
-            Paint.fill(Color.RED).copy(maskFilter = MaskFilter.Table(sourceTable)),
+            Paint.fill(ColorARGB.Red).copy(maskFilter = MaskFilter.Table(sourceTable)),
         )
 
         sourceTable[12] = 99u
@@ -521,7 +522,7 @@ class GPUPreparedTextLowererTest {
             target(),
             capabilities(facts.reversed()),
         )
-        val mapping = Paint.fill(Color.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
+        val mapping = Paint.fill(ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
             .toPreparedMaterialMapping()
 
         val first = assertIs<GPUPreparedMaterialProgramResult.Ready>(
@@ -636,7 +637,7 @@ class GPUPreparedTextLowererTest {
 
     @Test
     fun `paint snapshot preserves shared shader graph without aliasing its source`() {
-        val sharedLeaf = Shader.SolidColor(Color.GREEN)
+        val sharedLeaf = Shader.SolidColor(ColorARGB.Green)
         val operation = validOperation().copy(
             paint = Paint(
                 shader = Shader.Blend(
@@ -661,7 +662,7 @@ class GPUPreparedTextLowererTest {
     @Test
     fun `mode blender is normalized through the common scalar coverage planner`() {
         val operation = validOperation().copy(
-            paint = Paint.fill(Color.RED).copy(
+            paint = Paint.fill(ColorARGB.Red).copy(
                 blendMode = BlendMode.CLEAR,
                 blender = Blender.Mode(BlendMode.XOR),
             ),
@@ -676,7 +677,7 @@ class GPUPreparedTextLowererTest {
     @Test
     fun `common blend target refusal remains terminal for text`() {
         val operation = validOperation().copy(
-            paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.XOR),
+            paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.XOR),
         )
 
         val refused = assertIs<GPUPreparedTextLowering.Refused>(
@@ -995,7 +996,7 @@ class GPUPreparedTextLowererTest {
     fun `expanded text path source remains visible on the normalized GPU command`() {
         val operation = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(RectF32.ofLTRB(1f, 2f, 5f, 8f)),
-            paint = Paint.fill(Color.BLACK),
+            paint = Paint.fill(ColorARGB.Black),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
             sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
@@ -1036,7 +1037,7 @@ class GPUPreparedTextLowererTest {
         ),
         x = 1f,
         y = 2f,
-        paint = Paint.fill(Color.RED),
+        paint = Paint.fill(ColorARGB.Red),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )

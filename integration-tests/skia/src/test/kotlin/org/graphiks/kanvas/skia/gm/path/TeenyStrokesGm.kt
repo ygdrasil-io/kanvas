@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class TeenyStrokesGm : SkiaGm {
@@ -24,14 +24,14 @@ class TeenyStrokesGm : SkiaGm {
     override val height = 800
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        line(canvas, 0.00005f, Color.BLACK)
-        line(canvas, 0.000045f, Color.RED)
-        line(canvas, 0.0000035f, Color.GREEN)
-        line(canvas, 0.000003f, Color.BLUE)
-        line(canvas, 0.000002f, Color.BLACK)
+        line(canvas, 0.00005f, ColorARGB.Black)
+        line(canvas, 0.000045f, ColorARGB.Red)
+        line(canvas, 0.0000035f, ColorARGB.Green)
+        line(canvas, 0.000003f, ColorARGB.Blue)
+        line(canvas, 0.000002f, ColorARGB.Black)
     }
 
-    private fun line(canvas: GmCanvas, scale: Float, color: Color) {
+    private fun line(canvas: GmCanvas, scale: Float, color: ColorARGB) {
         val paint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,

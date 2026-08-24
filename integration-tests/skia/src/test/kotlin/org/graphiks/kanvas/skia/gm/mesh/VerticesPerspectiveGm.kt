@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -33,7 +33,7 @@ class VerticesPerspectiveGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val r = RectF32(0f, 0f, 128f, 128f)
 
-        val checker = makeCheckerboardShader(Color.BLACK, Color.WHITE, 32)
+        val checker = makeCheckerboardShader(ColorARGB.Black, ColorARGB.White, 32)
         val paint = Paint(shader = checker)
 
         val pos = listOf(
@@ -75,7 +75,7 @@ class VerticesPerspectiveGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun makeCheckerboardShader(c1: Color, c2: Color, size: Int): Shader {
+    private fun makeCheckerboardShader(c1: ColorARGB, c2: ColorARGB, size: Int): Shader {
         val side = 2 * size
         val pixels = ByteArray(side * side * 4)
         for (y in 0 until side) {
@@ -83,9 +83,9 @@ class VerticesPerspectiveGm : SkiaGm {
                 val i = (y * side + x) * 4
                 val onTopLeft = (x < size) xor (y < size)
                 val c = if (onTopLeft) c1 else c2
-                pixels[i] = ((c.packed shr 16) and 0xFFu).toByte()
-                pixels[i + 1] = ((c.packed shr 8) and 0xFFu).toByte()
-                pixels[i + 2] = (c.packed and 0xFFu).toByte()
+                pixels[i] = ((c.value shr 16) and 0xFFu).toByte()
+                pixels[i + 1] = ((c.value shr 8) and 0xFFu).toByte()
+                pixels[i + 2] = (c.value and 0xFFu).toByte()
                 pixels[i + 3] = 0xFF.toByte()
             }
         }

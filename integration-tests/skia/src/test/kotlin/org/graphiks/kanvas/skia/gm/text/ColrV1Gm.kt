@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/colrv1.cpp` — default `gradient_stops_repeat` category.
@@ -25,7 +25,7 @@ class ColrV1Gm : SkiaGm {
 
     private val codepoints = intArrayOf(0xf0100, 0xf0101, 0xf0102, 0xf0103)
     private val textSizes = floatArrayOf(12f, 18f, 30f, 120f)
-    private val colors = listOf(Color.BLACK, Color.GREEN, Color.RED, Color.BLUE)
+    private val colors = listOf(ColorARGB.Black, ColorARGB.Green, ColorARGB.Red, ColorARGB.Blue)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(1f, 1f, 1f)

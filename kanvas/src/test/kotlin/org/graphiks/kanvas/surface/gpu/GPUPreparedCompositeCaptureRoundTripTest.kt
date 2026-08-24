@@ -6,7 +6,7 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
@@ -19,9 +19,9 @@ import kotlin.test.assertTrue
 class GPUPreparedCompositeCaptureRoundTripTest {
 
     private val identity33 = Matrix3x3F32.Identity
-    private val opaqueBlack = Color.fromArgb(255, 0, 0, 0)
-    private val opaqueWhite = Color.fromArgb(255, 255, 255, 255)
-    private val halfAlphaRed = Color.fromArgb(128, 255, 0, 0)
+    private val opaqueBlack = ColorARGB.of(255, 0, 0, 0)
+    private val opaqueWhite = ColorARGB.of(255, 255, 255, 255)
+    private val halfAlphaRed = ColorARGB.of(128, 255, 0, 0)
 
     @Test
     fun `two rects of different geometry same index produce different identities`() {

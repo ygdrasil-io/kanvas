@@ -1,15 +1,15 @@
 package org.graphiks.kanvas.paint
 
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 
 enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
 sealed interface Shader {
-    data class SolidColor(val color: Color) : Shader
+    data class SolidColor(val color: ColorARGB) : Shader
     data class LinearGradient(
         val start: Point2F32, val end: Point2F32,
         val stops: List<GradientStop>,
@@ -53,8 +53,8 @@ sealed interface Shader {
     ) : Shader
     data class WithLocalMatrix(val shader: Shader, val matrix: Matrix3x3F32) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader
-    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: Size?) : Shader
-    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: Size?) : Shader
+    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
+    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
     data class WithWorkingColorSpace(val shader: Shader, val interpolation: ColorSpaceInterpolation) : Shader
     data class CoordClamp(val shader: Shader, val subset: RectF32) : Shader
 }

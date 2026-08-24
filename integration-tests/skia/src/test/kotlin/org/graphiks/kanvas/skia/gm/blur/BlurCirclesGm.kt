@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/blurcircles.cpp`.
@@ -33,7 +33,7 @@ class BlurCirclesGm : SkiaGm {
             canvas.translate(0f, 150f * i)
             for (j in circleRadii.indices) {
                 val paint = Paint(
-                    color = Color.BLACK,
+                    color = ColorARGB.Black,
                     maskFilter = blurFilters[i],
                 )
                 val cx = 50f; val cy = 50f

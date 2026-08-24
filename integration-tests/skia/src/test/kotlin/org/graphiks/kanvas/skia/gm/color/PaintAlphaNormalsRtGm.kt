@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Tests paint alpha with normal-map shader rendering across four tiled quadrants. */
@@ -26,7 +26,7 @@ class PaintAlphaNormalsRtGm : SkiaGm {
         val normalShader = normalMapImage.makeShader(sampling = SamplingOptions.LINEAR)
 
         val draw = { x: Int, y: Int, shader: Shader? ->
-            val paint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 164f / 255f), shader = shader)
+            val paint = Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 164f / 255f), shader = shader)
             canvas.save()
             canvas.translate(x.toFloat(), y.toFloat())
             canvas.clipRect(RectF32(0f, 0f, 256f, 256f))

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/strokes.cpp::Strokes5GM` (`zero_control_stroke`, 400 x 800).
@@ -26,7 +26,7 @@ class ZeroControlStrokeGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val p = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 40f,

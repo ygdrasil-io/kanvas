@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -53,7 +53,7 @@ class LinePathGm : SkiaGm {
             for (fill in fills) {
                 for (style in styles) {
                     val paint = Paint(
-                        color = Color.fromRGBA(0x00.toFloat(), 0x70.toFloat() / 255f, 0x00.toFloat(), 1f),
+                        color = ColorARGB.fromRGBA(0x00.toFloat(), 0x70.toFloat() / 255f, 0x00.toFloat(), 1f),
                         style = style,
                         strokeCap = capJoin.first,
                         strokeJoin = capJoin.second,
@@ -69,7 +69,7 @@ class LinePathGm : SkiaGm {
                     canvas.restore()
 
                     val rectPaint = Paint(
-                        color = Color.BLACK,
+                        color = ColorARGB.Black,
                         style = PaintStyle.STROKE,
                         strokeWidth = 1f,
                         antiAlias = true,

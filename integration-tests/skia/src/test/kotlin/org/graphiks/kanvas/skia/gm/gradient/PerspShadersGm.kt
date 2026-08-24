@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -29,22 +29,22 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
     override val width = kCellSize * kNumCols
     override val height = kCellSize * kNumRows
 
-    private var bitmapImage: Image = createCheckerboardImage(kCellSize, kCellSize, Color.BLUE, Color.fromRGBA(1f, 1f, 0f), kCellSize / 10)
+    private var bitmapImage: Image = createCheckerboardImage(kCellSize, kCellSize, ColorARGB.Blue, ColorARGB.fromRGBA(1f, 1f, 0f), kCellSize / 10)
     private val linearGrad1 = Shader.LinearGradient(
         start = Point2F32(0f, 0f), end = Point2F32(kCellSize.toFloat(), kCellSize.toFloat()),
         stops = listOf(
-            GradientStop(0f, Color.RED), GradientStop(0.25f, Color.GREEN),
-            GradientStop(0.5f, Color.RED), GradientStop(0.75f, Color.GREEN),
-            GradientStop(1f, Color.RED),
+            GradientStop(0f, ColorARGB.Red), GradientStop(0.25f, ColorARGB.Green),
+            GradientStop(0.5f, ColorARGB.Red), GradientStop(0.75f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Red),
         ),
         tileMode = TileMode.CLAMP,
     )
     private val linearGrad2 = Shader.LinearGradient(
         start = Point2F32(0f, 0f), end = Point2F32(0f, kCellSize.toFloat()),
         stops = listOf(
-            GradientStop(0f, Color.RED), GradientStop(0.25f, Color.GREEN),
-            GradientStop(0.5f, Color.RED), GradientStop(0.75f, Color.GREEN),
-            GradientStop(1f, Color.RED),
+            GradientStop(0f, ColorARGB.Red), GradientStop(0.25f, ColorARGB.Green),
+            GradientStop(0.5f, ColorARGB.Red), GradientStop(0.75f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Red),
         ),
         tileMode = TileMode.CLAMP,
     )
@@ -119,7 +119,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
         canvas.restore()
     }
 
-    private fun createCheckerboardImage(w: Int, h: Int, c0: Color, c1: Color, size: Int): Image {
+    private fun createCheckerboardImage(w: Int, h: Int, c0: ColorARGB, c1: ColorARGB, size: Int): Image {
         val pixels = ByteArray(w * h * 4)
         for (y in 0 until h) {
             for (x in 0 until w) {
@@ -127,7 +127,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
                 val pickC0 = (cellX + cellY) % 2 == 0
                 val c = if (pickC0) c0 else c1
                 val i = (y * w + x) * 4
-                val packed = c.packed.toInt()
+                val packed = c.value.toInt()
                 pixels[i] = (packed and 0xFF).toByte()
                 pixels[i + 1] = ((packed ushr 8) and 0xFF).toByte()
                 pixels[i + 2] = ((packed ushr 16) and 0xFF).toByte()

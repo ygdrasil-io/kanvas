@@ -17,14 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurRequest
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.redByte
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 
 /**
  * CPU pixel oracle for top-level mask blur, faithful to the legacy
@@ -59,7 +53,7 @@ object TopLevelMaskBlurPixelOracle {
     /** Shape descriptor accepted by the oracle (all draws are non-AA in the flip set). */
     sealed interface Shape {
         data class Rect(val left: Float, val top: Float, val right: Float, val bottom: Float) : Shape
-        data class RRectShape(val rect: RRect) : Shape
+        data class RRectShape(val rect: RRectF32) : Shape
         data class Path(
             val vertices: List<Float>,
             val contourStarts: List<Int>,
@@ -168,7 +162,7 @@ object TopLevelMaskBlurPixelOracle {
         clipBounds: GPUBounds,
         style: BlurStyle,
         sigma: Float,
-        source: Color,
+        source: ColorARGB,
         blendMode: BlendMode,
         destinationEncoded: UByteArray,
         maxIntermediateBytes: Long = Long.MAX_VALUE,
@@ -217,7 +211,7 @@ object TopLevelMaskBlurPixelOracle {
         return coverage
     }
 
-    private fun rrectInside(plan: MaskBlurPlan.Ready, rrect: RRect, px: Float, py: Float): Float {
+    private fun rrectInside(plan: MaskBlurPlan.Ready, rrect: RRectF32, px: Float, py: Float): Float {
         val rect = rrect.rect
         val left = (rect.left - plan.deviceBounds.left) * plan.scale
         val top = (rect.top - plan.deviceBounds.top) * plan.scale
@@ -321,7 +315,7 @@ object TopLevelMaskBlurPixelOracle {
     private fun compositePass(
         plan: MaskBlurPlan.Ready,
         styled: FloatArray,
-        source: Color,
+        source: ColorARGB,
         blendMode: BlendMode,
         destinationEncoded: UByteArray,
         targetWidth: Int,
@@ -467,7 +461,7 @@ object TopLevelMaskBlurPixelOracle {
 
     private data class Premul4(val r: Float, val g: Float, val b: Float, val a: Float)
 
-    private fun Color.toLinearPremul(): FloatArray {
+    private fun ColorARGB.toLinearPremul(): FloatArray {
         val alpha = a
         return floatArrayOf(srgbToLinear(r) * alpha, srgbToLinear(g) * alpha, srgbToLinear(b) * alpha, alpha)
     }
@@ -540,7 +534,7 @@ object TopLevelMaskBlurPixelOracle {
         top: Float,
         right: Float,
         bottom: Float,
-        color: Color,
+        color: ColorARGB,
     ): UByteArray {
         val premul = color.toLinearPremul()
         val out = destination.copyOf()
@@ -568,7 +562,7 @@ object TopLevelMaskBlurPixelOracle {
         top: Float,
         right: Float,
         bottom: Float,
-        color: Color,
+        color: ColorARGB,
     ): UByteArray {
         val premul = color.toLinearPremul()
         val out = UByteArray(targetWidth * targetHeight * 4)

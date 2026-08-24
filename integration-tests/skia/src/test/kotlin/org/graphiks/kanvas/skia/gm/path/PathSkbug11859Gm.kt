@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/pathfill.cpp::path_skbug_11859`.
@@ -22,7 +22,7 @@ class PathSkbug11859Gm : SkiaGm {
     override val height = 512
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(color = Color.fromRGBA(1f, 0f, 0f, 1f), antiAlias = true)
+        val paint = Paint(color = ColorARGB.fromRGBA(1f, 0f, 0f, 1f), antiAlias = true)
         val path = Path {
             moveTo(258f, -2f)
             lineTo(258f, 258f)

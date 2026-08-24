@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/strokefill.cpp::bug339297` (DEF_SIMPLE_GM, 640 x 480).
@@ -44,13 +44,13 @@ class Bug339297Gm : SkiaGm {
 
         var paint = Paint(
             antiAlias = true,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             style = PaintStyle.FILL,
         )
         canvas.drawPath(path, paint)
 
         paint = paint.copy(
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
         )

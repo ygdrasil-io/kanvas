@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,13 +32,13 @@ class DrawBitmapRect3Gm : SkiaGm {
 
     private fun make3x3Bitmap(): Bitmap {
         val bitmap = Bitmap(3, 3)
-        val YELLOW = Color.fromRGBA(1f, 1f, 0f)
-        val GRAY = Color.fromRGBA(0.5f, 0.5f, 0.5f)
-        val CYAN = Color.fromRGBA(0f, 1f, 1f)
-        val MAGENTA = Color.fromRGBA(1f, 0f, 1f)
+        val YELLOW = ColorARGB.fromRGBA(1f, 1f, 0f)
+        val GRAY = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f)
+        val CYAN = ColorARGB.fromRGBA(0f, 1f, 1f)
+        val MAGENTA = ColorARGB.fromRGBA(1f, 0f, 1f)
         val data = arrayOf(
-            arrayOf(Color.RED,    Color.WHITE, Color.BLUE),
-            arrayOf(Color.GREEN,  Color.BLACK, CYAN),
+            arrayOf(ColorARGB.Red,    ColorARGB.White, ColorARGB.Blue),
+            arrayOf(ColorARGB.Green,  ColorARGB.Black, CYAN),
             arrayOf(YELLOW, GRAY,  MAGENTA),
         )
         for (x in 0 until 3) {

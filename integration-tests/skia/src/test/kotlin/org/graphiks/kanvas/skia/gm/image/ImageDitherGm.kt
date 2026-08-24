@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -32,8 +32,8 @@ class ImageDitherGm : SkiaGm {
         val gradientShader = Shader.LinearGradient(
             start = Point2F32(0f, 0f), end = Point2F32(100f, 100f),
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(0.333f, 0.333f, 0.333f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0.267f, 0.267f, 0.267f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(0.333f, 0.333f, 0.333f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0.267f, 0.267f, 0.267f, 1f)),
             ),
             tileMode = TileMode.CLAMP,
         )

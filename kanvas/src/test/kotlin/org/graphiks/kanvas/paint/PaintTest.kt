@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.paint
 
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -10,15 +10,15 @@ import org.junit.jupiter.api.Assertions.assertTrue
 class PaintTest {
     @Test
     fun `Paint fill factory`() {
-        val p = Paint.fill(Color.RED)
-        assertEquals(Color.RED, p.color)
+        val p = Paint.fill(ColorARGB.Red)
+        assertEquals(ColorARGB.Red, p.color)
         assertEquals(PaintStyle.FILL, p.style)
     }
 
     @Test
     fun `Paint stroke factory`() {
-        val p = Paint.stroke(Color.BLUE, 3f)
-        assertEquals(Color.BLUE, p.color)
+        val p = Paint.stroke(ColorARGB.Blue, 3f)
+        assertEquals(ColorARGB.Blue, p.color)
         assertEquals(PaintStyle.STROKE, p.style)
         assertEquals(3f, p.strokeWidth)
     }
@@ -26,7 +26,7 @@ class PaintTest {
     @Test
     fun `Paint defaults`() {
         val p = Paint()
-        assertEquals(Color.BLACK, p.color)
+        assertEquals(ColorARGB.Black, p.color)
         assertEquals(BlendMode.SRC_OVER, p.blendMode)
         assertEquals(PaintStyle.FILL, p.style)
         assertTrue(p.antiAlias)
@@ -39,11 +39,11 @@ class PaintTest {
 
     @Test
     fun `Paint copy with shader`() {
-        val p = Paint.fill(Color.RED).copy(
+        val p = Paint.fill(ColorARGB.Red).copy(
             shader = Shader.LinearGradient(
                 start = Point2F32(0f, 0f),
                 end = Point2F32(100f, 0f),
-                stops = listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
+                stops = listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Black)),
             ),
             blendMode = BlendMode.MULTIPLY,
         )
@@ -53,9 +53,9 @@ class PaintTest {
 
     @Test
     fun `Paint copy preserves unset fields`() {
-        val p1 = Paint.fill(Color.GREEN)
+        val p1 = Paint.fill(ColorARGB.Green)
         val p2 = p1.copy(blendMode = BlendMode.SCREEN)
-        assertEquals(Color.GREEN, p2.color)
+        assertEquals(ColorARGB.Green, p2.color)
         assertEquals(PaintStyle.FILL, p2.style)
         assertEquals(BlendMode.SCREEN, p2.blendMode)
     }

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/cubicpaths.cpp::bug5099` (DEF_SIMPLE_GM, 50 x 50).
@@ -29,7 +29,7 @@ class Bug5099Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 10f,

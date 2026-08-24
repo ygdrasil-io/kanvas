@@ -23,7 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -325,7 +325,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
 
     private fun rect(): DisplayOp.DrawRect = DisplayOp.DrawRect(
         RectF32.ofLTRB(2f, 3f, 12f, 11f),
-        Paint.fill(Color.RED).copy(antiAlias = false),
+        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
