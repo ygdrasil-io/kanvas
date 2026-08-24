@@ -85,6 +85,14 @@ object EvidenceBundleVerifier {
                 require(oracleVersion > 0) { "historical oracle version must be positive" }
                 require(oracleProvenance.isNotBlank()) { "historical oracle provenance must not be blank" }
                 require(observed == "rendered" || observed == "refused") { "historical observed outcome is invalid" }
+                if (expectation == "render") {
+                    require(oracleKind == "generated-cpu" || oracleKind == "checked-in-png") { "render expectation requires an image oracle" }
+                } else {
+                    require(oracleKind == "stable-refusal") { "refusal expectation requires stable refusal oracle" }
+                    require(oracleId == "stable-refusal" && oracleVersion == 1 && oracleProvenance == "stable-refusal") {
+                        "refusal oracle identity is not canonical"
+                    }
+                }
                 if (oracleKind == "stable-refusal") require(observed == "refused") { "stable refusal oracle requires refused outcome" }
             }
             val fileObject = manifest.requiredObject("files")
@@ -167,6 +175,10 @@ object EvidenceBundleVerifier {
             val routeOutcome = route.requiredString("outcome")
             require(routeOutcome == observed) { "route outcome does not match observed outcome" }
             val telemetrySubmissions = telemetry.requiredLong("submissions")
+            val structuralSubmissions = route.requiredObject("structuralCounters")["queue.submit"]?.jsonPrimitive?.longOrNull ?: 0L
+            require(structuralSubmissions == telemetrySubmissions && structuralSubmissions == submissionDelta) {
+                "structural queue.submit count differs from submission telemetry"
+            }
             require(telemetrySubmissions == submissionDelta) { "route submissions differ from diagnostics" }
             if (observed == "rendered") {
                 require(furthestPhase == "Completed") { "rendered evidence must reach Completed" }

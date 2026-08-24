@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.test.ComparisonUtils
 import org.junit.jupiter.api.io.TempDir
 
 class PromoteEvidenceCliTest {
@@ -170,6 +171,21 @@ class PromoteEvidenceCliTest {
         writeAllBundles(repository, COMMIT)
         assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
         listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val solid = promotedRoot(repository).resolve("solid-card-stack")
+        val solidCase = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }
+        val historicalPixels = ByteArray(solidCase.descriptor.width * solidCase.descriptor.height * 4) { index -> (index * 17 + 3).toByte() }
+        writePng(solid.resolve("cpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
+        writePng(solid.resolve("gpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
+        refreshHash(solid, "cpu.png")
+        refreshHash(solid, "gpu.png")
+        val currentExpected = EvidenceVerificationExpectation.fromCase(
+            solidCase,
+            COMMIT,
+            expectedRgba = requireNotNull(solidCase.oracle).render(solidCase.descriptor.width, solidCase.descriptor.height),
+        )
+        val currentVerification = EvidenceBundleVerifier.verify(solid, currentExpected)
+        assertTrue(currentVerification is EvidenceBundleVerification.Invalid)
+        assertTrue((currentVerification as EvidenceBundleVerification.Invalid).errors.any { it.contains("CPU PNG does not match expected oracle pixels") })
         rewriteHistoricalIdentity(promotedRoot(repository))
 
         writeAllBundles(repository, COMMIT)
@@ -191,6 +207,52 @@ class PromoteEvidenceCliTest {
         rewriteHistoricalIdentity(promotedRoot(repository))
         val manifest = promotedRoot(repository).resolve("solid-card-stack/manifest.json")
         Files.writeString(manifest, Files.readString(manifest).replaceFirst("\"oracleKind\":\"generated-cpu\"", "\"oracleKind\":\"unknown\""))
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects a refusal with an image oracle before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val manifest = promotedRoot(repository).resolve("aggregate-memory-budget-refusal/manifest.json")
+        Files.writeString(
+            manifest,
+            Files.readString(manifest)
+                .replaceFirst("\"oracleKind\":\"stable-refusal\"", "\"oracleKind\":\"generated-cpu\"")
+                .replaceFirst("\"oracleId\":\"stable-refusal\"", "\"oracleId\":\"historical-refusal-cpu\"")
+                .replaceFirst("\"oracleProvenance\":\"stable-refusal\"", "\"oracleProvenance\":\"generated-cpu\""),
+        )
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects refusal structural submission without runtime submission before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val directory = promotedRoot(repository).resolve("aggregate-memory-budget-refusal")
+        val route = directory.resolve("route.json")
+        Files.writeString(route, Files.readString(route).replaceFirst("\"structuralCounters\":{}", "\"structuralCounters\":{\"queue.submit\":1}"))
+        refreshHash(directory, "route.json")
         val before = snapshot(promotedRoot(repository))
 
         writeAllBundles(repository, COMMIT)
@@ -435,6 +497,16 @@ class PromoteEvidenceCliTest {
         require(start >= key.length)
         val end = text.indexOf('"', start)
         Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end))
+    }
+
+    private fun writePng(path: Path, rgba: ByteArray, width: Int, height: Int) {
+        val temporary = Files.createTempFile("historical-pixels-", ".png")
+        try {
+            ComparisonUtils.saveRgbaAsPng(rgba, width, height, temporary.toFile())
+            Files.move(temporary, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
     }
 
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
