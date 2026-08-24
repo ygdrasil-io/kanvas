@@ -89,6 +89,35 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
+    fun `linear gradient cache isolates and reuses clamp and repeat direct and analytic programs`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val keys = listOf(
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradientRepeat).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticLinearGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticLinearGradientRepeat).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
+            ),
+        )
+
+        val acquired = keys.map { key -> cache.acquire(key).acquiredHandles() }
+        val reused = keys.map { key -> cache.acquire(key.copy()).acquiredHandles() }
+
+        acquired.zip(reused).forEach { (first, second) -> assertSame(first, second) }
+        assertEquals(4, acquired.map { it.componentIdentity }.distinct().size)
+        assertEquals(4, acquired.map { it.pipeline }.distinctBy(System::identityHashCode).size)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(4, 4, 0), cache.counters())
+        cache.close()
+    }
+
+    @Test
     fun `analytic shape component exposes exact uniform80 dynamic binding`() {
         val descriptor = corePrimitiveBindGroupLayoutDescriptor(
             PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,

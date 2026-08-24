@@ -519,6 +519,73 @@ class FirstRoutePlannerTest {
         }
     }
 
+    /** Repeat is a bounded unfiltered FillRect exception, not a shared gradient admission. */
+    @Test
+    fun `linear repeat remains refused for rrect path and mask filtered fill rect`() {
+        fun repeatLinear() = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 8f, endY = 0f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            tileMode = "repeat",
+        )
+        fun assertTileModeRefusal(plan: GPUFirstRoutePlan) {
+            assertEquals(
+                "unsupported.material.gradient_tile_mode_unsupported",
+                assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code,
+            )
+        }
+
+        assertTileModeRefusal(
+            GPUFirstRoutePlanner(firstSliceRRectWithLinearGradientCapabilities()).plan(
+                GPUFillRRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(981),
+                    rrect = GPURRect(GPURect(0f, 0f, 16f, 16f), radiusX = 3f, radiusY = 3f),
+                    target = GPUTargetFacts(32, 32, "rgba8unorm"),
+                    material = repeatLinear(),
+                ),
+            ),
+        )
+        assertTileModeRefusal(
+            GPUFirstRoutePlanner(firstSlicePathFillWithLinearGradientCapabilities()).plan(
+                GPUFillPathCommandBuilder.build(
+                    commandId = GPUDrawCommandID(982),
+                    pathKey = "path:repeat-triangle:v1",
+                    pathDescriptor = GPUPathFacts(
+                        pathKey = "path:repeat-triangle:v1",
+                        verbCount = 4,
+                        pointCount = 3,
+                        fillRule = "NonZero",
+                        inverseFill = false,
+                        finiteProof = "finite",
+                        volatility = "immutable",
+                        transformClass = "identity",
+                        edgeCount = 3,
+                    ),
+                    tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+                    contourStarts = listOf(0),
+                    edgeCount = 3,
+                    target = GPUTargetFacts(32, 32, "rgba8unorm"),
+                    material = repeatLinear(),
+                ),
+            ),
+        )
+        assertTileModeRefusal(
+            GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(
+                GPUFillRectCommandBuilder.build(
+                    commandId = GPUDrawCommandID(983),
+                    rect = GPURect(0f, 0f, 16f, 16f),
+                    target = GPUTargetFacts(32, 32, "rgba8unorm"),
+                    material = repeatLinear(),
+                ).copy(
+                    maskFilter = NormalizedMaskFilter.Blur(
+                        style = NormalizedBlurStyle.NORMAL,
+                        sigma = 4f,
+                    ),
+                ),
+            ),
+        )
+    }
+
     @Test
     fun `bounded radial and sweep fill rects select their CorePrimitive programs`() {
         val cases = listOf(

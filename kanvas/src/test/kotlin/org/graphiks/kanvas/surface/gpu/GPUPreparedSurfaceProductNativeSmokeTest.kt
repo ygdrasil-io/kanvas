@@ -102,7 +102,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `public Surface repeat linear gradient wraps the post first cycle pixel natively`() {
+    fun `internal prepared Surface route wraps the post first cycle pixel natively`() {
         val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
         surface.canvas {
             drawRect(
@@ -143,6 +143,34 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(0, result.stats.opsRefused)
         assertEquals(1L, evidence.submits)
         assertEquals(1L, evidence.readbackCopies)
+    }
+
+    @Test
+    fun `Surface render wraps the post first cycle repeat gradient pixel`() {
+        val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        start = Point2F32(8.5f, 16.5f),
+                        end = Point2F32(16.5f, 16.5f),
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
+                        ),
+                        tileMode = TileMode.REPEAT,
+                    ),
+                ).copy(antiAlias = false),
+            )
+        }
+
+        val result = surface.render()
+
+        // The centre of pixel x=16 is 16.5, so t_raw=1: repeat is red and clamp would be blue.
+        assertPixel(result.pixels.toByteArray(), 32, 16, 16, listOf(255, 0, 0, 255))
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
     }
 
     @Test

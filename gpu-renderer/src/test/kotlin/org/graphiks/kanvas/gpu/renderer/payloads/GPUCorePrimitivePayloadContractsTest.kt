@@ -631,6 +631,17 @@ class GPUCorePrimitivePayloadContractsTest {
                 blend(GPUBlendMode.SRC_OVER),
             ).stableRenderPipelineKey("core-primitive"),
         )
+        assertNotEquals(
+            analytic.stableRenderPipelineKey("core-primitive"),
+            corePrimitiveRenderPipelineStructuralKey(
+                gather(
+                    material = linearMaterial(),
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                ),
+                GPUClipExecutionPlan.NoClip,
+                blend(GPUBlendMode.SRC_OVER),
+            ).stableRenderPipelineKey("core-primitive"),
+        )
     }
 
     @Test
