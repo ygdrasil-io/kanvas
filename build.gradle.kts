@@ -3894,6 +3894,27 @@ tasks.register<Exec>("validateMepRcScenePack") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
 }
 
+tasks.register("gpuEvidenceCorrectness") {
+    group = "verification"
+    description = "Runs the eligible-adapter GPU evidence gate and verifies all generated bundles."
+    dependsOn(":integration-tests:gpu-evidence:verifyGeneratedGpuEvidence")
+}
+
+tasks.register("gpuEvidencePerformance") {
+    group = "verification"
+    description = "Captures independent hardware-eligible GPU performance evidence."
+    dependsOn(":integration-tests:gpu-evidence:gpuEvidencePerformance")
+}
+
+tasks.register("gpuEvidenceVerification") {
+    group = "verification"
+    description = "Runs host-independent GPU evidence tests and verifies checked-in promoted snapshots."
+    dependsOn(
+        ":integration-tests:gpu-evidence:test",
+        ":integration-tests:gpu-evidence:verifyPromotedGpuEvidence",
+    )
+}
+
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
@@ -3908,6 +3929,7 @@ tasks.register("pipelinePmBundle") {
         "pipelinePerformanceTrendWarnings",
         "pipelinePerformanceReleaseGate",
         "validateMepRcScenePack",
+        "gpuEvidenceVerification",
 
     )
 

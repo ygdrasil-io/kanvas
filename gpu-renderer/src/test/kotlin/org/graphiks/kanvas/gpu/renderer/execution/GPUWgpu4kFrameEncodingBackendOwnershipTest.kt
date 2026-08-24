@@ -17,6 +17,30 @@ import org.junit.jupiter.api.TestFactory
 
 class GPUWgpu4kFrameEncodingBackendOwnershipTest {
     @Test
+    fun `submission callback records each successful queue submission and not a failed submit`() {
+        val fixture = SubmissionCallbackFixture()
+        var recordedSubmissions = 0
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = GPUDeviceGenerationID(82),
+            device = fixture.device,
+            queue = fixture.queue,
+            onSubmission = { recordedSubmissions += 1 },
+        )
+        try {
+            backend.submit(backend.createCommandEncoder("successful-submit").finish())
+            assertEquals(1, recordedSubmissions)
+
+            fixture.failNextSubmit = true
+            assertFailsWith<IllegalStateException> {
+                backend.submit(backend.createCommandEncoder("failed-submit").finish())
+            }
+            assertEquals(1, recordedSubmissions)
+        } finally {
+            backend.close()
+        }
+    }
+
+    @Test
     fun `texture upload forwards padded bytes and logical extent to writeTexture`() {
         val calls = mutableListOf<List<Any?>>()
         val queue = nativeProxy(GPUQueue::class.java) { methodName, _, arguments ->
@@ -238,6 +262,47 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
             }
             check(successfulCloses == 0) { "$label closed more than once" }
             successfulCloses += 1
+        }
+    }
+
+    private class SubmissionCallbackFixture {
+        var failNextSubmit = false
+
+        val device: GPUDevice = nativeProxy(GPUDevice::class.java) { methodName, _, _ ->
+            when (methodName) {
+                "createCommandEncoder" -> nativeProxy(GPUCommandEncoder::class.java) { encoderMethod, _, _ ->
+                    when (encoderMethod) {
+                        "finish" -> nativeProxy(GPUCommandBuffer::class.java) { bufferMethod, _, _ ->
+                            when (bufferMethod) {
+                                "close", "setLabel" -> Unit
+                                "getLabel" -> "submission-callback-command-buffer"
+                                "toString" -> "SubmissionCallbackCommandBuffer"
+                                else -> error("Unexpected fake command-buffer call: $bufferMethod")
+                            }
+                        }
+                        "close", "setLabel" -> Unit
+                        "getLabel" -> "submission-callback-command-encoder"
+                        "toString" -> "SubmissionCallbackCommandEncoder"
+                        else -> error("Unexpected fake command-encoder call: $encoderMethod")
+                    }
+                }
+                "toString" -> "SubmissionCallbackDevice"
+                else -> error("Unexpected fake device call: $methodName")
+            }
+        }
+
+        val queue: GPUQueue = nativeProxy(GPUQueue::class.java) { methodName, _, _ ->
+            when (methodName) {
+                "submit" -> {
+                    if (failNextSubmit) {
+                        failNextSubmit = false
+                        throw IllegalStateException("fake queue submit failure")
+                    }
+                    Unit
+                }
+                "toString" -> "SubmissionCallbackQueue"
+                else -> error("Unexpected fake queue call: $methodName")
+            }
         }
     }
 

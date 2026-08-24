@@ -67,3 +67,5 @@ bin/
 /depot_tools/
 /skia/
 /int-result/
+/reports/gpu-renderer/evidence/correctness/generated/
+/reports/gpu-renderer/evidence/performance/generated/

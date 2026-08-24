@@ -209,6 +209,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private val queue: GPUQueue,
     private val canonicalSceneTargetView: GPUTextureView? = null,
     private val onDestinationCopyEncoded: () -> Unit = {},
+    private val onSubmission: () -> Unit = {},
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -265,6 +266,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
         }
         try {
             queue.submit(listOf(native))
+            onSubmission()
             synchronized(this) { submitCount += 1 }
         } finally {
             closeOrQuarantine(native, quarantinedCommandBuffers)

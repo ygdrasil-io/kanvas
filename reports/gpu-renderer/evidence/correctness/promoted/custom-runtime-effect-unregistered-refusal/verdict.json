@@ -1,0 +1,1 @@
+{"expectation":"refuse:unsupported.runtime_effect.custom_wgsl_not_registered","observedOutcome":"refused","verdictKind":"pass","reason":"exact refusal before submission"}

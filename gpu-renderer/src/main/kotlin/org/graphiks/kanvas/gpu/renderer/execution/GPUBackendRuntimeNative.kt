@@ -1164,7 +1164,7 @@ private class WgpuBackendSession(
             ),
         )
     }
-    private val adapterSummary = adapterSummary(glfw)
+    private val adapterSummary = adapterSummary(glfw).summary
     private val backendLimits = glfw.wgpuContext.device.limits.let { deviceLimits ->
         GPULimits(
             maxTextureDimension2D = minOf(
@@ -1182,8 +1182,7 @@ private class WgpuBackendSession(
     }
     private var offscreenTargetOrdinalCounter = 0L
 
-    override val adapterInfo: GPUBackendAdapterSummary? =
-        GPUBackendAdapterSummary(adapterSummary)
+    override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
 
     override val capabilities: GPUCapabilities =
         GPUCapabilities(
@@ -1386,6 +1385,7 @@ private class WgpuBackendSession(
             queue = glfw.wgpuContext.device.queue,
             canonicalSceneTargetView = preparedTarget.view,
             onDestinationCopyEncoded = telemetryRecorder::recordDestinationCopy,
+            onSubmission = telemetryRecorder::recordSubmission,
         ))
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
@@ -7295,7 +7295,7 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
                 ?: error("GPU adapter request failed for native surface")
             try {
                 surface.computeSurfaceCapabilities(adapter)
-                val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))
+                val adapterInfo = adapterSummary(adapter.info)
                 val device = runBlocking { adapter.requestDevice() }
                     .getOrElse { error -> error(error.message ?: error.toString()) }
                 try {
@@ -7331,9 +7331,9 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
     }
 }
 
-private fun adapterSummary(glfw: GLFWContext): String = adapterSummary(glfw.wgpuContext.adapter.info)
+private fun adapterSummary(glfw: GLFWContext): GPUBackendAdapterSummary = adapterSummary(glfw.wgpuContext.adapter.info)
 
-private fun adapterSummary(info: GPUAdapterInfo): String {
+private fun adapterSummary(info: GPUAdapterInfo): GPUBackendAdapterSummary {
     val parts = buildList {
         if (info.vendor.isNotBlank()) add(info.vendor)
         if (info.device.isNotBlank()) add(info.device)
@@ -7343,7 +7343,14 @@ private fun adapterSummary(info: GPUAdapterInfo): String {
         if (info.architecture.isNotBlank()) add("arch=${info.architecture}")
         if (info.description.isNotBlank()) add("desc=${info.description}")
     }
-    return if (detail.isEmpty()) head else "$head ${detail.joinToString(" ")}"
+    return GPUBackendAdapterSummary(
+        summary = if (detail.isEmpty()) head else "$head ${detail.joinToString(" ")}",
+        vendor = info.vendor.ifBlank { null },
+        device = info.device.ifBlank { null },
+        architecture = info.architecture.ifBlank { null },
+        description = info.description.ifBlank { null },
+        isFallbackAdapter = info.isFallbackAdapter,
+    )
 }
 
 private fun Map<String, Long>.firstNonZeroPointer(vararg keys: String): Long? =
