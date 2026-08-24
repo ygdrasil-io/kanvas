@@ -5,6 +5,7 @@ import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -162,6 +163,44 @@ class PromoteEvidenceCliTest {
 
         assertEquals(0, result)
         assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline accepts coherent historical route and oracle identities`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        rewriteHistoricalIdentity(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val stderr = ByteArrayOutputStream()
+        val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertEquals(0, result, "historical route/oracle identities must not be compared to current catalog semantics: ${stderr}")
+        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects an unknown historical oracle kind before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        rewriteHistoricalIdentity(promotedRoot(repository))
+        val manifest = promotedRoot(repository).resolve("solid-card-stack/manifest.json")
+        Files.writeString(manifest, Files.readString(manifest).replaceFirst("\"oracleKind\":\"generated-cpu\"", "\"oracleKind\":\"unknown\""))
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
@@ -361,6 +400,44 @@ class PromoteEvidenceCliTest {
     private fun removeScene(root: Path, sceneId: String) {
         Files.walk(root.resolve(sceneId)).sorted(Comparator.reverseOrder()).forEach(Files::delete)
     }
+
+    private fun rewriteHistoricalIdentity(root: Path) {
+        mapOf(
+            "solid-card-stack" to "product.solid-rect",
+            "translucent-card-overlap" to "product.solid-rect",
+            "scissor-overlay" to "product.solid-rect",
+            "stroke-rect-outline" to "product.stroke-rect",
+            "separable-blur-rect" to "product.separable-blur-rect",
+        ).forEach { (sceneId, routeId) ->
+            val directory = root.resolve(sceneId)
+            val route = directory.resolve("route.json")
+            Files.writeString(route, Files.readString(route).replaceFirst(Regex("\\\"routeId\\\":\\\"[^\\\"]+\\\""), "\\\"routeId\\\":\\\"$routeId\\\""))
+            refreshHash(directory, "route.json")
+        }
+        mapOf(
+            "translucent-card-overlap" to ("reference-raster-translucent-src-over" to 1),
+            "separable-blur-rect" to ("separable-blur-transparent-decal" to 1),
+        ).forEach { (sceneId, oracle) ->
+            val manifest = root.resolve(sceneId).resolve("manifest.json")
+            val text = Files.readString(manifest)
+                .replaceFirst(Regex("\\\"oracleId\\\":\\\"[^\\\"]+\\\""), "\\\"oracleId\\\":\\\"${oracle.first}\\\"")
+                .replaceFirst(Regex("\\\"oracleVersion\\\":\\d+"), "\\\"oracleVersion\\\":${oracle.second}")
+            Files.writeString(manifest, text)
+        }
+    }
+
+    private fun refreshHash(directory: Path, name: String) {
+        val manifest = directory.resolve("manifest.json")
+        val hash = sha256(Files.readAllBytes(directory.resolve(name)))
+        val text = Files.readString(manifest)
+        val key = "\"$name\":\""
+        val start = text.indexOf(key) + key.length
+        require(start >= key.length)
+        val end = text.indexOf('"', start)
+        Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end))
+    }
+
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     companion object {
         private const val COMMIT = "0123456789abcdef0123456789abcdef01234567"

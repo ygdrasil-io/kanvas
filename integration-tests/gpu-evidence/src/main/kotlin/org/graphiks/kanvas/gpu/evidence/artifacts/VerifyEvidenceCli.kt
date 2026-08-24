@@ -131,17 +131,12 @@ class VerifyEvidenceCliRunner(
             val commit = commonManifestCommit(entries)
             val results = entries.map { directory ->
                 val sceneId = directory.fileName.toString()
-                val evidenceCase = requireNotNull(expectedById[sceneId])
+                requireNotNull(expectedById[sceneId])
                 val promotion = directory.resolve("promotion.json")
                 require(Files.isRegularFile(promotion, NOFOLLOW_LINKS) && !Files.isSymbolicLink(promotion)) {
                     "$sceneId: historical bundle requires a regular promotion.json"
                 }
-                val expected = EvidenceVerificationExpectation.fromCase(
-                    evidenceCase = evidenceCase,
-                    sourceCommit = commit,
-                    expectedRgba = evidenceCase.oracle?.render(evidenceCase.descriptor.width, evidenceCase.descriptor.height),
-                )
-                when (val result = EvidenceBundleVerifier.verify(directory, expected)) {
+                when (val result = EvidenceBundleVerifier.verifyRecorded(directory, commit)) {
                     is EvidenceBundleVerification.Invalid -> {
                         stderr.println("$sceneId: invalid (${result.errors.joinToString("; ")})")
                         false

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
+import org.graphiks.kanvas.gpu.evidence.catalog.ComparisonPolicy
 import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.test.ComparisonUtils
@@ -29,10 +30,21 @@ sealed interface EvidenceBundleVerification {
 
 object EvidenceBundleVerifier {
     fun verify(directory: Path, expected: EvidenceVerificationExpectation): EvidenceBundleVerification {
-        return verifyInternal(directory, expected.sourceCommit, expected)
+        return verifyInternal(directory, expected.sourceCommit, expected, recordedHistorical = false)
     }
 
-    private fun verifyInternal(directory: Path, expectedSourceCommit: String, expected: EvidenceVerificationExpectation): EvidenceBundleVerification {
+    internal fun verifyRecorded(directory: Path, sourceCommit: String): EvidenceBundleVerification {
+        // Recorded mode authenticates structure and recomputed evidence against the reviewed artifact;
+        // catalogue/Git review remains the trust boundary for historical semantic identities.
+        return verifyInternal(directory, sourceCommit, expected = null, recordedHistorical = true)
+    }
+
+    private fun verifyInternal(
+        directory: Path,
+        expectedSourceCommit: String,
+        expected: EvidenceVerificationExpectation?,
+        recordedHistorical: Boolean,
+    ): EvidenceBundleVerification {
         var sceneId: String? = directory.fileName?.toString()
         val errors = mutableListOf<String>()
         try {
@@ -50,16 +62,31 @@ object EvidenceBundleVerifier {
             val expectation = manifest.requiredString("expectation")
             manifest.requiredString("generatedAtUtc")
             val oracleKind = manifest.requiredString("oracleKind")
-            manifest.requiredString("oracleId"); manifest.requiredInt("oracleVersion"); manifest.requiredString("oracleProvenance")
+            val oracleId = manifest.requiredString("oracleId")
+            val oracleVersion = manifest.requiredInt("oracleVersion")
+            val oracleProvenance = manifest.requiredString("oracleProvenance")
             val oracleSha256 = manifest.optionalNullableString("oracleSha256")
-            val descriptor = expected.descriptor
-            require(sceneId == descriptor.id.value) { "scene id does not match expected case" }
-            require(expectation == descriptor.expectation.manifestValue()) { "expectation does not match expected case" }
-            require(oracleKind == descriptor.oracle.kind()) { "oracle kind does not match expected case" }
-            require(manifest.requiredString("oracleId") == descriptor.oracle.id()) { "oracle id does not match expected case" }
-            require(manifest.requiredInt("oracleVersion") == descriptor.oracle.version()) { "oracle version does not match expected case" }
-            require(manifest.requiredString("oracleProvenance") == descriptor.oracle.provenance()) { "oracle provenance does not match expected case" }
-            require(oracleSha256 == descriptor.oracle.sha256()) { "oracle sha256 does not match expected case" }
+            val descriptor = expected?.descriptor
+            if (descriptor != null) {
+                require(sceneId == descriptor.id.value) { "scene id does not match expected case" }
+                require(expectation == descriptor.expectation.manifestValue()) { "expectation does not match expected case" }
+                require(oracleKind == descriptor.oracle.kind()) { "oracle kind does not match expected case" }
+                require(oracleId == descriptor.oracle.id()) { "oracle id does not match expected case" }
+                require(oracleVersion == descriptor.oracle.version()) { "oracle version does not match expected case" }
+                require(oracleProvenance == descriptor.oracle.provenance()) { "oracle provenance does not match expected case" }
+                require(oracleSha256 == descriptor.oracle.sha256()) { "oracle sha256 does not match expected case" }
+            } else {
+                require(recordedHistorical) { "verification expectation is required" }
+                require(expectation == "render" || expectation.startsWith("refuse:") && expectation.removePrefix("refuse:").isNotBlank()) {
+                    "historical expectation is invalid"
+                }
+                require(oracleKind in setOf("generated-cpu", "checked-in-png", "stable-refusal")) { "historical oracle kind is invalid" }
+                require(oracleId.isNotBlank()) { "historical oracle id must not be blank" }
+                require(oracleVersion > 0) { "historical oracle version must be positive" }
+                require(oracleProvenance.isNotBlank()) { "historical oracle provenance must not be blank" }
+                require(observed == "rendered" || observed == "refused") { "historical observed outcome is invalid" }
+                if (oracleKind == "stable-refusal") require(observed == "refused") { "stable refusal oracle requires refused outcome" }
+            }
             val fileObject = manifest.requiredObject("files")
             val hashes = fileObject.entries.associate { (name, value) ->
                 require(isSafeFileName(name)) { "unsafe logical file name: $name" }
@@ -67,11 +94,13 @@ object EvidenceBundleVerifier {
             }
             val actualPaths = Files.list(directory).use { stream -> stream.iterator().asSequence().toList() }
             require(actualPaths.none { Files.isSymbolicLink(it) }) { "bundle contains symlink" }
+            if (recordedHistorical) require(actualPaths.all { Files.isRegularFile(it, NOFOLLOW_LINKS) }) { "historical bundle contains a non-regular file" }
             val actual = actualPaths.map { it.fileName.toString() }.toSet()
             val expectedFiles = if (observed == "rendered") {
                 if (oracleKind == "checked-in-png") CHECKED_IN_RENDER_FILES else RENDER_FILES
             } else if (observed == "refused" || observed == "unavailable") REFUSAL_FILES else error("unknown observedOutcome")
             require(actual == expectedFiles || actual == expectedFiles + "promotion.json") { "file set mismatch: expected=$expectedFiles actual=$actual" }
+            if (recordedHistorical) require("promotion.json" in actual) { "historical bundle requires promotion.json" }
             if ("promotion.json" in actual) verifyPromotion(directory, sceneId, sourceCommit)
             require(hashes.keys == expectedFiles - "manifest.json") { "manifest file hashes are incomplete" }
             hashes.forEach { (name, expectedHash) -> require(expectedHash == sha256(Files.readAllBytes(directory.resolve(name)))) { "hash mismatch for $name" } }
@@ -100,7 +129,8 @@ object EvidenceBundleVerifier {
             route.optionalString("attemptId")
             val furthestPhase = route.optionalString("furthestPhase")
             route.requiredString("outcome")
-            require(routeId == expected.expectedRouteId) { "route id does not match expected case" }
+            if (expected != null) require(routeId == expected.expectedRouteId) { "route id does not match expected case" }
+            else require(routeId.isNotBlank()) { "historical route id must not be blank" }
             route["encodedScopeKinds"]?.jsonArray?.forEach { it.jsonPrimitive.asString("encoded scope kind") } ?: error("encodedScopeKinds must be an array")
             route["structuralEvents"]?.jsonArray?.forEach { event -> val e = event.jsonObject; e.requireKeys(setOf("kind", "phase", "label")); e.requiredString("kind"); e.requiredString("phase"); e.optionalString("label") } ?: error("structuralEvents must be an array")
             route.requiredObject("structuralCounters").forEach { (key, value) ->
@@ -115,10 +145,13 @@ object EvidenceBundleVerifier {
             stats.requireKeys(setOf("width", "height", "colorFormat", "colorInterpretation", "tolerance", "minimumSimilarityPercent", "similarityPercent", "differingPixels", "maxChannelDifference", "meanChannelDifference", "pass"))
             val width = stats.requiredInt("width"); val height = stats.requiredInt("height"); require(width > 0 && height > 0) { "invalid dimensions" }; require(stats.requiredString("colorFormat") == "rgba8unorm") { "invalid colorFormat" }; require(stats.requiredString("colorInterpretation") == "encoded-premul-srgb") { "invalid colorInterpretation" }; val tolerance = stats.requiredInt("tolerance"); require(tolerance in 0..255); val minimumSimilarity = stats.requiredDouble("minimumSimilarityPercent"); require(minimumSimilarity in 0.0..100.0); val similarity = stats.requiredDouble("similarityPercent"); require(similarity in 0.0..100.0); val differingPixels = stats.requiredInt("differingPixels"); val totalPixels = Math.multiplyExact(width, height); require(differingPixels in 0..totalPixels); val maxChannelDifference = stats.requiredInt("maxChannelDifference"); require(maxChannelDifference in 0..255); val meanChannelDifference = stats.requiredDouble("meanChannelDifference"); require(meanChannelDifference >= 0.0)
             val pass = stats.requiredBoolean("pass")
-            val policy = expected.descriptor.comparison
-            require(width == expected.descriptor.width && height == expected.descriptor.height) { "dimensions do not match expected case" }
-            require(tolerance == (policy?.perChannelTolerance ?: 0)) { "tolerance does not match expected case" }
-            require(minimumSimilarity == (policy?.minimumSimilarityPercent ?: 100.0)) { "minimum similarity does not match expected case" }
+            val policy = expected?.descriptor?.comparison
+            if (expected != null) {
+                require(width == expected.descriptor.width && height == expected.descriptor.height) { "dimensions do not match expected case" }
+                require(tolerance == (policy?.perChannelTolerance ?: 0)) { "tolerance does not match expected case" }
+                require(minimumSimilarity == (policy?.minimumSimilarityPercent ?: 100.0)) { "minimum similarity does not match expected case" }
+            }
+            val comparisonPolicy = policy ?: ComparisonPolicy(tolerance, minimumSimilarity, 1, "recorded historical policy")
             val expectedSimilarity = (totalPixels - differingPixels).toDouble() / totalPixels.toDouble() * 100.0
             require(kotlin.math.abs(expectedSimilarity - similarity) <= 1e-9) { "similarity contradicts differingPixels" }
             require(pass == (similarity >= minimumSimilarity)) { "stats pass contradicts similarity threshold" }
@@ -140,9 +173,13 @@ object EvidenceBundleVerifier {
                 require((route.requiredObject("structuralCounters")["queue.submit"]?.jsonPrimitive?.longOrNull ?: 0L) > 0L) { "rendered evidence requires queue.submit proof" }
                 require(telemetrySubmissions > 0L) { "rendered evidence requires submission telemetry" }
             }
-            if (expected.descriptor.expectation is EvidenceExpectation.ShouldRefuse) {
-                val reason = (expected.descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
-                if (observed == "refused") require(reasonCode == reason) { "refusal reason does not match expected case" }
+            val expectedRefusalReason = when {
+                expected?.descriptor?.expectation is EvidenceExpectation.ShouldRefuse -> (expected.descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
+                recordedHistorical && expectation.startsWith("refuse:") -> expectation.removePrefix("refuse:")
+                else -> null
+            }
+            if (expectedRefusalReason != null) {
+                if (observed == "refused") require(reasonCode == expectedRefusalReason) { "refusal reason does not match expected case" }
                 require(submissionDelta == 0L && telemetrySubmissions == 0L) { "refusal submitted commands" }
             }
             if (observed == "refused") require(submissionDelta == 0L && telemetrySubmissions == 0L) { "refusal submitted commands" }
@@ -172,21 +209,28 @@ object EvidenceBundleVerifier {
             require(recordedKind == reconstructed.kind()) { "verdict kind mismatch" }
             require(recordedReason == reconstructed.reason()) { "verdict reason mismatch" }
             if (observed == "rendered") {
-                val comparisonPolicy = requireNotNull(expected.descriptor.comparison)
                 val gpu = decodePng(directory.resolve("gpu.png"), width, height)
-                val oracle = when (expected.descriptor.oracle) {
-                    is OraclePolicy.GeneratedCpu -> {
-                        val expectedPixels = requireNotNull(expected.expectedRgba)
-                        val cpu = decodePng(directory.resolve("cpu.png"), width, height)
-                        require(cpu.contentEquals(expectedPixels)) { "CPU PNG does not match expected oracle pixels" }
-                        expectedPixels
+                val oracle = if (expected != null) {
+                    when (expected.descriptor.oracle) {
+                        is OraclePolicy.GeneratedCpu -> {
+                            val expectedPixels = requireNotNull(expected.expectedRgba)
+                            val cpu = decodePng(directory.resolve("cpu.png"), width, height)
+                            require(cpu.contentEquals(expectedPixels)) { "CPU PNG does not match expected oracle pixels" }
+                            expectedPixels
+                        }
+                        is OraclePolicy.CheckedInPng -> {
+                            val expectedPng = requireNotNull(expected.checkedInPngBytes)
+                            require(Files.readAllBytes(directory.resolve("skia.png")).contentEquals(expectedPng)) { "checked-in oracle PNG does not match expected bytes" }
+                            decodePng(directory.resolve("skia.png"), width, height)
+                        }
+                        OraclePolicy.StableRefusal -> error("rendered evidence cannot use StableRefusal oracle")
                     }
-                    is OraclePolicy.CheckedInPng -> {
-                        val expectedPng = requireNotNull(expected.checkedInPngBytes)
-                        require(Files.readAllBytes(directory.resolve("skia.png")).contentEquals(expectedPng)) { "checked-in oracle PNG does not match expected bytes" }
-                        decodePng(directory.resolve("skia.png"), width, height)
+                } else {
+                    when (oracleKind) {
+                        "generated-cpu" -> decodePng(directory.resolve("cpu.png"), width, height)
+                        "checked-in-png" -> decodePng(directory.resolve("skia.png"), width, height)
+                        else -> error("rendered evidence cannot use StableRefusal oracle")
                     }
-                    OraclePolicy.StableRefusal -> error("rendered evidence cannot use StableRefusal oracle")
                 }
                 val recomputed = EvidenceComparator().compare(gpu, oracle, width, height, comparisonPolicy)
                 require(similarity == recomputed.similarityPercent) { "similarity does not match recomputed comparison" }
