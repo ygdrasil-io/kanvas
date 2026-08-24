@@ -9,6 +9,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Rendered evidence scenes expressed solely through the public Kanvas Canvas API. */
 object KanvasScenePrograms {
@@ -103,6 +104,52 @@ object KanvasScenePrograms {
                 antiAlias = false,
             ),
         )
+    })
+
+    fun linearGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint(shader = Shader.LinearGradient(
+            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(0.5f, ColorARGB.of(255, 56, 220, 120)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
+            TileMode.CLAMP,
+        ), antiAlias = false))
+    })
+
+    fun sweepGradientPartialAngle() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.SweepGradient(
+            Point2F32(32.5f, 32.5f), 45f, 315f,
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 64, 64)), GradientStop(1f, ColorARGB.of(255, 64, 208, 255))), TileMode.CLAMP,
+        ), antiAlias = false))
+    })
+
+    fun affineSolidRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        concat(Matrix3x3F32(sx = 1f, kx = .25f, tx = 4f, sy = 1f))
+        drawRect(RectF32.ofLTRB(8f, 16f, 40f, 48f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
+    })
+
+    fun scissoredRadialGradient() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(20f, 12f, 52f, 52f), antiAlias = false)
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.RadialGradient(
+            Point2F32(32.5f, 32.5f), 23.5f,
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 232, 72)), GradientStop(1f, ColorARGB.of(255, 48, 80, 192))), TileMode.CLAMP,
+        ), antiAlias = false))
+        restore()
+    })
+
+    fun repeatGradientRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint(shader = Shader.LinearGradient(
+            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.REPEAT,
+        ), antiAlias = false))
+    })
+
+    fun gradientStrokeRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.LinearGradient(
+                Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.CLAMP,
+            ), antiAlias = false,
+        ))
     })
 
     private val BACKGROUND = ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, 1f)

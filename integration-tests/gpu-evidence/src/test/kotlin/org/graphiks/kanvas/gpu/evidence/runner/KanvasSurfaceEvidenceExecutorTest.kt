@@ -77,6 +77,20 @@ class KanvasSurfaceEvidenceExecutorTest {
         assertNull(failure.route.furthestPhase)
     }
 
+    @Test fun `terminal Surface messages become independent zero-submission refusals only when strictly parseable`() {
+        val observedTelemetry = FakeTelemetryProbe(submissionDelta = 0)
+        val observed = executor(observedTelemetry).execute(refusalCase(observedTelemetry, "unsupported.observed: rejected"))
+        assertEquals("unsupported.observed", assertIs<SceneObservation.Refused>(assertIs<EvidenceExecutionResult.Observed>(observed).observation).stableReasonCode)
+
+        val malformedTelemetry = FakeTelemetryProbe(submissionDelta = 0)
+        val malformed = executor(malformedTelemetry).execute(refusalCase(malformedTelemetry, "unsupported observed: rejected"))
+        assertEquals("failed.kanvas.surface", assertIs<EvidenceExecutionResult.ExecutionFailure>(malformed).stableReasonCode)
+
+        val submittedTelemetry = FakeTelemetryProbe()
+        val submitted = executor(submittedTelemetry).execute(refusalCase(submittedTelemetry, "unsupported.observed: rejected", submitBeforeFailure = true))
+        assertEquals("failed.kanvas.surface", assertIs<EvidenceExecutionResult.ExecutionFailure>(submitted).stableReasonCode)
+    }
+
     @Test fun `surface program records once and reuses the same surface session`() {
         var recordings = 0
         val program = KanvasSurfaceProgram(routeId = "kanvas.surface.render", record = { recordings++ })
@@ -118,6 +132,20 @@ class KanvasSurfaceEvidenceExecutorTest {
     private fun renderedResult(draws: Int = 1, pipelines: Int = 1) = RenderResult(
         pixels = ubyteArrayOf(0x11u, 0x22u, 0x33u, 0xffu), width = 1, height = 1,
         diagnostics = Diagnostics(), stats = RenderStats(1, 0, pipelines, draws, 1f),
+    )
+
+    private fun refusalCase(telemetry: FakeTelemetryProbe, message: String, submitBeforeFailure: Boolean = false) = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("surface-refusal"), "Surface refusal", "Surface terminal refusal contract.",
+            1, 1, 1L, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.expected"), OraclePolicy.StableRefusal, null, emptySet(),
+        ),
+        program = KanvasSurfaceProgram("kanvas.surface.render", {}, sessionFactory = { _, _, _ ->
+            KanvasSurfaceRenderSession {
+                if (submitBeforeFailure) telemetry.observeRender()
+                throw IllegalStateException(message)
+            }
+        }),
+        oracle = null,
     )
 
     private class FakeTelemetryProbe(private val submissionDelta: Long = 1L) : EvidenceBackendPort {

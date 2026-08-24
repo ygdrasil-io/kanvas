@@ -46,16 +46,17 @@ class SurfaceSrgbGradientCpuOracle private constructor(
         }
     }
 
-    private val start: SurfaceSrgbOracleMath.LinearPremul
-    private val end: SurfaceSrgbOracleMath.LinearPremul
+    private val decodedStops: List<Pair<Float, SurfaceSrgbOracleMath.LinearPremul>>
 
     init {
-        require(stops.size == 2 && stops[0].position == 0f && stops[1].position == 1f) {
-            "oracle supports exactly two stops at positions zero and one"
+        require(stops.size in 1..16 && stops.all { it.position in 0f..1f } &&
+            (stops.size == 1 || (stops.first().position == 0f && stops.last().position == 1f &&
+                stops.zipWithNext().all { (left, right) -> left.position < right.position }))
+        ) {
+            "oracle requires one through sixteen ordered stops in the unit interval"
         }
         require(stops.all { it.alpha == 255 }) { "oracle requires opaque stops" }
-        start = stops[0].decode()
-        end = stops[1].decode()
+        decodedStops = stops.map { it.position to it.decode() }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -75,7 +76,19 @@ class SurfaceSrgbGradientCpuOracle private constructor(
         return output
     }
 
-    private fun interpolate(t: Double): SurfaceSrgbOracleMath.LinearPremul =
+    private fun interpolate(t: Double): SurfaceSrgbOracleMath.LinearPremul {
+        val upperIndex = decodedStops.indexOfFirst { (position, _) -> t <= position.toDouble() }.let { if (it < 0) decodedStops.lastIndex else it }
+        if (upperIndex == 0) return decodedStops.first().second
+        val (startPosition, start) = decodedStops[upperIndex - 1]
+        val (endPosition, end) = decodedStops[upperIndex]
+        return interpolate(start, end, ((t - startPosition) / (endPosition - startPosition)).coerceIn(0.0, 1.0))
+    }
+
+    private fun interpolate(
+        start: SurfaceSrgbOracleMath.LinearPremul,
+        end: SurfaceSrgbOracleMath.LinearPremul,
+        t: Double,
+    ): SurfaceSrgbOracleMath.LinearPremul =
         SurfaceSrgbOracleMath.LinearPremul(
             start.red + (end.red - start.red) * t,
             start.green + (end.green - start.green) * t,

@@ -182,10 +182,21 @@ class SurfaceSrgbGradientCpuOracleTest {
         fun oracle(stops: List<SurfaceSrgbGradientCpuOracle.Stop>) =
             SurfaceSrgbGradientCpuOracle.linear(bounds, start, end, stops)
 
-        assertIllegalArgument("oracle supports exactly two stops at positions zero and one") { oracle(emptyList()) }
-        assertIllegalArgument("oracle supports exactly two stops at positions zero and one") {
+        assertIllegalArgument("oracle requires one through sixteen ordered stops in the unit interval") { oracle(emptyList()) }
+        assertIllegalArgument("oracle requires one through sixteen ordered stops in the unit interval") {
             oracle(listOf(SurfaceSrgbGradientCpuOracle.Stop(0.1f, 0, 0, 0), SurfaceSrgbGradientCpuOracle.Stop(1f, 255, 255, 255)))
         }
+        val threeStops = SurfaceSrgbGradientCpuOracle.linear(
+            SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 3f, 1f),
+            SurfaceSrgbGradientCpuOracle.Point(0.5f, 0.5f), SurfaceSrgbGradientCpuOracle.Point(2.5f, 0.5f),
+            listOf(
+                SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 0, 0),
+                SurfaceSrgbGradientCpuOracle.Stop(.5f, 0, 255, 0),
+                SurfaceSrgbGradientCpuOracle.Stop(1f, 0, 0, 255),
+            ),
+        ).render(3, 1)
+        assertPixel(threeStops, 3, 1, 0, intArrayOf(0, 255, 0, 255))
+        assertPixel(threeStops, 3, 2, 0, intArrayOf(0, 0, 255, 255))
         assertIllegalArgument("gradient stop position must be finite") {
             oracle(listOf(SurfaceSrgbGradientCpuOracle.Stop(Float.NaN, 0, 0, 0), SurfaceSrgbGradientCpuOracle.Stop(1f, 255, 255, 255)))
         }

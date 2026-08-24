@@ -35,6 +35,14 @@ class KanvasSurfaceEvidenceExecutor(
             session.render()
         } catch (failure: Exception) {
             val delta = backend.telemetry() - before
+            val refusalCode = terminalRefusalCode(failure.message)
+            if (refusalCode != null && delta.submissions == 0L) {
+                return EvidenceExecutionResult.Observed(SceneObservation.Refused(
+                    refusalCode, failure.message.orEmpty(), delta.submissions,
+                    RouteEvidence(program.routeId, null, null, "refused", emptyList(), emptyList(), mapOf("queue.submit" to delta.submissions), delta),
+                    listOf("diagnostic.code=$refusalCode"), environment,
+                ))
+            }
             return failure(program.routeId, null, failure.message ?: "Surface.render failed.", delta, environment, failure)
         }
         val delta = backend.telemetry() - before
@@ -78,6 +86,12 @@ class KanvasSurfaceEvidenceExecutor(
         listOf(failure::class.simpleName.orEmpty()),
         environment,
     )
+
+    private fun terminalRefusalCode(message: String?): String? {
+        val separator = message?.indexOf(": ")?.takeIf { it > 0 } ?: return null
+        val code = message.substring(0, separator)
+        return code.takeIf { it.matches(Regex("[a-z0-9]+(?:[._][a-z0-9]+)+")) }
+    }
 
     private fun route(routeId: String, result: RenderResult, delta: GPUBackendRuntimeTelemetry) = RouteEvidence(
         routeId,
