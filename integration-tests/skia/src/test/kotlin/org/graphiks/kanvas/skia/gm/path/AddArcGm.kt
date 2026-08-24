@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -48,7 +48,7 @@ class AddArcGm : SkiaGm {
             val rInt = rand.nextInt(256)
             val gInt = rand.nextInt(256)
             val bInt = rand.nextInt(255)
-            paint = paint.copy(color = Color.fromRGBA(rInt / 255f, gInt / 255f, bInt / 255f, 1f))
+            paint = paint.copy(color = ColorARGB.fromRGBA(rInt / 255f, gInt / 255f, bInt / 255f, 1f))
             val startAngle = rand.nextFloat() * 360f
 
             canvas.drawArc(r, startAngle, sweepAngle, useCenter = false, paint = paint)

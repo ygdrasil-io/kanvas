@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -32,14 +32,14 @@ class ChromeGradText1Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val r = RectF32(0f, 0f, 100f, 100f)
         canvas.clipRect(r)
-        canvas.drawRect(r, Paint(color = Color.RED))
+        canvas.drawRect(r, Paint(color = ColorARGB.Red))
 
         val paint = Paint(shader = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(1f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.GREEN),
-                GradientStop(1f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Green),
             ),
             tileMode = TileMode.CLAMP,
         ))

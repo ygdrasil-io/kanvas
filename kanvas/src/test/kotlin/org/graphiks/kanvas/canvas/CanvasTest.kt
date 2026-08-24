@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.math.geometry.Point2F32
 
 import org.graphiks.kanvas.geometry.Path
@@ -11,6 +14,7 @@ import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
@@ -26,11 +30,11 @@ class TestBuffer : DisplayListBuffer {
 }
 
 class CanvasTest {
-    @Test fun `Canvas records drawRect`() { val b = TestBuffer(); Canvas(b).drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(1, b.count()) }
-    @Test fun `Canvas save does not emit EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.save(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().none { it is DisplayOp.EndLayer }) }
-    @Test fun `Canvas saveLayer emits EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.saveLayer(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(Color.WHITE)); c.restore(); assertTrue(b.ops().any { it is DisplayOp.EndLayer }) }
+    @Test fun `Canvas records drawRect`() { val b = TestBuffer(); Canvas(b).drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)); assertEquals(1, b.count()) }
+    @Test fun `Canvas save does not emit EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.save(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(ColorARGB.White)); c.restore(); assertTrue(b.ops().none { it is DisplayOp.EndLayer }) }
+    @Test fun `Canvas saveLayer emits EndLayer`() { val b = TestBuffer(); val c = Canvas(b); c.saveLayer(); c.drawRect(RectF32.ofLTRB(0f,0f,10f,10f), Paint.fill(ColorARGB.White)); c.restore(); assertTrue(b.ops().any { it is DisplayOp.EndLayer }) }
     @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.tx); assertEquals(20f, c.matrix.ty) }
-    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
+    @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
     @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(RectF32.ofLTRB(0f,0f,50f,50f)); assertEquals(RectF32.ofLTRB(0f,0f,50f,50f), c.localClipBounds) }
     @Test
     fun `clip geometry is frozen when captured not when a later draw occurs`() {
@@ -72,13 +76,13 @@ class CanvasTest {
         // Canvas queries retain the semantic outer clip while the first layer child is unclipped.
         assertEquals(outer, canvas.localClipBounds)
         canvas.clipRect(inner, antiAlias = false)
-        canvas.drawRect(draw, Paint.fill(Color.RED))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.Red))
         canvas.saveLayer()
-        canvas.drawRect(draw, Paint.fill(Color.GREEN))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.Green))
         canvas.restore()
-        canvas.drawRect(draw, Paint.fill(Color.BLUE))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.Blue))
         canvas.restore()
-        canvas.drawRect(draw, Paint.fill(Color.WHITE))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.White))
 
         val begins = buffer.ops().filterIsInstance<DisplayOp.BeginLayer>()
         assertEquals(outer, assertIs<ClipStack.DeviceRect>(begins[0].rec.compositeClip).rect)
@@ -96,15 +100,15 @@ class CanvasTest {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         val outer = RectF32(1.25f, 2.5f, 15.75f, 16.5f)
-        val inner = RRect(RectF32(3f, 4f, 13f, 14f), radius = 2f)
+        val inner = RRectF32.of(RectF32(3f, 4f, 13f, 14f), radius = 2f)
         val draw = RectF32(0f, 0f, 20f, 20f)
 
         canvas.clipRect(outer, antiAlias = true)
         canvas.save()
         canvas.clipRRect(inner, antiAlias = false)
-        canvas.drawRect(draw, Paint.fill(Color.RED))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.Red))
         canvas.restore()
-        canvas.drawRect(draw, Paint.fill(Color.BLUE))
+        canvas.drawRect(draw, Paint.fill(ColorARGB.Blue))
 
         val draws = buffer.ops().filterIsInstance<DisplayOp.DrawRect>()
         val nested = assertIs<ClipStack.Complex>(draws[0].clip)
@@ -128,7 +132,7 @@ class CanvasTest {
         }
         val buffer = TestBuffer()
 
-        Canvas(buffer).drawText(textBlob(typeface, emptyGlyph), 4f, 8f, Paint.fill(Color.BLACK))
+        Canvas(buffer).drawText(textBlob(typeface, emptyGlyph), 4f, 8f, Paint.fill(ColorARGB.Black))
 
         assertTrue(buffer.ops().isEmpty())
     }
@@ -147,7 +151,7 @@ class CanvasTest {
             textBlob(typeface, space, mapOf("wght" to 721f)),
             4f,
             8f,
-            Paint.fill(Color.BLACK),
+            Paint.fill(ColorARGB.Black),
         )
 
         assertTrue(buffer.ops().isEmpty())
@@ -166,7 +170,7 @@ class CanvasTest {
             textBlob(typeface, glyph, mapOf("ZZZZ" to 1f)),
             4f,
             8f,
-            Paint.fill(Color.BLACK),
+            Paint.fill(ColorARGB.Black),
         )
 
         assertIs<DisplayOp.DrawText>(buffer.ops().single())
@@ -181,7 +185,7 @@ class CanvasTest {
         val glyph = typeface.glyphIdForCodepoint('A'.code)
         val buffer = TestBuffer()
 
-        Canvas(buffer).drawText(textBlob(typeface, glyph), 4f, 8f, Paint.fill(Color.BLACK))
+        Canvas(buffer).drawText(textBlob(typeface, glyph), 4f, 8f, Paint.fill(ColorARGB.Black))
 
         assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(buffer.ops().single()).sourceOperation)
     }
@@ -193,7 +197,7 @@ class CanvasTest {
             override fun glyphIdForCodepoint(codepoint: Int): Int = 1
             override fun getAdvance(glyphId: Int, fontSize: Float): Float = fontSize
             override fun getGlyphPath(glyphId: Int, fontSize: Float): Path = Path()
-            override fun paintForGlyph(glyphId: Int): Paint = Paint.fill(Color.BLUE)
+            override fun paintForGlyph(glyphId: Int): Paint = Paint.fill(ColorARGB.Blue)
         }
         val buffer = TestBuffer()
 
@@ -211,7 +215,7 @@ class CanvasTest {
             ),
             4f,
             8f,
-            Paint.fill(Color.BLACK),
+            Paint.fill(ColorARGB.Black),
         )
 
         assertTrue(buffer.ops().isEmpty())

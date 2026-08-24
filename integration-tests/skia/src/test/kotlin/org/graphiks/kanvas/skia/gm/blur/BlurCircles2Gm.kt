@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -70,7 +70,7 @@ class BlurCircles2Gm : SkiaGm {
             val blurRadius = br * kDeltaBlurRadius + kMinBlurRadius
             val maxRowR = blurRadius + kMaxRadius
             val rowFilter = blurMaker(blurRadius)
-            val rowPaint = Paint(color = Color.BLACK, maskFilter = rowFilter)
+            val rowPaint = Paint(color = ColorARGB.Black, maskFilter = rowFilter)
 
             canvas.save()
             for (r in 0 until kRadiusSteps) {
@@ -89,7 +89,7 @@ class BlurCircles2Gm : SkiaGm {
             canvas.restore()
 
             if (br != kBlurRadiusSteps - 1) {
-                val blackPaint = Paint(color = Color.BLACK)
+                val blackPaint = Paint(color = ColorARGB.Black)
                 val lineY = 3 * maxRowR + 1.5f * kPad
                 canvas.drawLine(0f, lineY, lineWidth, lineY, blackPaint)
             }

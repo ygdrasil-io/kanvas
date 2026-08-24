@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/crbug_946965.cpp`.
@@ -23,7 +23,7 @@ class Crbug946965Gm : SkiaGm {
     override val height = 150
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rrect = RRect(RectF32.ofLTRB(-20f, -5f, 20f, 5f), 10f)
+        val rrect = RRectF32.of(RectF32.ofLTRB(-20f, -5f, 20f, 5f), 10f)
         canvas.translate(25f, 80f)
         canvas.rotate(90f)
         canvas.scale(1.5f, 1f)

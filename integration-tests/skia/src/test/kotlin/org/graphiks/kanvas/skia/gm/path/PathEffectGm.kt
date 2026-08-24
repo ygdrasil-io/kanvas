@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -33,7 +33,7 @@ class PathEffectGm : SkiaGm {
         val basePaint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
         )
 
         val polyline = Path {

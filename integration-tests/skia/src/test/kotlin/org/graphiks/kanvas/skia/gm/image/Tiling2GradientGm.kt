@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -54,7 +54,7 @@ class Tiling2GradientGm : SkiaGm {
 
         y += 16f + h
 
-        val colors = listOf(Color.RED, Color.fromRGBA(0f, 68f / 255f, 1f))
+        val colors = listOf(ColorARGB.Red, ColorARGB.fromRGBA(0f, 68f / 255f, 1f))
 
         for (ky in modes.indices) {
             x = 16f + w

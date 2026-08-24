@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -82,10 +82,10 @@ class DashCubicsGm : SkiaGm {
         )
         canvas.drawPath(path, paint)
 
-        paint = paint.copy(color = Color.RED, strokeWidth = 21f, pathEffect = PathEffect.Dash(intervals, 0f))
+        paint = paint.copy(color = ColorARGB.Red, strokeWidth = 21f, pathEffect = PathEffect.Dash(intervals, 0f))
         canvas.drawPath(path, paint)
 
-        paint = paint.copy(color = Color.GREEN, pathEffect = null, strokeWidth = 0f)
+        paint = paint.copy(color = ColorARGB.Green, pathEffect = null, strokeWidth = 0f)
         canvas.drawPath(path, paint)
     }
 }

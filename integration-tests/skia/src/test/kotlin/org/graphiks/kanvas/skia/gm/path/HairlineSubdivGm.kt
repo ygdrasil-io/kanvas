@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/hairlines.cpp::hairline_subdiv`.
@@ -24,19 +24,19 @@ class HairlineSubdivGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(45f, -25f)
-        drawSubdividedQuad(canvas, 334, 334, 467, 267, Color.BLACK)
+        drawSubdividedQuad(canvas, 334, 334, 467, 267, ColorARGB.Black)
 
         canvas.translate(-185f, -150f)
-        drawSubdividedQuad(canvas, 472, 472, 660, 378, Color.RED)
+        drawSubdividedQuad(canvas, 472, 472, 660, 378, ColorARGB.Red)
 
         canvas.translate(-275f, -200f)
-        drawSubdividedQuad(canvas, 668, 668, 934, 535, Color.GREEN)
+        drawSubdividedQuad(canvas, 668, 668, 934, 535, ColorARGB.Green)
 
         canvas.translate(-385f, -260f)
-        drawSubdividedQuad(canvas, 944, 944, 1320, 756, Color.BLUE)
+        drawSubdividedQuad(canvas, 944, 944, 1320, 756, ColorARGB.Blue)
     }
 
-    private fun drawSubdividedQuad(canvas: GmCanvas, x0: Int, y0: Int, x1: Int, y1: Int, color: Color) {
+    private fun drawSubdividedQuad(canvas: GmCanvas, x0: Int, y0: Int, x1: Int, y1: Int, color: ColorARGB) {
         val paint = Paint(
             color = color,
             style = PaintStyle.STROKE,

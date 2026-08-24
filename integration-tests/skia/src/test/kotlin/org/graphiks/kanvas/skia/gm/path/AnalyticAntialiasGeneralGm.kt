@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
@@ -27,8 +27,8 @@ class AnalyticAntialiasGeneralGm : SkiaGm {
     override val height = 800
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(antiAlias = true, color = Color.RED)
-        canvas.drawRect(RectF32(0f, 0f, 800f, 800f), Paint(color = Color.WHITE))
+        val paint = Paint(antiAlias = true, color = ColorARGB.Red)
+        canvas.drawRect(RectF32(0f, 0f, 800f, 800f), Paint(color = ColorARGB.White))
 
         val r = 115.2f
         val cc = 128.0f
@@ -45,7 +45,7 @@ class AnalyticAntialiasGeneralGm : SkiaGm {
         canvas.translate(200f, 0f)
         val strokePaint = Paint(
             antiAlias = true,
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 5f,
         )

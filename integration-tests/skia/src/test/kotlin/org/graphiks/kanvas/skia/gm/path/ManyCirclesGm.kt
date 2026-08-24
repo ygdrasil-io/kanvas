@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.SkiaRandom
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ManyCirclesGm : SkiaGm {
@@ -36,7 +36,7 @@ class ManyCirclesGm : SkiaGm {
         }
     }
 
-    private fun genColor(rand: SkiaRandom): Color {
+    private fun genColor(rand: SkiaRandom): ColorARGB {
         val hue = rand.nextF() * 360f
         val sat = 0.5f + rand.nextF() * 0.5f
         val value = 0.5f + rand.nextF() * 0.5f
@@ -52,7 +52,7 @@ class ManyCirclesGm : SkiaGm {
             else -> Triple(c, 0f, xVal)
         }
         val m = value - c
-        return Color.fromRGBA(r1 + m, g1 + m, b1 + m)
+        return ColorARGB.fromRGBA(r1 + m, g1 + m, b1 + m)
     }
 
     private companion object {

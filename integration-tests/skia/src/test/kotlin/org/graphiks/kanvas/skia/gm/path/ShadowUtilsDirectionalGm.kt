@@ -7,10 +7,10 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.pow
 
@@ -30,10 +30,10 @@ class ShadowUtilsDirectionalGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rrect = Path { }.apply {
-            addRRect(RRect(RectF32.ofLTRB(-25f, -25f, 25f, 25f), CornerRadii(10f, 10f)))
+            addRRect(RRectF32.of(RectF32.ofLTRB(-25f, -25f, 25f, 25f), CornerRadiiF32.of(10f, 10f)))
         }
         val fillPaint = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             antiAlias = true,
             style = PaintStyle.FILL,
         )

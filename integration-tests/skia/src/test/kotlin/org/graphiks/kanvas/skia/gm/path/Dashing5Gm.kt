@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -30,12 +30,12 @@ class Dashing5Gm(private val doAA: Boolean) : SkiaGm {
         val kIntervalLength = kOn + kOff
 
         val colors = listOf(
-            Color.RED, Color.GREEN, Color.BLUE,
-            Color.fromRGBA(0f, 1f, 1f, 1f),
-            Color.fromRGBA(1f, 0f, 1f, 1f),
-            Color.fromRGBA(1f, 1f, 0f, 1f),
-            Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
-            Color.fromRGBA(0.25f, 0.25f, 0.25f, 1f),
+            ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue,
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.fromRGBA(0.25f, 0.25f, 0.25f, 1f),
         )
 
         var paint = Paint(

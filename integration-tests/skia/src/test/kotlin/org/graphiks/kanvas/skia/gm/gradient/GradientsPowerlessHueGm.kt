@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,7 +25,7 @@ class GradientsPowerlessHueGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(1f, 1f, 1f, 1f)
         canvas.drawString("Powerless hue gradients", 20f, 40f,
-            org.graphiks.kanvas.text.Font(Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!, 20f), Paint(color = Color.BLACK))
+            org.graphiks.kanvas.text.Font(Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!, 20f), Paint(color = ColorARGB.Black))
         val rects = listOf(
             RectF32.ofOriginSize(20f, 60f, 200f, 80f),
             RectF32.ofOriginSize(20f, 160f, 200f, 80f),
@@ -33,12 +33,12 @@ class GradientsPowerlessHueGm : SkiaGm {
             RectF32.ofOriginSize(20f, 360f, 200f, 80f),
         )
         val colors = listOf(
-            Color.fromRGBA(1f, 0f, 0f, 1f),
-            Color.fromRGBA(0f, 0f, 1f, 1f),
-            Color.fromRGBA(1f, 1f, 0f, 1f),
-            Color.fromRGBA(0f, 1f, 1f, 1f),
-            Color.fromRGBA(0.5f, 0f, 0.5f, 1f),
-            Color.fromRGBA(0f, 0.5f, 0f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0.5f, 0f, 0.5f, 1f),
+            ColorARGB.fromRGBA(0f, 0.5f, 0f, 1f),
         )
         for (rect in rects) {
             for ((i, c) in colors.withIndex()) {

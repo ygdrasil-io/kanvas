@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class FilterFastBoundsGm : SkiaGm {
@@ -38,7 +38,7 @@ class FilterFastBoundsGm : SkiaGm {
         // Column 0: saveLayer with picture filter
         val recorder = PictureRecorder()
         val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f))
-        rc.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint(color = Color.BLACK))
+        rc.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint(color = ColorARGB.Black))
         val pic = recorder.finishRecordingAsPicture()
         val picFilter = ImageFilter.Picture(pic)
 
@@ -51,11 +51,11 @@ class FilterFastBoundsGm : SkiaGm {
 
         // Horizontal separators
         for (i in 1 until paints.size) {
-            canvas.drawLine(0f, (i * kTileHeight).toFloat(), ((gDrawMethods.size + kNumExtraCols) * kTileWidth).toFloat(), (i * kTileHeight).toFloat(), Paint(color = Color.BLACK))
+            canvas.drawLine(0f, (i * kTileHeight).toFloat(), ((gDrawMethods.size + kNumExtraCols) * kTileWidth).toFloat(), (i * kTileHeight).toFloat(), Paint(color = ColorARGB.Black))
         }
         // Vertical separators
         for (i in 0 until gDrawMethods.size + kNumExtraCols) {
-            canvas.drawLine((i * kTileWidth).toFloat(), 0f, (i * kTileWidth).toFloat(), (paints.size * kTileWidth).toFloat(), Paint(color = Color.BLACK))
+            canvas.drawLine((i * kTileWidth).toFloat(), 0f, (i * kTileWidth).toFloat(), (paints.size * kTileWidth).toFloat(), Paint(color = ColorARGB.Black))
         }
 
         // Geometry columns
@@ -67,8 +67,8 @@ class FilterFastBoundsGm : SkiaGm {
     }
 
     private fun drawGeomWithPaint(canvas: GmCanvas, drawIdx: Int, cell: RectF32, paint: Paint) {
-        val redStroked = Paint(color = Color.RED, style = PaintStyle.STROKE)
-        val blueStroked = Paint(color = Color.BLUE, style = PaintStyle.STROKE)
+        val redStroked = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE)
+        val blueStroked = Paint(color = ColorARGB.Blue, style = PaintStyle.STROKE)
         val r = RectF32.ofLTRB(20f, 20f, 30f, 30f)
 
         canvas.save()
@@ -81,8 +81,8 @@ class FilterFastBoundsGm : SkiaGm {
     }
 
     private fun drawSaveLayerWithPaint(canvas: GmCanvas, cell: RectF32, paint: Paint) {
-        val redStroked = Paint(color = Color.RED, style = PaintStyle.STROKE)
-        val blueStroked = Paint(color = Color.BLUE, style = PaintStyle.STROKE)
+        val redStroked = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE)
+        val blueStroked = Paint(color = ColorARGB.Blue, style = PaintStyle.STROKE)
         val bounds = RectF32.ofLTRB(0f, 0f, 10f, 10f)
 
         canvas.save()
@@ -99,7 +99,7 @@ class FilterFastBoundsGm : SkiaGm {
         val list = mutableListOf<Paint>()
         list.add(Paint(imageFilter = ImageFilter.Blur(3f, 3f)))
         list.add(Paint(imageFilter = ImageFilter.Offset(15f, 15f)))
-        list.add(Paint(imageFilter = ImageFilter.DropShadow(10f, 10f, 3f, 3f, Color.RED)))
+        list.add(Paint(imageFilter = ImageFilter.DropShadow(10f, 10f, 3f, 3f, ColorARGB.Red)))
         list.add(Paint(imageFilter = ImageFilter.Dilate(2f, 2f)))
         list.add(Paint(imageFilter = ImageFilter.Erode(2f, 2f)))
         list.add(Paint())

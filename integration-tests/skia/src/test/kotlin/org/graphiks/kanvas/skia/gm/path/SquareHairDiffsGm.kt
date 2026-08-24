@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,11 +31,11 @@ class SquareHairDiffsGm : SkiaGm {
         val aliases = booleanArrayOf(false, true)
         val widths = floatArrayOf(0f, 1f, 1.001f)
         val caps = arrayOf(StrokeCap.BUTT, StrokeCap.SQUARE, StrokeCap.ROUND)
-        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE)
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue)
 
         for (alias in aliases) {
             for (w in widths) {
-                canvas.drawRect(RectF32.ofLTRB(120f, 0f, 600f, 100f), Paint(color = Color.BLACK))
+                canvas.drawRect(RectF32.ofLTRB(120f, 0f, 600f, 100f), Paint(color = ColorARGB.Black))
 
                 for (i in 0..2) {
                     val surface = Surface(120, 25)

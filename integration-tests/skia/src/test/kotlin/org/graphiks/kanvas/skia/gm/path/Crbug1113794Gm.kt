@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -31,7 +31,7 @@ class Crbug1113794Gm : SkiaGm {
         }
 
         val paint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             strokeWidth = 0.25f,
             style = PaintStyle.STROKE,

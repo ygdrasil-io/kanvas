@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,7 +31,7 @@ class BitmapCopyGm : SkiaGm {
 
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)),
+            Paint(color = ColorARGB.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)),
         )
 
         val font = Font(
@@ -71,11 +71,11 @@ class BitmapCopyGm : SkiaGm {
         val w2 = 20; val h2 = 20
         for (y in 0 until 40) {
             for (x in 0 until 40) {
-                val YELLOW = Color.fromRGBA(1f, 1f, 0f)
+                val YELLOW = ColorARGB.fromRGBA(1f, 1f, 0f)
                 val color = when {
-                    x < w2 && y < h2 -> Color.RED
-                    x >= w2 && y < h2 -> Color.GREEN
-                    x < w2 && y >= h2 -> Color.BLUE
+                    x < w2 && y < h2 -> ColorARGB.Red
+                    x >= w2 && y < h2 -> ColorARGB.Green
+                    x < w2 && y >= h2 -> ColorARGB.Blue
                     else -> YELLOW
                 }
                 bm.setPixel(x, y, color)

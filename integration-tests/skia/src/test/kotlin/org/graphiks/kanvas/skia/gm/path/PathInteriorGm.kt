@@ -4,8 +4,8 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -34,7 +34,7 @@ class PathInteriorGm : SkiaGm {
         canvas.translate(8.5f, 8.5f)
 
         val rect = RectF32(0f, 0f, 80f, 80f)
-        val rad = CornerRadii(rect.width() / 8f, rect.height() / 8f)
+        val rad = CornerRadiiF32.of(rect.width() / 8f, rect.height() / 8f)
 
         var i = 0
         for (insetFirst in 0..1) {
@@ -47,7 +47,7 @@ class PathInteriorGm : SkiaGm {
                         val builder = Path { }.also { it.fillType = fillType }
 
                         if (outerRR != 0) {
-                            val rrect = org.graphiks.kanvas.types.RRect(r, rad, rad, rad, rad)
+                            val rrect = org.graphiks.math.geometry.RRectF32.of(r, rad, rad, rad, rad)
                             builder.addRRect(rrect)
                         } else {
                             builder.addRect(r)
@@ -55,7 +55,7 @@ class PathInteriorGm : SkiaGm {
 
                         r = if (insetFirst != 0) rect else inset(rect)
                         if (innerRR != 0) {
-                            val rrect = org.graphiks.kanvas.types.RRect(r, rad, rad, rad, rad)
+                            val rrect = org.graphiks.math.geometry.RRectF32.of(r, rad, rad, rad, rad)
                             builder.addRRect(rrect)
                         } else {
                             builder.addRect(r)
@@ -74,13 +74,13 @@ class PathInteriorGm : SkiaGm {
     private fun show(c: GmCanvas, path: Path) {
         val fillPaint = Paint(
             antiAlias = true,
-            color = Color.fromRGBA(0x88.toFloat() / 255f, 0x88.toFloat() / 255f, 0x88.toFloat() / 255f, 1f),
+            color = ColorARGB.fromRGBA(0x88.toFloat() / 255f, 0x88.toFloat() / 255f, 0x88.toFloat() / 255f, 1f),
         )
         c.drawPath(path, fillPaint)
         val strokePaint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.RED,
+            color = ColorARGB.Red,
         )
         c.drawPath(path, strokePaint)
     }

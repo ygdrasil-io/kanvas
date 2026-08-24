@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -28,11 +28,11 @@ class BitmapShaderGmTest {
         assertEquals(8, imageOps.size)
         assertEquals(List(8) { ColorType.ALPHA_8 }, imageOps.map { it.image.colorType })
         assertEquals(4, imageOps.count { it.paint?.shader != null })
-        assertEquals(4, imageOps.count { it.paint?.shader == null && it.paint?.color == Color.GREEN })
+        assertEquals(4, imageOps.count { it.paint?.shader == null && it.paint?.color == ColorARGB.Green })
 
         val maskShaderPaints =
             rectOps.map { it.paint }.plus(pathOps.map { it.paint })
-                .filter { it.shader != null && it.color == Color.RED }
+                .filter { it.shader != null && it.color == ColorARGB.Red }
         assertEquals(4, maskShaderPaints.size)
         assertTrue(
             maskShaderPaints.all { it.shader?.unwrapImageShader()?.tileModeX == TileMode.REPEAT },

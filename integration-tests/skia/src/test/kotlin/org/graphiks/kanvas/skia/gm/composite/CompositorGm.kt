@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -44,11 +44,11 @@ class CompositorGm : SkiaGm {
             canvas.save()
             canvas.concat(mat)
 
-            val gridPaint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
+            val gridPaint = Paint(color = ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
             for (i in 0 until kRowCount) {
                 for (j in 0 until kColCount) {
                     val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
-                    canvas.drawRect(tile, Paint(color = Color.fromRGBA(0.2f, 0.8f, 0.3f, 1f)))
+                    canvas.drawRect(tile, Paint(color = ColorARGB.fromRGBA(0.2f, 0.8f, 0.3f, 1f)))
                     canvas.drawRect(tile, gridPaint)
                 }
             }
@@ -63,7 +63,7 @@ class CompositorGm : SkiaGm {
 
         canvas.save()
         canvas.translate(kOffset, kGap + 0.5f * kRowCount * kTileHeight)
-        canvas.drawString("Solid Color", 0f, 0f, font, Paint())
+        canvas.drawString("Solid ColorARGB", 0f, 0f, font, Paint())
         canvas.restore()
     }
 

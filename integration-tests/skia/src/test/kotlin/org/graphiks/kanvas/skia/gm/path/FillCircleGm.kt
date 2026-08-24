@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -47,7 +47,7 @@ class FillCircleGm : SkiaGm {
             val rr = ((colorInt ushr 16) and 0xFF) / 255f
             val g = ((colorInt ushr 8) and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
-            val paint = Paint(color = Color.fromRGBA(rr, g, b, a), antiAlias = true)
+            val paint = Paint(color = ColorARGB.fromRGBA(rr, g, b, a), antiAlias = true)
 
             canvas.save()
             canvas.drawOval(r, paint)

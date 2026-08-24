@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
@@ -47,7 +47,7 @@ class PointsMaskFilterGm : SkiaGm {
                     strokeWidth = 10f,
                     strokeCap = cap,
                     maskFilter = mf,
-                    color = Color.BLACK,
+                    color = ColorARGB.Black,
                 ),
             )
             canvas.drawPoints(
@@ -57,7 +57,7 @@ class PointsMaskFilterGm : SkiaGm {
                     style = PaintStyle.STROKE,
                     strokeWidth = 10f,
                     strokeCap = cap,
-                    color = Color.RED,
+                    color = ColorARGB.Red,
                 ),
             )
             canvas.translate(256f, 0f)

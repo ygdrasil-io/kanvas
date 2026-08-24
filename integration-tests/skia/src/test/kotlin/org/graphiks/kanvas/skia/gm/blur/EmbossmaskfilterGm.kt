@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -98,8 +98,8 @@ class EmbossmaskfilterGm : SkiaGm {
         val cx = bounds.width() * 0.5f
         val cy = bounds.height() * 0.5f
 
-        val paint1 = Paint(antiAlias = true, color = Color.RED, maskFilter = mf)
-        val paint2 = Paint(antiAlias = true, color = Color.BLUE, maskFilter = mf)
+        val paint1 = Paint(antiAlias = true, color = ColorARGB.Red, maskFilter = mf)
+        val paint2 = Paint(antiAlias = true, color = ColorARGB.Blue, maskFilter = mf)
 
         canvas.drawCircle(cx - offset, cy, radius, paint1)
         canvas.drawRect(
@@ -126,8 +126,8 @@ class EmbossmaskfilterGm : SkiaGm {
         val cx = bounds.width() * 0.5f
         val cy = bounds.height() * 0.5f
 
-        val paint1 = Paint(antiAlias = true, color = Color.RED)
-        val paint2 = Paint(antiAlias = true, color = Color.BLUE, maskFilter = blurFilter, blendMode = blendMode)
+        val paint1 = Paint(antiAlias = true, color = ColorARGB.Red)
+        val paint2 = Paint(antiAlias = true, color = ColorARGB.Blue, maskFilter = blurFilter, blendMode = blendMode)
 
         canvas.drawCircle(cx - offset, cy, radius, paint1)
         canvas.drawRect(

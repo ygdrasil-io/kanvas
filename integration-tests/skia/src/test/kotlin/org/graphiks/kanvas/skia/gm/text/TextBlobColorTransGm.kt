@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.floor
 
@@ -66,10 +66,10 @@ class TextBlobColorTransGm : SkiaGm {
         canvas.translate(10f, 40f)
 
         val colors = listOf(
-            Color.fromRGBA(0f, 1f, 1f, 1f),  // CYAN
-            Color.fromRGBA(0.75f, 0.75f, 0.75f, 1f), // LTGRAY
-            Color.fromRGBA(1f, 1f, 0f, 1f),  // YELLOW
-            Color.WHITE,
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),  // CYAN
+            ColorARGB.fromRGBA(0.75f, 0.75f, 0.75f, 1f), // LTGRAY
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),  // YELLOW
+            ColorARGB.White,
         )
         var colorIndex = 0
         var y = 0

@@ -8,9 +8,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -38,7 +38,7 @@ abstract class ComplexClip2Gm(
     override val height = kHeight
 
     private val rects = Array(5) { RectF32.ofLTRB(0f, 0f, 0f, 0f) }
-    private val rrects = Array(5) { RRect(RectF32.Empty) }
+    private val rrects = Array(5) { RRectF32.of(RectF32.Empty) }
     private val paths = arrayOfNulls<Path>(5)
     private val rectColors = IntArray(5)
     private val ops = Array(kRows * kCols) { Array(5) { ClipOp.INTERSECT } }
@@ -50,28 +50,28 @@ abstract class ComplexClip2Gm(
         val yD = 30.65f; val yE = 40.65f; val yF = 50.65f
 
         rects[0] = RectF32.ofLTRB(xB, yB, xE, yE)
-        rrects[0] = RRect(rects[0], CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f))
-        paths[0] = Path { }.apply { addRRect(RRect(rects[0], CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f))) }
+        rrects[0] = RRectF32.of(rects[0], CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f))
+        paths[0] = Path { }.apply { addRRect(RRectF32.of(rects[0], CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f))) }
         rectColors[0] = 0xFFFF0000.toInt()
 
         rects[1] = RectF32.ofLTRB(xA, yA, xD, yD)
-        rrects[1] = RRect(rects[1], CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f))
-        paths[1] = Path { }.apply { addRRect(RRect(rects[1], CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f))) }
+        rrects[1] = RRectF32.of(rects[1], CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f))
+        paths[1] = Path { }.apply { addRRect(RRectF32.of(rects[1], CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f))) }
         rectColors[1] = 0xFF00FF00.toInt()
 
         rects[2] = RectF32.ofLTRB(xC, yA, xF, yD)
-        rrects[2] = RRect(rects[2], CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f))
-        paths[2] = Path { }.apply { addRRect(RRect(rects[2], CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f))) }
+        rrects[2] = RRectF32.of(rects[2], CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f))
+        paths[2] = Path { }.apply { addRRect(RRectF32.of(rects[2], CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f))) }
         rectColors[2] = 0xFF0000FF.toInt()
 
         rects[3] = RectF32.ofLTRB(xA, yC, xD, yF)
-        rrects[3] = RRect(rects[3], CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f))
-        paths[3] = Path { }.apply { addRRect(RRect(rects[3], CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f))) }
+        rrects[3] = RRectF32.of(rects[3], CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f))
+        paths[3] = Path { }.apply { addRRect(RRectF32.of(rects[3], CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f))) }
         rectColors[3] = 0xFFFFFF00.toInt()
 
         rects[4] = RectF32.ofLTRB(xC, yC, xF, yF)
-        rrects[4] = RRect(rects[4], CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f), CornerRadii(7f, 7f))
-        paths[4] = Path { }.apply { addRRect(RRect(rects[4], CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f), CornerRadii(5f, 5f))) }
+        rrects[4] = RRectF32.of(rects[4], CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f), CornerRadiiF32.of(7f, 7f))
+        paths[4] = Path { }.apply { addRRect(RRectF32.of(rects[4], CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f), CornerRadiiF32.of(5f, 5f))) }
         rectColors[4] = 0xFF00FFFF.toInt()
 
         val opChoices = arrayOf(ClipOp.DIFFERENCE, ClipOp.INTERSECT)
@@ -90,7 +90,7 @@ abstract class ComplexClip2Gm(
         canvas.drawColor(0xDD / 255f, 0xA0 / 255f, 0xDD / 255f)
 
         var rectPaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)
-        val fillPaint = Paint(color = Color.fromRGBA(0xA0 / 255f, 0xDD / 255f, 0xA0 / 255f))
+        val fillPaint = Paint(color = ColorARGB.fromRGBA(0xA0 / 255f, 0xDD / 255f, 0xA0 / 255f))
 
         for (i in 0 until kRows) {
             for (j in 0 until kCols) {
@@ -101,7 +101,7 @@ abstract class ComplexClip2Gm(
                 )
 
                 for (k in 0 until 5) {
-                    rectPaint = rectPaint.copy(color = Color(rectColors[k].toUInt()))
+                    rectPaint = rectPaint.copy(color = ColorARGB.fromPackedUInt(rectColors[k].toUInt()))
                     when (clip) {
                         Clip.kRect_Clip -> canvas.drawRect(rects[k], rectPaint)
                         Clip.kRRect_Clip -> canvas.drawRRect(rrects[k], rectPaint)

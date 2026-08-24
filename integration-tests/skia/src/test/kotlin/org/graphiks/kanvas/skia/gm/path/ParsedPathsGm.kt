@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -34,7 +34,7 @@ class ParsedPathsGm : SkiaGm {
             for (yStart in 0 until 500 step 100) {
                 var count = 3
                 do {
-                    val cp = paint.copy(color = Color.fromRGBA(rand.nextFloat(), rand.nextFloat(), rand.nextFloat()))
+                    val cp = paint.copy(color = ColorARGB.fromRGBA(rand.nextFloat(), rand.nextFloat(), rand.nextFloat()))
                     val path = makeRandomPath(rand)
                     canvas.save()
                     canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f))

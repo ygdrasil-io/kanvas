@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,26 +28,26 @@ class TransparencyCheckGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         // Checkerboard background
-        drawCheckerboard(canvas, Color.fromRGBA(0.6f, 0.6f, 0.6f), Color.fromRGBA(0.4f, 0.4f, 0.4f), 8)
+        drawCheckerboard(canvas, ColorARGB.fromRGBA(0.6f, 0.6f, 0.6f), ColorARGB.fromRGBA(0.4f, 0.4f, 0.4f), 8)
 
         canvas.save()
         val kColors = listOf(
-            Color.BLACK,
-            Color.fromRGBA(0.5f, 0.5f, 0.5f),
-            Color.WHITE,
-            Color.RED,
-            Color.fromRGBA(1f, 1f, 0f),
-            Color.GREEN,
-            Color.fromRGBA(0f, 1f, 1f),
-            Color.BLUE,
-            Color.fromRGBA(1f, 0f, 1f),
+            ColorARGB.Black,
+            ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f),
+            ColorARGB.White,
+            ColorARGB.Red,
+            ColorARGB.fromRGBA(1f, 1f, 0f),
+            ColorARGB.Green,
+            ColorARGB.fromRGBA(0f, 1f, 1f),
+            ColorARGB.Blue,
+            ColorARGB.fromRGBA(1f, 0f, 1f),
         )
         val rowHeight = 9f / kColors.size
         for (i in kColors.indices) {
             val shader = Shader.LinearGradient(
                 start = Point2F32(0f, 0f), end = Point2F32(256f, 0f),
                 stops = listOf(
-                    GradientStop(0f, Color.TRANSPARENT),
+                    GradientStop(0f, ColorARGB.Transparent),
                     GradientStop(1f, kColors[i]),
                 ),
                 tileMode = TileMode.CLAMP,
@@ -63,7 +63,7 @@ class TransparencyCheckGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawCheckerboard(canvas: GmCanvas, c0: Color, c1: Color, size: Int) {
+    private fun drawCheckerboard(canvas: GmCanvas, c0: ColorARGB, c1: ColorARGB, size: Int) {
         val w = canvas.width; val h = canvas.height
         for (y in 0 until h step size) {
             for (x in 0 until w step size) {

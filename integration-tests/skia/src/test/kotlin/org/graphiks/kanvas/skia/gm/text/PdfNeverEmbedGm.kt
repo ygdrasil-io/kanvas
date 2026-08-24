@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/pdf_never_embed.cpp::pdf_never_embed` (512 × 512).
@@ -31,19 +31,19 @@ class PdfNeverEmbedGm : SkiaGm {
 
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
 
-        canvas.drawString(text, 30f, 90f, font, Paint(color = Color.BLACK))
+        canvas.drawString(text, 30f, 90f, font, Paint(color = ColorARGB.Black))
 
         canvas.save()
         canvas.rotate(45f)
-        canvas.drawString(text, 30f, 45f, font, Paint(color = Color.fromRGBA(0.94f, 0f, 0f, 0.94f)))
+        canvas.drawString(text, 30f, 45f, font, Paint(color = ColorARGB.fromRGBA(0.94f, 0f, 0f, 0.94f)))
         canvas.restore()
 
         canvas.save()
         canvas.scale(1f, 4f)
-        canvas.drawString(text, 15f, 70f, font, Paint(color = Color.fromRGBA(0f, 0.5f, 0f, 0.94f)))
+        canvas.drawString(text, 15f, 70f, font, Paint(color = ColorARGB.fromRGBA(0f, 0.5f, 0f, 0.94f)))
         canvas.restore()
 
         canvas.scale(1f, 0.5f)
-        canvas.drawString(text, 30f, 700f, font, Paint(color = Color.fromRGBA(0f, 0f, 0.5f, 0.94f)))
+        canvas.drawString(text, 30f, 700f, font, Paint(color = ColorARGB.fromRGBA(0f, 0f, 0.5f, 0.94f)))
     }
 }

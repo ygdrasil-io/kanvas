@@ -33,7 +33,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -52,7 +52,7 @@ class GPUPreparedAtlasLowererTest {
         val colorMismatch = atlasOperation(
             transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
             texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-            colors = listOf(Color.RED),
+            colors = listOf(ColorARGB.Red),
         )
 
         listOf(transformMismatch, colorMismatch).forEach { operation ->
@@ -79,7 +79,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), invalid),
-                        colors = listOf(Color.RED, Color.GREEN),
+                        colors = listOf(ColorARGB.Red, ColorARGB.Green),
                     ),
                     0,
                     0,
@@ -116,7 +116,7 @@ class GPUPreparedAtlasLowererTest {
                 atlasOperation(
                     transforms = spriteTransforms,
                     texRects = rects,
-                    colors = List(spriteTransforms.size) { Color.WHITE },
+                    colors = List(spriteTransforms.size) { ColorARGB.White },
                     transform = outer,
                 ),
                 17,
@@ -166,7 +166,7 @@ class GPUPreparedAtlasLowererTest {
                 atlasOperation(
                     transforms = listOf(transform),
                     texRects = listOf(rect),
-                    colors = listOf(Color.WHITE),
+                    colors = listOf(ColorARGB.White),
                 ),
                 0,
                 0,
@@ -199,7 +199,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity, invalid),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-                        colors = listOf(Color.RED, Color.GREEN),
+                        colors = listOf(ColorARGB.Red, ColorARGB.Green),
                     ),
                     0,
                     0,
@@ -213,14 +213,14 @@ class GPUPreparedAtlasLowererTest {
 
     @Test
     fun `sprites share one artifact and sampler choice but keep distinct dynamic uniforms`() {
-        val colors = listOf(Color.fromArgb(128, 128, 0, 0), Color.fromArgb(64, 0, 64, 0))
+        val colors = listOf(ColorARGB.of(128, 128, 0, 0), ColorARGB.of(64, 0, 64, 0))
         val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
             GPUPreparedAtlasLowerer.lower(
                 atlasOperation(
                     transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(8f, 0f)),
                     texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
                     colors = colors,
-                    paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)),
+                    paint = Paint.fill(ColorARGB.of(128, 255, 255, 255)),
                 ),
                 3,
                 9,
@@ -262,7 +262,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0)),
-                        colors = listOf(Color.RED),
+                        colors = listOf(ColorARGB.Red),
                         blendMode = mode,
                     ),
                     0,
@@ -279,7 +279,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-                        colors = listOf(Color.RED, Color.GREEN),
+                        colors = listOf(ColorARGB.Red, ColorARGB.Green),
                         blendMode = mode,
                     ),
                     0,
@@ -299,7 +299,7 @@ class GPUPreparedAtlasLowererTest {
             rect = RectF32.ofLTRB(2f, 3f, 31f, 37f),
             antiAlias = false,
         )
-        val paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)).copy(
+        val paint = Paint.fill(ColorARGB.of(128, 255, 255, 255)).copy(
             blendMode = BlendMode.PLUS,
             blender = Blender.Mode(BlendMode.SRC_OVER),
         )
@@ -308,7 +308,7 @@ class GPUPreparedAtlasLowererTest {
                 atlasOperation(
                     transforms = listOf(Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0)),
-                    colors = listOf(Color.fromArgb(128, 255, 64, 0)),
+                    colors = listOf(ColorARGB.of(128, 255, 64, 0)),
                     blendMode = BlendMode.MODULATE,
                     paint = paint,
                     clip = clip,
@@ -418,7 +418,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(8f, 0f)),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-                        colors = listOf(Color.RED, Color.GREEN),
+                        colors = listOf(ColorARGB.Red, ColorARGB.Green),
                         clip = clip,
                     ),
                     11,
@@ -446,7 +446,7 @@ class GPUPreparedAtlasLowererTest {
                     atlasOperation(
                         transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                         texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-                        colors = listOf(Color.RED, Color.GREEN),
+                        colors = listOf(ColorARGB.Red, ColorARGB.Green),
                         paint = paint,
                     ),
                     0,
@@ -470,7 +470,7 @@ class GPUPreparedAtlasLowererTest {
                 atlasOperation(
                     transforms = listOf(Matrix3x3F32.Identity, Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
-                    colors = listOf(Color.RED, Color.GREEN),
+                    colors = listOf(ColorARGB.Red, ColorARGB.Green),
                     paint = paint,
                 ),
                 0,
@@ -493,7 +493,7 @@ class GPUPreparedAtlasLowererTest {
     private fun atlasOperation(
         transforms: List<Matrix3x3F32>,
         texRects: List<RectF32>,
-        colors: List<Color>? = null,
+        colors: List<ColorARGB>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint? = null,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,

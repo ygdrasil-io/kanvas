@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -41,7 +41,7 @@ class SurfacePropsGm(
                     shader = makeShader(),
                 )
                 drawRect(RectF32(0f, 0f, W.toFloat(), H.toFloat()), paint)
-                val textPaint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f))
+                val textPaint = Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f))
                 val font = Font(typeface, size = 32f)
                 drawString(rec.label, W / 2f, H * 3f / 4f, font, textPaint)
             }
@@ -52,8 +52,8 @@ class SurfacePropsGm(
     }
 
     private fun makeShader(): Shader {
-        val gradA = Color.fromRGBA(0.6f, 0.6f, 0.6f, 1f)
-        val gradB = Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
+        val gradA = ColorARGB.fromRGBA(0.6f, 0.6f, 0.6f, 1f)
+        val gradB = ColorARGB.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
         return Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(W.toFloat(), H.toFloat()),

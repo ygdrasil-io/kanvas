@@ -10,14 +10,14 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `DEF_SIMPLE_GM(clip_shader_nested, canvas, 256, 256)` in `gm/complexclip.cpp`.
- * Tests nested clip-shaders: two stacked gradient shader masks, plus clipShader combined with RRect and star-path clipping.
+ * Tests nested clip-shaders: two stacked gradient shader masks, plus clipShader combined with RRectF32 and star-path clipping.
  * @see https://github.com/google/skia/blob/main/gm/complexclip.cpp
  */
 class ClipShaderNestedGm : SkiaGm {
@@ -36,8 +36,8 @@ class ClipShaderNestedGm : SkiaGm {
             center = Point2F32(0.5f * w, 0.5f * h),
             radius = 0.1f * w,
             stops = listOf(
-                GradientStop(0f, Color.BLACK),
-                GradientStop(1f, Color.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f)),
+                GradientStop(0f, ColorARGB.Black),
+                GradientStop(1f, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f)),
             ),
             tileMode = TileMode.REPEAT,
         )
@@ -49,7 +49,7 @@ class ClipShaderNestedGm : SkiaGm {
         canvas.scale(2f, 2f)
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(shader = gradShader))
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_IN))
-        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 2f * w, 2f * h), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 2f * w, 2f * h), Paint(color = ColorARGB.Black))
         canvas.restore()
         canvas.restore()
         canvas.restore()
@@ -57,16 +57,16 @@ class ClipShaderNestedGm : SkiaGm {
         // BL: small red rect, no clipping
         canvas.translate(0f, 2f * h)
         canvas.save()
-        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = Color.RED))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = ColorARGB.Red))
         canvas.restore()
 
-        // TR: small green rect, clip-shader + RRect clip
+        // TR: small green rect, clip-shader + RRectF32 clip
         canvas.translate(2f * w, -2f * h)
         canvas.save()
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(shader = gradShader))
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_IN))
-        canvas.clipRRect(RRect(RectF32.ofOriginSize(0f, 0f, w, h), 10f), antiAlias = true)
-        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = Color.GREEN))
+        canvas.clipRRect(RRectF32.of(RectF32.ofOriginSize(0f, 0f, w, h), 10f), antiAlias = true)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = ColorARGB.Green))
         canvas.restore()
         canvas.restore()
 
@@ -93,7 +93,7 @@ class ClipShaderNestedGm : SkiaGm {
         canvas.translate(w / 2, h / 2)
         canvas.clipPath(starPath)
         canvas.translate(-w / 2, -h / 2)
-        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = Color.BLUE))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w, h), Paint(color = ColorARGB.Blue))
         canvas.restore()
         canvas.restore()
     }

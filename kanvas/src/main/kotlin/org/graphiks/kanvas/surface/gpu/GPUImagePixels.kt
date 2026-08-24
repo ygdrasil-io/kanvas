@@ -3,10 +3,6 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
 
 internal fun Image.expandToRgbaForGpu(): ByteArray {
     val sourcePixels = pixels ?: return byteArrayOf()

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,7 +31,7 @@ class BlurImageVMaskGm : SkiaGm {
     )
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
-        val paint = Paint(antiAlias = true, color = Color.BLACK)
+        val paint = Paint(antiAlias = true, color = ColorARGB.Black)
 
         canvas.drawString("mask blur", 285f, 50f, font, paint)
         canvas.drawString("image blur", 285f + 250f, 50f, font, paint)
@@ -47,7 +47,7 @@ class BlurImageVMaskGm : SkiaGm {
 
             var r2 = r.copy(left = r.left + 250f, right = r.right + 250f)
             val maskBlurPaint = Paint(
-                color = Color.BLACK,
+                color = ColorARGB.Black,
                 antiAlias = true,
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
             )

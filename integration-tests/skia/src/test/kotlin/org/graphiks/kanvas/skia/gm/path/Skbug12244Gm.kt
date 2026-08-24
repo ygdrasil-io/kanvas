@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/strokes.cpp::skbug12244`.
@@ -36,7 +36,7 @@ class Skbug12244Gm : SkiaGm {
             lineTo(-2.7854299545288085938f, 6.9635753631591796875f)
         }
 
-        val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f))
         canvas.translate(20f, 20f)
         canvas.drawPath(path, paint)
     }

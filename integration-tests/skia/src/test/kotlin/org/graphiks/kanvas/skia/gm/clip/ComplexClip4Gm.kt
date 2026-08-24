@@ -6,8 +6,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -33,7 +33,7 @@ open class ComplexClip4Gm(
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDE / 255f, 0xDF / 255f, 0xDE / 255f)
 
-        val yellow = Paint(color = Color(0xFFFFFF00u), antiAlias = doAAClip)
+        val yellow = Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF00u), antiAlias = doAAClip)
 
         canvas.save()
 
@@ -61,11 +61,11 @@ open class ComplexClip4Gm(
 
         canvas.save()
         greenIn(canvas, RectF32.ofLTRB(500f, 500f, 800f, 700f))
-        val rrect = RRect(RectF32.ofLTRB(500f, 600f, 900f, 750f), radius = 0f).copy(
-            topLeft = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
-            topRight = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
-            bottomLeft = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
-            bottomRight = org.graphiks.kanvas.types.CornerRadii(200f, 75f),
+        val rrect = RRectF32.of(RectF32.ofLTRB(500f, 600f, 900f, 750f), radius = 0f).copy(
+            topLeft = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
+            topRight = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
+            bottomLeft = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
+            bottomRight = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
         )
         canvas.clipRRect(rrect, antiAlias = doAAClip)
         canvas.drawRect(RectF32.ofLTRB(500f, 600f, 900f, 750f), yellow)

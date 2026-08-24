@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.floor
@@ -106,12 +106,12 @@ class MixedTextBlobsGm : SkiaGm {
     }
 
     private fun drawBlob(canvas: GmCanvas, blob: TextBlob, clipRect: RectF32) {
-        val clipHairline = Paint(color = Color.WHITE, style = PaintStyle.STROKE)
-        val paint = Paint(color = Color.BLACK)
+        val clipHairline = Paint(color = ColorARGB.White, style = PaintStyle.STROKE)
+        val paint = Paint(color = ColorARGB.Black)
 
         canvas.save()
         canvas.drawRect(clipRect, clipHairline)
-        val ghostPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.125f))
+        val ghostPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.125f))
         canvas.drawTextBlob(blob, 0f, 0f, ghostPaint)
         canvas.clipRect(clipRect)
         canvas.drawTextBlob(blob, 0f, 0f, paint)

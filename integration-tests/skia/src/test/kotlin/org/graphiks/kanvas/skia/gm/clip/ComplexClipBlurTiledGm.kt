@@ -7,8 +7,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -38,7 +38,7 @@ class ComplexClipBlurTiledGm : SkiaGm {
                 val rect = RectF32.ofLTRB(0f, 0f, 512f, 512f)
                 canvas.saveLayer(rect, blurPaint)
                 val inset = RectF32(rect.left + 20f, rect.top + 20f, rect.right - 20f, rect.bottom - 20f)
-                val rrect = RRect(inset, CornerRadii(25f, 25f))
+                val rrect = RRectF32.of(inset, CornerRadiiF32.of(25f, 25f))
                 canvas.clipRRect(rrect, ClipOp.DIFFERENCE, true)
                 canvas.drawRect(rect, Paint())
                 canvas.restore()

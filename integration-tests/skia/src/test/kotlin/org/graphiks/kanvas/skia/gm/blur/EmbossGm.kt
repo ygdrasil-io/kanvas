@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,7 +27,7 @@ class EmbossGm : SkiaGm {
     override val height = 120
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawCircle(50f, 50f, 50f, Paint(color = Color.BLACK))
+        canvas.drawCircle(50f, 50f, 50f, Paint(color = ColorARGB.Black))
         canvas.translate(110f, 0f)
 
         canvas.drawCircle(50f, 50f, 50f, Paint(
@@ -37,20 +37,20 @@ class EmbossGm : SkiaGm {
 
         canvas.drawCircle(50f, 50f, 50f, Paint(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, blurRadius(3f)),
-            colorFilter = ColorFilter.Blend(Color.fromRGBA(1f, 0f, 0f, 1f), BlendMode.SRC_ATOP),
+            colorFilter = ColorFilter.Blend(ColorARGB.fromRGBA(1f, 0f, 0f, 1f), BlendMode.SRC_ATOP),
         ))
         canvas.translate(110f, 0f)
 
         canvas.drawCircle(50f, 50f, 30f, Paint(
-            color = Color.BLUE,
+            color = ColorARGB.Blue,
             style = PaintStyle.STROKE,
             strokeWidth = 10f,
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, blurRadius(4f)),
         ))
         canvas.translate(110f, 0f)
 
-        canvas.drawRect(RectF32.ofOriginSize(0f, 40f, 50f, 30f), Paint(color = Color.RED))
-        canvas.drawRect(RectF32.ofOriginSize(0f, 80f, 50f, 30f), Paint(color = Color.GREEN))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 40f, 50f, 30f), Paint(color = ColorARGB.Red))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 80f, 50f, 30f), Paint(color = ColorARGB.Green))
     }
 
     private companion object {

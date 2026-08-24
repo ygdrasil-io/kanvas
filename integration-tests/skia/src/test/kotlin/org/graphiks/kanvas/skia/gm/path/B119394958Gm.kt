@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -24,12 +24,12 @@ class B119394958Gm : SkiaGm {
     override val height = 100
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawCircle(50f, 50f, 45f, Paint(color = Color.BLUE, antiAlias = true))
+        canvas.drawCircle(50f, 50f, 45f, Paint(color = ColorARGB.Blue, antiAlias = true))
 
         canvas.drawCircle(
             50f, 50f, 35f,
             Paint(
-                color = Color.GREEN,
+                color = ColorARGB.Green,
                 style = PaintStyle.STROKE,
                 strokeWidth = 5f,
                 antiAlias = true,
@@ -40,7 +40,7 @@ class B119394958Gm : SkiaGm {
             RectF32.ofLTRB(30f, 30f, 70f, 70f),
             0f, 110f, false,
             Paint(
-                color = Color.RED,
+                color = ColorARGB.Red,
                 style = PaintStyle.STROKE,
                 strokeWidth = 5f,
                 strokeCap = StrokeCap.ROUND,

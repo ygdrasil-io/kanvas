@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.floor
 
@@ -44,7 +44,7 @@ class TextBlobBlockReorderingGm : SkiaGm {
 
         canvas.translate(xDelta.toFloat(), yDelta.toFloat())
 
-        val redPaint = Paint(color = Color.RED)
+        val redPaint = Paint(color = ColorARGB.Red)
         val bounds = RectF32(0f, -yOffset, textWidth, 0f)
         canvas.drawRect(bounds, redPaint)
         val srcInPaint = Paint(blendMode = BlendMode.SRC_IN)

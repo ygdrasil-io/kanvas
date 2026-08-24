@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,7 +32,7 @@ class ColorspaceGm : SkiaGm {
 
         val w = 128f
         val h = 128f
-        val paint = Paint(color = Color(0xFF4080FFu))
+        val paint = Paint(color = ColorARGB.fromPackedUInt(0xFF4080FFu))
         val rect = RectF32.ofOriginSize(0f, 0f, w, h)
 
         for (row in 0 until 5) {

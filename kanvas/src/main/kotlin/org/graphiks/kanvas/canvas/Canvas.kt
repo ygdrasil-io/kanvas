@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GlyphPaintProvider
@@ -11,11 +14,14 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.mapAxisAligned
+import org.graphiks.math.matrix.mapAxisAlignedRect
 
 /**
  * A immediate-mode style 2D drawing surface that records drawing operations into
@@ -82,7 +88,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Draw a rounded rectangle filled/stroked with [paint]. */
-    fun drawRRect(rrect: RRect, paint: Paint) {
+    fun drawRRect(rrect: RRectF32, paint: Paint) {
         buffer.append(DisplayOp.DrawRRect(rrect, paint, currentTransform, currentRecordedClip))
     }
 
@@ -196,12 +202,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Fill the entire canvas with [color] using optional [mode] (default: SRC_OVER). */
-    fun drawColor(color: Color, mode: BlendMode = BlendMode.SRC_OVER) {
+    fun drawColor(color: ColorARGB, mode: BlendMode = BlendMode.SRC_OVER) {
         buffer.append(DisplayOp.DrawColor(color, mode, currentTransform, currentRecordedClip))
     }
 
     /** Overwrite the entire canvas with [color]. */
-    fun clear(color: Color) {
+    fun clear(color: ColorARGB) {
         buffer.append(DisplayOp.Clear(color))
     }
 
@@ -216,7 +222,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Draw a double rounded rectangle (outer fill, inner hole). */
-    fun drawDRRect(outer: RRect, inner: RRect, paint: Paint) {
+    fun drawDRRect(outer: RRectF32, inner: RRectF32, paint: Paint) {
         buffer.append(DisplayOp.DrawDRRect(outer, inner, paint, currentTransform, currentRecordedClip))
     }
 
@@ -255,7 +261,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Batch-draw sprites from [atlas] texture. */
-    fun drawAtlas(atlas: Image, transforms: List<Matrix3x3F32>, texRects: List<RectF32>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
+    fun drawAtlas(atlas: Image, transforms: List<Matrix3x3F32>, texRects: List<RectF32>, colors: List<ColorARGB>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
         buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentRecordedClip))
     }
 
@@ -379,7 +385,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      *
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
-    fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+    fun clipRRect(rrect: RRectF32, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         val newOp = captureClipRRect(rrect, op, antiAlias)
         currentClip = appendClip(currentClip, newOp, allowDeviceRect = false)
         currentRecordedClip = appendClip(currentRecordedClip, newOp, allowDeviceRect = false)
@@ -407,7 +413,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
 
-    private fun captureClipRRect(rrect: RRect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
+    private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
         currentTransform.isScaleTranslate() ->
             ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
         !currentTransform.hasPerspective() ->

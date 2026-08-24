@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -69,7 +69,7 @@ class StrokeRectGm : SkiaGm {
                     val paint = Paint(
                         antiAlias = true,
                         style = if (doFill != 0) PaintStyle.STROKE_AND_FILL else PaintStyle.STROKE,
-                        color = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+                        color = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
                         strokeWidth = STROKE_WIDTH,
                         strokeJoin = join,
                     )

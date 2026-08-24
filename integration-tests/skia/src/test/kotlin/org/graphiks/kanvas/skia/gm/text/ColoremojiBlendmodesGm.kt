@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -47,9 +47,9 @@ class ColoremojiBlendmodesGm : SkiaGm {
             val x = startX + col * cellSize
             val y = startY + row * cellSize
 
-            canvas.drawRect(RectF32(x, y, x + cellSize - 4f, y + cellSize - 4f), Paint(color = Color.RED))
+            canvas.drawRect(RectF32(x, y, x + cellSize - 4f, y + cellSize - 4f), Paint(color = ColorARGB.Red))
 
-            val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f), blendMode = mode)
+            val paint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f, 1f), blendMode = mode)
             canvas.drawSimpleText(text, x + 5f, y + 40f, font, paint)
         }
     }

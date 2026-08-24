@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.paint
 
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -22,15 +22,15 @@ class ImageFilterTest {
 
     @Test
     fun `DropShadow filter`() {
-        val f = ImageFilter.DropShadow(2f, 3f, 4f, 4f, Color.BLACK)
+        val f = ImageFilter.DropShadow(2f, 3f, 4f, 4f, ColorARGB.Black)
         assertEquals(2f, f.dx)
         assertEquals(3f, f.dy)
-        assertEquals(Color.BLACK, f.color)
+        assertEquals(ColorARGB.Black, f.color)
     }
 
     @Test
     fun `ColorFilter wrapper`() {
-        val cf = ColorFilter.Blend(Color.RED, BlendMode.MULTIPLY)
+        val cf = ColorFilter.Blend(ColorARGB.Red, BlendMode.MULTIPLY)
         val f = ImageFilter.ColorFilter(cf)
         assertEquals(cf, f.filter)
     }

@@ -34,11 +34,9 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.ShaderChild
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformValue
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.r
 import kotlin.math.pow
 
 data class GPUPreparedMaterialMapping(
@@ -372,8 +370,8 @@ private class PreparedMeshProgramChildMapper(
     ): PreparedMeshColorFilterMapping =
         when (filter) {
             is ColorFilter.Matrix -> {
-                val values = filter.values.toList()
-                if (values.size != 20 || values.any { !it.isFinite() }) {
+                val values = List(20) { index -> filter.matrix[index] }
+                if (values.any { !it.isFinite() }) {
                     PreparedMeshColorFilterMapping.Refused("invalid_color_filter_matrix")
                 } else {
                     PreparedMeshColorFilterMapping.Ready(
@@ -1426,11 +1424,11 @@ private class PreparedColorFilterFingerprinter {
         when (filter) {
             is ColorFilter.Matrix ->
                 readyIdentity("Matrix") {
-                    floats("values", filter.values)
+                    floats("values", filter.matrix.toFloatArray())
                 }
             is ColorFilter.Blend ->
                 readyIdentity("Blend") {
-                    long("color", filter.color.packed.toLong())
+                    long("color", filter.color.value.toLong())
                     text("mode", filter.mode.name)
                 }
             is ColorFilter.Compose ->
@@ -1452,8 +1450,8 @@ private class PreparedColorFilterFingerprinter {
                 }
             is ColorFilter.Lighting ->
                 readyIdentity("Lighting") {
-                    long("mul", filter.mul.packed.toLong())
-                    long("add", filter.add.packed.toLong())
+                    long("mul", filter.mul.value.toLong())
+                    long("add", filter.add.value.toLong())
                 }
             ColorFilter.SRGBToLinear -> readyIdentity("SRGBToLinear")
             ColorFilter.LinearToSRGB -> readyIdentity("LinearToSRGB")
@@ -1774,7 +1772,7 @@ private fun ColorFilter.applyTo(input: GPUMaterialDescriptor.SolidColor): Rgba? 
     applyTo(input.toRgba())
 
 private fun ColorFilter.applyTo(input: Rgba): Rgba? = when (this) {
-    is ColorFilter.Matrix -> values.applyColorMatrix(input)
+    is ColorFilter.Matrix -> matrix.applyColorMatrix(input)
     is ColorFilter.HSLAMatrix -> null
     is ColorFilter.Table -> table.applyTable(input)
     is ColorFilter.Lighting -> Rgba(
@@ -1811,10 +1809,9 @@ private fun ColorFilter.applyTo(input: Rgba): Rgba? = when (this) {
     is ColorFilter.RuntimeEffect -> null
 }
 
-private fun org.graphiks.kanvas.types.Color.toRgba(): Rgba = Rgba(r, g, b, a)
+private fun ColorARGB.toRgba(): Rgba = Rgba(redNormalized, greenNormalized, blueNormalized, alphaNormalized)
 
-private fun FloatArray.applyColorMatrix(input: Rgba): Rgba? {
-    if (size < 20) return null
+private fun ColorMatrixF32.applyColorMatrix(input: Rgba): Rgba? {
     return Rgba(
         r = this[0] * input.r + this[1] * input.g + this[2] * input.b + this[3] * input.a + this[4],
         g = this[5] * input.r + this[6] * input.g + this[7] * input.b + this[8] * input.a + this[9],

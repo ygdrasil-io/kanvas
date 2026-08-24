@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -31,11 +31,11 @@ class RadialGradient4Gm : SkiaGm {
         val center = Point2F32(250f, 250f)
         val radius = 250f
         val stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(0.4f, Color.RED),
-            GradientStop(0.4f, Color.WHITE),
-            GradientStop(0.8f, Color.WHITE),
-            GradientStop(0.8f, Color.RED),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(0.4f, ColorARGB.Red),
+            GradientStop(0.4f, ColorARGB.White),
+            GradientStop(0.8f, ColorARGB.White),
+            GradientStop(0.8f, ColorARGB.Red),
         )
         val shader = Shader.RadialGradient(
             center = center, radius = radius,

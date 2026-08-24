@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
@@ -40,7 +40,7 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
                             val paint = Paint(
                                 shader = shader,
                                 colorFilter = cf,
-                                color = Color.fromRGBA(1f, 1f, 1f, alpha),
+                                color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha),
                             )
                             val vertices = Vertices(
                                 mode = VertexMode.TRIANGLE_FAN,
@@ -64,13 +64,13 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
             start = Point2F32(K_SHADER_SIZE / 4f, 0f),
             end = Point2F32(3f * K_SHADER_SIZE / 4f, K_SHADER_SIZE),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f / 6f, Color(0xFF00FFFFu)),
-                GradientStop(2f / 6f, Color.GREEN),
-                GradientStop(3f / 6f, Color.WHITE),
-                GradientStop(4f / 6f, Color(0xFFFF00FFu)),
-                GradientStop(5f / 6f, Color.BLUE),
-                GradientStop(1f, Color(0xFFFFFF00u)),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f / 6f, ColorARGB.fromPackedUInt(0xFF00FFFFu)),
+                GradientStop(2f / 6f, ColorARGB.Green),
+                GradientStop(3f / 6f, ColorARGB.White),
+                GradientStop(4f / 6f, ColorARGB.fromPackedUInt(0xFFFF00FFu)),
+                GradientStop(5f / 6f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0xFFFFFF00u)),
             ),
             tileMode = TileMode.MIRROR,
         )
@@ -78,8 +78,8 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
         else Shader.WithLocalMatrix(Shader.WithLocalMatrix(base, Matrix3x3F32.translation(-10f, 0f)), Matrix3x3F32.translation(10f, 0f))
     }
 
-    private val shader2: Shader = Shader.SolidColor(Color.BLUE)
-    private val colorFilter = ColorFilter.Blend(Color(0xFFAABBCCu), BlendMode.DARKEN)
+    private val shader2: Shader = Shader.SolidColor(ColorARGB.Blue)
+    private val colorFilter = ColorFilter.Blend(ColorARGB.fromPackedUInt(0xFFAABBCCu), BlendMode.DARKEN)
 
     private data class Attrs(val hasColors: Boolean, val hasTexs: Boolean)
 

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class MaddashGm : SkiaGm {
@@ -30,7 +30,7 @@ class MaddashGm : SkiaGm {
 
         val intervals = floatArrayOf(2.5f, 10f)
         var p = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 380f,
             pathEffect = PathEffect.Dash(intervals, 0f),

@@ -5,18 +5,13 @@ import org.graphiks.math.color.halfToFloat
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.toArgbInt
 
 class Bitmap(val info: ImageInfo) {
     init {
@@ -51,7 +46,7 @@ class Bitmap(val info: ImageInfo) {
 
     val pixels: ByteArray = ByteArray(allocationByteCount)
 
-    fun getPixel(x: Int, y: Int): Color {
+    fun getPixel(x: Int, y: Int): ColorARGB {
         if (x !in 0 until width || y !in 0 until height) throw IndexOutOfBoundsException("($x, $y) outside ${width}x$height")
         val index = (y * width + x) * colorType.bytesPerPixel
         return when (colorType) {
@@ -60,22 +55,22 @@ class Bitmap(val info: ImageInfo) {
                 val g = pixels[index + 1].toInt() and 0xFF
                 val b = pixels[index + 2].toInt() and 0xFF
                 val a = pixels[index + 3].toInt() and 0xFF
-                Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+                ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
             }
             ColorType.BGRA_8888 -> {
                 val b = pixels[index].toInt() and 0xFF
                 val g = pixels[index + 1].toInt() and 0xFF
                 val r = pixels[index + 2].toInt() and 0xFF
                 val a = pixels[index + 3].toInt() and 0xFF
-                Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+                ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
             }
             ColorType.ALPHA_8 -> {
                 val a = pixels[index].toInt() and 0xFF
-                Color.fromRGBA(0f, 0f, 0f, a / 255f)
+                ColorARGB.fromRGBA(0f, 0f, 0f, a / 255f)
             }
             ColorType.GRAY_8 -> {
                 val l = (pixels[index].toInt() and 0xFF) / 255f
-                Color.fromRGBA(l, l, l, 1f)
+                ColorARGB.fromRGBA(l, l, l, 1f)
             }
             ColorType.RGBA_F16,
             ColorType.RGBA_F16_NORM,
@@ -88,8 +83,8 @@ class Bitmap(val info: ImageInfo) {
                 val pg = halfToFloat(gh.toShort())
                 val pb = halfToFloat(bh.toShort())
                 val pa = halfToFloat(ah.toShort())
-                if (pa == 0f) return Color.TRANSPARENT
-                Color.fromRGBA(
+                if (pa == 0f) return ColorARGB.Transparent
+                ColorARGB.fromRGBA(
                     (pr / pa).coerceIn(0f, 1f),
                     (pg / pa).coerceIn(0f, 1f),
                     (pb / pa).coerceIn(0f, 1f),
@@ -101,7 +96,7 @@ class Bitmap(val info: ImageInfo) {
                 val r5 = (p ushr 11) and 0x1F
                 val g6 = (p ushr 5) and 0x3F
                 val b5 = p and 0x1F
-                Color.fromRGBA(
+                ColorARGB.fromRGBA(
                     (r5 * 255 / 31) / 255f,
                     (g6 * 255 / 63) / 255f,
                     (b5 * 255 / 31) / 255f,
@@ -115,8 +110,8 @@ class Bitmap(val info: ImageInfo) {
                 val g4 = (p ushr 4) and 0xF
                 val b4 = p and 0xF
                 val pa = a4 / 15f
-                if (pa == 0f) return Color.TRANSPARENT
-                Color.fromRGBA(
+                if (pa == 0f) return ColorARGB.Transparent
+                ColorARGB.fromRGBA(
                     ((r4 / 15f) / pa).coerceIn(0f, 1f),
                     ((g4 / 15f) / pa).coerceIn(0f, 1f),
                     ((b4 / 15f) / pa).coerceIn(0f, 1f),
@@ -127,7 +122,7 @@ class Bitmap(val info: ImageInfo) {
         }
     }
 
-    fun setPixel(x: Int, y: Int, color: Color) {
+    fun setPixel(x: Int, y: Int, color: ColorARGB) {
         if (x !in 0 until width || y !in 0 until height) return
         val index = (y * width + x) * colorType.bytesPerPixel
         val r = color.r; val g = color.g; val b = color.b; val a = color.a
@@ -192,10 +187,10 @@ class Bitmap(val info: ImageInfo) {
         }
     }
 
-    fun getArgb(x: Int, y: Int): Int = getPixel(x, y).toArgbInt()
+    fun getArgb(x: Int, y: Int): Int = getPixel(x, y).toPackedInt()
 
     fun setArgb(x: Int, y: Int, argb: Int) {
-        setPixel(x, y, Color.fromArgbInt(argb))
+        setPixel(x, y, ColorARGB.fromPackedInt(argb))
     }
 
     fun setPremulRgbaF16(x: Int, y: Int, r: Float, g: Float, b: Float, a: Float) {
@@ -216,7 +211,7 @@ class Bitmap(val info: ImageInfo) {
         return true
     }
 
-    fun eraseColor(color: Color) {
+    fun eraseColor(color: ColorARGB) {
         val r = color.r; val g = color.g; val b = color.b; val a = color.a
         when (colorType) {
             ColorType.RGBA_8888 -> {
@@ -299,7 +294,7 @@ class Bitmap(val info: ImageInfo) {
         }
     }
 
-    fun eraseArea(rect: RectF32, color: Color) {
+    fun eraseArea(rect: RectF32, color: ColorARGB) {
         val sx = rect.left.toInt().coerceIn(0, width)
         val sy = rect.top.toInt().coerceIn(0, height)
         val sw = rect.width().toInt().coerceAtMost(width - sx)

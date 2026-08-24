@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -49,7 +49,7 @@ class PictureGm : SkiaGm {
         // 4. translate(330, 0), paint with alpha 0.5.
         canvas.save()
         canvas.translate(330f, 0f)
-        canvas.saveLayer(RectF32.ofLTRB(0f, 0f, 100f, 100f), Paint(color = Color(0x80FFFFFFu)))
+        canvas.saveLayer(RectF32.ofLTRB(0f, 0f, 100f, 100f), Paint(color = ColorARGB.fromPackedUInt(0x80FFFFFFu)))
         canvas.drawPicture(picture)
         canvas.restore()
         canvas.restore()
@@ -61,10 +61,10 @@ class PictureGm : SkiaGm {
 
         val paint = Paint(antiAlias = true)
 
-        paint.copy(color = Color(0x800000FFu)).let { recCanvas.drawRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f), it) }
-        paint.copy(color = Color(0x80FF0000u)).let { recCanvas.drawPath(makeTriangle(0f, 0f, 100f, 0f, 100f, 100f), it) }
-        paint.copy(color = Color(0x8000FF00u)).let { recCanvas.drawPath(makeTriangle(0f, 0f, 100f, 0f, 0f, 100f), it) }
-        paint.copy(color = Color(0x80FFFFFFu), blendMode = BlendMode.PLUS).let { recCanvas.drawRect(RectF32.ofLTRB(25f, 25f, 75f, 75f), it) }
+        paint.copy(color = ColorARGB.fromPackedUInt(0x800000FFu)).let { recCanvas.drawRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f), it) }
+        paint.copy(color = ColorARGB.fromPackedUInt(0x80FF0000u)).let { recCanvas.drawPath(makeTriangle(0f, 0f, 100f, 0f, 100f, 100f), it) }
+        paint.copy(color = ColorARGB.fromPackedUInt(0x8000FF00u)).let { recCanvas.drawPath(makeTriangle(0f, 0f, 100f, 0f, 0f, 100f), it) }
+        paint.copy(color = ColorARGB.fromPackedUInt(0x80FFFFFFu), blendMode = BlendMode.PLUS).let { recCanvas.drawRect(RectF32.ofLTRB(25f, 25f, 75f, 75f), it) }
 
         return rec.finishRecordingAsPicture()
     }

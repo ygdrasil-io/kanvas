@@ -54,7 +54,7 @@ sealed interface ClipStackOp {
 
     /** Rounded-rectangle clip operation. */
     data class RRectOp(
-        val rrect: org.graphiks.kanvas.types.RRect,
+        val rrect: org.graphiks.math.geometry.RRectF32,
         val op: ClipOp,
         override val antiAlias: Boolean = true,
         override val perspectiveCaptureRefusal: Boolean = false,

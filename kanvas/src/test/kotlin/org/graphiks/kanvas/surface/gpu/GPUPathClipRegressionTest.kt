@@ -5,7 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -34,7 +34,7 @@ class GPUPathClipRegressionTest {
                 canvas {
                     // The AA background paint (Paint.fill default) splits into its own uniform80
                     // layout run; the clipped path pair is the path-analytic-clip run.
-                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                     save()
                     clipRect(RectF32(8f, 8f, 24f, 24f))
                     drawPath(
@@ -44,7 +44,7 @@ class GPUPathClipRegressionTest {
                             lineTo(16f, 24f)
                             close()
                         },
-                        Paint.fill(Color.RED).copy(antiAlias = false),
+                        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     )
                     restore()
                 }
@@ -67,7 +67,7 @@ class GPUPathClipRegressionTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                     drawPath(
                         Path {
                             moveTo(8f, 8f)
@@ -75,7 +75,7 @@ class GPUPathClipRegressionTest {
                             lineTo(16f, 24f)
                             close()
                         },
-                        Paint.fill(Color.BLACK).copy(
+                        Paint.fill(ColorARGB.Black).copy(
                             antiAlias = false,
                             blendMode = BlendMode.DST_IN,
                         ),
@@ -102,10 +102,10 @@ class GPUPathClipRegressionTest {
         // dst-read family whose formula program is a designed closed refusal.
         val result = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White).copy(antiAlias = false))
                 drawRect(
                     RectF32(8f, 8f, 24f, 24f),
-                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                    Paint.fill(ColorARGB.Black).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 )
             }
             render()
@@ -133,7 +133,7 @@ class GPUPathClipRegressionTest {
         // copy, cover fan read-only + dst-read formula).
         val result = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White).copy(antiAlias = false))
                 drawPath(
                     Path {
                         moveTo(8f, 8f)
@@ -141,7 +141,7 @@ class GPUPathClipRegressionTest {
                         lineTo(16f, 24f)
                         close()
                     },
-                    Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
                 )
             }
             render()

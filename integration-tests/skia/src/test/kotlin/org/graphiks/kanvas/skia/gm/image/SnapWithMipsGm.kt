@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,12 +27,12 @@ class SnapWithMipsGm : SkiaGm {
         val surface = Surface(32, 32)
         val kPad = 8
 
-        fun nextImage(color: Color): Image {
+        fun nextImage(color: ColorARGB): Image {
             surface.canvas { clear(color) }
             val w = 32f
             val h = 32f
-            val contrastPacked = color.packed.inv() or 0xFF000000u
-            val contrastColor = Color(contrastPacked)
+            val contrastPacked = color.value.inv() or 0xFF000000u
+            val contrastColor = ColorARGB.fromPackedUInt(contrastPacked)
             surface.canvas {
                 drawRect(
                     RectF32.ofLTRB(w * 2f / 5f, h * 2f / 5f, w * 3f / 5f, h * 3f / 5f),
@@ -42,7 +42,7 @@ class SnapWithMipsGm : SkiaGm {
             return surface.makeImageSnapshot()
         }
 
-        val kColors = listOf(Color(0xFFF0F0F0u), Color.BLUE)
+        val kColors = listOf(ColorARGB.fromPackedUInt(0xFFF0F0F0u), ColorARGB.Blue)
 
         canvas.save()
         for (y in 0 until 3) {

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.max
 import kotlin.math.min
@@ -70,7 +70,7 @@ class HslBlendGm : SkiaGm {
     private typealias BlendFn = (dr: Float, dg: Float, db: Float,
                                   sr: FloatArray, sg: FloatArray, sb: FloatArray) -> Unit
 
-    private fun blend(dst: Color, src: Color, mode: BlendFn): Color {
+    private fun blend(dst: ColorARGB, src: ColorARGB, mode: BlendFn): ColorARGB {
         val d = toFloats(dst)
         val s = toFloats(src)
         val sr = floatArrayOf(s[0])
@@ -146,8 +146,8 @@ class HslBlendGm : SkiaGm {
         sr[0] = R[0]; sg[0] = G[0]; sb[0] = B[0]
     }
 
-    private fun toFloats(c: Color): FloatArray {
-        val packed = c.packed.toInt()
+    private fun toFloats(c: ColorARGB): FloatArray {
+        val packed = c.value.toInt()
         val r = (packed shr 16) and 0xFF
         val g = (packed shr 8) and 0xFF
         val b = packed and 0xFF
@@ -155,14 +155,14 @@ class HslBlendGm : SkiaGm {
         return floatArrayOf(r / 255f, g / 255f, b / 255f, a / 255f)
     }
 
-    private fun fromFloats(r: Float, g: Float, b: Float, a: Float): Color {
+    private fun fromFloats(r: Float, g: Float, b: Float, a: Float): ColorARGB {
         val ri = (r.coerceIn(0f, 1f) * 255f).toInt()
         val gi = (g.coerceIn(0f, 1f) * 255f).toInt()
         val bi = (b.coerceIn(0f, 1f) * 255f).toInt()
         val ai = (a.coerceIn(0f, 1f) * 255f).toInt()
-        return Color.fromRGBA(ri / 255f, gi / 255f, bi / 255f, ai / 255f)
+        return ColorARGB.fromRGBA(ri / 255f, gi / 255f, bi / 255f, ai / 255f)
     }
 
-    private fun argb(a: Int, r: Int, g: Int, b: Int): Color =
-        Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+    private fun argb(a: Int, r: Int, g: Int, b: Int): ColorARGB =
+        ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 }

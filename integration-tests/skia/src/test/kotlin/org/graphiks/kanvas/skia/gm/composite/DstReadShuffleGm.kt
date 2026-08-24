@@ -13,14 +13,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.b
 import kotlin.random.Random
 
 /** Port of Skia's `gm/dstreadshuffle.cpp`.
@@ -36,7 +33,7 @@ class DstReadShuffleGm : SkiaGm {
     override val width = 530
     override val height = 680
 
-    private val kBackground = Color.fromRGBA(0.66f, 0.66f, 0.66f)
+    private val kBackground = ColorARGB.fromRGBA(0.66f, 0.66f, 0.66f)
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     private var fConvexPath: Path? = null
@@ -76,7 +73,7 @@ class DstReadShuffleGm : SkiaGm {
         val kRect = RectF32.ofOriginSize(0f, 0f, 75f, 85f)
         when (type) {
             ShapeType.Circle -> canvas.drawCircle(kRect.center().x, kRect.center().y, kRect.width() / 2f, paint)
-            ShapeType.RoundRect -> canvas.drawRRect(RRect(kRect, 15f), paint)
+            ShapeType.RoundRect -> canvas.drawRRect(RRectF32.of(kRect, 15f), paint)
             ShapeType.Rect -> canvas.drawRect(kRect, paint)
             ShapeType.ConvexPath -> {
                 if (fConvexPath == null) {
@@ -123,12 +120,12 @@ class DstReadShuffleGm : SkiaGm {
         }
     }
 
-    private fun getColor(random: Random): Color {
+    private fun getColor(random: Random): ColorARGB {
         val c = random.nextInt()
         val r = ((c ushr 16) and 0xFF) / 255f
         val g = ((c ushr 8) and 0xFF) / 255f
         val b = (c and 0xFF) / 255f
-        return Color.fromRGBA(r, g, b, 0.5f)
+        return ColorARGB.fromRGBA(r, g, b, 0.5f)
     }
 
     private fun drawHairlines(canvas: org.graphiks.kanvas.canvas.Canvas) {

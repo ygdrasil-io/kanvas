@@ -80,17 +80,13 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.mapAxisAligned
-import org.graphiks.kanvas.types.mapAxisAlignedRect
+import org.graphiks.math.matrix.mapAxisAligned
+import org.graphiks.math.matrix.mapAxisAlignedRect
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.surface.RenderConfig
 
 internal data class GPUOpMapping(
@@ -2233,7 +2229,7 @@ private fun intersect(first: GPURect, second: GPURect): GPURect = GPURect(
 internal data class ImageCell(
     val src: RectF32,
     val dst: RectF32,
-    val color: Color? = null,
+    val color: ColorARGB? = null,
     val sourceIndex: Int = 0,
 )
 
@@ -2377,9 +2373,9 @@ private fun latticeDestinationBoundaries(
 }
 
 /** Applies the caller's alpha and blend mode without tinting a lattice fixed color. */
-internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
+internal fun fixedLatticeColorPaint(color: ColorARGB, paint: Paint?): Paint {
     val base = paint ?: Paint()
-    return base.copy(color = Color.fromRGBA(color.r, color.g, color.b, color.a * base.color.a))
+    return base.copy(color = ColorARGB.fromRGBA(color.r, color.g, color.b, color.a * base.color.a))
 }
 
 // ────────────────────────────────────────────────────────────────────────────

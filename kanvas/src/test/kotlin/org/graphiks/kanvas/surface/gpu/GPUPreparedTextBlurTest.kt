@@ -33,7 +33,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -92,7 +92,7 @@ class GPUPreparedTextBlurTest {
 
     @Test
     fun `blurred prepared draw bounds preserve the padded mask footprint`() {
-        val plain = preparation(listOf(text(Paint.fill(Color.WHITE))))
+        val plain = preparation(listOf(text(Paint.fill(ColorARGB.White))))
         val blurred = preparation(listOf(blurred(BlurStyle.NORMAL, 1f)))
         val plainBounds = assertIs<NormalizedDrawCommand.DrawTextRun>(
             plain.mapping.visualCommands.single().normalized,
@@ -125,7 +125,7 @@ class GPUPreparedTextBlurTest {
                 height = NATIVE_HEIGHT,
                 colorFormat = color.physicalFormat.value,
             )
-            val plainOperation = text(Paint.fill(Color.WHITE))
+            val plainOperation = text(Paint.fill(ColorARGB.White))
             val plainInventory = assertIs<GPUPreparedTextFramePreparation.Ready>(
                 GPUPreparedTextFramePreparer.prepare(
                     operations = listOf(plainOperation),
@@ -333,7 +333,7 @@ class GPUPreparedTextBlurTest {
         sigma: Float,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ): DisplayOp.DrawText = text(
-        Paint.fill(Color.WHITE).copy(maskFilter = MaskFilter.Blur(style, sigma)),
+        Paint.fill(ColorARGB.White).copy(maskFilter = MaskFilter.Blur(style, sigma)),
         transform,
     )
 

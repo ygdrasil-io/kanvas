@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/dftext_blob_persp.cpp::DFTextBlobPerspGM`.
@@ -29,7 +29,7 @@ class DfTextBlobPerspGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         val text = "SkiaText"
         val font = Font(typeface, size = 32f)
-        val paint = Paint(color = Color.BLACK)
+        val paint = Paint(color = ColorARGB.Black)
 
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
 

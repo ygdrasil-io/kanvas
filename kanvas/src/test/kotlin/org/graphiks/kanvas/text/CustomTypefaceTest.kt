@@ -2,7 +2,7 @@ package org.graphiks.kanvas.text
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -16,7 +16,7 @@ class CustomTypefaceTest {
         val typeface = CustomTypeface.Builder("test-user-typeface")
             .setMetrics(FontMetrics(ascent = 0.8f, descent = -0.2f, leading = 0.1f))
             .setGlyph('A'.code, advance = 0.6f, path = direct)
-            .setDrawableGlyph('B'.code, advance = 0.7f, path = drawable, paint = Paint.fill(Color.fromArgb(255, 0, 128, 0)))
+            .setDrawableGlyph('B'.code, advance = 0.7f, path = drawable, paint = Paint.fill(ColorARGB.of(255, 0, 128, 0)))
             .build()
 
         val decoded = CustomTypeface.deserialize(typeface.serialize())
@@ -26,6 +26,6 @@ class CustomTypefaceTest {
         assertNotNull(decoded.getGlyphPath('B'.code, 20f))
         assertEquals(16f, decoded.getMetrics(20f)?.ascent)
         val painted = assertIs<GlyphPaintProvider>(decoded).paintForGlyph('B'.code)
-        assertEquals(Color.fromArgb(255, 0, 128, 0), painted?.color)
+        assertEquals(ColorARGB.of(255, 0, 128, 0), painted?.color)
     }
 }

@@ -26,11 +26,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZ
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -40,8 +40,8 @@ class GPUPreparedVerticesSemanticBuilderTest {
         val inventory = plan(
             listOf(
                 rect(),
-                vertices(Color.RED, Matrix3x3F32.Identity),
-                vertices(Color.BLUE, Matrix3x3F32.translation(3f, 4f)),
+                vertices(ColorARGB.Red, Matrix3x3F32.Identity),
+                vertices(ColorARGB.Blue, Matrix3x3F32.translation(3f, 4f)),
             ),
         )
 
@@ -173,7 +173,7 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     @Test
     fun `missing duplicate reordered and type-confused vertices authorities refuse atomically`() {
-        val inventory = plan(listOf(rect(), vertices(Color.RED), vertices(Color.BLUE)))
+        val inventory = plan(listOf(rect(), vertices(ColorARGB.Red), vertices(ColorARGB.Blue)))
         val prepared = assertNotNull(inventory.preparedVerticesInventory)
         val verticesIds = prepared.artifactKeyByCommandId.keys
         assertEquals(setOf(1, 2), verticesIds)
@@ -268,7 +268,7 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     @Test
     fun `analysis and semantic-only projections must preserve normalized command order`() {
-        val inventory = plan(listOf(rect(), vertices(Color.RED), vertices(Color.BLUE)))
+        val inventory = plan(listOf(rect(), vertices(ColorARGB.Red), vertices(ColorARGB.Blue)))
         val reorderedAnalysis = inventory.copy(
             recording = inventory.recording.copy(
                 analysis = inventory.recording.analysis.copy(
@@ -317,7 +317,7 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     @Test
     fun `record packet and target authority mutations refuse before semantic publication`() {
-        val inventory = plan(listOf(vertices(Color.RED)))
+        val inventory = plan(listOf(vertices(ColorARGB.Red)))
         val record = inventory.recording.analysis.records.single()
         val recordMutations = listOf(
             record.copy(recordId = "forged.record"),
@@ -450,7 +450,7 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     @Test
     fun `foreign core and clip producer authorities refuse before semantic publication`() {
-        val inventory = plan(listOf(vertices(Color.RED)))
+        val inventory = plan(listOf(vertices(ColorARGB.Red)))
         val record = inventory.recording.analysis.records.single()
         val rectRecord = plan(listOf(rect())).recording.analysis.records.single()
         val rrectRecord = plan(listOf(rrect())).recording.analysis.records.single()
@@ -670,20 +670,20 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     private fun rect() = DisplayOp.DrawRect(
         RectF32.ofLTRB(1f, 1f, 7f, 7f),
-        Paint.fill(Color.GREEN).copy(antiAlias = false),
+        Paint.fill(ColorARGB.Green).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
     private fun rrect() = DisplayOp.DrawRRect(
-        RRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 1f),
-        Paint.fill(Color.GREEN).copy(antiAlias = false),
+        RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 1f),
+        Paint.fill(ColorARGB.Green).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
     private fun vertices(
-        color: Color,
+        color: ColorARGB,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
     ) = DisplayOp.DrawVertices(
         Vertices(

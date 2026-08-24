@@ -2,7 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -10,7 +10,7 @@ class GPUImagePixelsTest {
     @Test
     fun `expands RGB565 pixels to RGBA upload bytes`() {
         val bitmap = Bitmap(128, 128, ColorType.RGB_565)
-        bitmap.eraseColor(Color.RED)
+        bitmap.eraseColor(ColorARGB.Red)
 
         val rgba = requireNotNull(bitmap.toImageOrNull()).expandToRgbaForGpu()
 
@@ -24,7 +24,7 @@ class GPUImagePixelsTest {
     @Test
     fun `expands gray8 pixels to opaque grayscale upload bytes`() {
         val bitmap = Bitmap(1, 1, ColorType.GRAY_8)
-        bitmap.setPixel(0, 0, Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
+        bitmap.setPixel(0, 0, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
 
         val rgba = requireNotNull(bitmap.toImageOrNull()).expandToRgbaForGpu()
 

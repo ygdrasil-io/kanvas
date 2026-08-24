@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -35,10 +35,10 @@ class CompareAtlasVerticesGm : SkiaGm {
         val tex = RectF32.ofOriginSize(0f, 0f, 128f, 128f)
         val atlas = makeTestImage()
         val identity = Matrix3x3F32.Identity
-        val colorList = listOf(Color.fromRGBA(0.53f, 0.27f, 0.53f, 0.53f))
+        val colorList = listOf(ColorARGB.fromRGBA(0.53f, 0.27f, 0.53f, 0.53f))
 
         val modes = listOf(BlendMode.SRC_OVER, BlendMode.PLUS)
-        val filters = listOf<ColorFilter?>(null, ColorFilter.Blend(Color.fromRGBA(0f, 1f, 0.53f, 1f), BlendMode.MODULATE))
+        val filters = listOf<ColorFilter?>(null, ColorFilter.Blend(ColorARGB.fromRGBA(0f, 1f, 0.53f, 1f), BlendMode.MODULATE))
 
         canvas.translate(10f, 10f)
 
@@ -46,12 +46,12 @@ class CompareAtlasVerticesGm : SkiaGm {
             for (alpha in listOf(1f, 0.5f)) {
                 canvas.save()
                 for (cf in filters) {
-                    val atlasPaint = Paint(blendMode = mode, colorFilter = cf, color = Color.fromRGBA(1f, 1f, 1f, alpha))
+                    val atlasPaint = Paint(blendMode = mode, colorFilter = cf, color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha))
                     canvas.drawAtlas(atlas, listOf(identity), listOf(tex), colors = colorList, blendMode = mode, paint = atlasPaint)
                     canvas.translate(128f, 0f)
 
                     val verts = makeVertices(tex, colorList[0])
-                    val vertPaint = Paint(blendMode = mode, colorFilter = cf, color = Color.fromRGBA(1f, 1f, 1f, alpha))
+                    val vertPaint = Paint(blendMode = mode, colorFilter = cf, color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha))
                     canvas.drawVertices(verts, vertPaint)
                     canvas.translate(145f, 0f)
                 }
@@ -80,7 +80,7 @@ class CompareAtlasVerticesGm : SkiaGm {
         return Image.fromPixels(w, h, pixels, ColorType.RGBA_8888, "test-atlas")
     }
 
-    private fun makeVertices(r: RectF32, color: Color): Vertices {
+    private fun makeVertices(r: RectF32, color: ColorARGB): Vertices {
         val pos = listOf(Point2F32(r.left, r.top), Point2F32(r.right, r.top), Point2F32(r.right, r.bottom), Point2F32(r.left, r.bottom))
         val colors = List(4) { color }
         return Vertices(mode = VertexMode.TRIANGLE_FAN, positions = pos, texCoords = pos, colors = colors)

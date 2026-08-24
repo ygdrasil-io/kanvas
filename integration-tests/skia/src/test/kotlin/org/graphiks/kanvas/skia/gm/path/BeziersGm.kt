@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.random.Random
 
 /**
@@ -51,11 +51,11 @@ class BeziersGm : SkiaGm {
             }
         }
         val c32 = rand.nextInt()
-        val color = Color.fromRGBA(
-            r = ((c32 ushr 16) and 0xFF) / 255f,
-            g = ((c32 ushr 8) and 0xFF) / 255f,
-            b = (c32 and 0xFF) / 255f,
-            a = 1f,
+        val color = ColorARGB.fromRGBA(
+            red = ((c32 ushr 16) and 0xFF) / 255f,
+            green = ((c32 ushr 8) and 0xFF) / 255f,
+            blue = (c32 and 0xFF) / 255f,
+            alpha = 1f,
         )
         var strokeW = rand.nextFloat() * 4f + 1f
         strokeW *= strokeW
@@ -84,11 +84,11 @@ class BeziersGm : SkiaGm {
             }
         }
         val c32 = rand.nextInt()
-        val color = Color.fromRGBA(
-            r = ((c32 ushr 16) and 0xFF) / 255f,
-            g = ((c32 ushr 8) and 0xFF) / 255f,
-            b = (c32 and 0xFF) / 255f,
-            a = 1f,
+        val color = ColorARGB.fromRGBA(
+            red = ((c32 ushr 16) and 0xFF) / 255f,
+            green = ((c32 ushr 8) and 0xFF) / 255f,
+            blue = (c32 and 0xFF) / 255f,
+            alpha = 1f,
         )
         var strokeW = rand.nextFloat() * 4f + 1f
         strokeW *= strokeW

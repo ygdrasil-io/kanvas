@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.cos
 import kotlin.math.sin
@@ -28,7 +28,7 @@ class MandolineGm : SkiaGm {
     override val height = 475
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(color = Color.WHITE, antiAlias = true)
+        val paint = Paint(color = ColorARGB.White, antiAlias = true)
 
         canvas.drawColor(0f, 0f, 0f, 1f)
 

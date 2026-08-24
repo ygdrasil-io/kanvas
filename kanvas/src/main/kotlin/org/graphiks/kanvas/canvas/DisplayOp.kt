@@ -6,9 +6,9 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Mesh
@@ -44,7 +44,7 @@ sealed interface DisplayOp {
 
     /** Draw a rounded rectangle. */
     data class DrawRRect(
-        val rrect: RRect, val paint: Paint,
+        val rrect: RRectF32, val paint: Paint,
         val transform: Matrix3x3F32, val clip: ClipStack,
     ) : DisplayOp
 
@@ -117,10 +117,10 @@ sealed interface DisplayOp {
     data object EndLayer : DisplayOp
 
     /** Fill the entire canvas with a color and blend mode. */
-    data class DrawColor(val color: Color, val mode: BlendMode, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawColor(val color: ColorARGB, val mode: BlendMode, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Overwrite the entire canvas with a color (ignores blend mode). */
-    data class Clear(val color: Color) : DisplayOp
+    data class Clear(val color: ColorARGB) : DisplayOp
 
     /** Draw a single point primitive. */
     data class DrawPoint(val x: Float, val y: Float, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
@@ -129,7 +129,7 @@ sealed interface DisplayOp {
     data class DrawPoints(val mode: PointMode, val points: List<Point2F32>, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw a double rounded rectangle (outer + inner). */
-    data class DrawDRRect(val outer: RRect, val inner: RRect, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawDRRect(val outer: RRectF32, val inner: RRectF32, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw a 9-patch image. */
     data class DrawImageNine(val image: Image, val center: RectF32, val dst: RectF32, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
@@ -159,7 +159,7 @@ sealed interface DisplayOp {
     ) : DisplayOp
 
     /** Batch-draw sprites from an atlas texture. */
-    data class DrawAtlas(val atlas: Image, val transforms: List<Matrix3x3F32>, val texRects: List<RectF32>, val colors: List<Color>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawAtlas(val atlas: Image, val transforms: List<Matrix3x3F32>, val texRects: List<RectF32>, val colors: List<ColorARGB>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Metadata annotation (no visual output). */
     data class Annotation(val rect: RectF32, val key: String, val value: String) : DisplayOp

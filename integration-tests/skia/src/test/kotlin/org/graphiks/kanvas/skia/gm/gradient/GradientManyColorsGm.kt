@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -60,29 +60,29 @@ class GradientManyColorsGm : SkiaGm {
         }
     }
 
-    private data class ColorPos(val colors: List<Color>, val pos: FloatArray?)
+    private data class ColorPos(val colors: List<ColorARGB>, val pos: FloatArray?)
 
     private fun make0(): ColorPos {
         val colors = listOf(
-            Color.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
-            Color.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
-            Color.fromRGBA(0xDF / 255f, 0x4B / 255f, 0x37 / 255f, 1f),
-            Color.fromRGBA(0xDF / 255f, 0x4B / 255f, 0x37 / 255f, 1f),
-            Color.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
-            Color.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
-            Color.fromRGBA(0xE6 / 255f, 0xDE / 255f, 0x36 / 255f, 1f),
-            Color.fromRGBA(0xE6 / 255f, 0xDE / 255f, 0x36 / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
-            Color.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
-            Color.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
-            Color.fromRGBA(0xE3 / 255f, 0xD0 / 255f, 0x82 / 255f, 1f),
+            ColorARGB.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
+            ColorARGB.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
+            ColorARGB.fromRGBA(0xDF / 255f, 0x4B / 255f, 0x37 / 255f, 1f),
+            ColorARGB.fromRGBA(0xDF / 255f, 0x4B / 255f, 0x37 / 255f, 1f),
+            ColorARGB.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
+            ColorARGB.fromRGBA(0x22 / 255f, 0xD1 / 255f, 0xCD / 255f, 1f),
+            ColorARGB.fromRGBA(0xE6 / 255f, 0xDE / 255f, 0x36 / 255f, 1f),
+            ColorARGB.fromRGBA(0xE6 / 255f, 0xDE / 255f, 0x36 / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
+            ColorARGB.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
+            ColorARGB.fromRGBA(0x9D / 255f, 0x47 / 255f, 0xD1 / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0x32 / 255f, 0x67 / 255f, 0xFF / 255f, 1f),
+            ColorARGB.fromRGBA(0xE3 / 255f, 0xD0 / 255f, 0x82 / 255f, 1f),
         )
         val percent = doubleArrayOf(
             1.0, 0.9510157507590116, 2.9510157507590113, 23.695886056604927,
@@ -100,18 +100,18 @@ class GradientManyColorsGm : SkiaGm {
 
     private fun make1(): ColorPos {
         val colors = listOf(
-            Color.BLACK, Color.WHITE, Color.BLACK, Color.WHITE,
-            Color.BLACK, Color.WHITE, Color.BLACK, Color.WHITE,
-            Color.BLACK,
+            ColorARGB.Black, ColorARGB.White, ColorARGB.Black, ColorARGB.White,
+            ColorARGB.Black, ColorARGB.White, ColorARGB.Black, ColorARGB.White,
+            ColorARGB.Black,
         )
         return ColorPos(colors, null)
     }
 
     private fun make2(): ColorPos {
         val colors = listOf(
-            Color.BLACK, Color.WHITE, Color.BLACK, Color.WHITE,
-            Color.BLACK, Color.WHITE, Color.BLACK, Color.WHITE,
-            Color.BLACK,
+            ColorARGB.Black, ColorARGB.White, ColorARGB.Black, ColorARGB.White,
+            ColorARGB.Black, ColorARGB.White, ColorARGB.Black, ColorARGB.White,
+            ColorARGB.Black,
         )
         val n = colors.size
         val pos = FloatArray(n) { it.toFloat() / (n - 1).toFloat() }
@@ -122,7 +122,7 @@ class GradientManyColorsGm : SkiaGm {
 
     private fun make3(): ColorPos {
         val colors = listOf(
-            Color.RED, Color.BLUE, Color.BLUE, Color.GREEN, Color.GREEN, Color.BLACK,
+            ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue, ColorARGB.Green, ColorARGB.Green, ColorARGB.Black,
         )
         val pos = floatArrayOf(0f, 0f, 0.5f, 0.5f, 1f, 1f)
         return ColorPos(colors, pos)

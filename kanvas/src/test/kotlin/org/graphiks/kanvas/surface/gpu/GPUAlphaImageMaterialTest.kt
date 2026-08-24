@@ -35,14 +35,10 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -72,7 +68,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `alpha image shader uploads white mask pixels and carries paint tint`() {
         val paint = Paint(
-            color = Color.fromRGBA(0f, 1f, 0f, 0.5f),
+            color = ColorARGB.fromRGBA(0f, 1f, 0f, 0.5f),
             shader = Shader.Image(alphaImage),
         )
 
@@ -94,7 +90,7 @@ class GPUAlphaImageMaterialTest {
 
     @Test
     fun `draw image command carries alpha image tint from paint`() {
-        val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f, 0.5f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f, 0.5f))
         val op = DisplayOp.DrawImage(
             image = alphaImage,
             src = RectF32(0f, 0f, 2f, 1f),
@@ -124,7 +120,7 @@ class GPUAlphaImageMaterialTest {
             image = preparedAlphaImage,
             src = RectF32(0f, 0f, 2f, 1f),
             dst = RectF32(0f, 0f, 2f, 1f),
-            paint = Paint.fill(Color.RED).copy(
+            paint = Paint.fill(ColorARGB.Red).copy(
                 shader = Shader.Image(preparedAlphaImage, sampling = SamplingOptions.NEAREST),
             ),
             transform = Matrix3x3F32.Identity,
@@ -170,7 +166,7 @@ class GPUAlphaImageMaterialTest {
 
     @Test
     fun `draw image command carries paint alpha for rgba image without rgb tint`() {
-        val paint = Paint(color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.4f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.4f))
         val op = DisplayOp.DrawImage(
             image = rgbaImage,
             src = RectF32(0f, 0f, 1f, 1f),
@@ -196,7 +192,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `image material with pixels is accepted for fill dispatch`() {
         val material = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             shader = Shader.Image(alphaImage),
         ).toMaterial()
         val op = DisplayOp.DrawRect(
@@ -224,8 +220,8 @@ class GPUAlphaImageMaterialTest {
                         center = Point2F32(4f, 4f),
                         radius = 4f,
                         stops = listOf(
-                            GradientStop(0f, Color.RED),
-                            GradientStop(1f, Color.BLUE),
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
                         ),
                     ),
                     matrix = Matrix3x3F32.of(
@@ -265,7 +261,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `draw image command dispatches alpha texture and tint uniforms`() {
         val paint = Paint(
-            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
+            color = ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
             blendMode = BlendMode.SRC_OVER,
         )
         val op = DisplayOp.DrawImage(
@@ -373,7 +369,7 @@ class GPUAlphaImageMaterialTest {
     @Test
     fun `alpha image shader fill path dispatches texture with stencil test`() {
         val paint = Paint(
-            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.7f),
+            color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.7f),
             shader = Shader.Image(alphaImage),
         )
         val path = Path().apply {
@@ -441,7 +437,7 @@ class GPUAlphaImageMaterialTest {
         }
         val command = DisplayOp.DrawPath(
             path = path,
-            paint = Paint.fill(Color.RED),
+            paint = Paint.fill(ColorARGB.Red),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         ).toNormalizedCommand(
@@ -484,7 +480,7 @@ class GPUAlphaImageMaterialTest {
     fun `path fill rejects non finite vertices before stencil fan creation`() {
         val command = DisplayOp.DrawPath(
             path = Path().addRect(RectF32(2f, 2f, 6f, 5f)),
-            paint = Paint.fill(Color.RED),
+            paint = Paint.fill(ColorARGB.Red),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         ).toNormalizedCommand(

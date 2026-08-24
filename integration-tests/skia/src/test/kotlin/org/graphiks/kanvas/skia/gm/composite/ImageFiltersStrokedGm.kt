@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,7 +31,7 @@ class ImageFiltersStrokedGm : SkiaGm {
 
         val filters: Array<ImageFilter?> = arrayOf(
             ImageFilter.Blur(5f, 5f, input = null),
-            ImageFilter.DropShadow(10f, 10f, 3f, 3f, Color.GREEN, null),
+            ImageFilter.DropShadow(10f, 10f, 3f, 3f, ColorARGB.Green, null),
             ImageFilter.Offset(-16f, 32f, null),
             ImageFilter.Dilate(4f, 4f, null),
         )
@@ -39,7 +39,7 @@ class ImageFiltersStrokedGm : SkiaGm {
         val r = RectF32(0f, 0f, 64f, 64f)
         val margin = 32f
         val paint = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             antiAlias = true,
             strokeWidth = 10f,
             style = PaintStyle.STROKE,

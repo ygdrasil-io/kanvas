@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -36,26 +36,26 @@ class LcdBlendGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         // Background checker
         val checker = Paint(
-            shader = checkerboardShader(Color.BLACK, Color.WHITE, 4),
+            shader = checkerboardShader(ColorARGB.Black, ColorARGB.White, 4),
         )
         canvas.drawRect(RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()), checker)
 
         // Render into offscreen surface, then composite
         val surface = Surface(kWidth, kHeight)
         surface.canvas {
-            drawColumn(this, argb(255, 0, 0, 0), Color.WHITE, useGrad = false)
+            drawColumn(this, argb(255, 0, 0, 0), ColorARGB.White, useGrad = false)
             translate(kColWidth.toFloat(), 0f)
-            drawColumn(this, Color.WHITE, Color.BLACK, useGrad = false)
+            drawColumn(this, ColorARGB.White, ColorARGB.Black, useGrad = false)
             translate(kColWidth.toFloat(), 0f)
-            drawColumn(this, Color.GREEN, argb(255, 255, 0, 255), useGrad = false)
+            drawColumn(this, ColorARGB.Green, argb(255, 255, 0, 255), useGrad = false)
             translate(kColWidth.toFloat(), 0f)
-            drawColumn(this, Color.fromRGBA(0f, 1f, 1f, 1f), argb(255, 255, 0, 255), useGrad = true)
+            drawColumn(this, ColorARGB.fromRGBA(0f, 1f, 1f, 1f), argb(255, 255, 0, 255), useGrad = true)
         }
         val surfImage = surface.makeImageSnapshot()
         canvas.drawImage(surfImage, RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()))
     }
 
-    private fun drawColumn(canvas: Canvas, backgroundColor: Color, textColor: Color, useGrad: Boolean) {
+    private fun drawColumn(canvas: Canvas, backgroundColor: ColorARGB, textColor: ColorARGB, useGrad: Boolean) {
         val gModes = listOf(
             BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST,
             BlendMode.SRC_OVER, BlendMode.DST_OVER,
@@ -93,13 +93,13 @@ class LcdBlendGm : SkiaGm {
         start = Point2F32(bounds.left, bounds.top),
         end = Point2F32(bounds.right, bounds.bottom),
         stops = listOf(
-            GradientStop(0f, Color.RED),
-            GradientStop(1f, Color.GREEN),
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Green),
         ),
         tileMode = TileMode.REPEAT,
     )
 
-    private fun checkerboardShader(c1: Color, c2: Color, size: Int): Shader {
+    private fun checkerboardShader(c1: ColorARGB, c2: ColorARGB, size: Int): Shader {
         val w = size * 2
         val h = size * 2
         val pixels = ByteArray(w * h * 4)
@@ -119,8 +119,8 @@ class LcdBlendGm : SkiaGm {
         return Shader.Image(img, TileMode.REPEAT, TileMode.REPEAT)
     }
 
-    private fun colorToBytes(c: Color): ByteArray {
-        val packed = c.packed.toInt()
+    private fun colorToBytes(c: ColorARGB): ByteArray {
+        val packed = c.value.toInt()
         return byteArrayOf(
             ((packed shr 16) and 0xFF).toByte(),
             ((packed shr 8) and 0xFF).toByte(),
@@ -136,6 +136,6 @@ class LcdBlendGm : SkiaGm {
         const val kHeight = 750
     }
 
-    private fun argb(a: Int, r: Int, g: Int, b: Int): Color =
-        Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+    private fun argb(a: Int, r: Int, g: Int, b: Int): ColorARGB =
+        ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 }

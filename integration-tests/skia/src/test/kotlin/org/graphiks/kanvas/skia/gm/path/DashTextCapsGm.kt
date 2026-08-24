@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -34,7 +34,7 @@ class DashTextCapsGm : SkiaGm {
             strokeWidth = 10f,
             strokeCap = StrokeCap.ROUND,
             strokeJoin = StrokeJoin.ROUND,
-            color = Color.fromRGBA(0xBB.toFloat() / 255f, 0f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0xBB.toFloat() / 255f, 0f, 0f, 1f),
             pathEffect = PathEffect.Dash(floatArrayOf(12f, 12f), 0f),
         )
 

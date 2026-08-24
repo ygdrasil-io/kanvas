@@ -5,7 +5,7 @@ import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -71,11 +71,11 @@ class BitmapTest {
     fun `F16 normalized supports the existing F16 pixel operations`() {
         val bitmap = Bitmap(1, 1, ColorType.RGBA_F16_NORM)
 
-        bitmap.setPixel(0, 0, Color.RED)
-        assertEquals(Color.RED, bitmap.getPixel(0, 0))
+        bitmap.setPixel(0, 0, ColorARGB.Red)
+        assertEquals(ColorARGB.Red, bitmap.getPixel(0, 0))
 
-        bitmap.eraseColor(Color.BLUE)
-        assertEquals(Color.BLUE, bitmap.getPixel(0, 0))
+        bitmap.eraseColor(ColorARGB.Blue)
+        assertEquals(ColorARGB.Blue, bitmap.getPixel(0, 0))
     }
 
     @Test
@@ -108,26 +108,26 @@ class BitmapTest {
     @Test
     fun `setPixel and getPixel round-trip RGBA`() {
         val bmp = Bitmap(2, 2)
-        bmp.setPixel(0, 0, Color.RED)
-        assertEquals(Color.RED, bmp.getPixel(0, 0))
+        bmp.setPixel(0, 0, ColorARGB.Red)
+        assertEquals(ColorARGB.Red, bmp.getPixel(0, 0))
     }
 
     @Test
-    fun `setArgb and getArgb round-trip packed Color bits`() {
+    fun `setArgb and getArgb round-trip packed ColorARGB bits`() {
         val bmp = Bitmap(2, 2)
         val argb = 0x8044AA11.toInt()
 
         bmp.setArgb(1, 0, argb)
 
         assertEquals(argb, bmp.getArgb(1, 0))
-        assertEquals(Color.fromArgbInt(argb), bmp.getPixel(1, 0))
+        assertEquals(ColorARGB.fromPackedInt(argb), bmp.getPixel(1, 0))
     }
 
     @Test
     fun `setPixel out of bounds is no-op`() {
         val bmp = Bitmap(2, 2)
-        bmp.setPixel(10, 10, Color.RED)
-        assertEquals(Color(0u), bmp.getPixel(1, 1))
+        bmp.setPixel(10, 10, ColorARGB.Red)
+        assertEquals(ColorARGB.fromPackedUInt(0u), bmp.getPixel(1, 1))
     }
 
     @Test
@@ -141,10 +141,10 @@ class BitmapTest {
     @Test
     fun `eraseColor fills all pixels`() {
         val bmp = Bitmap(4, 4)
-        bmp.eraseColor(Color.RED)
+        bmp.eraseColor(ColorARGB.Red)
         for (y in 0 until 4) {
             for (x in 0 until 4) {
-                assertEquals(Color.RED, bmp.getPixel(x, y))
+                assertEquals(ColorARGB.Red, bmp.getPixel(x, y))
             }
         }
     }
@@ -152,33 +152,33 @@ class BitmapTest {
     @Test
     fun `eraseArea fills sub-region only`() {
         val bmp = Bitmap(4, 4)
-        bmp.eraseColor(Color.BLUE)
-        bmp.eraseArea(RectF32(1f, 1f, 3f, 3f), Color.RED)
-        assertEquals(Color.RED, bmp.getPixel(1, 1))
-        assertEquals(Color.RED, bmp.getPixel(2, 2))
-        assertEquals(Color.BLUE, bmp.getPixel(0, 0))
-        assertEquals(Color.BLUE, bmp.getPixel(3, 3))
+        bmp.eraseColor(ColorARGB.Blue)
+        bmp.eraseArea(RectF32(1f, 1f, 3f, 3f), ColorARGB.Red)
+        assertEquals(ColorARGB.Red, bmp.getPixel(1, 1))
+        assertEquals(ColorARGB.Red, bmp.getPixel(2, 2))
+        assertEquals(ColorARGB.Blue, bmp.getPixel(0, 0))
+        assertEquals(ColorARGB.Blue, bmp.getPixel(3, 3))
     }
 
     @Test
     fun `extractSubset copies pixel data`() {
         val bmp = Bitmap(4, 4)
-        bmp.eraseColor(Color.RED)
-        bmp.setPixel(0, 0, Color.BLUE)
+        bmp.eraseColor(ColorARGB.Red)
+        bmp.setPixel(0, 0, ColorARGB.Blue)
         val subset = bmp.extractSubset(RectF32(0f, 0f, 2f, 2f))
         assertEquals(2, subset.width)
         assertEquals(2, subset.height)
-        assertEquals(Color.BLUE, subset.getPixel(0, 0))
-        assertEquals(Color.RED, subset.getPixel(1, 1))
+        assertEquals(ColorARGB.Blue, subset.getPixel(0, 0))
+        assertEquals(ColorARGB.Red, subset.getPixel(1, 1))
     }
 
     @Test
     fun `toImageOrNull returns independent copy`() {
         val bmp = Bitmap(2, 2)
-        bmp.eraseColor(Color.RED)
+        bmp.eraseColor(ColorARGB.Red)
         val img = requireNotNull(bmp.toImageOrNull())
-        bmp.setPixel(0, 0, Color.BLUE)
-        assertEquals(Color.RED, Color.fromRGBA(1f, 0f, 0f, 1f))
+        bmp.setPixel(0, 0, ColorARGB.Blue)
+        assertEquals(ColorARGB.Red, ColorARGB.fromRGBA(1f, 0f, 0f, 1f))
         assertEquals(AlphaType.UNPREMUL, img.alphaType)
     }
 
@@ -207,7 +207,7 @@ class BitmapTest {
     @Test
     fun `makeShader returns correct wrapping`() {
         val bmp = Bitmap(2, 2)
-        bmp.eraseColor(Color.RED)
+        bmp.eraseColor(ColorARGB.Red)
         val shader = bmp.makeShader(TileMode.REPEAT, TileMode.MIRROR, SamplingOptions.LINEAR, Matrix3x3F32.Identity)
         val wrapped = shader as org.graphiks.kanvas.paint.Shader.WithLocalMatrix
         val inner = wrapped.shader as org.graphiks.kanvas.paint.Shader.Image

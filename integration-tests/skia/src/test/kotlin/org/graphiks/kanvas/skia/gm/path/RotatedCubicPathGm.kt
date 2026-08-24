@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/pathfill.cpp` `DEF_SIMPLE_GM(rotatedcubicpath, …)`.
@@ -38,9 +38,9 @@ class RotatedCubicPathGm : SkiaGm {
             close()
         }
 
-        canvas.drawPath(path, paint.copy(color = Color.BLUE))
+        canvas.drawPath(path, paint.copy(color = ColorARGB.Blue))
 
         canvas.rotate(90f)
-        canvas.drawPath(path, paint.copy(color = Color.RED))
+        canvas.drawPath(path, paint.copy(color = ColorARGB.Red))
     }
 }

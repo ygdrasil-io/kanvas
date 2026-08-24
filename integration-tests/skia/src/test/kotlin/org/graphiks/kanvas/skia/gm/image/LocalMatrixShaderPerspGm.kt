@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -62,8 +62,8 @@ class LocalMatrixShaderPerspGm : SkiaGm {
         val gradShader = Shader.RadialGradient(
             center = Point2F32(fw / 2f, fh / 2f), radius = fw / 2f,
             stops = listOf(
-                GradientStop(0f, Color.BLACK),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.Black),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
             tileMode = TileMode.REPEAT,
         )

@@ -23,14 +23,14 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 
 class GPUPreparedTextSemanticBuilderTest {
     @Test
     fun `COLRv0 currentColor sRGB becomes exact linear premultiplied layer color`() {
-        val currentColor = Color.fromRGBA(0.5f, 0.25f, 0.75f, 0.625f)
+        val currentColor = ColorARGB.fromRGBA(0.5f, 0.25f, 0.75f, 0.625f)
         val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
             GPUPreparedTextFramePreparer.prepare(
                 operations = listOf(
@@ -458,7 +458,7 @@ class GPUPreparedTextSemanticBuilderTest {
         ),
         x = 4f,
         y = 24f,
-        paint = Paint.fill(Color.WHITE),
+        paint = Paint.fill(ColorARGB.White),
         transform = transform,
         clip = ClipStack.WideOpen,
     )
@@ -479,7 +479,7 @@ class GPUPreparedTextSemanticBuilderTest {
 
     private fun colorTextOperation(
         glyphCount: Int = 1,
-        paintColor: Color = Color.WHITE,
+        paintColor: ColorARGB = ColorARGB.White,
         useForegroundLayer: Boolean = false,
     ): DisplayOp.DrawText {
         val fontBytes = checkNotNull(
@@ -579,7 +579,7 @@ class GPUPreparedTextSemanticBuilderTest {
             ),
             x = 0f,
             y = 0f,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class ImageMaskSubsetGm : SkiaGm {
     private val kDest = RectF32.ofOriginSize(10f, 10f, 100f, 100f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f))
+        val paint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f))
 
         for (i in 0 until 3) {
             val image = makeMaskImage()
@@ -54,7 +54,7 @@ class ImageMaskSubsetGm : SkiaGm {
         for (y in 0 until kSize) {
             for (x in 0 until kSize) {
                 val a = if (((x / 5) + (y / 5)) % 2 == 0) 128 else 0
-                bitmap.setPixel(x, y, Color.fromRGBA(0f, 0f, 0f, a / 255f))
+                bitmap.setPixel(x, y, ColorARGB.fromRGBA(0f, 0f, 0f, a / 255f))
             }
         }
         return bitmap.toImage()

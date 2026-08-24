@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/stroketext.cpp` (native variant).
  *  Tests stroke text rendering — draws stroked glyph paths using native
@@ -27,7 +27,7 @@ class StrokeTextNativeGm : SkiaGm {
     override val height = 420
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val stroke = Paint(
-            color = Color(0xFFBB0000u),
+            color = ColorARGB.fromPackedUInt(0xFFBB0000u),
             style = PaintStyle.STROKE,
             strokeWidth = 10f,
             strokeCap = StrokeCap.ROUND,

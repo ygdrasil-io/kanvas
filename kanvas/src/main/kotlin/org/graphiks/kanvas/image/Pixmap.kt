@@ -4,8 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.color.halfToFloat
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.toArgbInt
+import org.graphiks.math.color.ColorARGB
 
 class Pixmap(
     val info: ImageInfo,
@@ -61,16 +60,16 @@ class Pixmap(
                     ((rgba ushr 16) and 0xFF)
             }
             ColorType.BGRA_8888 -> buffer.getInt(offset)
-            ColorType.ALPHA_8 -> Color.fromRGBA(0f, 0f, 0f, byte(offset) / 255f).toArgbInt()
+            ColorType.ALPHA_8 -> ColorARGB.fromRGBA(0f, 0f, 0f, byte(offset) / 255f).toPackedInt()
             ColorType.GRAY_8 -> {
                 val lightness = byte(offset) / 255f
-                Color.fromRGBA(lightness, lightness, lightness, 1f).toArgbInt()
+                ColorARGB.fromRGBA(lightness, lightness, lightness, 1f).toPackedInt()
             }
             ColorType.RGB_565,
             ColorType.ARGB_4444,
             ColorType.RGBA_F16,
             ColorType.RGBA_F16_NORM,
-                -> pixelColor(offset).toArgbInt()
+                -> pixelColor(offset).toPackedInt()
             else -> 0
         }
     }
@@ -90,10 +89,10 @@ class Pixmap(
         return true
     }
 
-    private fun pixelColor(offset: Int): Color = when (info.colorType) {
+    private fun pixelColor(offset: Int): ColorARGB = when (info.colorType) {
         ColorType.RGB_565 -> {
             val packed = ushort(offset)
-            Color.fromRGBA(
+            ColorARGB.fromRGBA(
                 ((packed ushr 11) and 0x1F) / 31f,
                 ((packed ushr 5) and 0x3F) / 63f,
                 (packed and 0x1F) / 31f,
@@ -103,7 +102,7 @@ class Pixmap(
         ColorType.ARGB_4444 -> {
             val packed = ushort(offset)
             val alpha = ((packed ushr 12) and 0xF) / 15f
-            if (alpha == 0f) Color.TRANSPARENT else Color.fromRGBA(
+            if (alpha == 0f) ColorARGB.Transparent else ColorARGB.fromRGBA(
                 (((packed ushr 8) and 0xF) / 15f / alpha).coerceIn(0f, 1f),
                 (((packed ushr 4) and 0xF) / 15f / alpha).coerceIn(0f, 1f),
                 ((packed and 0xF) / 15f / alpha).coerceIn(0f, 1f),
@@ -114,7 +113,7 @@ class Pixmap(
         ColorType.RGBA_F16_NORM,
             -> {
             val alpha = org.graphiks.math.color.halfToFloat(ushort(offset + 6).toShort())
-            if (alpha == 0f) Color.TRANSPARENT else Color.fromRGBA(
+            if (alpha == 0f) ColorARGB.Transparent else ColorARGB.fromRGBA(
                 (org.graphiks.math.color.halfToFloat(ushort(offset).toShort()) / alpha).coerceIn(0f, 1f),
                 (org.graphiks.math.color.halfToFloat(ushort(offset + 2).toShort()) / alpha).coerceIn(0f, 1f),
                 (org.graphiks.math.color.halfToFloat(ushort(offset + 4).toShort()) / alpha).coerceIn(0f, 1f),

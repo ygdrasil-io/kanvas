@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -29,7 +29,7 @@ class OverdrawTextXformGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.BLACK),
+            Paint(color = ColorARGB.Black),
         )
 
         val font = Font(typeface, size = 12f)
@@ -37,14 +37,14 @@ class OverdrawTextXformGm : SkiaGm {
 
         for (n in 1..20) {
             val y = n * 20f
-            canvas.drawString(text, 10f, y, font, Paint(color = Color.WHITE))
+            canvas.drawString(text, 10f, y, font, Paint(color = ColorARGB.White))
         }
 
         for (n in 1..20) {
             val y = n * 20f
             canvas.save()
             canvas.translate(256f + 10f, y)
-            canvas.drawString(text, 0f, 0f, font, Paint(color = Color.WHITE))
+            canvas.drawString(text, 0f, 0f, font, Paint(color = ColorARGB.White))
             canvas.restore()
         }
     }

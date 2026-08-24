@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
@@ -135,7 +135,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
     fun render(canvas: GmCanvas) {
         canvas.drawRect(
             RectF32.ofLTRB(0f, 0f, kGmWidth.toFloat(), kGmWidth.toFloat()),
-            Paint(color = Color.WHITE),
+            Paint(color = ColorARGB.White),
         )
 
         val offset = floatArrayOf(0f, kMaxPathHeight / 2f)
@@ -206,7 +206,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
         offset[0] += anchorBounds.width()
         if (doStrokeAndFill) offset[0] += kStrokeWidth
 
-        val colors = arrayOf(Color.BLACK, Color.WHITE)
+        val colors = arrayOf(ColorARGB.Black, ColorARGB.White)
         val dirs = intArrayOf(0, 1)
         val scales = floatArrayOf(1f, 0.75f, 0.5f, 0.25f, 0.1f, 0.01f, 0.001f)
         val joins = arrayOf(StrokeJoin.ROUND, StrokeJoin.BEVEL, StrokeJoin.MITER)

@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -98,12 +98,12 @@ class AndroidBlendModesGm : SkiaGm {
         }
     }
 
-    private fun intToColor(value: Int): Color {
+    private fun intToColor(value: Int): ColorARGB {
         val a = (value ushr 24) and 0xFF
         val r = (value ushr 16) and 0xFF
         val g = (value ushr 8) and 0xFF
         val b = value and 0xFF
-        return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+        return ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
     }
 
     private companion object {
@@ -111,10 +111,10 @@ class AndroidBlendModesGm : SkiaGm {
         const val kNumRows: Int = 5
         const val kNumCols: Int = 4
 
-        val kBlue = Color.fromRGBA(22f/255f, 150f/255f, 243f/255f, 1f)
-        val kRed = Color.fromRGBA(233f/255f, 30f/255f, 99f/255f, 1f)
-        val kWhite = Color.fromRGBA(243f/255f, 243f/255f, 243f/255f, 1f)
-        val kGrey = Color.fromRGBA(222f/255f, 222f/255f, 222f/255f, 1f)
+        val kBlue = ColorARGB.fromRGBA(22f/255f, 150f/255f, 243f/255f, 1f)
+        val kRed = ColorARGB.fromRGBA(233f/255f, 30f/255f, 99f/255f, 1f)
+        val kWhite = ColorARGB.fromRGBA(243f/255f, 243f/255f, 243f/255f, 1f)
+        val kGrey = ColorARGB.fromRGBA(222f/255f, 222f/255f, 222f/255f, 1f)
 
         const val kWhiteInt = 0xFFF3F3F3.toInt()
         const val kGreyInt = 0xFFDEDEDE.toInt()

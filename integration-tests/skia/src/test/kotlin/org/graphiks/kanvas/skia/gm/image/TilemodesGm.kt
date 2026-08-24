@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -94,9 +94,9 @@ class TilemodesGm(
             surface.canvas {
                 val pts = listOf(Point2F32(0f, 0f), Point2F32(w.toFloat(), h.toFloat()))
         val stops = listOf<GradientStop>(
-            GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-            GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-            GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
         )
                 val paint = Paint(
                     shader = Shader.LinearGradient(pts[0], pts[1], stops, TileMode.CLAMP),

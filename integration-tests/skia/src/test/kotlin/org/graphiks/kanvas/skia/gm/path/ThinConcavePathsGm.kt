@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/thinconcavepaths.cpp::thinconcavepaths`
@@ -33,7 +33,7 @@ class ThinConcavePathsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(
-            color = Color.fromRGBA(0f, 0f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f),
             style = PaintStyle.FILL,
             antiAlias = true,
         )

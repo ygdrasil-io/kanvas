@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -98,7 +98,7 @@ abstract class ComplexClipGm(
                 4f / 3f * (780f - 20f),
             ).let { RectF32.ofLTRB(it.left + 100f, it.top + 100f, it.right - 100f, it.bottom - 100f) }
 
-            canvas.drawRect(bounds, Paint(color = Color.RED, style = PaintStyle.STROKE))
+            canvas.drawRect(bounds, Paint(color = ColorARGB.Red, style = PaintStyle.STROKE))
             canvas.clipRect(bounds)
             canvas.saveLayer(bounds, null)
         }
@@ -138,7 +138,7 @@ abstract class ComplexClipGm(
                 canvas.drawString(aTxt, txtX, 220f, font, Paint(color = CLIP_A_COLOR))
                 txtX += font.measureText(aTxt)
                 val opName = if (opIdx == 0) "Isect " else "Diff "
-                canvas.drawString(opName, txtX, 220f, font, Paint(color = Color.BLACK))
+                canvas.drawString(opName, txtX, 220f, font, Paint(color = ColorARGB.Black))
                 txtX += font.measureText(opName)
                 val bTxt = if (doInvB) "InvB " else "B "
                 canvas.drawString(bTxt, txtX, 220f, font, Paint(color = CLIP_B_COLOR))
@@ -159,32 +159,32 @@ abstract class ComplexClipGm(
         val fade = 0x33
         val alphaFade = fade.toFloat() / 255f
 
-        canvas.drawPath(path, paint.copy(color = Color.fromRGBA(
-            ((PATH_COLOR.packed shr 16) and 0xFFu).toFloat() / 255f,
-            ((PATH_COLOR.packed shr 8) and 0xFFu).toFloat() / 255f,
-            (PATH_COLOR.packed and 0xFFu).toFloat() / 255f,
+        canvas.drawPath(path, paint.copy(color = ColorARGB.fromRGBA(
+            ((PATH_COLOR.value shr 16) and 0xFFu).toFloat() / 255f,
+            ((PATH_COLOR.value shr 8) and 0xFFu).toFloat() / 255f,
+            (PATH_COLOR.value and 0xFFu).toFloat() / 255f,
             alphaFade,
         )))
 
-        canvas.drawPath(clipA, paint.copy(color = Color.fromRGBA(
-            ((CLIP_A_COLOR.packed shr 16) and 0xFFu).toFloat() / 255f,
-            ((CLIP_A_COLOR.packed shr 8) and 0xFFu).toFloat() / 255f,
-            (CLIP_A_COLOR.packed and 0xFFu).toFloat() / 255f,
+        canvas.drawPath(clipA, paint.copy(color = ColorARGB.fromRGBA(
+            ((CLIP_A_COLOR.value shr 16) and 0xFFu).toFloat() / 255f,
+            ((CLIP_A_COLOR.value shr 8) and 0xFFu).toFloat() / 255f,
+            (CLIP_A_COLOR.value and 0xFFu).toFloat() / 255f,
             alphaFade,
         )))
 
-        canvas.drawPath(clipB, paint.copy(color = Color.fromRGBA(
-            ((CLIP_B_COLOR.packed shr 16) and 0xFFu).toFloat() / 255f,
-            ((CLIP_B_COLOR.packed shr 8) and 0xFFu).toFloat() / 255f,
-            (CLIP_B_COLOR.packed and 0xFFu).toFloat() / 255f,
+        canvas.drawPath(clipB, paint.copy(color = ColorARGB.fromRGBA(
+            ((CLIP_B_COLOR.value shr 16) and 0xFFu).toFloat() / 255f,
+            ((CLIP_B_COLOR.value shr 8) and 0xFFu).toFloat() / 255f,
+            (CLIP_B_COLOR.value and 0xFFu).toFloat() / 255f,
             alphaFade,
         )))
     }
 
     private companion object {
-        private val PATH_COLOR = Color.BLACK
-        private val CLIP_A_COLOR = Color(0xFF0000FFu)
-        private val CLIP_B_COLOR = Color(0xFFFF0000u)
+        private val PATH_COLOR = ColorARGB.Black
+        private val CLIP_A_COLOR = ColorARGB.fromPackedUInt(0xFF0000FFu)
+        private val CLIP_B_COLOR = ColorARGB.fromPackedUInt(0xFFFF0000u)
     }
 }
 

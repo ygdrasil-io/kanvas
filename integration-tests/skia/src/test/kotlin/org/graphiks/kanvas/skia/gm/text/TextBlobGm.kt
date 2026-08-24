@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -83,7 +83,7 @@ class TextBlobGm : SkiaGm {
 
             canvas.drawTextBlob(blob, offsetX, offsetY, paint)
 
-            val boxPaint = Paint(color = Color.BLUE, style = PaintStyle.STROKE, antiAlias = false)
+            val boxPaint = Paint(color = ColorARGB.Blue, style = PaintStyle.STROKE, antiAlias = false)
             val box = computeBlobBounds(blob)
             canvas.drawRect(
                 RectF32(box.left + offsetX, box.top + offsetY, box.right + offsetX, box.bottom + offsetY),

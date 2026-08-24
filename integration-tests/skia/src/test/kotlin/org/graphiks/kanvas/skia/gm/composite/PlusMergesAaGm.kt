@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -35,12 +35,12 @@ class PlusMergesAaGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val p = Paint(color = Color.RED, antiAlias = true)
+        val p = Paint(color = ColorARGB.Red, antiAlias = true)
 
         canvas.drawRect(RectF32(0f, 0f, 100f, 100f), p)
         canvas.drawRect(RectF32.ofOriginSize(150f, 0f, 100f, 100f), p)
 
-        val green = Color.fromRGBA(0f, 1f, 0f, 0xF0 / 255f)
+        val green = ColorARGB.fromRGBA(0f, 1f, 0f, 0xF0 / 255f)
 
         val upperLeft = Path {
             moveTo(0f, 0f)

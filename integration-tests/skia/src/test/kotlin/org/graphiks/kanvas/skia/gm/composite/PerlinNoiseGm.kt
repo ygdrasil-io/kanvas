@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 
 /**
  * Port of Skia's `gm/perlinnoise.cpp::PerlinNoiseGM` (220 x 620).
@@ -25,8 +25,8 @@ class PerlinNoiseGm : SkiaGm {
     override val height = 620
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val kBox = Size(80f, 80f)
-        val tile40 = Size(40f, 40f)
+        val kBox = SizeF32.of(80f, 80f)
+        val tile40 = SizeF32.of(40f, 40f)
 
         test(canvas, Point2F32(0f, 0f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
         test(canvas, Point2F32(100f, 0f), Type.TURBULENCE, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
@@ -43,7 +43,7 @@ class PerlinNoiseGm : SkiaGm {
         test(canvas, Point2F32(100f, 400f), Type.FRACTAL, stitch = true, fx = 0.1f, fy = 0.05f, oct = 1, seed = 0f, tile = tile40)
         canvas.restore()
 
-        test(canvas, Point2F32(0f, 500f), Type.TURBULENCE, stitch = true, fx = 0.03f, fy = 0.03f, oct = 1, seed = 0f, tile = Size(50f, 50f))
+        test(canvas, Point2F32(0f, 500f), Type.TURBULENCE, stitch = true, fx = 0.03f, fy = 0.03f, oct = 1, seed = 0f, tile = SizeF32.of(50f, 50f))
         test(canvas, Point2F32(120f, 500f), Type.TURBULENCE, stitch = false, fx = 0.05f, fy = 0.05f, oct = 2, seed = 0f, kSize = kBox)
     }
 
@@ -52,7 +52,7 @@ class PerlinNoiseGm : SkiaGm {
     private fun test(
         canvas: GmCanvas, pt: Point2F32, type: Type,
         stitch: Boolean, fx: Float, fy: Float, oct: Int, seed: Float,
-        kSize: Size? = null, tile: Size? = null,
+        kSize: SizeF32? = null, tile: SizeF32? = null,
     ) {
         val tileSize = if (stitch) tile else null
         val shader: Shader = when (type) {
@@ -72,11 +72,11 @@ class PerlinNoiseGm : SkiaGm {
             drawRect(canvas, Point2F32(pt.x + tile.width, pt.y + tile.height), paint, tile)
             drawRect(canvas, Point2F32(pt.x, pt.y + tile.height), paint, tile)
         } else {
-            drawRect(canvas, pt, paint, kSize ?: Size(80f, 80f))
+            drawRect(canvas, pt, paint, kSize ?: SizeF32.of(80f, 80f))
         }
     }
 
-    private fun drawRect(canvas: GmCanvas, pt: Point2F32, paint: Paint, size: Size) {
+    private fun drawRect(canvas: GmCanvas, pt: Point2F32, paint: Paint, size: SizeF32) {
         canvas.save()
         canvas.translate(pt.x, pt.y)
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, size.width, size.height), paint)

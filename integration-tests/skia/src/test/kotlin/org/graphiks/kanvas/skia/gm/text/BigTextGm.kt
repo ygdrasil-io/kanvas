@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/bigtext.cpp` BigTextGM.
@@ -36,7 +36,7 @@ class BigTextGm : SkiaGm {
         val centerY = -((metrics?.ascent ?: 1200f) + (metrics?.descent ?: -300f)) / 2f
         val posY = height / 2f - centerY
 
-        canvas.drawString("/", posX, posY, font, Paint(color = Color.RED))
-        canvas.drawString("\\", posX, posY, font, Paint(color = Color.BLUE))
+        canvas.drawString("/", posX, posY, font, Paint(color = ColorARGB.Red))
+        canvas.drawString("\\", posX, posY, font, Paint(color = ColorARGB.Blue))
     }
 }

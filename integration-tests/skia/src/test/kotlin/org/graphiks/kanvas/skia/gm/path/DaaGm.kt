@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,42 +25,42 @@ class DaaGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val k = 49f
 
-        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = ColorARGB.Red))
         val path1 = Path {
             moveTo(0f, 0f); lineTo(k, k); lineTo(0f, k); lineTo(0f, 0f)
             moveTo(0f, 0f); lineTo(k, k); lineTo(k, 0f); lineTo(0f, 0f)
         }
-        canvas.drawPath(path1, Paint(color = Color.GREEN))
+        canvas.drawPath(path1, Paint(color = ColorARGB.Green))
 
         canvas.translate(0f, k)
-        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = ColorARGB.Red))
         val path2a = Path { moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f) }
-        canvas.drawPath(path2a, Paint(color = Color.BLUE))
+        canvas.drawPath(path2a, Paint(color = ColorARGB.Blue))
         val path2b = Path { moveTo(k * 0.5f, 0f); lineTo(k * 0.5f, k); lineTo(k, k); lineTo(k, 0f) }
-        canvas.drawPath(path2b, Paint(color = Color.GREEN))
+        canvas.drawPath(path2b, Paint(color = ColorARGB.Green))
 
         canvas.translate(0f, k)
-        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = ColorARGB.Red))
         val path3 = Path {
             moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f)
             moveTo(k * 0.5f, 0f); lineTo(k * 0.5f, k); lineTo(k, k); lineTo(k, 0f)
         }
-        canvas.drawPath(path3, Paint(color = Color.GREEN))
+        canvas.drawPath(path3, Paint(color = ColorARGB.Green))
 
         canvas.translate(0f, k)
-        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = ColorARGB.Red))
         val path4 = Path {
             moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f)
             moveTo(k * 0.5f, 0f); lineTo(k, 0f); lineTo(k, k); lineTo(k * 0.5f, k)
         }
-        canvas.drawPath(path4, Paint(color = Color.GREEN))
+        canvas.drawPath(path4, Paint(color = ColorARGB.Green))
 
         canvas.translate(0f, k)
-        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = ColorARGB.Red))
         val path5 = Path {
             moveTo(k * 0.5f, 0f); lineTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k)
             lineTo(k * 0.5f, 0f); lineTo(k, 0f); lineTo(k, k); lineTo(k * 0.5f, k)
         }
-        canvas.drawPath(path5, Paint(color = Color.GREEN))
+        canvas.drawPath(path5, Paint(color = ColorARGB.Green))
     }
 }

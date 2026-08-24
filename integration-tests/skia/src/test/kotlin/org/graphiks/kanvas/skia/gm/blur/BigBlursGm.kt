@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -28,7 +28,7 @@ class BigBlursGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()),
-            Paint(color = Color.fromRGBA(0.867f, 0.867f, 0.867f, 1f)))
+            Paint(color = ColorARGB.fromRGBA(0.867f, 0.867f, 0.867f, 1f)))
 
         val kBig = 65536f
         val sigma = convertRadiusToSigma(4f)
@@ -61,12 +61,12 @@ class BigBlursGm : SkiaGm {
         )
 
         val outlinePaint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
         )
         val blurPaint = Paint(
             antiAlias = true,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
         )
 
         var desiredX = 0f

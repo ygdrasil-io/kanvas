@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -30,7 +30,7 @@ class GradientsColorSpaceTilemodeGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0x88 / 255f, 0x88 / 255f, 0x88 / 255f, 1f))
+            Paint(color = ColorARGB.fromRGBA(0x88 / 255f, 0x88 / 255f, 0x88 / 255f, 1f))
         )
 
         val tileModes = listOf(
@@ -45,8 +45,8 @@ class GradientsColorSpaceTilemodeGm : SkiaGm {
                 shader = Shader.LinearGradient(
                     start = Point2F32(20f, 0f), end = Point2F32(120f, 0f),
                     stops = listOf(
-                        GradientStop(0f, Color.BLUE),
-                        GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),
+                        GradientStop(0f, ColorARGB.Blue),
+                        GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
                     ),
                     tileMode = tileMode,
                     interpolation = ColorSpaceInterpolation.OKLCH,

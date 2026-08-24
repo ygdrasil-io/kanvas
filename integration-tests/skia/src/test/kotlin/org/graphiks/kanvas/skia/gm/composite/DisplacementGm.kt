@@ -13,11 +13,8 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.b
 
 /** Port of Skia's `gm/displacement.cpp`.
  *  Tests displacement image filter — renders text and shapes with
@@ -50,7 +47,7 @@ class DisplacementGm : SkiaGm {
         val largeW = fLargeW ?: return
         val largeH = fLargeH ?: return
 
-        canvas.drawColor(Color.BLACK.r, Color.BLACK.g, Color.BLACK.b)
+        canvas.drawColor(ColorARGB.Black.r, ColorARGB.Black.g, ColorARGB.Black.b)
 
         // Row 1 — no crop, scales 0, 16, 32, 48, 64
         drawClippedBitmap(canvas, 0, 0, image, Paint(imageFilter = ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.G, 0f, ImageFilter.Blur(0f, 0f))))
@@ -81,9 +78,9 @@ class DisplacementGm : SkiaGm {
 
     private fun ensureImages() {
         if (fImage != null) return
-        fImage = makeStringImage(80, 80, Color.fromRGBA(0.5f, 0.27f, 0.13f, 1f))
-        val c1 = Color.fromRGBA(0.14f, 0.27f, 0.52f, 1f)
-        val c2 = Color.fromRGBA(0.5f, 0.25f, 0.13f, 1f)
+        fImage = makeStringImage(80, 80, ColorARGB.fromRGBA(0.5f, 0.27f, 0.13f, 1f))
+        val c1 = ColorARGB.fromRGBA(0.14f, 0.27f, 0.52f, 1f)
+        val c2 = ColorARGB.fromRGBA(0.5f, 0.25f, 0.13f, 1f)
         fCheckerboard = makeCheckerboardImage(80, 80, c1, c2, 8)
         fSmall = makeCheckerboardImage(64, 64, c1, c2, 8)
         fLarge = makeCheckerboardImage(96, 96, c1, c2, 8)
@@ -99,7 +96,7 @@ class DisplacementGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun makeStringImage(w: Int, h: Int, color: Color): Image {
+    private fun makeStringImage(w: Int, h: Int, color: ColorARGB): Image {
         val surface = Surface(w, h)
         surface.canvas {
             val paint = Paint(color = color, antiAlias = true)
@@ -109,7 +106,7 @@ class DisplacementGm : SkiaGm {
         return surface.makeImageSnapshot()
     }
 
-    private fun makeCheckerboardImage(w: Int, h: Int, c1: Color, c2: Color, size: Int): Image {
+    private fun makeCheckerboardImage(w: Int, h: Int, c1: ColorARGB, c2: ColorARGB, size: Int): Image {
         val bitmap = Bitmap(w, h)
         bitmap.eraseColor(c1)
         var y = 0

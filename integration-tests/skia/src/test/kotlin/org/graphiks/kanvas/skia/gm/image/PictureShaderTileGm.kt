@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -131,20 +131,20 @@ class PictureShaderTileGm : SkiaGm {
     }
 
     private fun drawScene(canvas: Canvas, pictureSize: Float) {
-        canvas.clear(Color.WHITE)
+        canvas.clear(ColorARGB.White)
 
         var paint = Paint(antiAlias = true)
 
-        paint = paint.copy(color = Color.GREEN)
+        paint = paint.copy(color = ColorARGB.Green)
         canvas.drawPath(Path { }.apply { addCircle(pictureSize / 4f, pictureSize / 4f, pictureSize / 4f) }, paint)
 
-        paint = paint.copy(color = Color.BLUE)
+        paint = paint.copy(color = ColorARGB.Blue)
         canvas.drawRect(
             RectF32.ofOriginSize(pictureSize / 2f, pictureSize / 2f, pictureSize / 2f, pictureSize / 2f),
             paint,
         )
 
-        paint = paint.copy(color = Color.RED, style = PaintStyle.STROKE)
+        paint = paint.copy(color = ColorARGB.Red, style = PaintStyle.STROKE)
         canvas.drawPath(
             Path { moveTo(pictureSize / 2f, pictureSize * 1f / 3f); lineTo(pictureSize / 2f, pictureSize * 2f / 3f) },
             paint,
@@ -155,7 +155,7 @@ class PictureShaderTileGm : SkiaGm {
         )
 
         paint = paint.copy(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             style = PaintStyle.STROKE,
         )
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, pictureSize, pictureSize), paint)

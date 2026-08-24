@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class GammatextColorShaderGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(0.533f, 0.533f, 0.533f)),
+            Paint(color = ColorARGB.fromRGBA(0.533f, 0.533f, 0.533f)),
         )
         val kText = "ABCDEFG"
         val font = Font(typeface, size = 18f, antiAlias = true, subpixel = true)
@@ -39,7 +39,7 @@ class GammatextColorShaderGm : SkiaGm {
         var i = 0
         while (i < 256) {
             val frac = i / 255f
-            val color = Color.fromRGBA(frac, frac, frac)
+            val color = ColorARGB.fromRGBA(frac, frac, frac)
             canvas.drawString(kText, 0f, 0f, font, Paint(color = color))
             canvas.drawString(kText, 100f, 0f, font, Paint(shader = Shader.SolidColor(color)))
             canvas.drawString(kText, 200f, 0f, font, Paint(shader = Shader.SolidColor(color)))

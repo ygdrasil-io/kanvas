@@ -29,20 +29,16 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.redByte
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -78,7 +74,7 @@ class GPUAllApiBlendSurfaceTest {
             canvas {
                 save()
                 clipRect(ALPHA_MASK_RECT, ClipOp.INTERSECT, antiAlias = true)
-                drawRect(SURFACE_RECT, Paint.fill(Color.WHITE).copy(antiAlias = false))
+                drawRect(SURFACE_RECT, Paint.fill(ColorARGB.White).copy(antiAlias = false))
                 restore()
             }
             render()
@@ -254,7 +250,7 @@ class GPUAllApiBlendSurfaceTest {
     }
 
     private fun renderCpu(api: BlendCase, mode: BlendMode, context: BlendContext): CpuPixel {
-        val sourceOnTransparent = blendPremultiplied(SOURCE, Color.TRANSPARENT, BlendMode.SRC)
+        val sourceOnTransparent = blendPremultiplied(SOURCE, ColorARGB.Transparent, BlendMode.SRC)
         val effectiveMode =
             if (api.name == "DrawAtlas" && context != BlendContext.SAVE_LAYER) {
                 BlendMode.SRC_OVER
@@ -267,7 +263,7 @@ class GPUAllApiBlendSurfaceTest {
         val color = when (context) {
             BlendContext.SAVE_LAYER -> when (api.composition) {
                 Composition.BLEND -> sourceOver(
-                    blendPremultiplied(SOURCE, Color.TRANSPARENT, mode),
+                    blendPremultiplied(SOURCE, ColorARGB.Transparent, mode),
                     DESTINATION.toPremultipliedLinear(),
                 ).toColor()
                 Composition.CLEAR -> sourceOver(
@@ -308,7 +304,7 @@ class GPUAllApiBlendSurfaceTest {
             Paint.fill(SOURCE).copy(antiAlias = false, blendMode = mode)
         }
         val imagePaint: (BlendMode) -> Paint = { mode ->
-            Paint.fill(Color.WHITE).copy(antiAlias = false, blendMode = mode)
+            Paint.fill(ColorARGB.White).copy(antiAlias = false, blendMode = mode)
         }
         // Image texels and the text-atlas material are UNORM linear inputs. Shape paint is an
         // sRGB-facing API, so these fixture inputs use the inverse transfer to produce SOURCE.
@@ -336,7 +332,7 @@ class GPUAllApiBlendSurfaceTest {
                 drawRect(SOURCE_RECT, shapePaint(mode))
             },
             BlendCase("DrawRRect", Point2F32(16f, 16f), Point2F32(7f, 16f), Point2F32(12f, 16f)) { mode ->
-                drawRRect(RRect(SOURCE_RECT, radius = 3f), shapePaint(mode))
+                drawRRect(RRectF32.of(SOURCE_RECT, radius = 3f), shapePaint(mode))
             },
             BlendCase("DrawPath", Point2F32(16f, 16f), Point2F32(10f, 10f), Point2F32(16f, 12f)) { mode ->
                 drawPath(
@@ -380,8 +376,8 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase("DrawDRRect", Point2F32(22f, 16f), Point2F32(7f, 16f), Point2F32(22f, 12f)) { mode ->
                 drawDRRect(
-                    RRect(RectF32(4f, 4f, 28f, 28f), radius = 2f),
-                    RRect(RectF32(10f, 10f, 22f, 22f), radius = 2f),
+                    RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 2f),
+                    RRectF32.of(RectF32(10f, 10f, 22f, 22f), radius = 2f),
                     shapePaint(mode),
                 )
             },
@@ -459,7 +455,7 @@ class GPUAllApiBlendSurfaceTest {
             typeface = typeface,
             fontSize = 48f,
         )
-        val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+        val shaderColor = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f)
         val shader = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(SURFACE_SIZE.toFloat(), 0f),
@@ -476,7 +472,7 @@ class GPUAllApiBlendSurfaceTest {
                 blob = blob,
                 x = 4.5f,
                 y = 26f,
-                paint = Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
+                paint = Paint.fill(ColorARGB.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
                     shader = shader,
                     blendMode = mode,
                 ),
@@ -513,12 +509,12 @@ class GPUAllApiBlendSurfaceTest {
             val recorder = PictureRecorder()
             recorder.beginRecording(SURFACE_RECT).drawRect(
                 SOURCE_RECT,
-                Paint.fill(Color.fromArgb(255, SOURCE.redByte, SOURCE.greenByte, SOURCE.blueByte))
+                Paint.fill(ColorARGB.of(255, SOURCE.red, SOURCE.green, SOURCE.blue))
                     .copy(antiAlias = false),
             )
             drawPicture(
                 recorder.finishRecordingAsPicture(),
-                Paint.fill(Color.fromArgb(SOURCE.alphaByte, 255, 255, 255)).copy(blendMode = mode),
+                Paint.fill(ColorARGB.of(SOURCE.alpha, 255, 255, 255)).copy(blendMode = mode),
             )
         }
 
@@ -696,10 +692,10 @@ class GPUAllApiBlendSurfaceTest {
         height = 4,
         pixels = ByteArray(4 * 4 * 4) { index ->
             when (index % 4) {
-                0 -> premultipliedSrgbByte(SOURCE.redByte)
-                1 -> premultipliedSrgbByte(SOURCE.greenByte)
-                2 -> premultipliedSrgbByte(SOURCE.blueByte)
-                else -> SOURCE.alphaByte.toByte()
+                0 -> premultipliedSrgbByte(SOURCE.red)
+                1 -> premultipliedSrgbByte(SOURCE.green)
+                2 -> premultipliedSrgbByte(SOURCE.blue)
+                else -> SOURCE.alpha.toByte()
             }
         },
         colorType = ColorType.RGBA_8888,
@@ -712,10 +708,10 @@ class GPUAllApiBlendSurfaceTest {
         height = 4,
         pixels = ByteArray(4 * 4 * 4) { index ->
             when (index % 4) {
-                0 -> linearByte(SOURCE.redByte)
-                1 -> linearByte(SOURCE.greenByte)
-                2 -> linearByte(SOURCE.blueByte)
-                else -> SOURCE.alphaByte.toByte()
+                0 -> linearByte(SOURCE.red)
+                1 -> linearByte(SOURCE.green)
+                2 -> linearByte(SOURCE.blue)
+                else -> SOURCE.alpha.toByte()
             }
         },
         colorType = ColorType.RGBA_8888,
@@ -742,33 +738,33 @@ class GPUAllApiBlendSurfaceTest {
         return overlapWidth * overlapHeight
     }
 
-    private fun Color.toRgbaBytes(): UByteArray = ubyteArrayOf(
-        redByte.toUByte(),
-        greenByte.toUByte(),
-        blueByte.toUByte(),
-        alphaByte.toUByte(),
+    private fun ColorARGB.toRgbaBytes(): UByteArray = ubyteArrayOf(
+        red.toUByte(),
+        green.toUByte(),
+        blue.toUByte(),
+        alpha.toUByte(),
     )
 
-    private fun sourceLinearColor(): Color = Color.fromRGBA(
-        srgbToLinear(SOURCE.redByte / 255f),
-        srgbToLinear(SOURCE.greenByte / 255f),
-        srgbToLinear(SOURCE.blueByte / 255f),
-        SOURCE.alphaByte / 255f,
+    private fun sourceLinearColor(): ColorARGB = ColorARGB.fromRGBA(
+        srgbToLinear(SOURCE.red / 255f),
+        srgbToLinear(SOURCE.green / 255f),
+        srgbToLinear(SOURCE.blue / 255f),
+        SOURCE.alpha / 255f,
     )
 
     private fun linearByte(srgbByte: Int): Byte =
-        (srgbToLinear(srgbByte / 255f) * SOURCE.alphaByte / 255f * 255f + .5f)
+        (srgbToLinear(srgbByte / 255f) * SOURCE.alpha / 255f * 255f + .5f)
             .toInt()
             .coerceIn(0, 255)
             .toByte()
 
     private fun premultipliedSrgbByte(srgbByte: Int): Byte =
-        (srgbByte * SOURCE.alphaByte / 255f + .5f)
+        (srgbByte * SOURCE.alpha / 255f + .5f)
             .toInt()
             .coerceIn(0, 255)
             .toByte()
 
-    private fun destinationAfterInitialDraw(): Color = blend(Color.TRANSPARENT, DESTINATION, BlendMode.DST)
+    private fun destinationAfterInitialDraw(): ColorARGB = blend(ColorARGB.Transparent, DESTINATION, BlendMode.DST)
 
     private fun assertPixelsNear(expected: UByteArray, actual: UByteArray, tolerance: Int) {
         expected.indices.forEach { channel ->
@@ -780,11 +776,11 @@ class GPUAllApiBlendSurfaceTest {
     }
 
     /** Pure Kotlin Porter-Duff and W3C blend oracle; no GPU/WGSL helper is used here. */
-    private fun blend(source: Color, destination: Color, mode: BlendMode): Color =
+    private fun blend(source: ColorARGB, destination: ColorARGB, mode: BlendMode): ColorARGB =
         blendPremultiplied(source, destination, mode).toColor()
 
     /** Implements `D + F * (blend(S, D) - D)` for an independently generated coverage F. */
-    private fun blendWithCoverage(source: Color, destination: Color, mode: BlendMode, coverage: Float): Color {
+    private fun blendWithCoverage(source: ColorARGB, destination: ColorARGB, mode: BlendMode, coverage: Float): ColorARGB {
         val blended = blendPremultiplied(source, destination, mode)
         val destinationPremul = destination.toPremultipliedLinear()
         return PremultipliedLinear(
@@ -795,11 +791,11 @@ class GPUAllApiBlendSurfaceTest {
         ).toColor()
     }
 
-    private fun blendPremultiplied(source: Color, destination: Color, mode: BlendMode): PremultipliedLinear {
+    private fun blendPremultiplied(source: ColorARGB, destination: ColorARGB, mode: BlendMode): PremultipliedLinear {
         val s = source.toLinear()
         val d = destination.toLinear()
-        val sa = source.alphaByte / 255f
-        val da = destination.alphaByte / 255f
+        val sa = source.alpha / 255f
+        val da = destination.alpha / 255f
         if (mode in ARTISTIC_MODES) {
             val mixed = blendColor(s, d, mode)
             val alpha = sa + da * (1f - sa)
@@ -827,7 +823,7 @@ class GPUAllApiBlendSurfaceTest {
         ).let { if (mode == BlendMode.PLUS) it.clamped() else it }
     }
 
-    private fun sourceOver(source: Color, destination: Color): Color = blend(source, destination, BlendMode.SRC_OVER)
+    private fun sourceOver(source: ColorARGB, destination: ColorARGB): ColorARGB = blend(source, destination, BlendMode.SRC_OVER)
 
     private fun sourceOver(source: PremultipliedLinear, destination: PremultipliedLinear): PremultipliedLinear =
         PremultipliedLinear(
@@ -929,19 +925,19 @@ class GPUAllApiBlendSurfaceTest {
         return clipped
     }
 
-    private fun Color.toLinear(): FloatArray = floatArrayOf(
-        srgbToLinear(redByte / 255f),
-        srgbToLinear(greenByte / 255f),
-        srgbToLinear(blueByte / 255f),
+    private fun ColorARGB.toLinear(): FloatArray = floatArrayOf(
+        srgbToLinear(red / 255f),
+        srgbToLinear(green / 255f),
+        srgbToLinear(blue / 255f),
     )
 
-    private fun Color.toPremultipliedLinear(): PremultipliedLinear {
-        val alpha = alphaByte / 255f
+    private fun ColorARGB.toPremultipliedLinear(): PremultipliedLinear {
+        val alpha = alpha / 255f
         val rgb = toLinear()
         return PremultipliedLinear(rgb[0] * alpha, rgb[1] * alpha, rgb[2] * alpha, alpha)
     }
 
-    private fun PremultipliedLinear.toColor(): Color = Color.fromRGBA(
+    private fun PremultipliedLinear.toColor(): ColorARGB = ColorARGB.fromRGBA(
         linearToSrgb(red),
         linearToSrgb(green),
         linearToSrgb(blue),
@@ -1025,9 +1021,9 @@ class GPUAllApiBlendSurfaceTest {
         val CLIP_RECT = RectF32(12f, 12f, 24f, 24f)
         val ALPHA_MASK_RECT = RectF32(12.5f, 12.5f, 23.5f, 23.5f)
         val ALPHA_MASK_EDGE = Point2F32(12f, 16f)
-        val SOURCE = Color.fromArgb(192, 208, 80, 32)
-        val DESTINATION = Color.fromArgb(160, 40, 120, 208)
-        val PARTIAL_ALPHA_EFFECTIVE_SOURCE = Color.fromRGBA(1f, 0f, 0f, 0.3f)
+        val SOURCE = ColorARGB.of(192, 208, 80, 32)
+        val DESTINATION = ColorARGB.of(160, 40, 120, 208)
+        val PARTIAL_ALPHA_EFFECTIVE_SOURCE = ColorARGB.fromRGBA(1f, 0f, 0f, 0.3f)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
         val IMAGE_API_NAMES = setOf("DrawImage", "DrawImageNine", "DrawImageLattice", "DrawAtlas")
         val VERTICES_API_NAMES = setOf("DrawVertices", "DrawMesh(program=null)")

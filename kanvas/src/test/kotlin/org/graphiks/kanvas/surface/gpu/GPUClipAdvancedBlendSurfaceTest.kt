@@ -10,9 +10,8 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.withAlphaByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -31,8 +30,8 @@ class GPUClipAdvancedBlendSurfaceTest {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         val before = session!!.runtimeTelemetry
-        val destination = Color.fromArgb(255, 64, 128, 192)
-        val source = Color.fromArgb(255, 192, 64, 32)
+        val destination = ColorARGB.of(255, 64, 128, 192)
+        val source = ColorARGB.of(255, 192, 64, 32)
         val expectedByMode = listOf(
             BlendMode.MULTIPLY,
             BlendMode.SCREEN,
@@ -59,7 +58,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderClippedBlend(
                 destination,
-                Color.RED.withAlphaByte(128),
+                ColorARGB.Red.withAlpha(128),
                 BlendMode.DARKEN,
             )
         }
@@ -81,12 +80,12 @@ class GPUClipAdvancedBlendSurfaceTest {
         // black inside the scissor and retained white outside.
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                 save()
                 clipRect(RectF32(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
                 drawRect(
                     RectF32(4f, 4f, 28f, 28f),
-                    Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
+                    Paint.fill(ColorARGB.Black).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 )
                 restore()
             }
@@ -109,10 +108,10 @@ class GPUClipAdvancedBlendSurfaceTest {
         // route's blend oracle).
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                 drawRect(
                     RectF32(10f, 10f, 22f, 22f),
-                    Paint.fill(Color.BLACK).copy(
+                    Paint.fill(ColorARGB.Black).copy(
                         antiAlias = false,
                         blendMode = BlendMode.DARKEN,
                         maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 2f),
@@ -121,12 +120,12 @@ class GPUClipAdvancedBlendSurfaceTest {
             }
             render().pixels.toUByteArray()
         }
-        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE)
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.White)
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32,
             TopLevelMaskBlurPixelOracle.Shape.Rect(10f, 10f, 22f, 22f),
             TopLevelMaskBlurPixelOracle.fullTargetBounds(),
-            BlurStyle.NORMAL, 2f, Color.BLACK, BlendMode.DARKEN, destination,
+            BlurStyle.NORMAL, 2f, ColorARGB.Black, BlendMode.DARKEN, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
@@ -140,7 +139,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         val childCanvas = childRecorder.beginRecording(RectF32(0f, 0f, 32f, 32f))
         childCanvas.drawRect(
             RectF32(4f, 4f, 28f, 28f),
-            Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.COLOR_DODGE),
+            Paint.fill(ColorARGB.Black).copy(antiAlias = false, blendMode = BlendMode.COLOR_DODGE),
         )
         val child = childRecorder.finishRecordingAsPicture()
 
@@ -155,7 +154,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                     save()
                     clipRect(RectF32(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = true)
                     drawPicture(picture)
@@ -179,14 +178,14 @@ class GPUClipAdvancedBlendSurfaceTest {
         blackDodgeRecorder.beginRecording(RectF32(0f, 0f, 32f, 32f)).apply {
             drawRect(
                 RectF32(0f, 0f, 32f, 32f),
-                Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.COLOR_DODGE),
+                Paint.fill(ColorARGB.Black).copy(antiAlias = false, blendMode = BlendMode.COLOR_DODGE),
             )
         }
         val blackDodgePicture = blackDodgeRecorder.finishRecordingAsPicture()
 
         val blueRecorder = PictureRecorder()
         blueRecorder.beginRecording(RectF32(0f, 0f, 32f, 32f)).apply {
-            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE).copy(antiAlias = false))
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
         }
         val bluePicture = blueRecorder.finishRecordingAsPicture()
 
@@ -206,7 +205,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             Surface(width = 32, height = 32).run {
                 canvas {
-                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                    drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                     drawPicture(parentPicture)
                 }
                 render()
@@ -215,7 +214,7 @@ class GPUClipAdvancedBlendSurfaceTest {
         assertEquals("unsupported.composite.clip", failure.diagnostic.code.value)
     }
 
-    private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode): UByteArray =
+    private fun renderClippedBlend(destination: ColorARGB, source: ColorARGB, mode: BlendMode): UByteArray =
         Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(destination))

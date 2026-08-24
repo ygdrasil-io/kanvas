@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -24,10 +24,10 @@ class Crbug1156804Gm : SkiaGm {
     override val height = 250
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        drawOne(canvas, RectF32.ofOriginSize(64f, 64f, 25f, 25f), 1f, 3f, Color.GREEN)
-        drawOne(canvas, RectF32.ofOriginSize(164f, 64f, 25f, 25f), 30f, 3f, Color.GREEN)
-        drawOne(canvas, RectF32.ofOriginSize(64f, 164f, 25f, 25f), 1f, 20f, Color.RED)
-        drawOne(canvas, RectF32.ofOriginSize(164f, 164f, 25f, 25f), 30f, 20f, Color.GREEN)
+        drawOne(canvas, RectF32.ofOriginSize(64f, 64f, 25f, 25f), 1f, 3f, ColorARGB.Green)
+        drawOne(canvas, RectF32.ofOriginSize(164f, 64f, 25f, 25f), 30f, 3f, ColorARGB.Green)
+        drawOne(canvas, RectF32.ofOriginSize(64f, 164f, 25f, 25f), 1f, 20f, ColorARGB.Red)
+        drawOne(canvas, RectF32.ofOriginSize(164f, 164f, 25f, 25f), 30f, 20f, ColorARGB.Green)
     }
 
     private fun drawOne(
@@ -35,7 +35,7 @@ class Crbug1156804Gm : SkiaGm {
         rect: RectF32,
         saveBorder: Float,
         sigma: Float,
-        color: Color,
+        color: ColorARGB,
     ) {
         val blurFilter = ImageFilter.Blur(
             sigmaX = sigma, sigmaY = sigma,

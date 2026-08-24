@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -119,18 +119,18 @@ class DfTextGm : SkiaGm {
 
         // ─── 5. Gamma-corrected blending ──────────────────────────────
         val fgColors = listOf(
-            Color.WHITE,
-            Color.fromRGBA(1f, 1f, 0f, 1f),
-            Color.fromRGBA(1f, 0f, 1f, 1f),
-            Color.fromRGBA(0f, 1f, 1f, 1f),
-            Color.RED,
-            Color.fromRGBA(0f, 1f, 0f, 1f),
-            Color.BLUE,
-            Color.BLACK,
+            ColorARGB.White,
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),
+            ColorARGB.Red,
+            ColorARGB.fromRGBA(0f, 1f, 0f, 1f),
+            ColorARGB.Blue,
+            ColorARGB.Black,
         )
 
         var rect = RectF32.ofLTRB(670f, 215f, 820f, 397f)
-        canvas.drawRect(rect, Paint(color = Color.fromRGBA(247f / 255f, 243f / 255f, 247f / 255f)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromRGBA(247f / 255f, 243f / 255f, 247f / 255f)))
 
         x = 680f
         y = 235f
@@ -141,7 +141,7 @@ class DfTextGm : SkiaGm {
         }
 
         rect = RectF32.ofLTRB(820f, 215f, 970f, 397f)
-        canvas.drawRect(rect, Paint(color = Color.fromRGBA(24f / 255f, 28f / 255f, 24f / 255f)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromRGBA(24f / 255f, 28f / 255f, 24f / 255f)))
 
         x = 830f
         y = 235f

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -49,8 +49,8 @@ class PictureImageGeneratorGm : SkiaGm {
         var i = 0
         while (r > 4f) {
             paint = paint.copy(
-                color = if ((i and 1) == 0) Color.BLACK
-                else Color.fromRGBA(0xCCf / 255f, 0x41f / 255f, 0x41f / 255f)
+                color = if ((i and 1) == 0) ColorARGB.Black
+                else ColorARGB.fromRGBA(0xCCf / 255f, 0x41f / 255f, 0x41f / 255f)
             )
             canvas.drawRect(
                 RectF32.ofLTRB(cx - r, cy - r * 0.5f, cx + r, cy + r * 0.5f),
@@ -97,7 +97,7 @@ class PictureImageGeneratorGm : SkiaGm {
             if (cfg.sy < 0f) m = m * Matrix3x3F32.translation(0f, cfg.height.toFloat())
 
             val opacityPaint = if (cfg.opacity < 1f) {
-                Paint(color = Color.fromRGBA(1f, 1f, 1f, cfg.opacity))
+                Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, cfg.opacity))
             } else {
                 null
             }
@@ -106,7 +106,7 @@ class PictureImageGeneratorGm : SkiaGm {
             val sh = cfg.height
             val surface = Surface(sw, sh)
             val sc = surface.canvas()
-            sc.clear(Color.TRANSPARENT)
+            sc.clear(ColorARGB.Transparent)
             if (opacityPaint != null) sc.saveLayer(null, opacityPaint)
             sc.setMatrix(m)
             pic.playback(sc)
@@ -116,7 +116,7 @@ class PictureImageGeneratorGm : SkiaGm {
             val x = drawSize * (i % drawsPerRow)
             val y = drawSize * (i / drawsPerRow)
 
-            val bg = Paint(color = Color.fromRGBA(0xF0f / 255f, 0xF0f / 255f, 0xF0f / 255f))
+            val bg = Paint(color = ColorARGB.fromRGBA(0xF0f / 255f, 0xF0f / 255f, 0xF0f / 255f))
             canvas.drawRect(
                 RectF32.ofOriginSize(x, y, image.width.toFloat(), image.height.toFloat()),
                 bg,

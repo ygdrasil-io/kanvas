@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -48,7 +48,7 @@ class ImageBlurRepeatModeGm : SkiaGm {
         canvas.save()
         canvas.translate(30f, 0f)
 
-        val colors = listOf(Color.RED, Color.BLUE, Color.GREEN, Color.fromRGBA(1f, 1f, 0f, 1f), Color.BLACK)
+        val colors = listOf(ColorARGB.Red, ColorARGB.Blue, ColorARGB.Green, ColorARGB.fromRGBA(1f, 1f, 0f, 1f), ColorARGB.Black)
         val bandWidth = 25f
         val xDir = (direction and 0x1) == 1
         val yDir = (direction and 0x2) == 2

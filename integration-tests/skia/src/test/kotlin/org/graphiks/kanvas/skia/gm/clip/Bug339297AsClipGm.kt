@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/strokefill.cpp::bug339297_as_clip` (640 × 480).
@@ -46,7 +46,7 @@ class Bug339297AsClipGm : SkiaGm {
         canvas.restore()
 
         val paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
             antiAlias = true,

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -26,7 +26,7 @@ class BezierConicEffectsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(1f, 1f, 1f, 1f)
 
-        val ctrlPaint = Paint(color = Color.RED)
+        val ctrlPaint = Paint(color = ColorARGB.Red)
         val quadPaths = listOf(
             listOf(40f, 40f, 120f, 160f, 180f, 80f),
             listOf(60f, 120f, 30f, 60f, 200f, 120f),
@@ -45,17 +45,17 @@ class BezierConicEffectsGm : SkiaGm {
 
             val polyPath = Path { moveTo(x0, y0); lineTo(x1, y1); lineTo(x2, y2); close() }
             canvas.drawPath(polyPath, Paint(
-                color = Color.fromRGBA(0xA0 / 255f, 0xA0 / 255f, 0xA0 / 255f),
+                color = ColorARGB.fromRGBA(0xA0 / 255f, 0xA0 / 255f, 0xA0 / 255f),
                 style = PaintStyle.STROKE,
                 strokeWidth = 1f,
             ))
 
             val curvePath = Path { moveTo(x0, y0); quadTo(x1, y1, x2, y2) }
-            canvas.drawPath(curvePath, Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 2f))
+            canvas.drawPath(curvePath, Paint(color = ColorARGB.Black, style = PaintStyle.STROKE, strokeWidth = 2f))
 
             canvas.drawRect(
                 RectF32.ofLTRB(x0, y0, x2, y2),
-                Paint(color = Color.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f), style = PaintStyle.STROKE, strokeWidth = 1f),
+                Paint(color = ColorARGB.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f), style = PaintStyle.STROKE, strokeWidth = 1f),
             )
         }
     }

@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class ImageFiltersClippedGm : SkiaGm {
 
         val filters: Array<ImageFilter?> = arrayOf(
             ImageFilter.Blur(12f, 12f, input = null),
-            ImageFilter.DropShadow(10f, 10f, 3f, 3f, Color.GREEN, null),
+            ImageFilter.DropShadow(10f, 10f, 3f, 3f, ColorARGB.Green, null),
             ImageFilter.Offset(-16f, 32f, null),
             ImageFilter.Dilate(2f, 2f, null),
             ImageFilter.Erode(2f, 2f, null),
@@ -74,7 +74,7 @@ class ImageFiltersClippedGm : SkiaGm {
         primBounds: RectF32,
         clipBounds: RectF32,
     ) {
-        val paint = Paint(color = Color.WHITE, imageFilter = filter, antiAlias = true)
+        val paint = Paint(color = ColorARGB.White, imageFilter = filter, antiAlias = true)
         canvas.save()
         canvas.clipRect(clipBounds)
         canvas.drawCircle(primBounds.center().x, primBounds.center().y, primBounds.width() * 2f / 5f, paint)

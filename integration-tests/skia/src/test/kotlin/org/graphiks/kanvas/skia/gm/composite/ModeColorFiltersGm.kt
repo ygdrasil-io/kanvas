@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,21 +27,21 @@ class ModeColorFiltersGm : SkiaGm {
         canvas.drawColor(0x30 / 255f, 0x30 / 255f, 0x30 / 255f, 1f)
 
         val bgPaint = Paint(
-            color = Color.fromRGBA(0x80 / 255f, 0f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0x80 / 255f, 0f, 0f, 1f),
             blendMode = BlendMode.SRC,
         )
 
         val colors = listOf(
-            Color.fromRGBA(1f, 1f, 1f, 1f),
-            Color.fromRGBA(0f, 0f, 0f, 1f),
-            Color.fromRGBA(0f, 0f, 0f, 0f),
-            Color.fromRGBA(0x10 / 255f, 0x20 / 255f, 0x42 / 255f, 1f),
-            Color.fromRGBA(0x20 / 255f, 0x30 / 255f, 0x90 / 255f, 0xA0 / 255f),
+            ColorARGB.fromRGBA(1f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 1f),
+            ColorARGB.fromRGBA(0f, 0f, 0f, 0f),
+            ColorARGB.fromRGBA(0x10 / 255f, 0x20 / 255f, 0x42 / 255f, 1f),
+            ColorARGB.fromRGBA(0x20 / 255f, 0x30 / 255f, 0x90 / 255f, 0xA0 / 255f),
         )
 
         val alphas = listOf(
-            Color.fromRGBA(1f, 1f, 1f, 1f),
-            Color.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f),
+            ColorARGB.fromRGBA(1f, 1f, 1f, 1f),
+            ColorARGB.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f),
         )
 
         val modes = listOf(

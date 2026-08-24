@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
@@ -65,10 +65,10 @@ class TextBlobMixedSizesGm : SkiaGm {
         canvas.translate(kPadX.toFloat(), kPadY.toFloat())
         canvas.save()
 
-        val paint = Paint(antiAlias = false, color = Color.BLACK)
+        val paint = Paint(antiAlias = false, color = ColorARGB.Black)
         val kSigma = 24f  // ConvertRadiusToSigma(8) for blur
         val blurPaint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             maskFilter = MaskFilter.Blur(style = BlurStyle.NORMAL, sigma = kSigma),
         )
 

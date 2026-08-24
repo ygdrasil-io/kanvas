@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/ducky_yuv_blend.cpp`.
@@ -75,8 +75,8 @@ class DuckyYuvBlendGm : SkiaGm {
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {
-        val c1 = Color.fromRGBA(0.25f, 0.25f, 0.25f, 1f)
-        val c2 = Color.fromRGBA(0.75f, 0.75f, 0.75f, 1f)
+        val c1 = ColorARGB.fromRGBA(0.25f, 0.25f, 0.25f, 1f)
+        val c2 = ColorARGB.fromRGBA(0.75f, 0.75f, 0.75f, 1f)
         val size = 25
         for (y in 0 until height step size) {
             for (x in 0 until width step size) {

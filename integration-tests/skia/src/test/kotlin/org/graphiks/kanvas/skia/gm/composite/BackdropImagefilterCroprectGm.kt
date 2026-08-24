@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
@@ -7,16 +9,16 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 fun makeInvertFilter(crop: RectF32?): ImageFilter {
-    val matrix = ColorFilter.Matrix(floatArrayOf(
+    val matrix = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
         -1f, 0f, 0f, 0f, 1f,
         0f, -1f, 0f, 0f, 1f,
         0f, 0f, -1f, 0f, 1f,
         0f, 0f, 0f, 1f, 0f,
-    ))
+    )))
     return ImageFilter.ColorFilter(matrix)
 }
 
@@ -52,10 +54,10 @@ fun drawBackdropFilterGm(
         }
 
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, 1000f, 1000f), Paint(
-            color = if (i == 0) Color(0xFF00FFFFu) else Color(0xFFFF00FFu),
+            color = if (i == 0) ColorARGB.fromPackedUInt(0xFF00FFFFu) else ColorARGB.fromPackedUInt(0xFFFF00FFu),
         ))
         canvas.drawRect(cropInLocal, Paint(
-            color = if (i == 0) Color.RED else Color(0xFF00FF00u),
+            color = if (i == 0) ColorARGB.Red else ColorARGB.fromPackedUInt(0xFF00FF00u),
         ))
 
         if (i == 1) {

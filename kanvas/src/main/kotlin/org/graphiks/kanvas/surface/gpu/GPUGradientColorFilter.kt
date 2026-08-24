@@ -3,10 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
-import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.b
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.r
+import org.graphiks.math.color.ColorMatrixF32
 
 internal fun GPUMaterialDescriptor.withGradientColorFilter(filter: ColorFilter): GPUMaterialDescriptor? = when (this) {
     is GPUMaterialDescriptor.LinearGradient -> filteredColors(filter)?.let { colors ->
@@ -107,7 +104,7 @@ private fun FloatArray.filteredBy(filter: ColorFilter): FloatArray? {
 }
 
 private fun ColorFilter.applyTo(input: GradientRgba, requireNoClamp: Boolean): GradientRgba? = when (this) {
-    is ColorFilter.Matrix -> values.applyMatrix(input, requireNoClamp)
+    is ColorFilter.Matrix -> matrix.applyMatrix(input, requireNoClamp)
     is ColorFilter.Lighting -> GradientRgba(
         r = input.r * mul.r + add.r,
         g = input.g * mul.g + add.g,
@@ -118,8 +115,7 @@ private fun ColorFilter.applyTo(input: GradientRgba, requireNoClamp: Boolean): G
     else -> null
 }
 
-private fun FloatArray.applyMatrix(input: GradientRgba, requireNoClamp: Boolean): GradientRgba? {
-    if (size != 20) return null
+private fun ColorMatrixF32.applyMatrix(input: GradientRgba, requireNoClamp: Boolean): GradientRgba? {
     return GradientRgba(
         r = this[0] * input.r + this[1] * input.g + this[2] * input.b + this[3] * input.a + this[4],
         g = this[5] * input.r + this[6] * input.g + this[7] * input.b + this[8] * input.a + this[9],

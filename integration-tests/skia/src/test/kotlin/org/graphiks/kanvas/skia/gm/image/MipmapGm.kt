@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/mipmap.cpp`.
@@ -38,7 +38,7 @@ class MipmapGm : SkiaGm {
 
     private fun makeImage(): Image {
         val surf = Surface(319, 52)
-        surf.canvas { drawColor(Color.fromRGBA(248f / 255f, 248f / 255f, 248f / 255f)) }
+        surf.canvas { drawColor(ColorARGB.fromRGBA(248f / 255f, 248f / 255f, 248f / 255f)) }
         val paint = Paint(antiAlias = true, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
         surf.canvas {
             for (i in 0 until 20) {

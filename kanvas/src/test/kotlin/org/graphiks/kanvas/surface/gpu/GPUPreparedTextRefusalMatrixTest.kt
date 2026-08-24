@@ -23,7 +23,7 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -210,7 +210,7 @@ class GPUPreparedTextRefusalMatrixTest {
                 "unsupported shader mask filter",
                 valid.copy(
                     paint = valid.paint.copy(
-                        maskFilter = MaskFilter.Shader(Shader.SolidColor(Color.RED)),
+                        maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.Red)),
                     ),
                 ),
                 GPUTextRefusalCodes.MASK_FILTER_UNSUPPORTED,
@@ -548,7 +548,7 @@ class GPUPreparedTextRefusalMatrixTest {
         ),
         x = 1f,
         y = 2f,
-        paint = Paint.fill(Color.RED).copy(
+        paint = Paint.fill(ColorARGB.Red).copy(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
         ),
         transform = Matrix3x3F32.Identity,

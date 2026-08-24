@@ -12,8 +12,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 class ManyRRectsGm : SkiaGm {
@@ -26,7 +26,7 @@ class ManyRRectsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(
-            color = Color.BLUE,
+            color = ColorARGB.Blue,
             antiAlias = true,
         )
 
@@ -37,7 +37,7 @@ class ManyRRectsGm : SkiaGm {
         val kXIncrement = 5
 
         val rect = RectF32.ofLTRB(0f, 0f, 4f, 4f)
-        val rrect = RRect(rect, 1f)
+        val rrect = RRectF32.of(rect, 1f)
         var total = 7_000
         while (total-- > 0) {
             canvas.save()

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ImageSubsetGm : SkiaGm {
@@ -52,7 +52,7 @@ class ImageSubsetGm : SkiaGm {
 
         val surface = Surface(200, 200)
         surface.canvas {
-            clear(Color.TRANSPARENT)
+            clear(ColorARGB.Transparent)
             picture.playback(this)
         }
         return surface.makeImageSnapshot()
@@ -80,7 +80,7 @@ class ImageSubsetGm : SkiaGm {
 
         val surface = Surface(100, 100)
         surface.canvas {
-            clear(Color.TRANSPARENT)
+            clear(ColorARGB.Transparent)
             restored.playback(this)
         }
         return surface.makeImageSnapshot()

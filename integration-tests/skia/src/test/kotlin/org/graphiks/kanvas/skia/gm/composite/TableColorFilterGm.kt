@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.sqrt
@@ -101,13 +101,13 @@ class TableColorFilterGm : SkiaGm {
 
     private fun makeShader0(w: Int, h: Int): Shader {
         val stops = listOf(
-            GradientStop(0f, Color.BLACK),
-            GradientStop(1f / 6f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-            GradientStop(2f / 6f, Color.fromRGBA(0f, 1f, 1f, 1f)),
-            GradientStop(3f / 6f, Color.RED),
-            GradientStop(4f / 6f, Color.TRANSPARENT),
-            GradientStop(5f / 6f, Color.BLUE),
-            GradientStop(1f, Color.WHITE),
+            GradientStop(0f, ColorARGB.Black),
+            GradientStop(1f / 6f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+            GradientStop(2f / 6f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)),
+            GradientStop(3f / 6f, ColorARGB.Red),
+            GradientStop(4f / 6f, ColorARGB.Transparent),
+            GradientStop(5f / 6f, ColorARGB.Blue),
+            GradientStop(1f, ColorARGB.White),
         )
         return Shader.LinearGradient(
             start = Point2F32(0f, 0f),
@@ -121,7 +121,7 @@ class TableColorFilterGm : SkiaGm {
         surface.canvas {
             val cx = w / 2f
             val cy = h / 2f
-            drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = ColorARGB.Transparent))
             val path = org.graphiks.kanvas.geometry.Path { }.apply { addCircle(cx, cy, cx) }
             drawPath(path, Paint(shader = makeShader1(w, h), antiAlias = true))
         }
@@ -135,9 +135,9 @@ class TableColorFilterGm : SkiaGm {
             center = Point2F32(cx, cy),
             radius = cx,
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-                GradientStop(1f, Color.BLUE),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.Blue),
             ),
         )
     }

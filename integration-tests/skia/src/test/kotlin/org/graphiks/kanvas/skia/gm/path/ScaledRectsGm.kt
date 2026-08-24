@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -33,7 +33,7 @@ class ScaledRectsGm : SkiaGm {
         canvas.concat(makeMatrix(3.0f, -0.5f, -0.5f, -3.0f))
         canvas.drawRect(
             RectF32.ofOriginSize(-1000f, -1000f, 2000f, 2000f),
-            Paint(color = Color.BLUE),
+            Paint(color = ColorARGB.Blue),
         )
         canvas.restore()
 
@@ -41,7 +41,7 @@ class ScaledRectsGm : SkiaGm {
         canvas.concat(makeMatrix(3000.0f, -500.0f, -500.0f, -3000.0f))
         canvas.drawRect(
             RectF32.ofOriginSize(-1f, -1f, 2f, 2f),
-            Paint(color = Color.RED, blendMode = BlendMode.PLUS),
+            Paint(color = ColorARGB.Red, blendMode = BlendMode.PLUS),
         )
         canvas.restore()
     }

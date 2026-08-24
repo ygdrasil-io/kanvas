@@ -8,9 +8,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/alpha_image.cpp` (alpha-tint variant).
  *  Creates an ALPHA_8 image from pixel data and renders it with a
@@ -36,7 +35,7 @@ class AlphaImageAlphaTintGm : SkiaGm {
         }
         val image = Image.fromPixels(64, 64, pixels, ColorType.ALPHA_8, "alpha_image")
 
-        val tint = Color.fromRGBA(0f, 1f, 0f, 0.5f)
+        val tint = ColorARGB.fromRGBA(0f, 1f, 0f, 0.5f)
         val paint = Paint(color = tint)
 
         canvas.translate(8f, 8f)

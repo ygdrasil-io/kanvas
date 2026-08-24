@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.runtime_effect
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.gpu.renderer.wgsl.ComposeColorFilterWgsl
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
@@ -11,7 +13,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -35,10 +37,10 @@ class ComposeColorFilterGm : SkiaGm {
         val sweep = Shader.SweepGradient(
             Point2F32(50f, 50f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(0.33f, Color.GREEN),
-                GradientStop(0.66f, Color.BLUE),
-                GradientStop(1f, Color.RED),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(0.33f, ColorARGB.Green),
+                GradientStop(0.66f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.Red),
             ),
         )
 
@@ -71,7 +73,7 @@ class ComposeColorFilterGm : SkiaGm {
             0f, 0f, 0f, (aHi - aLo) / 255f, aLo / 255f,
         )
         val inner = ColorFilter.Luma
-        val outer = ColorFilter.Matrix(tint)
+        val outer = ColorFilter.Matrix(ColorMatrixF32.of(tint))
         if (!useSL) return ColorFilter.Compose(outer, inner)
         return effect.makeColorFilter(UniformBlock {}, mapOf("inner" to inner, "outer" to outer))
     }

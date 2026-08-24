@@ -13,9 +13,9 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -47,7 +47,7 @@ class ClipShaderDifferenceGm : SkiaGm {
             localMatrix,
         )
 
-        val paint = Paint(color = Color.RED)
+        val paint = Paint(color = ColorARGB.Red)
 
         // TL: rectangle with kDifference
         canvas.save()
@@ -63,7 +63,7 @@ class ClipShaderDifferenceGm : SkiaGm {
         canvas.translate(256f, 0f)
         canvas.drawRect(rect, Paint(shader = shader))
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_OUT))
-        canvas.drawRRect(RRect(rect, 64f), paint)
+        canvas.drawRRect(RRectF32.of(rect, 64f), paint)
         canvas.restore()
         canvas.restore()
 

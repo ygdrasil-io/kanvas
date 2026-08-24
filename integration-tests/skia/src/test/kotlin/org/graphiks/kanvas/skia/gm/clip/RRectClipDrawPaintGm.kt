@@ -8,10 +8,10 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,30 +31,30 @@ class RRectClipDrawPaintGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rrect = RRect(RectF32.ofOriginSize(10f, 10f, 236f, 236f), radius = 0f).copy(
-            topLeft = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
-            topRight = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
-            bottomRight = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
-            bottomLeft = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
+        val rrect = RRectF32.of(RectF32.ofOriginSize(10f, 10f, 236f, 236f), radius = 0f).copy(
+            topLeft = org.graphiks.math.geometry.CornerRadiiF32.of(30f, 40f),
+            topRight = org.graphiks.math.geometry.CornerRadiiF32.of(30f, 40f),
+            bottomRight = org.graphiks.math.geometry.CornerRadiiF32.of(30f, 40f),
+            bottomLeft = org.graphiks.math.geometry.CornerRadiiF32.of(30f, 40f),
         )
         val zoomOut = Matrix3x3F32.translation(128f, 128f) * Matrix3x3F32.scaling(0.7f, 0.7f) * Matrix3x3F32.translation(-128f, -128f)
         val layerRect = RectF32.ofOriginSize(0f, 0f, 256f, 256f)
 
-        var p = Paint(color = Color.RED)
+        var p = Paint(color = ColorARGB.Red)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = true)
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
         canvas.concat(zoomOut)
-        p = p.copy(color = Color.BLUE)
+        p = p.copy(color = ColorARGB.Blue)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = false)
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
-        val cyan = Color(0xFF00FFFFu)
-        val green = Color(0xFF00FF00u)
+        val cyan = ColorARGB.fromPackedUInt(0xFF00FFFFu)
+        val green = ColorARGB.fromPackedUInt(0xFF00FF00u)
         p = p.copy(shader = Shader.LinearGradient(
             start = Point2F32(0f, 0f), end = Point2F32(256f, 256f),
             stops = listOf(GradientStop(0f, cyan), GradientStop(1f, green)),
@@ -65,8 +65,8 @@ class RRectClipDrawPaintGm : SkiaGm {
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
-        val magenta = Color(0xFFFF00FFu)
-        val gray = Color(0xFF888888u)
+        val magenta = ColorARGB.fromPackedUInt(0xFFFF00FFu)
+        val gray = ColorARGB.fromPackedUInt(0xFF888888u)
         p = p.copy(shader = Shader.RadialGradient(
             center = Point2F32(128f, 128f), radius = 128f,
             stops = listOf(GradientStop(0f, magenta), GradientStop(1f, gray)),

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import kotlin.math.sin
 
@@ -86,8 +86,8 @@ class TextBlobShaderGm : SkiaGm {
             center = Point2F32(width / 2f, height / 2f),
             radius = width * 0.66f,
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Green),
             ),
             tileMode = TileMode.REPEAT,
         )

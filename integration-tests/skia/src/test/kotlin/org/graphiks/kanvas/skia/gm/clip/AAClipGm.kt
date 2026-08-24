@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -22,9 +22,9 @@ class AAClipGm : SkiaGm {
     override val height = 120
 
     private fun draw(canvas: GmCanvas, target: RectF32, x: Int, y: Int) {
-        val borderPaint = Paint(color = Color.fromRGBA(0f, 0xDD / 255f, 0f, 1f), antiAlias = true)
-        val backgroundPaint = Paint(color = Color.fromRGBA(0xDD / 255f, 0f, 0f, 1f), antiAlias = true)
-        val foregroundPaint = Paint(color = Color.fromRGBA(0f, 0f, 0xDD / 255f, 1f), antiAlias = true)
+        val borderPaint = Paint(color = ColorARGB.fromRGBA(0f, 0xDD / 255f, 0f, 1f), antiAlias = true)
+        val backgroundPaint = Paint(color = ColorARGB.fromRGBA(0xDD / 255f, 0f, 0f, 1f), antiAlias = true)
+        val foregroundPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0xDD / 255f, 1f), antiAlias = true)
 
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())

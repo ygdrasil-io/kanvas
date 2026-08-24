@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -54,10 +54,10 @@ class AllVariants8888Gm : SkiaGm {
                 val dy = y - r
                 val inside = (dx * dx + dy * dy) < (r * r)
                 val color = if (inside) {
-                    if (premul) Color.WHITE
-                    else Color.fromRGBA(1f, 0f, 0f, 1f)
+                    if (premul) ColorARGB.White
+                    else ColorARGB.fromRGBA(1f, 0f, 0f, 1f)
                 } else {
-                    Color.TRANSPARENT
+                    ColorARGB.Transparent
                 }
                 bm.setPixel(x, y, color)
             }
@@ -66,8 +66,8 @@ class AllVariants8888Gm : SkiaGm {
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {
-        val ltGray = Color.fromRGBA(0.94f, 0.94f, 0.94f)
-        val white = Color.WHITE
+        val ltGray = ColorARGB.fromRGBA(0.94f, 0.94f, 0.94f)
+        val white = ColorARGB.White
         val size = 8f
         for (y in 0..((height / size).toInt())) {
             for (x in 0..((width / size).toInt())) {

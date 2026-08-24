@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -27,14 +27,14 @@ class RgbwSweepGradientGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val stops = listOf(
-            GradientStop(0f, Color.WHITE),
-            GradientStop(0.25f, Color.WHITE),
-            GradientStop(0.25f, Color.BLUE),
-            GradientStop(0.5f, Color.BLUE),
-            GradientStop(0.5f, Color.RED),
-            GradientStop(0.75f, Color.RED),
-            GradientStop(0.75f, Color.GREEN),
-            GradientStop(1f, Color.GREEN),
+            GradientStop(0f, ColorARGB.White),
+            GradientStop(0.25f, ColorARGB.White),
+            GradientStop(0.25f, ColorARGB.Blue),
+            GradientStop(0.5f, ColorARGB.Blue),
+            GradientStop(0.5f, ColorARGB.Red),
+            GradientStop(0.75f, ColorARGB.Red),
+            GradientStop(0.75f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Green),
         )
         val shader = Shader.SweepGradient(
             center = Point2F32(50f, 50f),

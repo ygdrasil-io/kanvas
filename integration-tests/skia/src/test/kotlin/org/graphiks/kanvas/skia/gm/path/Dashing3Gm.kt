@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -39,7 +39,7 @@ class Dashing3Gm : SkiaGm {
     ) {
         val strokeCap = if (circles) StrokeCap.ROUND else StrokeCap.BUTT
         var paint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             style = PaintStyle.STROKE,
             strokeWidth = strokeWidth.toFloat(),
             strokeCap = strokeCap,

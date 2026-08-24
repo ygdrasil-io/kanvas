@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -43,7 +43,7 @@ class DrawRegionModesGm : SkiaGm {
 
         var paint = Paint(
             style = PaintStyle.FILL,
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
         )
 
@@ -75,7 +75,7 @@ class DrawRegionModesGm : SkiaGm {
             style = PaintStyle.FILL,
             shader = Shader.LinearGradient(
                 Point2F32(50f, 50f), Point2F32(150f, 150f),
-                listOf(GradientStop(0f, Color.BLUE), GradientStop(1f, Color(0xFFFFFF00u))),
+                listOf(GradientStop(0f, ColorARGB.Blue), GradientStop(1f, ColorARGB.fromPackedUInt(0xFFFFFF00u))),
             ),
         )
         canvas.drawPath(regionPath, paint)

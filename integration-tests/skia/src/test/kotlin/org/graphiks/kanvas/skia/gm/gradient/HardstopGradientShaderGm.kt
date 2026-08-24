@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -31,7 +31,7 @@ class HardstopGradientShaderGm : SkiaGm {
             GradientStop(
                 positions?.getOrElse(i) { if (i == colors.lastIndex) 1f else 0f }
                     ?: (i.toFloat() / (colors.size - 1).coerceAtLeast(1)),
-                Color.fromRGBA(
+                ColorARGB.fromRGBA(
                     ((c ushr 16) and 0xFF) / 255f,
                     ((c ushr 8) and 0xFF) / 255f,
                     (c and 0xFF) / 255f,

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -45,7 +45,7 @@ class TilemodeDecalGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = sourceImage
-        val bgPaint = Paint(color = Color(0xFFFFFF00u))
+        val bgPaint = Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF00u))
 
         val imgW = img.width.toFloat()
         val imgH = img.height.toFloat()
@@ -90,7 +90,7 @@ class TilemodeDecalGm : SkiaGm {
                 canvas.drawRect(r, bgPaint)
                 val grad = Shader.LinearGradient(
                     Point2F32(0f, 0f), Point2F32(imgW, imgH),
-                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                     pair.tx,
                 )
                 canvas.drawRect(r, Paint(shader = grad))
@@ -104,7 +104,7 @@ class TilemodeDecalGm : SkiaGm {
                 val rad = imgW * 0.5f
                 val grad = Shader.RadialGradient(
                     center, rad,
-                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                     pair.tx,
                 )
                 canvas.drawRect(r, Paint(shader = grad))

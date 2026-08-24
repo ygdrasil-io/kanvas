@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/blurtextsmallradii.cpp::blurSmallRadii`.
@@ -34,13 +34,13 @@ class BlurSmallRadiiGm : SkiaGm {
 
         for (sigma in sigmas) {
             val redBlurPaint = Paint(
-                color = Color.RED,
+                color = ColorARGB.Red,
                 antiAlias = true,
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
             )
             canvas.drawString("guest", 20f, y, font, redBlurPaint)
 
-            val greenPaint = Paint(color = Color(0xFF00FF00u))
+            val greenPaint = Paint(color = ColorARGB.fromPackedUInt(0xFF00FF00u))
             canvas.drawString("guest", 20f, y, font, greenPaint)
             y += 20f
         }

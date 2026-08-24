@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -30,7 +30,7 @@ class DashCircleGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val refPaint = Paint(
-            color = Color.fromRGBA(0xbf / 255f, 0x3f / 255f, 0x7f / 255f, 1f),
+            color = ColorARGB.fromRGBA(0xbf / 255f, 0x3f / 255f, 0x7f / 255f, 1f),
             style = PaintStyle.STROKE,
             strokeWidth = 1f,
             antiAlias = true,

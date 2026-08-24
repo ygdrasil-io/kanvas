@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/imagefiltersbase.cpp::ImageFiltersText_CF`
@@ -36,7 +36,7 @@ class TextFilterColorGm : SkiaGm {
             for (useFilter in 0..1) {
                 canvas.save()
                 val colorFilterPaint = Paint(
-                    colorFilter = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_IN),
+                    colorFilter = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_IN),
                 )
                 if (useFilter == 1) {
                     if (doSaveLayer == 1) {

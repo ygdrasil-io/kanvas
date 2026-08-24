@@ -8,9 +8,9 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -33,50 +33,50 @@ class RRectBlurGm : SkiaGm {
             canvas,
             cellY = 0,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 1.0f),
-            color = Color.WHITE,
-            rr = RRect(RectF32(0f, 0f, 50f, 50f), CornerRadii(10f, 15f)),
+            color = ColorARGB.White,
+            rr = RRectF32.of(RectF32(0f, 0f, 50f, 50f), CornerRadiiF32.of(10f, 15f)),
         )
 
         drawBlurryRrect(
             canvas,
             cellY = 100,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
-            color = Color.fromRGBA(1f, 1f, 0f, 1f),
-            rr = RRect(RectF32(0f, 0f, 60f, 80f), CornerRadii(3.1f, 1.5f)),
+            color = ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
+            rr = RRectF32.of(RectF32(0f, 0f, 60f, 80f), CornerRadiiF32.of(3.1f, 1.5f)),
         )
 
-        val ninePatch = RRect(
+        val ninePatch = RRectF32.of(
             rect = RectF32(0f, 0f, 70f, 80f),
-            topLeft = CornerRadii(5f, 10f),
-            topRight = CornerRadii(13f, 10f),
-            bottomRight = CornerRadii(13f, 7f),
-            bottomLeft = CornerRadii(5f, 7f),
+            topLeft = CornerRadiiF32.of(5f, 10f),
+            topRight = CornerRadiiF32.of(13f, 10f),
+            bottomRight = CornerRadiiF32.of(13f, 7f),
+            bottomLeft = CornerRadiiF32.of(5f, 7f),
         )
         drawBlurryRrect(
             canvas,
             cellY = 200,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 2.5f),
-            color = Color.fromRGBA(200f / 255f, 100f / 255f, 30f / 255f, 1f),
+            color = ColorARGB.fromRGBA(200f / 255f, 100f / 255f, 30f / 255f, 1f),
             rr = ninePatch,
         )
 
-        val complex = RRect(
+        val complex = RRectF32.of(
             rect = RectF32(0f, 0f, 90f, 90f),
-            topLeft = CornerRadii(0f, 0f),
-            topRight = CornerRadii(20f, 1f),
-            bottomRight = CornerRadii(30f, 30f),
-            bottomLeft = CornerRadii(10f, 30f),
+            topLeft = CornerRadiiF32.of(0f, 0f),
+            topRight = CornerRadiiF32.of(20f, 1f),
+            bottomRight = CornerRadiiF32.of(30f, 30f),
+            bottomLeft = CornerRadiiF32.of(10f, 30f),
         )
         drawBlurryRrect(
             canvas,
             cellY = 300,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 1.1f),
-            color = Color.fromRGBA(35f / 255f, 120f / 255f, 220f / 255f, 1f),
+            color = ColorARGB.fromRGBA(35f / 255f, 120f / 255f, 220f / 255f, 1f),
             rr = complex,
         )
 
         val linePaint = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             style = org.graphiks.kanvas.paint.PaintStyle.STROKE,
             strokeWidth = 1f,
         )
@@ -90,8 +90,8 @@ class RRectBlurGm : SkiaGm {
         canvas: GmCanvas,
         cellY: Int,
         mf: MaskFilter.Blur,
-        color: Color,
-        rr: RRect,
+        color: ColorARGB,
+        rr: RRectF32,
     ) {
         val paint = Paint(
             color = color,
@@ -110,14 +110,14 @@ class RRectBlurGm : SkiaGm {
         canvas.drawPath(rightPath, paint)
     }
 
-    private fun offsetRRect(rr: RRect, dx: Float, dy: Float): RRect {
+    private fun offsetRRect(rr: RRectF32, dx: Float, dy: Float): RRectF32 {
         val offsetRect = RectF32.ofLTRB(
             rr.rect.left + dx,
             rr.rect.top + dy,
             rr.rect.right + dx,
             rr.rect.bottom + dy,
         )
-        return RRect(
+        return RRectF32.of(
             rect = offsetRect,
             topLeft = rr.topLeft,
             topRight = rr.topRight,

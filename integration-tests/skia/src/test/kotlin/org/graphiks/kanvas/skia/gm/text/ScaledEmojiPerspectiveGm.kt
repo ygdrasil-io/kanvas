@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
@@ -43,7 +43,7 @@ class ScaledEmojiPerspectiveGm : SkiaGm {
 
         canvas.save()
         canvas.concat(perspective)
-        canvas.drawSimpleText(text, 200f, 500f, font, Paint(color = Color.fromRGBA(0f, 1f, 1f)))
+        canvas.drawSimpleText(text, 200f, 500f, font, Paint(color = ColorARGB.fromRGBA(0f, 1f, 1f)))
         canvas.restore()
     }
 }

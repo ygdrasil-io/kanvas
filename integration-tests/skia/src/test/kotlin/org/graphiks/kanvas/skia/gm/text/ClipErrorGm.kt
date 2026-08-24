@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -35,7 +35,7 @@ class ClipErrorGm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, kSigma),
         )
         val paint = Paint()
-        val clearPaint = Paint(color = Color.WHITE)
+        val clearPaint = Paint(color = ColorARGB.White)
 
         canvas.save()
         canvas.translate(0f, 0f)

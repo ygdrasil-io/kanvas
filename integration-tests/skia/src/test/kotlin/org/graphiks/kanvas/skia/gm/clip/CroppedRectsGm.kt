@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -86,9 +86,9 @@ class CroppedRectsGm : SkiaGm {
     private fun createImage(): Image {
         val surface = Surface(500, 500)
         surface.canvas {
-            drawColor(Color.RED)
+            drawColor(ColorARGB.Red)
 
-            val greenFill = Paint(color = Color.fromRGBA(0f, 1f, 0f))
+            val greenFill = Paint(color = ColorARGB.fromRGBA(0f, 1f, 0f))
             drawRect(srcImageClip, greenFill)
 
             val strokeWidth = 10f
@@ -101,7 +101,7 @@ class CroppedRectsGm : SkiaGm {
             val darkGreen = Paint(
                 style = PaintStyle.STROKE,
                 strokeWidth = strokeWidth,
-                color = Color.fromRGBA(0f, 0x88 / 255f, 0f),
+                color = ColorARGB.fromRGBA(0f, 0x88 / 255f, 0f),
             )
             drawRect(inset, darkGreen)
         }

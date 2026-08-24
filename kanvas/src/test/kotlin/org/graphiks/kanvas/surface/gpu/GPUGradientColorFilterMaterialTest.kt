@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -7,7 +9,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,16 +21,16 @@ class GPUGradientColorFilterMaterialTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(10f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.BLUE),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Blue),
             ),
         )
-        val swapRedBlue = ColorFilter.Matrix(floatArrayOf(
+        val swapRedBlue = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
             0f, 0f, 1f, 0f, 0f,
             0f, 1f, 0f, 0f, 0f,
             1f, 0f, 0f, 0f, 0f,
             0f, 0f, 0f, 1f, 0f,
-        ))
+        )))
 
         val material = Paint(shader = shader, colorFilter = swapRedBlue).toMaterial() as GPUMaterialDescriptor.LinearGradient
 
@@ -47,13 +49,13 @@ class GPUGradientColorFilterMaterialTest {
             end = Point2F32(20f, 20f),
             endRadius = 20f,
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Green),
             ),
         )
         val filtered = Shader.WithColorFilter(
             shader = shader,
-            filter = ColorFilter.Blend(Color.BLUE, BlendMode.SRC),
+            filter = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC),
         )
 
         val material = filtered.toMaterial() as GPUMaterialDescriptor.ConicalGradient
@@ -71,16 +73,16 @@ class GPUGradientColorFilterMaterialTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(10f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.BLACK),
-                GradientStop(1f, Color.WHITE),
+                GradientStop(0f, ColorARGB.Black),
+                GradientStop(1f, ColorARGB.White),
             ),
         )
-        val clampingMatrix = ColorFilter.Matrix(floatArrayOf(
+        val clampingMatrix = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
             2f, 0f, 0f, 0f, -0.5f,
             0f, 1f, 0f, 0f, 0f,
             0f, 0f, 1f, 0f, 0f,
             0f, 0f, 0f, 1f, 0f,
-        ))
+        )))
 
         val material = Paint(shader = shader, colorFilter = clampingMatrix).toMaterial() as GPUMaterialDescriptor.LinearGradient
 
@@ -95,15 +97,15 @@ class GPUGradientColorFilterMaterialTest {
             start = Point2F32(0f, 0f),
             end = Point2F32(10f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Green),
             ),
             tileMode = TileMode.DECAL,
         )
 
         val material = Paint(
             shader = shader,
-            colorFilter = ColorFilter.Blend(Color.BLUE, BlendMode.SRC),
+            colorFilter = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC),
         ).toMaterial() as GPUMaterialDescriptor.LinearGradient
 
         assertEquals(1f, material.startR)

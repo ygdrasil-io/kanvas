@@ -12,9 +12,9 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -53,7 +53,7 @@ class GPUMaskBlurSurfaceTest {
             clipBounds = fullTarget(),
             style = BlurStyle.NORMAL,
             sigma = 2f,
-            source = Color.BLACK,
+            source = ColorARGB.Black,
             blendMode = BlendMode.SRC_OVER,
             destinationEncoded = transparent(),
         )
@@ -63,21 +63,21 @@ class GPUMaskBlurSurfaceTest {
 
     @Test
     fun `source-composited translucent blur renders prepared over an opaque destination`() {
-        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.BLUE)
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.Blue)
 
         // Opaque source.
-        val opaque = renderBlurredOverOpaqueBlue(Color.RED, sigma = 3f)
+        val opaque = renderBlurredOverOpaqueBlue(ColorARGB.Red, sigma = 3f)
         val expectedOpaque = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(10f, 10f, 22f, 22f), fullTarget(), BlurStyle.NORMAL, 3f,
-            Color.RED, BlendMode.SRC_OVER, destination,
+            ColorARGB.Red, BlendMode.SRC_OVER, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedOpaque, opaque)
 
         // Translucent source: premultiplied alpha participates in the coverage shade.
-        val translucent = renderBlurredOverOpaqueBlue(Color.fromArgb(128, 255, 0, 0), sigma = 3f)
+        val translucent = renderBlurredOverOpaqueBlue(ColorARGB.of(128, 255, 0, 0), sigma = 3f)
         val expectedTranslucent = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(10f, 10f, 22f, 22f), fullTarget(), BlurStyle.NORMAL, 3f,
-            Color.fromArgb(128, 255, 0, 0), BlendMode.SRC_OVER, destination,
+            ColorARGB.of(128, 255, 0, 0), BlendMode.SRC_OVER, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedTranslucent, translucent)
     }
@@ -93,7 +93,7 @@ class GPUMaskBlurSurfaceTest {
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 8f, 9f, 17f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
         // The halo must fade out beyond the target edge (decal), never wrap.
@@ -105,7 +105,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = renderRectPixels(BlurStyle.OUTER, 2f)
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(8f, 8f, 17f, 17f), fullTarget(), BlurStyle.OUTER, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
         // OUTER coverage is zero inside the original shape bounds.
@@ -117,7 +117,7 @@ class GPUMaskBlurSurfaceTest {
         val solid = renderRectPixels(BlurStyle.SOLID, 2f)
         val expectedSolid = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(8f, 8f, 17f, 17f), fullTarget(), BlurStyle.SOLID, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedSolid, solid)
         // SOLID keeps full coverage inside the shape (max(original, blurred)).
@@ -126,7 +126,7 @@ class GPUMaskBlurSurfaceTest {
         val inner = renderRectPixels(BlurStyle.INNER, 2f)
         val expectedInner = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(8f, 8f, 17f, 17f), fullTarget(), BlurStyle.INNER, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedInner, inner)
         // INNER coverage is zero outside the original shape bounds.
@@ -145,7 +145,7 @@ class GPUMaskBlurSurfaceTest {
                 contourStarts = listOf(0),
                 inverseFill = false,
             ),
-            fullTarget(), BlurStyle.NORMAL, 2f, Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            fullTarget(), BlurStyle.NORMAL, 2f, ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedTriangle, triangle)
 
@@ -153,15 +153,15 @@ class GPUMaskBlurSurfaceTest {
         val expectedRRect = TopLevelMaskBlurPixelOracle.render(
             32, 32,
             TopLevelMaskBlurPixelOracle.Shape.RRectShape(
-                RRect(
+                RRectF32.of(
                     rect = RectF32(8f, 8f, 17f, 17f),
-                    topLeft = CornerRadii(2f, 2f),
-                    topRight = CornerRadii(2f, 2f),
-                    bottomRight = CornerRadii(2f, 2f),
-                    bottomLeft = CornerRadii(2f, 2f),
+                    topLeft = CornerRadiiF32.of(2f, 2f),
+                    topRight = CornerRadiiF32.of(2f, 2f),
+                    bottomRight = CornerRadiiF32.of(2f, 2f),
+                    bottomLeft = CornerRadiiF32.of(2f, 2f),
                 ),
             ),
-            fullTarget(), BlurStyle.NORMAL, 2f, Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            fullTarget(), BlurStyle.NORMAL, 2f, ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedRRect, rrect)
     }
@@ -171,7 +171,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = renderRectPixels(BlurStyle.NORMAL, 48f)
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(8f, 8f, 17f, 17f), fullTarget(), BlurStyle.NORMAL, 48f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
         // The wide halo must reach well beyond the shape bounds.
@@ -199,7 +199,7 @@ class GPUMaskBlurSurfaceTest {
 
     @Test
     fun `ordinary paint does not force mask blur composition`() {
-        val result = renderOrdinaryRect(Paint.fill(Color.RED))
+        val result = renderOrdinaryRect(Paint.fill(ColorARGB.Red))
 
         assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:") })
     }
@@ -212,7 +212,7 @@ class GPUMaskBlurSurfaceTest {
         val wideOpen = renderSourceCompositedBlur(RenderConfig.DEFAULT) {}
         val expectedWideOpen = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expectedWideOpen, wideOpen)
     }
@@ -243,7 +243,7 @@ class GPUMaskBlurSurfaceTest {
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
             clip = TopLevelMaskBlurPixelOracle.RectClip(14f, 14f, 18f, 18f, antiAlias = true),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
@@ -262,7 +262,7 @@ class GPUMaskBlurSurfaceTest {
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
             clip = TopLevelMaskBlurPixelOracle.RectClip(14.5f, 14.5f, 18.5f, 18.5f, antiAlias = true),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
@@ -293,7 +293,7 @@ class GPUMaskBlurSurfaceTest {
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC_OVER, transparent(),
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
             clip = TopLevelMaskBlurPixelOracle.ComplexClip(
                 listOf(
                     TopLevelMaskBlurPixelOracle.ComplexClipElement(
@@ -323,7 +323,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                 save()
                 clipRect(RectF32(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
                 drawRect(
@@ -334,10 +334,10 @@ class GPUMaskBlurSurfaceTest {
             }
             render().pixels.toUByteArray()
         }
-        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE)
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.White)
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(4f, 4f, 28f, 28f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.DARKEN, destination,
+            ColorARGB.Black, BlendMode.DARKEN, destination,
             clip = TopLevelMaskBlurPixelOracle.RectClip(8f, 8f, 24f, 24f, antiAlias = false),
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
@@ -354,8 +354,8 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                drawRect(RectF32(0f, 0f, 16f, 32f), Paint.fill(Color.fromArgb(255, 128, 128, 128)))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
+                drawRect(RectF32(0f, 0f, 16f, 32f), Paint.fill(ColorARGB.of(255, 128, 128, 128)))
                 drawRect(
                     RectF32(12f, 8f, 24f, 24f),
                     blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
@@ -364,12 +364,12 @@ class GPUMaskBlurSurfaceTest {
             render().pixels.toUByteArray()
         }
         val destination = TopLevelMaskBlurPixelOracle.overlayRect(
-            TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE),
-            32, 32, 0f, 0f, 16f, 32f, Color.fromArgb(255, 128, 128, 128),
+            TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.White),
+            32, 32, 0f, 0f, 16f, 32f, ColorARGB.of(255, 128, 128, 128),
         )
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(12f, 8f, 24f, 24f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.DARKEN, destination,
+            ColorARGB.Black, BlendMode.DARKEN, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
@@ -381,8 +381,8 @@ class GPUMaskBlurSurfaceTest {
         // per-channel minimum (W3C compositing, mirroring kanvasBlendAdvancedPremul);
         // a premultiplied-min oracle diverges by tens of levels for colored translucent
         // sources. Source = translucent (128,128,255,0) over mid-gray (0.5).
-        val source = Color.fromArgb(128, 128, 255, 0)
-        val destinationColor = Color.fromArgb(255, 128, 128, 128)
+        val source = ColorARGB.of(128, 128, 255, 0)
+        val destinationColor = ColorARGB.of(255, 128, 128, 128)
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
@@ -411,7 +411,7 @@ class GPUMaskBlurSurfaceTest {
         requireWebGpu()
         // Frame 1 fills the retained session target with blue.
         Surface(width = 32, height = 32).run {
-            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Blue)) }
             render()
         }
         // Frame 2 is the leading-blur-mixed shape: the FIRST paint op is a mask blur, a later
@@ -423,7 +423,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(RectF32(4f, 4f, 12f, 12f), blurPaint(BlurStyle.NORMAL, 2f))
-                drawRect(RectF32(20f, 20f, 30f, 30f), Paint.fill(Color.RED))
+                drawRect(RectF32(20f, 20f, 30f, 30f), Paint.fill(ColorARGB.Red))
             }
             render().pixels.toUByteArray()
         }
@@ -437,7 +437,7 @@ class GPUMaskBlurSurfaceTest {
         requireWebGpu()
         // Frame 1 fills the retained session target with blue.
         Surface(width = 32, height = 32).run {
-            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Blue)) }
             render()
         }
         // Frame 2 draws TWO blur rects and nothing else. Chain 0's composite is the frame's
@@ -470,7 +470,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.White))
                 drawRect(
                     RectF32(10f, 10f, 22f, 22f),
                     blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC),
@@ -478,10 +478,10 @@ class GPUMaskBlurSurfaceTest {
             }
             render().pixels.toUByteArray()
         }
-        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, Color.WHITE)
+        val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.White)
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(10f, 10f, 22f, 22f), fullTarget(), BlurStyle.NORMAL, 2f,
-            Color.BLACK, BlendMode.SRC, destination,
+            ColorARGB.Black, BlendMode.SRC, destination,
         )
         TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
     }
@@ -493,11 +493,11 @@ class GPUMaskBlurSurfaceTest {
 
     private fun transparent() = UByteArray(32 * 32 * 4)
 
-    private fun renderBlurredOverOpaqueBlue(source: Color, sigma: Float): UByteArray =
+    private fun renderBlurredOverOpaqueBlue(source: ColorARGB, sigma: Float): UByteArray =
         Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Blue))
                 drawRect(
                     RectF32(10f, 10f, 22f, 22f),
                     Paint.fill(source).copy(antiAlias = false, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma)),
@@ -566,12 +566,12 @@ class GPUMaskBlurSurfaceTest {
         requireWebGpu()
         canvas {
             drawRRect(
-                RRect(
+                RRectF32.of(
                     rect = RectF32(8f, 8f, 17f, 17f),
-                    topLeft = CornerRadii(2f, 2f),
-                    topRight = CornerRadii(2f, 2f),
-                    bottomRight = CornerRadii(2f, 2f),
-                    bottomLeft = CornerRadii(2f, 2f),
+                    topLeft = CornerRadiiF32.of(2f, 2f),
+                    topRight = CornerRadiiF32.of(2f, 2f),
+                    bottomRight = CornerRadiiF32.of(2f, 2f),
+                    bottomLeft = CornerRadiiF32.of(2f, 2f),
                 ),
                 blurPaint(BlurStyle.NORMAL, sigma),
             )
@@ -580,7 +580,7 @@ class GPUMaskBlurSurfaceTest {
     }
 
     private fun blurPaint(style: BlurStyle, sigma: Float): Paint = Paint(
-        color = Color.BLACK,
+        color = ColorARGB.Black,
         maskFilter = MaskFilter.Blur(style, sigma),
         antiAlias = false,
     )

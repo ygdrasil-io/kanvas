@@ -7,8 +7,8 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/hugepath.cpp` (huge-AA variant).
@@ -34,7 +34,7 @@ class PathHugeAaGm : SkiaGm {
         val surface = Surface(w, h)
 
         val path = Path { }
-        path.addRRect(RRect(
+        path.addRRect(RRectF32.of(
             RectF32.ofLTRB(4f, 4f, (w - 8).toFloat(), (h - 8).toFloat()),
             12f,
         ))
@@ -52,7 +52,7 @@ class PathHugeAaGm : SkiaGm {
         canvas.save()
         canvas.clipRect(RectF32.ofLTRB(4f, 4f, 68f, 68f))
         surface.canvas {
-            clear(Color.TRANSPARENT)
+            clear(ColorARGB.Transparent)
             drawPath(path, Paint(antiAlias = true))
         }
         canvas.drawImage(surface.makeImageSnapshot(), RectF32(

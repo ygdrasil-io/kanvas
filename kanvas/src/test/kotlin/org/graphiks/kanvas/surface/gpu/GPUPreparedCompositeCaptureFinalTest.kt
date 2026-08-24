@@ -8,7 +8,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
@@ -23,8 +23,8 @@ import kotlin.test.assertTrue
 class GPUPreparedCompositeCaptureFinalTest {
 
     private val id33 = Matrix3x3F32.Identity
-    private val black = Paint(color = Color.fromArgb(255, 0, 0, 0))
-    private val red = Paint(color = Color.fromArgb(255, 255, 0, 0))
+    private val black = Paint(color = ColorARGB.of(255, 0, 0, 0))
+    private val red = Paint(color = ColorARGB.of(255, 255, 0, 0))
 
     @Test
     fun `two different rects produce different identities`() {

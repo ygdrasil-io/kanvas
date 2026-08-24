@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -41,10 +41,10 @@ class ScaledEmojiPosGm : SkiaGm {
         val positions = run.positions
 
         // Draw via auto-advance (upper row — reference, in green)
-        canvas.drawSimpleText(text, 50f, 250f, font, Paint(color = Color.GREEN))
+        canvas.drawSimpleText(text, 50f, 250f, font, Paint(color = ColorARGB.Green))
 
         // Draw via per-glyph-pos (lower row, in red, shifted down)
         val shiftedPositions = positions.map { Point2F32(it.x, it.y + 350f) }
-        canvas.drawGlyphs(glyphIds, shiftedPositions, font, Paint(color = Color.RED))
+        canvas.drawGlyphs(glyphIds, shiftedPositions, font, Paint(color = ColorARGB.Red))
     }
 }

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /** Supplies a glyph-local paint, as Skia's drawable custom glyphs do. */
 interface GlyphPaintProvider {
@@ -71,7 +71,7 @@ class CustomTypeface private constructor(
                 output.writeFloat(glyph.advance)
                 output.writeBoolean(glyph.drawablePaint != null)
                 glyph.drawablePaint?.let { paint ->
-                    output.writeInt(paint.color.packed.toInt())
+                    output.writeInt(paint.color.value.toInt())
                     output.writeBoolean(paint.antiAlias)
                 }
                 writePath(output, glyph.path)
@@ -136,7 +136,7 @@ class CustomTypeface private constructor(
                 val advance = input.readFloat()
                 val hasPaint = input.readBoolean()
                 val paint = if (hasPaint) Paint(
-                    color = Color.fromArgbInt(input.readInt()),
+                    color = ColorARGB.fromPackedInt(input.readInt()),
                     antiAlias = input.readBoolean(),
                 ) else {
                     null

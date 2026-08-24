@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -52,9 +52,9 @@ class LocalMatrixImageFilterGm : SkiaGm {
     private fun makeSourceImage(): Image {
         val surface = Surface(100, 100)
         surface.canvas {
-            drawRect(RectF32(0f, 0f, 100f, 100f), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, 100f, 100f), Paint(color = ColorARGB.Transparent))
             val circlePath = Path { }.apply { addCircle(50f, 50f, 50f) }
-            drawPath(circlePath, Paint(antiAlias = true, color = Color.RED))
+            drawPath(circlePath, Paint(antiAlias = true, color = ColorARGB.Red))
         }
         return surface.makeImageSnapshot()
     }

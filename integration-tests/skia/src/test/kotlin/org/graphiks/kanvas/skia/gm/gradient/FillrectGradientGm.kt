@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -26,26 +26,26 @@ class FillrectGradientGm : SkiaGm {
     override val height = kNumRows * (kCellSize + kPadSize)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        drawGradient(canvas, listOf(GradientStop(0f, Color.GREEN), GradientStop(1f, Color.WHITE)))
-        drawGradient(canvas, listOf(GradientStop(0f, Color.GREEN), GradientStop(0.5f, Color.WHITE), GradientStop(1f, Color.RED)))
-        drawGradient(canvas, listOf(GradientStop(0.4f, Color.GREEN), GradientStop(0.5f, Color.WHITE), GradientStop(0.6f, Color.RED)))
-        drawGradient(canvas, listOf(GradientStop(0f, Color.RED)))
-        drawGradient(canvas, listOf(GradientStop(1f, Color.RED)))
-        drawGradient(canvas, listOf(GradientStop(0.5f, Color.RED)))
+        drawGradient(canvas, listOf(GradientStop(0f, ColorARGB.Green), GradientStop(1f, ColorARGB.White)))
+        drawGradient(canvas, listOf(GradientStop(0f, ColorARGB.Green), GradientStop(0.5f, ColorARGB.White), GradientStop(1f, ColorARGB.Red)))
+        drawGradient(canvas, listOf(GradientStop(0.4f, ColorARGB.Green), GradientStop(0.5f, ColorARGB.White), GradientStop(0.6f, ColorARGB.Red)))
+        drawGradient(canvas, listOf(GradientStop(0f, ColorARGB.Red)))
+        drawGradient(canvas, listOf(GradientStop(1f, ColorARGB.Red)))
+        drawGradient(canvas, listOf(GradientStop(0.5f, ColorARGB.Red)))
         drawGradient(canvas, listOf(
-            GradientStop(0f, Color.BLUE), GradientStop(0.5f, Color.WHITE),
-            GradientStop(0.5f, Color.RED), GradientStop(1f, Color.fromRGBA(1f, 1f, 0f)),
+            GradientStop(0f, ColorARGB.Blue), GradientStop(0.5f, ColorARGB.White),
+            GradientStop(0.5f, ColorARGB.Red), GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f)),
         ))
         drawGradient(canvas, listOf(
-            GradientStop(0f, Color.BLUE), GradientStop(0.5f, Color.WHITE),
-            GradientStop(0.5f, Color.fromRGBA(0x88f / 255f, 0x88f / 255f, 0x88f / 255f)),
-            GradientStop(0.5f, Color.fromRGBA(0f, 1f, 1f)),
-            GradientStop(0.5f, Color.RED), GradientStop(1f, Color.fromRGBA(1f, 1f, 0f)),
+            GradientStop(0f, ColorARGB.Blue), GradientStop(0.5f, ColorARGB.White),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0x88f / 255f, 0x88f / 255f, 0x88f / 255f)),
+            GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 1f)),
+            GradientStop(0.5f, ColorARGB.Red), GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f)),
         ))
         drawGradient(canvas, listOf(
-            GradientStop(0.5f, Color.WHITE), GradientStop(0.5f, Color.fromRGBA(0x88f / 255f, 0x88f / 255f, 0x88f / 255f)),
-            GradientStop(1f, Color.fromRGBA(1f, 1f, 0f)), GradientStop(0.5f, Color.fromRGBA(0f, 1f, 1f)),
-            GradientStop(0.5f, Color.RED), GradientStop(0f, Color.BLUE),
+            GradientStop(0.5f, ColorARGB.White), GradientStop(0.5f, ColorARGB.fromRGBA(0x88f / 255f, 0x88f / 255f, 0x88f / 255f)),
+            GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f)), GradientStop(0.5f, ColorARGB.fromRGBA(0f, 1f, 1f)),
+            GradientStop(0.5f, ColorARGB.Red), GradientStop(0f, ColorARGB.Blue),
         ))
     }
 

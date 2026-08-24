@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bigtileimagefilter.cpp` (tile-image-filter variant).
@@ -38,8 +38,8 @@ class TileImageFilterGm : SkiaGm {
 
         canvas.drawColor(0f, 0f, 0f, 1f)
 
-        val red = Paint(color = Color.fromRGBA(1f, 0f, 0f, 1f), style = PaintStyle.STROKE)
-        val blue = Paint(color = Color.fromRGBA(0f, 0f, 1f, 1f), style = PaintStyle.STROKE)
+        val red = Paint(color = ColorARGB.fromRGBA(1f, 0f, 0f, 1f), style = PaintStyle.STROKE)
+        val blue = Paint(color = ColorARGB.fromRGBA(0f, 0f, 1f, 1f), style = PaintStyle.STROKE)
 
         var x = 0f
         var y = 0f
@@ -99,10 +99,10 @@ class TileImageFilterGm : SkiaGm {
 
             canvas.save()
             canvas.translate(0f, 100f)
-            val greenCF = ColorFilter.Blend(Color.fromRGBA(0f, 1f, 0f, 1f), org.graphiks.kanvas.paint.BlendMode.SRC)
+            val greenCF = ColorFilter.Blend(ColorARGB.fromRGBA(0f, 1f, 0f, 1f), org.graphiks.kanvas.paint.BlendMode.SRC)
             val coloured = ImageFilter.ColorFilter(greenCF, null)
             val tileFilter = ImageFilter.Tile(srcRect, dstRect, coloured)
-            val tilePaint = Paint(color = Color.fromRGBA(1f, 0f, 0f, 1f), imageFilter = tileFilter)
+            val tilePaint = Paint(color = ColorARGB.fromRGBA(1f, 0f, 0f, 1f), imageFilter = tileFilter)
             canvas.clipRect(RectF32(0f, 0f, dstRect.width(), dstRect.height()))
             canvas.saveLayer(dstRect, tilePaint)
             canvas.restore()
@@ -113,7 +113,7 @@ class TileImageFilterGm : SkiaGm {
     private fun makeStringImage(w: Int, h: Int, color: Int, x: Int, y: Int, textSize: Int, str: String): Image {
         val surface = Surface(w, h)
         surface.canvas {
-            val paint = Paint(color = Color.fromRGBA(
+            val paint = Paint(color = ColorARGB.fromRGBA(
                 ((color shr 16) and 0xFF) / 255f,
                 ((color shr 8) and 0xFF) / 255f,
                 (color and 0xFF) / 255f,
@@ -128,14 +128,14 @@ class TileImageFilterGm : SkiaGm {
     private fun makeCheckerboardImage(w: Int, h: Int, c1: Int, c2: Int, size: Int): Image {
         val surface = Surface(w, h)
         surface.canvas {
-            val bgColor = Color.fromRGBA(
+            val bgColor = ColorARGB.fromRGBA(
                 ((c1 shr 16) and 0xFF) / 255f,
                 ((c1 shr 8) and 0xFF) / 255f,
                 (c1 and 0xFF) / 255f,
                 ((c1 shr 24) and 0xFF) / 255f,
             )
             drawColor(bgColor)
-            val fgColor = Color.fromRGBA(
+            val fgColor = ColorARGB.fromRGBA(
                 ((c2 shr 16) and 0xFF) / 255f,
                 ((c2 shr 8) and 0xFF) / 255f,
                 (c2 and 0xFF) / 255f,

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -36,7 +36,7 @@ class StLouisArchGm : SkiaGm {
         canvas.save()
         canvas.scale(1f, -1f)
         canvas.translate(0f, -kHeight)
-        val paint = Paint(color = Color.BLACK, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
+        val paint = Paint(color = ColorARGB.Black, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
         for (p in paths) {
             canvas.drawPath(p, paint)
         }

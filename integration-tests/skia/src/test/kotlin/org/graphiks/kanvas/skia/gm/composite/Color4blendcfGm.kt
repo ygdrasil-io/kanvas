@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,13 +27,13 @@ class Color4blendcfGm : SkiaGm {
         canvas.translate(10f, 10f)
 
         val colors = listOf(
-            Color.RED,
-            Color.GREEN,
-            Color.BLUE,
-            Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
+            ColorARGB.Red,
+            ColorARGB.Green,
+            ColorARGB.Blue,
+            ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
         )
 
-        val paint = Paint(color = Color.WHITE)
+        val paint = Paint(color = ColorARGB.White)
         val r = RectF32.ofOriginSize(0f, 0f, 100f, 100f)
 
         for (c4 in colors) {

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -33,8 +33,8 @@ class AsyncRescaleAndReadNoBleedGm : SkiaGm {
     private fun makeSource(): Image {
         val surface = Surface(12, 6)
         surface.canvas {
-            drawRect(RectF32(0f, 0f, 12f, 6f), Paint(color = Color(0xFFFF0000u)))
-            drawRect(RectF32(6f, 0f, 12f, 6f), Paint(color = Color(0xFF0000FFu)))
+            drawRect(RectF32(0f, 0f, 12f, 6f), Paint(color = ColorARGB.fromPackedUInt(0xFFFF0000u)))
+            drawRect(RectF32(6f, 0f, 12f, 6f), Paint(color = ColorARGB.fromPackedUInt(0xFF0000FFu)))
         }
         return surface.makeImageSnapshot()
     }

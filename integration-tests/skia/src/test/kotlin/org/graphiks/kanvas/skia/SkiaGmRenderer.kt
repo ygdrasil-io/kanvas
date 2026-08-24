@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 object SkiaGmRenderer {
@@ -25,7 +25,7 @@ object SkiaGmRenderer {
         surface.renderOpListener = tracer
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, width, height)

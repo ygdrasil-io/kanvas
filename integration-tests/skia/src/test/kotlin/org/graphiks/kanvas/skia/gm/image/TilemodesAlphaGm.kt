@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -60,7 +60,7 @@ class TilemodesAlphaGm : SkiaGm {
                 )
                 val paint = Paint(
                     shader = shader,
-                    color = Color.fromRGBA(0f, 0f, 0f, 0.5f),
+                    color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.5f),
                 )
                 canvas.drawRect(rect, paint)
             }

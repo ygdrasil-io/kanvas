@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -36,19 +36,19 @@ class VeryLargePictureImageGm : SkiaGm {
 
         canvas.translate(10f, 10f)
 
-        showImage(canvas, small, small, Color.RED, Color.GREEN)
+        showImage(canvas, small, small, ColorARGB.Red, ColorARGB.Green)
         canvas.translate(0f, 150f)
 
-        showImage(canvas, big, small, Color.BLUE, Color.fromRGBA(1f, 0f, 1f, 1f))
+        showImage(canvas, big, small, ColorARGB.Blue, ColorARGB.fromRGBA(1f, 0f, 1f, 1f))
         canvas.translate(0f, 150f)
 
-        showImage(canvas, medium, medium, Color.fromRGBA(1f, 0f, 1f, 1f), Color.fromRGBA(1f, 1f, 0f, 1f))
+        showImage(canvas, medium, medium, ColorARGB.fromRGBA(1f, 0f, 1f, 1f), ColorARGB.fromRGBA(1f, 1f, 0f, 1f))
         canvas.translate(0f, 150f)
 
-        showImage(canvas, veryBig, small, Color.GREEN, Color.fromRGBA(1f, 1f, 0f, 1f))
+        showImage(canvas, veryBig, small, ColorARGB.Green, ColorARGB.fromRGBA(1f, 1f, 0f, 1f))
     }
 
-    private fun showImage(canvas: GmCanvas, w: Int, h: Int, c1: Color, c2: Color) {
+    private fun showImage(canvas: GmCanvas, w: Int, h: Int, c1: ColorARGB, c2: ColorARGB) {
         val image = makePictureImage(w, h, c1, c2)
 
         val borderPaint = Paint(style = PaintStyle.STROKE)
@@ -77,7 +77,7 @@ class VeryLargePictureImageGm : SkiaGm {
         canvas.drawRect(dstRect, borderPaint)
     }
 
-    private fun makePictureImage(width: Int, height: Int, c1: Color, c2: Color): Image {
+    private fun makePictureImage(width: Int, height: Int, c1: ColorARGB, c2: ColorARGB): Image {
         val surface = Surface(width, height)
         surface.canvas {
             val paint = Paint(shader = org.graphiks.kanvas.paint.Shader.LinearGradient(

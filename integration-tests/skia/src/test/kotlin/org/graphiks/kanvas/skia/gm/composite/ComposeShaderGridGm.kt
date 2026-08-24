@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -55,8 +55,8 @@ class ComposeShaderGridGm : SkiaGm {
             start = Point2F32(0f, 0f),
             end = Point2F32(0f, size),
             stops = listOf(
-                GradientStop(0f, Color.BLUE),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
         )
     }
@@ -66,8 +66,8 @@ class ComposeShaderGridGm : SkiaGm {
             start = Point2F32(0f, 0f),
             end = Point2F32(size, 0f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
         )
     }
@@ -107,13 +107,13 @@ class ComposeShaderGridGm : SkiaGm {
         val r = RectF32(0f, 0f, CELL_SIZE, CELL_SIZE)
         canvas.saveLayer()
         val dstPaint = Paint(
-            color = Color.fromRGBA(1f, 0f, 0f, alpha),
+            color = ColorARGB.fromRGBA(1f, 0f, 0f, alpha),
             shader = dst,
             blendMode = BlendMode.SRC,
         )
         canvas.drawRect(r, dstPaint)
         val srcPaint = Paint(
-            color = Color.fromRGBA(0f, 0f, 1f, alpha),
+            color = ColorARGB.fromRGBA(0f, 0f, 1f, alpha),
             shader = src,
             blendMode = mode,
         )
@@ -129,7 +129,7 @@ class ComposeShaderGridGm : SkiaGm {
         alpha: Float,
     ) {
         val p = Paint(
-            color = Color.fromRGBA(1f, 1f, 1f, alpha),
+            color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha),
             shader = Shader.Blend(mode, dst, src),
         )
         canvas.drawRect(RectF32(0f, 0f, CELL_SIZE, CELL_SIZE), p)

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -62,7 +62,7 @@ class ComplexClip3SimpleGm : SkiaGm {
         canvas.translate(20f, 20f)
         canvas.scale(3f / 4f, 3f / 4f)
 
-        val pathPaint = Paint(antiAlias = true, color = Color(0xFFFFFF00u))
+        val pathPaint = Paint(antiAlias = true, color = ColorARGB.fromPackedUInt(0xFFFFFF00u))
 
         for (invA in 0 until 2) {
             for (aaBits in 0 until 4) {
@@ -84,7 +84,7 @@ class ComplexClip3SimpleGm : SkiaGm {
                         canvas.restore()
 
                         val str = "${if (doAAA) "A" else "B"}${if (doInvA) "I" else "N"} $opName ${if (doAAB) "A" else "B"}${if (doInvB) "I" else "N"}"
-                        canvas.drawString(str, 10f, 130f, font, Paint(color = Color.BLACK))
+                        canvas.drawString(str, 10f, 130f, font, Paint(color = ColorARGB.Black))
 
                         if (doInvB) canvas.translate(150f, 0f) else canvas.translate(120f, 0f)
                     }
@@ -145,7 +145,7 @@ class ComplexClip3ComplexGm : SkiaGm {
         canvas.translate(20f, 20f)
         canvas.scale(3f / 4f, 3f / 4f)
 
-        val pathPaint = Paint(antiAlias = true, color = Color(0xFFFFFF00u))
+        val pathPaint = Paint(antiAlias = true, color = ColorARGB.fromPackedUInt(0xFFFFFF00u))
 
         for (invA in 0 until 2) {
             for (aaBits in 0 until 4) {
@@ -167,7 +167,7 @@ class ComplexClip3ComplexGm : SkiaGm {
                         canvas.restore()
 
                         val str = "${if (doAAA) "A" else "B"}${if (doInvA) "I" else "N"} $opName ${if (doAAB) "A" else "B"}${if (doInvB) "I" else "N"}"
-                        canvas.drawString(str, 10f, 130f, font, Paint(color = Color.BLACK))
+                        canvas.drawString(str, 10f, 130f, font, Paint(color = ColorARGB.Black))
 
                         if (doInvB) canvas.translate(150f, 0f) else canvas.translate(120f, 0f)
                     }

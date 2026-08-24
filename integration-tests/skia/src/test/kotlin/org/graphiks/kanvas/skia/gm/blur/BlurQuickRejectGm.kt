@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -38,11 +38,11 @@ class BlurQuickRejectGm : SkiaGm {
             RectF32(kBoxSize + 1f, 0f, kBoxSize + kBlurRadius + 1f, kBoxSize),
             RectF32(0f, kBoxSize + kBlurRadius + 1f, kBoxSize, 2 * kBoxSize + kBlurRadius + 1f),
         )
-        val colors = arrayOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(1f, 1f, 0f, 1f))
+        val colors = arrayOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.fromRGBA(1f, 1f, 0f, 1f))
 
         val hairlinePaint = Paint(
             style = PaintStyle.STROKE,
-            color = Color.WHITE,
+            color = ColorARGB.White,
             strokeWidth = 0f,
         )
 

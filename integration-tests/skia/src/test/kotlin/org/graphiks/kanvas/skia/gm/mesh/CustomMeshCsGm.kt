@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.ReferenceStatusEntry
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -40,8 +40,8 @@ class CustomMeshCsGm : SkiaGm {
             start = Point2F32(X0, 0f),
             end = Point2F32(X0 + rectW / 2f, 0f),
             stops = listOf(
-                GradientStop(0f, Color.WHITE),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.White),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
             tileMode = TileMode.MIRROR,
         )
@@ -52,7 +52,7 @@ class CustomMeshCsGm : SkiaGm {
                 for (spin in listOf(false, true)) {
                     val verts = buildColorSpaceVertices(unpremul, spin)
                     val paint = Paint(
-                        color = Color.BLACK,
+                        color = ColorARGB.Black,
                         shader = if (useShader) shader else null,
                     )
                     canvas.drawVertices(verts, paint)
@@ -77,10 +77,10 @@ class CustomMeshCsGm : SkiaGm {
         )
         // Unpremul RGBA: red, green(alpha=0), yellow(alpha=0), blue
         private val srcColors = listOf(
-            Color(0xFFFF0000u),
-            Color(0x0000FF00u),
-            Color(0x00FFFF00u),
-            Color(0xFF0000FFu),
+            ColorARGB.fromPackedUInt(0xFFFF0000u),
+            ColorARGB.fromPackedUInt(0x0000FF00u),
+            ColorARGB.fromPackedUInt(0x00FFFF00u),
+            ColorARGB.fromPackedUInt(0xFF0000FFu),
         )
 
         fun buildColorSpaceVertices(unpremul: Boolean, spin: Boolean): Vertices {
@@ -97,23 +97,23 @@ class CustomMeshCsGm : SkiaGm {
             )
         }
 
-        private fun premultiply(c: Color): Color {
-            val p = c.packed
+        private fun premultiply(c: ColorARGB): ColorARGB {
+            val p = c.value
             val a = (p shr 24) and 0xFFu
-            if (a == 0u) return Color.TRANSPARENT
+            if (a == 0u) return ColorARGB.Transparent
             val r = (((p shr 16) and 0xFFu).toInt() * a.toInt() / 255).toUInt()
             val g = (((p shr 8) and 0xFFu).toInt() * a.toInt() / 255).toUInt()
             val b = ((p and 0xFFu).toInt() * a.toInt() / 255).toUInt()
-            return Color((a shl 24) or (r shl 16) or (g shl 8) or b)
+            return ColorARGB.fromPackedUInt((a shl 24) or (r shl 16) or (g shl 8) or b)
         }
 
-        private fun spinColors(colors: List<Color>): List<Color> = colors.map { c ->
-            val p = c.packed
+        private fun spinColors(colors: List<ColorARGB>): List<ColorARGB> = colors.map { c ->
+            val p = c.value
             val a = (p shr 24) and 0xFFu
             val r = (p shr 16) and 0xFFu
             val g = (p shr 8) and 0xFFu
             val b = p and 0xFFu
-            Color((a shl 24) or (g shl 16) or (b shl 8) or r)
+            ColorARGB.fromPackedUInt((a shl 24) or (g shl 16) or (b shl 8) or r)
         }
     }
 }

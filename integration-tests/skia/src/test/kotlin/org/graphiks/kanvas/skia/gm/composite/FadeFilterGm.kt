@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.skia.GmCanvas
@@ -29,7 +31,7 @@ class FadeFilterGm : SkiaGm {
             0f, 0f, 0f, 1f, 0f,
         )
         val paint = Paint(
-            colorFilter = ColorFilter.Matrix(matrix),
+            colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(matrix)),
         )
         canvas.drawRect(RectF32.ofLTRB(64f, 64f, 192f, 192f), paint)
     }

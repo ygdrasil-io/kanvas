@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -27,12 +27,12 @@ class MacaaColorsGm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val gray = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f)
+        val gray = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f)
         val colors = listOf(
-            Color.BLACK to Color.WHITE,
-            Color.BLACK to gray,
-            Color.WHITE to Color.BLACK,
-            Color.WHITE to gray,
+            ColorARGB.Black to ColorARGB.White,
+            ColorARGB.Black to gray,
+            ColorARGB.White to ColorARGB.Black,
+            ColorARGB.White to gray,
         )
         val sizes = listOf(10f, 12f, 15f, 18f, 24f)
         val str = "Hamburgefons"

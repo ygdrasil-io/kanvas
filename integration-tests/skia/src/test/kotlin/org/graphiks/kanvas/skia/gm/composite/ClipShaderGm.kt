@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -58,12 +58,12 @@ class ClipShaderGm : SkiaGm {
             center = Point2F32(64f, 64f),
             radius = 32f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 1f, 0f, 1f)),
-                GradientStop(0.2f, Color.fromRGBA(0f, 1f, 0f, 1f)),
-                GradientStop(0.4f, Color.fromRGBA(0f, 0f, 1f, 1f)),
-                GradientStop(0.6f, Color.fromRGBA(1f, 0f, 1f, 1f)),
-                GradientStop(0.8f, Color.fromRGBA(0f, 1f, 1f, 1f)),
-                GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
+                GradientStop(0.2f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(0.4f, ColorARGB.fromRGBA(0f, 0f, 1f, 1f)),
+                GradientStop(0.6f, ColorARGB.fromRGBA(1f, 0f, 1f, 1f)),
+                GradientStop(0.8f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
             ),
             tileMode = TileMode.MIRROR,
         )

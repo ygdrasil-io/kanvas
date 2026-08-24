@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
@@ -194,7 +194,7 @@ class DegenerateSegmentsGm : SkiaGm {
                 path.fillType = fill
 
                 val paint = Paint(
-                    color = Color.fromRGBA(0f, 0x70 / 255f, 0f, 1f),
+                    color = ColorARGB.fromRGBA(0f, 0x70 / 255f, 0f, 1f),
                     style = style,
                     strokeWidth = 6f,
                     strokeCap = cap,
@@ -205,7 +205,7 @@ class DegenerateSegmentsGm : SkiaGm {
                 canvas.drawPath(path, paint)
                 canvas.restore()
 
-                canvas.drawRect(rect, Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true))
+                canvas.drawRect(rect, Paint(color = ColorARGB.Black, style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true))
             }
             canvas.restore()
         }

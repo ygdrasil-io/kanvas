@@ -21,9 +21,9 @@ import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.text.TextBlob
 import org.junit.jupiter.api.AfterEach
@@ -449,7 +449,7 @@ class GPUClipCoverageContractsTest {
     fun `perspective is refused before clip coverage planning`() {
         val command = DisplayOp.DrawRect(
             rect = RectF32.ofLTRB(2f, 3f, 10f, 11f),
-            paint = Paint.fill(Color.RED),
+            paint = Paint.fill(ColorARGB.Red),
             transform = Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
             clip = ClipStack.DeviceRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false),
         ).toNormalizedCommand(cmdId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(0), target = target())
@@ -466,7 +466,7 @@ class GPUClipCoverageContractsTest {
         canvas.clipRect(RectF32.ofLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         canvas.resetMatrix()
         canvas.clipRect(RectF32.ofLTRB(3f, 4f, 9f, 10f), antiAlias = false)
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red))
 
         val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
         val command = draw.toNormalizedCommand(
@@ -484,7 +484,7 @@ class GPUClipCoverageContractsTest {
         val clip = perspectiveClipAfterReset()
         val transform = Matrix3x3F32.Identity
         val operations = listOf<DisplayOp>(
-            DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED), transform, clip),
+            DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red), transform, clip),
             DisplayOp.DrawImage(
                 image = Image.placeholder(1, 1),
                 src = RectF32.ofLTRB(0f, 0f, 1f, 1f),
@@ -493,7 +493,7 @@ class GPUClipCoverageContractsTest {
                 transform = transform,
                 clip = clip,
             ),
-            DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, Paint.fill(Color.RED), transform, clip),
+            DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, Paint.fill(ColorARGB.Red), transform, clip),
         )
 
         operations.forEach { operation ->

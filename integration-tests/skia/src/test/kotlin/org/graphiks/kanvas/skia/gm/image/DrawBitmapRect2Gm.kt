@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -47,7 +47,7 @@ open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
             RectF32.ofLTRB(-32f, -32f, 32f, 32f),
         )
 
-        val stroke = Paint(style = PaintStyle.STROKE, color = Color.BLACK, strokeWidth = 1f)
+        val stroke = Paint(style = PaintStyle.STROKE, color = ColorARGB.Black, strokeWidth = 1f)
         val dstR = RectF32.ofLTRB(0f, 200f, 128f, 380f)
 
         canvas.save()
@@ -73,14 +73,14 @@ open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
     private fun makeImage(): Image {
         val surface = Surface(64, 64)
         surface.canvas {
-            drawColor(Color.RED)
+            drawColor(ColorARGB.Red)
             val path = Path { }.apply { addCircle(32f, 32f, 32f) }
             val shader = Shader.LinearGradient(
                 start = Point2F32(0f, 0f),
                 end = Point2F32(64f, 64f),
                 stops = listOf(
-                    GradientStop(0f, Color.WHITE),
-                    GradientStop(1f, Color.BLUE),
+                    GradientStop(0f, ColorARGB.White),
+                    GradientStop(1f, ColorARGB.Blue),
                 ),
             )
             drawPath(path, Paint(shader = shader, antiAlias = true))

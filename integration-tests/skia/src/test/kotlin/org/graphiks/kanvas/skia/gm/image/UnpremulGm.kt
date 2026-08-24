@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -34,7 +34,7 @@ class UnpremulGm : SkiaGm {
     override val height = 200
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val color = Color.fromRGBA(0x40 / 255f, 0f, 0f, 0xBF / 255f)
+        val color = ColorARGB.fromRGBA(0x40 / 255f, 0f, 0f, 0xBF / 255f)
 
         canvas.save()
         val paint = Paint(color = color, blendMode = BlendMode.SRC)
@@ -54,16 +54,16 @@ class UnpremulGm : SkiaGm {
     }
 
     private fun markGmGood(canvas: GmCanvas, x: Float, y: Float) {
-        val translucent = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.314f))
+        val translucent = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.314f))
         canvas.saveLayer(null, translucent)
         canvas.translate(x, y)
         canvas.scale(2f, 2f)
 
-        val greenFill = Paint.fill(Color.fromRGBA(27f / 255f, 158f / 255f, 119f / 255f))
+        val greenFill = Paint.fill(ColorARGB.fromRGBA(27f / 255f, 158f / 255f, 119f / 255f))
         canvas.drawCircle(0f, 0f, 12f, greenFill)
 
         val checkmark = Paint(
-            color = Color.TRANSPARENT,
+            color = ColorARGB.Transparent,
             blendMode = BlendMode.SRC,
             strokeWidth = 2f,
             style = PaintStyle.STROKE,

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,7 +32,7 @@ class TextBlobUseAfterGpuFreeGm : SkiaGm {
 
         // White rect over top half
         val rect = RectF32(0f, 0f, width.toFloat(), height / 2f)
-        canvas.drawRect(rect, Paint(color = Color.WHITE))
+        canvas.drawRect(rect, Paint(color = ColorARGB.White))
         canvas.drawTextBlob(blob, 20f, 60f, Paint())
 
         // GPU free is a no-op on raster

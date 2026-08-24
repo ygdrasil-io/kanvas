@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/crbug_996140.cpp`.
  *  Regression test for crbug.com/996140 — draws complex overlapping
@@ -26,7 +26,7 @@ class Crbug996140Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)),
+            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f)),
         )
 
         val cx = 19.221f
@@ -54,13 +54,13 @@ class Crbug996140Gm : SkiaGm {
         }
 
         val stroke = Paint(
-            color = Color.fromRGBA(0f, 0f, 1f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0f, 1f, 1f),
             strokeWidth = 1f,
             style = PaintStyle.STROKE,
             antiAlias = true,
         )
         val fill = Paint(
-            color = Color.fromRGBA(1f, 0f, 0f, 1f),
+            color = ColorARGB.fromRGBA(1f, 0f, 0f, 1f),
             style = PaintStyle.FILL,
             antiAlias = true,
         )

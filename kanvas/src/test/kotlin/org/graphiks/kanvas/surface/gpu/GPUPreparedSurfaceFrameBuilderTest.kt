@@ -55,13 +55,13 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -120,9 +120,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 RectF32.ofLTRB(0f, 0f, 2f, 2f),
                 RectF32.ofLTRB(2f, 0f, 4f, 2f),
             ),
-            colors = listOf(Color.RED, Color.fromArgb(128, 0, 128, 0)),
+            colors = listOf(ColorARGB.Red, ColorARGB.of(128, 0, 128, 0)),
             blendMode = BlendMode.MODULATE,
-            paint = Paint.fill(Color.fromArgb(192, 255, 255, 255)),
+            paint = Paint.fill(ColorARGB.of(192, 255, 255, 255)),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
@@ -172,9 +172,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 RectF32.ofLTRB(0f, 0f, 2f, 2f),
                 RectF32.ofLTRB(2f, 0f, 4f, 2f),
             ),
-            colors = listOf(Color.RED, Color.GREEN),
+            colors = listOf(ColorARGB.Red, ColorARGB.Green),
             blendMode = BlendMode.SRC,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(
                 rect = RectF32.ofLTRB(4f, 6f, 14f, 15f),
@@ -207,9 +207,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
             atlas = atlasImage("builder-atlas-scissor-total"),
             transforms = listOf(Matrix3x3F32.translation(2f, 3f)),
             texRects = listOf(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
-            colors = listOf(Color.RED),
+            colors = listOf(ColorARGB.Red),
             blendMode = BlendMode.SRC,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(rect, antiAlias = false),
         )
@@ -329,9 +329,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 xDivs = listOf(2, 4),
                 yDivs = emptyList(),
                 colors = listOf(
-                    Color.TRANSPARENT,
-                    Color.fromArgb(128, 128, 64, 32),
-                    Color.TRANSPARENT,
+                    ColorARGB.Transparent,
+                    ColorARGB.of(128, 128, 64, 32),
+                    ColorARGB.Transparent,
                 ),
                 flags = listOf(
                     LatticeFlags.DEFAULT,
@@ -340,7 +340,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 ),
             ),
             dst = RectF32.ofLTRB(2f, 4f, 26f, 12f),
-            paint = Paint.fill(Color.fromArgb(128, 30, 40, 50)).copy(antiAlias = false),
+            paint = Paint.fill(ColorARGB.of(128, 30, 40, 50)).copy(antiAlias = false),
             transform = Matrix3x3F32.translation(1f, 2f),
             clip = ClipStack.WideOpen,
             sampling = SamplingOptions.NEAREST,
@@ -388,11 +388,11 @@ class GPUPreparedSurfaceFrameBuilderTest {
             lattice = Lattice(
                 xDivs = listOf(2),
                 yDivs = emptyList(),
-                colors = listOf(Color.GREEN, Color.BLUE),
+                colors = listOf(ColorARGB.Green, ColorARGB.Blue),
                 flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
             ),
             dst = RectF32.ofLTRB(2f, 4f, 18f, 12f),
-            paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+            paint = Paint.fill(ColorARGB.White).copy(antiAlias = false),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
@@ -416,7 +416,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     fun `analytic antialiased rect semantic uses the recorded packet blend authority`() {
         val operation = DisplayOp.DrawRect(
             RECT,
-            Paint.fill(Color.RED).copy(antiAlias = false),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
@@ -434,17 +434,17 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
     @Test
     fun `hardware sRGB store admits fractional alpha and coverage authorities`() {
-        val nonPrimary = Color.fromArgb(a = 255, r = 40, g = 120, b = 208)
+        val nonPrimary = ColorARGB.of(alpha = 255, red = 40, green = 120, blue = 208)
         val fractionalCases = listOf(
             "material-alpha" to
-                rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208)),
+                rect(color = ColorARGB.of(alpha = 160, red = 40, green = 120, blue = 208)),
             "rect-aa" to
                 rect(color = nonPrimary).copy(
                     paint = Paint.fill(nonPrimary).copy(antiAlias = true),
                 ),
             "rrect-aa" to
                 DisplayOp.DrawRRect(
-                    RRect(RECT, radius = 2f),
+                    RRectF32.of(RECT, radius = 2f),
                     Paint.fill(nonPrimary).copy(antiAlias = true),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -502,7 +502,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
     @Test
     fun `AA path promotion reports missing multisample color capability`() {
-        val nonPrimary = Color.fromArgb(a = 255, r = 40, g = 120, b = 208)
+        val nonPrimary = ColorARGB.of(alpha = 255, red = 40, green = 120, blue = 208)
         val unsupportedAaPath = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
             GPUPreparedSurfaceFrameBuilder.build(
                 request(listOf(
@@ -581,7 +581,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val path = triangle()
         val clippedPath = DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.BLUE).copy(antiAlias = false),
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             ClipStack.DeviceRect(RectF32.ofLTRB(2f, 3f, 20f, 18f), antiAlias = false),
         )
@@ -605,14 +605,14 @@ class GPUPreparedSurfaceFrameBuilderTest {
     @Test
     fun `mixed direct path direct frame records every visual once in source order`() {
         val operations = listOf(
-            rect(RectF32.ofLTRB(1f, 1f, 7f, 7f), Color.RED),
+            rect(RectF32.ofLTRB(1f, 1f, 7f, 7f), ColorARGB.Red),
             DisplayOp.DrawPath(
                 triangle(),
-                Paint.fill(Color.GREEN).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Green).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
-            rect(RectF32.ofLTRB(20f, 12f, 28f, 20f), Color.BLUE),
+            rect(RectF32.ofLTRB(20f, 12f, 28f, 20f), ColorARGB.Blue),
         )
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -632,7 +632,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val gradient = Shader.LinearGradient(
             Point2F32(0f, 0f),
             Point2F32(8f, 8f),
-            listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
         )
         val complexClip = ClipStack.Complex(
             listOf(
@@ -645,7 +645,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
         )
         val translucentRequest =
-            request(listOf(rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208))))
+            request(listOf(rect(color = ColorARGB.of(alpha = 160, red = 40, green = 120, blue = 208))))
         val translucentReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(translucentRequest),
         )
@@ -658,12 +658,12 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
 
         val cases = listOf(
-            request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))) to
+            request(listOf(rect().copy(paint = Paint.fill(ColorARGB.White).copy(shader = gradient)))) to
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(2f, 2f), Point2F32(12f, 2f)),
-                Paint.stroke(Color.RED, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
+                Paint.stroke(ColorARGB.Red, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ))) to "unsupported.geometry.path_key_nondeterministic",
@@ -693,9 +693,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(
                 request(listOf(
-                    rect(color = Color.BLUE),
-                    rect(color = Color.RED).copy(
-                        paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR),
+                    rect(color = ColorARGB.Blue),
+                    rect(color = ColorARGB.Red).copy(
+                        paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.CLEAR),
                     ),
                 )),
             ),
@@ -732,8 +732,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
         // destination snapshot for the CLEAR consumer instead of sealing one mixed fixed-function
         // multi-key pass.
         val mixed = request(listOf(
-            rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC_OVER)),
-            rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
+            rect().copy(paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.SRC_OVER)),
+            rect().copy(paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.CLEAR)),
         ))
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -754,7 +754,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     @Test
     fun `clear and src hard rects build ready with fixed function blend packets`() {
         val clear = request(listOf(rect().copy(
-            paint = Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.CLEAR),
+            paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false, blendMode = BlendMode.CLEAR),
         )))
         val clearResult = GPUPreparedSurfaceFrameBuilder.build(clear)
         val clearReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -768,7 +768,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         assertTrue(GPUBlendMode.CLEAR in clearBlends)
 
         val src = request(listOf(rect().copy(
-            paint = Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.SRC),
+            paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false, blendMode = BlendMode.SRC),
         )))
         val srcResult = GPUPreparedSurfaceFrameBuilder.build(src)
         val srcReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -788,7 +788,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         // be expressed by the coverage-modulating analytic shader (geometric AA interpolation), so
         // it routes through the dst-read formula, mirroring the MULTIPLY case below.
         val result = GPUPreparedSurfaceFrameBuilder.build(
-            request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))),
+            request(listOf(rect().copy(paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.SRC)))),
         )
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             result,
@@ -807,7 +807,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     @Test
     fun `multiply rect builds ready with destination snapshot and shader with destination blend`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
-            request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.MULTIPLY)))),
+            request(listOf(rect().copy(paint = Paint.fill(ColorARGB.Red).copy(blendMode = BlendMode.MULTIPLY)))),
         )
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             result,
@@ -998,9 +998,9 @@ class GPUPreparedSurfaceFrameBuilderTest {
             alphaType = AlphaType.PREMUL,
         )
         val operations: List<DisplayOp> = listOf(
-            rect(RectF32.ofLTRB(1f, 1f, 5f, 5f), Color.RED),
+            rect(RectF32.ofLTRB(1f, 1f, 5f, 5f), ColorARGB.Red),
             drawImage(first, RectF32.ofLTRB(6f, 1f, 10f, 5f)),
-            rect(RectF32.ofLTRB(11f, 1f, 15f, 5f), Color.BLUE),
+            rect(RectF32.ofLTRB(11f, 1f, 15f, 5f), ColorARGB.Blue),
             drawImage(second, RectF32.ofLTRB(16f, 1f, 20f, 5f)),
         )
 
@@ -1105,7 +1105,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val base = drawImage(image, RectF32.ofLTRB(1f, 1f, 5f, 5f))
         val cases = listOf(
             base.copy(
-                paint = Paint.fill(Color.WHITE).copy(
+                paint = Paint.fill(ColorARGB.White).copy(
                     shader = Shader.Image(image, sampling = SamplingOptions.Cubic.Mitchell),
                 ),
             ) to GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
@@ -1123,7 +1123,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 ),
             ) to GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
             base.copy(
-                paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.MULTIPLY),
+                paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.MULTIPLY),
             ) to GPUPreparedImageRefusalCodes.NATIVE_BINDING,
         )
 
@@ -1293,7 +1293,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
     private fun rect(
         bounds: RectF32 = RECT,
-        color: Color = Color.RED,
+        color: ColorARGB = ColorARGB.Red,
     ): DisplayOp.DrawRect = DisplayOp.DrawRect(
         bounds,
         Paint.fill(color).copy(antiAlias = false),
@@ -1306,7 +1306,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             mode = VertexMode.TRIANGLES,
             positions = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f)),
         ),
-        paint = Paint.fill(Color.RED),
+        paint = Paint.fill(ColorARGB.Red),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )

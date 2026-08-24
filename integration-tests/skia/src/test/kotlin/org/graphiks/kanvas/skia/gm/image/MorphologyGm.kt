@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/morphology.cpp`.
@@ -24,11 +24,11 @@ class MorphologyGm : SkiaGm {
     override val height = 560
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, 700f, 560f), Paint(Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, 700f, 560f), Paint(ColorARGB.Black))
 
         val surf = Surface(135, 135)
-        surf.canvas { drawColor(Color.BLACK) }
-        val white = Paint(Color.WHITE)
+        surf.canvas { drawColor(ColorARGB.Black) }
+        val white = Paint(ColorARGB.White)
         surf.canvas {
             drawRect(RectF32.ofOriginSize(10f, 10f, 110f, 50f), white)
             drawRect(RectF32.ofOriginSize(10f, 65f, 110f, 50f), white)

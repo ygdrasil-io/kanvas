@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -37,7 +37,7 @@ class Crbug10141204Gm : SkiaGm {
         canvas.scale(9783.93962050256f, -9783.93962050256f)
 
         val paint = Paint(
-            color = Color.BLUE,
+            color = ColorARGB.Blue,
             antiAlias = true,
         )
         canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 512f, 512f), paint)

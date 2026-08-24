@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -76,19 +76,19 @@ class XfermodesGm : SkiaGm {
 
                 // Background: dark/light alternating rect cells
                 val bgColor = if ((i / 5 + i) % 2 == 0)
-                    Color.fromRGBA(0.8f, 0.8f, 0.8f, 1f)
+                    ColorARGB.fromRGBA(0.8f, 0.8f, 0.8f, 1f)
                 else
-                    Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
+                    ColorARGB.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
                 canvas.drawRect(r, Paint(color = bgColor))
 
                 // Draw source shapes with blend mode
                 canvas.save()
                 val srcPaint = Paint(
-                    color = Color.fromRGBA(0.4f, 0.7f, 1f, 0.8f),
+                    color = ColorARGB.fromRGBA(0.4f, 0.7f, 1f, 0.8f),
                     blendMode = row.mode,
                 )
                 val dstPaint = Paint(
-                    color = Color.fromRGBA(1f, 0.8f, 0.3f, 0.8f),
+                    color = ColorARGB.fromRGBA(1f, 0.8f, 0.3f, 0.8f),
                 )
                 canvas.drawRect(
                     RectF32.ofLTRB(x + 4f, y + 4f, x + w - 4f, y + h - 4f),

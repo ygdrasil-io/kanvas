@@ -14,7 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -212,11 +212,11 @@ class GPUPreparedVerticesFramePreparerTest {
             VertexMode.TRIANGLES,
             listOf(Point2F32(0f, 0f), Point2F32(2f * scale, 0f), Point2F32(0f, 2f * scale)),
         ),
-        Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen,
+        Paint.fill(ColorARGB.Red), Matrix3x3F32.Identity, ClipStack.WideOpen,
     )
 
     private fun rectOp() = DisplayOp.DrawRect(
-        RectF32.ofLTRB(1f, 1f, 3f, 3f), Paint.fill(Color.RED),
+        RectF32.ofLTRB(1f, 1f, 3f, 3f), Paint.fill(ColorARGB.Red),
         Matrix3x3F32.Identity, ClipStack.WideOpen,
     )
 

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -38,11 +38,11 @@ class AlternateLumaGm : SkiaGm {
         val gradient = Shader.LinearGradient(
             Point2F32(0f, 0f), Point2F32(width.toFloat(), height.toFloat()),
             listOf(
-                GradientStop(0f, Color(0xFFFF0000u)),
-                GradientStop(0.25f, Color(0xFF00FF00u)),
-                GradientStop(0.5f, Color(0xFF0000FFu)),
-                GradientStop(0.75f, Color(0xFFFF00FFu)),
-                GradientStop(1f, Color(0xFFFFFF00u)),
+                GradientStop(0f, ColorARGB.fromPackedUInt(0xFFFF0000u)),
+                GradientStop(0.25f, ColorARGB.fromPackedUInt(0xFF00FF00u)),
+                GradientStop(0.5f, ColorARGB.fromPackedUInt(0xFF0000FFu)),
+                GradientStop(0.75f, ColorARGB.fromPackedUInt(0xFFFF00FFu)),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0xFFFFFF00u)),
             ),
         )
 

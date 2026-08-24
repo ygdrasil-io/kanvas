@@ -56,13 +56,13 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -72,7 +72,7 @@ class GPUFramePathApiInventoryTest {
     fun `public inventory path prepares vertices with text and maps the snapshot once`() {
         val operations = listOf(
             DisplayOp.DrawRect(
-                RectF32.ofLTRB(1f, 1f, 4f, 4f), Paint.fill(Color.RED),
+                RectF32.ofLTRB(1f, 1f, 4f, 4f), Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
             DisplayOp.DrawText(
@@ -85,7 +85,7 @@ class GPUFramePathApiInventoryTest {
                     ),
                     typeface = liberationTypeface(), fontSize = 12f,
                 ),
-                x = 4f, y = 16f, paint = Paint.fill(Color.WHITE),
+                x = 4f, y = 16f, paint = Paint.fill(ColorARGB.White),
                 transform = Matrix3x3F32.Identity, clip = ClipStack.WideOpen,
             ),
             DisplayOp.DrawVertices(
@@ -93,17 +93,17 @@ class GPUFramePathApiInventoryTest {
                     VertexMode.TRIANGLES,
                     listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
                 ),
-                Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen,
+                Paint.fill(ColorARGB.Red), Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
             DisplayOp.DrawVertices(
                 Vertices(
                     VertexMode.TRIANGLES,
                     listOf(Point2F32(0f, 0f), Point2F32(3f, 0f), Point2F32(0f, 3f)),
                 ),
-                Paint.fill(Color.BLUE), Matrix3x3F32.Identity, ClipStack.WideOpen,
+                Paint.fill(ColorARGB.Blue), Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
-                RectF32.ofLTRB(5f, 5f, 8f, 8f), Paint.fill(Color.GREEN),
+                RectF32.ofLTRB(5f, 5f, 8f, 8f), Paint.fill(ColorARGB.Green),
                 Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
         )
@@ -127,19 +127,19 @@ class GPUFramePathApiInventoryTest {
                 VertexMode.TRIANGLES,
                 listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val firstRect = DisplayOp.DrawRect(
                     RectF32.ofLTRB(1f, 1f, 4f, 4f),
-                    Paint.fill(Color.GREEN).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Green).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
         )
         val secondRect = DisplayOp.DrawRect(
             RectF32.ofLTRB(5f, 5f, 8f, 8f),
-            Paint.fill(Color.BLUE).copy(antiAlias = false),
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
@@ -193,7 +193,7 @@ class GPUFramePathApiInventoryTest {
                 VertexMode.TRIANGLES,
                 listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
             ),
-            Paint.fill(Color.RED), Matrix3x3F32.Identity, clip,
+            Paint.fill(ColorARGB.Red), Matrix3x3F32.Identity, clip,
         )
         val culledText = DisplayOp.DrawText(
             blob = TextBlob(
@@ -205,7 +205,7 @@ class GPUFramePathApiInventoryTest {
                 ),
                 typeface = liberationTypeface(), fontSize = 12f,
             ),
-            x = 4f, y = 16f, paint = Paint.fill(Color.WHITE),
+            x = 4f, y = 16f, paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.DeviceRect(RectF32.ofLTRB(80f, 80f, 96f, 96f), false),
         )
@@ -278,7 +278,7 @@ class GPUFramePathApiInventoryTest {
             operations = listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.skewing(0.25f, 0.125f),
                     org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
@@ -338,7 +338,7 @@ class GPUFramePathApiInventoryTest {
             operations = listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.skewing(0.25f, 0.125f),
                     org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
@@ -384,7 +384,7 @@ class GPUFramePathApiInventoryTest {
                 operations = listOf(
                     DisplayOp.DrawRect(
                         RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                        Paint.fill(Color.RED).copy(antiAlias = false),
+                        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                         transform,
                         org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                     ),
@@ -410,7 +410,7 @@ class GPUFramePathApiInventoryTest {
             operations = listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.skewing(0.25f, 0.125f),
                     org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
@@ -448,7 +448,7 @@ class GPUFramePathApiInventoryTest {
             operations = listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
@@ -466,8 +466,8 @@ class GPUFramePathApiInventoryTest {
             )
         val rrectAuthority = inventoryFor(
             DisplayOp.DrawRRect(
-                RRect(RectF32.ofLTRB(2f, 3f, 12f, 11f), radius = 2f),
-                Paint.fill(Color.RED),
+                RRectF32.of(RectF32.ofLTRB(2f, 3f, 12f, 11f), radius = 2f),
+                Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             ),
@@ -499,7 +499,7 @@ class GPUFramePathApiInventoryTest {
             operations = listOf(
                 DisplayOp.DrawRect(
                     RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     org.graphiks.kanvas.canvas.ClipStack.WideOpen,
                 ),
@@ -530,14 +530,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `rrect semantic consumes the analysis sealed geometry authority`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 rect = RectF32.ofLTRB(2f, 3f, 14f, 13f),
-                topLeft = CornerRadii(8f, 2f),
-                topRight = CornerRadii(8f, 6f),
-                bottomRight = CornerRadii(4f, 6f),
-                bottomLeft = CornerRadii(2f, 2f),
+                topLeft = CornerRadiiF32.of(8f, 2f),
+                topRight = CornerRadiiF32.of(8f, 6f),
+                bottomRight = CornerRadiiF32.of(4f, 6f),
+                bottomLeft = CornerRadiiF32.of(2f, 2f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -555,8 +555,8 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `rrect semantic gathering refuses missing transplanted or mutated analysis authority`() {
         val operation = DisplayOp.DrawRRect(
-            RRect(RectF32.ofLTRB(2f, 3f, 14f, 13f), radius = 2f),
-            Paint.fill(Color.RED),
+            RRectF32.of(RectF32.ofLTRB(2f, 3f, 14f, 13f), radius = 2f),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         )
@@ -575,8 +575,8 @@ class GPUFramePathApiInventoryTest {
             normalizedCommands = listOf(mutated),
         )
         val donor = inventoryFor(DisplayOp.DrawRRect(
-            RRect(RectF32.ofLTRB(4f, 5f, 18f, 17f), radius = 3f),
-            Paint.fill(Color.RED),
+            RRectF32.of(RectF32.ofLTRB(4f, 5f, 18f, 17f), radius = 3f),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         )).recording.analysis.records.single()
@@ -625,8 +625,8 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(40, 30)
         surface.canvas {
             translate(13f, 17f)
-            drawColor(Color.RED)
-            clear(Color.BLUE)
+            drawColor(ColorARGB.Red)
+            clear(ColorARGB.Blue)
         }
 
         val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(40, 30), RenderConfig.DEFAULT)
@@ -654,12 +654,12 @@ class GPUFramePathApiInventoryTest {
             drawPoint(
                 20f,
                 20f,
-                Paint.stroke(Color.RED, 6f).copy(strokeCap = StrokeCap.ROUND, antiAlias = true),
+                Paint.stroke(ColorARGB.Red, 6f).copy(strokeCap = StrokeCap.ROUND, antiAlias = true),
             )
             drawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(10f, 10f), Point2F32(30f, 10f)),
-                Paint.stroke(Color.BLUE, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = true),
+                Paint.stroke(ColorARGB.Blue, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = true),
             )
         }
 
@@ -681,7 +681,7 @@ class GPUFramePathApiInventoryTest {
         val operation = DisplayOp.DrawPoint(
             10f,
             12f,
-            Paint.stroke(Color.RED, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
+            Paint.stroke(ColorARGB.Red, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         )
@@ -703,7 +703,7 @@ class GPUFramePathApiInventoryTest {
         val operation = DisplayOp.DrawPoints(
             PointMode.POINTS,
             listOf(Point2F32(5f, 5f), Point2F32(15f, 10f)),
-            Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.BUTT, antiAlias = false),
+            Paint.stroke(ColorARGB.Blue, 6f).copy(strokeCap = StrokeCap.BUTT, antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         )
@@ -725,7 +725,7 @@ class GPUFramePathApiInventoryTest {
         val semantic = semanticFor(DisplayOp.DrawPoint(
             10f,
             12f,
-            Paint.fill(Color.RED).copy(strokeWidth = 0f, strokeCap = StrokeCap.SQUARE),
+            Paint.fill(ColorARGB.Red).copy(strokeWidth = 0f, strokeCap = StrokeCap.SQUARE),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -740,7 +740,7 @@ class GPUFramePathApiInventoryTest {
         val inventory = inventoryFor(DisplayOp.DrawPoints(
             PointMode.POINTS,
             listOf(Point2F32(5f, 5f), Point2F32(15f, 10f)),
-            Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.ROUND),
+            Paint.stroke(ColorARGB.Blue, 6f).copy(strokeCap = StrokeCap.ROUND),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -753,14 +753,14 @@ class GPUFramePathApiInventoryTest {
 
     @Test
     fun `stroked rrect lowers to path and preserves stroke facts`() {
-        val paint = Paint.stroke(Color.GREEN, 4f).copy(
+        val paint = Paint.stroke(ColorARGB.Green, 4f).copy(
             strokeCap = StrokeCap.ROUND,
             strokeJoin = StrokeJoin.ROUND,
             pathEffect = PathEffect.Dash(floatArrayOf(3f, 2f), phase = 1f),
             antiAlias = true,
         )
         val operation = DisplayOp.DrawRRect(
-            RRect(RectF32.ofLTRB(10f, 10f, 30f, 24f), radius = 4f),
+            RRectF32.of(RectF32.ofLTRB(10f, 10f, 30f, 24f), radius = 4f),
             paint,
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
@@ -800,7 +800,7 @@ class GPUFramePathApiInventoryTest {
 
         val semantic = semanticFor(DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.RED).copy(antiAlias = true),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = true),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -822,7 +822,7 @@ class GPUFramePathApiInventoryTest {
         }
         val semantic = semanticFor(DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.GREEN).copy(antiAlias = false),
+            Paint.fill(ColorARGB.Green).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -844,7 +844,7 @@ class GPUFramePathApiInventoryTest {
         }
         val semantic = semanticFor(DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.BLUE),
+            Paint.fill(ColorARGB.Blue),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -866,7 +866,7 @@ class GPUFramePathApiInventoryTest {
                     fillType = FillType.INVERSE_WINDING
                     addRect(RectF32.ofLTRB(10f, 11f, 15f, 16f))
                 },
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
             )
         }
 
@@ -887,7 +887,7 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(DisplayOp.DrawPath(
                 path,
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             )),
@@ -907,9 +907,9 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `drrect preserves outer and inner contours instead of filling two fans`() {
         val semantic = semanticFor(DisplayOp.DrawDRRect(
-            RRect(RectF32.ofLTRB(2f, 2f, 30f, 30f), radius = 4f),
-            RRect(RectF32.ofLTRB(9f, 9f, 23f, 23f), radius = 2f),
-            Paint.fill(Color.WHITE),
+            RRectF32.of(RectF32.ofLTRB(2f, 2f, 30f, 30f), radius = 4f),
+            RRectF32.of(RectF32.ofLTRB(9f, 9f, 23f, 23f), radius = 2f),
+            Paint.fill(ColorARGB.White),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -925,9 +925,9 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `invalid drrect inner outside outer becomes a stable geometry refusal`() {
         val inventory = inventoryFor(DisplayOp.DrawDRRect(
-            RRect(RectF32.ofLTRB(4f, 4f, 20f, 20f), radius = 2f),
-            RRect(RectF32.ofLTRB(2f, 8f, 12f, 16f), radius = 1f),
-            Paint.fill(Color.WHITE),
+            RRectF32.of(RectF32.ofLTRB(4f, 4f, 20f, 20f), radius = 2f),
+            RRectF32.of(RectF32.ofLTRB(2f, 8f, 12f, 16f), radius = 1f),
+            Paint.fill(ColorARGB.White),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -941,14 +941,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `direct rrect normalizes oversized radii before semantic gathering`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 3f, 12f, 11f),
-                topLeft = CornerRadii(8f, 6f),
-                topRight = CornerRadii(8f, 6f),
-                bottomRight = CornerRadii(8f, 6f),
-                bottomLeft = CornerRadii(8f, 6f),
+                topLeft = CornerRadiiF32.of(8f, 6f),
+                topRight = CornerRadiiF32.of(8f, 6f),
+                bottomRight = CornerRadiiF32.of(8f, 6f),
+                bottomLeft = CornerRadiiF32.of(8f, 6f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -960,14 +960,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `draw rrect preserves raw square corner input until shared normalization`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 3f, 12f, 13f),
-                topLeft = CornerRadii(0f, 100f),
-                topRight = CornerRadii(2f, 2f),
-                bottomRight = CornerRadii(2f, 2f),
-                bottomLeft = CornerRadii(2f, 2f),
+                topLeft = CornerRadiiF32.of(0f, 100f),
+                topRight = CornerRadiiF32.of(2f, 2f),
+                bottomRight = CornerRadiiF32.of(2f, 2f),
+                bottomLeft = CornerRadiiF32.of(2f, 2f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -988,14 +988,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `draw rrect keeps negative radius raw until the shared typed refusal`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 3f, 12f, 13f),
-                topLeft = CornerRadii(-1f, 2f),
-                topRight = CornerRadii(2f, 2f),
-                bottomRight = CornerRadii(2f, 2f),
-                bottomLeft = CornerRadii(2f, 2f),
+                topLeft = CornerRadiiF32.of(-1f, 2f),
+                topRight = CornerRadiiF32.of(2f, 2f),
+                bottomRight = CornerRadiiF32.of(2f, 2f),
+                bottomLeft = CornerRadiiF32.of(2f, 2f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1009,14 +1009,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `draw rrect normalizes very large finite radii without float overflow`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 3f, 12f, 13f),
-                topLeft = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
-                topRight = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
-                bottomRight = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
-                bottomLeft = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
+                topLeft = CornerRadiiF32.of(Float.MAX_VALUE, Float.MAX_VALUE),
+                topRight = CornerRadiiF32.of(Float.MAX_VALUE, Float.MAX_VALUE),
+                bottomRight = CornerRadiiF32.of(Float.MAX_VALUE, Float.MAX_VALUE),
+                bottomLeft = CornerRadiiF32.of(Float.MAX_VALUE, Float.MAX_VALUE),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1034,14 +1034,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `semantic gathering normalizes the same raw asymmetric rrect analyzed from display ops`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 rect = RectF32.ofLTRB(2f, 3f, 14f, 13f),
-                topLeft = CornerRadii(8f, 2f),
-                topRight = CornerRadii(8f, 6f),
-                bottomRight = CornerRadii(4f, 6f),
-                bottomLeft = CornerRadii(2f, 2f),
+                topLeft = CornerRadiiF32.of(8f, 2f),
+                topRight = CornerRadiiF32.of(8f, 6f),
+                bottomRight = CornerRadiiF32.of(4f, 6f),
+                bottomLeft = CornerRadiiF32.of(2f, 2f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1056,14 +1056,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `direct rrect reflection permutes normalized corners into device order`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 4f, 12f, 14f),
-                topLeft = CornerRadii(1f, 1f),
-                topRight = CornerRadii(2f, 1f),
-                bottomRight = CornerRadii(3f, 1f),
-                bottomLeft = CornerRadii(4f, 1f),
+                topLeft = CornerRadiiF32.of(1f, 1f),
+                topRight = CornerRadiiF32.of(2f, 1f),
+                bottomRight = CornerRadiiF32.of(3f, 1f),
+                bottomLeft = CornerRadiiF32.of(4f, 1f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.of(-1f, 0f, 32f, 0f, -1f, 32f),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1075,14 +1075,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `direct rrect horizontal reflection permutes normalized corners into device order`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 4f, 12f, 14f),
-                topLeft = CornerRadii(1f, 1f),
-                topRight = CornerRadii(2f, 1f),
-                bottomRight = CornerRadii(3f, 1f),
-                bottomLeft = CornerRadii(4f, 1f),
+                topLeft = CornerRadiiF32.of(1f, 1f),
+                topRight = CornerRadiiF32.of(2f, 1f),
+                bottomRight = CornerRadiiF32.of(3f, 1f),
+                bottomLeft = CornerRadiiF32.of(4f, 1f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.of(-1f, 0f, 32f, 0f, 1f, 0f),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1094,14 +1094,14 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `direct rrect vertical reflection permutes normalized corners into device order`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
-            RRect(
+            RRectF32.of(
                 RectF32.ofLTRB(2f, 4f, 12f, 14f),
-                topLeft = CornerRadii(1f, 1f),
-                topRight = CornerRadii(2f, 1f),
-                bottomRight = CornerRadii(3f, 1f),
-                bottomLeft = CornerRadii(4f, 1f),
+                topLeft = CornerRadiiF32.of(1f, 1f),
+                topRight = CornerRadiiF32.of(2f, 1f),
+                bottomRight = CornerRadiiF32.of(3f, 1f),
+                bottomLeft = CornerRadiiF32.of(4f, 1f),
             ),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.of(1f, 0f, 0f, 0f, -1f, 32f),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1113,8 +1113,8 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `skewed direct rrect becomes a stable geometry refusal`() {
         val inventory = inventoryFor(DisplayOp.DrawRRect(
-            RRect(RectF32.ofLTRB(2f, 4f, 12f, 14f), radius = 2f),
-            Paint.fill(Color.RED),
+            RRectF32.of(RectF32.ofLTRB(2f, 4f, 12f, 14f), radius = 2f),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.skewing(0.25f, 0f),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1128,7 +1128,7 @@ class GPUFramePathApiInventoryTest {
     fun `partially outside rect retains exact geometry with target bounded coverage`() {
         val semantic = semanticFor(DisplayOp.DrawRect(
             RectF32.ofLTRB(-4f, 3f, 12f, 15f),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1142,8 +1142,8 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `partially outside rrect retains exact geometry with target bounded coverage`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
-            RRect(RectF32.ofLTRB(-4f, 3f, 12f, 15f), radius = 3f),
-            Paint.fill(Color.RED),
+            RRectF32.of(RectF32.ofLTRB(-4f, 3f, 12f, 15f), radius = 3f),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1159,7 +1159,7 @@ class GPUFramePathApiInventoryTest {
         val gradient = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(16f, 0f),
-            stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+            stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
         )
         val inventory = inventoryFor(DisplayOp.DrawRect(
             RectF32.ofLTRB(2f, 3f, 18f, 20f),
@@ -1187,7 +1187,7 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(DisplayOp.DrawPath(
                 path,
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             )),
@@ -1216,7 +1216,7 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(DisplayOp.DrawPath(
                 path,
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             )),
@@ -1234,13 +1234,13 @@ class GPUFramePathApiInventoryTest {
         val path = triangle()
         val aa = semanticFor(DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.RED).copy(antiAlias = true),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = true),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
         val binary = semanticFor(DisplayOp.DrawPath(
             path,
-            Paint.fill(Color.RED).copy(antiAlias = false),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
@@ -1255,7 +1255,7 @@ class GPUFramePathApiInventoryTest {
         val semantic = semanticFor(DisplayOp.DrawPoints(
             PointMode.LINES,
             listOf(Point2F32(4f, 8f), Point2F32(24f, 8f)),
-            Paint.stroke(Color.RED, 4f).copy(
+            Paint.stroke(ColorARGB.Red, 4f).copy(
                 strokeCap = StrokeCap.SQUARE,
                 strokeJoin = StrokeJoin.BEVEL,
                 strokeMiter = 3f,
@@ -1287,7 +1287,7 @@ class GPUFramePathApiInventoryTest {
         val semantic = semanticFor(
             DisplayOp.DrawPath(
                 path,
-                Paint.stroke(Color.RED, 0f).copy(antiAlias = false),
+                Paint.stroke(ColorARGB.Red, 0f).copy(antiAlias = false),
                 Matrix3x3F32.scaling(2f, 2f),
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             ),
@@ -1310,7 +1310,7 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(DisplayOp.DrawPath(
                 triangle(),
-                Paint.stroke(Color.RED, 4f).copy(
+                Paint.stroke(ColorARGB.Red, 4f).copy(
                     strokeCap = StrokeCap.ROUND,
                     strokeJoin = StrokeJoin.BEVEL,
                     pathEffect = PathEffect.Dash(floatArrayOf(5f, 2f), phase = 1f),
@@ -1337,35 +1337,35 @@ class GPUFramePathApiInventoryTest {
     fun `mixed core frame remains fail closed until native core capability exists`() {
         val surface = Surface(48, 40)
         surface.canvas {
-            drawColor(Color.fromRGBA(0.05f, 0.06f, 0.07f, 1f))
+            drawColor(ColorARGB.fromRGBA(0.05f, 0.06f, 0.07f, 1f))
             translate(1f, 2f)
             clipRect(RectF32.ofLTRB(0f, 0f, 46f, 38f), ClipOp.INTERSECT, antiAlias = false)
             drawPoint(
                 2f,
                 3f,
-                Paint.stroke(Color.WHITE, 1f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
+                Paint.stroke(ColorARGB.White, 1f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
             )
             drawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(3f, 4f), Point2F32(14f, 9f)),
-                Paint.stroke(Color.RED, 2f),
+                Paint.stroke(ColorARGB.Red, 2f),
             )
-            drawRect(RectF32.ofLTRB(4f, 11f, 14f, 20f), Paint.fill(Color.GREEN))
+            drawRect(RectF32.ofLTRB(4f, 11f, 14f, 20f), Paint.fill(ColorARGB.Green))
             clipRRect(
-                RRect(RectF32.ofLTRB(1f, 1f, 43f, 35f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(1f, 1f, 43f, 35f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
-            drawRRect(RRect(RectF32.ofLTRB(16f, 11f, 28f, 21f), radius = 2f), Paint.fill(Color.BLUE))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(16f, 11f, 28f, 21f), radius = 2f), Paint.fill(ColorARGB.Blue))
             clipPath(
                 Path().apply { addRect(RectF32.ofLTRB(2f, 2f, 42f, 34f)) },
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
             drawDRRect(
-                RRect(RectF32.ofLTRB(29f, 10f, 43f, 25f), radius = 3f),
-                RRect(RectF32.ofLTRB(33f, 14f, 39f, 21f), radius = 1f),
-                Paint.fill(Color.WHITE),
+                RRectF32.of(RectF32.ofLTRB(29f, 10f, 43f, 25f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(33f, 14f, 39f, 21f), radius = 1f),
+                Paint.fill(ColorARGB.White),
             )
             clipRect(RectF32.ofLTRB(20f, 16f, 24f, 20f), ClipOp.DIFFERENCE, antiAlias = true)
             drawPath(
@@ -1375,7 +1375,7 @@ class GPUFramePathApiInventoryTest {
                     lineTo(13f, 36f)
                     close()
                 },
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
             )
             flushAndSnapshot(RectF32.ofLTRB(0f, 0f, 48f, 40f))
         }
@@ -1409,12 +1409,12 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "harness-background")
-            drawRRect(RRect(RectF32.ofLTRB(1f, 2f, 5f, 7f), radius = 1f), Paint.fill(Color.RED))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(1f, 2f, 5f, 7f), radius = 1f), Paint.fill(ColorARGB.Red))
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "gm-content")
             drawDRRect(
-                RRect(RectF32.ofLTRB(8f, 3f, 16f, 13f), radius = 2f),
-                RRect(RectF32.ofLTRB(10f, 5f, 14f, 11f), radius = 1f),
-                Paint.fill(Color.GREEN),
+                RRectF32.of(RectF32.ofLTRB(8f, 3f, 16f, 13f), radius = 2f),
+                RRectF32.of(RectF32.ofLTRB(10f, 5f, 14f, 11f), radius = 1f),
+                Paint.fill(ColorARGB.Green),
             )
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "none")
             drawPath(
@@ -1424,7 +1424,7 @@ class GPUFramePathApiInventoryTest {
                     lineTo(24f, 14f)
                     close()
                 },
-                Paint.fill(Color.BLUE),
+                Paint.fill(ColorARGB.Blue),
             )
         }
 
@@ -1482,7 +1482,7 @@ class GPUFramePathApiInventoryTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(0f, 0f, 2f, 2f),
-                Paint.fill(Color.RED).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             ),
@@ -1496,7 +1496,7 @@ class GPUFramePathApiInventoryTest {
             ),
             DisplayOp.DrawRect(
                 RectF32.ofLTRB(4f, 0f, 6f, 2f),
-                Paint.fill(Color.BLUE).copy(antiAlias = false),
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             ),
@@ -1561,11 +1561,11 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(16, 16)
         surface.canvas {
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "gm-content")
-            drawRect(RectF32.ofLTRB(1f, 1f, 4f, 4f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(1f, 1f, 4f, 4f), Paint.fill(ColorARGB.Red))
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "GM-CONTENT")
-            drawRect(RectF32.ofLTRB(5f, 1f, 8f, 4f), Paint.fill(Color.GREEN))
+            drawRect(RectF32.ofLTRB(5f, 1f, 8f, 4f), Paint.fill(ColorARGB.Green))
             drawAnnotation(RectF32.Empty, "unrelated.annotation", "harness-background")
-            drawRect(RectF32.ofLTRB(9f, 1f, 12f, 4f), Paint.fill(Color.BLUE))
+            drawRect(RectF32.ofLTRB(9f, 1f, 12f, 4f), Paint.fill(ColorARGB.Blue))
         }
 
         val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(16, 16), RenderConfig.DEFAULT)
@@ -1588,20 +1588,20 @@ class GPUFramePathApiInventoryTest {
         surface.canvas {
             translate(2f, 3f)
             clipRect(RectF32.ofLTRB(0f, 0f, 32f, 24f), ClipOp.INTERSECT, antiAlias = false)
-            drawColor(Color.RED, BlendMode.SRC_OVER)
-            clear(Color.TRANSPARENT)
-            drawPoint(1f, 1f, Paint.fill(Color.GREEN).copy(antiAlias = false))
+            drawColor(ColorARGB.Red, BlendMode.SRC_OVER)
+            clear(ColorARGB.Transparent)
+            drawPoint(1f, 1f, Paint.fill(ColorARGB.Green).copy(antiAlias = false))
             drawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(2f, 2f), Point2F32(8f, 8f)),
-                Paint.stroke(Color.BLUE, 2f),
+                Paint.stroke(ColorARGB.Blue, 2f),
             )
-            drawRect(RectF32.ofLTRB(3f, 4f, 10f, 12f), Paint.fill(Color.RED))
-            drawRRect(RRect(RectF32.ofLTRB(11f, 4f, 18f, 12f), radius = 2f), Paint.fill(Color.GREEN))
+            drawRect(RectF32.ofLTRB(3f, 4f, 10f, 12f), Paint.fill(ColorARGB.Red))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(11f, 4f, 18f, 12f), radius = 2f), Paint.fill(ColorARGB.Green))
             drawDRRect(
-                RRect(RectF32.ofLTRB(19f, 3f, 30f, 15f), radius = 2f),
-                RRect(RectF32.ofLTRB(22f, 6f, 27f, 12f), radius = 1f),
-                Paint.fill(Color.BLUE),
+                RRectF32.of(RectF32.ofLTRB(19f, 3f, 30f, 15f), radius = 2f),
+                RRectF32.of(RectF32.ofLTRB(22f, 6f, 27f, 12f), radius = 1f),
+                Paint.fill(ColorARGB.Blue),
             )
             drawPath(
                 Path().apply {
@@ -1610,7 +1610,7 @@ class GPUFramePathApiInventoryTest {
                     lineTo(7f, 25f)
                     close()
                 },
-                Paint.fill(Color.WHITE),
+                Paint.fill(ColorARGB.White),
             )
             drawAnnotation(RectF32.Empty, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "none")
             flushAndSnapshot(RectF32.ofLTRB(0f, 0f, 40f, 30f))
@@ -1645,12 +1645,12 @@ class GPUFramePathApiInventoryTest {
         surface.canvas {
             clipRect(RectF32.ofLTRB(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
             clipRRect(
-                RRect(
+                RRectF32.of(
                     rect = RectF32.ofLTRB(4f, 4f, 28f, 28f),
-                    topLeft = CornerRadii(2f, 2f),
-                    topRight = CornerRadii(2f, 2f),
-                    bottomRight = CornerRadii(2f, 2f),
-                    bottomLeft = CornerRadii(2f, 2f),
+                    topLeft = CornerRadiiF32.of(2f, 2f),
+                    topRight = CornerRadiiF32.of(2f, 2f),
+                    bottomRight = CornerRadiiF32.of(2f, 2f),
+                    bottomLeft = CornerRadiiF32.of(2f, 2f),
                 ),
                 ClipOp.DIFFERENCE,
                 antiAlias = true,
@@ -1660,7 +1660,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
-            drawRRect(RRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), radius = 2f), Paint.fill(Color.RED))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 32f, 32f), radius = 2f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(), RenderConfig.DEFAULT)
@@ -1692,7 +1692,7 @@ class GPUFramePathApiInventoryTest {
         val plan = GPUFramePathApiInventory.plan(
             operations = listOf(DisplayOp.DrawRect(
                 RectF32.ofLTRB(2f, 3f, 12f, 14f),
-                Paint.fill(Color.RED),
+                Paint.fill(ColorARGB.Red),
                 Matrix3x3F32.Identity,
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             )),
@@ -1709,7 +1709,7 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRect(RectF32.ofLTRB(3f, 4f, 24f, 27f), ClipOp.INTERSECT, antiAlias = false)
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1728,11 +1728,11 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRRect(
-                RRect(RectF32.ofLTRB(3f, 4f, 24f, 27f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(3f, 4f, 24f, 27f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1755,11 +1755,11 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRRect(
-                RRect(RectF32.ofLTRB(3f, 4f, 24f, 27f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(3f, 4f, 24f, 27f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
         val operations = surface.snapshotOps()
         val capabilities = capabilitiesWith(FILL_RECT_CAPABILITY)
@@ -1798,7 +1798,7 @@ class GPUFramePathApiInventoryTest {
             val surface = Surface(32, 32)
             surface.canvas {
                 buildClip()
-                drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+                drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
             }
             return requireNotNull(
                 GPUFramePathApiInventory.plan(
@@ -1818,14 +1818,14 @@ class GPUFramePathApiInventoryTest {
         })
         assertIs<GPUClipExecutionPlan.AnalyticCoverage>(executionFor {
             clipRRect(
-                RRect(RectF32.ofLTRB(2f, 3f, 25f, 28f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(2f, 3f, 25f, 28f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
         })
         assertIs<GPUClipExecutionPlan.AnalyticIntersection>(executionFor {
             clipRRect(
-                RRect(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
@@ -1833,7 +1833,7 @@ class GPUFramePathApiInventoryTest {
         })
         assertIs<GPUClipExecutionPlan.CoverageMask>(executionFor {
             clipRRect(
-                RRect(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
@@ -1856,8 +1856,8 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRect(RectF32.ofLTRB(2.25f, 2.5f, 29.25f, 29.5f), antiAlias = true)
-            clipRRect(RRect(RectF32.ofLTRB(4f, 4f, 27f, 27f), radius = 3f), antiAlias = false)
-            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 4f, 27f, 27f), radius = 3f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1881,7 +1881,7 @@ class GPUFramePathApiInventoryTest {
             setMatrix(Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
             clipRect(RectF32.ofLTRB(2f, 3f, 24f, 27f), ClipOp.INTERSECT, antiAlias = true)
             resetMatrix()
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1905,11 +1905,11 @@ class GPUFramePathApiInventoryTest {
         val clippedRect = Surface(32, 32).also { surface ->
             surface.canvas {
                 clipRRect(
-                    RRect(RectF32.ofLTRB(2f, 3f, 28f, 29f), radius = 3f),
+                    RRectF32.of(RectF32.ofLTRB(2f, 3f, 28f, 29f), radius = 3f),
                     ClipOp.INTERSECT,
                     antiAlias = true,
                 )
-                drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+                drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
             }
         }
         val boundedPlan = GPUFramePathApiInventory.plan(
@@ -1924,7 +1924,7 @@ class GPUFramePathApiInventoryTest {
 
         val pathSurface = Surface(32, 32).also { surface ->
             surface.canvas {
-                drawPath(triangle(), Paint.fill(Color.BLUE).copy(antiAlias = false))
+                drawPath(triangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
             }
         }
         val stencilCapabilityFacts = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig()
@@ -2035,7 +2035,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
         val capabilities = capabilitiesWith(
             FILL_RECT_CAPABILITY,
@@ -2071,7 +2071,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -2107,7 +2107,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
         }
         val capabilities = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
             boundedClipEnabled = false,
@@ -2143,7 +2143,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -2178,7 +2178,7 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
-            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -2203,12 +2203,12 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRRect(
-                RRect(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
             clipRect(RectF32.ofLTRB(12f, 10f, 20f, 22f), ClipOp.DIFFERENCE, antiAlias = false)
-            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
         }
 
         val plan = GPUFramePathApiInventory.plan(
@@ -2236,12 +2236,12 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRRect(
-                RRect(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                RRectF32.of(RectF32.ofLTRB(2f, 2f, 29f, 29f), radius = 3f),
                 ClipOp.INTERSECT,
                 antiAlias = true,
             )
             clipRect(RectF32.ofLTRB(12f, 10f, 20f, 22f), ClipOp.DIFFERENCE, antiAlias = false)
-            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
         }
         val capabilities = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
             boundedClipEnabled = false,
@@ -2264,12 +2264,12 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `all 29 blend identities use the canonical shared plan on every core family`() {
         val families = listOf<(BlendMode) -> DisplayOp>(
-            { mode -> DisplayOp.DrawColor(Color.RED, mode, Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
+            { mode -> DisplayOp.DrawColor(ColorARGB.Red, mode, Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawPoint(2f, 2f, paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawPoints(PointMode.LINES, listOf(Point2F32(1f, 1f), Point2F32(5f, 5f)), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
-            { mode -> DisplayOp.DrawRRect(RRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
-            { mode -> DisplayOp.DrawDRRect(RRect(RectF32.ofLTRB(1f, 1f, 8f, 8f), 1f), RRect(RectF32.ofLTRB(3f, 3f, 6f, 6f), 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
+            { mode -> DisplayOp.DrawRRect(RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
+            { mode -> DisplayOp.DrawDRRect(RRectF32.of(RectF32.ofLTRB(1f, 1f, 8f, 8f), 1f), RRectF32.of(RectF32.ofLTRB(3f, 3f, 6f, 6f), 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawPath(triangle(), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
         )
 
@@ -2375,7 +2375,7 @@ class GPUFramePathApiInventoryTest {
         const val FILL_RECT_CAPABILITY = "first_slice.fill_rect.native"
     }
 
-    private fun paint(mode: BlendMode) = Paint.fill(Color.RED).copy(blendMode = mode)
+    private fun paint(mode: BlendMode) = Paint.fill(ColorARGB.Red).copy(blendMode = mode)
 
     private fun triangle() = Path().apply {
         moveTo(1f, 1f)

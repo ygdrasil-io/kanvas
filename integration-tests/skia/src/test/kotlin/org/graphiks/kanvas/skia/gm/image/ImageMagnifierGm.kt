@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -28,7 +28,7 @@ class ImageMagnifierGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.Black))
 
         val magnifier = ImageFilter.Magnifier(
             src = RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()),
@@ -46,7 +46,7 @@ class ImageMagnifierGm : SkiaGm {
         repeat(count) {
             val x = rng.nextInt(500)
             val y = rng.nextInt(500)
-            val color = Color.fromRGBA(
+            val color = ColorARGB.fromRGBA(
                 rng.nextInt(256) / 255f,
                 rng.nextInt(256) / 255f,
                 rng.nextInt(256) / 255f,

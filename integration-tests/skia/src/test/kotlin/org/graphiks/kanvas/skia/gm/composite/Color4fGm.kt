@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
@@ -8,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -38,14 +40,14 @@ class Color4fGm : SkiaGm {
 
     private fun drawIntoCanvas(surface: Surface) {
         surface.canvas {
-            drawRect(RectF32(0f, 0f, 1024f, 100f), Paint(color = Color.WHITE))
+            drawRect(RectF32(0f, 0f, 1024f, 100f), Paint(color = ColorARGB.White))
             val r = RectF32(0f, 0f, 50f, 100f)
-            val shaderColors = listOf(Color.RED, Color.fromRGBA(1f, 0f, 0f, 0.5f))
+            val shaderColors = listOf(ColorARGB.Red, ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f))
             val filters: List<ColorFilter?> = listOf(
                 null,
-                ColorFilter.Matrix(saturationMatrix(0.75f)),
+                ColorFilter.Matrix(ColorMatrixF32.of(saturationMatrix(0.75f))),
                 makeCf1(),
-                ColorFilter.Blend(Color.fromRGBA(0x80 / 255f, 0x44 / 255f, 0xCC / 255f, 0x88 / 255f), BlendMode.SRC_ATOP),
+                ColorFilter.Blend(ColorARGB.fromRGBA(0x80 / 255f, 0x44 / 255f, 0xCC / 255f, 0x88 / 255f), BlendMode.SRC_ATOP),
             )
             var tx = 0f
             for (col in shaderColors) {
@@ -58,8 +60,8 @@ class Color4fGm : SkiaGm {
     }
 
     private fun makeCf1(): ColorFilter {
-        val outer = ColorFilter.Matrix(saturationMatrix(0.75f))
-        val inner = ColorFilter.Matrix(scaleMatrix(1.1f, 0.9f, 1f))
+        val outer = ColorFilter.Matrix(ColorMatrixF32.of(saturationMatrix(0.75f)))
+        val inner = ColorFilter.Matrix(ColorMatrixF32.of(scaleMatrix(1.1f, 0.9f, 1f)))
         return ColorFilter.Compose(outer, inner)
     }
 

@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.paint
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -9,21 +11,21 @@ import org.junit.jupiter.api.Assertions.assertTrue
 class EffectHierarchiesTest {
     @Test
     fun `ColorFilter Matrix`() {
-        val f = ColorFilter.Matrix(FloatArray(20) { it.toFloat() })
-        assertEquals(20, f.values.size)
+        val f = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20) { it.toFloat() }))
+        assertEquals(19f, f.matrix[19])
     }
 
     @Test
     fun `ColorFilter Blend`() {
-        val f = ColorFilter.Blend(Color.RED, BlendMode.MULTIPLY)
-        assertEquals(Color.RED, f.color)
+        val f = ColorFilter.Blend(ColorARGB.Red, BlendMode.MULTIPLY)
+        assertEquals(ColorARGB.Red, f.color)
         assertEquals(BlendMode.MULTIPLY, f.mode)
     }
 
     @Test
     fun `ColorFilter Compose`() {
-        val inner = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_OVER)
-        val outer = ColorFilter.Matrix(FloatArray(20) { 1f })
+        val inner = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_OVER)
+        val outer = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20) { 1f }))
         val f = ColorFilter.Compose(outer, inner)
         assertEquals(inner, f.inner)
     }
@@ -37,8 +39,8 @@ class EffectHierarchiesTest {
 
     @Test
     fun `ColorFilter Lighting`() {
-        val f = ColorFilter.Lighting(Color(0xFF808080u), Color(0xFF404040u))
-        assertEquals(Color(0xFF808080u), f.mul)
+        val f = ColorFilter.Lighting(ColorARGB.fromPackedUInt(0xFF808080u), ColorARGB.fromPackedUInt(0xFF404040u))
+        assertEquals(ColorARGB.fromPackedUInt(0xFF808080u), f.mul)
     }
 
     @Test

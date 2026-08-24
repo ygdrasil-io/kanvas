@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class StrokerectAnisotropicGm : SkiaGm {
@@ -27,13 +27,13 @@ class StrokerectAnisotropicGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val aaPaint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             strokeWidth = 10f,
             style = PaintStyle.STROKE,
         )
         val bwPaint = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             strokeWidth = 10f,
             style = PaintStyle.STROKE,
         )

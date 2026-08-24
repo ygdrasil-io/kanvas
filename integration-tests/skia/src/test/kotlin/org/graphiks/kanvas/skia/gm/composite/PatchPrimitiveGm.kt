@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -45,7 +45,7 @@ class PatchPrimitiveGm : SkiaGm {
     override val height = 1100
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(0f, 1f, 1f, 1f))
+        val colors = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.fromRGBA(0f, 1f, 1f, 1f))
         val texCoords = listOf(
             Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(100f, 100f), Point2F32(0f, 100f),
         )
@@ -53,18 +53,18 @@ class PatchPrimitiveGm : SkiaGm {
             start = Point2F32(100f / 4f, 0f),
             end = Point2F32(3f * 100f / 4f, 100f),
             stops = listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(1f / 6f, Color.fromRGBA(0f, 1f, 1f, 1f)),
-                GradientStop(2f / 6f, Color.GREEN),
-                GradientStop(3f / 6f, Color.WHITE),
-                GradientStop(4f / 6f, Color.fromRGBA(1f, 0f, 1f, 1f)),
-                GradientStop(5f / 6f, Color.BLUE),
-                GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(1f / 6f, ColorARGB.fromRGBA(0f, 1f, 1f, 1f)),
+                GradientStop(2f / 6f, ColorARGB.Green),
+                GradientStop(3f / 6f, ColorARGB.White),
+                GradientStop(4f / 6f, ColorARGB.fromRGBA(1f, 0f, 1f, 1f)),
+                GradientStop(5f / 6f, ColorARGB.Blue),
+                GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
             ),
             tileMode = TileMode.MIRROR,
         )
         val modes = listOf(BlendMode.SRC, BlendMode.DST, BlendMode.COLOR_DODGE)
-        val paint = Paint(color = Color.GREEN)
+        val paint = Paint(color = ColorARGB.Green)
 
         canvas.save()
         for (iy in 0 until 3) {

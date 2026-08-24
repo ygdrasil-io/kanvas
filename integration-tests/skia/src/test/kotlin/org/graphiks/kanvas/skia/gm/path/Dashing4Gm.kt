@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -82,7 +82,7 @@ class Dashing4Gm : SkiaGm {
         paint = paint.copy(
             antiAlias = true,
             strokeCap = StrokeCap.ROUND,
-            color = Color.fromRGBA(0f, 0f, 0f, 0x44 / 255f),
+            color = ColorARGB.fromRGBA(0f, 0f, 0f, 0x44 / 255f),
             strokeWidth = 40f,
         )
         drawLine(canvas, 0, 30, paint)
@@ -94,7 +94,7 @@ class Dashing4Gm : SkiaGm {
         canvas.translate(0f, 50f)
         paint = paint.copy(
             strokeCap = StrokeCap.ROUND,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             strokeWidth = 11f,
         )
         drawLine(canvas, 0, 30, paint, finalX = 0f)

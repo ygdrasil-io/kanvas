@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -44,7 +44,7 @@ class Skbug9319Gm : SkiaGm {
         canvas.translate(0f, 120f)
 
         canvas.save()
-        val rr = RRect(r, 0.1f)
+        val rr = RRectF32.of(r, 0.1f)
         canvas.clipRRect(rr, ClipOp.DIFFERENCE)
         canvas.drawRRect(rr, p)
         canvas.restore()

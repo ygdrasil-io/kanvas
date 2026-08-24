@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,7 +27,7 @@ class PerlinNoiseRotatedGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val outline = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             strokeWidth = 2f,
             style = PaintStyle.STROKE,
             antiAlias = true,

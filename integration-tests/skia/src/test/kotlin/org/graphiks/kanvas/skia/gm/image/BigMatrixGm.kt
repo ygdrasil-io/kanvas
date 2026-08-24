@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -39,12 +39,12 @@ class BigMatrixGm : SkiaGm {
         val small = 1f / 500f
 
         var pt = inv.transform(Point2F32(10f, 10f))
-        canvas.drawCircle(pt.x, pt.y, small, Paint(color = Color.RED, antiAlias = true))
+        canvas.drawCircle(pt.x, pt.y, small, Paint(color = ColorARGB.Red, antiAlias = true))
 
         pt = inv.transform(Point2F32(30f, 10f))
         canvas.drawRect(
             RectF32.ofLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
-            Paint(color = Color.RED, antiAlias = true),
+            Paint(color = ColorARGB.Red, antiAlias = true),
         )
 
         val bmpPixels = byteArrayOf(

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -69,8 +69,8 @@ class HighContrastFilterGm : SkiaGm {
             shader = Shader.LinearGradient(
                 start = pts[0], end = pts[1],
                 stops = listOf(
-                    GradientStop(0.2f, Color.WHITE),
-                    GradientStop(0.8f, Color.BLACK),
+                    GradientStop(0.2f, ColorARGB.White),
+                    GradientStop(0.8f, ColorARGB.Black),
                 ),
                 tileMode = TileMode.CLAMP,
             ),
@@ -81,8 +81,8 @@ class HighContrastFilterGm : SkiaGm {
             shader = Shader.LinearGradient(
                 start = pts[0], end = pts[1],
                 stops = listOf(
-                    GradientStop(0.2f, Color.GREEN),
-                    GradientStop(0.8f, Color.WHITE),
+                    GradientStop(0.2f, ColorARGB.Green),
+                    GradientStop(0.8f, ColorARGB.White),
                 ),
                 tileMode = TileMode.CLAMP,
             ),
@@ -112,6 +112,6 @@ class HighContrastFilterGm : SkiaGm {
         private const val kFontScale = 0.15f
     }
 
-    private fun argb(a: Int, r: Int, g: Int, b: Int): Color =
-        Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+    private fun argb(a: Int, r: Int, g: Int, b: Int): ColorARGB =
+        ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 }

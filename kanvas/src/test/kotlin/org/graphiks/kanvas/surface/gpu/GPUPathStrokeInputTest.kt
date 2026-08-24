@@ -7,7 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.abs
@@ -247,7 +247,7 @@ class GPUPathStrokeInputTest {
 
     @Test
     fun `rounded rect conversion keeps curved corners and closes the contour`() {
-        val path = Path().addRRect(RRect(RectF32.ofLTRB(0f, 0f, 10f, 8f), radius = 2f))
+        val path = Path().addRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 10f, 8f), radius = 2f))
 
         val flat = PathTessellator(tolerance = 0.25f, maxVertices = 64)
             .flatten(path.toPathTessellatorData())
@@ -259,7 +259,7 @@ class GPUPathStrokeInputTest {
     @Test
     fun `rounded rect conversion clamps oversized radii inside rect bounds`() {
         val rect = RectF32.ofLTRB(0f, 0f, 78f, 38f)
-        val path = Path().addRRect(RRect(rect, radius = 400f))
+        val path = Path().addRRect(RRectF32.of(rect, radius = 400f))
 
         val flat = PathTessellator(tolerance = 0.25f, maxVertices = 128)
             .flatten(path.toPathTessellatorData())

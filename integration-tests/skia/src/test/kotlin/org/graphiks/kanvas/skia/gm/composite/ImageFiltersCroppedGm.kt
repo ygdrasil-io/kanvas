@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class ImageFiltersCroppedGm : SkiaGm {
             ::drawRectProc, ::drawCircleProc, ::drawColorProc, ::drawRectProc,
         )
 
-        val cf = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_IN)
+        val cf = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_IN)
 
         val filters: List<ImageFilter?> = listOf(
             null,
@@ -71,7 +71,7 @@ class ImageFiltersCroppedGm : SkiaGm {
     private fun drawColorProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
         )
         canvas.save()
         canvas.clipRect(r)
@@ -80,7 +80,7 @@ class ImageFiltersCroppedGm : SkiaGm {
     }
 
     private fun drawCircleProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
-        val magenta = Color.fromRGBA(1f, 0f, 1f, 1f)
+        val magenta = ColorARGB.fromRGBA(1f, 0f, 1f, 1f)
         val paint = Paint(
             color = magenta,
             imageFilter = imf,
@@ -92,7 +92,7 @@ class ImageFiltersCroppedGm : SkiaGm {
     private fun drawRectProc(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
-            color = Color.GREEN,
+            color = ColorARGB.Green,
         )
         canvas.drawRect(r, paint)
     }
@@ -101,7 +101,7 @@ class ImageFiltersCroppedGm : SkiaGm {
         val cell = w / CHECKER_COLS.toFloat()
         for (row in 0 until CHECKER_COLS) {
             for (col in 0 until CHECKER_COLS) {
-                val color = if ((row + col) % 2 == 0) Color.WHITE else Color.BLACK
+                val color = if ((row + col) % 2 == 0) ColorARGB.White else ColorARGB.Black
                 val paint = Paint(color = color, antiAlias = false)
                 val cx = col * cell
                 val cy = row * cell

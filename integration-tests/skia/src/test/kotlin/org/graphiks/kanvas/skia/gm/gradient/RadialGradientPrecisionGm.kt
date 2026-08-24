@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -31,8 +31,8 @@ class RadialGradientPrecisionGm : SkiaGm {
         val center = Point2F32(1000f, 1000f)
         val radius = 40f
         val stops = listOf(
-            GradientStop(0f, Color.BLACK),
-            GradientStop(1f, Color.GREEN),
+            GradientStop(0f, ColorARGB.Black),
+            GradientStop(1f, ColorARGB.Green),
         )
         val shader = Shader.RadialGradient(
             center = center, radius = radius,

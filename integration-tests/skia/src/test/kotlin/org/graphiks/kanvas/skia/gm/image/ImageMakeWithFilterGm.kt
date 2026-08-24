@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -43,7 +43,7 @@ class ImageMakeWithFilterGm : SkiaGm {
 
         canvas.save()
         canvas.translate(margin, margin)
-        val alpha = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.3f))
+        val alpha = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.3f))
         for (row in 0 until 6) {
             canvas.save()
             for (col in 0 until 13) {

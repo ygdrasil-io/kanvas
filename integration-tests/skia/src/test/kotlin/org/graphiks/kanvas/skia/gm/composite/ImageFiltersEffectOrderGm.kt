@@ -12,11 +12,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 
 /**
  * Port of Skia's `gm/imagefilters.cpp::DEF_SIMPLE_GM(imagefilters_effect_order, ...)` (512 × 512).
@@ -42,7 +42,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
             -1f, -1f, -1f,
         )
         val edgeDetector: ImageFilter = ImageFilter.MatrixConvolution(
-            Size(3f, 3f), kernel, 1f, 0f, Vector2F32(1f, 1f),
+            SizeF32.of(3f, 3f), kernel, 1f, 0f, Vector2F32(1f, 1f),
             org.graphiks.kanvas.paint.TileMode.CLAMP, false, null,
         )
 
@@ -75,7 +75,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
 
         val alphaMaskShader = Shader.RadialGradient(
             Point2F32(128f, 128f), 128f,
-            listOf(GradientStop(0.4f, Color.BLACK), GradientStop(0.9f, Color.TRANSPARENT)),
+            listOf(GradientStop(0.4f, ColorARGB.Black), GradientStop(0.9f, ColorARGB.Transparent)),
         )
         val maskFilter = MaskFilter.Shader(alphaMaskShader)
 
@@ -96,7 +96,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
                 ImageFilter.Blend(
                     BlendMode.SRC_IN,
                     ImageFilter.Offset(0f, 0f, null),
-                    ImageFilter.ColorFilter(ColorFilter.Blend(Color.BLACK, BlendMode.SRC_IN), null),
+                    ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Black, BlendMode.SRC_IN), null),
                 ),
             ),
         )

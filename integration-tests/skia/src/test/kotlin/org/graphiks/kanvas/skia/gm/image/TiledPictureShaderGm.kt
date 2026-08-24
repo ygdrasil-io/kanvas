@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -52,11 +52,11 @@ class TiledPictureShaderGm : SkiaGm {
         val c = recorder.beginRecording(tile)
 
         val r = RectF32.ofLTRB(4f, 4f, 96f, 96f)
-        var p = Paint(color = Color.fromRGBA(0x30f / 255f, 0x3Ff / 255f, 0x9Ff / 255f))
+        var p = Paint(color = ColorARGB.fromRGBA(0x30f / 255f, 0x3Ff / 255f, 0x9Ff / 255f))
         c.drawRect(r, p)
 
         p = p.copy(
-            color = Color.fromRGBA(0xC5f / 255f, 0xCAf / 255f, 0xE9f / 255f),
+            color = ColorARGB.fromRGBA(0xC5f / 255f, 0xCAf / 255f, 0xE9f / 255f),
             style = PaintStyle.STROKE,
             strokeWidth = 10f,
         )
@@ -65,11 +65,11 @@ class TiledPictureShaderGm : SkiaGm {
 
         val picture = recorder.finishRecordingAsPicture()
 
-        var paint = Paint(color = Color.fromRGBA(0x8Bf / 255f, 0xC3f / 255f, 0x4Af / 255f))
+        var paint = Paint(color = ColorARGB.fromRGBA(0x8Bf / 255f, 0xC3f / 255f, 0x4Af / 255f))
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
 
         canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 400f, 350f))
-        paint = paint.copy(color = Color.fromRGBA(0xB6f / 255f, 0xB6f / 255f, 0xB6f / 255f))
+        paint = paint.copy(color = ColorARGB.fromRGBA(0xB6f / 255f, 0xB6f / 255f, 0xB6f / 255f))
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
 
         paint = paint.copy(shader = picture.asShader(

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -25,11 +25,11 @@ class WorkingspaceGm : SkiaGm {
     override val height = 350
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.White))
 
         val cellW = 40f
         val cellH = 40f
-        val green = Color.GREEN
+        val green = ColorARGB.Green
         val paint = Paint(color = green)
 
         for (row in 0 until 7) {

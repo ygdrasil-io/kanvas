@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class FlightAnimatedImageGm : SkiaGm {
@@ -51,7 +51,7 @@ class FlightAnimatedImageGm : SkiaGm {
     }
 
     private fun drawFrame(canvas: GmCanvas, frame: Int, scale: Float) {
-        val colors = listOf(Color.BLUE, Color(0xFFFF00FFu), Color(0xFF00FFFFu))
+        val colors = listOf(ColorARGB.Blue, ColorARGB.fromPackedUInt(0xFFFF00FFu), ColorARGB.fromPackedUInt(0xFF00FFFFu))
         val color = colors[frame % colors.size]
         val r = RectF32.ofLTRB(10f * scale, 10f * scale, 90f * scale, 90f * scale)
         canvas.drawRect(r, Paint(color = color, antiAlias = true))

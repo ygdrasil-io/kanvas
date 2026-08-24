@@ -5,7 +5,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -29,9 +29,9 @@ class LatticeDecompositionTest {
                     LatticeFlags.TRANSPARENT, LatticeFlags.TRANSPARENT, LatticeFlags.TRANSPARENT,
                 ),
                 colors = listOf(
-                    Color.TRANSPARENT, Color.TRANSPARENT, Color.TRANSPARENT,
-                    Color.RED, Color(0x880000FFu), Color(0xFF00FF00u),
-                    Color.TRANSPARENT, Color.TRANSPARENT, Color.TRANSPARENT,
+                    ColorARGB.Transparent, ColorARGB.Transparent, ColorARGB.Transparent,
+                    ColorARGB.Red, ColorARGB.fromPackedUInt(0x880000FFu), ColorARGB.fromPackedUInt(0xFF00FF00u),
+                    ColorARGB.Transparent, ColorARGB.Transparent, ColorARGB.Transparent,
                 ),
             ),
             dst = RectF32.ofOriginSize(100f, 100f, 200f, 200f),
@@ -52,9 +52,9 @@ class LatticeDecompositionTest {
         assertEquals(RectF32.ofLTRB(104f, 101f, 225f, 222f), cells[4].dst)
         assertEquals(RectF32.ofLTRB(225f, 101f, 300f, 222f), cells[5].dst)
         assertNull(cells[0].color)
-        assertEquals(Color.RED, cells[3].color)
-        assertEquals(Color(0x880000FFu), cells[4].color)
-        assertEquals(Color(0xFF00FF00u), cells[5].color)
+        assertEquals(ColorARGB.Red, cells[3].color)
+        assertEquals(ColorARGB.fromPackedUInt(0x880000FFu), cells[4].color)
+        assertEquals(ColorARGB.fromPackedUInt(0xFF00FF00u), cells[5].color)
     }
 
     @Test
@@ -82,12 +82,12 @@ class LatticeDecompositionTest {
                     LatticeFlags.DEFAULT,
                 ),
                 colors = listOf(
-                    Color.TRANSPARENT,
-                    Color.TRANSPARENT,
-                    Color.RED,
-                    Color.TRANSPARENT,
-                    Color.TRANSPARENT,
-                    Color.TRANSPARENT,
+                    ColorARGB.Transparent,
+                    ColorARGB.Transparent,
+                    ColorARGB.Red,
+                    ColorARGB.Transparent,
+                    ColorARGB.Transparent,
+                    ColorARGB.Transparent,
                 ),
             ),
             dst = RectF32.ofLTRB(0f, 0f, 60f, 40f),
@@ -102,7 +102,7 @@ class LatticeDecompositionTest {
             listOf(explicitRects[0], explicitRects[2], explicitRects[3], explicitRects[4], explicitRects[5]),
             cells.map(ImageCell::dst),
         )
-        assertEquals(Color.RED, cells[1].color)
+        assertEquals(ColorARGB.Red, cells[1].color)
         assertTrue(cells.filterIndexed { index, _ -> index != 1 }.all { it.color == null })
     }
 }

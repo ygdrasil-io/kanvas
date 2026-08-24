@@ -1,9 +1,14 @@
 package org.graphiks.kanvas.geometry
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.MutablePoint2F32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.mutableLineOf
 import org.graphiks.math.vector.MutableVector2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
@@ -187,6 +192,15 @@ class GeometryTest {
     }
 
     @Test
+    fun `isLine writes segment endpoints`() {
+        val line = mutableLineOf(Point2F32.Origin, Point2F32.Origin)
+
+        assertTrue(Path().apply { moveTo(5f, 7f); lineTo(11f, 13f) }.isLine(line))
+        assertEquals(Point2F32(5f, 7f), line.start)
+        assertEquals(Point2F32(11f, 13f), line.end)
+    }
+
+    @Test
     fun `isLine on rect returns false`() {
         assertFalse(Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)).isLine())
     }
@@ -229,7 +243,7 @@ class GeometryTest {
 
     @Test
     fun `isRRect on addRRect path`() {
-        val path = Path().addRRect(RRect(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
+        val path = Path().addRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
         assertTrue(path.isRRect())
     }
 

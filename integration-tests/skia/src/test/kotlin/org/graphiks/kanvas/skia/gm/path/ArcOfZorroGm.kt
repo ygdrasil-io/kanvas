@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -53,7 +53,7 @@ class ArcOfZorroGm : SkiaGm {
             val r = (colorInt shr 16 and 0xFF) / 255f
             val g = (colorInt shr 8 and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
-            paint = paint.copy(color = Color.fromRGBA(r, g, b, 1f))
+            paint = paint.copy(color = ColorARGB.fromRGBA(r, g, b, 1f))
 
             canvas.save()
             canvas.translate(xOffset.toFloat(), yOffset.toFloat())

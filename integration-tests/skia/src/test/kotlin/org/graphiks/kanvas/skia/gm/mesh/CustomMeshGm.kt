@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.ReferenceStatusEntry
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -38,8 +38,8 @@ class CustomMeshGm : SkiaGm {
             start = Point2F32(20f, 20f),
             end = Point2F32(120f, 120f),
             stops = listOf(
-                GradientStop(0f, Color.WHITE),
-                GradientStop(1f, Color.TRANSPARENT),
+                GradientStop(0f, ColorARGB.White),
+                GradientStop(1f, ColorARGB.Transparent),
             ),
         )
 
@@ -52,7 +52,7 @@ class CustomMeshGm : SkiaGm {
                         val verts = buildVertices(indexed = i and 1 == 1, colors = colors)
                         val alphaMask = (alpha and 0xFF).toUInt() shl 24
                         val paint = Paint(
-                            color = Color(alphaMask or 0x00FF00u),
+                            color = ColorARGB.fromPackedUInt(alphaMask or 0x00FF00u),
                             blendMode = mode,
                             shader = if (useShader) shader else null,
                         )
@@ -73,10 +73,10 @@ class CustomMeshGm : SkiaGm {
             Point2F32(20f, 120f), Point2F32(120f, 120f),
         )
         private val quadColors = listOf(
-            Color(0xFFFFFF00u),
-            Color.WHITE,
-            Color(0xFFFF00FFu),
-            Color(0xFF00FFFFu),
+            ColorARGB.fromPackedUInt(0xFFFFFF00u),
+            ColorARGB.White,
+            ColorARGB.fromPackedUInt(0xFFFF00FFu),
+            ColorARGB.fromPackedUInt(0xFF00FFFFu),
         )
         private val indexedPositions = listOf(
             Point2F32(20f, 20f), Point2F32(100f, 0f),
@@ -84,12 +84,12 @@ class CustomMeshGm : SkiaGm {
             Point2F32(20f, 120f), Point2F32(120f, 120f),
         )
         private val indexedColors = listOf(
-            Color(0xFFFFFF00u),
-            Color.TRANSPARENT,
-            Color.WHITE,
-            Color.TRANSPARENT,
-            Color(0xFFFF00FFu),
-            Color(0xFF00FFFFu),
+            ColorARGB.fromPackedUInt(0xFFFFFF00u),
+            ColorARGB.Transparent,
+            ColorARGB.White,
+            ColorARGB.Transparent,
+            ColorARGB.fromPackedUInt(0xFFFF00FFu),
+            ColorARGB.fromPackedUInt(0xFF00FFFFu),
         )
         private val indices = listOf(0, 2, 4, 2, 5, 4)
 

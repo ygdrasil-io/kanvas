@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class BigRectGm : SkiaGm {
                 canvas.save()
                 canvas.translate((i * 40 + 5).toFloat(), (j * 40 + 5).toFloat())
                 val paint = Paint(
-                    color = Color.BLUE,
+                    color = ColorARGB.Blue,
                     style = if (i and 1 != 0) PaintStyle.FILL else PaintStyle.STROKE,
                     strokeWidth = if (i and 2 != 0) 1f else 0f,
                     antiAlias = (i and 4) != 0,
@@ -57,7 +57,7 @@ class BigRectGm : SkiaGm {
         canvas.drawRect(RectF32(-1f, 34f, 35f, 36f), rectPaint)
 
         val outOfBoundsPaint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
         )

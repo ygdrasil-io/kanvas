@@ -100,6 +100,12 @@ public class ColorMatrixF32 {
     /** Returns a copy of the backing array. */
     public fun toFloatArray(): FloatArray = fMat.copyOf()
 
+    /** Returns the row-major coefficient at [index]. */
+    public operator fun get(index: Int): Float {
+        require(index in fMat.indices) { "ColorMatrixF32 index $index outside [0, 19]" }
+        return fMat[index]
+    }
+
     /** Pre-multiplies: `this = this * other`. */
     public fun preConcat(other: ColorMatrixF32) {
         setConcat(this, other)

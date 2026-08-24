@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
@@ -30,12 +30,12 @@ class Crbug938592Gm : SkiaGm {
             start = Point2F32(0f, 0f),
             end = Point2F32(0f, 30f),
             stops = listOf(
-                GradientStop(0f, Color.BLUE),
-                GradientStop(9f / 20f, Color.BLUE),
-                GradientStop(9f / 20f, Color.RED),
-                GradientStop(11f / 20f, Color.RED),
-                GradientStop(11f / 20f, Color.GREEN),
-                GradientStop(20f / 20f, Color.GREEN),
+                GradientStop(0f, ColorARGB.Blue),
+                GradientStop(9f / 20f, ColorARGB.Blue),
+                GradientStop(9f / 20f, ColorARGB.Red),
+                GradientStop(11f / 20f, ColorARGB.Red),
+                GradientStop(11f / 20f, ColorARGB.Green),
+                GradientStop(20f / 20f, ColorARGB.Green),
             ),
             tileMode = TileMode.CLAMP,
         )

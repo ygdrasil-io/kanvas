@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -44,12 +44,12 @@ class Crbug224618Gm : SkiaGm {
         )
 
         val faceColors = listOf(
-            Color.RED,
-            Color.fromRGBA(0f, 1f, 0f),
-            Color.BLUE,
-            Color.fromRGBA(1f, 1f, 0f),
-            Color.fromRGBA(1f, 0x65 / 255f, 0f),  // orange
-            Color.fromRGBA(0x80 / 255f, 0f, 0x80 / 255f),  // purple
+            ColorARGB.Red,
+            ColorARGB.fromRGBA(0f, 1f, 0f),
+            ColorARGB.Blue,
+            ColorARGB.fromRGBA(1f, 1f, 0f),
+            ColorARGB.fromRGBA(1f, 0x65 / 255f, 0f),  // orange
+            ColorARGB.fromRGBA(0x80 / 255f, 0f, 0x80 / 255f),  // purple
         )
 
         // Approximate 3D cube faces with 2D transforms
@@ -72,7 +72,7 @@ class Crbug224618Gm : SkiaGm {
                 cubeImage,
                 RectF32(0f, 0f, 400f, 400f),
                 RectF32(0f, 0f, 300f, 300f),
-                Paint(color = Color.fromRGBA(0.5f, 1f, 1f, 1f)),
+                Paint(color = ColorARGB.fromRGBA(0.5f, 1f, 1f, 1f)),
             )
 
             canvas.restore()
@@ -86,8 +86,8 @@ class Crbug224618Gm : SkiaGm {
                 center = Point2F32(200f, 200f),
                 radius = 25f,
                 stops = listOf(
-                    GradientStop(0f, Color.TRANSPARENT),
-                    GradientStop(1f, Color.fromRGBA(1f, 1f, 1f, 0.5f)),
+                    GradientStop(0f, ColorARGB.Transparent),
+                    GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f)),
                 ),
                 tileMode = TileMode.MIRROR,
             )

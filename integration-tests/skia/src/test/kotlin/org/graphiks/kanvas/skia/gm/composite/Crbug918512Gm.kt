@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -39,7 +39,7 @@ class Crbug918512Gm : SkiaGm {
         canvas.saveLayer(null, layerPaint)
 
         canvas.drawColor(0f, 0f, 0f, 0f)
-        val paint = Paint(color = Color(0xFF808080u))
+        val paint = Paint(color = ColorARGB.fromPackedUInt(0xFF808080u))
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, 128f, 256f), paint)
 
         canvas.restore()

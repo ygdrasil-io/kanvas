@@ -1,10 +1,14 @@
 package org.graphiks.kanvas
 
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
+
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -35,7 +39,7 @@ class KanvasSmokeTest {
     fun `canvas drawRect records command`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(ColorARGB.Red))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
@@ -45,7 +49,7 @@ class KanvasSmokeTest {
     fun `canvas drawRRect records command`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRRect(RRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), 10f), Paint.fill(Color.GREEN))
+            drawRRect(RRectF32.of(RectF32.ofOriginSize(10f, 10f, 100f, 80f), 10f), Paint.fill(ColorARGB.Green))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
@@ -60,7 +64,7 @@ class KanvasSmokeTest {
                 lineTo(100f, 10f)
                 lineTo(55f, 80f)
                 close()
-            }, Paint.fill(Color.BLUE))
+            }, Paint.fill(ColorARGB.Blue))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
@@ -88,7 +92,7 @@ class KanvasSmokeTest {
     fun `canvas drawRect produces correct DisplayOp`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(ColorARGB.Red))
         }
         val result = surface.render()
         assertEquals(1, result.stats.opsDispatched)

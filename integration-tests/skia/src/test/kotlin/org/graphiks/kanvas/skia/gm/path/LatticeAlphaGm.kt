@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.geometry.RectF32
 
@@ -31,7 +31,7 @@ class LatticeAlphaGm : SkiaGm {
         val image = makeAlphaImage()
         val divs = listOf(20, 40, 60, 80)
         val lattice = Lattice(xDivs = divs, yDivs = divs)
-        val paint = Paint(color = Color(0xFFFF00FFu)) // magenta
+        val paint = Paint(color = ColorARGB.fromPackedUInt(0xFFFF00FFu)) // magenta
 
         canvas.drawImageLattice(image, lattice, RectF32.ofOriginSize(0f, 0f, 120f, 120f), paint)
     }

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 class ThinStrokedRectsGm : SkiaGm {
@@ -27,7 +27,7 @@ class ThinStrokedRectsGm : SkiaGm {
         canvas.drawColor(0f, 0f, 0f, 1f)
 
         val paint = Paint(
-            color = Color.WHITE,
+            color = ColorARGB.White,
             style = PaintStyle.STROKE,
             antiAlias = true,
         )
@@ -46,14 +46,14 @@ class ThinStrokedRectsGm : SkiaGm {
             canvas.restore()
         }
 
-        paint.copy(color = Color.RED)
+        paint.copy(color = ColorARGB.Red)
         canvas.translate(0f, 15f)
         for (i in 0 until 8) {
             canvas.save()
             canvas.translate(i * 0.125f, i * 30f)
             canvas.scale(0.5f, 0.5f)
             for (j in STROKE_WIDTHS.indices) {
-                canvas.drawRect(rect2, paint.copy(strokeWidth = 2f * STROKE_WIDTHS[j], color = Color.RED))
+                canvas.drawRect(rect2, paint.copy(strokeWidth = 2f * STROKE_WIDTHS[j], color = ColorARGB.Red))
                 canvas.translate(30f, 0f)
             }
             canvas.restore()

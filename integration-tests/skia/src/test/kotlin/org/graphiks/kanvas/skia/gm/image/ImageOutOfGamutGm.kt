@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -49,19 +49,19 @@ class ImageOutOfGamutGm : SkiaGm {
         for (y in 0 until K_BOX_SIZE) {
             for (x in 0 until K_BOX_SIZE) {
                 val color = when (colorType) {
-                    ColorType.RGBA_8888 -> Color.fromRGBA(
+                    ColorType.RGBA_8888 -> ColorARGB.fromRGBA(
                         (y * 8).coerceAtMost(255) / 255f,
                         (x * 8).coerceAtMost(255) / 255f,
                         0f,
                         0x40 / 255f,
                     )
-                    ColorType.BGRA_8888 -> Color.fromRGBA(
+                    ColorType.BGRA_8888 -> ColorARGB.fromRGBA(
                         0f,
                         (x * 8).coerceAtMost(255) / 255f,
                         (y * 8).coerceAtMost(255) / 255f,
                         0x40 / 255f,
                     )
-                    else -> Color.TRANSPARENT
+                    else -> ColorARGB.Transparent
                 }
                 bm.setPixel(x, y, color)
             }

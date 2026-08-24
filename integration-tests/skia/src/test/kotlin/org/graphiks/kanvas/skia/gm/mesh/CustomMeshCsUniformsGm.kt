@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -46,13 +46,13 @@ class CustomMeshCsUniformsGm : SkiaGm {
         )
 
         // Uniform = (1, 0, 0, 1) — red at full alpha
-        val uniformColor = Color(0xFFFF0000u)
-        val rawSpinColor = Color(0xFF00FF00u)
-        val rawWideColor = Color(0xFF00FF00u)
+        val uniformColor = ColorARGB.fromPackedUInt(0xFFFF0000u)
+        val rawSpinColor = ColorARGB.fromPackedUInt(0xFF00FF00u)
+        val rawWideColor = ColorARGB.fromPackedUInt(0xFF00FF00u)
 
         data class CsConfig(
-            val color: Color = uniformColor,
-            val expectedColor: Color = uniformColor,
+            val color: ColorARGB = uniformColor,
+            val expectedColor: ColorARGB = uniformColor,
         )
 
         val configs = listOf(

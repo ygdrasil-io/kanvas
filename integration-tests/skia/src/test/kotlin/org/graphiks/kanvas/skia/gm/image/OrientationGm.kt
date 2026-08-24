@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -30,7 +30,7 @@ class Orientation444Gm : SkiaGm {
             canvas.translate(0f, 0f)
             // Draw colored rect placeholder for each orientation tile
             val hue = i.toFloat() / 8f
-            val color = Color.fromRGBA(hue, 1f - hue, 0.5f)
+            val color = ColorARGB.fromRGBA(hue, 1f - hue, 0.5f)
             canvas.drawRect(
                 RectF32.ofOriginSize(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
                 Paint(color = color),
@@ -72,7 +72,7 @@ class RespectOrientationJpegGm : SkiaGm {
         for (i in 1..8) {
             canvas.save()
             val hue = (i.toFloat() / 8f + 0.3f) % 1f
-            val color = Color.fromRGBA(0.5f, hue, 1f - hue)
+            val color = ColorARGB.fromRGBA(0.5f, hue, 1f - hue)
             canvas.drawRect(
                 RectF32.ofOriginSize(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
                 Paint(color = color),

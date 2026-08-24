@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/bug12866.cpp::bug40810065`.
@@ -37,7 +37,7 @@ class Bug40810065Gm : SkiaGm {
         }
 
         val stroke = Paint(
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 1f,

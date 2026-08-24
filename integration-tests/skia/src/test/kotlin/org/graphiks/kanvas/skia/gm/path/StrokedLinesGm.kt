@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -31,11 +31,11 @@ class StrokedLinesGm : SkiaGm {
 
         canvas.translate(0f, (kRadius + kPad).toFloat())
 
-        val whitePaint = Paint(color = Color.WHITE, style = PaintStyle.STROKE, strokeWidth = kStrokeWidth)
+        val whitePaint = Paint(color = ColorARGB.White, style = PaintStyle.STROKE, strokeWidth = kStrokeWidth)
 
         val colors = listOf(
             whitePaint,
-            whitePaint.copy(color = Color.fromRGBA(1f, 0f, 0f, 1f)),
+            whitePaint.copy(color = ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
         )
 
         for (paint in colors) {

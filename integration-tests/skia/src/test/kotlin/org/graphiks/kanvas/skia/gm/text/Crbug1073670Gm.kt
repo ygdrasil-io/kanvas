@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -29,7 +29,7 @@ class Crbug1073670Gm : SkiaGm {
         val shader = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(0f, 250f),
-            stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+            stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
         )
         val paint = Paint(shader = shader)
         val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!

@@ -2,7 +2,7 @@ package org.graphiks.kanvas.svg
 
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 
 class SvgGradientParser {
@@ -18,7 +18,7 @@ class SvgGradientParser {
             val r = (colorInt shr 16 and 0xFF) / 255f
             val g = (colorInt shr 8 and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
-            GradientStop(stop.offset ?: 0f, Color.fromRGBA(r, g, b))
+            GradientStop(stop.offset ?: 0f, ColorARGB.fromRGBA(r, g, b))
         }
         return Shader.LinearGradient(
             start = Point2F32(x1, y1),
@@ -36,7 +36,7 @@ class SvgGradientParser {
             val r = (colorInt shr 16 and 0xFF) / 255f
             val g = (colorInt shr 8 and 0xFF) / 255f
             val b = (colorInt and 0xFF) / 255f
-            GradientStop(stop.offset ?: 0f, Color.fromRGBA(r, g, b))
+            GradientStop(stop.offset ?: 0f, ColorARGB.fromRGBA(r, g, b))
         }
         return Shader.RadialGradient(
             center = Point2F32(cx, cy),

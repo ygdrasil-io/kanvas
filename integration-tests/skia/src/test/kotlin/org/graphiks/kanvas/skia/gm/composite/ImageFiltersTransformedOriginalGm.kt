@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ColorChannel
 import org.graphiks.kanvas.paint.ImageFilter
@@ -10,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -32,17 +34,17 @@ class ImageFiltersTransformedOriginalGm : SkiaGm {
         val gradientCircle = makeGradientCircle(64, 64)
 
         val gradient = ImageFilter.ColorFilter(
-            org.graphiks.kanvas.paint.ColorFilter.Matrix(floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)),
+            org.graphiks.kanvas.paint.ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f))),
             null,
         )
         val checker = ImageFilter.ColorFilter(
-            org.graphiks.kanvas.paint.ColorFilter.Matrix(floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)),
+            org.graphiks.kanvas.paint.ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f))),
             null,
         )
 
         val filters = arrayOf(
             ImageFilter.Blur(12f, 0f, input = null),
-            ImageFilter.DropShadow(0f, 15f, 8f, 0f, Color.GREEN, null),
+            ImageFilter.DropShadow(0f, 15f, 8f, 0f, ColorARGB.Green, null),
             ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.R, 12f, gradient, checker),
             ImageFilter.Dilate(2f, 2f, checker),
             ImageFilter.Erode(2f, 2f, checker),
@@ -56,7 +58,7 @@ class ImageFiltersTransformedOriginalGm : SkiaGm {
             canvas.translate(margin, 0f)
             for (i in filters.indices) {
                 val paint = Paint(
-                    color = Color.WHITE,
+                    color = ColorARGB.White,
                     imageFilter = filters[i],
                     antiAlias = true,
                 )

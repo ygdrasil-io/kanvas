@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.path
 
+import org.graphiks.math.color.ColorARGB
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
@@ -52,8 +54,8 @@ class StrokeCircleGm : SkiaGm {
         }
     }
 
-    private fun fromInt(c: Int): org.graphiks.kanvas.types.Color =
-        org.graphiks.kanvas.types.Color.fromRGBA(
+    private fun fromInt(c: Int): org.graphiks.math.color.ColorARGB =
+        org.graphiks.math.color.ColorARGB.fromRGBA(
             ((c ushr 16) and 0xFF) / 255f,
             ((c ushr 8) and 0xFF) / 255f,
             (c and 0xFF) / 255f,

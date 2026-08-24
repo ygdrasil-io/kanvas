@@ -10,8 +10,8 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 private val font = Font(
@@ -37,18 +37,18 @@ sealed class SimpleAaclipBaseGm(
     private val referenceBackground = 0xDD / 255f
     private val fBase = RectF32.ofLTRB(100.65f, 100.65f, 150.65f, 150.65f)
     private val fRect = RectF32.ofLTRB(130.65f, 130.65f, 170.65f, 170.65f)
-    private val fBasePath = Path { }.apply { addRRect(RRect(fBase, 5f)) }
-    private val fRectPath = Path { }.apply { addRRect(RRect(fRect, 5f)) }
+    private val fBasePath = Path { }.apply { addRRect(RRectF32.of(fBase, 5f)) }
+    private val fRectPath = Path { }.apply { addRRect(RRectF32.of(fRect, 5f)) }
     private val fBaseRectPath = Path { }.apply { addRect(fBase) }
     private val fRectRectPath = Path { }.apply { addRect(fRect) }
 
     private fun drawOrig(canvas: GmCanvas) {
-        val paint = Paint(color = Color.BLACK, style = PaintStyle.STROKE)
+        val paint = Paint(color = ColorARGB.Black, style = PaintStyle.STROKE)
         canvas.drawRect(fBase, paint)
         canvas.drawRect(fRect, paint)
     }
 
-    private fun drawPathsOped(canvas: GmCanvas, op: ClipOp, color: Color) {
+    private fun drawPathsOped(canvas: GmCanvas, op: ClipOp, color: ColorARGB) {
         drawOrig(canvas)
         canvas.save()
         if (usePath) {
@@ -67,8 +67,8 @@ sealed class SimpleAaclipBaseGm(
         canvas.drawColor(referenceBackground, referenceBackground, referenceBackground, 1f)
 
         val gOps = listOf(
-            Triple("Difference", ClipOp.DIFFERENCE, Color.BLACK),
-            Triple("Intersect", ClipOp.INTERSECT, Color.RED),
+            Triple("Difference", ClipOp.DIFFERENCE, ColorARGB.Black),
+            Triple("Intersect", ClipOp.INTERSECT, ColorARGB.Red),
         )
 
         var xOff = 0

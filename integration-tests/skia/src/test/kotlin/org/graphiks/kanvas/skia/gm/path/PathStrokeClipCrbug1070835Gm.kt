@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class PathStrokeClipCrbug1070835Gm : SkiaGm {
         val surf = Surface(25, 25)
 
         val paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 2f,

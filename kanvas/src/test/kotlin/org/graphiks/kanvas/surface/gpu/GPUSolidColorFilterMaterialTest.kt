@@ -1,10 +1,12 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -19,8 +21,8 @@ class GPUSolidColorFilterMaterialTest {
         )
 
         val material = Paint(
-            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.5f),
-            colorFilter = ColorFilter.Matrix(matrix),
+            color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.5f),
+            colorFilter = ColorFilter.Matrix(ColorMatrixF32.of(matrix)),
         ).toMaterial() as GPUMaterialDescriptor.SolidColor
 
         assertEquals(0.5f, material.r, 0.01f)
@@ -32,15 +34,15 @@ class GPUSolidColorFilterMaterialTest {
     @Test
     fun `compose applies inner color filter before outer color filter`() {
         val invertTable = UByteArray(256) { (255 - it).toUByte() }
-        val alphaHalf = ColorFilter.Matrix(floatArrayOf(
+        val alphaHalf = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
             0f, 1f, 0f, 0f, 0f,
             0f, 0f, 1f, 0f, 0f,
             0f, 0f, 0f, 0.5f, 0f,
-        ))
+        )))
 
         val material = Paint(
-            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
+            color = ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
             colorFilter = ColorFilter.Compose(alphaHalf, ColorFilter.Table(invertTable)),
         ).toMaterial() as GPUMaterialDescriptor.SolidColor
 
@@ -53,8 +55,8 @@ class GPUSolidColorFilterMaterialTest {
     @Test
     fun `blend color filter supports porter duff modes used by modecolorfilters`() {
         val srcIn = Paint(
-            color = Color.fromRGBA(0.8f, 0.2f, 0.4f, 0.5f),
-            colorFilter = ColorFilter.Blend(Color.fromRGBA(0.1f, 0.6f, 0.3f, 0.75f), BlendMode.SRC_IN),
+            color = ColorARGB.fromRGBA(0.8f, 0.2f, 0.4f, 0.5f),
+            colorFilter = ColorFilter.Blend(ColorARGB.fromRGBA(0.1f, 0.6f, 0.3f, 0.75f), BlendMode.SRC_IN),
         ).toMaterial() as GPUMaterialDescriptor.SolidColor
 
         assertEquals(0.1f, srcIn.r, 0.01f)
@@ -63,8 +65,8 @@ class GPUSolidColorFilterMaterialTest {
         assertEquals(0.375f, srcIn.a, 0.01f)
 
         val modulate = Paint(
-            color = Color.fromRGBA(0.8f, 0.2f, 0.4f, 0.5f),
-            colorFilter = ColorFilter.Blend(Color.fromRGBA(0.5f, 0.5f, 1f, 1f), BlendMode.MODULATE),
+            color = ColorARGB.fromRGBA(0.8f, 0.2f, 0.4f, 0.5f),
+            colorFilter = ColorFilter.Blend(ColorARGB.fromRGBA(0.5f, 0.5f, 1f, 1f), BlendMode.MODULATE),
         ).toMaterial() as GPUMaterialDescriptor.SolidColor
 
         assertEquals(0.4f, modulate.r, 0.01f)
@@ -83,7 +85,7 @@ class GPUSolidColorFilterMaterialTest {
         )
 
         val material = Paint(
-            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.8f),
+            color = ColorARGB.fromRGBA(0.2f, 0.4f, 0.6f, 0.8f),
             colorFilter = ColorFilter.HSLAMatrix(hueShiftAsRgbaMatrix),
         ).toMaterial() as GPUMaterialDescriptor.SolidColor
 

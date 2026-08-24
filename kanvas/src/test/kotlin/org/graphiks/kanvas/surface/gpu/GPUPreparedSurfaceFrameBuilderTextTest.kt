@@ -52,7 +52,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -62,7 +62,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `empty text is accepted and elided before typeface clip and blend work`() {
         val operation = textOperation().copy(
             blob = TextBlob(emptyList()),
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DARKEN),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.DARKEN),
             clip = orderedCoverageMaskClip(),
         )
 
@@ -90,13 +90,13 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `rect plus empty text builds only the core packet and no text resource`() {
         val rect = DisplayOp.DrawRect(
             RectF32.ofLTRB(0f, 0f, 64f, 64f),
-            Paint.fill(Color.WHITE),
+            Paint.fill(ColorARGB.White),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val emptyText = textOperation().copy(
             blob = TextBlob(emptyList()),
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DARKEN),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.DARKEN),
             clip = orderedCoverageMaskClip(),
         )
 
@@ -120,7 +120,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `destination read color glyph as first visual op synthesizes leading clear before the copy`() {
         val destinationReadText = colorTextOperation(fontSize = 28f).copy(
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.COLOR_DODGE),
         )
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -157,7 +157,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `empty blob destination read text stays builder no op without synthesized clear`() {
         val emptyText = textOperation().copy(
             blob = TextBlob(emptyList()),
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.COLOR_DODGE),
         )
 
         // A frame whose only visual op is an elided empty text is a builder NoOp. If the
@@ -178,7 +178,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         // painted op: the synthesis must skip the empty blob when locating the first visual.
         val emptyText = textOperation().copy(blob = TextBlob(emptyList()))
         val destinationReadText = colorTextOperation(fontSize = 28f).copy(
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.COLOR_DODGE),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.COLOR_DODGE),
         )
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -257,12 +257,12 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `opaque DST_IN text is elided before atlas binding and native allocation`() {
         val rect = DisplayOp.DrawRect(
             RectF32.ofLTRB(0f, 0f, 64f, 64f),
-            Paint.fill(Color.RED),
+            Paint.fill(ColorARGB.Red),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val noOpText = textOperation().copy(
-            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DST_IN),
+            paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.DST_IN),
         )
         val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
             GPUPreparedTextFramePreparer.prepare(
@@ -306,12 +306,12 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `target empty destination read text remains terminal before mapping`() {
         val rect = DisplayOp.DrawRect(
             RectF32.ofLTRB(0f, 0f, 64f, 64f),
-            Paint.fill(Color.WHITE),
+            Paint.fill(ColorARGB.White),
             Matrix3x3F32.Identity,
             ClipStack.WideOpen,
         )
         val culledText = textOperation().copy(
-            paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
+            paint = Paint.fill(ColorARGB.Black).copy(blendMode = BlendMode.DARKEN),
             clip = ClipStack.DeviceRect(
                 rect = RectF32.ofLTRB(80f, 80f, 96f, 96f),
                 antiAlias = false,
@@ -431,14 +431,14 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val operations = listOf(
             DisplayOp.DrawRect(
                 rect = RectF32.ofLTRB(0f, 0f, 8f, 8f),
-                paint = Paint.fill(Color.RED).copy(antiAlias = false),
+                paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
             textOperation().copy(clip = clip),
             DisplayOp.DrawRect(
                 rect = RectF32.ofLTRB(32f, 32f, 40f, 40f),
-                paint = Paint.fill(Color.BLUE).copy(antiAlias = false),
+                paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = clip,
             ),
@@ -554,13 +554,13 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     @Test
     fun `prepared text transports the exact compiled gradient program without descriptor reconstruction`() {
         val operation = textOperation().copy(
-            paint = Paint.fill(Color.WHITE).copy(
+            paint = Paint.fill(ColorARGB.White).copy(
                 shader = Shader.LinearGradient(
                     start = Point2F32(0f, 0f),
                     end = Point2F32(32f, 0f),
                     stops = listOf(
-                        GradientStop(0f, Color.RED),
-                        GradientStop(1f, Color.BLUE),
+                        GradientStop(0f, ColorARGB.Red),
+                        GradientStop(1f, ColorARGB.Blue),
                     ),
                     tileMode = TileMode.CLAMP,
                 ),
@@ -639,7 +639,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             ),
             x = 4f,
             y = 24f,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )
@@ -682,11 +682,11 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
                 GPUFrameProvenance.GmContent.annotationValue,
             ),
             textOperation().copy(
-                paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.SRC),
+                paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.SRC),
                 clip = clip,
             ),
             colorTextOperation(fontSize = 8f).copy(
-                paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.SRC),
+                paint = Paint.fill(ColorARGB.White).copy(blendMode = BlendMode.SRC),
                 clip = clip,
             ),
         )
@@ -835,7 +835,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
                 GPUFrameProvenance.GmContent.annotationValue,
             ),
             DisplayOp.DrawColor(
-                Color.BLUE,
+                ColorARGB.Blue,
                 BlendMode.SRC_OVER,
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -894,7 +894,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
     fun `two pass preparation expands exact text subruns without reordering core commands`() {
         val operations = listOf(
             DisplayOp.DrawColor(
-                Color.BLUE,
+                ColorARGB.Blue,
                 BlendMode.SRC_OVER,
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -906,7 +906,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             ),
             textOperation(),
             DisplayOp.DrawColor(
-                Color.RED,
+                ColorARGB.Red,
                 BlendMode.SRC_OVER,
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -952,7 +952,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         ),
         x = 4f,
         y = 24f,
-        paint = Paint.fill(Color.WHITE),
+        paint = Paint.fill(ColorARGB.White),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,
     )
@@ -1033,7 +1033,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             ),
             x = 0f,
             y = 0f,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(ColorARGB.White),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
         )

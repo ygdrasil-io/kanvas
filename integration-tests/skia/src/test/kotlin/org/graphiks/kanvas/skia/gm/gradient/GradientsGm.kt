@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -32,7 +32,7 @@ class GradientsGm : SkiaGm {
         val pts = arrayOf(Point2F32(0f, 0f), Point2F32(100f, 100f))
         val rect = RectF32(0f, 0f, 100f, 100f)
 
-        val base5 = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE, Color.BLACK)
+        val base5 = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.White, ColorARGB.Black)
         val gradDatas = listOf(
             listOf(GradientStop(0f, base5[0]), GradientStop(1f, base5[1])),
             listOf(GradientStop(0f, base5[0]), GradientStop(1f, base5[1])),
@@ -46,10 +46,10 @@ class GradientsGm : SkiaGm {
                 GradientStop(1f, base5[4]),
             ),
             listOf(
-                GradientStop(0f, Color.RED),
-                GradientStop(0f, Color.GREEN),
-                GradientStop(1f, Color.GREEN),
-                GradientStop(1f, Color.BLUE),
+                GradientStop(0f, ColorARGB.Red),
+                GradientStop(0f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Blue),
             ),
         )
 

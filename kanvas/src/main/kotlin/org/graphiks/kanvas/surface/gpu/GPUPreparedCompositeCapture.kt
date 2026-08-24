@@ -28,7 +28,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -640,7 +640,7 @@ internal object GPUPreparedCompositeCapturer {
             )
         }
 
-        private fun RRect.toSnapshot(operationIndex: Int): GPUPreparedGeometrySnapshot.RRectGeometry =
+        private fun RRectF32.toSnapshot(operationIndex: Int): GPUPreparedGeometrySnapshot.RRectGeometry =
             GPUPreparedGeometrySnapshot.RRectGeometry(
                 rect = rect.toSnapshot(GPUPreparedCompositeRefusalCodes.OPERATION, operationIndex),
                 topLeft = topLeft.toPointSnapshot(operationIndex),
@@ -649,7 +649,7 @@ internal object GPUPreparedCompositeCapturer {
                 bottomLeft = bottomLeft.toPointSnapshot(operationIndex),
             )
 
-        private fun org.graphiks.kanvas.types.CornerRadii.toPointSnapshot(
+        private fun org.graphiks.math.geometry.CornerRadiiF32.toPointSnapshot(
             operationIndex: Int,
         ): GPUPreparedPointSnapshot {
             if (!x.isFinite() || !y.isFinite()) {
@@ -789,7 +789,7 @@ internal object GPUPreparedCompositeCapturer {
                 )
             }
             return GPUPreparedPaintSnapshot(
-                colorArgb = color.packed,
+                colorArgb = color.value,
                 blendMode = GPUBlendMode.valueOf(blendMode.name),
                 style = when (style) {
                     PaintStyle.FILL -> GPUPreparedPaintStyle.Fill

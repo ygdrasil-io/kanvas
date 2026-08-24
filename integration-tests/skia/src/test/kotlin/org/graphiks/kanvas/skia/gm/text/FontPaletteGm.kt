@@ -7,10 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.g
-import org.graphiks.kanvas.types.b
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/palette.cpp` (font palette variant).
  *  Tests font palette overrides for color fonts — draws emoji text with
@@ -28,10 +25,10 @@ class FontPaletteGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawColor(Color.WHITE.r, Color.WHITE.g, Color.WHITE.b)
+        canvas.drawColor(ColorARGB.White.r, ColorARGB.White.g, ColorARGB.White.b)
         canvas.translate(10f, 20f)
         val font = Font(typeface, 200f)
-        canvas.drawString("ABC", 0f, 220f, font, Paint(color = Color.BLACK))
-        canvas.drawString("ABC", 440f, 220f, font, Paint(color = Color.BLACK))
+        canvas.drawString("ABC", 0f, 220f, font, Paint(color = ColorARGB.Black))
+        canvas.drawString("ABC", 440f, 220f, font, Paint(color = ColorARGB.Black))
     }
 }

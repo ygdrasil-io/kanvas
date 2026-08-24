@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -151,8 +151,8 @@ class ClipShaderPerspGm : SkiaGm {
             config.localMatrix == LocalMatrix.BOTH_WITH_LOCAL_MATRIX
         val gradCenter = Point2F32(0.5f * img.width, 0.5f * img.height)
         val gradColors = listOf(
-            GradientStop(0f, Color.BLACK),
-            GradientStop(1f, Color.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f)),
+            GradientStop(0f, ColorARGB.Black),
+            GradientStop(1f, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f)),
         )
         val gradShader = if (gradLM) {
             Shader.WithLocalMatrix(
@@ -199,7 +199,7 @@ class ClipShaderPerspGm : SkiaGm {
         }
 
         canvas.clipRect(imgRect)
-        canvas.drawRect(imgRect, Paint(color = Color.BLACK))
+        canvas.drawRect(imgRect, Paint(color = ColorARGB.Black))
         canvas.drawImage(img, imgRect)
 
         canvas.restore()

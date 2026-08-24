@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -41,10 +41,10 @@ class ConvexPolyClipGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         setupClips()
         val image = makeImg(100, 100)
-        val bgPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.08f))
+        val bgPaint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 0.08f))
         canvas.drawImageRect(image, RectF32.ofOriginSize(0f, 0f, 100f, 100f), RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), bgPaint)
         val font = Font(typeface, 23f)
-        val txtPaint = Paint(color = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
+        val txtPaint = Paint(color = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
         val kMargin = 10f
         var startX = 0f
         for (doLayer in 0..1) {
@@ -60,7 +60,7 @@ class ConvexPolyClipGm : SkiaGm {
                     x += 100 + kMargin
                 }
                 for (aa in 0..1) {
-                    val outlinePaint = Paint(color = Color.fromRGBA(0.314f, 0.314f, 0.314f, 0.314f), antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
+                    val outlinePaint = Paint(color = ColorARGB.fromRGBA(0.314f, 0.314f, 0.314f, 0.314f), antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
                     if (doLayer == 1) canvas.saveLayer() else canvas.save()
                     canvas.translate(x, y)
                     canvas.drawPath(clip.asClosedPath(), outlinePaint)
@@ -127,9 +127,9 @@ class ConvexPolyClipGm : SkiaGm {
             val wF = w.toFloat(); val hF = h.toFloat()
             val pt = Point2F32(wF / 2f, hF / 2f)
             val radius = 3f * maxOf(wF, hF)
-            val colors = listOf(Color.fromRGBA(0.5f, 0.5f, 0.5f), Color.fromRGBA(0.133f, 0.133f, 0.333f),
-                Color.fromRGBA(0.2f, 0.075f, 0.2f), Color.fromRGBA(0.533f, 0.267f, 0.133f),
-                Color.fromRGBA(0f, 0f, 0.133f), Color.WHITE, Color.fromRGBA(0.667f, 0.733f, 0.8f))
+            val colors = listOf(ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f), ColorARGB.fromRGBA(0.133f, 0.133f, 0.333f),
+                ColorARGB.fromRGBA(0.2f, 0.075f, 0.2f), ColorARGB.fromRGBA(0.533f, 0.267f, 0.133f),
+                ColorARGB.fromRGBA(0f, 0f, 0.133f), ColorARGB.White, ColorARGB.fromRGBA(0.667f, 0.733f, 0.8f))
             val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
             val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
             var rect = RectF32.ofOriginSize(0f, 0f, wF, hF)

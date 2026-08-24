@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -61,9 +61,9 @@ class Strokes2Gm : SkiaGm {
         }
     }
 
-    private fun rndColor(rand: Random): Color {
+    private fun rndColor(rand: Random): ColorARGB {
         val c32 = rand.nextInt()
-        return Color.fromRGBA(
+        return ColorARGB.fromRGBA(
             ((c32 ushr 16) and 0xFF) / 255f,
             ((c32 ushr 8) and 0xFF) / 255f,
             (c32 and 0xFF) / 255f,

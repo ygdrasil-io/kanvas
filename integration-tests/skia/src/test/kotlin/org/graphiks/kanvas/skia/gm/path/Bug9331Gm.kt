@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -29,11 +29,11 @@ class Bug9331Gm : SkiaGm {
         val clip = RectF32(0f, 0f, 200f, 150f)
 
         run {
-            val p = Paint(color = Color.fromRGBA(0x44 / 255f, 0f, 0f, 1f))
+            val p = Paint(color = ColorARGB.fromRGBA(0x44 / 255f, 0f, 0f, 1f))
             canvas.drawRect(clip, p)
         }
 
-        fun draw(color: Color, clipRect: RectF32) {
+        fun draw(color: ColorARGB, clipRect: RectF32) {
             val intervals = floatArrayOf(13f, 17f)
             val p = Paint(
                 color = color,
@@ -47,7 +47,7 @@ class Bug9331Gm : SkiaGm {
             canvas.restore()
         }
 
-        draw(Color.BLACK, clip)
-        draw(Color.BLUE, RectF32(0f, 150f, 200f, 300f))
+        draw(ColorARGB.Black, clip)
+        draw(ColorARGB.Blue, RectF32(0f, 150f, 200f, 300f))
     }
 }

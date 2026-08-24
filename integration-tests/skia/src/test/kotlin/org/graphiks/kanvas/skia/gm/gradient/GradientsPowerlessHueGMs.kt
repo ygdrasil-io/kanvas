@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -84,66 +84,66 @@ private fun drawPowerlessHueGradients(canvas: GmCanvas) {
     canvas.translate(5f, 5f)
     canvas.save()
 
-    gradient(listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, argb(255, 252, 252, 255)), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, argb(255, 252, 252, 255)), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.BLACK), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, argb(255, 0, 0, 3)), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Black), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, argb(255, 0, 0, 3)), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
-    gradient(listOf(GradientStop(0f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.RED), GradientStop(0.5f, Color.WHITE), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Red), GradientStop(0.5f, ColorARGB.White), GradientStop(1f, ColorARGB.Blue)))
     gradient(listOf(
-        GradientStop(0f, Color.RED),
+        GradientStop(0f, ColorARGB.Red),
         GradientStop(0.5f, argb(255, 255, 252, 252)),
         GradientStop(0.5f, argb(255, 252, 252, 255)),
-        GradientStop(1f, Color.BLUE),
+        GradientStop(1f, ColorARGB.Blue),
     ))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.RED), GradientStop(0.5f, Color.BLACK), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Red), GradientStop(0.5f, ColorARGB.Black), GradientStop(1f, ColorARGB.Blue)))
     gradient(listOf(
-        GradientStop(0f, Color.RED),
+        GradientStop(0f, ColorARGB.Red),
         GradientStop(0.5f, argb(255, 3, 0, 0)),
         GradientStop(0.5f, argb(255, 0, 0, 3)),
-        GradientStop(1f, Color.BLUE),
+        GradientStop(1f, ColorARGB.Blue),
     ))
     nextRow()
 
-    gradient(listOf(GradientStop(0f, Color.RED), GradientStop(0.5f, Color.TRANSPARENT), GradientStop(1f, Color.BLUE)))
+    gradient(listOf(GradientStop(0f, ColorARGB.Red), GradientStop(0.5f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Blue)))
     gradient(listOf(
-        GradientStop(0f, Color.RED),
-        GradientStop(0.5f, Color.TRANSPARENT),
-        GradientStop(0.5f, Color.TRANSPARENT),
-        GradientStop(1f, Color.BLUE),
+        GradientStop(0f, ColorARGB.Red),
+        GradientStop(0.5f, ColorARGB.Transparent),
+        GradientStop(0.5f, ColorARGB.Transparent),
+        GradientStop(1f, ColorARGB.Blue),
     ))
     nextRow()
 
     canvas.restore()
 }
 
-private fun argb(a: Int, r: Int, g: Int, b: Int): Color =
-    Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+private fun argb(a: Int, r: Int, g: Int, b: Int): ColorARGB =
+    ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 
 private fun drawCheckerboard(canvas: GmCanvas) {
-    val c1 = Color.fromRGBA(0.6f, 0.6f, 0.6f, 1f)
-    val c2 = Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
+    val c1 = ColorARGB.fromRGBA(0.6f, 0.6f, 0.6f, 1f)
+    val c2 = ColorARGB.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
     for (y in 0 until 400 step 8) {
         for (x in 0 until 420 step 8) {
             val dark = ((x / 8) + (y / 8)) % 2 == 0

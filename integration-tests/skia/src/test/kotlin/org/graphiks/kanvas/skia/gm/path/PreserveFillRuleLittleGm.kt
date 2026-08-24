@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -34,7 +34,7 @@ class PreserveFillRuleLittleGm : SkiaGm {
 
         canvas.drawColor(1f, 1f, 1f)
 
-        val paint = Paint(antiAlias = true, color = Color.GREEN)
+        val paint = Paint(antiAlias = true, color = ColorARGB.Green)
 
         canvas.drawPath(makeStar(cx, cy, r, 7, FillType.WINDING), paint)
 

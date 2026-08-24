@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
@@ -57,7 +57,7 @@ class PerspTextGm : SkiaGm {
                 val centered = Matrix3x3F32.translation(x, y) * persp * Matrix3x3F32.translation(-x, -y)
                 canvas.save()
                 canvas.concat(centered)
-                canvas.drawString(text, x, y, font, Paint(antiAlias = true, color = Color.BLACK))
+                canvas.drawString(text, x, y, font, Paint(antiAlias = true, color = ColorARGB.Black))
                 canvas.restore()
                 y += textHeight + 5f
             }

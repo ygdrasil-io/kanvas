@@ -25,12 +25,34 @@ class ColorARGBTest {
     }
 
     @Test
+    fun `packed UInt conversion preserves ARGB bits`() {
+        val c = ColorARGB.fromPackedUInt(0x80123456u)
+
+        assertEquals(0x80123456.toInt(), c.toPackedInt())
+    }
+
+    @Test
     fun `colorRGB sets alpha to 0xFF`() {
         val c = ColorARGB.of(0x12, 0x34, 0x56)
         assertEquals(0xFF, c.alpha)
         assertEquals(0x12, c.red)
         assertEquals(0x34, c.green)
         assertEquals(0x56, c.blue)
+    }
+
+    @Test
+    fun `normalized RGBA factory clamps quantizes and exposes normalized channels`() {
+        val color = ColorARGB.fromRGBA(red = -0.25f, green = 0.5f, blue = 1.25f, alpha = 0.25f)
+
+        assertEquals(0x400080FF, color.toPackedInt())
+        assertEquals(0f, color.redNormalized)
+        assertEquals(128f / 255f, color.greenNormalized)
+        assertEquals(1f, color.blueNormalized)
+        assertEquals(64f / 255f, color.alphaNormalized)
+        assertEquals(color.redNormalized, color.r)
+        assertEquals(color.greenNormalized, color.g)
+        assertEquals(color.blueNormalized, color.b)
+        assertEquals(color.alphaNormalized, color.a)
     }
 
     @Test

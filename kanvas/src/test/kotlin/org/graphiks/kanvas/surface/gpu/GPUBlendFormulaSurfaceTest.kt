@@ -13,11 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequiremen
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.alphaByte
-import org.graphiks.kanvas.types.blueByte
-import org.graphiks.kanvas.types.greenByte
-import org.graphiks.kanvas.types.redByte
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -70,7 +66,7 @@ class GPUBlendFormulaSurfaceTest {
     fun `DARKEN rect renders prepared through the destination read formula route`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
-        val source = Color.fromArgb(255, 192, 64, 32)
+        val source = ColorARGB.of(255, 192, 64, 32)
 
         // A single destination-read draw renders prepared with the GPU copy-then-formula
         // route. (A second background draw splits the frame into the two-render dst-copy
@@ -104,7 +100,7 @@ class GPUBlendFormulaSurfaceTest {
             pixels = result.pixels,
             x = 16,
             y = 16,
-            expected = expectedBlend(source, Color.TRANSPARENT, BlendMode.DARKEN),
+            expected = expectedBlend(source, ColorARGB.Transparent, BlendMode.DARKEN),
             tolerance = 2,
         )
     }
@@ -120,20 +116,20 @@ class GPUBlendFormulaSurfaceTest {
         assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains(allModes))
     }
 
-    private fun expectedBlend(source: Color, destination: Color, mode: BlendMode): Color {
+    private fun expectedBlend(source: ColorARGB, destination: ColorARGB, mode: BlendMode): ColorARGB {
         val src = source.toLinearRgb()
         val dst = destination.toLinearRgb()
-        val sourceAlpha = source.alphaByte / 255f
-        val destinationAlpha = destination.alphaByte / 255f
+        val sourceAlpha = source.alpha / 255f
+        val destinationAlpha = destination.alpha / 255f
         val blended = blendColor(src, dst, mode)
         val outputAlpha = sourceAlpha + destinationAlpha * (1f - sourceAlpha)
-        if (outputAlpha == 0f) return Color.fromRGBA(0f, 0f, 0f, 0f)
+        if (outputAlpha == 0f) return ColorARGB.fromRGBA(0f, 0f, 0f, 0f)
         val outputPremul = FloatArray(3) { channel ->
             src[channel] * sourceAlpha * (1f - destinationAlpha) +
                 dst[channel] * destinationAlpha * (1f - sourceAlpha) +
                 sourceAlpha * destinationAlpha * blended[channel]
         }
-        return Color.fromRGBA(
+        return ColorARGB.fromRGBA(
             linearToSrgb(outputPremul[0]),
             linearToSrgb(outputPremul[1]),
             linearToSrgb(outputPremul[2]),
@@ -222,10 +218,10 @@ class GPUBlendFormulaSurfaceTest {
         return clipped
     }
 
-    private fun Color.toLinearRgb(): FloatArray = floatArrayOf(
-        srgbToLinear(redByte / 255f),
-        srgbToLinear(greenByte / 255f),
-        srgbToLinear(blueByte / 255f),
+    private fun ColorARGB.toLinearRgb(): FloatArray = floatArrayOf(
+        srgbToLinear(red / 255f),
+        srgbToLinear(green / 255f),
+        srgbToLinear(blue / 255f),
     )
 
     private fun srgbToLinear(value: Float): Float =
@@ -234,7 +230,7 @@ class GPUBlendFormulaSurfaceTest {
     private fun linearToSrgb(value: Float): Float =
         if (value <= 0.0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - 0.055f
 
-    private fun assertPixelNear(pixels: UByteArray, x: Int, y: Int, expected: Color, tolerance: Int) {
+    private fun assertPixelNear(pixels: UByteArray, x: Int, y: Int, expected: ColorARGB, tolerance: Int) {
         val offset = (y * 32 + x) * 4
         val actual = intArrayOf(
             pixels[offset].toInt(),
@@ -242,7 +238,7 @@ class GPUBlendFormulaSurfaceTest {
             pixels[offset + 2].toInt(),
             pixels[offset + 3].toInt(),
         )
-        val wanted = intArrayOf(expected.redByte, expected.greenByte, expected.blueByte, expected.alphaByte)
+        val wanted = intArrayOf(expected.red, expected.green, expected.blue, expected.alpha)
         wanted.indices.forEach { channel ->
             assertTrue(
                 abs(wanted[channel] - actual[channel]) <= tolerance,

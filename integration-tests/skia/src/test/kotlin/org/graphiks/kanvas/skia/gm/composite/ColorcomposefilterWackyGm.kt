@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,9 +27,9 @@ class ColorcomposefilterWackyGm : SkiaGm {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)
 
         val colors = listOf(
-            Color.fromRGBA(0f, 1f, 1f, 1f),    // cyan
-            Color.fromRGBA(1f, 0f, 1f, 1f),    // magenta
-            Color.fromRGBA(1f, 1f, 0f, 1f),    // yellow
+            ColorARGB.fromRGBA(0f, 1f, 1f, 1f),    // cyan
+            ColorARGB.fromRGBA(1f, 0f, 1f, 1f),    // magenta
+            ColorARGB.fromRGBA(1f, 1f, 0f, 1f),    // yellow
         )
         val modes = listOf(
             BlendMode.OVERLAY, BlendMode.DARKEN, BlendMode.COLOR_BURN, BlendMode.EXCLUSION,
@@ -40,7 +40,7 @@ class ColorcomposefilterWackyGm : SkiaGm {
         val spacer = 10f
 
         canvas.translate(spacer, spacer)
-        val paint = Paint(color = Color.WHITE)
+        val paint = Paint(color = ColorARGB.White)
 
         canvas.drawRect(r, paint)
 

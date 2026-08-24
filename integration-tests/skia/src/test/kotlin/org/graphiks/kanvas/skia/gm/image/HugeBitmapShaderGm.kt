@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /** Port of Skia's `gm/bitmapshader.cpp` (huge-bitmap variant).
  *  Creates a 1x60000 ALPHA_8 image and renders it as a mirrored shader
@@ -35,7 +35,7 @@ class HugeBitmapShaderGm : SkiaGm {
         val image = Image.fromPixels(bitmapW, bitmapH, pixels, ColorType.ALPHA_8, "huge_bitmap_shader")
 
         val paint = Paint(
-            color = Color.RED,
+            color = ColorARGB.Red,
             antiAlias = true,
             shader = Shader.Image(image, TileMode.MIRROR, TileMode.MIRROR),
         )

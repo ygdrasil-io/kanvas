@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 
 /** Port of Skia's `gm/imagefiltersclipped.cpp` (convolve subset variant).
  *  Tests convolve image filter with subset rects — renders a checkerboard
@@ -35,7 +35,7 @@ class ImageFilterConvolveSubsetGm : SkiaGm {
 
         val kernel = floatArrayOf(1f, 1f, 1f, 1f, -7f, 1f, 1f, 1f, 1f)
         val convFilter = ImageFilter.MatrixConvolution(
-            kernelSize = Size(3f, 3f),
+            kernelSize = SizeF32.of(3f, 3f),
             kernel = kernel,
             gain = 1f,
             bias = 0.3f,

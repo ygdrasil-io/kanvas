@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -61,7 +61,7 @@ class ClipCubicGm : SkiaGm {
     private fun drawAndClip(canvas: GmCanvas, p: Path, dx: Float, dy: Float) {
         canvas.save()
         val r = RectF32.ofOriginSize(0f, H / 4f, W, H / 2f)
-        val bgPaint = Paint(color = Color(0xFF8888FFu))
+        val bgPaint = Paint(color = ColorARGB.fromPackedUInt(0xFF8888FFu))
 
         canvas.drawRect(r, bgPaint)
         doDraw(canvas, p)
@@ -75,9 +75,9 @@ class ClipCubicGm : SkiaGm {
     }
 
     private fun doDraw(canvas: GmCanvas, p: Path) {
-        var paint = Paint(antiAlias = true, color = Color(0xFFCCCCCCu))
+        var paint = Paint(antiAlias = true, color = ColorARGB.fromPackedUInt(0xFFCCCCCCu))
         canvas.drawPath(p, paint)
-        paint = paint.copy(color = Color.RED, style = PaintStyle.STROKE)
+        paint = paint.copy(color = ColorARGB.Red, style = PaintStyle.STROKE)
         canvas.drawPath(p, paint)
     }
 }

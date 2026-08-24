@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -73,7 +73,7 @@ class CircularArcsWeirdGm : SkiaGm {
             }
         }
 
-        val linePaint = Paint(antiAlias = true, color = Color.RED)
+        val linePaint = Paint(antiAlias = true, color = ColorARGB.Red)
         val midX = arcs.size * (kS + kPad) - kPad / 2f
         val h = paints.size * (kS + kPad)
         canvas.drawLine(midX, -kPad, midX, h, linePaint)

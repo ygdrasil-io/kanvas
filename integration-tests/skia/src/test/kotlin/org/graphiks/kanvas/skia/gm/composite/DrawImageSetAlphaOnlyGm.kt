@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -32,9 +32,9 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
         for (tile in tiles) {
             val alpha = (kM - ((tile.dst.left / kTileW).toInt() % kM)) / kM.toFloat()
             val paint = if (tile.isAlphaOnly) {
-                Paint(color = Color.fromRGBA(0.2f, 0.8f, 0.4f, alpha * tile.alpha))
+                Paint(color = ColorARGB.fromRGBA(0.2f, 0.8f, 0.4f, alpha * tile.alpha))
             } else {
-                Paint(color = Color.fromRGBA(1f, 1f, 1f, alpha * tile.alpha))
+                Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha * tile.alpha))
             }
             canvas.drawImageRect(tile.image, tile.src, tile.dst, paint)
         }
@@ -44,9 +44,9 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
         for (tile in tiles) {
             val alpha = (kM - ((tile.dst.left / kTileW).toInt() % kM)) / kM.toFloat()
             val paint = if (tile.isAlphaOnly) {
-                Paint(color = Color.fromRGBA(0.2f, 0.8f, 0.4f, alpha * tile.alpha))
+                Paint(color = ColorARGB.fromRGBA(0.2f, 0.8f, 0.4f, alpha * tile.alpha))
             } else {
-                Paint(color = Color.fromRGBA(1f, 1f, 1f, alpha * tile.alpha))
+                Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, alpha * tile.alpha))
             }
             canvas.drawImageRect(tile.image, tile.src, tile.dst, paint)
         }
@@ -100,8 +100,8 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
     }
 
     private fun drawCheckerboard(canvas: GmCanvas, size: Int) {
-        val lightGray = Paint(color = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
-        val darkGray = Paint(color = Color.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
+        val lightGray = Paint(color = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
+        val darkGray = Paint(color = ColorARGB.fromRGBA(0.25f, 0.25f, 0.25f, 1f))
         val totalW = kM * kTileW
         val totalH = 2 * kN * kTileH
         var y = 0

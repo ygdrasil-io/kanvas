@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -31,12 +31,12 @@ class SmallColorStopGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rect = RectF32.ofOriginSize(0f, 0f, 100f, 150f)
 
-        canvas.drawRect(rect, Paint(color = Color.fromRGBA(1f, 1f, 0f, 1f)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromRGBA(1f, 1f, 0f, 1f)))
 
         val stops = listOf(
-            GradientStop(0f, Color.GREEN),
-            GradientStop(0.003f, Color.RED),
-            GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),
+            GradientStop(0f, ColorARGB.Green),
+            GradientStop(0.003f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.fromRGBA(1f, 1f, 0f, 1f)),
         )
         val shader = Shader.ConicalGradient(
             start = Point2F32(200f, 25f), startRadius = 20f,

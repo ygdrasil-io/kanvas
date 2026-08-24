@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -27,9 +27,9 @@ class CgimageGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(256, 256)
         surf.canvas {
-            drawRect(RectF32(10f, 10f, 246f, 246f), Paint(color = Color.BLUE))
-            drawRect(RectF32(20f, 20f, 236f, 236f), Paint(color = Color.GREEN))
-            drawRect(RectF32(30f, 30f, 226f, 226f), Paint(color = Color.RED))
+            drawRect(RectF32(10f, 10f, 246f, 246f), Paint(color = ColorARGB.Blue))
+            drawRect(RectF32(20f, 20f, 236f, 236f), Paint(color = ColorARGB.Green))
+            drawRect(RectF32(30f, 30f, 226f, 226f), Paint(color = ColorARGB.Red))
         }
         val img = surf.makeImageSnapshot()
         canvas.drawImage(img, RectF32(0f, 0f, 256f, 256f))

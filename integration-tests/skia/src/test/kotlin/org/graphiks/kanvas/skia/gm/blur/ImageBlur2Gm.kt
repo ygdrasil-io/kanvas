@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
@@ -42,7 +42,7 @@ class ImageBlur2Gm : SkiaGm {
                 val rr = ((raw ushr 16) and 0xFF) / 255f
                 val gg = ((raw ushr 8) and 0xFF) / 255f
                 val bb = (raw and 0xFF) / 255f
-                val textColor = Color.fromRGBA(rr, gg, bb, 1f)
+                val textColor = ColorARGB.fromRGBA(rr, gg, bb, 1f)
 
                 for (i in 0 until 6) {
                     val cellX = x * dx

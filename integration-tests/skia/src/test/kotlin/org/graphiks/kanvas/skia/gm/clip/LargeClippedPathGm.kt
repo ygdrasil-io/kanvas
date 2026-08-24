@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
@@ -44,7 +44,7 @@ private fun drawClippedFlower(canvas: GmCanvas, fillType: FillType) {
     canvas.translate(kSize / 2f, kSize / 2f)
     canvas.scale(kSize / 3f, kSize / 3f)
 
-    val paint = Paint(antiAlias = true, color = Color(0xFFFF00FFu))
+    val paint = Paint(antiAlias = true, color = ColorARGB.fromPackedUInt(0xFFFF00FFu))
     canvas.drawPath(flower, paint)
 }
 

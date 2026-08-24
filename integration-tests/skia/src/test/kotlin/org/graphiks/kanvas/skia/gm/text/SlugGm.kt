@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -30,7 +30,7 @@ class SlugGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         val text = "hamburgefons"
         val font = Font(typeface, size = 16f)
-        val paint = Paint(color = Color.BLACK)
+        val paint = Paint(color = ColorARGB.Black)
 
         canvas.clipRect(RectF32.ofLTRB(40f, 50f, (width0 - 40).toFloat(), (height0 - 50).toFloat()))
         canvas.scale(1.3f, 1.3f)

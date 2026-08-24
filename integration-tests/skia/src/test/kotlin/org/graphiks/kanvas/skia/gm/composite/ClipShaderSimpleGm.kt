@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -43,7 +43,7 @@ class ClipShaderSimpleGm : SkiaGm {
         canvas.translate(img.width + 10f, 0f)
         canvas.drawRect(imgRect, Paint(shader = shader))
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_IN))
-        canvas.drawRect(imgRect, Paint(color = Color.RED))
+        canvas.drawRect(imgRect, Paint(color = ColorARGB.Red))
         canvas.restore()
         canvas.restore()
 
@@ -52,7 +52,7 @@ class ClipShaderSimpleGm : SkiaGm {
         canvas.translate(0f, img.height + 10f)
         canvas.drawRect(imgRect, Paint(shader = shader))
         canvas.saveLayer(null, Paint(blendMode = BlendMode.SRC_OUT))
-        canvas.drawRect(imgRect, Paint(color = Color.GREEN))
+        canvas.drawRect(imgRect, Paint(color = ColorARGB.Green))
         canvas.restore()
         canvas.restore()
 

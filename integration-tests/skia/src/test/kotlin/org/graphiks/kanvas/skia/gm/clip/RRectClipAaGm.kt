@@ -6,8 +6,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -33,7 +33,7 @@ class RRectClipAaGm : SkiaGm {
             canvas.save()
             canvas.translate(x.toFloat(), y.toFloat())
             val path = Path { }.apply { addRRect(rrects[idx]) }
-            val paint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f))
+            val paint = Paint(color = ColorARGB.fromRGBA(0f, 0f, 0f, 1f))
             canvas.drawPath(path, paint)
             canvas.restore()
             x += kTileX

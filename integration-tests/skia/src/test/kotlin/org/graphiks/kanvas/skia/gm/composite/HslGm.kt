@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -44,7 +44,7 @@ class HslGm : SkiaGm {
         val recs = listOf(
             BlendMode.HUE to "Hue",
             BlendMode.SATURATION to "Saturation",
-            BlendMode.COLOR to "Color",
+            BlendMode.COLOR to "ColorARGB",
             BlendMode.LUMINOSITY to "Luminosity",
         )
 
@@ -64,7 +64,7 @@ class HslGm : SkiaGm {
                 val bgPaint = Paint(shader = dst)
                 canvas.drawRect(r, bgPaint)
 
-                val srcPaint = Paint(blendMode = mode, color = Color.fromRGBA(1f, 1f, 1f, srcA))
+                val srcPaint = Paint(blendMode = mode, color = ColorARGB.fromRGBA(1f, 1f, 1f, srcA))
                 canvas.drawImage(image, r, srcPaint)
                 canvas.translate(r.width() + 10f, 0f)
             }
@@ -97,6 +97,6 @@ class HslGm : SkiaGm {
         return this::class.java.classLoader?.getResourceAsStream(path)?.readBytes()
     }
 
-    private fun argb(a: Int, r: Int, g: Int, b: Int): Color =
-        Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+    private fun argb(a: Int, r: Int, g: Int, b: Int): ColorARGB =
+        ColorARGB.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
 }

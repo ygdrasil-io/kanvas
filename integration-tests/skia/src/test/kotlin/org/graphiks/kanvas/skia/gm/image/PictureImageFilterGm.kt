@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -118,7 +118,7 @@ class PictureImageFilterGm : SkiaGm {
     private fun makePicture(): Picture {
         val rec = PictureRecorder()
         val canvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
-        val paint = Paint(color = Color.WHITE)
+        val paint = Paint(color = ColorARGB.White)
         val circle = Path { }.apply { addCircle(50f, 50f, 35f) }
         canvas.drawPath(circle, paint)
         return rec.finishRecordingAsPicture()
@@ -127,7 +127,7 @@ class PictureImageFilterGm : SkiaGm {
     private fun makeStrokePicture(): Picture {
         val rec = PictureRecorder()
         val canvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
-        val paint = Paint(color = Color.WHITE, style = PaintStyle.STROKE, strokeWidth = 3f)
+        val paint = Paint(color = ColorARGB.White, style = PaintStyle.STROKE, strokeWidth = 3f)
         val circle = Path { }.apply { addCircle(50f, 50f, 15f) }
         canvas.drawPath(circle, paint)
         return rec.finishRecordingAsPicture()

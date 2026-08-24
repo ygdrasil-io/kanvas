@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -45,7 +45,7 @@ class EmptyShaderGm : SkiaGm {
         var top = K_PAD.toFloat()
         for (build in builders) {
             val r = RectF32.ofOriginSize(left, top, K_SIZE.toFloat(), K_SIZE.toFloat())
-            val p = Paint(color = Color.BLUE, shader = build(r))
+            val p = Paint(color = ColorARGB.Blue, shader = build(r))
             canvas.drawRect(r, p)
             canvas.drawRect(r, stroke)
             left += K_SIZE + K_PAD
@@ -64,8 +64,8 @@ class EmptyShaderGm : SkiaGm {
             startAngle = start,
             endAngle = end,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
             ),
             tileMode = TileMode.DECAL,
         )
@@ -76,8 +76,8 @@ class EmptyShaderGm : SkiaGm {
         return Shader.LinearGradient(
             start = pt, end = pt,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
             ),
             tileMode = TileMode.DECAL,
         )
@@ -89,8 +89,8 @@ class EmptyShaderGm : SkiaGm {
             start = pt, startRadius = 0f,
             end = pt, endRadius = 0f,
             stops = listOf(
-                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
-                GradientStop(1f, Color.fromRGBA(0f, 1f, 0f, 1f)),
+                GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, ColorARGB.fromRGBA(0f, 1f, 0f, 1f)),
             ),
             tileMode = TileMode.DECAL,
         )

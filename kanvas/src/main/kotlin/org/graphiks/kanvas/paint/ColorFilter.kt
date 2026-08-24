@@ -1,18 +1,12 @@
 package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.pipeline.UniformBlock
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 
 sealed interface ColorFilter {
-    data class Matrix(val values: FloatArray) : ColorFilter {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (other !is Matrix) return false
-            return values.contentEquals(other.values)
-        }
-        override fun hashCode(): Int = values.contentHashCode()
-    }
-    data class Blend(val color: Color, val mode: BlendMode) : ColorFilter
+    data class Matrix(val matrix: ColorMatrixF32) : ColorFilter
+    data class Blend(val color: ColorARGB, val mode: BlendMode) : ColorFilter
     data class Compose(val outer: ColorFilter, val inner: ColorFilter) : ColorFilter
     data class Table(val table: UByteArray) : ColorFilter {
         override fun equals(other: Any?): Boolean {
@@ -22,7 +16,7 @@ sealed interface ColorFilter {
         }
         override fun hashCode(): Int = table.contentHashCode()
     }
-    data class Lighting(val mul: Color, val add: Color) : ColorFilter
+    data class Lighting(val mul: ColorARGB, val add: ColorARGB) : ColorFilter
     data object SRGBToLinear : ColorFilter
     data object LinearToSRGB : ColorFilter
     data class HSLAMatrix(val values: FloatArray) : ColorFilter {

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -49,7 +49,7 @@ class ArcToGm : SkiaGm {
             antiAlias = true,
             style = PaintStyle.STROKE,
             strokeWidth = 2f,
-            color = Color.fromRGBA(0x66 / 255f, 0x00 / 255f, 0x00 / 255f, 1f)
+            color = ColorARGB.fromRGBA(0x66 / 255f, 0x00 / 255f, 0x00 / 255f, 1f)
         )
         var oval = RectF32.ofOriginSize(100f, 100f, 100f, 100f)
 
@@ -92,15 +92,15 @@ class ArcToGm : SkiaGm {
         // (250, 400) → (250, 500); each variant picks a different
         // (largeArc, sweep) → arc combination.
         paint = paint.copy(strokeWidth = 5f)
-        val purple = Color.fromRGBA(0x80 / 255f, 0x00 / 255f, 0x80 / 255f, 1f)
-        val darkgreen = Color.fromRGBA(0x00 / 255f, 0x80 / 255f, 0x00 / 255f, 1f)
-        val blue = Color.BLUE
-        val red = Color.RED
+        val purple = ColorARGB.fromRGBA(0x80 / 255f, 0x00 / 255f, 0x80 / 255f, 1f)
+        val darkgreen = ColorARGB.fromRGBA(0x00 / 255f, 0x80 / 255f, 0x00 / 255f, 1f)
+        val blue = ColorARGB.Blue
+        val red = ColorARGB.Red
         // SVG: "M250,400 A120,80 0 L,S 250,500", L/S ∈ {0,1}.
         // Mapping: largeArc 1 → true, 0 → false.
         //          sweep 1 → true (CCW), 0 → false (CW).
         data class Chord(
-            val color: Color,
+            val color: ColorARGB,
             val largeArc: Boolean,
             val sweep: Boolean,
         )

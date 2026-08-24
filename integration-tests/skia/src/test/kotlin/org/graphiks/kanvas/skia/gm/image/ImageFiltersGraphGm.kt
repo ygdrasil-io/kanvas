@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.skia.gm.image
 
+import org.graphiks.math.color.ColorMatrixF32
+
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -12,9 +14,9 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
-import org.graphiks.kanvas.types.Size
+import org.graphiks.math.geometry.SizeF32
 
 /**
  * Port of Skia's `gm/imagefiltersgraph.cpp::ImageFiltersGraphGM` (600 x 150).
@@ -32,13 +34,13 @@ class ImageFiltersGraphGm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.BLACK))
-        val fImage = makeStringImage(100, 100, Color.WHITE, 20f, 70f, 96f, "e")
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = ColorARGB.Black))
+        val fImage = makeStringImage(100, 100, ColorARGB.White, 20f, 70f, 96f, "e")
         val imgRect = RectF32.ofOriginSize(0f, 0f, fImage.width.toFloat(), fImage.height.toFloat())
 
         // 1 - Merge(Blur, ColorFilter(Erode(Blur)))
         run {
-            val cf = ColorFilter.Blend(Color.RED, BlendMode.SRC_IN)
+            val cf = ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC_IN)
             val blur = ImageFilter.Blur(4f, 4f, input = null)
             val erode = ImageFilter.Erode(4f, 4f, input = blur)
             val color = ImageFilter.ColorFilter(cf, input = erode)
@@ -56,9 +58,9 @@ class ImageFiltersGraphGm : SkiaGm {
                 0f, 0f, 1f, 0f, 0f,
                 0f, 0f, 0f, 0.5f, 0f,
             )
-            val matrixFilter = ImageFilter.ColorFilter(ColorFilter.Matrix(matrix), input = morph)
+            val matrixFilter = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.of(matrix)), input = morph)
             val blend = ImageFilter.Blend(
-                BlendMode.SRC_OVER, matrixFilter, ImageFilter.ColorFilter(ColorFilter.Matrix(matrix), input = null),
+                BlendMode.SRC_OVER, matrixFilter, ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.of(matrix)), input = null),
             )
             canvas.drawImage(fImage, imgRect, Paint(imageFilter = blend))
             canvas.translate(100f, 0f)
@@ -72,7 +74,7 @@ class ImageFiltersGraphGm : SkiaGm {
                 0f, 0f, 1f, 0f, 0f,
                 0f, 0f, 0f, 0.5f, 0f,
             )
-            val matrixCF = ImageFilter.ColorFilter(ColorFilter.Matrix(matrix), input = null)
+            val matrixCF = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.of(matrix)), input = null)
             val offsetFilter = ImageFilter.Offset(10f, 10f, input = matrixCF)
             val blend = ImageFilter.Blend(BlendMode.SRC_OVER, matrixCF, offsetFilter)
             canvas.drawImage(fImage, imgRect, Paint(imageFilter = blend))
@@ -101,7 +103,7 @@ class ImageFiltersGraphGm : SkiaGm {
                 -1f, -1f, -1f,
             )
             val convolve = ImageFilter.MatrixConvolution(
-                kernelSize = Size(3f, 3f),
+                kernelSize = SizeF32.of(3f, 3f),
                 kernel = kernel, gain = 1f, bias = 0f,
                 kernelOffset = org.graphiks.math.vector.Vector2F32(1f, 1f),
                 tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
@@ -113,15 +115,15 @@ class ImageFiltersGraphGm : SkiaGm {
 
         // 6 - ColorFilter(GREEN/SrcIn over BLUE/SrcIn) on red rect
         run {
-            val cf1 = ImageFilter.ColorFilter(ColorFilter.Blend(Color.BLUE, BlendMode.SRC_IN), input = null)
-            val cf2 = ImageFilter.ColorFilter(ColorFilter.Blend(Color.GREEN, BlendMode.SRC_IN), input = cf1)
-            val paint = Paint(imageFilter = cf2, color = Color.RED)
+            val cf1 = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC_IN), input = null)
+            val cf2 = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC_IN), input = cf1)
+            val paint = Paint(imageFilter = cf2, color = ColorARGB.Red)
             canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f), paint)
             canvas.translate(100f, 0f)
         }
     }
 
-    private fun makeStringImage(w: Int, h: Int, color: Color, x: Float, y: Float, textSize: Float, str: String): Image {
+    private fun makeStringImage(w: Int, h: Int, color: ColorARGB, x: Float, y: Float, textSize: Float, str: String): Image {
         val surface = Surface(w, h)
         surface.canvas {
             val paint = Paint(color = color)

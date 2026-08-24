@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/colorwheel.cpp::colorwheelnative`.
@@ -28,12 +28,12 @@ class ColorWheelNativeGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         canvas.drawColor(0.753f, 0.753f, 0.753f, 1f)
-        canvas.drawString("R",  8f, 20f, font, Paint(color = Color.RED))
-        canvas.drawString("G", 24f, 20f, font, Paint(color = Color(0xFF00FF00u)))
-        canvas.drawString("B", 40f, 20f, font, Paint(color = Color(0xFF0000FFu)))
-        canvas.drawString("C", 56f, 20f, font, Paint(color = Color(0xFF00FFFFu)))
-        canvas.drawString("M", 72f, 20f, font, Paint(color = Color(0xFFFF00FFu)))
-        canvas.drawString("Y", 88f, 20f, font, Paint(color = Color(0xFFFFFF00u)))
-        canvas.drawString("K", 104f, 20f, font, Paint(color = Color.BLACK))
+        canvas.drawString("R",  8f, 20f, font, Paint(color = ColorARGB.Red))
+        canvas.drawString("G", 24f, 20f, font, Paint(color = ColorARGB.fromPackedUInt(0xFF00FF00u)))
+        canvas.drawString("B", 40f, 20f, font, Paint(color = ColorARGB.fromPackedUInt(0xFF0000FFu)))
+        canvas.drawString("C", 56f, 20f, font, Paint(color = ColorARGB.fromPackedUInt(0xFF00FFFFu)))
+        canvas.drawString("M", 72f, 20f, font, Paint(color = ColorARGB.fromPackedUInt(0xFFFF00FFu)))
+        canvas.drawString("Y", 88f, 20f, font, Paint(color = ColorARGB.fromPackedUInt(0xFFFFFF00u)))
+        canvas.drawString("K", 104f, 20f, font, Paint(color = ColorARGB.Black))
     }
 }

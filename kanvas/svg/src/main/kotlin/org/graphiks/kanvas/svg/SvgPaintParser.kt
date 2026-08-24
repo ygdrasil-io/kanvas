@@ -2,7 +2,7 @@ package org.graphiks.kanvas.svg
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 class SvgPaintParser {
     private var gradientMap: Map<String, org.graphiks.kanvas.paint.Shader> = emptyMap()
@@ -14,7 +14,7 @@ class SvgPaintParser {
     fun parseFill(fill: String?, opacity: Float = 1f): Paint {
         if (fill == null) {
             return Paint(
-                color = Color.fromRGBA(0f, 0f, 0f, opacity),
+                color = ColorARGB.fromRGBA(0f, 0f, 0f, opacity),
                 style = PaintStyle.FILL,
             )
         }
@@ -25,7 +25,7 @@ class SvgPaintParser {
             if (shader != null) {
                 return Paint(
                     shader = shader,
-                    color = Color.fromRGBA(0f, 0f, 0f, opacity),
+                    color = ColorARGB.fromRGBA(0f, 0f, 0f, opacity),
                     style = PaintStyle.FILL,
                 )
             }
@@ -36,7 +36,7 @@ class SvgPaintParser {
         val g = (colorInt shr 8 and 0xFF) / 255f
         val b = (colorInt and 0xFF) / 255f
         return Paint(
-            color = Color.fromRGBA(r, g, b, opacity),
+            color = ColorARGB.fromRGBA(r, g, b, opacity),
             style = PaintStyle.FILL,
         )
     }
@@ -49,7 +49,7 @@ class SvgPaintParser {
         val width = strokeWidth ?: 1f
         if (stroke == null) {
             return Paint(
-                color = Color.fromRGBA(0f, 0f, 0f, strokeOpacity),
+                color = ColorARGB.fromRGBA(0f, 0f, 0f, strokeOpacity),
                 style = PaintStyle.STROKE,
                 strokeWidth = width,
             )
@@ -61,7 +61,7 @@ class SvgPaintParser {
             if (shader != null) {
                 return Paint(
                     shader = shader,
-                    color = Color.fromRGBA(0f, 0f, 0f, strokeOpacity),
+                    color = ColorARGB.fromRGBA(0f, 0f, 0f, strokeOpacity),
                     style = PaintStyle.STROKE,
                     strokeWidth = width,
                 )
@@ -73,7 +73,7 @@ class SvgPaintParser {
         val g = (colorInt shr 8 and 0xFF) / 255f
         val b = (colorInt and 0xFF) / 255f
         return Paint(
-            color = Color.fromRGBA(r, g, b, strokeOpacity),
+            color = ColorARGB.fromRGBA(r, g, b, strokeOpacity),
             style = PaintStyle.STROKE,
             strokeWidth = width,
         )

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -35,7 +35,7 @@ class ArithmodeBlenderGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val src = makeSrc(W, H)
         val dst = makeDst(W, H)
-        val checker = makeChecker(W, H, Color(0xFFBBBBBBu), Color(0xFFEEEEEEu), 8)
+        val checker = makeChecker(W, H, ColorARGB.fromPackedUInt(0xFFBBBBBBu), ColorARGB.fromPackedUInt(0xFFEEEEEEu), 8)
 
         val k1 = -0.25f; val k2 = 0.25f; val k3 = 0.25f; val k4 = 0f
 
@@ -57,19 +57,19 @@ class ArithmodeBlenderGm : SkiaGm {
 
         // Cell 2 — placeholder (no ImageFilter.Arithmetic equivalent).
         canvas.drawImage(checker, rect)
-        canvas.drawRect(rect, Paint(color = Color(0xFF888888u)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromPackedUInt(0xFF888888u)))
 
         canvas.translate(0f, (10 + H).toFloat())
 
         // Cell 3 — placeholder for SkShaders.Blend (deferred).
         canvas.drawImage(checker, rect)
-        canvas.drawRect(rect, Paint(color = Color(0xFF888888u)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromPackedUInt(0xFF888888u)))
 
         canvas.translate(0f, (10 + H).toFloat())
 
         // Cell 4 — placeholder for runtime-effect shader (deferred).
         canvas.drawImage(checker, rect)
-        canvas.drawRect(rect, Paint(color = Color(0xFF888888u)))
+        canvas.drawRect(rect, Paint(color = ColorARGB.fromPackedUInt(0xFF888888u)))
     }
 
     private fun makeSrc(w: Int, h: Int): Image {
@@ -80,12 +80,12 @@ class ArithmodeBlenderGm : SkiaGm {
                 Paint(shader = Shader.LinearGradient(
                     Point2F32(0f, 0f), Point2F32(w.toFloat(), h.toFloat()),
                     listOf(
-                        GradientStop(0f, Color.TRANSPARENT),
-                        GradientStop(0.2f, Color.GREEN),
-                        GradientStop(0.4f, Color(0xFF00FFFFu)),
-                        GradientStop(0.6f, Color.RED),
-                        GradientStop(0.8f, Color(0xFFFF00FFu)),
-                        GradientStop(1f, Color.WHITE),
+                        GradientStop(0f, ColorARGB.Transparent),
+                        GradientStop(0.2f, ColorARGB.Green),
+                        GradientStop(0.4f, ColorARGB.fromPackedUInt(0xFF00FFFFu)),
+                        GradientStop(0.6f, ColorARGB.Red),
+                        GradientStop(0.8f, ColorARGB.fromPackedUInt(0xFFFF00FFu)),
+                        GradientStop(1f, ColorARGB.White),
                     ),
                     TileMode.CLAMP,
                 )),
@@ -102,11 +102,11 @@ class ArithmodeBlenderGm : SkiaGm {
                 Paint(shader = Shader.LinearGradient(
                     Point2F32(0f, h.toFloat()), Point2F32(w.toFloat(), 0f),
                     listOf(
-                        GradientStop(0f, Color.BLUE),
-                        GradientStop(0.25f, Color(0xFFFFFF00u)),
-                        GradientStop(0.5f, Color.BLACK),
-                        GradientStop(0.75f, Color.GREEN),
-                        GradientStop(1f, Color(0xFF888888u)),
+                        GradientStop(0f, ColorARGB.Blue),
+                        GradientStop(0.25f, ColorARGB.fromPackedUInt(0xFFFFFF00u)),
+                        GradientStop(0.5f, ColorARGB.Black),
+                        GradientStop(0.75f, ColorARGB.Green),
+                        GradientStop(1f, ColorARGB.fromPackedUInt(0xFF888888u)),
                     ),
                     TileMode.CLAMP,
                 )),
@@ -115,7 +115,7 @@ class ArithmodeBlenderGm : SkiaGm {
         return surface.makeImageSnapshot()
     }
 
-    private fun makeChecker(w: Int, h: Int, c1: Color, c2: Color, size: Int): Image {
+    private fun makeChecker(w: Int, h: Int, c1: ColorARGB, c2: ColorARGB, size: Int): Image {
         val surface = Surface(w, h)
         surface.canvas {
             for (y in 0 until h step size) {

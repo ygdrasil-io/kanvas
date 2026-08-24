@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -52,7 +52,7 @@ class StringArtGm : SkiaGm {
         val paint = Paint(
             antiAlias = true,
             style = PaintStyle.STROKE,
-            color = Color.fromRGBA(0f, 0x77 / 255f, 0f, 1f),
+            color = ColorARGB.fromRGBA(0f, 0x77 / 255f, 0f, 1f),
         )
         canvas.drawPath(path, paint)
     }

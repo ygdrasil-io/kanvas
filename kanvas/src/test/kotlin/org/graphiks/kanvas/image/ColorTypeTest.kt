@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.image
 
+import org.graphiks.math.color.ColorARGB
+
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -17,7 +19,7 @@ class ColorTypeTest {
 
     @Test
     fun `RGBA and BGRA retain the same color with their native byte order`() {
-        val color = org.graphiks.kanvas.types.Color.fromRGBA(1f, 0.5f, 0.25f, 1f)
+        val color = org.graphiks.math.color.ColorARGB.fromRGBA(1f, 0.5f, 0.25f, 1f)
         val rgba = Bitmap(1, 1, ColorType.RGBA_8888).also { it.setPixel(0, 0, color) }
         val bgra = Bitmap(1, 1, ColorType.BGRA_8888).also { it.setPixel(0, 0, color) }
 

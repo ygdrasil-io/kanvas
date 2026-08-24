@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -35,7 +35,7 @@ class HairlinesSquarecapGm : SkiaGm {
         val paint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
-            color = Color.BLACK,
+            color = ColorARGB.Black,
             antiAlias = true,
             strokeCap = StrokeCap.SQUARE,
         )
@@ -80,12 +80,12 @@ class HairlinesSquarecapGm : SkiaGm {
         canvas.scale(kScale.toFloat(), kScale.toFloat())
         for ((p, _, _) in allPaths) canvas.drawPath(p, paint)
 
-        val gridPaint = Paint(color = Color.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
+        val gridPaint = Paint(color = ColorARGB.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f),
             style = PaintStyle.STROKE, strokeWidth = 0f)
         for (y in 0..kGridWh) canvas.drawLine(0f, y.toFloat(), kGridWh.toFloat(), y.toFloat(), gridPaint)
         for (x in 0..kGridWh) canvas.drawLine(x.toFloat(), 0f, x.toFloat(), kGridWh.toFloat(), gridPaint)
 
-        val highlightPaint = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true)
+        val highlightPaint = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true)
         for ((_, first, last) in openPaths) {
             canvas.drawRect(RectF32.ofOriginSize(first.first - 2f, first.second - 2f, 4f, 4f), highlightPaint)
             canvas.drawRect(RectF32.ofOriginSize(last.first - 2f, last.second - 2f, 4f, 4f), highlightPaint)

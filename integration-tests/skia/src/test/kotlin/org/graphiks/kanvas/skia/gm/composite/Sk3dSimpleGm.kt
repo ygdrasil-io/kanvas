@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,14 +28,14 @@ class Sk3dSimpleGm : SkiaGm {
         val ctm = Matrix3x3F32.translation(150f, 150f) * Matrix3x3F32.rotation(30f)
         canvas.save()
         canvas.concat(ctm)
-        canvas.drawRect(RectF32.ofLTRB(-100f, -100f, 100f, 100f), Paint(color = Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(-100f, -100f, 100f, 100f), Paint(color = ColorARGB.Red))
         canvas.restore()
 
         val recorder = PictureRecorder()
         val recCanvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 300f, 300f))
         recCanvas.save()
         recCanvas.concat(ctm)
-        recCanvas.drawRect(RectF32.ofLTRB(-100f, -100f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 1f, 0.5f)))
+        recCanvas.drawRect(RectF32.ofLTRB(-100f, -100f, 100f, 100f), Paint(color = ColorARGB.fromRGBA(0f, 0f, 1f, 0.5f)))
         recCanvas.restore()
         val pic = recorder.finishRecordingAsPicture()
         canvas.drawPicture(pic)

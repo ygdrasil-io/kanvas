@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
@@ -50,13 +50,13 @@ class BitmapShaderGm : SkiaGm {
             canvas.drawCircle(40f, 10f, 10f, paint)
 
             canvas.translate(0f, 25f)
-            paint = Paint(color = Color.GREEN)
+            paint = Paint(color = ColorARGB.Green)
             canvas.drawImage(mask, RectF32(0f, 0f, 20f, 20f), paint)
             canvas.drawImage(mask, RectF32(30f, 0f, 50f, 20f), paint)
 
             canvas.translate(0f, 25f)
             val maskShader = mask.makeShader(TileMode.REPEAT, TileMode.REPEAT).withLocalMatrix(localMatrix)
-            paint = Paint(color = Color.RED, shader = maskShader)
+            paint = Paint(color = ColorARGB.Red, shader = maskShader)
             canvas.drawRect(RectF32(0f, 0f, 20f, 20f), paint)
             canvas.drawRect(RectF32(30f, 0f, 50f, 20f), paint)
 
@@ -67,19 +67,19 @@ class BitmapShaderGm : SkiaGm {
 
     private fun makeBitmapImage(): Image {
         val bitmap = Bitmap(20, 20, ColorType.RGBA_8888)
-        bitmap.eraseColor(Color.RED)
-        bitmap.fillCircle(10f, 10f, 5f, Color.BLUE)
+        bitmap.eraseColor(ColorARGB.Red)
+        bitmap.fillCircle(10f, 10f, 5f, ColorARGB.Blue)
         return Image.fromPixels(20, 20, bitmap.pixels.copyOf(), ColorType.RGBA_8888, "bitmapshaders-color")
     }
 
     private fun makeMaskImage(): Image {
         val bitmap = Bitmap(20, 20, ColorType.ALPHA_8)
-        bitmap.eraseColor(Color.TRANSPARENT)
-        bitmap.fillCircle(10f, 10f, 10f, Color.BLACK)
+        bitmap.eraseColor(ColorARGB.Transparent)
+        bitmap.fillCircle(10f, 10f, 10f, ColorARGB.Black)
         return Image.fromPixels(20, 20, bitmap.pixels.copyOf(), ColorType.ALPHA_8, "bitmapshaders-mask")
     }
 
-    private fun Bitmap.fillCircle(cx: Float, cy: Float, radius: Float, color: Color) {
+    private fun Bitmap.fillCircle(cx: Float, cy: Float, radius: Float, color: ColorARGB) {
         val radiusSq = radius * radius
         for (y in 0 until height) {
             for (x in 0 until width) {

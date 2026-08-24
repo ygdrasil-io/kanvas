@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -34,8 +34,8 @@ class AllBitmapConfigsGm : SkiaGm {
         drawCheckerboard(canvas)
 
         val colorWheel = loadColorWheel()
-        val blackPaint = Paint(color = Color.BLACK, antiAlias = true)
-        val redPaint = Paint(color = Color.RED, antiAlias = true)
+        val blackPaint = Paint(color = ColorARGB.Black, antiAlias = true)
+        val redPaint = Paint(color = ColorARGB.Red, antiAlias = true)
 
         draw(canvas, colorWheel, blackPaint, "Native 32")
         canvas.translate(0f, SCALE.toFloat())
@@ -88,15 +88,15 @@ class AllBitmapConfigsGm : SkiaGm {
         for (y in 0 until SCALE) {
             for (x in 0 until SCALE) {
                 val value = ((x + y) and 0xFF) / 255f
-                bitmap.setPixel(x, y, Color.fromRGBA(value, value, value, value))
+                bitmap.setPixel(x, y, ColorARGB.fromRGBA(value, value, value, value))
             }
         }
         return Image(bitmap.width, bitmap.height, bitmap.colorType, sourceId, bitmap.pixels.copyOf(), bitmap.colorSpace)
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {
-        val ltGray = Color.fromRGBA(0.753f, 0.753f, 0.753f, 1f)
-        val white = Color.WHITE
+        val ltGray = ColorARGB.fromRGBA(0.753f, 0.753f, 0.753f, 1f)
+        val white = ColorARGB.White
         val size = 8f
         for (y in 0..((height / size).toInt())) {
             for (x in 0..((width / size).toInt())) {

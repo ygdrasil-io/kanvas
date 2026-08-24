@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
@@ -36,10 +36,10 @@ class PointsGm : SkiaGm {
             Point2F32(x, y)
         }
 
-        val p0 = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 4f)
-        val p1 = Paint(color = Color.GREEN, style = PaintStyle.STROKE)
-        val p2 = Paint(color = Color.BLUE, style = PaintStyle.STROKE, strokeCap = StrokeCap.ROUND, strokeWidth = 6f)
-        val p3 = Paint(color = Color.WHITE, style = PaintStyle.STROKE)
+        val p0 = Paint(color = ColorARGB.Red, style = PaintStyle.STROKE, strokeWidth = 4f)
+        val p1 = Paint(color = ColorARGB.Green, style = PaintStyle.STROKE)
+        val p2 = Paint(color = ColorARGB.Blue, style = PaintStyle.STROKE, strokeCap = StrokeCap.ROUND, strokeWidth = 6f)
+        val p3 = Paint(color = ColorARGB.White, style = PaintStyle.STROKE)
 
         canvas.drawPoints(PointMode.POLYGON, pts, p0)
         canvas.drawPoints(PointMode.LINES, pts, p1)

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -37,7 +37,7 @@ class CircularClipsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val ops = arrayOf(ClipOp.DIFFERENCE, ClipOp.INTERSECT)
         val rect = RectF32.ofLTRB(fX1 - fR, fY - fR, fX2 + fR, fY + fR)
-        var fillPaint = Paint(color = Color(0x80808080u))
+        var fillPaint = Paint(color = ColorARGB.fromPackedUInt(0x80808080u))
 
         canvas.save()
         canvas.scale(10f, 10f)
@@ -47,7 +47,7 @@ class CircularClipsGm : SkiaGm {
         canvas.drawRect(rect, fillPaint)
         canvas.restore()
 
-        fillPaint = fillPaint.copy(color = Color.BLACK)
+        fillPaint = fillPaint.copy(color = ColorARGB.Black)
 
         for (i in 0 until 4) {
             fCircle1 = toggleInverse(fCircle1)

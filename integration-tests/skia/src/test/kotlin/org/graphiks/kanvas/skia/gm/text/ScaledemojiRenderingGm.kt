@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Port of Skia's `gm/scaledemoji_rendering.cpp`.
@@ -79,7 +79,7 @@ class ScaledemojiRenderingGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0.5f, 0.5f, 0.5f)
 
-        val textPaint = Paint(color = Color.fromRGBA(0f, 1f, 1f))
+        val textPaint = Paint(color = ColorARGB.fromRGBA(0f, 1f, 1f))
 
         var y = 0f
 

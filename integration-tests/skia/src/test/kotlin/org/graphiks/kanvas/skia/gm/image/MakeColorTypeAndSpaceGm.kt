@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,10 +31,10 @@ class MakeColorTypeAndSpaceGm : SkiaGm {
 
         // Draw placeholders for the 3x4 grid of image cells
         val colors = listOf(
-            Color.fromRGBA(0.8f, 0.2f, 0.2f), Color.fromRGBA(0.2f, 0.8f, 0.2f), Color.fromRGBA(0.2f, 0.2f, 0.8f),
-            Color.fromRGBA(0.9f, 0.5f, 0.1f), Color.fromRGBA(0.1f, 0.9f, 0.5f), Color.fromRGBA(0.5f, 0.1f, 0.9f),
-            Color.fromRGBA(0.7f, 0.3f, 0.7f), Color.fromRGBA(0.3f, 0.7f, 0.3f), Color.fromRGBA(0.7f, 0.7f, 0.3f),
-            Color.fromRGBA(0.4f, 0.4f, 0.8f), Color.fromRGBA(0.8f, 0.4f, 0.4f), Color.fromRGBA(0.4f, 0.8f, 0.4f),
+            ColorARGB.fromRGBA(0.8f, 0.2f, 0.2f), ColorARGB.fromRGBA(0.2f, 0.8f, 0.2f), ColorARGB.fromRGBA(0.2f, 0.2f, 0.8f),
+            ColorARGB.fromRGBA(0.9f, 0.5f, 0.1f), ColorARGB.fromRGBA(0.1f, 0.9f, 0.5f), ColorARGB.fromRGBA(0.5f, 0.1f, 0.9f),
+            ColorARGB.fromRGBA(0.7f, 0.3f, 0.7f), ColorARGB.fromRGBA(0.3f, 0.7f, 0.3f), ColorARGB.fromRGBA(0.7f, 0.7f, 0.3f),
+            ColorARGB.fromRGBA(0.4f, 0.4f, 0.8f), ColorARGB.fromRGBA(0.8f, 0.4f, 0.4f), ColorARGB.fromRGBA(0.4f, 0.8f, 0.4f),
         )
 
         for (row in 0 until 4) {

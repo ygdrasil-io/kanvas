@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -70,11 +70,11 @@ class LineClosePathGm : SkiaGm {
             "Indicated Style, Fill and Linecaps, with stroke width 10"
         canvas.drawString(
             title, 20f, 20f, titleFont,
-            Paint(color = Color.BLACK, antiAlias = true),
+            Paint(color = ColorARGB.Black, antiAlias = true),
         )
 
         val cellRect = RectF32.ofOriginSize(0f, 0f, 100f, 30f)
-        val cellColor = Color.fromRGBA(0f, 0.44f, 0f, 1f)
+        val cellColor = ColorARGB.fromRGBA(0f, 0.44f, 0f, 1f)
         canvas.save()
         canvas.translate(10f, 30f)
         canvas.save()
@@ -97,7 +97,7 @@ class LineClosePathGm : SkiaGm {
                         cap.first, cap.second, style.first, fill.first, 10f,
                     )
                     val rectPaint = Paint(
-                        color = Color.BLACK,
+                        color = ColorARGB.Black,
                         style = PaintStyle.STROKE,
                         strokeWidth = 0f,
                         antiAlias = true,
@@ -128,7 +128,7 @@ class LineClosePathGm : SkiaGm {
     private fun drawCell(
         canvas: GmCanvas,
         srcPath: Path,
-        solidColor: Color,
+        solidColor: ColorARGB,
         clip: RectF32,
         cap: StrokeCap,
         join: StrokeJoin,

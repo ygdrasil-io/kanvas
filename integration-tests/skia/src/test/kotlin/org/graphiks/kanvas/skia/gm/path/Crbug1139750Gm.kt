@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/crbug_1139750.cpp`.
@@ -30,7 +30,7 @@ class Crbug1139750Gm : SkiaGm {
             strokeWidth = 2f,
         )
         val r = RectF32.ofOriginSize(1f, 1f, 19f, 19f)
-        val rr = RRect(r, 1f)
+        val rr = RRectF32.of(r, 1f)
         canvas.translate(10f, 10f)
         canvas.scale(1.47619f, 1.52381f)
         canvas.drawRRect(rr, paint)

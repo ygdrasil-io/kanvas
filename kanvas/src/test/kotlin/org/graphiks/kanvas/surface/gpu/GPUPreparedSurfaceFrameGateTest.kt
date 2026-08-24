@@ -16,13 +16,13 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.TextBlob
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.RRect
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -142,12 +142,12 @@ class GPUPreparedSurfaceFrameGateTest {
             GPUPreparedSurfaceFrameGate.classify(source, RenderConfig.DEFAULT),
         )
 
-        source += DisplayOp.Clear(Color.BLUE)
+        source += DisplayOp.Clear(ColorARGB.Blue)
 
         assertEquals(1, candidate.operations.size)
         @Suppress("UNCHECKED_CAST")
         assertFailsWith<UnsupportedOperationException> {
-            (candidate.operations as MutableList<DisplayOp>).add(DisplayOp.Clear(Color.GREEN))
+            (candidate.operations as MutableList<DisplayOp>).add(DisplayOp.Clear(ColorARGB.Green))
         }
     }
 
@@ -168,7 +168,7 @@ class GPUPreparedSurfaceFrameGateTest {
 
         return listOf(
             Fixture(visualRect(), visual),
-            Fixture(DisplayOp.DrawRRect(RRect(RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.DrawRRect(RRectF32.of(RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPath(path, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), visual),
@@ -176,11 +176,11 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.SetClip(CLIP), Expected.Candidate),
             Fixture(DisplayOp.BeginLayer(null, null), visual),
             Fixture(DisplayOp.EndLayer, visual),
-            Fixture(DisplayOp.DrawColor(Color.RED, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.Clear(Color.RED), visual),
+            Fixture(DisplayOp.DrawColor(ColorARGB.Red, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.Clear(ColorARGB.Red), visual),
             Fixture(DisplayOp.DrawPoint(1f, 1f, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point2F32(1f, 1f)), PAINT, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawDRRect(RRect(RECT, radius = 1f), RRect(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.DrawDRRect(RRectF32.of(RECT, radius = 1f), RRectF32.of(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), visual),
@@ -197,7 +197,7 @@ class GPUPreparedSurfaceFrameGateTest {
     private companion object {
         val RECT = RectF32.ofLTRB(0f, 0f, 8f, 8f)
         val INNER_RECT = RectF32.ofLTRB(2f, 2f, 6f, 6f)
-        val PAINT = Paint.fill(Color.RED)
+        val PAINT = Paint.fill(ColorARGB.Red)
         val MATRIX = Matrix3x3F32.Identity
         val CLIP = ClipStack.WideOpen
     }

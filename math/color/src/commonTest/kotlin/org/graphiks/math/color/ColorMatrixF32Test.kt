@@ -84,6 +84,15 @@ class ColorMatrixF32Test {
     }
 
     @Test
+    fun `indexed access reads row-major coefficients without copying`() {
+        val matrix = ColorMatrixF32.of(FloatArray(20) { it.toFloat() })
+
+        assertEquals(0f, matrix[0])
+        assertEquals(13f, matrix[13])
+        assertEquals(19f, matrix[19])
+    }
+
+    @Test
     fun `equals and hashCode`() {
         val a = ColorMatrixF32()
         val b = ColorMatrixF32()

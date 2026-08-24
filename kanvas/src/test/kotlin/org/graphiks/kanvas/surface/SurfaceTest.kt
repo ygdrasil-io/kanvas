@@ -5,7 +5,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -22,7 +22,7 @@ class SurfaceTest {
     @Test
     fun `BGRA render and snapshots preserve exact channel order and color type`() {
         val surface = Surface(2, 1, PixelFormat.BGRA8)
-        surface.canvas { drawColor(Color.RED) }
+        surface.canvas { drawColor(ColorARGB.Red) }
 
         val result = surface.render()
         assertEquals(PixelFormat.BGRA8, result.format)
@@ -42,11 +42,11 @@ class SurfaceTest {
         assertEquals(AlphaType.PREMUL, subset.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1), subset.pixels)
     }
-    @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
+    @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
     @Test
     fun `readPixels copies correct region`() {
         val surface = Surface(100, 100)
-        surface.canvas { drawColor(Color.RED) }
+        surface.canvas { drawColor(ColorARGB.Red) }
         val buffer = UByteArray(10 * 10 * 4)
         val ok = surface.readPixels(RectF32.ofLTRB(0f, 0f, 10f, 10f), buffer)
         assertTrue(ok)

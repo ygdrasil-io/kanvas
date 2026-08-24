@@ -1,12 +1,13 @@
 package org.graphiks.kanvas.types
 
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.color.ColorARGB
 
 data class Lattice(
     val xDivs: List<Int>,
     val yDivs: List<Int>,
     val rects: List<RectF32>? = null,
-    val colors: List<Color>? = null,
+    val colors: List<ColorARGB>? = null,
     val flags: List<LatticeFlags>? = null,
 )
 

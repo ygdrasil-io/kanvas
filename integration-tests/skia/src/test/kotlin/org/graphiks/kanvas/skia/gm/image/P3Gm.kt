@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
@@ -28,9 +28,9 @@ class P3Gm : SkiaGm {
     override val height = 1300
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val red = Color.RED
-        val green = Color.GREEN
-        val blue = Color.BLUE
+        val red = ColorARGB.Red
+        val green = ColorARGB.Green
+        val blue = ColorARGB.Blue
 
         canvas.drawRect(RectF32(10f, 10f, 70f, 70f), Paint(color = red))
         canvas.translate(0f, 80f)
@@ -65,7 +65,7 @@ class P3Gm : SkiaGm {
 
         val maskPixels = ByteArray(256) { (255 - it).toByte() }
         val mask = Image.fromPixels(16, 16, maskPixels, ColorType.ALPHA_8, "a8_mask")
-        val tint = Color.RED
+        val tint = ColorARGB.Red
 
         canvas.drawImage(mask, RectF32(10f, 10f, 26f, 26f), Paint(color = tint))
         canvas.translate(0f, 80f)
@@ -86,7 +86,7 @@ class P3Gm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawGradientPanel(c: GmCanvas, c0: Color, c1: Color) {
+    private fun drawGradientPanel(c: GmCanvas, c0: ColorARGB, c1: ColorARGB) {
         c.drawRect(
             RectF32(10f, 10f, 70f, 70f),
             Paint(shader = Shader.LinearGradient(

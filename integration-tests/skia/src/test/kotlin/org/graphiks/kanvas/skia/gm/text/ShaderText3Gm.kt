@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -35,21 +35,21 @@ class ShaderText3Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = Color(0xFFDDDDDDu)),
+            Paint(color = ColorARGB.fromPackedUInt(0xFFDDDDDDu)),
         )
 
         val gradientBase = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(75f, 75f),
             stops = listOf(
-                GradientStop(0f, Color(0x80F00080u)),
-                GradientStop(0.5f, Color(0xF0F08000u)),
-                GradientStop(1f, Color(0x800080F0u)),
+                GradientStop(0f, ColorARGB.fromPackedUInt(0x80F00080u)),
+                GradientStop(0.5f, ColorARGB.fromPackedUInt(0xF0F08000u)),
+                GradientStop(1f, ColorARGB.fromPackedUInt(0x800080F0u)),
             ),
             tileMode = TileMode.REPEAT,
         )
 
-        canvas.drawRect(RectF32(5f, 5f, 80f, 80f), Paint(shader = gradientBase, color = Color.fromRGBA(1f, 1f, 1f, 0.5f)))
+        canvas.drawRect(RectF32(5f, 5f, 80f, 80f), Paint(shader = gradientBase, color = ColorARGB.fromRGBA(1f, 1f, 1f, 0.5f)))
 
         val font = Font(typeface, size = kPointSize.toFloat())
         val outlinePaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)
@@ -68,9 +68,9 @@ class ShaderText3Gm : SkiaGm {
                     Shader.LinearGradient(
                         start = Point2F32(0f, 0f), end = Point2F32(75f, 75f),
                         stops = listOf(
-                            GradientStop(0f, Color(0x80F00080u)),
-                            GradientStop(0.5f, Color(0xF0F08000u)),
-                            GradientStop(1f, Color(0x800080F0u)),
+                            GradientStop(0f, ColorARGB.fromPackedUInt(0x80F00080u)),
+                            GradientStop(0.5f, ColorARGB.fromPackedUInt(0xF0F08000u)),
+                            GradientStop(1f, ColorARGB.fromPackedUInt(0x800080F0u)),
                         ),
                         tileMode = tmX,
                     ),
