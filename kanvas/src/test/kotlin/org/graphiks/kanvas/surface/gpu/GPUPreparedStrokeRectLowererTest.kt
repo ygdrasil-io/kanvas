@@ -26,19 +26,20 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedStrokeRectLowererTest {
     @Test
     fun `eligible public stroke rect expands to four device fill bands with contiguous identity`() {
-        val clip = ClipStack.DeviceRect(Rect.fromLTRB(12f, 14f, 54f, 54f), antiAlias = false)
+        val clip = ClipStack.DeviceRect(RectF32.ofLTRB(12f, 14f, 54f, 54f), antiAlias = false)
         val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
             GPUPreparedStrokeRectLowerer.lower(
                 operation = strokeRect(
                     paint = strokePaint.copy(
-                        colorFilter = ColorFilter.Blend(Color.BLUE, org.graphiks.kanvas.paint.BlendMode.SRC),
+                        colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.SRC),
                         blendMode = org.graphiks.kanvas.paint.BlendMode.SRC,
                     ),
                     transform = Matrix3x3F32.translation(2f, 4f),
@@ -125,13 +126,13 @@ class GPUPreparedStrokeRectLowererTest {
                 paint = strokePaint.copy(pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))),
             ) to "unsupported.stroke.rect_path_effect",
             "shader material" to strokeRect(
-                paint = strokePaint.copy(shader = Shader.SolidColor(Color.BLUE)),
+                paint = strokePaint.copy(shader = Shader.SolidColor(ColorARGB.Blue)),
             ) to "unsupported.stroke.rect_material",
             "malformed shader material" to strokeRect(
                 paint = strokePaint.copy(
                     shader = Shader.LinearGradient(
-                        start = org.graphiks.kanvas.types.Point(0f, 0f),
-                        end = org.graphiks.kanvas.types.Point(1f, 0f),
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(1f, 0f),
                         stops = emptyList(),
                     ),
                 ),
@@ -140,20 +141,20 @@ class GPUPreparedStrokeRectLowererTest {
                 paint = strokePaint.copy(colorFilter = ColorFilter.HighContrast),
             ) to "unsupported.stroke.rect_material",
             "non foldable blend color filter" to strokeRect(
-                paint = strokePaint.copy(colorFilter = ColorFilter.Blend(Color.BLUE, org.graphiks.kanvas.paint.BlendMode.MULTIPLY)),
+                paint = strokePaint.copy(colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.MULTIPLY)),
             ) to "unsupported.stroke.rect_material",
             "blender" to strokeRect(
                 paint = strokePaint.copy(blender = Blender.Mode(org.graphiks.kanvas.paint.BlendMode.SRC)),
             ) to "unsupported.stroke.rect_material",
-            "negative bounds" to strokeRect(bounds = Rect.fromLTRB(-16f, 16f, 48f, 48f)) to
+            "negative bounds" to strokeRect(bounds = RectF32.ofLTRB(-16f, 16f, 48f, 48f)) to
                 "unsupported.stroke.rect_target_overflow",
-            "outside target bounds" to strokeRect(bounds = Rect.fromLTRB(16f, 16f, 80f, 48f)) to
+            "outside target bounds" to strokeRect(bounds = RectF32.ofLTRB(16f, 16f, 80f, 48f)) to
                 "unsupported.stroke.rect_target_overflow",
-            "inverted bounds" to strokeRect(bounds = Rect.fromLTRB(48f, 16f, 16f, 48f)) to
+            "inverted bounds" to strokeRect(bounds = RectF32.ofLTRB(48f, 16f, 16f, 48f)) to
                 "unsupported.stroke.rect_inner_degenerate",
-            "target overflow" to strokeRect(bounds = Rect.fromLTRB(2f, 16f, 48f, 48f)) to
+            "target overflow" to strokeRect(bounds = RectF32.ofLTRB(2f, 16f, 48f, 48f)) to
                 "unsupported.stroke.rect_target_overflow",
-            "inner degenerate" to strokeRect(bounds = Rect.fromLTRB(16f, 16f, 20f, 48f)) to
+            "inner degenerate" to strokeRect(bounds = RectF32.ofLTRB(16f, 16f, 20f, 48f)) to
                 "unsupported.stroke.rect_inner_degenerate",
         )
 
@@ -200,7 +201,7 @@ class GPUPreparedStrokeRectLowererTest {
             GPUPreparedStrokeRectLowerer.lower(
                 operation = strokeRect(
                     paint = strokePaint.copy(
-                        colorFilter = ColorFilter.Blend(Color.BLUE, org.graphiks.kanvas.paint.BlendMode.SRC),
+                        colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.SRC),
                     ),
                 ),
                 firstCommandId = GPUDrawCommandID(0),
@@ -265,7 +266,7 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     private fun strokeRect(
-        bounds: Rect = Rect.fromLTRB(16f, 16f, 48f, 48f),
+        bounds: RectF32 = RectF32.ofLTRB(16f, 16f, 48f, 48f),
         paint: Paint = strokePaint,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         clip: ClipStack = ClipStack.WideOpen,
@@ -301,6 +302,6 @@ class GPUPreparedStrokeRectLowererTest {
     )
 
     private companion object {
-        val strokePaint: Paint = Paint.stroke(Color.RED, 6f).copy(antiAlias = false)
+        val strokePaint: Paint = Paint.stroke(ColorARGB.Red, 6f).copy(antiAlias = false)
     }
 }

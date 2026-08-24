@@ -74,8 +74,8 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 8f, 24f, 20f),
-                    Paint.stroke(Color.RED, 4f).copy(antiAlias = false),
+                    RectF32.ofLTRB(8f, 8f, 24f, 20f),
+                    Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -1204,18 +1204,18 @@ class GPUFramePathApiInventoryTest {
 
     @Test
     fun `bounded linear radial and sweep public materials reach core primitive semantics when facts are injected`() {
-        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
         val shaders = listOf(
-            Shader.LinearGradient(Point(0f, 0f), Point(32f, 0f), stops),
-            Shader.RadialGradient(Point(16f, 16f), 16f, stops),
-            Shader.SweepGradient(Point(16f, 16f), stops = stops),
+            Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(32f, 0f), stops),
+            Shader.RadialGradient(Point2F32(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point2F32(16f, 16f), stops = stops),
         )
 
         shaders.forEach { shader ->
             val inventory = GPUFramePathApiInventory.plan(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
                         Paint(shader = shader).copy(antiAlias = false),
                         Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
@@ -1254,17 +1254,17 @@ class GPUFramePathApiInventoryTest {
 
     @Test
     fun `antialiased radial and sweep public materials refuse before analytic recording`() {
-        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
         val shaders = listOf(
-            Shader.RadialGradient(Point(16f, 16f), 16f, stops),
-            Shader.SweepGradient(Point(16f, 16f), stops = stops),
+            Shader.RadialGradient(Point2F32(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point2F32(16f, 16f), stops = stops),
         )
 
         shaders.forEach { shader ->
             val inventory = GPUFramePathApiInventory.plan(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
                         Paint(shader = shader).copy(antiAlias = true),
                         Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
@@ -1297,12 +1297,12 @@ class GPUFramePathApiInventoryTest {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(2f, 2f, 30f, 30f),
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
                     Paint(
                         shader = Shader.LinearGradient(
-                            Point(0f, 0f),
-                            Point(32f, 0f),
-                            listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                            Point2F32(0f, 0f),
+                            Point2F32(32f, 0f),
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                         ),
                     ).copy(antiAlias = true),
                     Matrix3x3F32.Identity,
@@ -1329,18 +1329,18 @@ class GPUFramePathApiInventoryTest {
         val fixtures = listOf(
             "first_slice.linear_gradient.native" to
                 Shader.LinearGradient(
-                    Point(0f, 0f), Point(32f, 0f),
-                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                    Point2F32(0f, 0f), Point2F32(32f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                 ),
             "first_slice.radial_gradient.native" to
                 Shader.RadialGradient(
-                    Point(16f, 16f), 16f,
-                    listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                    Point2F32(16f, 16f), 16f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                 ),
             "first_slice.sweep_gradient.native" to
                 Shader.SweepGradient(
-                    Point(16f, 16f),
-                    stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                    Point2F32(16f, 16f),
+                    stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                 ),
         )
 
@@ -1361,7 +1361,7 @@ class GPUFramePathApiInventoryTest {
             val inventory = GPUFramePathApiInventory.plan(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(2f, 2f, 30f, 30f),
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
                         Paint(shader = shader).copy(antiAlias = false),
                         Matrix3x3F32.Identity,
                         ClipStack.WideOpen,

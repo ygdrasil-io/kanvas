@@ -38,8 +38,8 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val surface = Surface(width = 64, height = 64)
         surface.canvas {
             drawRect(
-                Rect.fromLTRB(16f, 16f, 48f, 48f),
-                Paint.stroke(Color.RED, 6f).copy(antiAlias = false),
+                RectF32.ofLTRB(16f, 16f, 48f, 48f),
+                Paint.stroke(ColorARGB.Red, 6f).copy(antiAlias = false),
             )
         }
 

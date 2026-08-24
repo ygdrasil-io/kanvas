@@ -175,8 +175,8 @@ class GPUMaterialMapperTest {
     @Test
     fun `linear wrappers retain source facts while prepared mapping refuses unsupported facts`() {
         val gradient = Shader.LinearGradient(
-            start = Point(1f, 2f),
-            end = Point(9f, 2f),
+            start = Point2F32(1f, 2f),
+            end = Point2F32(9f, 2f),
             stops = threeGradientStops(),
         )
         val localMatrix = Matrix3x3F32.translation(3f, 4f)

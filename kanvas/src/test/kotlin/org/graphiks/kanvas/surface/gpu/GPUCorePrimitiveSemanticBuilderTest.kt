@@ -260,11 +260,11 @@ class GPUCorePrimitiveSemanticBuilderTest {
                 DisplayOp.DrawPath(
                     path = path,
                     paint = Paint(shader = Shader.LinearGradient(
-                        start = Point(2f, 2f),
-                        end = Point(20f, 20f),
+                        start = Point2F32(2f, 2f),
+                        end = Point2F32(20f, 20f),
                         stops = listOf(
-                            GradientStop(0f, Color.RED),
-                            GradientStop(1f, Color.BLUE),
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
                         ),
                     )).copy(antiAlias = false),
                     transform = Matrix3x3F32.Identity,

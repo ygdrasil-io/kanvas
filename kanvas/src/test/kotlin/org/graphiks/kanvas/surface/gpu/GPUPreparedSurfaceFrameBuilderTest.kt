@@ -73,8 +73,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
             request(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(8f, 8f, 24f, 20f),
-                        Paint.stroke(Color.RED, 4f).copy(antiAlias = false),
+                        RectF32.ofLTRB(8f, 8f, 24f, 20f),
+                        Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false),
                         Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
                     ),
@@ -101,14 +101,14 @@ class GPUPreparedSurfaceFrameBuilderTest {
             request(
                 listOf(
                     DisplayOp.DrawRRect(
-                        RRect(Rect.fromLTRB(2f, 3f, 30f, 21f), radius = 4f),
+                        RRectF32.of(RectF32.ofLTRB(2f, 3f, 30f, 21f), radius = 4f),
                         Paint(
                             shader = Shader.LinearGradient(
-                                Point(2f, 3f),
-                                Point(30f, 21f),
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
                                 listOf(
-                                    GradientStop(0f, Color.fromArgb(160, 40, 120, 208)),
-                                    GradientStop(1f, Color.fromArgb(96, 224, 72, 48)),
+                                    GradientStop(0f, ColorARGB.of(160, 40, 120, 208)),
+                                    GradientStop(1f, ColorARGB.of(96, 224, 72, 48)),
                                 ),
                             ),
                         ).copy(antiAlias = false),
@@ -137,14 +137,14 @@ class GPUPreparedSurfaceFrameBuilderTest {
             request(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(2f, 3f, 30f, 21f),
+                        RectF32.ofLTRB(2f, 3f, 30f, 21f),
                         Paint(
                             shader = Shader.LinearGradient(
-                                Point(2f, 3f),
-                                Point(30f, 21f),
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
                                 listOf(
-                                    GradientStop(0f, Color.fromArgb(160, 40, 120, 208)),
-                                    GradientStop(1f, Color.fromArgb(96, 224, 72, 48)),
+                                    GradientStop(0f, ColorARGB.of(160, 40, 120, 208)),
+                                    GradientStop(1f, ColorARGB.of(96, 224, 72, 48)),
                                 ),
                             ),
                         ).copy(antiAlias = false),
@@ -173,12 +173,12 @@ class GPUPreparedSurfaceFrameBuilderTest {
             request(
                 listOf(
                     DisplayOp.DrawRect(
-                        Rect.fromLTRB(2f, 3f, 30f, 21f),
+                        RectF32.ofLTRB(2f, 3f, 30f, 21f),
                         Paint(
                             shader = Shader.LinearGradient(
-                                Point(2f, 3f),
-                                Point(30f, 21f),
-                                listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                             ),
                         ).copy(antiAlias = false, blendMode = BlendMode.MULTIPLY),
                         Matrix3x3F32.Identity,
@@ -756,17 +756,17 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
     @Test
     fun `bounded radial and sweep Canvas materials build CorePrimitive frames when facts are present`() {
-        val stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE))
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
         val operations = listOf(
             DisplayOp.DrawRect(
-                Rect.fromLTRB(2f, 2f, 14f, 14f),
-                Paint(shader = Shader.RadialGradient(Point(8f, 8f), 8f, stops)).copy(antiAlias = false),
+                RectF32.ofLTRB(2f, 2f, 14f, 14f),
+                Paint(shader = Shader.RadialGradient(Point2F32(8f, 8f), 8f, stops)).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
             DisplayOp.DrawRect(
-                Rect.fromLTRB(16f, 2f, 30f, 14f),
-                Paint(shader = Shader.SweepGradient(Point(23f, 8f), stops = stops)).copy(antiAlias = false),
+                RectF32.ofLTRB(16f, 2f, 30f, 14f),
+                Paint(shader = Shader.SweepGradient(Point2F32(23f, 8f), stops = stops)).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
@@ -815,7 +815,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
         val linearReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(
-                request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))),
+                request(listOf(rect().copy(paint = Paint.fill(ColorARGB.White).copy(shader = gradient)))),
             ),
         )
         val linearMaterial = linearReady.taskList.tasks.filterIsInstance<GPUTask.Render>()

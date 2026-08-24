@@ -15,8 +15,8 @@ import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLowerin
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 internal sealed interface GPUPreparedStrokeRectLowering {
@@ -140,7 +140,7 @@ internal object GPUPreparedStrokeRectLowerer {
                 // Resolve the original material once. The temporary fill paint is deliberately
                 // inert; the exact immutable descriptor is restored on all four fill commands.
                 val fillPaint = paint.copy(
-                    color = Color.TRANSPARENT,
+                    color = ColorARGB.Transparent,
                     colorFilter = null,
                     style = PaintStyle.FILL,
                     strokeWidth = 0f,
@@ -155,7 +155,7 @@ internal object GPUPreparedStrokeRectLowerer {
                     val commandId = GPUDrawCommandID(Math.addExact(firstCommandId.value, index))
                     val paintOrder = Math.addExact(firstPaintOrder, index)
                     val fill = DisplayOp.DrawRect(
-                        Rect.fromLTRB(
+                        RectF32.ofLTRB(
                             band.left.toFloat(), band.top.toFloat(),
                             band.right.toFloat(), band.bottom.toFloat(),
                         ),
@@ -273,7 +273,7 @@ private fun org.graphiks.kanvas.paint.Paint.hasFoldableSolidColorFilter(): Boole
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {
-    is ColorFilter.Matrix -> values.size >= 20 && values.all(Float::isFinite)
+    is ColorFilter.Matrix -> matrix.toFloatArray().all(Float::isFinite)
     is ColorFilter.Table -> table.size >= 256
     is ColorFilter.Lighting,
     ColorFilter.Luma,

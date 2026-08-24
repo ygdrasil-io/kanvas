@@ -20,9 +20,9 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
@@ -221,17 +221,17 @@ class GpuEvidenceCatalogTest {
     fun `public surface programs record only the requested Canvas operations`() {
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 56f, 34f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(14f, 38f, 50f, 54f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 10f, 56f, 34f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(14f, 38f, 50f, 54f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("solid-card-stack"),
         )
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(16f, 16f, 48f, 48f),
-                    Paint(color = Color.fromRGBA(0.18f, 0.42f, 0.76f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f), antiAlias = false),
+                    RectF32.ofLTRB(16f, 16f, 48f, 48f),
+                    Paint(color = ColorARGB.fromRGBA(0.18f, 0.42f, 0.76f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f), antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -240,37 +240,37 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 44f, 42f), Paint.fill(Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(24f, 22f, 56f, 54f), Paint.fill(Color.fromRGBA(0.5f, 0.25f, 0.125f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 10f, 44f, 42f), Paint.fill(ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(24f, 22f, 56f, 54f), Paint.fill(ColorARGB.fromRGBA(0.5f, 0.25f, 0.125f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("translucent-card-overlap"),
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 8f, 56f, 56f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
-                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
-                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 56f, 56f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.SetClip(ClipStack.DeviceRect(RectF32.ofLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(RectF32.ofLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.SetClip(ClipStack.DeviceRect(RectF32.ofLTRB(24f, 24f, 48f, 48f), false)),
+                DisplayOp.DrawRect(RectF32.ofLTRB(16f, 16f, 56f, 56f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(RectF32.ofLTRB(24f, 24f, 48f, 48f), false)),
             ),
             ops("scissor-overlay"),
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 48f, 48f), Paint.stroke(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(16f, 16f, 48f, 48f), Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("stroke-rect-outline"),
         )
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 16f, 56f, 48f),
+                    RectF32.ofLTRB(8f, 16f, 56f, 48f),
                     Paint(
                         shader = Shader.LinearGradient(
-                            Point(8.5f, 32.5f), Point(55.5f, 32.5f),
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 56, 56)), GradientStop(1f, Color.fromArgb(255, 56, 112, 255))),
+                            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,
@@ -284,11 +284,11 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    RectF32.ofLTRB(8f, 8f, 56f, 56f),
                     Paint(
                         shader = Shader.RadialGradient(
-                            Point(32.5f, 32.5f), 23.5f,
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 232, 72)), GradientStop(1f, Color.fromArgb(255, 48, 80, 192))),
+                            Point2F32(32.5f, 32.5f), 23.5f,
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 232, 72)), GradientStop(1f, ColorARGB.of(255, 48, 80, 192))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,
@@ -302,11 +302,11 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    RectF32.ofLTRB(8f, 8f, 56f, 56f),
                     Paint(
                         shader = Shader.SweepGradient(
-                            Point(32.5f, 32.5f), 0f, 360f,
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 64, 64)), GradientStop(1f, Color.fromArgb(255, 64, 208, 255))),
+                            Point2F32(32.5f, 32.5f), 0f, 360f,
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 64, 64)), GradientStop(1f, ColorARGB.of(255, 64, 208, 255))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,
