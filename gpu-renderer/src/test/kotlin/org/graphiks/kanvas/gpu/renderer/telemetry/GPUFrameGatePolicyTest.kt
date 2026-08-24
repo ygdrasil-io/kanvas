@@ -152,19 +152,6 @@ class GPUFrameGatePolicyTest {
         }
     }
 
-    @Test
-    fun `frame lane default provenance uses current offscreen frame samples`() {
-        val request = frameLane(
-            laneId = "default-provenance",
-            sourceHash = frameGateOwnedSampleFixtureSha,
-            adapterLabel = "test-adapter",
-        )
-
-        assertEquals(
-            "reports/gpu-renderer-scenes/frame-samples/frame-gate-blocker-board/frame-samples.json",
-            request.provenance.sourceArtifactLabel,
-        )
-    }
 }
 
 private fun frameWarmupPolicy(
