@@ -9,6 +9,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceRecordedSession
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -153,6 +154,67 @@ class GpuEvidenceCatalogTest {
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)
         assertEquals(null, budget.oracle)
+    }
+
+    @Test
+    fun `catalog locks exact product routes policies and oracle identities`() {
+        val expectedRenderIds = listOf(
+            "solid-card-stack",
+            "separable-blur-rect",
+            "translucent-card-overlap",
+            "scissor-overlay",
+            "stroke-rect-outline",
+            "linear-gradient-lanes",
+            "radial-swatch",
+            "sweep-disk",
+        )
+        assertEquals(
+            expectedRenderIds.associateWith { "kanvas.surface.render" },
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
+            },
+        )
+        assertEquals(
+            mapOf(
+                "custom-runtime-effect-unregistered-refusal" to "product.runtime-effect.custom",
+                "aggregate-memory-budget-refusal" to "product.solid-rect",
+            ),
+            GpuEvidenceCatalog.refusalCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to assertIs<RoutedSceneProgram>(evidenceCase.program).routeId
+            },
+        )
+
+        assertEquals(
+            mapOf(
+                "solid-card-stack" to OraclePolicy.GeneratedCpu("reference-raster-rect-src-over", 1),
+                "separable-blur-rect" to OraclePolicy.GeneratedCpu("surface-srgb-mask-blur-normal-decal", 2),
+                "translucent-card-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
+                "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
+                "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
+                "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
+                "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
+                "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
+            ),
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
+            },
+        )
+        assertEquals(
+            mapOf(
+                "solid-card-stack" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from opaque SrcOver rectangles."),
+                "separable-blur-rect" to ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the independently quantized vertical mask stage."),
+                "translucent-card-overlap" to ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."),
+                "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),
+                "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
+                "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+            ),
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
+            },
+        )
+        assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.oracle == OraclePolicy.StableRefusal && it.oracle == null })
     }
 
     @Test
