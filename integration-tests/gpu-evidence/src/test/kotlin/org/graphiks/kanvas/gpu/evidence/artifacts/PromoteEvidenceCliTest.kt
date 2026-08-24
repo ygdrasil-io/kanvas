@@ -5,6 +5,7 @@ import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.io.IOException
+import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -144,6 +145,44 @@ class PromoteEvidenceCliTest {
         assertEquals(true, json["rebaseline"]!!.jsonPrimitive.boolean)
         assertEquals("old=100.0", json["priorComparison"]!!.jsonPrimitive.content)
         assertEquals("new=99.9", json["newComparison"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `rebaseline promotes a verified historical seven scene subset to the current ten scene catalog`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        assertEquals(7, sceneDirectories(promotedRoot(repository)).size)
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertEquals(0, result)
+        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects a tampered known scene in a historical subset before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val gpu = promotedRoot(repository).resolve("solid-card-stack/gpu.png")
+        val tampered = Files.readAllBytes(gpu)
+        tampered[0] = (tampered[0].toInt() xor 0x01).toByte()
+        Files.write(gpu, tampered)
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
@@ -295,6 +334,10 @@ class PromoteEvidenceCliTest {
     private fun sceneDirectories(root: Path): Set<String> = if (!Files.exists(root)) emptySet() else Files.list(root).use { it.filter(Files::isDirectory).map { path -> path.fileName.toString() }.toList().toSet() }
     private fun snapshot(root: Path): Map<String, List<Byte>> = if (!Files.exists(root)) emptyMap() else Files.walk(root).use { stream ->
         stream.iterator().asSequence().filter(Files::isRegularFile).associate { root.relativize(it).toString() to Files.readAllBytes(it).toList() }
+    }
+
+    private fun removeScene(root: Path, sceneId: String) {
+        Files.walk(root.resolve(sceneId)).sorted(Comparator.reverseOrder()).forEach(Files::delete)
     }
 
     companion object {
