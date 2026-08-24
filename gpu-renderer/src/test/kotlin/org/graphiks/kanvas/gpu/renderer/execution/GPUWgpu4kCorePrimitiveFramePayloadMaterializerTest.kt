@@ -203,11 +203,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             routeShape: RouteShape,
             expectedBytes: ULong,
             expectedShader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+            tileMode: String = "clamp",
         ) {
             val fixture = fixture(
                 routeShape = routeShape,
                 useRealPreflight = true,
                 linearGradient = true,
+                linearGradientTileMode = tileMode,
             )
             val materialized = fixture.materializeCore()
             val packets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -245,6 +247,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.AnalyticShape,
             656uL,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient,
+        )
+        assertLinearMaterialization(
+            RouteShape.Direct,
+            592uL,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat,
+            tileMode = "repeat",
+        )
+        assertLinearMaterialization(
+            RouteShape.AnalyticShape,
+            656uL,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat,
+            tileMode = "repeat",
         )
     }
 
@@ -5259,6 +5273,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         copyBytesPerRowAlignment: Long = 256L,
         minUniformBufferOffsetAlignment: Long = 256L,
         linearGradient: Boolean = false,
+        linearGradientTileMode: String = "clamp",
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         require(!dstRead || routeShape == RouteShape.Direct)
@@ -5344,7 +5359,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         GPURect(1f + order, 1f, 5f + order, 5f),
                         targetFormat,
                         material = if (linearGradient) {
-                            linearGradientDescriptor()
+                            linearGradientDescriptor(tileMode = linearGradientTileMode)
                         } else {
                             GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f)
                         },
@@ -5487,7 +5502,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     } else {
                         TARGET
                     },
-                    material = if (linearGradient) linearGradientMaterial() else null,
+                    material = if (linearGradient) {
+                        linearGradientMaterial(tileMode = linearGradientTileMode)
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -6207,7 +6226,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         source = GPUCommandSource("unit-test", "core-proxy", GPUFrameProvenance.GmContent),
     )
 
-    private fun linearGradientDescriptor() = GPUMaterialDescriptor.LinearGradient(
+    private fun linearGradientDescriptor(tileMode: String = "clamp") = GPUMaterialDescriptor.LinearGradient(
         startX = 0f,
         startY = 0f,
         endX = 8f,
@@ -6222,16 +6241,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         endA = 1f,
         allStopPositions = floatArrayOf(0f, 1f),
         allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        tileMode = tileMode,
     )
 
-    private fun linearGradientMaterial() = GPUCorePrimitiveMaterialPayload.LinearGradient(
+    private fun linearGradientMaterial(tileMode: String = "clamp") = GPUCorePrimitiveMaterialPayload.LinearGradient(
         startX = 0f,
         startY = 0f,
         endX = 8f,
         endY = 0f,
         localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         interpolation = "srgb",
-        tileMode = "clamp",
+        tileMode = tileMode,
         positions = listOf(0f, 1f),
         colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )

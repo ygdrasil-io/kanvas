@@ -562,8 +562,10 @@ private fun validateGradientMaterial(
     require(interpolation == "srgb") {
         "Core gradient interpolation must be standard sRGB"
     }
-    require(tileMode == "clamp") {
-        "Core gradient tile mode must be clamp"
+    require(tileMode == "clamp" ||
+        (kind == GPUCorePrimitiveMaterialKind.LinearGradient && tileMode == "repeat")
+    ) {
+        "Core gradient tile mode must be clamp, except linear gradients may repeat"
     }
     require(positions.size in 1..CORE_PRIMITIVE_GRADIENT_MAX_STOPS) {
         "Core gradient must contain 1..$CORE_PRIMITIVE_GRADIENT_MAX_STOPS stops"

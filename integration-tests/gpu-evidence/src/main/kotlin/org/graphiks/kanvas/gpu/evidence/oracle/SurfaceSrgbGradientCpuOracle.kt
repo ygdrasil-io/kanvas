@@ -15,6 +15,7 @@ class SurfaceSrgbGradientCpuOracle private constructor(
     private val drawBounds: Rect,
     stops: List<Stop>,
     private val rawTAt: (Double, Double) -> Double,
+    private val tile: (Double) -> Double = { it.coerceIn(0.0, 1.0) },
 ) : CpuOracle {
     data class Point(val x: Float, val y: Float) {
         init {
@@ -67,7 +68,7 @@ class SurfaceSrgbGradientCpuOracle private constructor(
             val px = x + 0.5
             val py = y + 0.5
             if (!drawBounds.contains(px, py)) continue
-            val color = interpolate(rawTAt(px, py).coerceIn(0.0, 1.0))
+            val color = interpolate(tile(rawTAt(px, py)))
             val stored = SurfaceSrgbOracleMath.storeSrgb(color)
             val offset = ((y.toLong() * width.toLong() + x.toLong()) * 4L).toInt()
             for (channel in stored.indices) output[offset + channel] = stored[channel].toByte()
@@ -100,26 +101,46 @@ class SurfaceSrgbGradientCpuOracle private constructor(
 
     companion object {
         fun linear(drawBounds: Rect, start: Point, end: Point, stops: List<Stop>): SurfaceSrgbGradientCpuOracle {
+            return linearWithTile(drawBounds, start, end, stops) { it.coerceIn(0.0, 1.0) }
+        }
+
+        /** Independent repeat oracle: t_raw - floor(t_raw), including negative coordinates. */
+        fun linearRepeat(drawBounds: Rect, start: Point, end: Point, stops: List<Stop>): SurfaceSrgbGradientCpuOracle {
+            return linearWithTile(drawBounds, start, end, stops) { raw -> raw - kotlin.math.floor(raw) }
+        }
+
+        private fun linearWithTile(
+            drawBounds: Rect,
+            start: Point,
+            end: Point,
+            stops: List<Stop>,
+            tile: (Double) -> Double,
+        ): SurfaceSrgbGradientCpuOracle {
             val dx = end.x.toDouble() - start.x.toDouble()
             val dy = end.y.toDouble() - start.y.toDouble()
             val lengthSquared = dx * dx + dy * dy
             require(lengthSquared.isFinite()) { "linear geometry length must be finite" }
-            return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
-                if (lengthSquared <= 0.0) 0.0 else {
-                    ((x - start.x) * dx + (y - start.y) * dy) / lengthSquared
-                }
-            }
+            return SurfaceSrgbGradientCpuOracle(
+                drawBounds,
+                stops.toList(),
+                { x, y ->
+                    if (lengthSquared <= 0.0) 0.0 else {
+                        ((x - start.x) * dx + (y - start.y) * dy) / lengthSquared
+                    }
+                },
+                tile,
+            )
         }
 
         fun radial(drawBounds: Rect, center: Point, radius: Float, stops: List<Stop>): SurfaceSrgbGradientCpuOracle {
             require(radius.isFinite() && radius >= 0f) { "radial radius must be finite and nonnegative" }
-            return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
+            return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList(), rawTAt = { x, y ->
                 if (radius <= 0f) 0.0 else {
                     val dx = x - center.x
                     val dy = y - center.y
                     sqrt(dx * dx + dy * dy) / radius
                 }
-            }
+            })
         }
 
         fun sweep(
@@ -135,13 +156,13 @@ class SurfaceSrgbGradientCpuOracle private constructor(
             val startDegrees = positiveDegrees(startAngle.toDouble())
             val endDegrees = positiveDegrees(endAngle.toDouble())
             val wrapsZero = sweep == 360.0 || (sweep > 0.0 && endDegrees < startDegrees)
-            return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
+            return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList(), rawTAt = { x, y ->
                 if (sweep == 0.0 || (x == center.x.toDouble() && y == center.y.toDouble())) 0.0 else {
                     var degrees = positiveDegrees(atan2(y - center.y, x - center.x) * 180.0 / PI)
                     if (wrapsZero && degrees < startDegrees) degrees += 360.0
                     (degrees - startDegrees) / sweep
                 }
-            }
+            })
         }
 
         private fun positiveDegrees(value: Double): Double = (value % 360.0 + 360.0) % 360.0

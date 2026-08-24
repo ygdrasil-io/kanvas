@@ -25,6 +25,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
@@ -98,6 +99,50 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 "readbacks=${evidence.readbackCopies} pixels=${actualPixels.size / 4} " +
                 "maxChannelDelta=$maxChannelDelta telemetry=${runtime.runtimeTelemetry}",
         )
+    }
+
+    @Test
+    fun `public Surface repeat linear gradient wraps the post first cycle pixel natively`() {
+        val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        start = Point2F32(8.5f, 16.5f),
+                        end = Point2F32(16.5f, 16.5f),
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
+                        ),
+                        tileMode = TileMode.REPEAT,
+                    ),
+                ).copy(antiAlias = false),
+            )
+        }
+
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceNativeBackendPortFactory,
+            ),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            decisions.single(),
+            decisions.single().toString(),
+        ).evidence
+        assertPixel(result.pixels.toByteArray(), 32, 16, 16, listOf(255, 0, 0, 255))
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertEquals(1L, evidence.submits)
+        assertEquals(1L, evidence.readbackCopies)
     }
 
     @Test

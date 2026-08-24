@@ -468,6 +468,57 @@ class FirstRoutePlannerTest {
         )
     }
 
+    /** Repeat is admitted only for the bounded native linear-gradient FillRect route. */
+    @Test
+    fun `linear repeat gradient routes natively while adjacent tile modes and families remain refused`() {
+        fun linear(tileMode: String) = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 8f, endY = 0f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            tileMode = tileMode,
+        )
+        fun plan(material: GPUMaterialDescriptor) = GPUFirstRoutePlanner(
+            firstSliceWithLinearGradientCapabilities(),
+        ).plan(
+            GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(980),
+                rect = GPURect(left = -4f, top = 0f, right = 20f, bottom = 8f),
+                target = GPUTargetFacts(width = 32, height = 16, colorFormat = "rgba8unorm"),
+                material = material,
+            ).copy(antiAlias = false),
+        )
+
+        val accepted = plan(linear("repeat"))
+
+        assertIs<GPURouteDecision.Native>(accepted.routeDecision)
+        assertEquals(
+            "pending.pipeline.fill_rect.linear_gradient.repeat.rgba8unorm.src_over",
+            accepted.pass.pipelineKeys.single(),
+        )
+
+        listOf(
+            linear("mirror"),
+            linear("decal"),
+            GPUMaterialDescriptor.RadialGradient(
+                centerX = 4f, centerY = 4f, radius = 4f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+                tileMode = "repeat",
+            ),
+            GPUMaterialDescriptor.SweepGradient(
+                centerX = 4f, centerY = 4f, startAngle = 0f, endAngle = 360f,
+                startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+                endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+                tileMode = "repeat",
+            ),
+        ).forEach { refused ->
+            assertEquals(
+                "unsupported.material.gradient_tile_mode_unsupported",
+                assertIs<GPURouteDecision.Refused>(plan(refused).routeDecision).diagnostic.code,
+            )
+        }
+    }
+
     @Test
     fun `bounded radial and sweep fill rects select their CorePrimitive programs`() {
         val cases = listOf(

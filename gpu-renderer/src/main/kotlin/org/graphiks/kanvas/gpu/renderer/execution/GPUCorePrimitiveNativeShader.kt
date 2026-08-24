@@ -125,9 +125,11 @@ internal fun buildCorePrimitiveGradientNativeShader(
 ): GPUCorePrimitiveNativeShaderResult {
     val source = when (variant) {
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
         -> corePrimitiveGradientNativeWgsl(variant)
@@ -163,12 +165,16 @@ internal fun corePrimitiveGradientNativeShaderIdentity(
 ): String = when (variant) {
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
         "core-primitive-gradient-linear-direct-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ->
+        "core-primitive-gradient-linear-repeat-direct-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
         "core-primitive-gradient-radial-direct-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
         "core-primitive-gradient-sweep-direct-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
         "core-primitive-gradient-linear-analytic-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat ->
+        "core-primitive-gradient-linear-repeat-analytic-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
         "core-primitive-gradient-radial-analytic-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
@@ -205,11 +211,15 @@ private fun gradientReflectionInvalidMessage(
     val expectedStructName = when (variant) {
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
             "CorePrimitiveLinearGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ->
+            "CorePrimitiveLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
             "CorePrimitiveRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
             "CorePrimitiveSweepGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+            "CorePrimitiveAnalyticLinearGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat ->
             "CorePrimitiveAnalyticLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
             "CorePrimitiveAnalyticRadialGradientBlock"
@@ -272,6 +282,8 @@ private fun corePrimitiveGradientNativeWgsl(
     variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): String {
     val linear = variant.name.contains("Linear")
+    val linearRepeat = variant == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ||
+        variant == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat
     val radial = variant.name.contains("Radial")
     val analytic = variant.name.startsWith("Analytic")
     val geometryField = if (linear) {
@@ -387,11 +399,15 @@ private fun corePrimitiveGradientNativeWgsl(
     val structName = when (variant) {
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
             "CorePrimitiveLinearGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ->
+            "CorePrimitiveLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
             "CorePrimitiveRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
             "CorePrimitiveSweepGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+            "CorePrimitiveAnalyticLinearGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat ->
             "CorePrimitiveAnalyticLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
             "CorePrimitiveAnalyticRadialGradientBlock"
@@ -476,7 +492,7 @@ private fun corePrimitiveGradientNativeWgsl(
         fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
             $position
             $gradientBody
-            let t = clamp(t_raw, 0.0, 1.0);
+            let t = ${if (linearRepeat) "t_raw - floor(t_raw)" else "clamp(t_raw, 0.0, 1.0)"};
             $output
         }
     """.trimIndent()

@@ -25,11 +25,11 @@ object GpuEvidenceCatalog {
         sweepGradientPartialAngle(),
         affineSolidRect(),
         scissoredRadialGradient(),
+        repeatGradientRendered(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
-        repeatGradientRefusal(),
         gradientStrokeRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
@@ -264,7 +264,15 @@ object GpuEvidenceCatalog {
         null,
     )
 
-    private fun repeatGradientRefusal() = surfaceRefusal("repeat-gradient-refusal", "Repeat gradient refusal", "Public Kanvas Surface repeat gradient refuses before submission.", setOf("linear-gradient", "refusal", "kanvas-surface"), "unsupported.material.gradient_tile_mode_unsupported", KanvasScenePrograms.repeatGradientRefusal())
+    private fun repeatGradientRendered() = gradientCase(
+        "repeat-gradient-refusal", "Repeat linear gradient", "Public Kanvas Surface repeat linear gradient across negative coordinates and a post-first-cycle pixel.",
+        setOf("linear-gradient", "repeat", "kanvas-surface"), "surface-srgb-gradient-linear-repeat", KanvasScenePrograms.repeatGradientRefusal(),
+        SurfaceSrgbGradientCpuOracle.linearRepeat(
+            SurfaceSrgbGradientCpuOracle.Rect(0f, 16f, 64f, 48f),
+            SurfaceSrgbGradientCpuOracle.Point(16.5f, 32.5f), SurfaceSrgbGradientCpuOracle.Point(31.5f, 32.5f),
+            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56), SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255)),
+        ),
+    )
     private fun gradientStrokeRefusal() = surfaceRefusal("gradient-stroke-refusal", "Gradient stroke refusal", "Public Kanvas Surface gradient stroke rectangle refuses before submission.", setOf("stroke-rect", "linear-gradient", "refusal", "kanvas-surface"), "unsupported.stroke.rect_material", KanvasScenePrograms.gradientStrokeRefusal())
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
         EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 16, 16, 1L, tags, EvidenceExpectation.ShouldRefuse(code), OraclePolicy.StableRefusal, null, emptySet()), program, null,

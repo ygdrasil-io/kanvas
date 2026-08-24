@@ -126,6 +126,15 @@ internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform592-gradient-linear-repeat-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
@@ -153,6 +162,15 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTI
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat,
+        ),
+        bindingLayoutIdentity = "dynamic-uniform656-gradient-analytic-linear-repeat-v1",
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
@@ -176,12 +194,16 @@ internal fun corePrimitiveGradientComponentIdentity(
 ): GPUWgpu4kCorePrimitiveComponentIdentity = when (shader) {
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
         PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ->
+        PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
         PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
         PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
         PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat ->
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
         PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
@@ -756,9 +778,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY ->
                         buildCorePrimitiveAnalyticShapeNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+                    PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY,
                     -> buildCorePrimitiveGradientNativeShader(
@@ -868,10 +892,12 @@ private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): U
         error("Clip-stencil producer has no uniform binding")
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> 80uL
     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+    PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY,
     -> CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toULong()
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY,
     -> CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES.toULong()

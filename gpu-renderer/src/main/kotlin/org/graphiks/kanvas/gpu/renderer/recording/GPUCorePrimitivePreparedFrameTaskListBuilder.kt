@@ -184,13 +184,17 @@ internal fun corePrimitiveTargetStateHash(
 internal fun corePrimitiveGradientBindingLayoutHash(
     shader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): String? = when (shader) {
-    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat,
+    ->
         CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
         CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
         CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_BINDING_LAYOUT_HASH
-    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient,
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat,
+    ->
         CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
         CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_BINDING_LAYOUT_HASH

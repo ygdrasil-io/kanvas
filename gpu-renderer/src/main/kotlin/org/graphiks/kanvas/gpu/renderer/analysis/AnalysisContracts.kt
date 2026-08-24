@@ -309,8 +309,9 @@ class GPUFirstRoutePlanner(
         } else if (isSimpleGradient) {
             when (command.material) {
                 is GPUMaterialDescriptor.LinearGradient -> {
+                    val tileModeSuffix = if (command.material.tileMode == "repeat") ".repeat" else ""
                     pipelineKey =
-                        "pending.pipeline.fill_rect.linear_gradient.${command.layer.target.colorFormat}.src_over"
+                        "pending.pipeline.fill_rect.linear_gradient$tileModeSuffix.${command.layer.target.colorFormat}.src_over"
                     renderStep = linearGradientRenderStep
                     routeLabel = "native.fill_rect.linear_gradient"
                     materialKeyHash = "pending.material.linear_gradient"
@@ -1818,7 +1819,7 @@ class GPUFirstRoutePlanner(
                 "unsupported.material.gradient_non_finite_color"
             !endR.isFinite() || !endG.isFinite() || !endB.isFinite() || !endA.isFinite() ->
                 "unsupported.material.gradient_non_finite_color"
-            tileMode !in acceptedGradientTileModes ->
+            tileMode !in acceptedLinearGradientTileModes ->
                 "unsupported.material.gradient_tile_mode_unsupported"
             else -> null
         }
@@ -2103,8 +2104,11 @@ class GPUFirstRoutePlanner(
             GPUMaterialKind.RuntimeEffect,
         )
 
-        /** Gradient tile modes accepted by the first expansion route. */
+        /** Gradient tile modes accepted by the first expansion route outside linear repeat. */
         val acceptedGradientTileModes = setOf("clamp")
+
+        /** Linear gradients additionally admit repeat through a dedicated native shader variant. */
+        val acceptedLinearGradientTileModes = setOf("clamp", "repeat")
 
         /** Required capability fact for the native DrawImageRect promotion route. */
         const val firstImageDrawNativeCapabilityName = "first_slice.bitmap_rect.native"

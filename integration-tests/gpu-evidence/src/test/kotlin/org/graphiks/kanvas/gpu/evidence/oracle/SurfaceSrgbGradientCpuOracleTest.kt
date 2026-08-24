@@ -7,6 +7,25 @@ import kotlin.test.assertFailsWith
 
 class SurfaceSrgbGradientCpuOracleTest {
     @Test
+    fun `linear repeat wraps hand derived negative and post-first-cycle samples unlike clamp`() {
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 4f, 1f)
+        val start = SurfaceSrgbGradientCpuOracle.Point(1.5f, .5f)
+        val end = SurfaceSrgbGradientCpuOracle.Point(3.5f, .5f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 0, 0, 0),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 255, 255, 255),
+        )
+
+        val repeat = SurfaceSrgbGradientCpuOracle.linearRepeat(bounds, start, end, stops).render(4, 1)
+        val clamp = SurfaceSrgbGradientCpuOracle.linear(bounds, start, end, stops).render(4, 1)
+
+        assertPixel(repeat, 4, 0, 0, intArrayOf(188, 188, 188, 255)) // t_raw = -0.5 -> 0.5
+        assertPixel(repeat, 4, 3, 0, intArrayOf(0, 0, 0, 255)) // t_raw = 1.0 -> 0.0
+        assertPixel(clamp, 4, 0, 0, intArrayOf(0, 0, 0, 255))
+        assertPixel(clamp, 4, 3, 0, intArrayOf(255, 255, 255, 255))
+    }
+
+    @Test
     fun `opaque midpoint interpolates in linear light before sRGB storage`() {
         val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 3f, 1f)
         val midpoint = SurfaceSrgbGradientCpuOracle.linear(

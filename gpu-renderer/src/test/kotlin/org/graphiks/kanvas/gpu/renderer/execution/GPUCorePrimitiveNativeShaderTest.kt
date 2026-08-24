@@ -17,6 +17,22 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.WgslValidationSummary
 
 class GPUCorePrimitiveNativeShaderTest {
     @Test
+    fun `linear repeat shaders are parser validated and wrap positive and negative raw coordinates`() {
+        listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat,
+        ).forEach { variant ->
+            val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+                buildCorePrimitiveGradientNativeShader(variant),
+            )
+
+            assertTrue(requireNotNull(ready.plan.wgslReflection).report.validation.success)
+            assertContains(ready.plan.wgslSource, "let t = t_raw - floor(t_raw);")
+            assertFalse(ready.plan.wgslSource.contains("let t = clamp(t_raw, 0.0, 1.0);"))
+        }
+    }
+
+    @Test
     fun `linear gradient shader is parser validated with start and end ABI fields`() {
         val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveGradientNativeShader(

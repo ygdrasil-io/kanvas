@@ -48,6 +48,18 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     @Test
+    fun `linear repeat owns direct and analytic structural shader variants`() {
+        val shaderNames = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.entries.map { it.name }
+
+        assertTrue("DirectLinearGradientRepeat" in shaderNames)
+        assertTrue("AnalyticLinearGradientRepeat" in shaderNames)
+        assertFalse(
+            "DirectLinearGradient" == "DirectLinearGradientRepeat" ||
+                "AnalyticLinearGradient" == "AnalyticLinearGradientRepeat",
+        )
+    }
+
+    @Test
     fun `indexed path covers map every admitted fixed blend to distinct exact descriptors`() {
         data class Case(
             val mode: GPUBlendMode,
@@ -440,7 +452,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -616,7 +628,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -774,7 +786,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(37, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
