@@ -3,7 +3,8 @@
 Status: `completed` (reduced scope)
 Branch: `codex/graphite-dawn-frame-fp08`
 Evidence head: `c6abb814c` + Task 6 commit (this report + absence test)
-Plan: `reports/fp08-retire-immediate-cpu-paths-plan.md` (revision `8f2d2f1ea`)
+Historical plan: removed from the working tree; recover from Git history at
+revision `8f2d2f1ea` if needed.
 
 ## 1. Scope (revised)
 
@@ -12,7 +13,7 @@ legacy retirement (`renderViaGpuLegacy`, the legacy port, and legacy-only
 helper machinery) is deferred to **FP-09** because the prepared route does not
 yet cover every family the legacy renderer serves (see §3).
 
-## 2. Before/after diff of the Task 1 legacy map (`reports/fp08-legacy-map.txt`)
+## 2. Before/after diff of the historical Task 1 legacy map
 
 Before-snapshot (committed at `1dd769d01`, head `6b9e273ea`):
 production sites for the retired symbols:

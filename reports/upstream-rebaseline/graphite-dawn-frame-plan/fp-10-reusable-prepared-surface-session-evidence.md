@@ -26,7 +26,8 @@ flake note and classification are retained in §8.
 
 ## 2. Lifecycle map before/after
 
-**Before (Task 2 snapshot, `reports/fp10-lifecycle-map.txt`, committed at `2886fb1a5`):**
+**Before (Task 2 snapshot, removed from the working tree; recover from Git
+history at `2886fb1a5`):**
 
 - the process-global `GPUBackendRuntimeNativeFactory` was an unsynchronized check-then-act on
   `sharedInner` (`createOrNull()` GPUBackendRuntimeNative.kt:925-947, `dispose()` :950-955);

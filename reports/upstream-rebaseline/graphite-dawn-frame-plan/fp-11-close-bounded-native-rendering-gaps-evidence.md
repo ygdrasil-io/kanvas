@@ -117,8 +117,8 @@ from the two documented pre-existing failures (0.1) and from the
 ## 1. Before/after route-split table (the plan §1 map vs. the post-Tasks-2-7 route split)
 
 "Before" = the plan §1 refusal-code map as measured by the FP-09 evidence run
-(`reports/fp11-gap-map.txt` is the Task 1 saved before-snapshot of the
-production emission sites at plan-time HEAD `f14656988`). "After" = HEAD at
+(the historical Task 1 saved before-snapshot was removed from the working
+tree; recover it from Git history at plan-time HEAD `f14656988`). "After" = HEAD at
 the Task 9 closure, re-measured as in §0.3.
 
 | code | before (FP-09 measured) | after (Task 9 re-measured) | outcome |
@@ -331,8 +331,8 @@ Task 7 doc notes (pinned in the tests/production):
   `:2564` → `:2572`; mixed-layout second gate `:2120` → `:2132`.
 - Fix attribution (Task 8 review): the analytic-clip intersection twin was
   cited as "the FP-09 record cited `:2013`" — that is a false attribution. The
-  FP-11 plan cited `:2013` (`reports/fp11-close-bounded-native-rendering-gaps-
-  plan.md` §1); FP-09's plan cited `:2001` (intersection twin) and FP-09's
+  historical FP-11 plan §1 cited `:2013`; FP-09's plan cited `:2001`
+  (intersection twin) and FP-09's
   evidence cited `:1994`. Corrected in §2.
 - The blend-suite re-route branch for DrawPoint/DrawPoints ALPHA_MASK × DST is
   at `GPUAllApiBlendSurfaceTest.kt:585-586` (not `:607-611`; the DrawRRect DST
