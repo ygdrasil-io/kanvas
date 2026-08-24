@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/internal_links.cpp::InternalLinksGM` (700 x 500, gray BG).
@@ -27,7 +27,7 @@ class InternalLinksGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bg = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f, 1f)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = bg))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = bg))
 
         // Panel 1 - "Link to A"
         canvas.save()
@@ -43,7 +43,7 @@ class InternalLinksGm : SkiaGm {
     }
 
     private fun drawLabeledRect(canvas: GmCanvas, text: String, x: Float, y: Float) {
-        canvas.drawRect(Rect.fromXYWH(x, y, 50f, 20f), Paint(color = Color.BLUE))
+        canvas.drawRect(RectF32.ofOriginSize(x, y, 50f, 20f), Paint(color = Color.BLUE))
         val font = Font(typeface, size = 25f)
         canvas.drawString(text, x, y, font, Paint(color = Color.BLACK))
     }

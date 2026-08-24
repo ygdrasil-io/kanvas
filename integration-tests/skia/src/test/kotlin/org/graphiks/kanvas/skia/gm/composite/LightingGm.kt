@@ -11,7 +11,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -36,14 +36,14 @@ class LightingGm : SkiaGm {
     override fun onOnceBeforeDraw(canvas: GmCanvas) {
         val surf = Surface(100, 100)
         surf.canvas {
-            drawRect(Rect(0f, 0f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0f)))
-            drawRect(Rect.fromXYWH(20f, 20f, 60f, 60f), Paint(color = Color.WHITE))
+            drawRect(RectF32(0f, 0f, 100f, 100f), Paint(color = Color.fromRGBA(0f, 0f, 0f, 0f)))
+            drawRect(RectF32.ofOriginSize(20f, 20f, 60f, 60f), Paint(color = Color.WHITE))
         }
         fBitmap = surf.makeImageSnapshot()
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()),
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(0.063f, 0.063f, 0.063f, 1f)))
 
         drawChecker(canvas)
@@ -144,8 +144,8 @@ class LightingGm : SkiaGm {
     private fun drawClipped(canvas: GmCanvas, paint: Paint, x: Int, y: Int) {
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
-        canvas.clipRect(Rect.fromXYWH(0f, 0f, 100f, 100f))
-        canvas.drawImage(fBitmap, Rect(0f, 0f, 100f, 100f), paint)
+        canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 100f, 100f))
+        canvas.drawImage(fBitmap, RectF32(0f, 0f, 100f, 100f), paint)
         canvas.restore()
     }
 
@@ -155,8 +155,8 @@ class LightingGm : SkiaGm {
             for (xx in 0 until WIDTH step 16) {
                 canvas.save()
                 canvas.translate(xx.toFloat(), yy.toFloat())
-                canvas.drawRect(Rect.fromXYWH(8f, 0f, 8f, 8f), checkPaint)
-                canvas.drawRect(Rect.fromXYWH(0f, 8f, 8f, 8f), checkPaint)
+                canvas.drawRect(RectF32.ofOriginSize(8f, 0f, 8f, 8f), checkPaint)
+                canvas.drawRect(RectF32.ofOriginSize(0f, 8f, 8f, 8f), checkPaint)
                 canvas.restore()
             }
         }

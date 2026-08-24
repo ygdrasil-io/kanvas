@@ -9,7 +9,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,7 +34,7 @@ class LatticeDecompositionTest {
                     Color.TRANSPARENT, Color.TRANSPARENT, Color.TRANSPARENT,
                 ),
             ),
-            dst = Rect.fromXYWH(100f, 100f, 200f, 200f),
+            dst = RectF32.ofOriginSize(100f, 100f, 200f, 200f),
             paint = Paint(),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
@@ -45,12 +45,12 @@ class LatticeDecompositionTest {
         assertEquals(6, cells.size)
         // The first and final bands remain at their source size. Only the
         // middle band stretches to absorb the remaining destination space.
-        assertEquals(Rect.fromLTRB(100f, 100f, 104f, 101f), cells[0].dst)
-        assertEquals(Rect.fromLTRB(104f, 100f, 225f, 101f), cells[1].dst)
-        assertEquals(Rect.fromLTRB(225f, 100f, 300f, 101f), cells[2].dst)
-        assertEquals(Rect.fromLTRB(100f, 101f, 104f, 222f), cells[3].dst)
-        assertEquals(Rect.fromLTRB(104f, 101f, 225f, 222f), cells[4].dst)
-        assertEquals(Rect.fromLTRB(225f, 101f, 300f, 222f), cells[5].dst)
+        assertEquals(RectF32.ofLTRB(100f, 100f, 104f, 101f), cells[0].dst)
+        assertEquals(RectF32.ofLTRB(104f, 100f, 225f, 101f), cells[1].dst)
+        assertEquals(RectF32.ofLTRB(225f, 100f, 300f, 101f), cells[2].dst)
+        assertEquals(RectF32.ofLTRB(100f, 101f, 104f, 222f), cells[3].dst)
+        assertEquals(RectF32.ofLTRB(104f, 101f, 225f, 222f), cells[4].dst)
+        assertEquals(RectF32.ofLTRB(225f, 101f, 300f, 222f), cells[5].dst)
         assertNull(cells[0].color)
         assertEquals(Color.RED, cells[3].color)
         assertEquals(Color(0x880000FFu), cells[4].color)
@@ -60,7 +60,7 @@ class LatticeDecompositionTest {
     @Test
     fun `explicit lattice rects retain source row order when transparent cells are omitted`() {
         val explicitRects = List(6) { index ->
-            Rect.fromLTRB(
+            RectF32.ofLTRB(
                 index * 10f,
                 20f,
                 index * 10f + 8f,
@@ -90,7 +90,7 @@ class LatticeDecompositionTest {
                     Color.TRANSPARENT,
                 ),
             ),
-            dst = Rect.fromLTRB(0f, 0f, 60f, 40f),
+            dst = RectF32.ofLTRB(0f, 0f, 60f, 40f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,

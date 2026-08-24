@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rrectclipdrawpaint.cpp` (256 × 256).
@@ -31,26 +31,26 @@ class RRectClipDrawPaintGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rrect = RRect(Rect.fromXYWH(10f, 10f, 236f, 236f), radius = 0f).copy(
+        val rrect = RRect(RectF32.ofOriginSize(10f, 10f, 236f, 236f), radius = 0f).copy(
             topLeft = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
             topRight = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
             bottomRight = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
             bottomLeft = org.graphiks.kanvas.types.CornerRadii(30f, 40f),
         )
         val zoomOut = Matrix3x3F32.translation(128f, 128f) * Matrix3x3F32.scaling(0.7f, 0.7f) * Matrix3x3F32.translation(-128f, -128f)
-        val layerRect = Rect.fromXYWH(0f, 0f, 256f, 256f)
+        val layerRect = RectF32.ofOriginSize(0f, 0f, 256f, 256f)
 
         var p = Paint(color = Color.RED)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = true)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), p)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
         canvas.concat(zoomOut)
         p = p.copy(color = Color.BLUE)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = false)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), p)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
         val cyan = Color(0xFF00FFFFu)
@@ -62,7 +62,7 @@ class RRectClipDrawPaintGm : SkiaGm {
         canvas.concat(zoomOut)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = true)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), p)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
 
         val magenta = Color(0xFFFF00FFu)
@@ -74,7 +74,7 @@ class RRectClipDrawPaintGm : SkiaGm {
         canvas.concat(zoomOut)
         canvas.saveLayer(layerRect, null)
         canvas.clipRRect(rrect, antiAlias = false)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), p)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), p)
         canvas.restore()
     }
 }

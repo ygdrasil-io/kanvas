@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/shadertext3.cpp` ShaderText3GM.
@@ -34,7 +34,7 @@ class ShaderText3Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color(0xFFDDDDDDu)),
         )
 
@@ -49,7 +49,7 @@ class ShaderText3Gm : SkiaGm {
             tileMode = TileMode.REPEAT,
         )
 
-        canvas.drawRect(Rect(5f, 5f, 80f, 80f), Paint(shader = gradientBase, color = Color.fromRGBA(1f, 1f, 1f, 0.5f)))
+        canvas.drawRect(RectF32(5f, 5f, 80f, 80f), Paint(shader = gradientBase, color = Color.fromRGBA(1f, 1f, 1f, 0.5f)))
 
         val font = Font(typeface, size = kPointSize.toFloat())
         val outlinePaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)

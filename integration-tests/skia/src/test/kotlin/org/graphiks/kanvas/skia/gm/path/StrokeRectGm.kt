@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Simplified port of Skia's `gm/strokerect.cpp::StrokeRectGM` (1400 x 740).
@@ -48,18 +48,18 @@ class StrokeRectGm : SkiaGm {
         val w = 80f
         val h = 80f
         val rects = arrayOf(
-            Rect.fromLTRB(0f, 0f, w, h),
-            Rect.fromLTRB(w, 0f, 0f, h),
-            Rect.fromLTRB(0f, h, w, 0f),
-            Rect.fromLTRB(0f, 0f, STROKE_WIDTH, h),
-            Rect.fromLTRB(0f, 0f, w, STROKE_WIDTH),
-            Rect.fromLTRB(0f, 0f, STROKE_WIDTH / 2f, STROKE_WIDTH / 2f),
-            Rect.fromLTRB(0f, 0f, w, 0f),
-            Rect.fromLTRB(0f, 0f, 0f, h),
-            Rect.fromLTRB(0f, 0f, 0f, 0f),
-            Rect.fromLTRB(0f, 0f, w, FLT_EPSILON),
-            Rect.fromLTRB(0f, 0f, FLT_EPSILON, h),
-            Rect.fromLTRB(0f, 0f, FLT_EPSILON, FLT_EPSILON),
+            RectF32.ofLTRB(0f, 0f, w, h),
+            RectF32.ofLTRB(w, 0f, 0f, h),
+            RectF32.ofLTRB(0f, h, w, 0f),
+            RectF32.ofLTRB(0f, 0f, STROKE_WIDTH, h),
+            RectF32.ofLTRB(0f, 0f, w, STROKE_WIDTH),
+            RectF32.ofLTRB(0f, 0f, STROKE_WIDTH / 2f, STROKE_WIDTH / 2f),
+            RectF32.ofLTRB(0f, 0f, w, 0f),
+            RectF32.ofLTRB(0f, 0f, 0f, h),
+            RectF32.ofLTRB(0f, 0f, 0f, 0f),
+            RectF32.ofLTRB(0f, 0f, w, FLT_EPSILON),
+            RectF32.ofLTRB(0f, 0f, FLT_EPSILON, h),
+            RectF32.ofLTRB(0f, 0f, FLT_EPSILON, FLT_EPSILON),
         )
 
         for (doFill in 0..1) {

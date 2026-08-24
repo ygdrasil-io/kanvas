@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/colorwheel.cpp::DEF_SIMPLE_GM(colorwheel, canvas, 384, 256)`.
@@ -35,7 +35,7 @@ class ColorWheelGm : SkiaGm {
                 val gray = if (dark) 0x60 else 0x99
                 val c = (0xFF shl 24) or (gray shl 16) or (gray shl 8) or gray
                 canvas.drawRect(
-                    Rect.fromXYWH(x.toFloat(), y.toFloat(), tileSize.toFloat(), tileSize.toFloat()),
+                    RectF32.ofOriginSize(x.toFloat(), y.toFloat(), tileSize.toFloat(), tileSize.toFloat()),
                     Paint(color = Color(c.toUInt())),
                 )
             }
@@ -45,7 +45,7 @@ class ColorWheelGm : SkiaGm {
     private fun drawImage(canvas: GmCanvas, path: String, x: Int, y: Int) {
         val bytes = loadResource(path) ?: return
         val image = Image.decode(bytes)
-        canvas.drawImage(image, Rect.fromXYWH(x.toFloat(), y.toFloat(), image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(x.toFloat(), y.toFloat(), image.width.toFloat(), image.height.toFloat()))
     }
 
     private fun loadResource(path: String): ByteArray? =

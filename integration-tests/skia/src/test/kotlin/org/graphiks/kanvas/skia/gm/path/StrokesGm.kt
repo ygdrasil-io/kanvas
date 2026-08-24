@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class StrokesGm : SkiaGm {
     override val name = "strokes_round"
@@ -32,7 +32,7 @@ class StrokesGm : SkiaGm {
             val aa = y != 0
             canvas.save()
             canvas.translate(0f, SH * y)
-            canvas.clipRect(Rect.fromLTRB(2f, 2f, SW - 2f, SH - 2f))
+            canvas.clipRect(RectF32.ofLTRB(2f, 2f, SW - 2f, SH - 2f))
 
             val rand = SkiaRandom(0u)
             for (i in 0 until N) {
@@ -62,7 +62,7 @@ class StrokesGm : SkiaGm {
         }
     }
 
-    private fun rndRect(rand: SkiaRandom): Pair<Rect, Color> {
+    private fun rndRect(rand: SkiaRandom): Pair<RectF32, Color> {
         val x = rand.nextF() * W
         val y = rand.nextF() * H
         val w = rand.nextF() * (W shr 2)
@@ -72,7 +72,7 @@ class StrokesGm : SkiaGm {
 
         val dx = -w / 2f + woffset
         val dy = -h / 2f + hoffset
-        val r = Rect.fromLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
+        val r = RectF32.ofLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
 
         val c32 = rand.nextS()
         val color = Color.fromRGBA(

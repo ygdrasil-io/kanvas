@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 data class GPUPreparedImageLoweringContext(
     val provenance: GPUFrameProvenance,
@@ -392,7 +392,7 @@ internal object GPUPreparedImageGridLowerer {
         imageWidth: Int,
         imageHeight: Int,
         transform: Matrix3x3F32,
-        dst: Rect,
+        dst: RectF32,
         context: GPUPreparedImageLoweringContext,
         geometryCode: String,
     ): GPUPreparedImageGridLowering.Refused? {
@@ -541,7 +541,7 @@ internal object GPUPreparedImageGridLowerer {
         return true
     }
 
-    private fun Rect.isFiniteRect(): Boolean =
+    private fun RectF32.isFiniteRect(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
 
     private fun ImageCell.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =

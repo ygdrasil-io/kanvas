@@ -3,6 +3,7 @@ package org.graphiks.kanvas.paint
 import org.graphiks.math.geometry.Point2F32
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue

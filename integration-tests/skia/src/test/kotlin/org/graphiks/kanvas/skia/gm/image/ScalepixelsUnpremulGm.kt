@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/image.cpp::scalepixels_unpremul`
@@ -58,7 +58,7 @@ class ScalepixelsUnpremulGm : SkiaGm {
                 }
             }
             val dstImage = Image.fromPixels(256, 256, dstPixels, sourceId = "scalepixels_${samplingLabel}")
-            canvas.drawImage(dstImage, Rect.fromXYWH(0f, 0f, 256f, 256f))
+            canvas.drawImage(dstImage, RectF32.ofOriginSize(0f, 0f, 256f, 256f))
             canvas.restore()
             canvas.translate(266f, 0f)
         }

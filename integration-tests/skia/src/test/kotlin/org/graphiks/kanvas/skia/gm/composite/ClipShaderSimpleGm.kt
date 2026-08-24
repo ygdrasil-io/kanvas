@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `DEF_SIMPLE_GM(clip_shader, canvas, 840, 650)` in `gm/clip_shader.cpp`.
@@ -31,7 +31,7 @@ class ClipShaderSimpleGm : SkiaGm {
         val bytes = this::class.java.classLoader?.getResourceAsStream("images/yellow_rose.png")?.readBytes() ?: return
         val img = Image.decode(bytes)
         val shader = img.makeShader(TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.LINEAR)
-        val imgRect = Rect(0f, 0f, img.width.toFloat(), img.height.toFloat())
+        val imgRect = RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat())
 
         canvas.translate(10f, 10f)
 

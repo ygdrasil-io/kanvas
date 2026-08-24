@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/image.cpp::ImageGM` (960 x 1200, name "image-surface").
@@ -89,25 +89,25 @@ class ImageGm : SkiaGm {
         val sampling = SamplingOptions.NEAREST
         val paint: Paint? = null
 
-        canvas.drawImage(imgR, Rect(0f, 0f, 64f, 64f), paint)
-        canvas.drawImage(imgG, Rect(0f, 80f, 64f, 144f), paint)
+        canvas.drawImage(imgR, RectF32(0f, 0f, 64f, 64f), paint)
+        canvas.drawImage(imgG, RectF32(0f, 80f, 64f, 144f), paint)
 
         val surfImage = surf.makeImageSnapshot()
-        canvas.drawImage(surfImage, Rect(0f, 160f, 64f, 224f), paint)
+        canvas.drawImage(surfImage, RectF32(0f, 160f, 64f, 224f), paint)
 
-        val src1 = Rect.fromXYWH(0f, 0f, 64f, 64f)
-        val src2 = Rect.fromLTRB(-32f, -32f, 64f, 64f)
-        val src3 = Rect.fromXYWH(0f, 0f, 32f, 32f)
+        val src1 = RectF32.ofOriginSize(0f, 0f, 64f, 64f)
+        val src2 = RectF32.ofLTRB(-32f, -32f, 64f, 64f)
+        val src3 = RectF32.ofOriginSize(0f, 0f, 32f, 32f)
 
-        val dst1 = Rect.fromLTRB(0f, 240f, 65f, 305f)
-        val dst2 = Rect.fromLTRB(0f, 320f, 65f, 385f)
-        val dst3 = Rect.fromLTRB(0f, 400f, 65f, 465f)
-        val dst4 = Rect.fromLTRB(0f, 480f, 65f, 545f)
+        val dst1 = RectF32.ofLTRB(0f, 240f, 65f, 305f)
+        val dst2 = RectF32.ofLTRB(0f, 320f, 65f, 385f)
+        val dst3 = RectF32.ofLTRB(0f, 400f, 65f, 465f)
+        val dst4 = RectF32.ofLTRB(0f, 480f, 65f, 545f)
 
         canvas.drawImageRect(imgR, src1, dst1, paint)
         canvas.drawImageRect(imgG, src2, dst2, paint)
         canvas.drawImageRect(imgR, src3, dst3, paint)
-        val fullSrc = Rect.fromXYWH(0f, 0f, imgG.width.toFloat(), imgG.height.toFloat())
+        val fullSrc = RectF32.ofOriginSize(0f, 0f, imgG.width.toFloat(), imgG.height.toFloat())
         canvas.drawImageRect(imgG, fullSrc, dst4, paint)
     }
 

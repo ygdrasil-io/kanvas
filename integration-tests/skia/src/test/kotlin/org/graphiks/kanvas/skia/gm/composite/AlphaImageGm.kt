@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/alpha_image.cpp`.
@@ -30,7 +30,7 @@ class AlphaImageGm : SkiaGm {
         val image = makeAlphaImage(96, 96)
 
         canvas.drawImage(
-            image, Rect(16f, 16f, 112f, 112f),
+            image, RectF32(16f, 16f, 112f, 112f),
             Paint(
                 colorFilter = makeColorFilter(),
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 10f),
@@ -38,7 +38,7 @@ class AlphaImageGm : SkiaGm {
         )
 
         canvas.drawImage(
-            image, Rect(144f, 16f, 240f, 112f),
+            image, RectF32(144f, 16f, 240f, 112f),
             Paint(
                 color = Color.fromRGBA(0f, 1f, 1f, 1f),
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 10f),
@@ -46,7 +46,7 @@ class AlphaImageGm : SkiaGm {
         )
 
         canvas.drawImage(
-            image, Rect(16f, 144f, 112f, 240f),
+            image, RectF32(16f, 144f, 112f, 240f),
             Paint(
                 color = Color.fromRGBA(0f, 1f, 1f, 1f),
                 colorFilter = makeColorFilter(),
@@ -55,7 +55,7 @@ class AlphaImageGm : SkiaGm {
         )
 
         canvas.drawImage(
-            image, Rect(144f, 144f, 240f, 240f),
+            image, RectF32(144f, 144f, 240f, 240f),
             Paint(colorFilter = makeColorFilter()),
         )
     }

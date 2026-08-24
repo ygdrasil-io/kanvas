@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -29,7 +29,7 @@ class GradientsColorSpaceTilemodeGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(0x88 / 255f, 0x88 / 255f, 0x88 / 255f, 1f))
         )
 
@@ -52,7 +52,7 @@ class GradientsColorSpaceTilemodeGm : SkiaGm {
                     interpolation = ColorSpaceInterpolation.OKLCH,
                 )
             )
-            canvas.drawRect(Rect.fromXYWH(5f, 5f + i * 25f, 350f, 20f), paint)
+            canvas.drawRect(RectF32.ofOriginSize(5f, 5f + i * 25f, 350f, 20f), paint)
         }
     }
 }

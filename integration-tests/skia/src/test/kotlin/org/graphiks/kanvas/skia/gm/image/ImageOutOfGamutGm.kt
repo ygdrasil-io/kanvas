@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmappremul.cpp :: image_out_of_gamut`.
@@ -39,9 +39,9 @@ class ImageOutOfGamutGm : SkiaGm {
         val bgra = makeOutOfGamutImage(ColorType.BGRA_8888)
 
         canvas.translate(K_PADDING.toFloat(), K_PADDING.toFloat())
-        canvas.drawImage(rgba, Rect(0f, 0f, K_BOX_SIZE.toFloat(), K_BOX_SIZE.toFloat()))
+        canvas.drawImage(rgba, RectF32(0f, 0f, K_BOX_SIZE.toFloat(), K_BOX_SIZE.toFloat()))
         canvas.translate((K_BOX_SIZE + K_PADDING).toFloat(), 0f)
-        canvas.drawImage(bgra, Rect(0f, 0f, K_BOX_SIZE.toFloat(), K_BOX_SIZE.toFloat()))
+        canvas.drawImage(bgra, RectF32(0f, 0f, K_BOX_SIZE.toFloat(), K_BOX_SIZE.toFloat()))
     }
 
     private fun makeOutOfGamutImage(colorType: ColorType): Image {

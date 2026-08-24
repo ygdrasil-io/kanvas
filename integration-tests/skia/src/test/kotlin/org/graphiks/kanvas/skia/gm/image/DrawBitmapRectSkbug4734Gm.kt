@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/draw_bitmap_rect_skbug4374.cpp::draw_bitmap_rect_skbug4734`.
@@ -28,8 +28,8 @@ class DrawBitmapRectSkbug4734Gm : SkiaGm {
         val image = Image.decode(bytes)
         val w = image.width.toFloat()
         val h = image.height.toFloat()
-        val src = Rect.fromLTRB(0.5f, 1.5f, w - 0.5f, h - 1.5f)
-        val dst = Rect.fromLTRB(0.5f * 8f, 1.5f * 8f, (w - 0.5f) * 8f, (h - 1.5f) * 8f)
+        val src = RectF32.ofLTRB(0.5f, 1.5f, w - 0.5f, h - 1.5f)
+        val dst = RectF32.ofLTRB(0.5f * 8f, 1.5f * 8f, (w - 0.5f) * 8f, (h - 1.5f) * 8f)
         canvas.drawImageRect(image, src, dst)
     }
 

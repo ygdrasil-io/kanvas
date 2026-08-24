@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagemasksubset.cpp` ImageMaskSubsetGM.
@@ -26,8 +26,8 @@ class ImageMaskSubsetGm : SkiaGm {
     override val height = 480
 
     private val kSize = 100
-    private val kSubset = Rect.fromLTRB(25f, 25f, 75f, 75f)
-    private val kDest = Rect.fromXYWH(10f, 10f, 100f, 100f)
+    private val kSubset = RectF32.ofLTRB(25f, 25f, 75f, 75f)
+    private val kDest = RectF32.ofOriginSize(10f, 10f, 100f, 100f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(color = Color.fromRGBA(0f, 1f, 0f))
@@ -39,7 +39,7 @@ class ImageMaskSubsetGm : SkiaGm {
             canvas.drawImageRect(image, kSubset, kDest, paint)
 
             // Right cell: offset dst
-            val dstRight = Rect(
+            val dstRight = RectF32(
                 kDest.left + kSize * 1.5f, kDest.top,
                 kDest.right + kSize * 1.5f, kDest.bottom,
             )

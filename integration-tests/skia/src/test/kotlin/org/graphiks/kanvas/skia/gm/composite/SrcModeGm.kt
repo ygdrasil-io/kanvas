@@ -17,7 +17,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/srcmode.cpp`.
  *  Tests source mode blending with Shader.kSrc — draws layered shapes
@@ -43,7 +43,7 @@ class SrcModeGm : SkiaGm {
         }
         val image = surface.makeImageSnapshot()
         canvas.drawColor(0f, 0f, 0f, 1f)
-        canvas.drawImage(image, Rect(0f, 0f, width.toFloat(), height.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, width.toFloat(), height.toFloat()))
     }
 
     private fun drawContent(c: Canvas) {
@@ -99,11 +99,11 @@ class SrcModeGm : SkiaGm {
     }
 
     private fun drawRect(c: Canvas, paint: Paint, @Suppress("UNUSED_PARAMETER") font: Font) {
-        c.drawRect(Rect(0f, 0f, W, H), paint)
+        c.drawRect(RectF32(0f, 0f, W, H), paint)
     }
 
     private fun drawOval(c: Canvas, paint: Paint, @Suppress("UNUSED_PARAMETER") font: Font) {
-        val path = Path { }.apply { addOval(Rect(0f, 0f, W, H)) }
+        val path = Path { }.apply { addOval(RectF32(0f, 0f, W, H)) }
         c.drawPath(path, paint)
     }
 

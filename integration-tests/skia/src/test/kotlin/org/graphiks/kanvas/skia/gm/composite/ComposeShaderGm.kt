@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/composeshader.cpp (ComposeShaderGM).
@@ -29,7 +29,7 @@ class ComposeShaderGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val shader = makeShader(BlendMode.DST_IN)
         val paint = Paint(color = Color.GREEN)
-        val r = Rect(0f, 0f, 100f, 100f)
+        val r = RectF32(0f, 0f, 100f, 100f)
         canvas.drawRect(r, paint)
         val shaderPaint = Paint(shader = shader)
         canvas.drawRect(r, shaderPaint)

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imageblurclampmode.cpp`.
@@ -51,13 +51,13 @@ class ImageBlurClampModeGm : SkiaGm {
         canvas.translate(30f, 0f)
 
         val bluePaint = Paint(color = Color.BLUE, imageFilter = filter)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, IMAGE_WIDTH.toFloat(), IMAGE_HEIGHT.toFloat()), bluePaint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, IMAGE_WIDTH.toFloat(), IMAGE_HEIGHT.toFloat()), bluePaint)
 
         val greenPaint = Paint(color = Color.GREEN, imageFilter = filter)
         canvas.drawCircle(125f, 100f, 100f, greenPaint)
 
         val redPaint = Paint(color = Color.RED, imageFilter = filter)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 80f, 80f), redPaint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 80f, 80f), redPaint)
 
         canvas.restore()
     }

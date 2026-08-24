@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -31,7 +31,7 @@ class ScaledTiling2Gm : SkiaGm {
 
         val w = G_WIDTH.toFloat()
         val h = G_HEIGHT.toFloat()
-        val r = Rect.fromLTRB(-w, -h, w * 2, h * 2)
+        val r = RectF32.ofLTRB(-w, -h, w * 2, h * 2)
 
         val modes = arrayOf(TileMode.CLAMP, TileMode.REPEAT, TileMode.MIRROR)
 
@@ -44,9 +44,9 @@ class ScaledTiling2Gm : SkiaGm {
                 canvas.translate(x, y)
                 canvas.drawRect(r, paint)
                 canvas.restore()
-                x += r.width * 4f / 3f
+                x += r.width() * 4f / 3f
             }
-            y += r.height * 4f / 3f
+            y += r.height() * 4f / 3f
         }
     }
 

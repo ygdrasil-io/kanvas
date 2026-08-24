@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagedither.cpp` image_dither (425 × 110).
@@ -38,20 +38,20 @@ class ImageDitherGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val surface = Surface(100, 100)
-        surface.canvas { drawRect(Rect(0f, 0f, 100f, 100f), Paint(shader = gradientShader)) }
+        surface.canvas { drawRect(RectF32(0f, 0f, 100f, 100f), Paint(shader = gradientShader)) }
         val image = surface.makeImageSnapshot()
 
         canvas.translate(5f, 5f)
-        canvas.drawImage(image, Rect(0f, 0f, 100f, 100f))
+        canvas.drawImage(image, RectF32(0f, 0f, 100f, 100f))
         canvas.translate(105f, 0f)
 
         val imgShader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP)
-        canvas.drawRect(Rect(0f, 0f, 100f, 100f), Paint(shader = imgShader))
+        canvas.drawRect(RectF32(0f, 0f, 100f, 100f), Paint(shader = imgShader))
         canvas.translate(105f, 0f)
 
-        canvas.drawImage(image, Rect(0f, 0f, 100f, 100f))
+        canvas.drawImage(image, RectF32(0f, 0f, 100f, 100f))
         canvas.translate(105f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 100f, 100f), Paint(shader = gradientShader))
+        canvas.drawRect(RectF32(0f, 0f, 100f, 100f), Paint(shader = gradientShader))
     }
 }

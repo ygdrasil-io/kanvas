@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -31,7 +31,7 @@ class DrawAtlasGm : SkiaGm {
     override val height = 480
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val target = Rect.fromLTRB(50f, 50f, 80f, 90f)
+        val target = RectF32.ofLTRB(50f, 50f, 80f, 90f)
         val atlas = makeAtlas()
 
         data class Rec(val scale: Float, val degrees: Float, val tx: Float, val ty: Float)

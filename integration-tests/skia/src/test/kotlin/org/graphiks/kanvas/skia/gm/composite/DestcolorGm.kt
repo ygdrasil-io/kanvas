@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/destcolor.cpp`.
@@ -29,7 +29,7 @@ class DestcolorGm : SkiaGm {
             ?.readBytes()
         val mandrill = bytes?.let { Image.decode(it) }
         if (mandrill != null) {
-            canvas.drawImage(mandrill, Rect(0f, 0f, 512f, 512f))
+            canvas.drawImage(mandrill, RectF32(0f, 0f, 512f, 512f))
         }
 
         val paint = Paint(
@@ -37,6 +37,6 @@ class DestcolorGm : SkiaGm {
             blendMode = BlendMode.DIFFERENCE,
             antiAlias = true,
         )
-        canvas.drawOval(Rect.fromLTRB(128f, 128f, 640f, 640f), paint)
+        canvas.drawOval(RectF32.ofLTRB(128f, 128f, 640f, 640f), paint)
     }
 }

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -37,13 +37,13 @@ class TableMaskFilterGm : SkiaGm {
             maskFilter = MaskFilter.Table(table),
         )
 
-        val bounds = Rect(38f, 38f, 218f, 218f)
+        val bounds = RectF32(38f, 38f, 218f, 218f)
 
-        // Rect (CW) + oval approximated as CCW polygon — opposite winding creates a hole
+        // RectF32 (CW) + oval approximated as CCW polygon — opposite winding creates a hole
         val cx = (bounds.left + bounds.right) / 2f
         val cy = (bounds.top + bounds.bottom) / 2f
-        val rx = bounds.width / 2f
-        val ry = bounds.height / 2f
+        val rx = bounds.width() / 2f
+        val ry = bounds.height() / 2f
         val path = Path { }.apply {
             addRect(bounds)
             val steps = 64

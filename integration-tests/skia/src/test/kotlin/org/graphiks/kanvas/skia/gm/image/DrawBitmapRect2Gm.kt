@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmaprect.cpp` DrawBitmapRect2.
@@ -41,24 +41,24 @@ open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
         canvas.drawColor(r = 0.8f, g = 0.8f, b = 0.8f)
 
         val srcs = listOf(
-            Rect.fromLTRB(0f, 0f, 32f, 32f),
-            Rect.fromLTRB(0f, 0f, 80f, 80f),
-            Rect.fromLTRB(32f, 32f, 96f, 96f),
-            Rect.fromLTRB(-32f, -32f, 32f, 32f),
+            RectF32.ofLTRB(0f, 0f, 32f, 32f),
+            RectF32.ofLTRB(0f, 0f, 80f, 80f),
+            RectF32.ofLTRB(32f, 32f, 96f, 96f),
+            RectF32.ofLTRB(-32f, -32f, 32f, 32f),
         )
 
         val stroke = Paint(style = PaintStyle.STROKE, color = Color.BLACK, strokeWidth = 1f)
-        val dstR = Rect.fromLTRB(0f, 200f, 128f, 380f)
+        val dstR = RectF32.ofLTRB(0f, 200f, 128f, 380f)
 
         canvas.save()
         canvas.translate(16f, 40f)
         for (src in srcs) {
-            canvas.drawImage(image, Rect(0f, 0f, 64f, 64f), stroke)
+            canvas.drawImage(image, RectF32(0f, 0f, 64f, 64f), stroke)
             when (variant) {
                 Variant.FLOAT -> canvas.drawImageRect(image, src, dstR, stroke)
                 Variant.INT -> canvas.drawImageRect(
                     image,
-                    Rect.fromLTRB(src.left, src.top, src.right, src.bottom),
+                    RectF32.ofLTRB(src.left, src.top, src.right, src.bottom),
                     dstR,
                     stroke,
                 )

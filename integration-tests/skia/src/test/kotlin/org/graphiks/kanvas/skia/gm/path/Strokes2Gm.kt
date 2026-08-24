@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -39,7 +39,7 @@ class Strokes2Gm : SkiaGm {
             val aa = y != 0
             canvas.save()
             canvas.translate(0f, SH * y)
-            canvas.clipRect(Rect.fromLTRB(2f, 2f, SW - 2f, SH - 2f))
+            canvas.clipRect(RectF32.ofLTRB(2f, 2f, SW - 2f, SH - 2f))
 
             val rand = Random(0)
             for (i in 0 until N / 2) {

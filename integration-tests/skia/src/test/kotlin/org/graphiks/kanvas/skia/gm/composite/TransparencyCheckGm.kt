@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/transparency.cpp`
@@ -55,7 +55,7 @@ class TransparencyCheckGm : SkiaGm {
             canvas.save()
             canvas.scale(7f, 120f)
             canvas.drawRect(
-                Rect.fromXYWH(0f, i * rowHeight, 256f, rowHeight),
+                RectF32.ofOriginSize(0f, i * rowHeight, 256f, rowHeight),
                 Paint(shader = shader),
             )
             canvas.restore()
@@ -69,7 +69,7 @@ class TransparencyCheckGm : SkiaGm {
             for (x in 0 until w step size) {
                 val on = ((x / size) + (y / size)) % 2 == 0
                 canvas.drawRect(
-                    Rect.fromXYWH(x.toFloat(), y.toFloat(), size.toFloat(), size.toFloat()),
+                    RectF32.ofOriginSize(x.toFloat(), y.toFloat(), size.toFloat(), size.toFloat()),
                     Paint(color = if (on) c0 else c1),
                 )
             }

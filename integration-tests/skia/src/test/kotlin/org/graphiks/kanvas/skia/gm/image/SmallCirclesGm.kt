@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/smallcircles.cpp`.
  *  Draws many small anti-aliased circles onto a surface to test small
@@ -39,6 +39,6 @@ class SmallCirclesGm : SkiaGm {
             }
         }
         canvas.scale(7f, 7f)
-        canvas.drawImage(surf.makeImageSnapshot(), Rect(0f, 0f, 100f, 100f))
+        canvas.drawImage(surf.makeImageSnapshot(), RectF32(0f, 0f, 100f, 100f))
     }
 }

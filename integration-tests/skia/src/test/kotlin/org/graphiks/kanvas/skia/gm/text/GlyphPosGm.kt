@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -32,7 +32,7 @@ abstract class GlyphPosGm(
     override val height = 600
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(40f, 40f, 41f, 41f), Paint())
+        canvas.drawRect(RectF32(40f, 40f, 41f, 41f), Paint())
 
         canvas.translate(50f, 50f)
         drawTestCase(canvas, 1f, drawRef = true)
@@ -85,7 +85,7 @@ abstract class GlyphPosGm(
                 strokeWidth = 0f,
                 color = Color.GREEN,
             )
-            val bounds = Rect(0f, -font.size * 0.3f, font.size * kText.length * 0.6f, font.size * 0.3f)
+            val bounds = RectF32(0f, -font.size * 0.3f, font.size * kText.length * 0.6f, font.size * 0.3f)
             canvas.drawRect(bounds, paint)
 
             val advance = font.size * kText.length * 0.45f

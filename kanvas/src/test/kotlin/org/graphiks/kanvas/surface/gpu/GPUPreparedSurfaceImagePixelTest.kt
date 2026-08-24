@@ -33,7 +33,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedSurfaceImagePixelTest {
     @AfterTest
@@ -90,24 +90,24 @@ class GPUPreparedSurfaceImagePixelTest {
         )
         val operations = listOf(
             DisplayOp.DrawRect(
-                rect = Rect.fromLTRB(60f, 28f, 64f, 32f),
+                rect = RectF32.ofLTRB(60f, 28f, 64f, 32f),
                 paint = Paint.fill(Color.RED).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
-            drawImage(rgba, Rect.fromLTRB(0f, 0f, 2f, 2f), SamplingOptions.NEAREST),
-            drawImage(bgra, Rect.fromLTRB(3f, 0f, 5f, 2f), SamplingOptions.NEAREST),
+            drawImage(rgba, RectF32.ofLTRB(0f, 0f, 2f, 2f), SamplingOptions.NEAREST),
+            drawImage(bgra, RectF32.ofLTRB(3f, 0f, 5f, 2f), SamplingOptions.NEAREST),
             drawImage(
                 coverage,
-                Rect.fromLTRB(6f, 0f, 9f, 1f),
+                RectF32.ofLTRB(6f, 0f, 9f, 1f),
                 SamplingOptions.NEAREST,
                 Paint.fill(Color.RED),
             ),
-            drawImage(linear, Rect.fromLTRB(10f, 0f, 11f, 1f), SamplingOptions.LINEAR),
+            drawImage(linear, RectF32.ofLTRB(10f, 0f, 11f, 1f), SamplingOptions.LINEAR),
             DisplayOp.DrawImageNine(
                 image = grid,
-                center = Rect.fromLTRB(2f, 2f, 4f, 4f),
-                dst = Rect.fromLTRB(0f, 4f, 18f, 22f),
+                center = RectF32.ofLTRB(2f, 2f, 4f, 4f),
+                dst = RectF32.ofLTRB(0f, 4f, 18f, 22f),
                 paint = null,
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
@@ -118,7 +118,7 @@ class GPUPreparedSurfaceImagePixelTest {
                     xDivs = listOf(2, 4),
                     yDivs = emptyList(),
                 ),
-                dst = Rect.fromLTRB(20f, 4f, 38f, 10f),
+                dst = RectF32.ofLTRB(20f, 4f, 38f, 10f),
                 paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
@@ -307,12 +307,12 @@ class GPUPreparedSurfaceImagePixelTest {
 
     private fun drawImage(
         image: Image,
-        dst: Rect,
+        dst: RectF32,
         sampling: SamplingOptions,
         paint: Paint = Paint.fill(Color.WHITE),
     ) = DisplayOp.DrawImage(
         image = image,
-        src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = paint.copy(shader = Shader.Image(image, sampling = sampling)),
         transform = Matrix3x3F32.Identity,
@@ -334,7 +334,7 @@ class GPUPreparedSurfaceImagePixelTest {
         alphaType = AlphaType.PREMUL,
     )
 
-    private fun quadrant(x: Int, y: Int): Rect = Rect.fromLTRB(
+    private fun quadrant(x: Int, y: Int): RectF32 = RectF32.ofLTRB(
         x * 2f,
         y * 2f,
         x * 2f + 2f,

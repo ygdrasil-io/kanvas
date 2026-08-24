@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/inversepaths.cpp::inverse_paths` (800 × 1200).
@@ -44,10 +44,10 @@ class InversePathsGm : SkiaGm {
     )
 
     private fun generateSquare(cx: Float, cy: Float, w: Float): Path =
-        Path { }.apply { addRect(Rect.fromXYWH(cx - w / 2, cy - w / 2, w, w)) }
+        Path { }.apply { addRect(RectF32.ofOriginSize(cx - w / 2, cy - w / 2, w, w)) }
 
     private fun generateRectLine(cx: Float, cy: Float, l: Float): Path =
-        Path { }.apply { addRect(Rect.fromXYWH(cx - l / 2, cy, l, 0f)) }
+        Path { }.apply { addRect(RectF32.ofOriginSize(cx - l / 2, cy, l, 0f)) }
 
     private fun generateCircle(cx: Float, cy: Float, d: Float): Path =
         Path { }.apply { addCircle(cx, cy, d / 2) }
@@ -65,7 +65,7 @@ class InversePathsGm : SkiaGm {
         val dx = slideWidth + 2 * slideBoundary
         val dy = slideHeight + 2 * slideBoundary
 
-        val clipRect = Rect.fromLTRB(
+        val clipRect = RectF32.ofLTRB(
             slideBoundary, slideBoundary,
             slideBoundary + slideWidth, slideBoundary + slideHeight,
         )

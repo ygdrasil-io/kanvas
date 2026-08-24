@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -58,7 +58,7 @@ class HSLColorFilterGm : SkiaGm {
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = argbToColor(0xFFCCCCCCu.toInt())))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = argbToColor(0xFFCCCCCCu.toInt())))
 
         val gTests = arrayOf(
             arrayOf(floatArrayOf(-0.5f, 0.5f), floatArrayOf(0f, 0f), floatArrayOf(0f, 0f)),
@@ -66,7 +66,7 @@ class HSLColorFilterGm : SkiaGm {
             arrayOf(floatArrayOf(0f, 0f), floatArrayOf(0f, 0f), floatArrayOf(-1f, 1f)),
         )
 
-        val rect = Rect(0f, 0f, K_WHEEL_SIZE, K_WHEEL_SIZE)
+        val rect = RectF32(0f, 0f, K_WHEEL_SIZE, K_WHEEL_SIZE)
         var paint = Paint()
 
         for (shader in fShaders) {

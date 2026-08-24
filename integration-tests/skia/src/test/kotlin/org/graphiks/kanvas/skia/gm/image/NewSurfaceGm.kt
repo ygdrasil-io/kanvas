@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/surface.cpp` (new-surface variant).
  *  Tests Surface creation — creates a surface, draws a yellow/blue rect,
@@ -25,11 +25,11 @@ class NewSurfaceGm : SkiaGm {
         val surf = Surface(100, 100)
         surf.canvas { drawColor(Color.RED) }
         val image = surf.makeImageSnapshot()
-        canvas.drawImage(image, Rect.fromXYWH(10f, 10f, 100f, 100f))
+        canvas.drawImage(image, RectF32.ofOriginSize(10f, 10f, 100f, 100f))
 
         val surf2 = Surface(100, 100)
         surf2.canvas { drawColor(Color.RED) }
         val image2 = surf2.makeImageSnapshot()
-        canvas.drawImage(image2, Rect.fromXYWH(120f, 10f, 100f, 100f))
+        canvas.drawImage(image2, RectF32.ofOriginSize(120f, 10f, 100f, 100f))
     }
 }

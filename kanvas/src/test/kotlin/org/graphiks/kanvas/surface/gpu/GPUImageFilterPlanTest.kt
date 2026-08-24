@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -40,7 +40,7 @@ class GPUImageFilterPlanTest {
         paint: Paint,
         expectedCode: String,
         transform: Matrix3x3F32,
-        dst: Rect,
+        dst: RectF32,
         clip: ClipStack,
         targetSize: Int,
     ) {
@@ -87,7 +87,7 @@ class GPUImageFilterPlanTest {
     fun `draw image clamps blur bounds to the device rect clip`() {
         val command = imageOp(
             paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f, TileMode.CLAMP)),
-            clip = ClipStack.DeviceRect(Rect(8f, 6f, 16f, 18f)),
+            clip = ClipStack.DeviceRect(RectF32(8f, 6f, 16f, 18f)),
         ).toImageRectCommand(GPUDrawCommandID(3), target(64, 64))
 
         val plan = assertIs<GPUImageFilterPlan.Blur>(command.imageFilterPlan)
@@ -98,7 +98,7 @@ class GPUImageFilterPlanTest {
         paint: Paint,
         clip: ClipStack = ClipStack.WideOpen,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        dst: Rect = Rect(10f, 10f, 14f, 14f),
+        dst: RectF32 = RectF32(10f, 10f, 14f, 14f),
     ): DisplayOp.DrawImage = DisplayOp.DrawImage(
         image = Image.fromPixels(
             width = 4,
@@ -106,7 +106,7 @@ class GPUImageFilterPlanTest {
             pixels = ByteArray(4 * 4 * 4),
             sourceId = "image-filter-plan",
         ),
-        src = Rect(0f, 0f, 4f, 4f),
+        src = RectF32(0f, 0f, 4f, 4f),
         dst = dst,
         paint = paint,
         transform = transform,
@@ -120,19 +120,19 @@ class GPUImageFilterPlanTest {
         @JvmStatic
         fun unsupportedImageFilters(): Stream<Arguments> {
             val identity = Matrix3x3F32.Identity
-            val defaultDst = Rect(10f, 10f, 14f, 14f)
+            val defaultDst = RectF32(10f, 10f, 14f, 14f)
             fun case(
                 paint: Paint,
                 code: String,
                 transform: Matrix3x3F32 = identity,
-                dst: Rect = defaultDst,
+                dst: RectF32 = defaultDst,
                 clip: ClipStack = ClipStack.WideOpen,
                 targetSize: Int = 64,
             ) = Arguments.of(paint, code, transform, dst, clip, targetSize)
 
             val nestedBlur = ImageFilter.Blur(1f, 1f)
             val pictureRecorder = PictureRecorder()
-            pictureRecorder.beginRecording(Rect(0f, 0f, 1f, 1f))
+            pictureRecorder.beginRecording(RectF32(0f, 0f, 1f, 1f))
             val picture = pictureRecorder.finishRecordingAsPicture()
             val runtimeEffect = RuntimeEffect(
                 id = "unsupported-image-filter",
@@ -192,8 +192,8 @@ class GPUImageFilterPlanTest {
                     case(
                         Paint(imageFilter = ImageFilter.Blur(12f, 12f)),
                         "unsupported.image-filter.blur.intermediate-size",
-                        dst = Rect(36f, 36f, 2013f, 2013f),
-                        clip = ClipStack.DeviceRect(Rect(0f, 0f, 4096f, 4096f)),
+                        dst = RectF32(36f, 36f, 2013f, 2013f),
+                        clip = ClipStack.DeviceRect(RectF32(0f, 0f, 4096f, 4096f)),
                         targetSize = 4096,
                     ),
                     case(

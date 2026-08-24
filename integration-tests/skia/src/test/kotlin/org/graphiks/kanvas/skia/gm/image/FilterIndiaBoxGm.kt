@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/filterindiabox.cpp`.
  *  Tests ImageFilter.IndiaBox — renders a checkerboard image with
@@ -80,7 +80,7 @@ class FilterIndiaBoxGm : SkiaGm {
         canvas.save()
         canvas.translate(dx, 0f)
         canvas.concat(mat)
-        canvas.drawImage(image, Rect(0f, 0f, fW.toFloat(), fH.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, fW.toFloat(), fH.toFloat()))
         canvas.restore()
     }
 

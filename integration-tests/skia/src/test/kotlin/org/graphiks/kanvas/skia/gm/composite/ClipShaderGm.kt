@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clipshader.cpp::ClipShaderGM`.
@@ -27,7 +27,7 @@ class ClipShaderGm : SkiaGm {
     override val width = 145
     override val height = 128
 
-    private val maskRect = Rect.fromXYWH(0f, 10f, 64f, 44f)
+    private val maskRect = RectF32.ofOriginSize(0f, 10f, 64f, 44f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(5f, 0f)
@@ -67,7 +67,7 @@ class ClipShaderGm : SkiaGm {
             ),
             tileMode = TileMode.MIRROR,
         )
-        canvas.drawRect(Rect(0f, 0f, 145f, 128f), Paint(shader = gradient))
+        canvas.drawRect(RectF32(0f, 0f, 145f, 128f), Paint(shader = gradient))
         canvas.restore()
     }
 }

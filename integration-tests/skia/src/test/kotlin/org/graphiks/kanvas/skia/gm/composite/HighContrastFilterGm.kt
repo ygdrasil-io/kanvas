@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/highcontrastfilter.cpp::HighContrastFilterGM` (800 x 420).
@@ -49,17 +49,17 @@ class HighContrastFilterGm : SkiaGm {
     }
 
     private fun drawScene(c: GmCanvas) {
-        val layerBounds = Rect.fromLTRB(0f, 0f, 1f, 1f)
+        val layerBounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val xferPaint = Paint(colorFilter = ColorFilter.HighContrast)
         c.saveLayer(layerBounds, xferPaint)
 
         val paint = Paint(color = argb(255, 0x66, 0x11, 0x11))
-        c.drawRect(Rect.fromLTRB(0.1f, 0.2f, 0.9f, 0.4f), paint)
+        c.drawRect(RectF32.ofLTRB(0.1f, 0.2f, 0.9f, 0.4f), paint)
 
         val font = Font(typeface, size = kFontScale, antiAlias = false)
 
         c.drawString("A", 0.15f, 0.35f, font, Paint(color = argb(255, 0xbb, 0x77, 0x77)))
-        c.drawRect(Rect.fromLTRB(0.1f, 0.8f, 0.9f, 1.0f), Paint(color = argb(255, 0xcc, 0xcc, 0xff)))
+        c.drawRect(RectF32.ofLTRB(0.1f, 0.8f, 0.9f, 1.0f), Paint(color = argb(255, 0xcc, 0xcc, 0xff)))
         c.drawString("Z", 0.75f, 0.95f, font, Paint(color = argb(255, 0x88, 0x88, 0xbb)))
 
         val pts = arrayOf(Point2F32(0f, 0f), Point2F32(1f, 0f))
@@ -75,7 +75,7 @@ class HighContrastFilterGm : SkiaGm {
                 tileMode = TileMode.CLAMP,
             ),
         )
-        c.drawRect(Rect.fromLTRB(0.1f, 0.4f, 0.9f, 0.6f), gradPaint)
+        c.drawRect(RectF32.ofLTRB(0.1f, 0.4f, 0.9f, 0.6f), gradPaint)
 
         gradPaint = Paint(
             shader = Shader.LinearGradient(
@@ -87,7 +87,7 @@ class HighContrastFilterGm : SkiaGm {
                 tileMode = TileMode.CLAMP,
             ),
         )
-        c.drawRect(Rect.fromLTRB(0.1f, 0.6f, 0.9f, 0.8f), gradPaint)
+        c.drawRect(RectF32.ofLTRB(0.1f, 0.6f, 0.9f, 0.8f), gradPaint)
 
         c.restore()
     }

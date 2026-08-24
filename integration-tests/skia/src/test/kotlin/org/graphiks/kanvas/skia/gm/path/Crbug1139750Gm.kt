@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/crbug_1139750.cpp`.
  *  Regression test for crbug.com/1139750 — draws stroked rounded rects
@@ -29,7 +29,7 @@ class Crbug1139750Gm : SkiaGm {
             style = PaintStyle.STROKE,
             strokeWidth = 2f,
         )
-        val r = Rect.fromXYWH(1f, 1f, 19f, 19f)
+        val r = RectF32.ofOriginSize(1f, 1f, 19f, 19f)
         val rr = RRect(r, 1f)
         canvas.translate(10f, 10f)
         canvas.scale(1.47619f, 1.52381f)

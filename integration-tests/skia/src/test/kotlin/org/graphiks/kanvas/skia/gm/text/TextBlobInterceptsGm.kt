@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/texteffects.cpp::textblob_intercepts` (940 × 800).
@@ -177,7 +177,7 @@ class TextBlobInterceptsGm : SkiaGm {
         }
     }
 
-    private fun computeGlyphBounds(blob: TextBlob): Rect? {
+    private fun computeGlyphBounds(blob: TextBlob): RectF32? {
         var minX = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE
         var hasGlyphs = false
@@ -189,6 +189,6 @@ class TextBlobInterceptsGm : SkiaGm {
             }
         }
         if (!hasGlyphs) return null
-        return Rect(minX, 0f, maxX, blob.fontSize * 1.2f)
+        return RectF32(minX, 0f, maxX, blob.fontSize * 1.2f)
     }
 }

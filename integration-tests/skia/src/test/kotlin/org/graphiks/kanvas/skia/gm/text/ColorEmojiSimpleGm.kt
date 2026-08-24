@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Simple GM emulating color emoji rendering with a yellow smiley face. */
 class ColorEmojiSimpleGm : SkiaGm {
@@ -23,6 +23,6 @@ class ColorEmojiSimpleGm : SkiaGm {
         canvas.drawCircle(width / 2f, height / 2f, size / 2f, Paint(color = Color.fromRGBA(1f, 0.8f, 0f, 1f)))
         canvas.drawCircle(width / 2f - 15f, height / 2f - 10f, 8f, Paint(color = Color.BLACK))
         canvas.drawCircle(width / 2f + 15f, height / 2f - 10f, 8f, Paint(color = Color.BLACK))
-        canvas.drawArc(Rect(width / 2f - 20f, height / 2f + 5f, width / 2f + 20f, height / 2f + 30f), 0f, 180f, false, Paint(color = Color.BLACK, strokeWidth = 3f))
+        canvas.drawArc(RectF32(width / 2f - 20f, height / 2f + 5f, width / 2f + 20f, height / 2f + 30f), 0f, 180f, false, Paint(color = Color.BLACK, strokeWidth = 3f))
     }
 }

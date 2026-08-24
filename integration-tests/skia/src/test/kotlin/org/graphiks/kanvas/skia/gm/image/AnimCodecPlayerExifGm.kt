@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.skia.codec.SkAnimCodecPlayer
 
 private const val CELL_SIZE = 100
@@ -51,7 +51,7 @@ open class AnimCodecPlayerExifGm(
             val fw = frameImage.width.toFloat()
             val fh = frameImage.height.toFloat()
 
-            canvas.drawImage(frameImage, Rect(x, y, x + fw, y + fh))
+            canvas.drawImage(frameImage, RectF32(x, y, x + fw, y + fh))
         }
     }
 

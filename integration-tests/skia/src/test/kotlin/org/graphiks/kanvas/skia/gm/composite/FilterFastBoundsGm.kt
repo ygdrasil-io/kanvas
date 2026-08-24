@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class FilterFastBoundsGm : SkiaGm {
     override val name = "filterfastbounds"
@@ -37,16 +37,16 @@ class FilterFastBoundsGm : SkiaGm {
 
         // Column 0: saveLayer with picture filter
         val recorder = PictureRecorder()
-        val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        rc.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint(color = Color.BLACK))
+        val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        rc.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint(color = Color.BLACK))
         val pic = recorder.finishRecordingAsPicture()
         val picFilter = ImageFilter.Picture(pic)
 
         for (i in paints.indices) {
-            drawSaveLayerWithPaint(canvas, Rect.fromXYWH(0f, (i * kTileWidth).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[i])
+            drawSaveLayerWithPaint(canvas, RectF32.ofOriginSize(0f, (i * kTileWidth).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[i])
         }
         for (i in paints.indices) {
-            drawSaveLayerWithPaint(canvas, Rect.fromXYWH(kTileWidth.toFloat(), (i * kTileHeight).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[i])
+            drawSaveLayerWithPaint(canvas, RectF32.ofOriginSize(kTileWidth.toFloat(), (i * kTileHeight).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[i])
         }
 
         // Horizontal separators
@@ -61,15 +61,15 @@ class FilterFastBoundsGm : SkiaGm {
         // Geometry columns
         for (i in gDrawMethods.indices) {
             for (j in paints.indices) {
-                drawGeomWithPaint(canvas, i, Rect.fromXYWH(((i + kNumExtraCols) * kTileWidth).toFloat(), (j * kTileHeight).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[j])
+                drawGeomWithPaint(canvas, i, RectF32.ofOriginSize(((i + kNumExtraCols) * kTileWidth).toFloat(), (j * kTileHeight).toFloat(), kTileWidth.toFloat(), kTileHeight.toFloat()), paints[j])
             }
         }
     }
 
-    private fun drawGeomWithPaint(canvas: GmCanvas, drawIdx: Int, cell: Rect, paint: Paint) {
+    private fun drawGeomWithPaint(canvas: GmCanvas, drawIdx: Int, cell: RectF32, paint: Paint) {
         val redStroked = Paint(color = Color.RED, style = PaintStyle.STROKE)
         val blueStroked = Paint(color = Color.BLUE, style = PaintStyle.STROKE)
-        val r = Rect.fromLTRB(20f, 20f, 30f, 30f)
+        val r = RectF32.ofLTRB(20f, 20f, 30f, 30f)
 
         canvas.save()
         canvas.translate(cell.left, cell.top)
@@ -80,10 +80,10 @@ class FilterFastBoundsGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawSaveLayerWithPaint(canvas: GmCanvas, cell: Rect, paint: Paint) {
+    private fun drawSaveLayerWithPaint(canvas: GmCanvas, cell: RectF32, paint: Paint) {
         val redStroked = Paint(color = Color.RED, style = PaintStyle.STROKE)
         val blueStroked = Paint(color = Color.BLUE, style = PaintStyle.STROKE)
-        val bounds = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val bounds = RectF32.ofLTRB(0f, 0f, 10f, 10f)
 
         canvas.save()
         canvas.translate(cell.left + 30f, cell.top + 30f)
@@ -115,7 +115,7 @@ class FilterFastBoundsGm : SkiaGm {
         const val kNumExtraCols = 2
 
         val gDrawMethods = listOf(
-            { canvas: Canvas, r: Rect, p: Paint -> canvas.drawRect(r, p) },
+            { canvas: Canvas, r: RectF32, p: Paint -> canvas.drawRect(r, p) },
         )
     }
 }

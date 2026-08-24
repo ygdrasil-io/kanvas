@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp` alpha_image_shader_rt (350 × 50).
@@ -32,24 +32,24 @@ class AlphaImageShaderRTGm : SkiaGm {
         val shader = effect.makeShader(uniforms)
 
         val paint = Paint(color = Color.fromRGBA(0.5f, 0f, 0.5f, 1f))
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint)
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint)
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
         canvas.translate(50f, 0f)
 
-        canvas.drawRect(Rect(0f, 0f, 48f, 48f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 48f, 48f), paint.copy(shader = shader))
     }
 }

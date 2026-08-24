@@ -5,7 +5,7 @@ import org.graphiks.kanvas.types.Line
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
 import kotlin.math.PI
@@ -51,7 +51,7 @@ class Path internal constructor() {
     }
     fun close(): Path { commands.add(PathCommand.Close); return this }
 
-    fun addRect(rect: Rect): Path {
+    fun addRect(rect: RectF32): Path {
         moveTo(rect.left, rect.top)
         lineTo(rect.right, rect.top)
         lineTo(rect.right, rect.bottom)
@@ -60,9 +60,9 @@ class Path internal constructor() {
         return this
     }
 
-    fun addOval(rect: Rect): Path {
-        val cx = rect.center.x; val cy = rect.center.y
-        val rx = rect.width / 2f; val ry = rect.height / 2f
+    fun addOval(rect: RectF32): Path {
+        val cx = rect.center().x; val cy = rect.center().y
+        val rx = rect.width() / 2f; val ry = rect.height() / 2f
         val k = 0.5522847498f
         moveTo(cx + rx, cy)
         cubicTo(cx + rx, cy - k * ry, cx + k * rx, cy - ry, cx, cy - ry)
@@ -73,7 +73,7 @@ class Path internal constructor() {
         return this
     }
 
-    fun addCircle(cx: Float, cy: Float, r: Float): Path = addOval(Rect.fromLTRB(cx - r, cy - r, cx + r, cy + r))
+    fun addCircle(cx: Float, cy: Float, r: Float): Path = addOval(RectF32.ofLTRB(cx - r, cy - r, cx + r, cy + r))
 
     fun addRRect(rrect: RRect): Path {
         val r = rrect.rect
@@ -92,8 +92,8 @@ class Path internal constructor() {
     }
 
     private fun normalizedRadii(rrect: RRect): Array<CornerRadii> {
-        val width = rrect.rect.width.coerceAtLeast(0f)
-        val height = rrect.rect.height.coerceAtLeast(0f)
+        val width = rrect.rect.width().coerceAtLeast(0f)
+        val height = rrect.rect.height().coerceAtLeast(0f)
         val tl = rrect.topLeft.nonNegative()
         val tr = rrect.topRight.nonNegative()
         val br = rrect.bottomRight.nonNegative()
@@ -183,7 +183,7 @@ class Path internal constructor() {
      * geometry, or `null` when it has no points. Bézier control points are
      * included, so the result contains the ink even when it is not tight.
      */
-    fun computeBounds(): Rect? {
+    fun computeBounds(): RectF32? {
         var minX = Float.POSITIVE_INFINITY
         var minY = Float.POSITIVE_INFINITY
         var maxX = Float.NEGATIVE_INFINITY
@@ -210,10 +210,10 @@ class Path internal constructor() {
                 PathCommand.Close -> Unit
             }
         }
-        return if (minX.isFinite()) Rect.fromLTRB(minX, minY, maxX, maxY) else null
+        return if (minX.isFinite()) RectF32.ofLTRB(minX, minY, maxX, maxY) else null
     }
 
-    fun isRect(rect: Rect? = null): Boolean {
+    fun isRect(rect: RectF32? = null): Boolean {
         if (commands.size < 5) return false
         val move = commands[0] as? PathCommand.Move ?: return false
         val hasClose = commands.last() is PathCommand.Close
@@ -250,7 +250,7 @@ class Path internal constructor() {
         return true
     }
 
-    fun isOval(bounds: Rect? = null): Boolean {
+    fun isOval(bounds: RectF32? = null): Boolean {
         if (commands.size < 5) return false
         val move = commands[0] as? PathCommand.Move ?: return false
         val hasClose = commands.last() is PathCommand.Close
@@ -378,7 +378,7 @@ class Path internal constructor() {
         }
     }
 
-    fun conservativelyContainsRect(rect: Rect): Boolean {
+    fun conservativelyContainsRect(rect: RectF32): Boolean {
         val tl = Point2F32(rect.left, rect.top)
         val tr = Point2F32(rect.right, rect.top)
         val bl = Point2F32(rect.left, rect.bottom)

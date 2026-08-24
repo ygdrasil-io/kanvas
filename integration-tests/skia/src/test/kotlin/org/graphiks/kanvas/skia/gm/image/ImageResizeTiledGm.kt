@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imageresizetiled.cpp::imageresizetiled` (640 x 480).
@@ -35,9 +35,9 @@ class ImageResizeTiledGm : SkiaGm {
             var x = 0f
             while (x < width.toFloat()) {
                 canvas.save()
-                canvas.clipRect(Rect.fromXYWH(x, y, tileSize, tileSize))
+                canvas.clipRect(RectF32.ofOriginSize(x, y, tileSize, tileSize))
                 canvas.scale(1f / RESIZE_FACTOR, 1f / RESIZE_FACTOR)
-                canvas.saveLayer(Rect(0f, 0f, width.toFloat() * RESIZE_FACTOR, height.toFloat() * RESIZE_FACTOR))
+                canvas.saveLayer(RectF32(0f, 0f, width.toFloat() * RESIZE_FACTOR, height.toFloat() * RESIZE_FACTOR))
                 var posY = 0f
                 for (s in strs) {
                     posY += 100f

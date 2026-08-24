@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/tilemodes_scaled.cpp` ScaledTiling2GM with make_bm (650 × 610).
@@ -42,7 +42,7 @@ class ScaledTilemodeBitmapGm : SkiaGm {
         val modeNames = listOf("Clamp", "Repeat", "Mirror")
         val gW = 32f
         val gH = 32f
-        val r = Rect(-gW, -gH, gW * 2f, gH * 2f)
+        val r = RectF32(-gW, -gH, gW * 2f, gH * 2f)
         val spacingX = 96f
         val spacingY = 80f
 
@@ -50,7 +50,7 @@ class ScaledTilemodeBitmapGm : SkiaGm {
         var x = 66f
         val font = Font(typeface, 12f)
         for (kx in 0 until 3) {
-            canvas.drawString(modeNames[kx], x + r.width / 2f, y, font, Paint())
+            canvas.drawString(modeNames[kx], x + r.width() / 2f, y, font, Paint())
             x += spacingX
         }
         y += 16f + gH
@@ -82,7 +82,7 @@ class ScaledTilemodeBitmapGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val surf = Surface(32, 32)
-        surf.canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint(shader = gradShader)) }
+        surf.canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint(shader = gradShader)) }
         return surf.makeImageSnapshot()
     }
 }

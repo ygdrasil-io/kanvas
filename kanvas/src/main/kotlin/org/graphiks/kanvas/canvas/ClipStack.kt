@@ -13,7 +13,7 @@ sealed interface ClipStack {
     data object WideOpen : ClipStack
 
     /** Clipping to a single axis-aligned device rectangle. */
-    data class DeviceRect(val rect: org.graphiks.kanvas.types.Rect, val antiAlias: Boolean = true) : ClipStack
+    data class DeviceRect(val rect: org.graphiks.math.geometry.RectF32, val antiAlias: Boolean = true) : ClipStack
 
     /** Clipping to a list of clip operations (paths, round-rects, etc.). */
     data class Complex(val ops: List<ClipStackOp>) : ClipStack
@@ -46,7 +46,7 @@ sealed interface ClipStackOp {
     val perspectiveCaptureRefusal: Boolean
     /** Axis-aligned rectangle clip operation. */
     data class RectOp(
-        val rect: org.graphiks.kanvas.types.Rect,
+        val rect: org.graphiks.math.geometry.RectF32,
         val op: ClipOp,
         override val antiAlias: Boolean = true,
         override val perspectiveCaptureRefusal: Boolean = false,
@@ -86,7 +86,7 @@ internal fun ClipStack.intersectWith(other: ClipStack?): ClipStack = when (other
         is ClipStack.DeviceRect -> when (other) {
             is ClipStack.DeviceRect -> if (antiAlias == other.antiAlias) {
                 ClipStack.DeviceRect(
-                    org.graphiks.kanvas.types.Rect.fromLTRB(
+                    org.graphiks.math.geometry.RectF32.ofLTRB(
                         maxOf(rect.left, other.rect.left),
                         maxOf(rect.top, other.rect.top),
                         minOf(rect.right, other.rect.right),

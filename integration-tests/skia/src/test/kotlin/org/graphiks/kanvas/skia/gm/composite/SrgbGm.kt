@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/srgb.cpp`.
@@ -40,7 +40,7 @@ class SrgbGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val img = sourceImage
-        val imgRect = Rect(0f, 0f, 128f, 128f)
+        val imgRect = RectF32(0f, 0f, 128f, 128f)
 
         val array = floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
@@ -53,15 +53,15 @@ class SrgbGm : SkiaGm {
         val cf2 = ColorFilter.SRGBToLinear
 
         // Row 0 — reference + negate-red matrix
-        canvas.drawImage(img, Rect(0f, 0f, 128f, 128f))
-        canvas.drawImage(img, Rect(256f, 0f, 384f, 128f), Paint(colorFilter = cf0))
+        canvas.drawImage(img, RectF32(0f, 0f, 128f, 128f))
+        canvas.drawImage(img, RectF32(256f, 0f, 384f, 128f), Paint(colorFilter = cf0))
 
         // Row 1 — LinearToSRGB alone, then composed with matrix
-        canvas.drawImage(img, Rect(0f, 128f, 128f, 256f), Paint(colorFilter = cf1))
-        canvas.drawImage(img, Rect(256f, 128f, 384f, 256f), Paint(colorFilter = ColorFilter.Compose(cf1, cf0)))
+        canvas.drawImage(img, RectF32(0f, 128f, 128f, 256f), Paint(colorFilter = cf1))
+        canvas.drawImage(img, RectF32(256f, 128f, 384f, 256f), Paint(colorFilter = ColorFilter.Compose(cf1, cf0)))
 
         // Row 2 — SRGBToLinear alone, then composed with matrix
-        canvas.drawImage(img, Rect(0f, 256f, 128f, 384f), Paint(colorFilter = cf2))
-        canvas.drawImage(img, Rect(256f, 256f, 384f, 384f), Paint(colorFilter = ColorFilter.Compose(cf2, cf0)))
+        canvas.drawImage(img, RectF32(0f, 256f, 128f, 384f), Paint(colorFilter = cf2))
+        canvas.drawImage(img, RectF32(256f, 256f, 384f, 384f), Paint(colorFilter = ColorFilter.Compose(cf2, cf0)))
     }
 }

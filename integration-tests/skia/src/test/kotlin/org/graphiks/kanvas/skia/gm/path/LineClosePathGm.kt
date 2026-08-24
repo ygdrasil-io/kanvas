@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/linepaths.cpp::lineclosepath` (DEF_SIMPLE_GM,
@@ -73,24 +73,24 @@ class LineClosePathGm : SkiaGm {
             Paint(color = Color.BLACK, antiAlias = true),
         )
 
-        val cellRect = Rect.fromXYWH(0f, 0f, 100f, 30f)
+        val cellRect = RectF32.ofOriginSize(0f, 0f, 100f, 30f)
         val cellColor = Color.fromRGBA(0f, 0.44f, 0f, 1f)
         canvas.save()
         canvas.translate(10f, 30f)
         canvas.save()
         for ((capIdx, cap) in gCaps.withIndex()) {
             if (capIdx > 0) {
-                canvas.translate((cellRect.width + 40f) * gStyles.size, 0f)
+                canvas.translate((cellRect.width() + 40f) * gStyles.size, 0f)
             }
             canvas.save()
             for ((fillIdx, fill) in gFills.withIndex()) {
                 if (fillIdx > 0) {
-                    canvas.translate(0f, cellRect.height + 40f)
+                    canvas.translate(0f, cellRect.height() + 40f)
                 }
                 canvas.save()
                 for ((styleIdx, style) in gStyles.withIndex()) {
                     if (styleIdx > 0) {
-                        canvas.translate(cellRect.width + 40f, 0f)
+                        canvas.translate(cellRect.width() + 40f, 0f)
                     }
                     drawCell(
                         canvas, shape, cellColor, cellRect,
@@ -105,15 +105,15 @@ class LineClosePathGm : SkiaGm {
                     canvas.drawRect(cellRect, rectPaint)
 
                     canvas.drawString(
-                        style.second, 0f, cellRect.height + 12f,
+                        style.second, 0f, cellRect.height() + 12f,
                         labelFont, Paint(color = cellColor),
                     )
                     canvas.drawString(
-                        fill.second, 0f, cellRect.height + 24f,
+                        fill.second, 0f, cellRect.height() + 24f,
                         labelFont, Paint(color = cellColor),
                     )
                     canvas.drawString(
-                        cap.third, 0f, cellRect.height + 36f,
+                        cap.third, 0f, cellRect.height() + 36f,
                         labelFont, Paint(color = cellColor),
                     )
                 }
@@ -129,7 +129,7 @@ class LineClosePathGm : SkiaGm {
         canvas: GmCanvas,
         srcPath: Path,
         solidColor: Color,
-        clip: Rect,
+        clip: RectF32,
         cap: StrokeCap,
         join: StrokeJoin,
         style: PaintStyle,

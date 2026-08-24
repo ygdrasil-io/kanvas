@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/coordclampshader.cpp::coordclampshader`.
@@ -34,11 +34,11 @@ class CoordClampShaderGm : SkiaGm {
         }
 
         val imageShader = image.makeShader(TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.LINEAR)
-        val drawRect = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val drawRect = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
         val cx = image.width.toFloat() / 2f
         val cy = image.height.toFloat() / 2f
         val rotate = Matrix3x3F32.translation(cx, cy) * Matrix3x3F32.rotation(45f) * Matrix3x3F32.translation(-cx, -cy)
-        val clampRect = Rect(drawRect.left + 20f, drawRect.top + 40f, drawRect.right - 20f, drawRect.bottom - 40f)
+        val clampRect = RectF32(drawRect.left + 20f, drawRect.top + 40f, drawRect.right - 20f, drawRect.bottom - 40f)
 
         canvas.translate(10f, 10f)
 

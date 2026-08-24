@@ -5,6 +5,7 @@ import org.graphiks.math.vector.Vector2F32
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -26,7 +27,7 @@ class EffectsExpansionTest {
         assertTrue(s is Shader)
     }
     @Test fun `CoordClamp constructs`() {
-        val s = Shader.CoordClamp(Shader.SolidColor(Color.RED), Rect(0f, 0f, 100f, 100f))
+        val s = Shader.CoordClamp(Shader.SolidColor(Color.RED), RectF32(0f, 0f, 100f, 100f))
         assertTrue(s is Shader)
     }
 
@@ -142,7 +143,7 @@ class EffectsExpansionTest {
         assertTrue(f is ImageFilter)
     }
     @Test fun `Tile constructs`() {
-        val f = ImageFilter.Tile(Rect(0f, 0f, 10f, 10f), Rect(0f, 0f, 100f, 100f), null)
+        val f = ImageFilter.Tile(RectF32(0f, 0f, 10f, 10f), RectF32(0f, 0f, 100f, 100f), null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `Merge constructs`() {
@@ -154,7 +155,7 @@ class EffectsExpansionTest {
         assertTrue(f is ImageFilter)
     }
     @Test fun `Magnifier constructs`() {
-        val f = ImageFilter.Magnifier(Rect(0f, 0f, 50f, 50f), 2f, 0.1f, null)
+        val f = ImageFilter.Magnifier(RectF32(0f, 0f, 50f, 50f), 2f, 0.1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `MatrixConvolution constructs`() {

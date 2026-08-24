@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -29,7 +29,7 @@ class PathReverseGm : SkiaGm {
     override val height = 480
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        var r = Rect(10f, 10f, 100f, 60f)
+        var r = RectF32(10f, 10f, 100f, 60f)
 
         var builder = Path { }
 
@@ -47,7 +47,7 @@ class PathReverseGm : SkiaGm {
             lineTo(30f, 30f)
         }.also {
             it.addOval(r)
-            val r2 = Rect(r.left + 50f, r.top + 20f, r.right + 50f, r.bottom + 20f)
+            val r2 = RectF32(r.left + 50f, r.top + 20f, r.right + 50f, r.bottom + 20f)
             it.addOval(r2)
         }
         testRev(canvas, builder2)

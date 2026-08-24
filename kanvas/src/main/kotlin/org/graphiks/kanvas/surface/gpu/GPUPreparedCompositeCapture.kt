@@ -29,7 +29,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Collections
@@ -628,7 +628,7 @@ internal object GPUPreparedCompositeCapturer {
         private fun nextScopeId(): GPUPreparedCompositeScopeId =
             GPUPreparedCompositeScopeId("scope_${++scopeIdCounter}")
 
-        private fun Rect.toSnapshot(code: String, operationIndex: Int): GPUPreparedRectSnapshot {
+        private fun RectF32.toSnapshot(code: String, operationIndex: Int): GPUPreparedRectSnapshot {
             if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()) {
                 refuse(code, operationIndex, mapOf("reason" to "non-finite rectangle"))
             }

@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/composecolorfilter.cpp::composeCF` (200 x 400).
@@ -49,9 +49,9 @@ class ComposeColorFilterGm : SkiaGm {
             val cf0 = makeTintColorFilter(effect, 0xFF300000.toInt(), 0xFFA00000.toInt(), useSL)
             val cf1 = makeTintColorFilter(effect, 0xFF003000.toInt(), 0xFF00A000.toInt(), useSL)
 
-            canvas.drawRect(Rect(0f, 0f, 100f, 100f), Paint(shader = sweep, colorFilter = cf0))
+            canvas.drawRect(RectF32(0f, 0f, 100f, 100f), Paint(shader = sweep, colorFilter = cf0))
             canvas.translate(100f, 0f)
-            canvas.drawRect(Rect(0f, 0f, 100f, 100f), Paint(shader = sweep, colorFilter = cf1))
+            canvas.drawRect(RectF32(0f, 0f, 100f, 100f), Paint(shader = sweep, colorFilter = cf1))
             canvas.restore()
             canvas.translate(0f, 100f)
         }

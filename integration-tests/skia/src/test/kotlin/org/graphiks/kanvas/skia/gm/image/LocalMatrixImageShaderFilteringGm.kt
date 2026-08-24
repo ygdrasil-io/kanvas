@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/localmatriximageshader.cpp::localmatriximageshader_filtering` (256 x 256).
@@ -33,6 +33,6 @@ class LocalMatrixImageShaderFilteringGm : SkiaGm {
         val shader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.Cubic.Mitchell)
         val localShader = Shader.WithLocalMatrix(shader, m)
         val paint = Paint(shader = localShader)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 256f, 256f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 256f, 256f), paint)
     }
 }

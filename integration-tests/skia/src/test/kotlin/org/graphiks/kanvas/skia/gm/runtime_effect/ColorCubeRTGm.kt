@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp::ColorCubeRT` (512 x 512).
@@ -52,7 +52,7 @@ class ColorCubeRTGm : SkiaGm {
             uniforms,
             mapOf("child" to childShader, "color_cube" to lutShader),
         )
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
     }
 
     private fun synthetic256(): Image {

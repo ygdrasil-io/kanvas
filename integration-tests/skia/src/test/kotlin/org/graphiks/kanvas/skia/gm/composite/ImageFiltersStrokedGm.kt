@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefiltersstroked.cpp` (860 × 500).
@@ -36,7 +36,7 @@ class ImageFiltersStrokedGm : SkiaGm {
             ImageFilter.Dilate(4f, 4f, null),
         )
 
-        val r = Rect(0f, 0f, 64f, 64f)
+        val r = RectF32(0f, 0f, 64f, 64f)
         val margin = 32f
         val paint = Paint(
             color = Color.WHITE,
@@ -58,13 +58,13 @@ class ImageFiltersStrokedGm : SkiaGm {
                 when (i) {
                     0 -> canvas.drawLine(r.left, r.bottom, r.right, r.top, fp)
                     1 -> canvas.drawRect(r, fp)
-                    2 -> canvas.drawCircle(r.center.x, r.center.y, r.width * 2f / 5f, fp)
+                    2 -> canvas.drawCircle(r.center().x, r.center().y, r.width() * 2f / 5f, fp)
                 }
                 canvas.restore()
-                canvas.translate(r.width + margin, 0f)
+                canvas.translate(r.width() + margin, 0f)
             }
             canvas.restore()
-            canvas.translate(0f, r.height)
+            canvas.translate(0f, r.height())
         }
     }
 }

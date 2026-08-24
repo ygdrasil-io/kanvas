@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ManyRRectsGm : SkiaGm {
     override val name = "manyrrects"
@@ -36,7 +36,7 @@ class ManyRRectsGm : SkiaGm {
         val kYIncrement = 5
         val kXIncrement = 5
 
-        val rect = Rect.fromLTRB(0f, 0f, 4f, 4f)
+        val rect = RectF32.ofLTRB(0f, 0f, 4f, 4f)
         val rrect = RRect(rect, 1f)
         var total = 7_000
         while (total-- > 0) {

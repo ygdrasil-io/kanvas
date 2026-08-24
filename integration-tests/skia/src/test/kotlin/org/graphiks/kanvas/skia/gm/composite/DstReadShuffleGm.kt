@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
@@ -69,13 +69,13 @@ class DstReadShuffleGm : SkiaGm {
         surface.canvas { drawHairlines(this) }
         canvas.scale(5f, 5f)
         canvas.translate(67f, 10f)
-        canvas.drawImage(surface.makeImageSnapshot(), Rect.fromXYWH(0f, 0f, 35f, 35f))
+        canvas.drawImage(surface.makeImageSnapshot(), RectF32.ofOriginSize(0f, 0f, 35f, 35f))
     }
 
     private fun drawShape(canvas: GmCanvas, paint: Paint, type: ShapeType) {
-        val kRect = Rect.fromXYWH(0f, 0f, 75f, 85f)
+        val kRect = RectF32.ofOriginSize(0f, 0f, 75f, 85f)
         when (type) {
-            ShapeType.Circle -> canvas.drawCircle(kRect.center.x, kRect.center.y, kRect.width / 2f, paint)
+            ShapeType.Circle -> canvas.drawCircle(kRect.center().x, kRect.center().y, kRect.width() / 2f, paint)
             ShapeType.RoundRect -> canvas.drawRRect(RRect(kRect, 15f), paint)
             ShapeType.Rect -> canvas.drawRect(kRect, paint)
             ShapeType.ConvexPath -> {
@@ -133,7 +133,7 @@ class DstReadShuffleGm : SkiaGm {
 
     private fun drawHairlines(canvas: org.graphiks.kanvas.canvas.Canvas) {
         val background = Paint(color = kBackground)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 35f, 35f), background)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 35f, 35f), background)
         val hairPaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true)
         var x1 = 3f; var y1 = 7f; var x2 = 29f; var y2 = 7f
         val colorRandom = Random(0)

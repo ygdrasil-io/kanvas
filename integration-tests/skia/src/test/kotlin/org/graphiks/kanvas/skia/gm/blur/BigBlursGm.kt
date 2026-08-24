@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bigblurs.cpp`.
@@ -27,14 +27,14 @@ class BigBlursGm : SkiaGm {
     override val height = kHeight
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawRect(Rect(0f, 0f, kWidth.toFloat(), kHeight.toFloat()),
+        canvas.drawRect(RectF32(0f, 0f, kWidth.toFloat(), kHeight.toFloat()),
             Paint(color = Color.fromRGBA(0.867f, 0.867f, 0.867f, 1f)))
 
         val kBig = 65536f
         val sigma = convertRadiusToSigma(4f)
 
-        val bigRect = Rect(0f, 0f, kBig, kBig)
-        val insetRect = Rect(20f, 20f, kBig - 20f, kBig - 20f)
+        val bigRect = RectF32(0f, 0f, kBig, kBig)
+        val insetRect = RectF32(20f, 20f, kBig - 20f, kBig - 20f)
 
         val rectori = Path {
             moveTo(0f, 0f)
@@ -80,7 +80,7 @@ class BigBlursGm : SkiaGm {
                 for (k in origins.indices) {
                     canvas.save()
 
-                    val clipRect = Rect.fromXYWH(desiredX, desiredY, kCloseUpSize, kCloseUpSize)
+                    val clipRect = RectF32.ofOriginSize(desiredX, desiredY, kCloseUpSize, kCloseUpSize)
                     canvas.clipRect(clipRect)
 
                     canvas.translate(desiredX - origins[k].first, desiredY - origins[k].second)

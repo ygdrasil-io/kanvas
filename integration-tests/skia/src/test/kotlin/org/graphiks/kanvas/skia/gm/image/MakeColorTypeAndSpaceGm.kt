@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/makecolorspace.cpp::makecolortypeandspace`
@@ -40,7 +40,7 @@ class MakeColorTypeAndSpaceGm : SkiaGm {
         for (row in 0 until 4) {
             for (col in 0 until 3) {
                 val idx = row * 3 + col
-                val rect = Rect.fromXYWH(col * cellW, row * cellH, cellW, cellH)
+                val rect = RectF32.ofOriginSize(col * cellW, row * cellH, cellW, cellH)
                 val divider = Paint(color = colors[idx])
                 // Draw a colored rect as placeholder
                 canvas.drawRect(rect, divider)

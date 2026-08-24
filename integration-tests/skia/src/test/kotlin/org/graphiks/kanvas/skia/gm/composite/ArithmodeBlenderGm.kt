@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/arithmode.cpp::ArithmodeBlenderGM`.
@@ -39,12 +39,12 @@ class ArithmodeBlenderGm : SkiaGm {
 
         val k1 = -0.25f; val k2 = 0.25f; val k3 = 0.25f; val k4 = 0f
 
-        canvas.drawImage(src, Rect(10f, 10f, (10 + W).toFloat(), (10 + H).toFloat()))
-        canvas.drawImage(dst, Rect(10f, (10 + H + 10).toFloat(), (10 + W).toFloat(), (10 + H + 10 + H).toFloat()))
+        canvas.drawImage(src, RectF32(10f, 10f, (10 + W).toFloat(), (10 + H).toFloat()))
+        canvas.drawImage(dst, RectF32(10f, (10 + H + 10).toFloat(), (10 + W).toFloat(), (10 + H + 10 + H).toFloat()))
 
         canvas.translate((10 + W + 10).toFloat(), 10f)
 
-        val rect = Rect(0f, 0f, W.toFloat(), H.toFloat())
+        val rect = RectF32(0f, 0f, W.toFloat(), H.toFloat())
 
         // Cell 1 — paint.blender via saveLayer chain.
         canvas.drawImage(checker, rect)
@@ -76,7 +76,7 @@ class ArithmodeBlenderGm : SkiaGm {
         val surface = Surface(w, h)
         surface.canvas {
             drawRect(
-                Rect(0f, 0f, w.toFloat(), h.toFloat()),
+                RectF32(0f, 0f, w.toFloat(), h.toFloat()),
                 Paint(shader = Shader.LinearGradient(
                     Point2F32(0f, 0f), Point2F32(w.toFloat(), h.toFloat()),
                     listOf(
@@ -98,7 +98,7 @@ class ArithmodeBlenderGm : SkiaGm {
         val surface = Surface(w, h)
         surface.canvas {
             drawRect(
-                Rect(0f, 0f, w.toFloat(), h.toFloat()),
+                RectF32(0f, 0f, w.toFloat(), h.toFloat()),
                 Paint(shader = Shader.LinearGradient(
                     Point2F32(0f, h.toFloat()), Point2F32(w.toFloat(), 0f),
                     listOf(
@@ -123,7 +123,7 @@ class ArithmodeBlenderGm : SkiaGm {
                     val cellX = x / size
                     val cellY = y / size
                     val color = if ((cellX + cellY) % 2 == 0) c1 else c2
-                    drawRect(Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()), Paint(color = color))
+                    drawRect(RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()), Paint(color = color))
                 }
             }
         }

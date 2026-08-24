@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurs.cpp::blur2rectsnonninepatch` (700 x 500).
@@ -30,8 +30,8 @@ class Blur2RectsNonNinepatchGm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 4.3f),
         )
 
-        val outer = Rect.fromXYWH(10f, 110f, 100f, 100f)
-        val inner = Rect.fromXYWH(50f, 150f, 10f, 10f)
+        val outer = RectF32.ofOriginSize(10f, 110f, 100f, 100f)
+        val inner = RectF32.ofOriginSize(50f, 150f, 10f, 10f)
         val path = Path {
             moveTo(outer.left, outer.top)
             lineTo(outer.right, outer.top)
@@ -46,7 +46,7 @@ class Blur2RectsNonNinepatchGm : SkiaGm {
         }
         canvas.drawPath(path, paint)
 
-        val dx = kotlin.math.round(outer.width) + 40f + 0.25f
+        val dx = kotlin.math.round(outer.width()) + 40f + 0.25f
         canvas.translate(dx, 0f)
         canvas.drawPath(path, paint)
 

@@ -17,7 +17,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -27,7 +27,7 @@ class GPUPreparedVerticesFramePreparerTest {
         val prepared = GPUPreparedVerticesFramePreparer.prepare(
                 operations = listOf(
                     rectOp(),
-                    DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "test", "state"),
+                    DisplayOp.Annotation(RectF32.ofLTRB(0f, 0f, 1f, 1f), "test", "state"),
                     verticesOp(1f),
                     verticesOp(2f),
                     rectOp(),
@@ -216,7 +216,7 @@ class GPUPreparedVerticesFramePreparerTest {
     )
 
     private fun rectOp() = DisplayOp.DrawRect(
-        Rect.fromLTRB(1f, 1f, 3f, 3f), Paint.fill(Color.RED),
+        RectF32.ofLTRB(1f, 1f, 3f, 3f), Paint.fill(Color.RED),
         Matrix3x3F32.Identity, ClipStack.WideOpen,
     )
 

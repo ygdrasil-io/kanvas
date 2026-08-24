@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -32,7 +32,7 @@ class Orientation444Gm : SkiaGm {
             val hue = i.toFloat() / 8f
             val color = Color.fromRGBA(hue, 1f - hue, 0.5f)
             canvas.drawRect(
-                Rect.fromXYWH(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
+                RectF32.ofOriginSize(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
                 Paint(color = color),
             )
             // Draw orientation number
@@ -74,7 +74,7 @@ class RespectOrientationJpegGm : SkiaGm {
             val hue = (i.toFloat() / 8f + 0.3f) % 1f
             val color = Color.fromRGBA(0.5f, hue, 1f - hue)
             canvas.drawRect(
-                Rect.fromXYWH(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
+                RectF32.ofOriginSize(0f, 0f, IMG_W.toFloat(), IMG_H.toFloat()),
                 Paint(color = color),
             )
             canvas.restore()

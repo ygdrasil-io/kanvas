@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/closedcappedhairlines.cpp::hairlines_squarecap` (250 × 250).
@@ -87,8 +87,8 @@ class HairlinesSquarecapGm : SkiaGm {
 
         val highlightPaint = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = true)
         for ((_, first, last) in openPaths) {
-            canvas.drawRect(Rect.fromXYWH(first.first - 2f, first.second - 2f, 4f, 4f), highlightPaint)
-            canvas.drawRect(Rect.fromXYWH(last.first - 2f, last.second - 2f, 4f, 4f), highlightPaint)
+            canvas.drawRect(RectF32.ofOriginSize(first.first - 2f, first.second - 2f, 4f, 4f), highlightPaint)
+            canvas.drawRect(RectF32.ofOriginSize(last.first - 2f, last.second - 2f, 4f, 4f), highlightPaint)
         }
         canvas.restore()
     }

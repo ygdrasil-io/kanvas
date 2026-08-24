@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontEdging
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/all_bitmap_configs.cpp::DEF_SIMPLE_GM(not_native32_bitmap_config, ...)` (128 × 128).
@@ -34,7 +34,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         drawCheckerboard(canvas)
-        canvas.drawImage(makeNotNative32ColorWheel().toImage(), Rect.fromXYWH(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
+        canvas.drawImage(makeNotNative32ColorWheel().toImage(), RectF32.ofOriginSize(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {
@@ -42,7 +42,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
             for (x in 0 until SCALE step CHECK_SIZE) {
                 val dark = ((x / CHECK_SIZE) + (y / CHECK_SIZE)) % 2 == 0
                 canvas.drawRect(
-                    Rect.fromXYWH(x.toFloat(), y.toFloat(), CHECK_SIZE.toFloat(), CHECK_SIZE.toFloat()),
+                    RectF32.ofOriginSize(x.toFloat(), y.toFloat(), CHECK_SIZE.toFloat(), CHECK_SIZE.toFloat()),
                     Paint(color = if (dark) Color(0xFFCCCCCCu) else Color.WHITE, antiAlias = false),
                 )
             }

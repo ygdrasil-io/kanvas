@@ -11,7 +11,7 @@ import org.graphiks.kanvas.color.ColorProfile
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.ImageColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
@@ -299,11 +299,11 @@ class Bitmap(val info: ImageInfo) {
         }
     }
 
-    fun eraseArea(rect: Rect, color: Color) {
+    fun eraseArea(rect: RectF32, color: Color) {
         val sx = rect.left.toInt().coerceIn(0, width)
         val sy = rect.top.toInt().coerceIn(0, height)
-        val sw = rect.width.toInt().coerceAtMost(width - sx)
-        val sh = rect.height.toInt().coerceAtMost(height - sy)
+        val sw = rect.width().toInt().coerceAtMost(width - sx)
+        val sh = rect.height().toInt().coerceAtMost(height - sy)
         if (sw <= 0 || sh <= 0) return
         for (y in sy until sy + sh) {
             for (x in sx until sx + sw) {
@@ -312,11 +312,11 @@ class Bitmap(val info: ImageInfo) {
         }
     }
 
-    fun extractSubset(rect: Rect): Bitmap {
+    fun extractSubset(rect: RectF32): Bitmap {
         val sx = rect.left.toInt().coerceIn(0, width)
         val sy = rect.top.toInt().coerceIn(0, height)
-        val sw = rect.width.toInt().coerceAtMost(width - sx)
-        val sh = rect.height.toInt().coerceAtMost(height - sy)
+        val sw = rect.width().toInt().coerceAtMost(width - sx)
+        val sh = rect.height().toInt().coerceAtMost(height - sy)
         require(sw > 0 && sh > 0) { "empty subset rect: $rect" }
         val bpp = colorType.bytesPerPixel
         val subset = Bitmap(ImageInfo.make(sw, sh, colorType, alphaType, colorSpace))

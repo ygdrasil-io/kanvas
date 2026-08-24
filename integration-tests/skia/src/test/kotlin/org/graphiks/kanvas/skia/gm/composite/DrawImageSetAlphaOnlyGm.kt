@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/draw_image_set_alpha_only.cpp::DrawImageSetAlphaOnly`.
@@ -23,7 +23,7 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
     override val width = kM * kTileW
     override val height = 2 * kN * kTileH
 
-    private data class Tile(val image: Image, val src: Rect, val dst: Rect, val alpha: Float, val isAlphaOnly: Boolean)
+    private data class Tile(val image: Image, val src: RectF32, val dst: RectF32, val alpha: Float, val isAlphaOnly: Boolean)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         drawCheckerboard(canvas, 25)
@@ -63,8 +63,8 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
                     makeColorTile(kTileW + 2, kTileH + 2, x, y)
                 }
                 val srcL = 1f; val srcT = 1f
-                val src = Rect(srcL, srcT, srcL + kTileW, srcT + kTileH)
-                val dst = Rect(
+                val src = RectF32(srcL, srcT, srcL + kTileW, srcT + kTileH)
+                val dst = RectF32(
                     (x * kTileW).toFloat(), (y * kTileH).toFloat(),
                     ((x + 1) * kTileW).toFloat(), ((y + 1) * kTileH).toFloat(),
                 )
@@ -110,7 +110,7 @@ class DrawImageSetAlphaOnlyGm : SkiaGm {
             while (x < totalW) {
                 val parity = ((x / size) + (y / size)) % 2
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
                     if (parity == 0) lightGray else darkGray,
                 )
                 x += size

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -94,7 +94,7 @@ class SmallPathsGm : SkiaGm {
     }
 
     private fun makeRect(): Pair<Path, Float> {
-        val r = Rect(20f, 10f, 40f, 30f)
+        val r = RectF32(20f, 10f, 40f, 30f)
         return Path {
             moveTo(r.left, r.top)
             lineTo(r.right, r.top)
@@ -105,7 +105,7 @@ class SmallPathsGm : SkiaGm {
     }
 
     private fun makeOval(): Pair<Path, Float> {
-        val r = Rect(20f, 10f, 40f, 30f)
+        val r = RectF32(20f, 10f, 40f, 30f)
         return Path { }.also { it.addOval(r) } to 30f
     }
 

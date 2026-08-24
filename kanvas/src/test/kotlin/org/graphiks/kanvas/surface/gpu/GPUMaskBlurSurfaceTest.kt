@@ -15,7 +15,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -87,7 +87,7 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 8f, 9f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(RectF32(0f, 8f, 9f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
             }
             render().pixels.toUByteArray()
         }
@@ -154,7 +154,7 @@ class GPUMaskBlurSurfaceTest {
             32, 32,
             TopLevelMaskBlurPixelOracle.Shape.RRectShape(
                 RRect(
-                    rect = Rect(8f, 8f, 17f, 17f),
+                    rect = RectF32(8f, 8f, 17f, 17f),
                     topLeft = CornerRadii(2f, 2f),
                     topRight = CornerRadii(2f, 2f),
                     bottomRight = CornerRadii(2f, 2f),
@@ -228,8 +228,8 @@ class GPUMaskBlurSurfaceTest {
         // prepared under `mask blur composite under an analytic rect clip renders prepared`).
         val stacked = assertFailsWith<GPUPreparedSurfaceTerminalException> {
             renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
-                clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(RectF32(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(RectF32(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
             }
         }
         assertEquals("unsupported.native-mask-blur.clip", stacked.diagnostic.code.value)
@@ -239,7 +239,7 @@ class GPUMaskBlurSurfaceTest {
     fun `mask blur composite under an analytic rect clip renders prepared`() {
         requireWebGpu()
         val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-            clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
@@ -258,7 +258,7 @@ class GPUMaskBlurSurfaceTest {
         // centers EXACTLY on the clip edge (coverage 0.5): this pins the AA ramp and the
         // uniform64 packing of fractional bounds (compositeClipUniformBytes).
         val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-            clipRect(Rect(14.5f, 14.5f, 18.5f, 18.5f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(14.5f, 14.5f, 18.5f, 18.5f), ClipOp.INTERSECT, antiAlias = true)
         }
         val expected = TopLevelMaskBlurPixelOracle.render(
             32, 32, rectShape(0f, 0f, 32f, 32f), fullTarget(), BlurStyle.NORMAL, 2f,
@@ -276,7 +276,7 @@ class GPUMaskBlurSurfaceTest {
         // blur composite; the L-shape DIFFERENCE polygon decomposes into the band rects
         // [10,8,24,16] and [10,16,18,24].
         val pixels = renderSourceCompositedBlur(RenderConfig.DEFAULT) {
-            clipRect(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
             clipPath(
                 Path {
                     moveTo(10f, 8f)
@@ -323,11 +323,11 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                 save()
-                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(RectF32(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
                 drawRect(
-                    Rect(4f, 4f, 28f, 28f),
+                    RectF32(4f, 4f, 28f, 28f),
                     blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
                 )
                 restore()
@@ -354,10 +354,10 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
-                drawRect(Rect(0f, 0f, 16f, 32f), Paint.fill(Color.fromArgb(255, 128, 128, 128)))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 16f, 32f), Paint.fill(Color.fromArgb(255, 128, 128, 128)))
                 drawRect(
-                    Rect(12f, 8f, 24f, 24f),
+                    RectF32(12f, 8f, 24f, 24f),
                     blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
                 )
             }
@@ -386,9 +386,9 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(destinationColor))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(destinationColor))
                 drawRect(
-                    Rect(10f, 10f, 22f, 22f),
+                    RectF32(10f, 10f, 22f, 22f),
                     Paint.fill(source).copy(
                         antiAlias = false,
                         blendMode = BlendMode.DARKEN,
@@ -411,7 +411,7 @@ class GPUMaskBlurSurfaceTest {
         requireWebGpu()
         // Frame 1 fills the retained session target with blue.
         Surface(width = 32, height = 32).run {
-            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
             render()
         }
         // Frame 2 is the leading-blur-mixed shape: the FIRST paint op is a mask blur, a later
@@ -422,8 +422,8 @@ class GPUMaskBlurSurfaceTest {
         // shape [4,12) only at x>=2 or x<=13, so (0,0) lies outside the blur halo (coverage 0).
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(Rect(4f, 4f, 12f, 12f), blurPaint(BlurStyle.NORMAL, 2f))
-                drawRect(Rect(20f, 20f, 30f, 30f), Paint.fill(Color.RED))
+                drawRect(RectF32(4f, 4f, 12f, 12f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(RectF32(20f, 20f, 30f, 30f), Paint.fill(Color.RED))
             }
             render().pixels.toUByteArray()
         }
@@ -437,7 +437,7 @@ class GPUMaskBlurSurfaceTest {
         requireWebGpu()
         // Frame 1 fills the retained session target with blue.
         Surface(width = 32, height = 32).run {
-            canvas { drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
+            canvas { drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE)) }
             render()
         }
         // Frame 2 draws TWO blur rects and nothing else. Chain 0's composite is the frame's
@@ -452,8 +452,8 @@ class GPUMaskBlurSurfaceTest {
         // composite must leave it as chain 0's output.
         val pixels = Surface(width = 32, height = 32).run {
             canvas {
-                drawRect(Rect(6f, 6f, 14f, 14f), blurPaint(BlurStyle.NORMAL, 2f))
-                drawRect(Rect(14f, 14f, 22f, 22f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(RectF32(6f, 6f, 14f, 14f), blurPaint(BlurStyle.NORMAL, 2f))
+                drawRect(RectF32(14f, 14f, 22f, 22f), blurPaint(BlurStyle.NORMAL, 2f))
             }
             render().pixels.toUByteArray()
         }
@@ -470,9 +470,9 @@ class GPUMaskBlurSurfaceTest {
         val pixels = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
                 drawRect(
-                    Rect(10f, 10f, 22f, 22f),
+                    RectF32(10f, 10f, 22f, 22f),
                     blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC),
                 )
             }
@@ -497,9 +497,9 @@ class GPUMaskBlurSurfaceTest {
         Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
-                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
+                drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
                 drawRect(
-                    Rect(10f, 10f, 22f, 22f),
+                    RectF32(10f, 10f, 22f, 22f),
                     Paint.fill(source).copy(antiAlias = false, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma)),
                 )
             }
@@ -509,7 +509,7 @@ class GPUMaskBlurSurfaceTest {
     private fun renderOrdinaryRect(paint: Paint) = Surface(width = 32, height = 32).run {
         requireWebGpu()
         canvas {
-            drawRect(Rect(8f, 8f, 17f, 17f), paint)
+            drawRect(RectF32(8f, 8f, 17f, 17f), paint)
         }
         render()
     }
@@ -524,7 +524,7 @@ class GPUMaskBlurSurfaceTest {
     ) = Surface(width = 32, height = 32, config = config).run {
         requireWebGpu()
         canvas {
-            drawRect(Rect(8f, 8f, 17f, 17f), blurPaint(style, sigma))
+            drawRect(RectF32(8f, 8f, 17f, 17f), blurPaint(style, sigma))
         }
         render()
     }
@@ -538,7 +538,7 @@ class GPUMaskBlurSurfaceTest {
             save()
             clip()
             drawRect(
-                Rect(0f, 0f, 32f, 32f),
+                RectF32(0f, 0f, 32f, 32f),
                 blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC_OVER),
             )
             restore()
@@ -567,7 +567,7 @@ class GPUMaskBlurSurfaceTest {
         canvas {
             drawRRect(
                 RRect(
-                    rect = Rect(8f, 8f, 17f, 17f),
+                    rect = RectF32(8f, 8f, 17f, 17f),
                     topLeft = CornerRadii(2f, 2f),
                     topRight = CornerRadii(2f, 2f),
                     bottomRight = CornerRadii(2f, 2f),

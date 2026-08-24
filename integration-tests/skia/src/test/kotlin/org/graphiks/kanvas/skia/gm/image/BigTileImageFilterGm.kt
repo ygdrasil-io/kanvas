@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bigtileimagefilter.cpp`.
  *  Tests large-tile image filter rendering — draws paths with blur and
@@ -32,27 +32,27 @@ class BigTileImageFilterGm : SkiaGm {
         val redImage = createCircleTexture(kBitmapSize, Color.RED)
         val greenImage = createCircleTexture(kBitmapSize, Color.GREEN)
 
-        val bound = Rect.fromXYWH(0f, 0f, kWidth.toFloat(), kHeight.toFloat())
+        val bound = RectF32.ofOriginSize(0f, 0f, kWidth.toFloat(), kHeight.toFloat())
         val tileRed: ImageFilter = ImageFilter.Tile(
-            src = Rect.fromXYWH(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
-            dst = Rect.fromXYWH(0f, 0f, kWidth.toFloat(), kHeight.toFloat()),
+            src = RectF32.ofOriginSize(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
+            dst = RectF32.ofOriginSize(0f, 0f, kWidth.toFloat(), kHeight.toFloat()),
             input = null,
         )
         val redPaint = Paint(imageFilter = tileRed)
         canvas.saveLayer(bound, redPaint)
         canvas.restore()
 
-        val bound2 = Rect.fromXYWH(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat())
+        val bound2 = RectF32.ofOriginSize(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat())
         val tileGreen: ImageFilter = ImageFilter.Tile(
-            src = Rect.fromXYWH(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
-            dst = Rect.fromXYWH(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
+            src = RectF32.ofOriginSize(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
+            dst = RectF32.ofOriginSize(0f, 0f, kBitmapSize.toFloat(), kBitmapSize.toFloat()),
             input = null,
         )
         val greenPaint = Paint(imageFilter = tileGreen)
         canvas.translate(320f, 320f)
         canvas.saveLayer(bound2, greenPaint)
         canvas.setMatrix(org.graphiks.math.matrix.Matrix3x3F32.Identity)
-        canvas.drawImageRect(greenImage, bound2, Rect.fromXYWH(320f, 320f, kBitmapSize.toFloat(), kBitmapSize.toFloat()))
+        canvas.drawImageRect(greenImage, bound2, RectF32.ofOriginSize(320f, 320f, kBitmapSize.toFloat(), kBitmapSize.toFloat()))
         canvas.restore()
     }
 

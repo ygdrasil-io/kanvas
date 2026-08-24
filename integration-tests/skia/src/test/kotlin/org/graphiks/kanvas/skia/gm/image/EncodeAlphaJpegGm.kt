@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/encode_alpha_jpeg.cpp::EncodeJpegAlphaOptsGM` (400 × 200).
@@ -30,8 +30,8 @@ class EncodeAlphaJpegGm : SkiaGm {
 
         val xCoords = floatArrayOf(0f, 100f, 200f, 300f)
         for (xLeft in xCoords) {
-            canvas.drawImage(srcImg, Rect(xLeft, 0f, xLeft + 100f, 100f))
-            canvas.drawImage(srcImg, Rect(xLeft, 100f, xLeft + 100f, 200f))
+            canvas.drawImage(srcImg, RectF32(xLeft, 0f, xLeft + 100f, 100f))
+            canvas.drawImage(srcImg, RectF32(xLeft, 100f, xLeft + 100f, 200f))
         }
     }
 }

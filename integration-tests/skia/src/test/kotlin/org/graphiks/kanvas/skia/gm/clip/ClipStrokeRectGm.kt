@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clip_strokerect.cpp` (`ClipStrokeRectGM`).
@@ -32,8 +32,8 @@ class ClipStrokeRectGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         var paint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
 
-        val r1 = Rect.fromXYWH(20f, 20f, 100f, 100f)
-        val rect1 = Rect.fromXYWH(20f, 0f, 100f, 20f)
+        val r1 = RectF32.ofOriginSize(20f, 20f, 100f, 100f)
+        val rect1 = RectF32.ofOriginSize(20f, 0f, 100f, 20f)
 
         canvas.save()
         canvas.clipRect(rect1)
@@ -45,8 +45,8 @@ class ClipStrokeRectGm : SkiaGm {
 
         paint = paint.copy(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 22f)
 
-        val r2 = Rect.fromXYWH(20f, 140f, 100f, 100f)
-        val rect2 = Rect.fromXYWH(20f, 120f, 100f, 19f)
+        val r2 = RectF32.ofOriginSize(20f, 140f, 100f, 100f)
+        val rect2 = RectF32.ofOriginSize(20f, 120f, 100f, 19f)
 
         canvas.save()
         canvas.clipRect(rect2)

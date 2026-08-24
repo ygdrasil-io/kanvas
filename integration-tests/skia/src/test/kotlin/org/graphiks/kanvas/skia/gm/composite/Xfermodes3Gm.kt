@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/xfermodes3.cpp`.
  *  Tests all Skia blend modes (xfermodes) — draws layered coloured
@@ -100,7 +100,7 @@ class Xfermodes3Gm : SkiaGm {
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
 
-        val r = Rect(0f, 0f, kSize.toFloat(), kSize.toFloat())
+        val r = RectF32(0f, 0f, kSize.toFloat(), kSize.toFloat())
 
         val surface = Surface(kSize, kSize)
         surface.canvas {
@@ -112,7 +112,7 @@ class Xfermodes3Gm : SkiaGm {
         canvas.drawImage(image, r)
 
         val frame = Paint(style = PaintStyle.STROKE)
-        canvas.drawRect(Rect(-0.5f, -0.5f, kSize + 0.5f, kSize + 0.5f), frame)
+        canvas.drawRect(RectF32(-0.5f, -0.5f, kSize + 0.5f, kSize + 0.5f), frame)
 
         canvas.restore()
     }
@@ -123,8 +123,8 @@ class Xfermodes3Gm : SkiaGm {
             val dark = Color.fromRGBA(0.259f, 0.255f, 0.259f, 1f)
             val light = Color.fromRGBA(0.839f, 0.827f, 0.839f, 1f)
             clear(dark)
-            drawRect(Rect(1f, 0f, 2f, 1f), Paint(color = light))
-            drawRect(Rect(0f, 1f, 1f, 2f), Paint(color = light))
+            drawRect(RectF32(1f, 0f, 2f, 1f), Paint(color = light))
+            drawRect(RectF32(0f, 1f, 1f, 2f), Paint(color = light))
         }
         val image = bg.makeImageSnapshot()
         return Shader.WithLocalMatrix(

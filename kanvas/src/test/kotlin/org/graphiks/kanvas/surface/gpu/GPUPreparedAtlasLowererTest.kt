@@ -36,7 +36,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -67,10 +67,10 @@ class GPUPreparedAtlasLowererTest {
     @Test
     fun `every source rect must be finite nonempty and inside the artifact`() {
         val invalidRects = listOf(
-            Rect.fromLTRB(Float.NaN, 0f, 1f, 1f),
-            Rect.fromLTRB(1f, 1f, 1f, 2f),
-            Rect.fromLTRB(-1f, 0f, 1f, 1f),
-            Rect.fromLTRB(0f, 0f, 5f, 1f),
+            RectF32.ofLTRB(Float.NaN, 0f, 1f, 1f),
+            RectF32.ofLTRB(1f, 1f, 1f, 2f),
+            RectF32.ofLTRB(-1f, 0f, 1f, 1f),
+            RectF32.ofLTRB(0f, 0f, 5f, 1f),
         )
 
         invalidRects.forEach { invalid ->
@@ -296,7 +296,7 @@ class GPUPreparedAtlasLowererTest {
     @Test
     fun `sprite color paint alpha clip destination blend and order are each applied once`() {
         val clip = ClipStack.DeviceRect(
-            rect = Rect.fromLTRB(2f, 3f, 31f, 37f),
+            rect = RectF32.ofLTRB(2f, 3f, 31f, 37f),
             antiAlias = false,
         )
         val paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)).copy(
@@ -359,7 +359,7 @@ class GPUPreparedAtlasLowererTest {
                     transforms = listOf(Matrix3x3F32.Identity),
                     texRects = listOf(quadrant(0, 0)),
                     clip = ClipStack.DeviceRect(
-                        Rect.fromLTRB(-4f, 3f, 70f, 37f),
+                        RectF32.ofLTRB(-4f, 3f, 70f, 37f),
                         antiAlias = false,
                     ),
                 ),
@@ -381,9 +381,9 @@ class GPUPreparedAtlasLowererTest {
         )
 
         val invalid = listOf(
-            Rect.fromLTRB(16f, 3f, 4f, 37f),
-            Rect.fromLTRB(4f, 3f, Float.POSITIVE_INFINITY, 37f),
-            Rect.fromLTRB(70f, 3f, 80f, 37f),
+            RectF32.ofLTRB(16f, 3f, 4f, 37f),
+            RectF32.ofLTRB(4f, 3f, Float.POSITIVE_INFINITY, 37f),
+            RectF32.ofLTRB(70f, 3f, 80f, 37f),
         )
         invalid.forEach { rect ->
             val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
@@ -406,7 +406,7 @@ class GPUPreparedAtlasLowererTest {
     fun `antialiased and complex atlas clips refuse the whole logical operation`() {
         val invalidClips = listOf(
             ClipStack.DeviceRect(
-                rect = Rect.fromLTRB(2f, 3f, 31f, 37f),
+                rect = RectF32.ofLTRB(2f, 3f, 31f, 37f),
                 antiAlias = true,
             ),
             ClipStack.Complex(emptyList()),
@@ -492,7 +492,7 @@ class GPUPreparedAtlasLowererTest {
 
     private fun atlasOperation(
         transforms: List<Matrix3x3F32>,
-        texRects: List<Rect>,
+        texRects: List<RectF32>,
         colors: List<Color>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint? = null,
@@ -518,7 +518,7 @@ class GPUPreparedAtlasLowererTest {
         alphaType = AlphaType.PREMUL,
     )
 
-    private fun quadrant(x: Int, y: Int): Rect = Rect.fromLTRB(
+    private fun quadrant(x: Int, y: Int): RectF32 = RectF32.ofLTRB(
         x * 2f,
         y * 2f,
         x * 2f + 2f,

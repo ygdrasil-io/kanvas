@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/drawregion.cpp` (`DrawRegionGM`, GM name `drawregion`).
@@ -29,14 +29,14 @@ class DrawRegionGm : SkiaGm {
             style = PaintStyle.FILL,
             color = Color.MAGENTA,
         )
-        canvas.drawRect(Rect.fromLTRB(50f, 50f, 250f, 250f), fillPaint)
+        canvas.drawRect(RectF32.ofLTRB(50f, 50f, 250f, 250f), fillPaint)
 
         val regionPaint = Paint(color = Color.CYAN)
         var x = 50
         while (x < 250) {
             var y = 50
             while (y < 250) {
-                canvas.drawRect(Rect.fromXYWH(x.toFloat(), y.toFloat(), 1f, 1f), regionPaint)
+                canvas.drawRect(RectF32.ofOriginSize(x.toFloat(), y.toFloat(), 1f, 1f), regionPaint)
                 y += 2
             }
             x += 2

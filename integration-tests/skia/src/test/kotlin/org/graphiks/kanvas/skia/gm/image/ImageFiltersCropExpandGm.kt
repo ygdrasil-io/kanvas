@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefilterscropexpand.cpp`.
  *  Tests image-filter crop/expand — draws paths and shapes with blur
@@ -50,7 +50,7 @@ class ImageFiltersCropExpandGm : SkiaGm {
         while (outset <= 20) {
             canvas.save()
 
-            val bigRect = Rect.fromLTRB(
+            val bigRect = RectF32.ofLTRB(
                 (10 - outset).toFloat(),
                 (10 - outset).toFloat(),
                 (54 + outset).toFloat(),
@@ -72,10 +72,10 @@ class ImageFiltersCropExpandGm : SkiaGm {
         }
     }
 
-    private fun draw(canvas: GmCanvas, image: Image, layerRect: Rect, filter: ImageFilter?) {
+    private fun draw(canvas: GmCanvas, image: Image, layerRect: RectF32, filter: ImageFilter?) {
         val paint = Paint(imageFilter = filter)
         canvas.saveLayer(null, paint)
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
         canvas.restore()
 
         val strokePaint = Paint(color = Color.RED, style = PaintStyle.STROKE)
@@ -96,10 +96,10 @@ class ImageFiltersCropExpandGm : SkiaGm {
                 while (x < 48) {
                     save()
                     translate(x.toFloat(), y.toFloat())
-                    drawRect(Rect.fromXYWH(0f, 0f, 8f, 8f), darkPaint)
-                    drawRect(Rect.fromXYWH(8f, 0f, 8f, 8f), lightPaint)
-                    drawRect(Rect.fromXYWH(0f, 8f, 8f, 8f), lightPaint)
-                    drawRect(Rect.fromXYWH(8f, 8f, 8f, 8f), darkPaint)
+                    drawRect(RectF32.ofOriginSize(0f, 0f, 8f, 8f), darkPaint)
+                    drawRect(RectF32.ofOriginSize(8f, 0f, 8f, 8f), lightPaint)
+                    drawRect(RectF32.ofOriginSize(0f, 8f, 8f, 8f), lightPaint)
+                    drawRect(RectF32.ofOriginSize(8f, 8f, 8f, 8f), darkPaint)
                     restore()
                     x += 16
                 }

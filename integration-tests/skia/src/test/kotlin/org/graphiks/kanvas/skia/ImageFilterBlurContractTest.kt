@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.gm.blur.Blur2RectsGm
 import org.graphiks.kanvas.skia.gm.blur.ImageBlurRepeatUnclippedGm
 import org.graphiks.kanvas.test.GpuAvailability
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -19,7 +19,7 @@ class ImageFilterBlurContractTest {
     fun `backdrop save layer reports the stable refusal`() {
         GpuAvailability.requireWebGpu()
         val surface = Surface(width = 64, height = 64)
-        val crop = Rect.fromLTRB(0f, 0f, 64f, 64f)
+        val crop = RectF32.ofLTRB(0f, 0f, 64f, 64f)
 
         surface.canvas().saveLayer(
             SaveLayerRec(

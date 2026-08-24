@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/ninepatchstretch.cpp` (`NinePatchStretchGM`,
@@ -29,7 +29,7 @@ class NinePatchStretchGm : SkiaGm {
     override val height = 800
 
     private var fImage: Image? = null
-    private var fCenter = Rect(0f, 0f, 0f, 0f)
+    private var fCenter = RectF32(0f, 0f, 0f, 0f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (fImage == null) {
@@ -37,16 +37,16 @@ class NinePatchStretchGm : SkiaGm {
         }
         val img = fImage!!
 
-        val fixed = (img.width - fCenter.width).toFloat()
+        val fixed = (img.width - fCenter.width()).toFloat()
 
         val sizes = listOf(
-            Rect.fromXYWH(0f, 0f, fixed * 4f / 5f, fixed * 4f / 5f),
-            Rect.fromXYWH(0f, 0f, fixed * 4f / 5f, fixed * 4f),
-            Rect.fromXYWH(0f, 0f, fixed * 4f, fixed * 4f / 5f),
-            Rect.fromXYWH(0f, 0f, fixed * 4f, fixed * 4f),
+            RectF32.ofOriginSize(0f, 0f, fixed * 4f / 5f, fixed * 4f / 5f),
+            RectF32.ofOriginSize(0f, 0f, fixed * 4f / 5f, fixed * 4f),
+            RectF32.ofOriginSize(0f, 0f, fixed * 4f, fixed * 4f / 5f),
+            RectF32.ofOriginSize(0f, 0f, fixed * 4f, fixed * 4f),
         )
 
-        canvas.drawImage(img, Rect.fromXYWH(10f, 10f, 80f, 80f))
+        canvas.drawImage(img, RectF32.ofOriginSize(10f, 10f, 80f, 80f))
 
         val x = 100f
         val y = 100f
@@ -55,11 +55,11 @@ class NinePatchStretchGm : SkiaGm {
             for (iy in 0..1) {
                 for (ix in 0..1) {
                     val i = ix * 2 + iy
-                    val r = Rect.fromXYWH(
+                    val r = RectF32.ofOriginSize(
                         x + ix * fixed,
                         y + iy * fixed,
-                        sizes[i].width,
-                        sizes[i].height,
+                        sizes[i].width(),
+                        sizes[i].height(),
                     )
                     canvas.drawImageNine(img, fCenter, r)
                 }
@@ -76,24 +76,24 @@ class NinePatchStretchGm : SkiaGm {
         val surf = Surface(kSize, kSize)
         val sizeF = kSize.toFloat()
 
-        fCenter = Rect.fromLTRB(
+        fCenter = RectF32.ofLTRB(
             kFixed.toFloat(), kFixed.toFloat(),
             (kFixed + kStretchy).toFloat(), (kFixed + kStretchy).toFloat(),
         )
 
         surf.canvas {
-            var r = Rect.fromXYWH(0f, 0f, sizeF, sizeF)
+            var r = RectF32.ofOriginSize(0f, 0f, sizeF, sizeF)
             val strokeWidth = 6f
             val radius = kFixed.toFloat() - strokeWidth / 2f
 
             val paint = Paint(antiAlias = true, color = Color.RED)
             drawRRect(RRect(r, radius), paint)
 
-            r = Rect.fromXYWH(kFixed.toFloat(), 0f, kStretchy.toFloat(), sizeF)
+            r = RectF32.ofOriginSize(kFixed.toFloat(), 0f, kStretchy.toFloat(), sizeF)
             val paint2 = Paint(color = Color.fromRGBA(136f / 255f, 1f, 0f))
             drawRect(r, paint2)
 
-            r = Rect.fromXYWH(0f, kFixed.toFloat(), sizeF, kStretchy.toFloat())
+            r = RectF32.ofOriginSize(0f, kFixed.toFloat(), sizeF, kStretchy.toFloat())
             val paint3 = Paint(color = Color.fromRGBA(136f / 255f, 0f, 1f))
             drawRect(r, paint3)
         }

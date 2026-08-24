@@ -6,7 +6,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
@@ -36,19 +36,19 @@ class SurfaceTest {
         assertEquals(AlphaType.PREMUL, whole.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1), whole.pixels)
 
-        val subset = surface.makeImageSnapshot(Rect.fromLTRB(1f, 0f, 2f, 1f))
+        val subset = surface.makeImageSnapshot(RectF32.ofLTRB(1f, 0f, 2f, 1f))
         assertNotNull(subset)
         assertEquals(ColorType.BGRA_8888, subset!!.colorType)
         assertEquals(AlphaType.PREMUL, subset.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1), subset.pixels)
     }
-    @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
+    @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
     @Test
     fun `readPixels copies correct region`() {
         val surface = Surface(100, 100)
         surface.canvas { drawColor(Color.RED) }
         val buffer = UByteArray(10 * 10 * 4)
-        val ok = surface.readPixels(Rect.fromLTRB(0f, 0f, 10f, 10f), buffer)
+        val ok = surface.readPixels(RectF32.ofLTRB(0f, 0f, 10f, 10f), buffer)
         assertTrue(ok)
         // Verify first pixel is red (RGBA = 255,0,0,255)
         assertEquals(255.toByte(), buffer[0].toByte()) // R
@@ -93,7 +93,7 @@ class SurfaceTest {
         )
         val surface = Surface(100, 100)
         surface.canvas {
-            drawImage(img, Rect.fromLTRB(0f, 0f, 10f, 10f))
+            drawImage(img, RectF32.ofLTRB(0f, 0f, 10f, 10f))
         }
         val result = surface.render()
         val nonZero = (0 until result.pixels.size step 4).any { idx ->

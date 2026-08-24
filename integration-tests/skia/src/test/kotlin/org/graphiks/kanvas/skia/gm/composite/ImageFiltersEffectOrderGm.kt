@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 
 /**
@@ -60,7 +60,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
             imageFilter = edgeDetector,
         )
 
-        val crop = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val crop = RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat())
 
         canvas.save()
         canvas.clipRect(crop)

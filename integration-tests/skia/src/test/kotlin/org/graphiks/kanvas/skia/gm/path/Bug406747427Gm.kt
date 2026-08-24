@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/circulararcs.cpp::bug406747427`.
@@ -32,17 +32,17 @@ class Bug406747427Gm : SkiaGm {
         )
 
         canvas.drawArc(
-            Rect.fromXYWH(100f, 40f, 50f, 50f), 45f, 275f, useCenter = false,
+            RectF32.ofOriginSize(100f, 40f, 50f, 50f), 45f, 275f, useCenter = false,
             paint = paint.copy(color = Color.fromRGBA(1f, 0f, 0f, 1f), strokeWidth = 50f),
         )
 
         canvas.drawArc(
-            Rect.fromXYWH(100f, 140f, 50f, 50f), 45f, 275f, useCenter = false,
+            RectF32.ofOriginSize(100f, 140f, 50f, 50f), 45f, 275f, useCenter = false,
             paint = paint.copy(color = Color.fromRGBA(0f, 0f, 1f, 1f), strokeWidth = 48f),
         )
 
         canvas.drawArc(
-            Rect.fromXYWH(100f, 280f, 50f, 50f), 45f, 275f, useCenter = false,
+            RectF32.ofOriginSize(100f, 280f, 50f, 50f), 45f, 275f, useCenter = false,
             paint = paint.copy(color = Color.fromRGBA(0f, 1f, 0f, 1f), strokeWidth = 80f),
         )
     }

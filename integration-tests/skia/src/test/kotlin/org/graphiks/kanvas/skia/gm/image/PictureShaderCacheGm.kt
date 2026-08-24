@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class PictureShaderCacheGm : SkiaGm {
     override val name = "pictureshadercache"
@@ -35,7 +35,7 @@ class PictureShaderCacheGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (picture == null) {
             val recorder = PictureRecorder()
-            val pictureCanvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, tileSize, tileSize))
+            val pictureCanvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, tileSize, tileSize))
             drawTile(pictureCanvas)
             picture = recorder.finishRecordingAsPicture()
         }
@@ -48,7 +48,7 @@ class PictureShaderCacheGm : SkiaGm {
 
         // Surface colour-space cache-discrimination test omitted — Kanvas has no non-SRGB raster surface.
         val paint = Paint(shader = shader)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, tileSize, tileSize), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, tileSize, tileSize), paint)
     }
 
     private fun drawTile(canvas: Canvas) {
@@ -57,7 +57,7 @@ class PictureShaderCacheGm : SkiaGm {
         val circle = Path { }.apply { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
         canvas.drawPath(circle, paint)
         canvas.drawRect(
-            Rect.fromXYWH(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),
+            RectF32.ofOriginSize(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),
             paint,
         )
 

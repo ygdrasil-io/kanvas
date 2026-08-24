@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/perspimages.cpp::PerspImages` (1150x1280).
@@ -66,13 +66,13 @@ class PerspImagesGm : SkiaGm {
 
                         val w = origImage.width.toFloat()
                         val h = origImage.height.toFloat()
-                        val src = Rect.fromLTRB(w / 4f, h / 4f, 3f * w / 4f, 3f * h / 4f)
-                        val dst = Rect.fromLTRB(0f, 0f, 3f * w / 4f, 3f * h / 4f)
+                        val src = RectF32.ofLTRB(w / 4f, h / 4f, 3f * w / 4f, 3f * h / 4f)
+                        val dst = RectF32.ofLTRB(0f, 0f, 3f * w / 4f, 3f * h / 4f)
                         val usePaint = Paint(color = paint.color, antiAlias = aa, shader = paint.shader)
 
                         when (type) {
                             DrawType.DRAW_IMAGE ->
-                                canvas.drawImage(origImage, Rect(0f, 0f, w, h), usePaint)
+                                canvas.drawImage(origImage, RectF32(0f, 0f, w, h), usePaint)
                             DrawType.DRAW_IMAGE_RECT ->
                                 canvas.drawImageRect(origImage, src, dst, usePaint)
                         }

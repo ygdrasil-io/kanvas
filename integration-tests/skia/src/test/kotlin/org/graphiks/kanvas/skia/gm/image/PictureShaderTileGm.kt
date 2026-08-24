@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pictureshadertile.cpp::PictureShaderTileGM`
@@ -70,7 +70,7 @@ class PictureShaderTileGm : SkiaGm {
                 (i % kRowSize) * kFillSize * 1.1f,
                 (i / kRowSize) * kFillSize * 1.1f,
             )
-            canvas.drawRect(Rect.fromLTRB(0f, 0f, kFillSize, kFillSize), paint)
+            canvas.drawRect(RectF32.ofLTRB(0f, 0f, kFillSize, kFillSize), paint)
             canvas.restore()
         }
     }
@@ -79,7 +79,7 @@ class PictureShaderTileGm : SkiaGm {
         val recorder = PictureRecorder()
 
         val pictureCanvas = recorder.beginRecording(
-            Rect.fromLTRB(0f, 0f, kPictureSize, kPictureSize),
+            RectF32.ofLTRB(0f, 0f, kPictureSize, kPictureSize),
         )
         drawScene(pictureCanvas, kPictureSize)
         val picture: Picture = recorder.finishRecordingAsPicture()
@@ -87,7 +87,7 @@ class PictureShaderTileGm : SkiaGm {
         val offsetX = 100f
         val offsetY = 100f
         val offsetCanvas = recorder.beginRecording(
-            Rect.fromXYWH(offsetX, offsetY, kPictureSize, kPictureSize),
+            RectF32.ofOriginSize(offsetX, offsetY, kPictureSize, kPictureSize),
         )
         offsetCanvas.translate(offsetX, offsetY)
         drawScene(offsetCanvas, kPictureSize)
@@ -95,7 +95,7 @@ class PictureShaderTileGm : SkiaGm {
 
         for (i in Tile.tiles.indices) {
             val t = Tile.tiles[i]
-            val tile = Rect.fromXYWH(
+            val tile = RectF32.ofOriginSize(
                 t.x * kPictureSize, t.y * kPictureSize,
                 t.w * kPictureSize, t.h * kPictureSize,
             )
@@ -104,9 +104,9 @@ class PictureShaderTileGm : SkiaGm {
                     Matrix3x3F32.scaling(kFillSize / (2f * kPictureSize), kFillSize / (2f * kPictureSize))
 
             var pictureRef = picture
-            var tileRect: Rect? = tile
+            var tileRect: RectF32? = tile
 
-            if (tile == Rect.fromLTRB(0f, 0f, kPictureSize, kPictureSize)) {
+            if (tile == RectF32.ofLTRB(0f, 0f, kPictureSize, kPictureSize)) {
                 pictureRef = offsetPicture
                 tileRect = null
             }
@@ -140,7 +140,7 @@ class PictureShaderTileGm : SkiaGm {
 
         paint = paint.copy(color = Color.BLUE)
         canvas.drawRect(
-            Rect.fromXYWH(pictureSize / 2f, pictureSize / 2f, pictureSize / 2f, pictureSize / 2f),
+            RectF32.ofOriginSize(pictureSize / 2f, pictureSize / 2f, pictureSize / 2f, pictureSize / 2f),
             paint,
         )
 
@@ -158,7 +158,7 @@ class PictureShaderTileGm : SkiaGm {
             color = Color.BLACK,
             style = PaintStyle.STROKE,
         )
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, pictureSize, pictureSize), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, pictureSize, pictureSize), paint)
     }
 
     private data class Tile(

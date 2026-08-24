@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -33,11 +33,11 @@ class Bug41422450Gm : SkiaGm {
         )
         canvas.concat(mat)
 
-        val circle = Rect.fromLTRB(-3299135.5f, -12312541.0f, 9897407.0f, 884000.812f)
-        val cx = circle.center.x
-        val cy = circle.center.y
-        val rx = circle.width / 2f
-        val ry = circle.height / 2f
+        val circle = RectF32.ofLTRB(-3299135.5f, -12312541.0f, 9897407.0f, 884000.812f)
+        val cx = circle.center().x
+        val cy = circle.center().y
+        val rx = circle.width() / 2f
+        val ry = circle.height() / 2f
         val startAngle = 59.9999962f * PI / 180f
         val endAngle = (59.9999962f + 59.9999962f) * PI / 180f
         val startX = cx + rx * cos(startAngle).toFloat()

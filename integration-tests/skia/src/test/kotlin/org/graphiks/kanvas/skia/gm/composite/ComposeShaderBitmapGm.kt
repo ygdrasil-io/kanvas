@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/composeshader.cpp (ComposeShaderBitmapGM).
@@ -60,7 +60,7 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
             shaders = shaders.map { Shader.WithLocalMatrix(it, lm) }
         }
 
-        val r = Rect(0f, 0f, SQUARE_LENGTH.toFloat(), SQUARE_LENGTH.toFloat())
+        val r = RectF32(0f, 0f, SQUARE_LENGTH.toFloat(), SQUARE_LENGTH.toFloat())
 
         for (shader in shaders) {
             canvas.save()
@@ -71,11 +71,11 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
                     shader = shader,
                 )
                 canvas.drawRect(r, paint)
-                canvas.translate(r.width + 5f, 0f)
+                canvas.translate(r.width() + 5f, 0f)
                 alpha -= 0x28
             }
             canvas.restore()
-            canvas.translate(0f, r.height + 5f)
+            canvas.translate(0f, r.height() + 5f)
         }
     }
 

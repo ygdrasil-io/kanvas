@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/drawregionmodes.cpp` (375 × 500).
@@ -37,8 +37,8 @@ class DrawRegionModesGm : SkiaGm {
         canvas.drawColor(0f, 1f, 0f, 1f)
 
         val regionPath = Path { }.apply {
-            addRect(Rect(50f, 50f, 100f, 100f))
-            addRect(Rect(50f, 100f, 150f, 150f))
+            addRect(RectF32(50f, 50f, 100f, 100f))
+            addRect(RectF32(50f, 100f, 150f, 150f))
         }
 
         var paint = Paint(

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/image_shader.cpp` (tiny-scale variant).
  *  Applies an image shader with a 0.01x scale matrix to a decoded JPEG
@@ -33,7 +33,7 @@ class ImageshaderTinyscaleGm : SkiaGm {
         val shader = Shader.WithLocalMatrix(
             img.makeShader(TileMode.CLAMP, TileMode.CLAMP), lm,
         )
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(shader = shader))
     }
 
     private fun loadResource(path: String): ByteArray? =

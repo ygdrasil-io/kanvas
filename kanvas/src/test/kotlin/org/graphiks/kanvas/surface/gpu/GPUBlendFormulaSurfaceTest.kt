@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.blueByte
 import org.graphiks.kanvas.types.greenByte
 import org.graphiks.kanvas.types.redByte
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
@@ -79,7 +79,7 @@ class GPUBlendFormulaSurfaceTest {
         val result = Surface(width = 32, height = 32).run {
             canvas {
                 drawRect(
-                    Rect(4f, 4f, 28f, 28f),
+                    RectF32(4f, 4f, 28f, 28f),
                     Paint.fill(source).copy(antiAlias = false, blendMode = BlendMode.DARKEN),
                 )
             }

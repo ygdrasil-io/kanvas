@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -39,7 +39,7 @@ class ArcOfZorroGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xCC / 255f, 0xCC / 255f, 0xCC / 255f, 1f)
         val rand = Random(0)
-        val rect = Rect.fromXYWH(10f, 10f, 200f, 200f)
+        val rect = RectF32.ofOriginSize(10f, 10f, 200f, 200f)
         var paint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 35f

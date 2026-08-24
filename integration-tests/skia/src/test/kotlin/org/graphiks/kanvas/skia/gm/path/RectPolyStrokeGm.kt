@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rect_poly_stroke.cpp::rect_poly_stroke`
@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
  * 2 rotations × 2 procs) plus a 0-width green hairline overlay per
  * cell to expose any geometry mismatch between the two procs.
  *
- * Rect shapes include `(0×H)` / `(W×0)` / `(0×0)` degenerate cases —
+ * RectF32 shapes include `(0×H)` / `(W×0)` / `(0×0)` degenerate cases —
  * the dedicated rect rasterizer drops them entirely while the path
  * rasterizer may emit a stroked line / point.
  */
@@ -44,16 +44,16 @@ class RectPolyStrokeGm : SkiaGm {
         val THICKNESS = 20f
 
         val rects = arrayOf(
-            Rect.fromLTRB(0f, 0f, W, H),
-            Rect.fromLTRB(0f, 0f, W, 0f),
-            Rect.fromLTRB(0f, 0f, 0f, H),
-            Rect.fromLTRB(0f, 0f, 0f, 0f),
+            RectF32.ofLTRB(0f, 0f, W, H),
+            RectF32.ofLTRB(0f, 0f, W, 0f),
+            RectF32.ofLTRB(0f, 0f, 0f, H),
+            RectF32.ofLTRB(0f, 0f, 0f, 0f),
         )
         val degrees = floatArrayOf(0f, -30f)
         val joins = arrayOf(StrokeJoin.MITER, StrokeJoin.ROUND, StrokeJoin.BEVEL)
-        val procs: Array<Pair<(GmCanvas, Rect, Paint) -> Unit, Color>> = arrayOf(
-            { c: GmCanvas, r: Rect, p: Paint -> c.drawRect(r, p) } to Color.BLACK,
-            { c: GmCanvas, r: Rect, p: Paint -> c.drawPath(Path { }.apply { addRect(r) }, p) } to Color.fromRGBA(0f, 0f, 0x88f / 255f, 1f),
+        val procs: Array<Pair<(GmCanvas, RectF32, Paint) -> Unit, Color>> = arrayOf(
+            { c: GmCanvas, r: RectF32, p: Paint -> c.drawRect(r, p) } to Color.BLACK,
+            { c: GmCanvas, r: RectF32, p: Paint -> c.drawPath(Path { }.apply { addRect(r) }, p) } to Color.fromRGBA(0f, 0f, 0x88f / 255f, 1f),
         )
 
         canvas.translate(30f, 50f)

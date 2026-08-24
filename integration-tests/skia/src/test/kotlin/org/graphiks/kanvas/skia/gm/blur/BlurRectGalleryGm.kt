@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurrect.cpp::blurrect_gallery` (1200 x 1024).
@@ -43,7 +43,7 @@ class BlurRectGalleryGm : SkiaGm {
         for (i in widths.indices) {
             val rectW = widths[i]
             val rectH = heights[i]
-            val r = Rect.fromXYWH(0f, 0f, rectW.toFloat(), rectH.toFloat())
+            val r = RectF32.ofOriginSize(0f, 0f, rectW.toFloat(), rectH.toFloat())
 
             canvas.save()
 
@@ -111,10 +111,10 @@ class BlurRectGalleryGm : SkiaGm {
                     canvas.save()
                     canvas.translate(curX.toFloat(), curY.toFloat())
                     canvas.translate(
-                        -(bm.width - r.width) / 2f,
-                        -(bm.height - r.height) / 2f,
+                        -(bm.width - r.width()) / 2f,
+                        -(bm.height - r.height()) / 2f,
                     )
-                    canvas.drawImage(bm, Rect.fromXYWH(0f, 0f, bm.width.toFloat(), bm.height.toFloat()))
+                    canvas.drawImage(bm, RectF32.ofOriginSize(0f, 0f, bm.width.toFloat(), bm.height.toFloat()))
                     canvas.restore()
 
                     curX += bm.width + fPadding

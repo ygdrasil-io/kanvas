@@ -34,7 +34,7 @@ import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -51,7 +51,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
         val result = renderViaGpu(
             buffer = StaticDisplayListBuffer(
-                listOf(rect(Rect.fromLTRB(0f, 0f, 4f, 4f), color)),
+                listOf(rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), color)),
             ),
             width = 4,
             height = 4,
@@ -76,7 +76,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         // prepares a new one. The asserted frame below therefore always sees (targetCreations 1,
         // targetCloses 0), whether or not a previous test in the class already rendered.
         renderViaGpu(
-            buffer = StaticDisplayListBuffer(listOf(rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED))),
+            buffer = StaticDisplayListBuffer(listOf(rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Color.RED))),
             width = 4,
             height = 4,
             format = PixelFormat.RGBA8,
@@ -85,14 +85,14 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         GPUBackendRuntimeFactory.dispose()
 
         val operations = listOf(
-            rect(Rect.fromLTRB(1f, 1f, 7f, 7f), Color.RED),
+            rect(RectF32.ofLTRB(1f, 1f, 7f, 7f), Color.RED),
             DisplayOp.DrawPath(
                 triangle(),
                 Paint.fill(Color.GREEN).copy(antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
             ),
-            rect(Rect.fromLTRB(22f, 18f, 30f, 26f), Color.BLUE),
+            rect(RectF32.ofLTRB(22f, 18f, 30f, 26f), Color.BLUE),
         )
         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
 
@@ -160,7 +160,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 listOf(
                     drawImage(
                         source,
-                        Rect.fromLTRB(1f, 1f, 3f, 3f),
+                        RectF32.ofLTRB(1f, 1f, 3f, 3f),
                         SamplingOptions.NEAREST,
                     ),
                 ),
@@ -224,17 +224,17 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             ),
         )
         val operations = listOf(
-            rect(Rect.fromLTRB(0f, 0f, 2f, 2f), Color.RED),
-            drawImage(rgba, Rect.fromLTRB(3f, 0f, 5f, 2f), SamplingOptions.NEAREST),
-            drawImage(bgra, Rect.fromLTRB(6f, 0f, 8f, 2f), SamplingOptions.NEAREST),
+            rect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Color.RED),
+            drawImage(rgba, RectF32.ofLTRB(3f, 0f, 5f, 2f), SamplingOptions.NEAREST),
+            drawImage(bgra, RectF32.ofLTRB(6f, 0f, 8f, 2f), SamplingOptions.NEAREST),
             drawImage(
                 alpha,
-                Rect.fromLTRB(9f, 0f, 12f, 1f),
+                RectF32.ofLTRB(9f, 0f, 12f, 1f),
                 SamplingOptions.NEAREST,
                 Paint.fill(Color.RED),
             ),
-            drawImage(linear, Rect.fromLTRB(13f, 0f, 14f, 1f), SamplingOptions.LINEAR),
-            rect(Rect.fromLTRB(15f, 0f, 17f, 2f), Color.BLUE),
+            drawImage(linear, RectF32.ofLTRB(13f, 0f, 14f, 1f), SamplingOptions.LINEAR),
+            rect(RectF32.ofLTRB(15f, 0f, 17f, 2f), Color.BLUE),
         )
         val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
             RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
@@ -296,8 +296,8 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         val operations = listOf(
             DisplayOp.DrawImageNine(
                 image = gridImage,
-                center = Rect.fromLTRB(2f, 2f, 4f, 4f),
-                dst = Rect.fromLTRB(0f, 0f, 18f, 18f),
+                center = RectF32.ofLTRB(2f, 2f, 4f, 4f),
+                dst = RectF32.ofLTRB(0f, 0f, 18f, 18f),
                 paint = null,
                 transform = Matrix3x3F32.translation(1f, 1f),
                 clip = ClipStack.WideOpen,
@@ -308,9 +308,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                     xDivs = listOf(2, 4),
                     yDivs = emptyList(),
                     rects = listOf(
-                        Rect.fromLTRB(20f, 0f, 28f, 6f),
-                        Rect.fromLTRB(24f, 0f, 32f, 6f),
-                        Rect.fromLTRB(32f, 0f, 38f, 6f),
+                        RectF32.ofLTRB(20f, 0f, 28f, 6f),
+                        RectF32.ofLTRB(24f, 0f, 32f, 6f),
+                        RectF32.ofLTRB(32f, 0f, 38f, 6f),
                     ),
                     colors = listOf(Color.TRANSPARENT, Color.GREEN, Color.TRANSPARENT),
                     flags = listOf(
@@ -319,7 +319,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                         LatticeFlags.TRANSPARENT,
                     ),
                 ),
-                dst = Rect.fromLTRB(20f, 0f, 38f, 6f),
+                dst = RectF32.ofLTRB(20f, 0f, 38f, 6f),
                 paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
                 transform = Matrix3x3F32.translation(0f, 10f),
                 clip = ClipStack.WideOpen,
@@ -380,7 +380,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             pixels = GPUPreparedImageTestFixtures.atlas4x4Bytes,
         )
         val operations = listOf(
-            rect(Rect.fromLTRB(12f, 12f, 16f, 16f), Color.GREEN),
+            rect(RectF32.ofLTRB(12f, 12f, 16f, 16f), Color.GREEN),
             DisplayOp.DrawAtlas(
                 atlas = atlas,
                 transforms = listOf(
@@ -388,15 +388,15 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                     Matrix3x3F32.translation(8f, 2f),
                 ),
                 texRects = listOf(
-                    Rect.fromLTRB(0f, 0f, 2f, 2f),
-                    Rect.fromLTRB(2f, 0f, 4f, 2f),
+                    RectF32.ofLTRB(0f, 0f, 2f, 2f),
+                    RectF32.ofLTRB(2f, 0f, 4f, 2f),
                 ),
                 colors = listOf(Color.BLUE, Color.RED),
                 blendMode = BlendMode.SRC,
                 paint = Paint.fill(Color.WHITE),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.DeviceRect(
-                    rect = Rect.fromLTRB(3f, 2f, 11f, 4f),
+                    rect = RectF32.ofLTRB(3f, 2f, 11f, 4f),
                     antiAlias = false,
                 ),
             ),
@@ -462,13 +462,13 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             BlendMode.MODULATE,
         )
         val operations = buildList {
-            add(rect(Rect.fromLTRB(6f, 10f, 8f, 12f), Color.GREEN))
+            add(rect(RectF32.ofLTRB(6f, 10f, 8f, 12f), Color.GREEN))
             modes.forEachIndexed { index, mode ->
                 add(
                     DisplayOp.DrawAtlas(
                         atlas = atlas,
                         transforms = listOf(Matrix3x3F32.translation(0f, (index * 2).toFloat())),
-                        texRects = listOf(Rect.fromLTRB(0f, 0f, 3f, 1f)),
+                        texRects = listOf(RectF32.ofLTRB(0f, 0f, 3f, 1f)),
                         colors = listOf(Color.fromArgb(160, 192, 96, 32)),
                         blendMode = mode,
                         paint = Paint.fill(Color.fromArgb(192, 128, 64, 160)),
@@ -547,7 +547,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             Paint.fill(Color.fromArgb(192, 32, 224, 96)),
         )
         val operations = buildList {
-            add(rect(Rect.fromLTRB(2f, 10f, 4f, 12f), Color.GREEN))
+            add(rect(RectF32.ofLTRB(2f, 10f, 4f, 12f), Color.GREEN))
             modes.forEachIndexed { index, mode ->
                 paints.forEachIndexed { paintIndex, paint ->
                     add(
@@ -559,7 +559,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                                     (index * 2).toFloat(),
                                 ),
                             ),
-                            texRects = listOf(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+                            texRects = listOf(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
                             colors = listOf(Color.fromArgb(176, 80, 160, 48)),
                             blendMode = mode,
                             paint = paint,
@@ -622,10 +622,10 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             alphaType = AlphaType.PREMUL,
         )
         val operations = listOf(
-            rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED),
+            rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Color.RED),
             drawImage(
                 image,
-                Rect.fromLTRB(48f, 0f, 50f, 2f),
+                RectF32.ofLTRB(48f, 0f, 50f, 2f),
                 SamplingOptions.NEAREST,
             ),
             text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, Color.WHITE),
@@ -642,7 +642,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             ),
-            rect(Rect.fromLTRB(6f, 0f, 10f, 4f), Color.BLUE),
+            rect(RectF32.ofLTRB(6f, 0f, 10f, 4f), Color.BLUE),
         )
         var captured: GPUPreparedSurfaceFrameBuildResult.Ready? = null
         val executor = GPUPreparedSurfaceFrameExecutor(
@@ -783,7 +783,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     @Test
     fun `vertices frame routes through the product gate as prepared with exact native pixels`() {
         val operations = listOf(
-            rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED),
+            rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Color.RED),
             DisplayOp.DrawVertices(
                 vertices = Vertices(
                     mode = VertexMode.TRIANGLES,
@@ -827,7 +827,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
         val result = renderViaGpu(
             buffer = StaticDisplayListBuffer(
-                listOf(rect(Rect.fromLTRB(0f, 0f, 2f, 1f), Color.RED)),
+                listOf(rect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Color.RED)),
             ),
             width = 2,
             height = 1,
@@ -874,7 +874,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                                 ),
                                 uniforms = org.graphiks.kanvas.pipeline.UniformBlock {},
                             ),
-                            bounds = Rect.fromLTRB(0f, 0f, 4f, 4f),
+                            bounds = RectF32.ofLTRB(0f, 0f, 4f, 4f),
                         ),
                         paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
                         blendMode = null,
@@ -898,7 +898,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         )
     }
 
-    private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(
+    private fun rect(bounds: RectF32, color: Color) = DisplayOp.DrawRect(
         bounds,
         Paint.fill(color).copy(antiAlias = false),
         Matrix3x3F32.Identity,
@@ -946,12 +946,12 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
     private fun drawImage(
         image: Image,
-        dst: Rect,
+        dst: RectF32,
         sampling: SamplingOptions,
         paint: Paint = Paint.fill(Color.WHITE),
     ) = DisplayOp.DrawImage(
         image = image,
-        src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         dst = dst,
         paint = paint.copy(shader = Shader.Image(image, sampling = sampling)),
         transform = Matrix3x3F32.Identity,

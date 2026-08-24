@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/drrect_small_inner.cpp`.
@@ -26,7 +26,7 @@ class DRRectSmallInnerGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(antiAlias = true)
         val outerRadius = 35f
-        val outer = RRect(Rect.fromXYWH(0f, 0f, 2f * outerRadius, 2f * outerRadius), outerRadius)
+        val outer = RRect(RectF32.ofOriginSize(0f, 0f, 2f * outerRadius, 2f * outerRadius), outerRadius)
 
         canvas.translate(10f, 10f)
         for (offcenter in listOf(false, true)) {
@@ -37,7 +37,7 @@ class DRRectSmallInnerGm : SkiaGm {
                     var tx = outerRadius - innerRadiusX
                     val ty = outerRadius - innerRadiusY
                     if (offcenter) tx += 1f
-                    val inner = RRect(Rect.fromXYWH(tx, ty, 2f * innerRadiusX, 2f * innerRadiusY), 0f)
+                    val inner = RRect(RectF32.ofOriginSize(tx, ty, 2f * innerRadiusX, 2f * innerRadiusY), 0f)
 
                     val path = Path { }
                     path.addRRect(outer)

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -51,7 +51,7 @@ class GradientsInterestingGm : SkiaGm {
             canvas.save()
             for (mode in modes) {
                 val shader = Shader.LinearGradient(start = p0, end = p1, stops = cfg, tileMode = mode)
-                canvas.drawRect(Rect.fromXYWH(0f, 0f, cellSize, cellSize), Paint(shader = shader))
+                canvas.drawRect(RectF32.ofOriginSize(0f, 0f, cellSize, cellSize), Paint(shader = shader))
                 canvas.translate(cellSize * 1.1f, 0f)
             }
             canvas.restore()

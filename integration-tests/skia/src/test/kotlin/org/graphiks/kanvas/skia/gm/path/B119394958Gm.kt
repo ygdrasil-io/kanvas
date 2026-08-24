@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/b_119394958.cpp`.
@@ -37,7 +37,7 @@ class B119394958Gm : SkiaGm {
         )
 
         canvas.drawArc(
-            Rect.fromLTRB(30f, 30f, 70f, 70f),
+            RectF32.ofLTRB(30f, 30f, 70f, 70f),
             0f, 110f, false,
             Paint(
                 color = Color.RED,

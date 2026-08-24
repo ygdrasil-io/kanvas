@@ -10,7 +10,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -32,7 +32,7 @@ class GPUImageFilterSurfaceTest {
             renderFixtureThroughSurface(
                 image = opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
                 paint = Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP)),
-                dst = Rect.fromXYWH(8f, 8f, 9f, 9f),
+                dst = RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                 surfaceSize = 32,
             )
         }
@@ -65,7 +65,7 @@ class GPUImageFilterSurfaceTest {
             renderFixtureThroughSurface(
                 image = opaqueRedLeftEdge(width = 9, height = 9),
                 paint = Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP)),
-                dst = Rect.fromXYWH(8f, 8f, 9f, 9f),
+                dst = RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                 surfaceSize = 32,
             )
         }
@@ -80,11 +80,11 @@ class GPUImageFilterSurfaceTest {
                 canvas {
                     if (clip) {
                         save()
-                        clipRect(Rect(7.5f, 0f, 24f, 32f), ClipOp.INTERSECT, antiAlias = true)
+                        clipRect(RectF32(7.5f, 0f, 24f, 32f), ClipOp.INTERSECT, antiAlias = true)
                     }
                     drawImage(
                         opaqueRedLeftEdge(width = 9, height = 9),
-                        Rect.fromXYWH(8f, 8f, 9f, 9f),
+                        RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                         Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP)),
                     )
                     if (clip) restore()
@@ -101,8 +101,8 @@ class GPUImageFilterSurfaceTest {
         assertPreparedImageFilterRefusal {
             renderImageRectThroughSurface(
                 image = blueImageWithOpaqueRedCenterCrop(),
-                src = Rect(1f, 1f, 3f, 3f),
-                dst = Rect.fromXYWH(10f, 10f, 2f, 2f),
+                src = RectF32(1f, 1f, 3f, 3f),
+                dst = RectF32.ofOriginSize(10f, 10f, 2f, 2f),
                 paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP)),
                 surfaceSize = 32,
             )
@@ -116,7 +116,7 @@ class GPUImageFilterSurfaceTest {
             renderFixtureThroughSurface(
                 opaqueRedImpulse(9, 9, 4, 4),
                 Paint(imageFilter = ImageFilter.Blur(0f, 0f)),
-                Rect.fromXYWH(8f, 8f, 9f, 9f),
+                RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                 32,
             )
         }
@@ -145,7 +145,7 @@ class GPUImageFilterSurfaceTest {
     private fun renderFixtureThroughSurface(
         image: Image,
         paint: Paint,
-        dst: Rect,
+        dst: RectF32,
         surfaceSize: Int,
     ): ByteArray {
         val surface = Surface(surfaceSize, surfaceSize)
@@ -155,8 +155,8 @@ class GPUImageFilterSurfaceTest {
 
     private fun renderImageRectThroughSurface(
         image: Image,
-        src: Rect,
-        dst: Rect,
+        src: RectF32,
+        dst: RectF32,
         paint: Paint,
         surfaceSize: Int,
     ): ByteArray {
@@ -169,12 +169,12 @@ class GPUImageFilterSurfaceTest {
         canvas {
             drawImage(
                 opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
-                Rect.fromXYWH(0f, 0f, 9f, 9f),
+                RectF32.ofOriginSize(0f, 0f, 9f, 9f),
                 Paint(),
             )
             drawImage(
                 opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
-                Rect.fromXYWH(8f, 8f, 9f, 9f),
+                RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                 paint,
             )
         }
@@ -185,7 +185,7 @@ class GPUImageFilterSurfaceTest {
         canvas {
             drawImage(
                 opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
-                Rect.fromXYWH(8f, 8f, 9f, 9f),
+                RectF32.ofOriginSize(8f, 8f, 9f, 9f),
                 paint,
             )
         }

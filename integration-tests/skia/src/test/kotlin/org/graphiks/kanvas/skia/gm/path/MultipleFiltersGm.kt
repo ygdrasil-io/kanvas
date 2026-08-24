@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/imagefilters.cpp DEF_SIMPLE_GM(multiple_filters).
@@ -44,7 +44,7 @@ class MultipleFiltersGm : SkiaGm {
     private fun drawFilteredLayer(canvas: GmCanvas) {
         val restorePaint = Paint(color = Color.fromRGBA(1f, 1f, 1f, 0.5f))
         canvas.save()
-        canvas.clipRect(Rect(0f, 0f, 200f, 200f))
+        canvas.clipRect(RectF32(0f, 0f, 200f, 200f))
         canvas.save()
 
         val circlePaint = Paint(
@@ -72,7 +72,7 @@ class MultipleFiltersGm : SkiaGm {
                     antiAlias = false,
                 )
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()),
                     solid,
                 )
                 x += size

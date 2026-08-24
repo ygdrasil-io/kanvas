@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private const val kTileWidth = 40f
 private const val kTileHeight = 30f
@@ -28,7 +28,7 @@ private fun dqsDrawText(canvas: GmCanvas, text: String, typeface: org.graphiks.k
 private fun dqsDrawGradientTilesLocal(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
-            val tile = Rect.fromXYWH(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
+            val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
             val color = if ((i * kColCount + j) % 2 == 0) Color.BLUE else Color.WHITE
             canvas.drawRect(tile, Paint(color = color))
         }
@@ -38,7 +38,7 @@ private fun dqsDrawGradientTilesLocal(canvas: GmCanvas) {
 private fun dqsDrawGradientTilesAligned(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
-            val tile = Rect.fromXYWH(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
+            val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
             canvas.drawRect(tile, Paint(color = Color.BLUE))
         }
     }
@@ -47,7 +47,7 @@ private fun dqsDrawGradientTilesAligned(canvas: GmCanvas) {
 private fun dqsDrawColorTilesGreen(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
-            val tile = Rect.fromXYWH(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
+            val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
             val color = Color.fromRGBA(51f / 255f, 204f / 255f, 77f / 255f, 1f)
             canvas.drawRect(tile, Paint(color = color))
         }
@@ -57,7 +57,7 @@ private fun dqsDrawColorTilesGreen(canvas: GmCanvas) {
 private fun dqsDrawColorTilesMulticolor(canvas: GmCanvas) {
     for (i in 0 until kRowCount) {
         for (j in 0 until kColCount) {
-            val tile = Rect.fromXYWH(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
+            val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
             val r = (i + 1f) / kRowCount
             val g = (j + 1f) / kColCount
             val color = Color.fromRGBA(r, g, 0.4f, 1f)

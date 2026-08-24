@@ -20,7 +20,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/skbug_257.cpp`.
  *  Regression test for skbug.com/257 — draws text blobs with rotated
@@ -51,7 +51,7 @@ class Skbug257Gm : SkiaGm {
         val translate = 225364f
         canvas.translate(0f, -translate)
 
-        val rect = Rect(8f, 8f + translate, size - 8f, size - 8f + translate)
+        val rect = RectF32(8f, 8f + translate, size - 8f, size - 8f + translate)
         val shader = makeRotatedCheckerboardShader()
         val checkPaint = Paint(shader = shader)
         canvas.drawRect(rect, checkPaint)
@@ -102,9 +102,9 @@ class Skbug257Gm : SkiaGm {
             val fill = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f))
             for (yy in 0 until tileSize) {
                 for (xx in 0 until tileSize) {
-                    val r = Rect(xx.toFloat(), yy.toFloat(), (xx + 1).toFloat(), (yy + 1).toFloat())
+                    val r = RectF32(xx.toFloat(), yy.toFloat(), (xx + 1).toFloat(), (yy + 1).toFloat())
                     drawRect(r, fill)
-                    val r2 = Rect((xx + tileSize).toFloat(), (yy + tileSize).toFloat(), (xx + tileSize + 1).toFloat(), (yy + tileSize + 1).toFloat())
+                    val r2 = RectF32((xx + tileSize).toFloat(), (yy + tileSize).toFloat(), (xx + tileSize + 1).toFloat(), (yy + tileSize + 1).toFloat())
                     drawRect(r2, fill)
                 }
             }

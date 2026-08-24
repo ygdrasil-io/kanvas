@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `DEF_SIMPLE_GM(clip_shader_layer, canvas, 430, 320)` in `gm/complexclip.cpp`.
@@ -29,7 +29,7 @@ class ClipShaderLayerGm : SkiaGm {
         val bytes = this::class.java.classLoader?.getResourceAsStream("images/yellow_rose.png")?.readBytes() ?: return
         val img = Image.decode(bytes)
         val shader = img.makeShader(TileMode.CLAMP, TileMode.CLAMP, SamplingOptions.LINEAR)
-        val imgRect = Rect(0f, 0f, img.width.toFloat(), img.height.toFloat())
+        val imgRect = RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat())
 
         canvas.translate(10f, 10f)
         canvas.clipRect(imgRect)

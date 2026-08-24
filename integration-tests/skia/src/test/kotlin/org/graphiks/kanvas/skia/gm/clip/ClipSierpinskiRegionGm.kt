@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clip_sierpinski_region.cpp`.
@@ -24,7 +24,7 @@ class ClipSierpinskiRegionGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rects = buildSierpinskiRects()
 
-        canvas.saveLayer(Rect.fromXYWH(kTrans.toFloat(), kTrans.toFloat(), 1000f, 1000f), null)
+        canvas.saveLayer(RectF32.ofOriginSize(kTrans.toFloat(), kTrans.toFloat(), 1000f, 1000f), null)
 
         val cx = 50f
         val cy = 50f
@@ -39,14 +39,14 @@ class ClipSierpinskiRegionGm : SkiaGm {
         }
 
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.RED),
         )
         canvas.restore()
     }
 
-    private fun buildSierpinskiRects(): List<Rect> {
-        val rects = mutableListOf<Rect>()
+    private fun buildSierpinskiRects(): List<RectF32> {
+        val rects = mutableListOf<RectF32>()
         var n = 1
         var s = kSize / 3f
         for (i in 0 until kSteps) {
@@ -54,13 +54,13 @@ class ClipSierpinskiRegionGm : SkiaGm {
                 for (y in 0 until n) {
                     val l = (3 * x + 1) * s
                     val t = (3 * y + 1) * s
-                    rects.add(Rect.fromXYWH(l, t, s, s))
+                    rects.add(RectF32.ofOriginSize(l, t, s, s))
                 }
             }
             n *= 3
             s /= 3f
         }
-        return rects.map { Rect(it.left + kTrans, it.top + kTrans, it.right + kTrans, it.bottom + kTrans) }
+        return rects.map { RectF32(it.left + kTrans, it.top + kTrans, it.right + kTrans, it.bottom + kTrans) }
     }
 
     private companion object {

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/convexpaths.cpp`.
@@ -53,17 +53,17 @@ class ConvexPathsGm : SkiaGm {
 
         out.add(Path { moveTo(0f, 50f); quadTo(50f, 0f, 100f, 50f); quadTo(50f, 100f, 0f, 50f) })
 
-        out.add(Path { }.apply { addRect(Rect(0f, 0f, 100f, 100f)) })
-        out.add(Path { }.apply { addRect(Rect(0f, 0f, 100f, 100f)) })
+        out.add(Path { }.apply { addRect(RectF32(0f, 0f, 100f, 100f)) })
+        out.add(Path { }.apply { addRect(RectF32(0f, 0f, 100f, 100f)) })
 
         out.add(Path { }.apply { addCircle(50f, 50f, 50f) })
 
-        out.add(Path { }.apply { addOval(Rect.fromXYWH(0f, 0f, 50f, 100f)) })
-        out.add(Path { }.apply { addOval(Rect.fromXYWH(0f, 0f, 100f, 5f)) })
-        out.add(Path { }.apply { addOval(Rect.fromXYWH(0f, 0f, 1f, 100f)) })
+        out.add(Path { }.apply { addOval(RectF32.ofOriginSize(0f, 0f, 50f, 100f)) })
+        out.add(Path { }.apply { addOval(RectF32.ofOriginSize(0f, 0f, 100f, 5f)) })
+        out.add(Path { }.apply { addOval(RectF32.ofOriginSize(0f, 0f, 1f, 100f)) })
 
         val radii = CornerRadii(40f, 20f)
-        out.add(Path { }.apply { addRRect(RRect(Rect(0f, 0f, 100f, 100f), radii, radii, radii, radii)) })
+        out.add(Path { }.apply { addRRect(RRect(RectF32(0f, 0f, 100f, 100f), radii, radii, radii, radii)) })
 
         run {
             val length = 100f

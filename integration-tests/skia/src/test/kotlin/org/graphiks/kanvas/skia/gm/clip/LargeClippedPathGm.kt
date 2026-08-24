@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -22,10 +22,10 @@ private fun drawClippedFlower(canvas: GmCanvas, fillType: FillType) {
     val kGridCount = 50
     val kCellSize: Float = kSize.toFloat() / kGridCount
     for (y in 0 until kGridCount) {
-        clip.addRect(Rect.fromLTRB(0f, y * kCellSize, kSize.toFloat(), (y + 1) * kCellSize))
+        clip.addRect(RectF32.ofLTRB(0f, y * kCellSize, kSize.toFloat(), (y + 1) * kCellSize))
     }
     for (x in 0 until kGridCount) {
-        clip.addRect(Rect.fromLTRB(x * kCellSize, 0f, (x + 1) * kCellSize, kSize.toFloat()))
+        clip.addRect(RectF32.ofLTRB(x * kCellSize, 0f, (x + 1) * kCellSize, kSize.toFloat()))
     }
     canvas.clipPath(clip)
 
@@ -39,7 +39,7 @@ private fun drawClippedFlower(canvas: GmCanvas, fillType: FillType) {
         flower.quadTo(cos(c) * 2f, sin(c) * 2f, cos(theta), sin(theta))
     }
     flower.close()
-    flower.addOval(Rect.fromLTRB(-0.75f, -0.75f, 0.75f, 0.75f))
+    flower.addOval(RectF32.ofLTRB(-0.75f, -0.75f, 0.75f, 0.75f))
 
     canvas.translate(kSize / 2f, kSize / 2f)
     canvas.scale(kSize / 3f, kSize / 3f)

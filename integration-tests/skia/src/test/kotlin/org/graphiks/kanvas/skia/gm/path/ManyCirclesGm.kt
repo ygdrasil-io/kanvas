@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ManyCirclesGm : SkiaGm {
     override val name = "manycircles"
@@ -31,7 +31,7 @@ class ManyCirclesGm : SkiaGm {
             val x = rand.nextF() * kWidth - 100f
             val y = rand.nextF() * kHeight - 100f
             val w = rand.nextF() * 200f
-            val circle = Rect.fromXYWH(x, y, w, w)
+            val circle = RectF32.ofOriginSize(x, y, w, w)
             canvas.drawOval(circle, paint.copy(color = genColor(rand)))
         }
     }

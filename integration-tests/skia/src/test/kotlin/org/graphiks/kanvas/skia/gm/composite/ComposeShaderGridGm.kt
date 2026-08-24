@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/composeshader.cpp.
@@ -76,7 +76,7 @@ class ComposeShaderGridGm : SkiaGm {
         canvas.save()
         val gap = 4f
         val outset = gap + 1.5f
-        val borderR = Rect(
+        val borderR = RectF32(
             -outset,
             -outset,
             2f * CELL_SIZE + gap + outset,
@@ -104,7 +104,7 @@ class ComposeShaderGridGm : SkiaGm {
         mode: BlendMode,
         alpha: Float,
     ) {
-        val r = Rect(0f, 0f, CELL_SIZE, CELL_SIZE)
+        val r = RectF32(0f, 0f, CELL_SIZE, CELL_SIZE)
         canvas.saveLayer()
         val dstPaint = Paint(
             color = Color.fromRGBA(1f, 0f, 0f, alpha),
@@ -132,7 +132,7 @@ class ComposeShaderGridGm : SkiaGm {
             color = Color.fromRGBA(1f, 1f, 1f, alpha),
             shader = Shader.Blend(mode, dst, src),
         )
-        canvas.drawRect(Rect(0f, 0f, CELL_SIZE, CELL_SIZE), p)
+        canvas.drawRect(RectF32(0f, 0f, CELL_SIZE, CELL_SIZE), p)
     }
 
     private companion object {

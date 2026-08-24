@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val font = Font(
     typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!,
@@ -35,8 +35,8 @@ sealed class SimpleAaclipBaseGm(
     override val height = 240
 
     private val referenceBackground = 0xDD / 255f
-    private val fBase = Rect.fromLTRB(100.65f, 100.65f, 150.65f, 150.65f)
-    private val fRect = Rect.fromLTRB(130.65f, 130.65f, 170.65f, 170.65f)
+    private val fBase = RectF32.ofLTRB(100.65f, 100.65f, 150.65f, 150.65f)
+    private val fRect = RectF32.ofLTRB(130.65f, 130.65f, 170.65f, 170.65f)
     private val fBasePath = Path { }.apply { addRRect(RRect(fBase, 5f)) }
     private val fRectPath = Path { }.apply { addRRect(RRect(fRect, 5f)) }
     private val fBaseRectPath = Path { }.apply { addRect(fBase) }
@@ -59,7 +59,7 @@ sealed class SimpleAaclipBaseGm(
             canvas.clipPath(fRectRectPath, op, true)
         }
         val paint = Paint(color = color)
-        canvas.drawRect(Rect.fromLTRB(90f, 90f, 180f, 180f), paint)
+        canvas.drawRect(RectF32.ofLTRB(90f, 90f, 180f, 180f), paint)
         canvas.restore()
     }
 

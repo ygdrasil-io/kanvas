@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's CGImage GM (800 × 250).
@@ -27,13 +27,13 @@ class CgimageGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val surf = Surface(256, 256)
         surf.canvas {
-            drawRect(Rect(10f, 10f, 246f, 246f), Paint(color = Color.BLUE))
-            drawRect(Rect(20f, 20f, 236f, 236f), Paint(color = Color.GREEN))
-            drawRect(Rect(30f, 30f, 226f, 226f), Paint(color = Color.RED))
+            drawRect(RectF32(10f, 10f, 246f, 246f), Paint(color = Color.BLUE))
+            drawRect(RectF32(20f, 20f, 236f, 236f), Paint(color = Color.GREEN))
+            drawRect(RectF32(30f, 30f, 226f, 226f), Paint(color = Color.RED))
         }
         val img = surf.makeImageSnapshot()
-        canvas.drawImage(img, Rect(0f, 0f, 256f, 256f))
-        canvas.drawImage(img, Rect(256f, 0f, 512f, 256f))
-        canvas.drawImage(img, Rect(512f, 0f, 768f, 256f))
+        canvas.drawImage(img, RectF32(0f, 0f, 256f, 256f))
+        canvas.drawImage(img, RectF32(256f, 0f, 512f, 256f))
+        canvas.drawImage(img, RectF32(512f, 0f, 768f, 256f))
     }
 }

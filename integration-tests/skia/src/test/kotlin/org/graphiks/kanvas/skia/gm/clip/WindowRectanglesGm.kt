@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/windowrectangles.cpp`.
@@ -29,21 +29,21 @@ class WindowRectanglesGm : SkiaGm {
         drawCheckerboard(canvas)
 
         canvas.clipPath(
-            Path { }.apply { addRect(Rect(370.75f, 80.25f, 519.75f, 180.25f)) },
+            Path { }.apply { addRect(RectF32(370.75f, 80.25f, 519.75f, 180.25f)) },
             ClipOp.DIFFERENCE, antiAlias = false,
         )
         canvas.clipPath(
-            Path { }.apply { addRect(Rect(80.25f, 420.75f, 230.25f, 520.75f)) },
+            Path { }.apply { addRect(RectF32(80.25f, 420.75f, 230.25f, 520.75f)) },
             ClipOp.DIFFERENCE, antiAlias = true,
         )
         canvas.clipRRect(
-            RRect(Rect(200f, 200f, 400f, 400f), CornerRadii(60f, 45f)),
+            RRect(RectF32(200f, 200f, 400f, 400f), CornerRadii(60f, 45f)),
             ClipOp.DIFFERENCE, antiAlias = true,
         )
 
         canvas.clipRRect(
             RRect(
-                Rect(419.75f, 370.75f, 519.75f, 520.75f),
+                RectF32(419.75f, 370.75f, 519.75f, 520.75f),
                 CornerRadii(12f, 35f), CornerRadii(23f, 20f),
                 CornerRadii(12f, 35f), CornerRadii(23f, 20f),
             ),
@@ -52,7 +52,7 @@ class WindowRectanglesGm : SkiaGm {
 
         canvas.clipRRect(
             RRect(
-                Rect(80.25f, 80.75f, 180.25f, 229.75f),
+                RectF32(80.25f, 80.75f, 180.25f, 229.75f),
                 CornerRadii(6f, 4f), CornerRadii(8f, 12f),
                 CornerRadii(16f, 24f), CornerRadii(48f, 32f),
             ),
@@ -60,7 +60,7 @@ class WindowRectanglesGm : SkiaGm {
         )
 
         canvas.drawRect(
-            Rect(50f, 50f, 550f, 550f),
+            RectF32(50f, 50f, 550f, 550f),
             Paint(color = Color(0xFF00AA80u)),
         )
     }
@@ -75,7 +75,7 @@ class WindowRectanglesGm : SkiaGm {
             for (x in 0 until (canvas.width + size - 1) / size) {
                 val color = colors[(x + y) % 2]
                 canvas.drawRect(
-                    Rect((x * size).toFloat(), (y * size).toFloat(), ((x + 1) * size).toFloat(), ((y + 1) * size).toFloat()),
+                    RectF32((x * size).toFloat(), (y * size).toFloat(), ((x + 1) * size).toFloat(), ((y + 1) * size).toFloat()),
                     Paint(color = color),
                 )
             }

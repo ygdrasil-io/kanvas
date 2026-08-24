@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
@@ -44,11 +44,11 @@ class AnisotropicImageScaleLinearGm : SkiaGm {
             } else {
                 (gScales.size - i) * (img.height + kSpacer) - h
             }
-            val dst = Rect(
+            val dst = RectF32(
                 kSpacer.toFloat(), yOff.toFloat(),
                 (kSpacer + img.width).toFloat(), (yOff + h).toFloat(),
             )
-            canvas.drawImageRect(img, Rect(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
+            canvas.drawImageRect(img, RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
         }
 
         for (i in gScales.indices) {
@@ -62,11 +62,11 @@ class AnisotropicImageScaleLinearGm : SkiaGm {
                 xOff = img.width + 2 * kSpacer + img.width - w
                 yOff = kSpacer + (gScales.size - i - 1) * (img.height + kSpacer)
             }
-            val dst = Rect(
+            val dst = RectF32(
                 xOff.toFloat(), yOff.toFloat(),
                 (xOff + w).toFloat(), (yOff + img.height).toFloat(),
             )
-            canvas.drawImageRect(img, Rect(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
+            canvas.drawImageRect(img, RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat()), dst)
         }
     }
 

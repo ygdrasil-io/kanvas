@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/quadpaths.cpp::QuadClosePathGM` (1240 x 390).
@@ -52,23 +52,23 @@ class QuadClosePathGm : SkiaGm {
     )
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val cellRect = Rect.fromXYWH(0f, 0f, 100f, 30f)
+        val cellRect = RectF32.ofOriginSize(0f, 0f, 100f, 30f)
         canvas.save()
         canvas.translate(10f, 30f)
         canvas.save()
         for ((capIdx, cap) in gCaps.withIndex()) {
             if (capIdx > 0) {
-                canvas.translate((cellRect.width + 40f) * gStyles.size, 0f)
+                canvas.translate((cellRect.width() + 40f) * gStyles.size, 0f)
             }
             canvas.save()
             for ((fillIdx, fill) in gFills.withIndex()) {
                 if (fillIdx > 0) {
-                    canvas.translate(0f, cellRect.height + 40f)
+                    canvas.translate(0f, cellRect.height() + 40f)
                 }
                 canvas.save()
                 for ((styleIdx, style) in gStyles.withIndex()) {
                     if (styleIdx > 0) {
-                        canvas.translate(cellRect.width + 40f, 0f)
+                        canvas.translate(cellRect.width() + 40f, 0f)
                     }
                     val cellColor = Color.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
                     drawCell(
@@ -95,7 +95,7 @@ class QuadClosePathGm : SkiaGm {
         canvas: GmCanvas,
         srcPath: Path,
         solidColor: Color,
-        clip: Rect,
+        clip: RectF32,
         cap: StrokeCap,
         join: StrokeJoin,
         style: PaintStyle,

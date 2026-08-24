@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/drrect.cpp`.
@@ -26,23 +26,23 @@ class DRRectGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paint = Paint(antiAlias = true)
-        var r = Rect(0f, 0f, 100f, 100f)
+        var r = RectF32(0f, 0f, 100f, 100f)
         val radii = listOf(CornerRadii(0f, 0f), CornerRadii(30f, 1f), CornerRadii(10f, 40f), CornerRadii(40f, 40f))
-        val dx = r.width + 16f
-        val dy = r.height + 16f
+        val dx = r.width() + 16f
+        val dy = r.height() + 16f
 
         val outers = listOf(
             RRect(r, CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f)),
-            RRect(r, CornerRadii(r.width / 2f, r.height / 2f)),
+            RRect(r, CornerRadii(r.width() / 2f, r.height() / 2f)),
             RRect(r, 20f),
             RRect(r, radii[0], radii[1], radii[2], radii[3]),
         )
 
-        r = Rect(r.left + 25f, r.top + 25f, r.right - 25f, r.bottom - 25f)
+        r = RectF32(r.left + 25f, r.top + 25f, r.right - 25f, r.bottom - 25f)
         val inners = listOf(
             null,
             RRect(r, CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f), CornerRadii(0f, 0f)),
-            RRect(r, CornerRadii(r.width / 2f, r.height / 2f)),
+            RRect(r, CornerRadii(r.width() / 2f, r.height() / 2f)),
             RRect(r, 20f),
             RRect(r, radii[0], radii[1], radii[2], radii[3]),
         )

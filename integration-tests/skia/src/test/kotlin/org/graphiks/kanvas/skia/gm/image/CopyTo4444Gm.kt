@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/copy_to_4444.cpp::CopyTo4444GM`.
@@ -35,13 +35,13 @@ class CopyTo4444Gm : SkiaGm {
             ?: error("Resource not found: images/dog.jpg")
         val image = Image.decode(bytes)
 
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
 
         val bm4444 = copyTo4444(image)
         val image4444 = bm4444.toImage()
         canvas.drawImage(
             image4444,
-            Rect(
+            RectF32(
                 image.width.toFloat(), 0f,
                 (image.width + image4444.width).toFloat(), image4444.height.toFloat(),
             ),

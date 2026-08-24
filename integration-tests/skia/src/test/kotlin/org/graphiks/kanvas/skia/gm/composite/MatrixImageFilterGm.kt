@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/matriximagefilter.cpp::matriximagefilter` (420 × 100).
@@ -30,7 +30,7 @@ class MatrixImageFilterGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val checker = makeCheckerboard()
         val matrix = Matrix3x3F32.skewing(0.5f, 0.2f)
-        val srcRect = Rect.fromXYWH(0f, 0f, 96f, 96f)
+        val srcRect = RectF32.ofOriginSize(0f, 0f, 96f, 96f)
         val margin = 10f
 
         canvas.translate(margin, margin)
@@ -41,7 +41,7 @@ class MatrixImageFilterGm : SkiaGm {
         canvas.drawImage(checker, srcRect)
         canvas.restore()
 
-        canvas.translate(srcRect.width + margin, 0f)
+        canvas.translate(srcRect.width() + margin, 0f)
 
         // Linear sampling
         canvas.save()
@@ -59,10 +59,10 @@ class MatrixImageFilterGm : SkiaGm {
             while (y < 64) {
                 var x = 0
                 while (x < 64) {
-                    drawRect(Rect.fromXYWH(x.toFloat(), y.toFloat(), 16f, 16f), dark)
-                    drawRect(Rect.fromXYWH((x + 16).toFloat(), y.toFloat(), 16f, 16f), light)
-                    drawRect(Rect.fromXYWH(x.toFloat(), (y + 16).toFloat(), 16f, 16f), light)
-                    drawRect(Rect.fromXYWH((x + 16).toFloat(), (y + 16).toFloat(), 16f, 16f), dark)
+                    drawRect(RectF32.ofOriginSize(x.toFloat(), y.toFloat(), 16f, 16f), dark)
+                    drawRect(RectF32.ofOriginSize((x + 16).toFloat(), y.toFloat(), 16f, 16f), light)
+                    drawRect(RectF32.ofOriginSize(x.toFloat(), (y + 16).toFloat(), 16f, 16f), light)
+                    drawRect(RectF32.ofOriginSize((x + 16).toFloat(), (y + 16).toFloat(), 16f, 16f), dark)
                     x += 32
                 }
                 y += 32

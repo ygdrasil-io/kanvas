@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/textblobgeometrychange.cpp::TextBlobGeometryChange`
@@ -32,7 +32,7 @@ class TextBlobGeometryChangeGm : SkiaGm {
         val blob = font.toTextBlob(text, 10f, 10f)
 
         // White background for top half
-        val rect = Rect(0f, 0f, width.toFloat(), height / 2f)
+        val rect = RectF32(0f, 0f, width.toFloat(), height / 2f)
         canvas.drawRect(rect, Paint(color = Color.WHITE))
         canvas.drawTextBlob(blob, 0f, 0f, Paint())
 

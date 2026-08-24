@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/localmatrixshader.cpp` localmatrixshader_nested (450 × 1200).
@@ -38,7 +38,7 @@ class LocalMatrixShaderNestedGm : SkiaGm {
         val outer = Matrix3x3F32.scaling(2f, 2f)
         val inner = Matrix3x3F32.translation(20f, 20f)
 
-        val rect = Rect(0f, 0f, fw * 2f + 40f, fh * 2f + 40f)
+        val rect = RectF32(0f, 0f, fw * 2f + 40f, fh * 2f + 40f)
         val border = Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 1f)
         val empty = Paint()
         val baseShader = Shader.Image(image, TileMode.CLAMP, TileMode.CLAMP)
@@ -62,13 +62,13 @@ class LocalMatrixShaderNestedGm : SkiaGm {
             for (s in shaders) {
                 canvas.drawRect(rect, Paint(shader = s))
                 canvas.drawRect(rect, border)
-                canvas.translate(0f, rect.height * 1.5f)
+                canvas.translate(0f, rect.height() * 1.5f)
             }
             canvas.restore()
             if (pass == 0) {
-                canvas.translate(0f, rect.height * shaders.size * 1.5f)
+                canvas.translate(0f, rect.height() * shaders.size * 1.5f)
             } else if (pass == 1) {
-                canvas.translate(rect.width * 1.5f, rect.height * shaders.size * 1.5f)
+                canvas.translate(rect.width() * 1.5f, rect.height() * shaders.size * 1.5f)
                 canvas.scale(2f, 2f)
             }
         }

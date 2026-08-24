@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's gm/colorfilterimagefilter.cpp (colorfiltershader).
@@ -45,7 +45,7 @@ class ColorFilterShaderGm : SkiaGm {
             ),
         )
 
-        val r = Rect(0f, 0f, 120f, 120f)
+        val r = RectF32(0f, 0f, 120f, 120f)
         canvas.translate(20f, 20f)
         for (shader in shaders) {
             canvas.save()

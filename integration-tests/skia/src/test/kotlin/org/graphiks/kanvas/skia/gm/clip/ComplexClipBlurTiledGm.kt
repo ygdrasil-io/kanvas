@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/complexclip_blur_tiled.cpp::ComplexClipBlurTiledGM`.
@@ -26,7 +26,7 @@ class ComplexClipBlurTiledGm : SkiaGm {
     private val tileSize = 128f
 
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 512f, 512f), Paint())
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 512f, 512f), Paint())
 
         val blurPaint = Paint(imageFilter = ImageFilter.Blur(5f, 5f))
         var y = 0f
@@ -35,9 +35,9 @@ class ComplexClipBlurTiledGm : SkiaGm {
             while (x < width) {
                 canvas.save()
                 canvas.translate(-x, -y)
-                val rect = Rect.fromLTRB(0f, 0f, 512f, 512f)
+                val rect = RectF32.ofLTRB(0f, 0f, 512f, 512f)
                 canvas.saveLayer(rect, blurPaint)
-                val inset = Rect(rect.left + 20f, rect.top + 20f, rect.right - 20f, rect.bottom - 20f)
+                val inset = RectF32(rect.left + 20f, rect.top + 20f, rect.right - 20f, rect.bottom - 20f)
                 val rrect = RRect(inset, CornerRadii(25f, 25f))
                 canvas.clipRRect(rrect, ClipOp.DIFFERENCE, true)
                 canvas.drawRect(rect, Paint())

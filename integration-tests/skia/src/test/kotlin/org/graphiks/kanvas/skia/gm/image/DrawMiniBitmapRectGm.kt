@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /** Port of Skia's `gm/drawminibitmaprect.cpp`.
@@ -31,7 +31,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val image = sharedImage()
-        val dstRect = Rect.fromXYWH(0f, 0f, 64f, 64f)
+        val dstRect = RectF32.ofOriginSize(0f, 0f, 64f, 64f)
         val kMaxSrcRectSize = 1 shl (nextLog2(GSURFACE_SIZE) + 2)
         val kPadX = 30
         val kPadY = 40
@@ -45,7 +45,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
         while (w <= kMaxSrcRectSize) {
             var h = 1
             while (h <= kMaxSrcRectSize) {
-                val srcRect = Rect.fromXYWH(
+                val srcRect = RectF32.ofOriginSize(
                     ((GSURFACE_SIZE - w) / 2).toFloat(),
                     ((GSURFACE_SIZE - h) / 2).toFloat(),
                     w.toFloat(),
@@ -59,11 +59,11 @@ class DrawMiniBitmapRectGm : SkiaGm {
                 canvas.drawImageRect(image, srcRect, dstRect)
                 canvas.restore()
 
-                canvas.translate(dstRect.width + kPadX, 0f)
+                canvas.translate(dstRect.width() + kPadX, 0f)
                 rowCount++
-                if ((dstRect.width + 2 * kPadX) * rowCount > GSIZE) {
+                if ((dstRect.width() + 2 * kPadX) * rowCount > GSIZE) {
                     canvas.restore()
-                    canvas.translate(0f, dstRect.height + kPadY)
+                    canvas.translate(0f, dstRect.height() + kPadY)
                     canvas.save()
                     rowCount = 0
                 }
@@ -115,7 +115,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
             val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }
 
             surface.canvas {
-                var rect = Rect.fromXYWH(0f, 0f, wScalar, hScalar)
+                var rect = RectF32.ofOriginSize(0f, 0f, wScalar, hScalar)
                 var mat = Matrix3x3F32.Identity
                 for (i in 0 until 4) {
                     val shader = Shader.RadialGradient(
@@ -126,7 +126,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
                     )
                     drawRect(rect, Paint(shader = Shader.WithLocalMatrix(shader, mat)))
                     val inset = wScalar / 8f
-                    rect = Rect(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+                    rect = RectF32(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
                     mat = mat * Matrix3x3F32.scaling(0.25f, 0.25f)
                 }
             }

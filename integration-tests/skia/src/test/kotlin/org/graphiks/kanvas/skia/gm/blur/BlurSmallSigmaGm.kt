@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurs.cpp` (DEF_SIMPLE_GM BlurSmallSigma).
@@ -26,10 +26,10 @@ class BlurSmallSigmaGm : SkiaGm {
         val leftPaint = Paint(
             imageFilter = ImageFilter.Blur(sigmaX = 16f, sigmaY = 1e-5f),
         )
-        canvas.drawRect(Rect.fromLTRB(64f, 64f, 192f, 192f), leftPaint)
+        canvas.drawRect(RectF32.ofLTRB(64f, 64f, 192f, 192f), leftPaint)
 
         val redPaint = Paint(color = Color.RED)
-        val rect = Rect.fromLTRB(320f, 64f, 448f, 192f)
+        val rect = RectF32.ofLTRB(320f, 64f, 448f, 192f)
         canvas.drawRect(rect, redPaint)
 
         val blackPaint = Paint(

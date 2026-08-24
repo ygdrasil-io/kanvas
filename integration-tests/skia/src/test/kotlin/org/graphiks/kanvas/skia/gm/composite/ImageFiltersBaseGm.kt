@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefiltersbase.cpp`.
@@ -28,7 +28,7 @@ class ImageFiltersBaseGm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val drawProcs: List<(GmCanvas, Rect, ImageFilter?) -> Unit> = listOf(
+        val drawProcs: List<(GmCanvas, RectF32, ImageFilter?) -> Unit> = listOf(
             ::drawPaintCell, ::drawLineCell, ::drawRectCell, ::drawPathCell,
             ::drawBitmapCell, ::drawRectCell,
         )
@@ -43,10 +43,10 @@ class ImageFiltersBaseGm : SkiaGm {
             ImageFilter.DropShadow(10f, 5f, 3f, 3f, Color.BLUE, null),
         )
 
-        val r = Rect(0f, 0f, 64f, 64f)
+        val r = RectF32(0f, 0f, 64f, 64f)
         val margin = 16f
-        val dx = r.width + margin
-        val dy = r.height + margin
+        val dx = r.width() + margin
+        val dy = r.height() + margin
 
         canvas.translate(margin, margin)
         for (i in drawProcs.indices) {
@@ -61,7 +61,7 @@ class ImageFiltersBaseGm : SkiaGm {
         }
     }
 
-    private fun drawFrame(canvas: GmCanvas, r: Rect) {
+    private fun drawFrame(canvas: GmCanvas, r: RectF32) {
         val paint = Paint(
             color = Color.RED,
             style = org.graphiks.kanvas.paint.PaintStyle.STROKE,
@@ -69,7 +69,7 @@ class ImageFiltersBaseGm : SkiaGm {
         canvas.drawRect(r, paint)
     }
 
-    private fun drawPaintCell(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawPaintCell(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
             color = Color.fromRGBA(0f, 1f, 0f, 1f),
@@ -80,19 +80,19 @@ class ImageFiltersBaseGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawLineCell(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawLineCell(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             color = Color.BLUE,
             imageFilter = imf,
             style = org.graphiks.kanvas.paint.PaintStyle.STROKE,
-            strokeWidth = r.width / 10f,
+            strokeWidth = r.width() / 10f,
         )
         canvas.drawLine(r.left, r.top, r.right, r.bottom, paint)
     }
 
-    private fun drawRectCell(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
-        val inset = r.width / 10f
-        val rr = Rect(r.left + inset, r.top + inset, r.right - inset, r.bottom - inset)
+    private fun drawRectCell(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
+        val inset = r.width() / 10f
+        val rr = RectF32(r.left + inset, r.top + inset, r.right - inset, r.bottom - inset)
         val paint = Paint(
             color = Color.fromRGBA(1f, 1f, 0f, 1f),
             imageFilter = imf,
@@ -100,19 +100,19 @@ class ImageFiltersBaseGm : SkiaGm {
         canvas.drawRect(rr, paint)
     }
 
-    private fun drawPathCell(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawPathCell(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(
             color = Color.fromRGBA(1f, 0f, 1f, 1f),
             imageFilter = imf,
             antiAlias = true,
         )
-        canvas.drawCircle(r.center.x, r.center.y, r.width * 2f / 5f, paint)
+        canvas.drawCircle(r.center().x, r.center().y, r.width() * 2f / 5f, paint)
     }
 
-    private fun drawBitmapCell(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawBitmapCell(canvas: GmCanvas, r: RectF32, imf: ImageFilter?) {
         val paint = Paint(imageFilter = imf)
-        val bw = r.width.toInt()
-        val bh = r.height.toInt()
+        val bw = r.width().toInt()
+        val bh = r.height().toInt()
         val surface = Surface(bw, bh)
         surface.canvas {
             val cx = bw / 2f
@@ -122,6 +122,6 @@ class ImageFiltersBaseGm : SkiaGm {
             drawPath(path, Paint(color = Color.fromRGBA(1f, 0f, 1f, 1f), antiAlias = true))
         }
         val image = surface.makeImageSnapshot()
-        canvas.drawImage(image, Rect(0f, 0f, r.width, r.height), paint)
+        canvas.drawImage(image, RectF32(0f, 0f, r.width(), r.height()), paint)
     }
 }

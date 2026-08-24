@@ -14,7 +14,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/crbug_224618.cpp` CrBug224618GM.
@@ -65,13 +65,13 @@ class Crbug224618Gm : SkiaGm {
             canvas.concat(mat)
 
             val fillPaint = Paint(color = faceColors[i], antiAlias = true)
-            canvas.drawRect(Rect(0f, 0f, 300f, 300f), fillPaint)
+            canvas.drawRect(RectF32(0f, 0f, 300f, 300f), fillPaint)
 
             // Draw textured rect (no perspective correction, but shows image placement)
             canvas.drawImageRect(
                 cubeImage,
-                Rect(0f, 0f, 400f, 400f),
-                Rect(0f, 0f, 300f, 300f),
+                RectF32(0f, 0f, 400f, 400f),
+                RectF32(0f, 0f, 300f, 300f),
                 Paint(color = Color.fromRGBA(0.5f, 1f, 1f, 1f)),
             )
 
@@ -91,7 +91,7 @@ class Crbug224618Gm : SkiaGm {
                 ),
                 tileMode = TileMode.MIRROR,
             )
-            drawRect(Rect(0f, 0f, 400f, 400f), Paint(shader = shader))
+            drawRect(RectF32(0f, 0f, 400f, 400f), Paint(shader = shader))
         }
         return surface.makeImageSnapshot()
     }

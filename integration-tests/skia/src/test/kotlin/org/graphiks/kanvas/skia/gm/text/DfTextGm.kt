@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/dftext.cpp` DFTextGM (1024 × 768).
@@ -129,7 +129,7 @@ class DfTextGm : SkiaGm {
             Color.BLACK,
         )
 
-        var rect = Rect.fromLTRB(670f, 215f, 820f, 397f)
+        var rect = RectF32.ofLTRB(670f, 215f, 820f, 397f)
         canvas.drawRect(rect, Paint(color = Color.fromRGBA(247f / 255f, 243f / 255f, 247f / 255f)))
 
         x = 680f
@@ -140,7 +140,7 @@ class DfTextGm : SkiaGm {
             y += fontHeight(font)
         }
 
-        rect = Rect.fromLTRB(820f, 215f, 970f, 397f)
+        rect = RectF32.ofLTRB(820f, 215f, 970f, 397f)
         canvas.drawRect(rect, Paint(color = Color.fromRGBA(24f / 255f, 28f / 255f, 24f / 255f)))
 
         x = 830f

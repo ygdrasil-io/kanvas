@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bigmatrix.cpp`.
@@ -43,7 +43,7 @@ class BigMatrixGm : SkiaGm {
 
         pt = inv.transform(Point2F32(30f, 10f))
         canvas.drawRect(
-            Rect.fromLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
+            RectF32.ofLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
             Paint(color = Color.RED, antiAlias = true),
         )
 
@@ -59,7 +59,7 @@ class BigMatrixGm : SkiaGm {
         val s = Matrix3x3F32.scaling(1f / 1000f, 1f / 1000f)
         val shader = Shader.WithLocalMatrix(bmp.makeShader(TileMode.REPEAT, TileMode.REPEAT), s)
         canvas.drawRect(
-            Rect.fromLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
+            RectF32.ofLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
             Paint(shader = shader, antiAlias = false),
         )
     }

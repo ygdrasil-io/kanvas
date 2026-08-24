@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests image encoding — creates a surface with text and encodes it
  *  as a PNG image, then draws the decoded image.
@@ -30,8 +30,8 @@ class EncodeGm : SkiaGm {
         val pngImage = Image.decode(sourceBytes, "image/jpeg")
         if (pngImage.width == 0) return
 
-        canvas.drawImage(pngImage, Rect.fromXYWH(0f, 0f, 512f, 512f))
-        canvas.drawImage(pngImage, Rect.fromXYWH(512f, 0f, 512f, 512f))
+        canvas.drawImage(pngImage, RectF32.ofOriginSize(0f, 0f, 512f, 512f))
+        canvas.drawImage(pngImage, RectF32.ofOriginSize(512f, 0f, 512f, 512f))
 
         val font = Font(typeface, 12f)
         canvas.drawString("Images should look identical.", 450f, 550f, font, Paint())

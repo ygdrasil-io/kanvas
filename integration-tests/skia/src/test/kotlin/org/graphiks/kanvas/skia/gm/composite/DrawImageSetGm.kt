@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.sqrt
 
 /**
@@ -29,7 +29,7 @@ class DrawImageSetGm : SkiaGm {
     override val width = 1000
     override val height = 725
 
-    private data class Tile(val src: Rect, val dst: Rect, val alpha: Float)
+    private data class Tile(val src: RectF32, val dst: RectF32, val alpha: Float)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val mw = (kM * kTileW).toFloat()
@@ -42,8 +42,8 @@ class DrawImageSetGm : SkiaGm {
         for (y in 0 until kN) {
             for (x in 0 until kM) {
                 tiles.add(Tile(
-                    src = Rect(0f, 0f, kTileW.toFloat(), kTileH.toFloat()),
-                    dst = Rect(
+                    src = RectF32(0f, 0f, kTileW.toFloat(), kTileH.toFloat()),
+                    dst = RectF32(
                         (x * kTileW).toFloat(), (y * kTileH).toFloat(),
                         ((x + 1) * kTileW).toFloat(), ((y + 1) * kTileH).toFloat(),
                     ),
@@ -90,9 +90,9 @@ class DrawImageSetGm : SkiaGm {
             }
 
             val tile0 = tiles[0]
-            val insetSrc = Rect.fromXYWH(kTileW / 4f, kTileH / 4f, kTileW / 2f, kTileH / 2f)
-            val exclusionDst = Rect.fromXYWH(d / 4f, 2f * d, 1.5f * kTileW, 1.5f * kTileH)
-            val linearDst = Rect.fromXYWH(d / 4f + 1.5f * kTileW + 8f, 2f * d, 1.5f * kTileW, 1.5f * kTileH)
+            val insetSrc = RectF32.ofOriginSize(kTileW / 4f, kTileH / 4f, kTileW / 2f, kTileH / 2f)
+            val exclusionDst = RectF32.ofOriginSize(d / 4f, 2f * d, 1.5f * kTileW, 1.5f * kTileH)
+            val linearDst = RectF32.ofOriginSize(d / 4f + 1.5f * kTileW + 8f, 2f * d, 1.5f * kTileW, 1.5f * kTileH)
 
             canvas.save()
             canvas.rotate(3f)

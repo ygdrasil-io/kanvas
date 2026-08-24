@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/beziereffects.cpp` — conic variant.
@@ -54,7 +54,7 @@ class BezierConicEffectsGm : SkiaGm {
             canvas.drawPath(curvePath, Paint(color = Color.BLACK, style = PaintStyle.STROKE, strokeWidth = 2f))
 
             canvas.drawRect(
-                Rect.fromLTRB(x0, y0, x2, y2),
+                RectF32.ofLTRB(x0, y0, x2, y2),
                 Paint(color = Color.fromRGBA(0x80 / 255f, 0x80 / 255f, 0x80 / 255f), style = PaintStyle.STROKE, strokeWidth = 1f),
             )
         }

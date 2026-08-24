@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/conicpaths.cpp` (DEF_SIMPLE_GM largeovals).
@@ -23,14 +23,14 @@ class LargeOvalsGm : SkiaGm {
     override val height = 250
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        var r = Rect.fromXYWH(-520f, -520f, 5000f, 4000f)
+        var r = RectF32.ofOriginSize(-520f, -520f, 5000f, 4000f)
         val paint = Paint(
             style = PaintStyle.STROKE,
             strokeWidth = 100f,
             antiAlias = true,
         )
         canvas.drawOval(r, paint)
-        r = Rect.fromLTRB(
+        r = RectF32.ofLTRB(
             r.left - 15f, r.top - 15f,
             r.right - 15f, r.bottom - 15f,
         )
@@ -45,7 +45,7 @@ class LargeOvalsGm : SkiaGm {
         canvas.save()
         canvas.translate(0f, 0f)
         canvas.scale(1f, 1f)
-        r = Rect.fromLTRB(
+        r = RectF32.ofLTRB(
             r.left + 55f, r.top + 55f,
             r.right + 55f, r.bottom + 55f,
         )
@@ -56,7 +56,7 @@ class LargeOvalsGm : SkiaGm {
             antiAlias = true,
         )
         canvas.drawOval(r, paint3)
-        r = Rect.fromLTRB(
+        r = RectF32.ofLTRB(
             r.left - 15f, r.top - 15f,
             r.right - 15f, r.bottom - 15f,
         )

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.text
 
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * GPU-ready text blob wrapping a [TextBlob] with rasterized glyph atlas data.
@@ -18,13 +18,13 @@ data class GpuTextBlob(
     val atlasRgba: ByteArray,       // A8 glyph atlas pixels (width × height)
     val atlasWidth: Int,
     val atlasHeight: Int,
-    private val glyphUvData: List<Rect>? = null,
-    val glyphRects: List<Rect> = emptyList(),
+    private val glyphUvData: List<RectF32>? = null,
+    val glyphRects: List<RectF32> = emptyList(),
 ) {
     /** Per-glyph UV coordinates into the atlas texture, computed by TextBridge. */
-    val glyphUvs: List<Rect> by lazy {
+    val glyphUvs: List<RectF32> by lazy {
         glyphUvData ?: List(textBlob.glyphRuns.sumOf { it.glyphs.size }) {
-            Rect.fromLTRB(0f, 0f, 1f, 1f)
+            RectF32.ofLTRB(0f, 0f, 1f, 1f)
         }
     }
 

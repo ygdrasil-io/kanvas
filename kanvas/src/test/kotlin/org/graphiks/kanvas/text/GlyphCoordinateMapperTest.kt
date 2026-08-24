@@ -7,7 +7,7 @@ import org.graphiks.kanvas.font.scaler.GlyphBounds
 import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.OutlineCommand
 import org.graphiks.kanvas.font.scaler.ScaledGlyph
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GlyphCoordinateMapperTest {
     @Test
@@ -26,7 +26,7 @@ class GlyphCoordinateMapperTest {
         val mapped = GlyphCoordinateMapper.map(glyph)
 
         assertTrue(mapped is MappedGlyph.Drawn)
-        assertEquals(Rect.fromLTRB(2f, -20f, 12f, 0f), mapped.baselineRect)
+        assertEquals(RectF32.ofLTRB(2f, -20f, 12f, 0f), mapped.baselineRect)
     }
 
     @Test

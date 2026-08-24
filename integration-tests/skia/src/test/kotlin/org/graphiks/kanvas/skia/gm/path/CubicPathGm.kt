@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of upstream `gm/cubicpaths.cpp` `CubicPathGM`
@@ -54,7 +54,7 @@ class CubicPathGm : SkiaGm {
 
     private fun drawPathCell(
         path: Path, canvas: GmCanvas, color: Color,
-        clip: Rect,
+        clip: RectF32,
         cap: StrokeCap, join: StrokeJoin,
         style: PaintStyle, fill: FillType,
         strokeWidth: Float,
@@ -104,18 +104,18 @@ class CubicPathGm : SkiaGm {
         // Skip title for now as drawString is not available on GmCanvas
 
         // --- 4 × 3 × 3 grid -------------------------------------------
-        val rect = Rect.fromXYWH(0f, 0f, 100f, 30f)
+        val rect = RectF32.ofOriginSize(0f, 0f, 100f, 30f)
         canvas.save()
         canvas.translate(10f, 30f)
         canvas.save()
         for (capIdx in caps.indices) {
-            if (capIdx > 0) canvas.translate((rect.width + 40f) * styles.size, 0f)
+            if (capIdx > 0) canvas.translate((rect.width() + 40f) * styles.size, 0f)
             canvas.save()
             for (fillIdx in fills.indices) {
-                if (fillIdx > 0) canvas.translate(0f, rect.height + 40f)
+                if (fillIdx > 0) canvas.translate(0f, rect.height() + 40f)
                 canvas.save()
                 for (styleIdx in styles.indices) {
-                    if (styleIdx > 0) canvas.translate(rect.width + 40f, 0f)
+                    if (styleIdx > 0) canvas.translate(rect.width() + 40f, 0f)
 
                     val cellColor = Color.fromRGBA(0x00 / 255f, 0x70 / 255f, 0x00 / 255f, 1f)
                     drawPathCell(

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurs.cpp::BlurDrawImage` (256 x 256).
@@ -54,6 +54,6 @@ class BlurDrawImageGm : SkiaGm {
         )
 
         canvas.scale(0.25f, 0.25f)
-        canvas.drawImage(image, Rect.fromXYWH(256f, 256f, imgW.toFloat(), imgH.toFloat()), paint)
+        canvas.drawImage(image, RectF32.ofOriginSize(256f, 256f, imgW.toFloat(), imgH.toFloat()), paint)
     }
 }

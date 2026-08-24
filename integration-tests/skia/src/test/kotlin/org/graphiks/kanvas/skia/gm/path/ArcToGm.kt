@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/arcto.cpp` (`DEF_SIMPLE_GM(arcto, …, 500, 600)`).
@@ -51,15 +51,15 @@ class ArcToGm : SkiaGm {
             strokeWidth = 2f,
             color = Color.fromRGBA(0x66 / 255f, 0x00 / 255f, 0x00 / 255f, 1f)
         )
-        var oval = Rect.fromXYWH(100f, 100f, 100f, 100f)
+        var oval = RectF32.ofOriginSize(100f, 100f, 100f, 100f)
 
         // Section 1: loop — angle ∈ {0, 45}, oHeight ∈ {2, 1}, two
         // arcs per inner step (small CW + large CCW), oval marches +50px.
         var angle = 0f
         while (angle <= 45f) {
             for (oHeight in intArrayOf(2, 1)) {
-                val ovalHeight = oval.height / oHeight
-                val ovalWidthHalf = oval.width * 0.5f
+                val ovalHeight = oval.height() / oHeight
+                val ovalWidthHalf = oval.width() * 0.5f
 
                 val small = Path {
                     moveTo(oval.left, oval.top)
@@ -83,7 +83,7 @@ class ArcToGm : SkiaGm {
                 }
                 canvas.drawPath(large, paint)
 
-                oval = Rect.fromXYWH(oval.left + 50f, oval.top, oval.width, oval.height)
+                oval = RectF32.ofOriginSize(oval.left + 50f, oval.top, oval.width(), oval.height())
             }
             angle += 45f
         }

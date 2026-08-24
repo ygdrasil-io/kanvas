@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmaprecttest.cpp::bitmaprecttest`.
@@ -27,20 +27,20 @@ class BitmapRectTestGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val image = makeImage()
 
-        canvas.drawImage(image, Rect.fromXYWH(150f, 45f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(150f, 45f, image.width.toFloat(), image.height.toFloat()))
 
         val scale = 0.472560018f
         canvas.save()
         canvas.scale(scale, scale)
         canvas.drawImageRect(
             image,
-            Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()),
-            Rect.fromXYWH(100f, 100f, 128f, 128f),
+            RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+            RectF32.ofOriginSize(100f, 100f, 128f, 128f),
         )
         canvas.restore()
 
         canvas.scale(-1f, 1f)
-        canvas.drawImage(image, Rect.fromXYWH(-310f, 45f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(-310f, 45f, image.width.toFloat(), image.height.toFloat()))
     }
 
     private fun makeImage(): Image {
@@ -51,7 +51,7 @@ class BitmapRectTestGm : SkiaGm {
                 Paint(),
             )
             drawRect(
-                Rect.fromLTRB(0.5f, 0.5f, 59.5f, 59.5f),
+                RectF32.ofLTRB(0.5f, 0.5f, 59.5f, 59.5f),
                 Paint(style = PaintStyle.STROKE, strokeWidth = 1f),
             )
         }

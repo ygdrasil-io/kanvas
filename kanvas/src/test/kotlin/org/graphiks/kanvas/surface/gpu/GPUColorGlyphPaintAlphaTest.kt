@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.blueByte
@@ -83,7 +83,7 @@ class GPUColorGlyphPaintAlphaTest {
         val clippedPixel = findOpaquePalettePixel(baseline.pixels, fixture.cpalColor)
         val clippedX = clippedPixel % FIXTURE_DIMENSION
         val clippedY = clippedPixel / FIXTURE_DIMENSION
-        val hole = Rect(
+        val hole = RectF32(
             (clippedX - 1).coerceAtLeast(0).toFloat(),
             (clippedY - 1).coerceAtLeast(0).toFloat(),
             (clippedX + 2).coerceAtMost(FIXTURE_DIMENSION).toFloat(),
@@ -166,7 +166,7 @@ class GPUColorGlyphPaintAlphaTest {
     private fun renderFixtureGlyph(
         fixture: FixtureGlyph,
         paintAlpha: Int,
-        coverageMaskHole: Rect? = null,
+        coverageMaskHole: RectF32? = null,
     ) =
         Surface(FIXTURE_DIMENSION, FIXTURE_DIMENSION).run {
             canvas {
@@ -174,14 +174,14 @@ class GPUColorGlyphPaintAlphaTest {
                 if (coverageMaskHole == null) {
                     // A fractional AA device clip selects the analytic scalar S/G route.
                     clipRect(
-                        Rect(0.5f, 0.5f, 191.5f, 191.5f),
+                        RectF32(0.5f, 0.5f, 191.5f, 191.5f),
                         ClipOp.INTERSECT,
                         antiAlias = true,
                     )
                 } else {
                     // Two non-AA elements select the shared, single-sample CoverageMask route.
                     clipRect(
-                        Rect(0f, 0f, FIXTURE_DIMENSION.toFloat(), FIXTURE_DIMENSION.toFloat()),
+                        RectF32(0f, 0f, FIXTURE_DIMENSION.toFloat(), FIXTURE_DIMENSION.toFloat()),
                         ClipOp.INTERSECT,
                         antiAlias = false,
                     )
@@ -226,7 +226,7 @@ class GPUColorGlyphPaintAlphaTest {
     private fun findOpaquePalettePixelOutside(
         pixels: UByteArray,
         expected: Color,
-        excluded: Rect,
+        excluded: RectF32,
     ): Int =
         (0 until FIXTURE_DIMENSION * FIXTURE_DIMENSION).firstOrNull { index ->
             val x = index % FIXTURE_DIMENSION

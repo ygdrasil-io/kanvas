@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.RRect
 import kotlin.math.max
 
@@ -28,10 +28,10 @@ class ShadowUtilsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val paths = listOf(
-            Path { }.also { it.addRRect(RRect(Rect(0f, 0f, 50f, 50f), CornerRadii(10f, 10f))) },
-            Path { }.also { it.addRect(Rect(0f, 0f, 50f, 50f)) },
+            Path { }.also { it.addRRect(RRect(RectF32(0f, 0f, 50f, 50f), CornerRadii(10f, 10f))) },
+            Path { }.also { it.addRect(RectF32(0f, 0f, 50f, 50f)) },
             Path { }.also { it.addCircle(25f, 25f, 25f) },
-            Path { }.also { it.addOval(Rect(0f, 0f, 20f, 60f)) },
+            Path { }.also { it.addOval(RectF32(0f, 0f, 20f, 60f)) },
         )
 
         val concavePaths = listOf(
@@ -71,7 +71,7 @@ class ShadowUtilsGm : SkiaGm {
         // For now, just draw the paths without shadows
         // Shadow drawing would require SkShadowUtils which may not be available
         for (path in paths) {
-            val postM = Rect(0f, 0f, 50f, 50f)
+            val postM = RectF32(0f, 0f, 50f, 50f)
             val w = postM.width + kHeight
             val dx = w + kPad
             if (x + dx > width - 3f * kPad) {
@@ -106,7 +106,7 @@ class ShadowUtilsGm : SkiaGm {
         x = kPad
         dy = 0f
         for (path in concavePaths) {
-            val postM = Rect(0f, 0f, 50f, 50f)
+            val postM = RectF32(0f, 0f, 50f, 50f)
             val w = postM.width + kHeight
             val dx = w + kPad
 

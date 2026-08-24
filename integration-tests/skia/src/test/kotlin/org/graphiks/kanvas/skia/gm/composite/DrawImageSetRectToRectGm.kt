@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.max
 import kotlin.math.min
 
@@ -26,7 +26,7 @@ class DrawImageSetRectToRectGm : SkiaGm {
     override val width = 1250
     override val height = 850
 
-    private data class Tile(val src: Rect, val dst: Rect, val alpha: Float)
+    private data class Tile(val src: RectF32, val dst: RectF32, val alpha: Float)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         drawCheckerboard(canvas)
@@ -39,8 +39,8 @@ class DrawImageSetRectToRectGm : SkiaGm {
         for (y in 0 until kN) {
             for (x in 0 until kM) {
                 tiles.add(Tile(
-                    src = Rect(0f, 0f, kTileW.toFloat(), kTileH.toFloat()),
-                    dst = Rect(
+                    src = RectF32(0f, 0f, kTileW.toFloat(), kTileH.toFloat()),
+                    dst = RectF32(
                         (x * kTileW).toFloat(), (y * kTileH).toFloat(),
                         ((x + 1) * kTileW).toFloat(), ((y + 1) * kTileH).toFloat(),
                     ),
@@ -85,7 +85,7 @@ class DrawImageSetRectToRectGm : SkiaGm {
                 canvas.save()
                 canvas.concat(matrices[m])
                 for ((ti, tile) in tiles.withIndex()) {
-                    val sd = Rect(
+                    val sd = RectF32(
                         tile.dst.left * sx, tile.dst.top * sy,
                         tile.dst.right * sx, tile.dst.bottom * sy,
                     )
@@ -131,7 +131,7 @@ class DrawImageSetRectToRectGm : SkiaGm {
             while (x < totalW) {
                 val parity = ((x / tile) + (y / tile)) % 2
                 canvas.drawRect(
-                    Rect(x.toFloat(), y.toFloat(), (x + tile).toFloat(), (y + tile).toFloat()),
+                    RectF32(x.toFloat(), y.toFloat(), (x + tile).toFloat(), (y + tile).toFloat()),
                     if (parity == 0) black else white,
                 )
                 x += tile

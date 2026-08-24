@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/anisotropic.cpp` (aniso-mips variant).
  *  Draws a gradient-backed image at various scale factors to test
@@ -40,9 +40,9 @@ class AnisoMipsGm : SkiaGm {
                     val image = updateImage(surface, color)
                     if (shaderPass) {
                         val paint = Paint(shader = image.makeShader())
-                        canvas.drawRect(Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+                        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
                     } else {
-                        canvas.drawImage(image, Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+                        canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()))
                     }
                     canvas.restore()
                     canvas.translate(kImageSize * sx + kPad, 0f)
@@ -64,7 +64,7 @@ class AnisoMipsGm : SkiaGm {
             val innerColor = Color.fromRGBA(
                 0.06f, 0.06f, 0.06f, 1f,
             )
-            val rect = Rect.fromLTRB(
+            val rect = RectF32.ofLTRB(
                 surf.width * 2f / 5f, surf.height * 2f / 5f,
                 surf.width * 3f / 5f, surf.height * 3f / 5f,
             )

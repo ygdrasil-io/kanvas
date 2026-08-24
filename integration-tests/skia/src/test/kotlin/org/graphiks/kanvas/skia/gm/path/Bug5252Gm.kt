@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bug5252.cpp::bug5252` (500 x 500).
@@ -33,7 +33,7 @@ class Bug5252Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.translate(10f, 20f)
-        canvas.clipRect(Rect(0f, 0f, 225f, 200f))
+        canvas.clipRect(RectF32(0f, 0f, 225f, 200f))
 
         val paint = Paint(
             style = PaintStyle.STROKE,
@@ -45,7 +45,7 @@ class Bug5252Gm : SkiaGm {
             for (j in 0 until 10) {
                 canvas.save()
                 canvas.translate(i * 15f, j * 20f)
-                canvas.drawRect(Rect.fromXYWH(5f, 5f, 10f, 15f), paint)
+                canvas.drawRect(RectF32.ofOriginSize(5f, 5f, 10f, 15f), paint)
                 canvas.drawPath(
                     Path {
                         moveTo(6f, 6f)

@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -28,7 +28,7 @@ class EmptyPathGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rand = Random(0)
-        val rect = Rect(0f, 0f, 100f, 30f)
+        val rect = RectF32(0f, 0f, 100f, 30f)
         val borderPaint = Paint(
             color = Color.fromRGBA(0f, 0f, 0f, 1f),
             style = PaintStyle.STROKE,

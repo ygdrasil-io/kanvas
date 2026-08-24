@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import kotlin.test.Test
@@ -93,8 +93,8 @@ class GPUPreparedCompositeCaptureTest {
     @Test
     fun `painted picture becomes synthetic child scope`() {
         val innerPicture = recordPicture { canvas ->
-            canvas.drawRect(Rect(0f, 0f, 10f, 10f), Paint())
-            canvas.drawRect(Rect(10f, 10f, 20f, 20f), Paint())
+            canvas.drawRect(RectF32(0f, 0f, 10f, 10f), Paint())
+            canvas.drawRect(RectF32(10f, 10f, 20f, 20f), Paint())
         }
         val ops = listOf(
             DisplayOp.DrawPicture(innerPicture, Paint(), identity33, ClipStack.WideOpen),
@@ -111,7 +111,7 @@ class GPUPreparedCompositeCaptureTest {
     @Test
     fun `unpainted picture expands inline without synthetic scope`() {
         val picture = recordPicture { canvas ->
-            canvas.drawRect(Rect(0f, 0f, 10f, 10f), Paint())
+            canvas.drawRect(RectF32(0f, 0f, 10f, 10f), Paint())
         }
         val ops = listOf(
             DisplayOp.DrawPicture(picture, null, identity33, ClipStack.WideOpen),
@@ -151,12 +151,12 @@ class GPUPreparedCompositeCaptureTest {
     }
 
     private fun simpleRect(x: Float, y: Float, w: Float, h: Float): DisplayOp {
-        return DisplayOp.DrawRect(Rect(x, y, w, h), Paint(), identity33, ClipStack.WideOpen)
+        return DisplayOp.DrawRect(RectF32(x, y, w, h), Paint(), identity33, ClipStack.WideOpen)
     }
 
     private fun recordPicture(block: (org.graphiks.kanvas.canvas.Canvas) -> Unit): Picture {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect(0f, 0f, 100f, 100f))
+        val canvas = recorder.beginRecording(RectF32(0f, 0f, 100f, 100f))
         block(canvas)
         return recorder.finishRecordingAsPicture()
     }

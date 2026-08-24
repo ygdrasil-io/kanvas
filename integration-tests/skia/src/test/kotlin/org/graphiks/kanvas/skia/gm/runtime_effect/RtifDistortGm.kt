@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -38,7 +38,7 @@ class RtifDistortGm : SkiaGm {
         val effect = RuntimeEffect.compile(RtifDistortWgsl).getOrThrow()
         val filter = ImageFilter.RuntimeEffect(effect, UniformBlock {}, childShaderName = "child")
         val filterPaint = Paint(imageFilter = filter)
-        val clip = Rect(0f, 0f, 250f, 250f)
+        val clip = RectF32(0f, 0f, 250f, 250f)
         val colPositions = listOf(0f, 250f)
         val rowPositions = listOf(0f, 250f, 500f)
         val transforms = listOf(
@@ -59,7 +59,7 @@ class RtifDistortGm : SkiaGm {
 
     private fun drawLayer(
         canvas: GmCanvas, tx: Float, ty: Float, m: Matrix3x3F32,
-        clip: Rect, filterPaint: Paint,
+        clip: RectF32, filterPaint: Paint,
     ) {
         canvas.save()
         canvas.translate(tx, ty)

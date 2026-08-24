@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.test.ComparisonUtils
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import java.io.File
 import kotlin.math.max
 
@@ -170,7 +170,7 @@ object OpInspector {
     private fun renderPartial(ops: List<DisplayOp>, count: Int, width: Int, height: Int): ByteArray {
         val surface = Surface(width, height, config = RenderConfig.DEFAULT)
         val canvas = surface.canvas()
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()),
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         for (i in 0 until count.coerceAtMost(ops.size)) {
             replayOp(canvas, ops[i])

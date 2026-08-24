@@ -2,7 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -48,7 +48,7 @@ class SimpleRectGm : SkiaGm {
             val y = rand.nextFloat() * (max - min) + min
             val w = rand.nextFloat() * size
             val h = rand.nextFloat() * size
-            canvas.drawRect(Rect.fromXYWH(x, y, w, h), paint)
+            canvas.drawRect(RectF32.ofOriginSize(x, y, w, h), paint)
         }
     }
 }

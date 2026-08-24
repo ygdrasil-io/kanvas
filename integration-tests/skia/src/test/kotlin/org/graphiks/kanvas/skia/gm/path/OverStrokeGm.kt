@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.MutablePoint2F32
 import org.graphiks.math.vector.MutableVector2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of upstream Skia's `gm/overstroke.cpp::OverStroke` GM.
@@ -88,7 +88,7 @@ class OverStrokeGm : SkiaGm {
 
     private fun quadPath(): Path = Path { moveTo(0f, 0f); lineTo(100f, 0f); quadTo(50f, -40f, 0f, 0f); close() }
     private fun cubicPath(): Path = Path { moveTo(0f, 0f); cubicTo(25f, 75f, 75f, -50f, 100f, 0f) }
-    private fun ovalPath(): Path = Path { }.apply { addOval(Rect.fromXYWH(0f, -25f, 100f, 50f)) }
+    private fun ovalPath(): Path = Path { }.apply { addOval(RectF32.ofOriginSize(0f, -25f, 100f, 50f)) }
 
     private fun drawSmall(canvas: GmCanvas, path: Path) {
         drawRibs(canvas, path)

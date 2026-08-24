@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/daa.cpp`.
@@ -25,7 +25,7 @@ class DaaGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val k = 49f
 
-        canvas.drawRect(Rect(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
         val path1 = Path {
             moveTo(0f, 0f); lineTo(k, k); lineTo(0f, k); lineTo(0f, 0f)
             moveTo(0f, 0f); lineTo(k, k); lineTo(k, 0f); lineTo(0f, 0f)
@@ -33,14 +33,14 @@ class DaaGm : SkiaGm {
         canvas.drawPath(path1, Paint(color = Color.GREEN))
 
         canvas.translate(0f, k)
-        canvas.drawRect(Rect(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
         val path2a = Path { moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f) }
         canvas.drawPath(path2a, Paint(color = Color.BLUE))
         val path2b = Path { moveTo(k * 0.5f, 0f); lineTo(k * 0.5f, k); lineTo(k, k); lineTo(k, 0f) }
         canvas.drawPath(path2b, Paint(color = Color.GREEN))
 
         canvas.translate(0f, k)
-        canvas.drawRect(Rect(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
         val path3 = Path {
             moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f)
             moveTo(k * 0.5f, 0f); lineTo(k * 0.5f, k); lineTo(k, k); lineTo(k, 0f)
@@ -48,7 +48,7 @@ class DaaGm : SkiaGm {
         canvas.drawPath(path3, Paint(color = Color.GREEN))
 
         canvas.translate(0f, k)
-        canvas.drawRect(Rect(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
         val path4 = Path {
             moveTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k); lineTo(k * 0.5f, 0f)
             moveTo(k * 0.5f, 0f); lineTo(k, 0f); lineTo(k, k); lineTo(k * 0.5f, k)
@@ -56,7 +56,7 @@ class DaaGm : SkiaGm {
         canvas.drawPath(path4, Paint(color = Color.GREEN))
 
         canvas.translate(0f, k)
-        canvas.drawRect(Rect(0f, 0f, k, k), Paint(color = Color.RED))
+        canvas.drawRect(RectF32(0f, 0f, k, k), Paint(color = Color.RED))
         val path5 = Path {
             moveTo(k * 0.5f, 0f); lineTo(0f, 0f); lineTo(0f, k); lineTo(k * 0.5f, k)
             lineTo(k * 0.5f, 0f); lineTo(k, 0f); lineTo(k, k); lineTo(k * 0.5f, k)

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/circulararcs.cpp::circular_arc_stroke_matrix`
@@ -89,7 +89,7 @@ class CircularArcStrokeMatrixGm : SkiaGm {
         }
 
         val kPad = 2f * kStrokeWidth
-        val bounds = Rect(0f, 0f, 2f * kRadius, 2f * kRadius)
+        val bounds = RectF32(0f, 0f, 2f * kRadius, 2f * kRadius)
 
         canvas.translate(kPad, kPad)
 

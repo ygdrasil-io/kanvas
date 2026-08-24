@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/encode_color_types.cpp::EncodeColorTypesGM`.
@@ -59,9 +59,9 @@ open class EncodeColorTypesGm(
 
         val alphaCount = 3
         for (i in 0 until alphaCount) {
-            canvas.drawImage(src, Rect(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
+            canvas.drawImage(src, RectF32(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
             canvas.translate(imageWidth.toFloat(), 0f)
-            canvas.drawImage(src, Rect(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
+            canvas.drawImage(src, RectF32(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
             canvas.translate(imageWidth * 1.5f, 0f)
         }
     }

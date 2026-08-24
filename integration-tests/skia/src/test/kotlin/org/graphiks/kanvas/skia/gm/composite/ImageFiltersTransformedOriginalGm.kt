@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefilterstransformed.cpp`.
  *  Tests transformed image filters — renders gradient images with blur,
@@ -68,7 +68,7 @@ class ImageFiltersTransformedOriginalGm : SkiaGm {
                     2 -> canvas.skew(0.5f, 0.2f)
                 }
                 canvas.translate(-size * 0.5f, -size * 0.5f)
-                canvas.drawOval(Rect(0f, size * 0.1f, size, size * 0.6f + size * 0.1f), paint)
+                canvas.drawOval(RectF32(0f, size * 0.1f, size, size * 0.6f + size * 0.1f), paint)
                 canvas.restore()
                 canvas.translate(size + margin, 0f)
             }

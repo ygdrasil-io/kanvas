@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -36,9 +36,9 @@ class ImageMagnifierBoundsGm : SkiaGm {
     }
 
     private fun drawRow(c: GmCanvas, inset: Float) {
-        val widgetBounds = Rect(16f, 24f, 220f, 248f)
+        val widgetBounds = RectF32(16f, 24f, 220f, 248f)
         val kZoomAmount = 2.5f
-        val kOutBounds = Rect(0f, 0f, 256f, 256f)
+        val kOutBounds = RectF32(0f, 0f, 256f, 256f)
 
         val magnifier: ImageFilter = ImageFilter.Magnifier(
             src = widgetBounds, zoom = kZoomAmount, inset = inset,
@@ -78,8 +78,8 @@ class ImageMagnifierBoundsGm : SkiaGm {
         c.restore()
     }
 
-    private fun drawBorder(c: GmCanvas, rect: Rect, color: Color, width: Float, borderInset: Float) {
-        val r = Rect(
+    private fun drawBorder(c: GmCanvas, rect: RectF32, color: Color, width: Float, borderInset: Float) {
+        val r = RectF32(
             rect.left + borderInset, rect.top + borderInset,
             rect.right - borderInset, rect.bottom - borderInset,
         )

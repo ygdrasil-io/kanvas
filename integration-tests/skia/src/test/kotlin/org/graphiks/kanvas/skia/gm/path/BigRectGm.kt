@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bigrect.cpp`.
@@ -42,25 +42,25 @@ class BigRectGm : SkiaGm {
     }
 
     private fun drawBigRect(canvas: GmCanvas, big: Float, rectPaint: Paint) {
-        canvas.clipRect(Rect(0f, 0f, 35f, 35f))
+        canvas.clipRect(RectF32(0f, 0f, 35f, 35f))
         canvas.translate(0.5f, 0.5f)
 
-        canvas.drawRect(Rect(-big, 5f, big, 10f), rectPaint)
-        canvas.drawRect(Rect(5f, -big, 10f, big), rectPaint)
-        canvas.drawRect(Rect(-big, 20f, 17f, 25f), rectPaint)
-        canvas.drawRect(Rect(20f, -big, 25f, 17f), rectPaint)
-        canvas.drawRect(Rect(28f, 20f, big, 25f), rectPaint)
-        canvas.drawRect(Rect(20f, 28f, 25f, big), rectPaint)
-        canvas.drawRect(Rect(-2f, -1f, 0f, 35f), rectPaint)
-        canvas.drawRect(Rect(-1f, -2f, 35f, 0f), rectPaint)
-        canvas.drawRect(Rect(34f, -1f, 36f, 35f), rectPaint)
-        canvas.drawRect(Rect(-1f, 34f, 35f, 36f), rectPaint)
+        canvas.drawRect(RectF32(-big, 5f, big, 10f), rectPaint)
+        canvas.drawRect(RectF32(5f, -big, 10f, big), rectPaint)
+        canvas.drawRect(RectF32(-big, 20f, 17f, 25f), rectPaint)
+        canvas.drawRect(RectF32(20f, -big, 25f, 17f), rectPaint)
+        canvas.drawRect(RectF32(28f, 20f, big, 25f), rectPaint)
+        canvas.drawRect(RectF32(20f, 28f, 25f, big), rectPaint)
+        canvas.drawRect(RectF32(-2f, -1f, 0f, 35f), rectPaint)
+        canvas.drawRect(RectF32(-1f, -2f, 35f, 0f), rectPaint)
+        canvas.drawRect(RectF32(34f, -1f, 36f, 35f), rectPaint)
+        canvas.drawRect(RectF32(-1f, 34f, 35f, 36f), rectPaint)
 
         val outOfBoundsPaint = Paint(
             color = Color.RED,
             style = PaintStyle.STROKE,
             strokeWidth = 0f,
         )
-        canvas.drawRect(Rect(-1f, -1f, 35f, 35f), outOfBoundsPaint)
+        canvas.drawRect(RectF32(-1f, -1f, 35f, 35f), outOfBoundsPaint)
     }
 }

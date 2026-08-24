@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port stub for Skia's `gm/imagemakewithfilter.cpp::ImageMakeWithFilterGM`.
@@ -33,7 +33,7 @@ class ImageMakeWithFilterGm : SkiaGm {
 
         val surf = Surface(100, 100)
         surf.canvas {
-            drawImage(src, Rect(0f, 0f, 100f, 100f))
+            drawImage(src, RectF32(0f, 0f, 100f, 100f))
         }
         val img = surf.makeImageSnapshot()
 
@@ -47,7 +47,7 @@ class ImageMakeWithFilterGm : SkiaGm {
         for (row in 0 until 6) {
             canvas.save()
             for (col in 0 until 13) {
-                canvas.drawImage(img, Rect(0f, 0f, 100f, 100f), alpha)
+                canvas.drawImage(img, RectF32(0f, 0f, 100f, 100f), alpha)
                 canvas.translate(dx, 0f)
             }
             canvas.restore()

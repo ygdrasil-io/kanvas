@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/xfermodes.cpp`.
@@ -72,7 +72,7 @@ class XfermodesGm : SkiaGm {
             var y = y0
             for ((i, row) in modes.withIndex()) {
                 if ((row.mask and sourceType) == 0) continue
-                val r = Rect.fromLTRB(x, y, x + w, y + h)
+                val r = RectF32.ofLTRB(x, y, x + w, y + h)
 
                 // Background: dark/light alternating rect cells
                 val bgColor = if ((i / 5 + i) % 2 == 0)
@@ -91,14 +91,14 @@ class XfermodesGm : SkiaGm {
                     color = Color.fromRGBA(1f, 0.8f, 0.3f, 0.8f),
                 )
                 canvas.drawRect(
-                    Rect.fromLTRB(x + 4f, y + 4f, x + w - 4f, y + h - 4f),
+                    RectF32.ofLTRB(x + 4f, y + 4f, x + w - 4f, y + h - 4f),
                     dstPaint,
                 )
                 canvas.drawCircle(x + w / 2f, y + h / 2f, w / 4f, srcPaint)
                 canvas.restore()
 
                 // Stroke frame
-                val frame = Rect.fromLTRB(
+                val frame = RectF32.ofLTRB(
                     r.left - 0.5f, r.top - 0.5f,
                     r.right + 0.5f, r.bottom + 0.5f,
                 )

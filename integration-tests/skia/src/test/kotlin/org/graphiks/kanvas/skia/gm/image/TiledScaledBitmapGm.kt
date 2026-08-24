@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/tiledscaledbitmap.cpp`.
  *  Tests tiled scaled bitmap rendering — creates a gradient image and
@@ -36,7 +36,7 @@ class TiledScaledBitmapGm : SkiaGm {
             Shader.Image(fBitmap, TileMode.REPEAT, TileMode.REPEAT), mat,
         )
 
-        canvas.drawRect(Rect(8f, 8f, 1008f, 608f), paint.copy(shader = shader))
+        canvas.drawRect(RectF32(8f, 8f, 1008f, 608f), paint.copy(shader = shader))
     }
 
     private fun makeBm(width: Int, height: Int): Image {

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/spritebitmap.cpp`.
  *  Tests sprite bitmap rendering — creates a gradient image and draws it
@@ -42,8 +42,8 @@ class SpriteBitmapGm : SkiaGm {
 
     private fun draw1Bitmap(c: GmCanvas, doClip: Boolean, dx: Int, dy: Int, blur: Boolean) {
         c.save()
-        val clipR = Rect(dx.toFloat(), dy.toFloat(), (dx + 100).toFloat(), (dy + 100).toFloat())
-        val insetClip = Rect(clipR.left + 5f, clipR.top + 5f, clipR.right - 5f, clipR.bottom - 5f)
+        val clipR = RectF32(dx.toFloat(), dy.toFloat(), (dx + 100).toFloat(), (dy + 100).toFloat())
+        val insetClip = RectF32(clipR.left + 5f, clipR.top + 5f, clipR.right - 5f, clipR.bottom - 5f)
 
         val paint = if (blur) {
             Paint(imageFilter = ImageFilter.Blur(8f, 8f))
@@ -57,7 +57,7 @@ class SpriteBitmapGm : SkiaGm {
             c.save()
             c.clipRect(insetClip)
         }
-        c.drawImage(bm, Rect(dx.toFloat(), dy.toFloat(), (dx + 100).toFloat(), (dy + 100).toFloat()), paint)
+        c.drawImage(bm, RectF32(dx.toFloat(), dy.toFloat(), (dx + 100).toFloat(), (dy + 100).toFloat()), paint)
         if (doClip) {
             c.restore()
         }

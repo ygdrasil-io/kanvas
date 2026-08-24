@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.Vector2F32
@@ -11,7 +11,7 @@ enum class ColorChannel { R, G, B, A }
 sealed interface ImageFilter {
     /** Crops [input] to [crop], sampling outside it with [tileMode]. */
     data class Crop(
-        val crop: Rect,
+        val crop: RectF32,
         val tileMode: TileMode = TileMode.CLAMP,
         val input: ImageFilter? = null,
     ) : ImageFilter
@@ -61,14 +61,14 @@ sealed interface ImageFilter {
         val input: ImageFilter? = null,
     ) : ImageFilter
     data class Offset(val dx: Float, val dy: Float, val input: ImageFilter? = null) : ImageFilter
-    data class Tile(val src: Rect, val dst: Rect, val input: ImageFilter? = null) : ImageFilter
+    data class Tile(val src: RectF32, val dst: RectF32, val input: ImageFilter? = null) : ImageFilter
     data class Merge(val inputs: List<ImageFilter>) : ImageFilter
     data class DisplacementMap(
         val xChannelSelector: ColorChannel, val yChannelSelector: ColorChannel,
         val scale: Float, val displacement: ImageFilter, val input: ImageFilter? = null,
     ) : ImageFilter
-    data class Picture(val picture: org.graphiks.kanvas.picture.Picture, val src: Rect? = null) : ImageFilter
-    data class Magnifier(val src: Rect, val zoom: Float, val inset: Float, val input: ImageFilter? = null) : ImageFilter
+    data class Picture(val picture: org.graphiks.kanvas.picture.Picture, val src: RectF32? = null) : ImageFilter
+    data class Magnifier(val src: RectF32, val zoom: Float, val inset: Float, val input: ImageFilter? = null) : ImageFilter
     data class MatrixConvolution(
         val kernelSize: Size, val kernel: FloatArray, val gain: Float, val bias: Float,
         val kernelOffset: Vector2F32, val tileMode: TileMode, val convolveAlpha: Boolean,

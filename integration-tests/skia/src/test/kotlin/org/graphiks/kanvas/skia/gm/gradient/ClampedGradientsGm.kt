@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -40,7 +40,7 @@ class ClampedGradientsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val rect = Rect(0f, 0f, 100f, 300f)
+        val rect = RectF32(0f, 0f, 100f, 300f)
         canvas.translate(20f, 20f)
 
         val paint = Paint(

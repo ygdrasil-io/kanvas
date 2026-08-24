@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -31,7 +31,7 @@ class VerticesPerspectiveGm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, 128f, 128f)
+        val r = RectF32(0f, 0f, 128f, 128f)
 
         val checker = makeCheckerboardShader(Color.BLACK, Color.WHITE, 32)
         val paint = Paint(shader = checker)
@@ -57,19 +57,19 @@ class VerticesPerspectiveGm : SkiaGm {
         canvas.restore()
 
         canvas.save()
-        canvas.translate(r.width, 0f)
+        canvas.translate(r.width(), 0f)
         canvas.concat(persp)
         canvas.drawRect(r, paint)
         canvas.restore()
 
         canvas.save()
-        canvas.translate(0f, r.height)
+        canvas.translate(0f, r.height())
         canvas.concat(persp)
         canvas.drawVertices(verts, paint)
         canvas.restore()
 
         canvas.save()
-        canvas.translate(r.width, r.height)
+        canvas.translate(r.width(), r.height())
         canvas.concat(persp)
         canvas.drawVertices(verts, paint)
         canvas.restore()

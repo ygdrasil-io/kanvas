@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -90,8 +90,8 @@ class DashCircle2Gm : SkiaGm {
         canvas.save()
         canvas.translate(-kBoundsHalf * 1.2f + kPad, -kBoundsHalf * 1.2f + kPad)
 
-        val kCircle = Rect.fromLTRB(-kRadius, -kRadius, kRadius, kRadius)
-        val kThinCircle = Rect.fromLTRB(-kThinRadius, -kThinRadius, kThinRadius, kThinRadius)
+        val kCircle = RectF32.ofLTRB(-kRadius, -kRadius, kRadius, kRadius)
+        val kThinCircle = RectF32.ofLTRB(-kThinRadius, -kThinRadius, kThinRadius, kThinRadius)
 
         for (i in dEffects.indices) {
             canvas.save()

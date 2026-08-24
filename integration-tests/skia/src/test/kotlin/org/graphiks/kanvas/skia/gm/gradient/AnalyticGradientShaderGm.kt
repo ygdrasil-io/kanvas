@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -62,7 +62,7 @@ class AnalyticGradientShaderGm : SkiaGm {
             (cellCol * CELL_WIDTH + PAD_WIDTH).toFloat(),
             (cellRow * CELL_HEIGHT + PAD_HEIGHT).toFloat(),
         )
-        canvas.drawRect(Rect(0f, 0f, RECT_WIDTH.toFloat(), RECT_HEIGHT.toFloat()), paint)
+        canvas.drawRect(RectF32(0f, 0f, RECT_WIDTH.toFloat(), RECT_HEIGHT.toFloat()), paint)
         canvas.restore()
     }
 

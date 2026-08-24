@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Color
 
 /**
@@ -54,7 +54,7 @@ class LumaFilterGm : SkiaGm {
             floatArrayOf(1f, 1f, 1f, 1f),
         )
 
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
 
         for (i in colors.indices) {
             val c = colors[i]
@@ -64,7 +64,7 @@ class LumaFilterGm : SkiaGm {
             val shader = effect.makeShader(uniforms)
             val x = (i % 4) * 128f
             val y = (i / 4) * 128f
-            canvas.drawRect(Rect(x, y, x + 128f, y + 128f), Paint(shader = shader))
+            canvas.drawRect(RectF32(x, y, x + 128f, y + 128f), Paint(shader = shader))
         }
     }
 }

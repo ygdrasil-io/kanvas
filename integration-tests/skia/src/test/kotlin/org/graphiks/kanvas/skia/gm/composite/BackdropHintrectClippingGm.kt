@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class BackdropHintrectClippingGm : SkiaGm {
     override val name = "backdrop_hintrect_clipping"
@@ -36,7 +36,7 @@ class BackdropHintrectClippingGm : SkiaGm {
                 drawOne(canvas, useClip, useHintRect)
 
                 val rec = PictureRecorder()
-                val rc = rec.beginRecording(Rect.fromLTRB(0f, 0f, 256f, 256f))
+                val rc = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 256f, 256f))
                 val tmp = GmCanvas(rc, 256, 256)
                 drawOne(tmp, useClip, useHintRect)
                 canvas.translate(256f, 0f)
@@ -76,7 +76,7 @@ private fun makeSweepShader(cx: Float, cy: Float): Shader {
 
 private fun drawOne(canvas: GmCanvas, useClip: Boolean, useHintRect: Boolean) {
     canvas.save()
-    canvas.clipRect(Rect.fromLTRB(0f, 0f, 256f, 256f))
+    canvas.clipRect(RectF32.ofLTRB(0f, 0f, 256f, 256f))
 
     val cx = 128f
     val cy = 128f
@@ -84,13 +84,13 @@ private fun drawOne(canvas: GmCanvas, useClip: Boolean, useHintRect: Boolean) {
     val p = Paint(shader = makeSweepShader(cx, cy), antiAlias = true)
     canvas.drawCircle(cx, cy, rad, p)
 
-    val r = Rect.fromLTRB(cx - 50, cy - 50, cx + 50, cy + 50)
+    val r = RectF32.ofLTRB(cx - 50, cy - 50, cx + 50, cy + 50)
     val sigma = 10f
     if (useClip) {
         canvas.clipRect(r)
     }
     val blur = ImageFilter.Blur(sigma, sigma, TileMode.CLAMP)
-    val backdropBounds: Rect? = if (useHintRect) r else null
+    val backdropBounds: RectF32? = if (useHintRect) r else null
 
     // Note: Kanvas saveLayer does not support backdrop filter directly;
     // we apply the blur as the layer's image filter instead.

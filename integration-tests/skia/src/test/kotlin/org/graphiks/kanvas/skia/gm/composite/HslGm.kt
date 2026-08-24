@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/hsl.cpp::DEF_SIMPLE_GM(HSL_duck, canvas, 1110, 620)`.
@@ -36,7 +36,7 @@ class HslGm : SkiaGm {
         val image = srcBytes?.let { Image.decode(it) } ?: return
 
         val dst = makeGrad(image.width.toFloat())
-        val r = Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val r = RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat())
 
         canvas.translate(10f, 50f)
         canvas.scale(0.5f, 0.5f)
@@ -54,7 +54,7 @@ class HslGm : SkiaGm {
         canvas.save()
         for ((_, name) in recs) {
             canvas.drawString(name, 150f, -20f, font, Paint())
-            canvas.translate(r.width + 10f, 0f)
+            canvas.translate(r.width() + 10f, 0f)
         }
         canvas.restore()
 
@@ -66,12 +66,12 @@ class HslGm : SkiaGm {
 
                 val srcPaint = Paint(blendMode = mode, color = Color.fromRGBA(1f, 1f, 1f, srcA))
                 canvas.drawImage(image, r, srcPaint)
-                canvas.translate(r.width + 10f, 0f)
+                canvas.translate(r.width() + 10f, 0f)
             }
             val str = "alpha ${"%.1f".format(srcA)}"
-            canvas.drawString(str, 10f, r.height / 2f, font, Paint())
+            canvas.drawString(str, 10f, r.height() / 2f, font, Paint())
             canvas.restore()
-            canvas.translate(0f, r.height + 10f)
+            canvas.translate(0f, r.height() + 10f)
         }
     }
 

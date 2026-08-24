@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.random.Random
 
 /**
@@ -52,7 +52,7 @@ class ImageBlur2Gm : SkiaGm {
                         imageFilter = paint.imageFilter,
                     )
                     canvas.drawRect(
-                        Rect.fromXYWH(cellX, cellY, dx - 4f, 10f),
+                        RectF32.ofOriginSize(cellX, cellY, dx - 4f, 10f),
                         fillPaint,
                     )
                 }

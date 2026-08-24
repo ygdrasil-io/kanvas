@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradtext.cpp` ChromeGradText1GM.
@@ -30,7 +30,7 @@ class ChromeGradText1Gm : SkiaGm {
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val r = Rect(0f, 0f, 100f, 100f)
+        val r = RectF32(0f, 0f, 100f, 100f)
         canvas.clipRect(r)
         canvas.drawRect(r, Paint(color = Color.RED))
 

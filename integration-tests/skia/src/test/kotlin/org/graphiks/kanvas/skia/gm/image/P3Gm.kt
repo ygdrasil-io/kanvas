@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/p3.cpp`.
  *  Tests P3 color space rendering — draws gradient colours and a
@@ -32,10 +32,10 @@ class P3Gm : SkiaGm {
         val green = Color.GREEN
         val blue = Color.BLUE
 
-        canvas.drawRect(Rect(10f, 10f, 70f, 70f), Paint(color = red))
+        canvas.drawRect(RectF32(10f, 10f, 70f, 70f), Paint(color = red))
         canvas.translate(0f, 80f)
 
-        canvas.drawRect(Rect(10f, 10f, 70f, 70f), Paint(color = red))
+        canvas.drawRect(RectF32(10f, 10f, 70f, 70f), Paint(color = red))
         canvas.translate(0f, 80f)
 
         drawGradientPanel(canvas, red, green)
@@ -51,7 +51,7 @@ class P3Gm : SkiaGm {
         canvas.translate(0f, 80f)
 
         canvas.drawRect(
-            Rect(10f, 10f, 70f, 70f),
+            RectF32(10f, 10f, 70f, 70f),
             Paint(shader = Shader.LinearGradient(
                 start = Point2F32(10.5f, 10.5f), end = Point2F32(10.5f, 69.5f),
                 stops = listOf(
@@ -67,28 +67,28 @@ class P3Gm : SkiaGm {
         val mask = Image.fromPixels(16, 16, maskPixels, ColorType.ALPHA_8, "a8_mask")
         val tint = Color.RED
 
-        canvas.drawImage(mask, Rect(10f, 10f, 26f, 26f), Paint(color = tint))
+        canvas.drawImage(mask, RectF32(10f, 10f, 26f, 26f), Paint(color = tint))
         canvas.translate(0f, 80f)
 
         canvas.save()
         canvas.translate(10f, 10f)
-        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint(color = tint, shader = Shader.Image(mask)))
+        canvas.drawRect(RectF32(0f, 0f, 16f, 16f), Paint(color = tint, shader = Shader.Image(mask)))
         canvas.restore()
         canvas.translate(0f, 80f)
 
-        canvas.drawImageRect(mask, Rect(0f, 0f, 16f, 16f), Rect(10f, 10f, 70f, 70f), Paint(color = tint))
+        canvas.drawImageRect(mask, RectF32(0f, 0f, 16f, 16f), RectF32(10f, 10f, 70f, 70f), Paint(color = tint))
         canvas.translate(0f, 80f)
 
         canvas.save()
         canvas.translate(10f, 10f)
         canvas.scale(3.75f, 3.75f)
-        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint(color = tint, shader = Shader.Image(mask)))
+        canvas.drawRect(RectF32(0f, 0f, 16f, 16f), Paint(color = tint, shader = Shader.Image(mask)))
         canvas.restore()
     }
 
     private fun drawGradientPanel(c: GmCanvas, c0: Color, c1: Color) {
         c.drawRect(
-            Rect(10f, 10f, 70f, 70f),
+            RectF32(10f, 10f, 70f, 70f),
             Paint(shader = Shader.LinearGradient(
                 start = Point2F32(10.5f, 10.5f), end = Point2F32(69.5f, 69.5f),
                 stops = listOf(GradientStop(0f, c0), GradientStop(1f, c1)),

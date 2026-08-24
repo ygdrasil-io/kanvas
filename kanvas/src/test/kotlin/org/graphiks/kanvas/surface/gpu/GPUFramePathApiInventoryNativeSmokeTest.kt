@@ -21,7 +21,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GPUFramePathApiInventoryNativeSmokeTest {
     @Test
@@ -41,13 +41,13 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(2f, 2f, 20f, 20f),
+                    RectF32.ofLTRB(2f, 2f, 20f, 20f),
                     Paint.fill(halfRed).copy(antiAlias = false),
                     Matrix3x3F32.Identity,
-                    ClipStack.DeviceRect(Rect.fromLTRB(4f, 5f, 18f, 19f), antiAlias = false),
+                    ClipStack.DeviceRect(RectF32.ofLTRB(4f, 5f, 18f, 19f), antiAlias = false),
                 ),
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(6f, 6f, 12f, 12f),
+                    RectF32.ofLTRB(6f, 6f, 12f, 12f),
                     Paint.fill(halfGreen).copy(antiAlias = false),
                     Matrix3x3F32.skewing(0.5f, 0f),
                     ClipStack.WideOpen,

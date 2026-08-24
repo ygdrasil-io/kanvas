@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.paint.TileMode
 
 /**
@@ -55,7 +55,7 @@ class MirrorTileGm : SkiaGm {
                     translate(imgx.width.toFloat(), 0f)
                     if (offset) translate(0.5f, 0f)
                     drawRect(
-                        Rect(-imgx.width.toFloat(), 0f, 3f * imgx.width, 5f),
+                        RectF32(-imgx.width.toFloat(), 0f, 3f * imgx.width, 5f),
                         paintH,
                     )
                     restore()
@@ -67,7 +67,7 @@ class MirrorTileGm : SkiaGm {
                     translate(3f * imgx.width + 3f, imgy.height.toFloat())
                     if (offset) translate(0f, 0.5f)
                     drawRect(
-                        Rect(0f, -imgy.height.toFloat(), 5f, 3f * imgy.height),
+                        RectF32(0f, -imgy.height.toFloat(), 5f, 3f * imgy.height),
                         paintV,
                     )
                     restore()
@@ -79,6 +79,6 @@ class MirrorTileGm : SkiaGm {
 
         val snapshot = surf.makeImageSnapshot()
         canvas.scale(8f, 8f)
-        canvas.drawImage(snapshot, Rect(0f, 0f, offscreenW.toFloat(), offscreenH.toFloat()))
+        canvas.drawImage(snapshot, RectF32(0f, 0f, offscreenW.toFloat(), offscreenH.toFloat()))
     }
 }

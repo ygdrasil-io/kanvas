@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
@@ -37,7 +37,7 @@ class OffsetImageFilterGm : SkiaGm {
 
         for (i in 0 until 4) {
             val image = if (i and 0x01 == 1) checkerboard else bitmap
-            val cropRect = Rect(
+            val cropRect = RectF32(
                 (i * 12).toFloat(), (i * 8).toFloat(),
                 (image.width - i * 8).toFloat(), (image.height - i * 12).toFloat(),
             )
@@ -48,7 +48,7 @@ class OffsetImageFilterGm : SkiaGm {
             canvas.translate((image.width + 12).toFloat(), 0f)
         }
 
-        val cropRect = Rect(0f, 0f, 100f, 100f)
+        val cropRect = RectF32(0f, 0f, 100f, 100f)
         val paint = Paint(imageFilter = ImageFilter.Offset(-5f, -10f))
         drawClippedImage(canvas, bitmap, paint, 2f, cropRect)
     }
@@ -58,13 +58,13 @@ class OffsetImageFilterGm : SkiaGm {
         image: Image,
         paint: Paint,
         scale: Float,
-        cropRect: Rect,
+        cropRect: RectF32,
     ) {
-        val clipRect = Rect(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val clipRect = RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat())
         canvas.save()
         canvas.clipRect(clipRect)
         canvas.scale(scale, scale)
-        canvas.drawImage(image, Rect(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
+        canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()), paint)
         canvas.restore()
 
         val strokePaint = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 2f)
@@ -89,7 +89,7 @@ class OffsetImageFilterGm : SkiaGm {
             while (y < h) {
                 var x = (y / size) % 2 * size
                 while (x < w) {
-                    drawRect(Rect(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()), paint)
+                    drawRect(RectF32(x.toFloat(), y.toFloat(), (x + size).toFloat(), (y + size).toFloat()), paint)
                     x += 2 * size
                 }
                 y += size

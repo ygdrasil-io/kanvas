@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/tilemodes.cpp::tilemode_decal`.
@@ -49,7 +49,7 @@ class TilemodeDecalGm : SkiaGm {
 
         val imgW = img.width.toFloat()
         val imgH = img.height.toFloat()
-        val r = Rect(-20f, -20f, imgW + 20f, imgH + 20f)
+        val r = RectF32(-20f, -20f, imgW + 20f, imgH + 20f)
 
         canvas.translate(45f, 45f)
 
@@ -68,21 +68,21 @@ class TilemodeDecalGm : SkiaGm {
                 canvas.save(); canvas.rotate(4f)
                 canvas.drawRect(r, bgPaint)
                 canvas.drawRect(r, Paint(shader = img.makeShader(pair.tx, pair.ty, SamplingOptions.NEAREST)))
-                canvas.restore(); canvas.translate(0f, r.height + 20f)
+                canvas.restore(); canvas.translate(0f, r.height() + 20f)
             }
             // 2. Linear
             run {
                 canvas.save(); canvas.rotate(4f)
                 canvas.drawRect(r, bgPaint)
                 canvas.drawRect(r, Paint(shader = img.makeShader(pair.tx, pair.ty, SamplingOptions.LINEAR)))
-                canvas.restore(); canvas.translate(0f, r.height + 20f)
+                canvas.restore(); canvas.translate(0f, r.height() + 20f)
             }
             // 3. Bicubic
             run {
                 canvas.save(); canvas.rotate(4f)
                 canvas.drawRect(r, bgPaint)
                 canvas.drawRect(r, Paint(shader = img.makeShader(pair.tx, pair.ty, SamplingOptions.Cubic.Mitchell)))
-                canvas.restore(); canvas.translate(0f, r.height + 20f)
+                canvas.restore(); canvas.translate(0f, r.height() + 20f)
             }
             // 4. Linear gradient
             run {
@@ -94,7 +94,7 @@ class TilemodeDecalGm : SkiaGm {
                     pair.tx,
                 )
                 canvas.drawRect(r, Paint(shader = grad))
-                canvas.restore(); canvas.translate(0f, r.height + 20f)
+                canvas.restore(); canvas.translate(0f, r.height() + 20f)
             }
             // 5. Radial gradient
             run {
@@ -108,10 +108,10 @@ class TilemodeDecalGm : SkiaGm {
                     pair.tx,
                 )
                 canvas.drawRect(r, Paint(shader = grad))
-                canvas.restore(); canvas.translate(0f, r.height + 20f)
+                canvas.restore(); canvas.translate(0f, r.height() + 20f)
             }
             canvas.restore()
-            canvas.translate(r.width + 10f, 0f)
+            canvas.translate(r.width() + 10f, 0f)
         }
     }
 }

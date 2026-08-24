@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/filltypespersp.cpp`.
  *  Tests fill types with perspective — draws star-shaped paths with
@@ -48,7 +48,7 @@ class FillTypePerspGm : SkiaGm {
         )
         canvas.save()
         canvas.translate(100f, 100f)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), bgPaint)
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), bgPaint)
         canvas.restore()
 
         canvas.translate(20f, 20f)
@@ -84,15 +84,15 @@ class FillTypePerspGm : SkiaGm {
     private fun showPath(
         canvas: GmCanvas, x: Int, y: Int, ft: Float, scale: Float, paint: Paint,
     ) {
-        val r = Rect(0f, 0f, 150f, 150f)
+        val r = RectF32(0f, 0f, 150f, 150f)
         canvas.save()
         canvas.translate(x.toFloat(), y.toFloat())
         canvas.clipRect(r)
         canvas.drawRect(r, Paint(color = Color.WHITE))
         val withFill = fPath
-        canvas.translate(r.left + r.width / 2f, r.top + r.height / 2f)
+        canvas.translate(r.left + r.width() / 2f, r.top + r.height() / 2f)
         canvas.scale(scale, scale)
-        canvas.translate(-(r.left + r.width / 2f), -(r.top + r.height / 2f))
+        canvas.translate(-(r.left + r.width() / 2f), -(r.top + r.height() / 2f))
         canvas.drawPath(withFill, paint)
         canvas.restore()
     }

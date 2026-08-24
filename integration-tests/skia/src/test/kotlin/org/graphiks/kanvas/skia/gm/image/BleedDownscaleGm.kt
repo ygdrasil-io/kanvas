@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bleed.cpp::bleed_downscale`.
@@ -33,12 +33,12 @@ class BleedDownscaleGm : SkiaGm {
             for (col in 0 until 3) {
                 val surf = Surface(1, 1)
                 surf.canvas {
-                    drawImageRect(img, src, Rect(0f, 0f, 1f, 1f))
+                    drawImageRect(img, src, RectF32(0f, 0f, 1f, 1f))
                 }
                 val snap = surf.makeImageSnapshot()
                 canvas.drawImage(
                     snap,
-                    Rect(0f, 0f, snap.width.toFloat(), snap.height.toFloat()),
+                    RectF32(0f, 0f, snap.width.toFloat(), snap.height.toFloat()),
                 )
                 canvas.translate(120f, 0f)
             }
@@ -47,16 +47,16 @@ class BleedDownscaleGm : SkiaGm {
         }
     }
 
-    private fun makeImage(): Pair<Image, Rect> {
+    private fun makeImage(): Pair<Image, RectF32> {
         val n = 10 + 2 + 8 + 2 + 10
         val surf = Surface(n, n)
         surf.canvas {
-            drawRect(Rect(0f, 0f, n.toFloat(), n.toFloat()), Paint(color = Color.RED))
-            val inner = Rect.fromLTRB(10f, 10f, (n - 10).toFloat(), (n - 10).toFloat())
+            drawRect(RectF32(0f, 0f, n.toFloat(), n.toFloat()), Paint(color = Color.RED))
+            val inner = RectF32.ofLTRB(10f, 10f, (n - 10).toFloat(), (n - 10).toFloat())
             drawRect(inner, Paint(color = Color.BLUE))
         }
         val image = surf.makeImageSnapshot()
-        val srcRect = Rect.fromLTRB(12f, 12f, (n - 12).toFloat(), (n - 12).toFloat())
+        val srcRect = RectF32.ofLTRB(12f, 12f, (n - 12).toFloat(), (n - 12).toFloat())
         return Pair(image, srcRect)
     }
 }

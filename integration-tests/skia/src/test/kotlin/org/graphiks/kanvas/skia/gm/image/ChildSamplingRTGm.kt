@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests child sampling in a runtime effect with semi-transparent crossed lines. */
 class ChildSamplingRTGm : SkiaGm {
@@ -19,7 +19,7 @@ class ChildSamplingRTGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bg = Paint(color = Color.fromRGBA(0.9f, 0.9f, 0.9f, 1f))
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), bg)
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), bg)
         val p = Paint(color = Color.fromRGBA(1f, 0f, 0f, 0.8f), antiAlias = true)
         canvas.drawLine(10f, 10f, 100f, 100f, p)
         canvas.drawLine(10f, 100f, 100f, 10f, p)

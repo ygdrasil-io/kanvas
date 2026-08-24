@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/perlinnoise.cpp::PerlinNoiseRotatedGM` (320 × 220).
@@ -33,8 +33,8 @@ class PerlinNoiseRotatedGm : SkiaGm {
             antiAlias = true,
         )
 
-        val rectToDraw = Rect.fromXYWH(0f, 0f, 60f, 60f)
-        val marker = Rect.fromXYWH(0f, 0f, 5f, 5f)
+        val rectToDraw = RectF32.ofOriginSize(0f, 0f, 60f, 60f)
+        val marker = RectF32.ofOriginSize(0f, 0f, 5f, 5f)
         val cellW = 100f
         val cellH = 100f
         val kPad = 10
@@ -46,12 +46,12 @@ class PerlinNoiseRotatedGm : SkiaGm {
             for (rotation in listOf(0f, 10f, 80f)) {
                 canvas.save()
                 canvas.translate(xOffset, yOffset)
-                canvas.drawRect(Rect.fromXYWH(0f, 0f, cellW, cellH), outline)
+                canvas.drawRect(RectF32.ofOriginSize(0f, 0f, cellW, cellH), outline)
 
                 canvas.save()
                 canvas.translate(cellW / 2f, cellH / 2f)
                 canvas.rotate(rotation)
-                canvas.translate(-rectToDraw.width / 2f, -rectToDraw.height / 2f)
+                canvas.translate(-rectToDraw.width() / 2f, -rectToDraw.height() / 2f)
                 canvas.drawRect(rectToDraw, noisePaint)
                 canvas.drawRect(rectToDraw, outline)
                 canvas.drawRect(marker, outline)

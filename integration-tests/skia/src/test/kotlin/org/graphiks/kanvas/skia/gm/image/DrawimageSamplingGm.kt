@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/image_shader.cpp` (draw-image-sampling variant).
  *  Compares drawImage, shader-based, and drawImageRect paths for a
@@ -27,26 +27,26 @@ class DrawimageSamplingGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val n = 256
         val kScale = 1.0f / 6
-        val dst = Rect(0f, 0f, kScale * n, kScale * n)
+        val dst = RectF32(0f, 0f, kScale * n, kScale * n)
         val img = checkerboardImage(n, n, 0xFF000000u.toInt(), 0xFFFFFFFFu.toInt(), 7)
-        val src = Rect(0f, 0f, img.width.toFloat(), img.height.toFloat())
-        val mx = Matrix3x3F32.scaling(dst.width / src.width, dst.height / src.height)
+        val src = RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat())
+        val mx = Matrix3x3F32.scaling(dst.width() / src.width(), dst.height() / src.height())
 
         for (mm in listOf(false, true)) {
             for (fm in listOf(false, true)) {
                 canvas.save()
                 canvas.save()
                 canvas.concat(mx)
-                canvas.drawImage(img, Rect(0f, 0f, img.width.toFloat(), img.height.toFloat()))
+                canvas.drawImage(img, RectF32(0f, 0f, img.width.toFloat(), img.height.toFloat()))
                 canvas.restore()
 
-                canvas.translate(dst.width + 4f, 0f)
+                canvas.translate(dst.width() + 4f, 0f)
                 canvas.drawRect(dst, Paint(shader = img.makeShader(TileMode.CLAMP, TileMode.CLAMP)))
-                canvas.translate(dst.width + 4f, 0f)
+                canvas.translate(dst.width() + 4f, 0f)
 
                 canvas.drawImageRect(img, src, dst)
                 canvas.restore()
-                canvas.translate(0f, dst.height + 8f)
+                canvas.translate(0f, dst.height() + 8f)
             }
         }
     }

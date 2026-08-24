@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/aaclip.cpp:ClipCubicGM` (skbug.com/40034846).
@@ -60,7 +60,7 @@ class ClipCubicGm : SkiaGm {
 
     private fun drawAndClip(canvas: GmCanvas, p: Path, dx: Float, dy: Float) {
         canvas.save()
-        val r = Rect.fromXYWH(0f, H / 4f, W, H / 2f)
+        val r = RectF32.ofOriginSize(0f, H / 4f, W, H / 2f)
         val bgPaint = Paint(color = Color(0xFF8888FFu))
 
         canvas.drawRect(r, bgPaint)

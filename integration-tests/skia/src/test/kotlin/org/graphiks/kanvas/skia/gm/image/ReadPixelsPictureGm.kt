@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ReadPixelsPictureGm : SkiaGm {
     override val name = "readpixelspicture"
@@ -37,7 +37,7 @@ class ReadPixelsPictureGm : SkiaGm {
         for (col in 0 until 3) {
             canvas.save()
             for (row in 0 until 12) {
-                canvas.drawImage(image, Rect.fromXYWH(0f, 0f, cellW.toFloat(), cellH.toFloat()))
+                canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, cellW.toFloat(), cellH.toFloat()))
                 canvas.translate(0f, cellH.toFloat())
             }
             canvas.restore()
@@ -60,7 +60,7 @@ class ReadPixelsPictureGm : SkiaGm {
 
     private fun makePictureImage(): Image? {
         val recorder = PictureRecorder()
-        val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, kCellWidth.toFloat(), kCellHeight.toFloat()))
+        val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, kCellWidth.toFloat(), kCellHeight.toFloat()))
         drawContents(rc)
         val picture = recorder.finishRecordingAsPicture()
         val surface = Surface(kCellWidth, kCellHeight)

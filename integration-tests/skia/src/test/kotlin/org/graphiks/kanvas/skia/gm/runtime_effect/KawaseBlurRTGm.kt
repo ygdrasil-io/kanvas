@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/kawaseblur.cpp` (512 x 512).
@@ -46,7 +46,7 @@ class KawaseBlurRTGm : SkiaGm {
         }
         val blurShader = blurEffect.makeShader(blurUniforms, mapOf("src" to origShader))
         canvas.saveLayer(null, Paint(shader = blurShader))
-        canvas.drawImage(original, Rect(0f, 0f, 256f, 256f))
+        canvas.drawImage(original, RectF32(0f, 0f, 256f, 256f))
         canvas.restore()
 
         // Pass 2: cross-fade blurred result + original
@@ -61,7 +61,7 @@ class KawaseBlurRTGm : SkiaGm {
             mapOf("in_blur" to blurredShader, "in_original" to origShader),
         )
         canvas.saveLayer(null, Paint(shader = mixShader))
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.WHITE))
         canvas.restore()
     }
 

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/emboss.cpp::embossmaskfilter` (640 × 960).
@@ -45,7 +45,7 @@ class EmbossmaskfilterGm : SkiaGm {
         for (r in 0 until gridTopRows) {
             for (col in 0 until gridTopCols) {
                 if (exampleIndex < sigmas.size) {
-                    val cellBounds = Rect(
+                    val cellBounds = RectF32(
                         col * cellTopW + 10f, r * cellTopH + 10f,
                         col * cellTopW + cellTopW - 10f, r * cellTopH + cellTopH - 10f,
                     )
@@ -75,7 +75,7 @@ class EmbossmaskfilterGm : SkiaGm {
             for (col in 0 until gridBotCols) {
                 if (bIndex < blendModesToTest.size) {
                     val mode = blendModesToTest[bIndex]
-                    val cellBounds = Rect(
+                    val cellBounds = RectF32(
                         col * cellBotW + 10f, topHeight + r * cellBotH + 10f,
                         col * cellBotW + cellBotW - 10f, topHeight + r * cellBotH + cellBotH - 10f,
                     )
@@ -86,24 +86,24 @@ class EmbossmaskfilterGm : SkiaGm {
         }
     }
 
-    private fun drawBlurExample(canvas: GmCanvas, bounds: Rect, sigma: Float, label: String) {
+    private fun drawBlurExample(canvas: GmCanvas, bounds: RectF32, sigma: Float, label: String) {
         canvas.save()
         canvas.clipRect(bounds)
         canvas.translate(bounds.left, bounds.top)
 
         val mf = MaskFilter.Blur(BlurStyle.NORMAL, blurRadius(sigma))
 
-        val radius = bounds.width * 0.25f
+        val radius = bounds.width() * 0.25f
         val offset = radius * 0.3f
-        val cx = bounds.width * 0.5f
-        val cy = bounds.height * 0.5f
+        val cx = bounds.width() * 0.5f
+        val cy = bounds.height() * 0.5f
 
         val paint1 = Paint(antiAlias = true, color = Color.RED, maskFilter = mf)
         val paint2 = Paint(antiAlias = true, color = Color.BLUE, maskFilter = mf)
 
         canvas.drawCircle(cx - offset, cy, radius, paint1)
         canvas.drawRect(
-            Rect(cx + offset - radius, cy - radius, cx + offset + radius, cy + radius),
+            RectF32(cx + offset - radius, cy - radius, cx + offset + radius, cy + radius),
             paint2,
         )
 
@@ -112,7 +112,7 @@ class EmbossmaskfilterGm : SkiaGm {
 
     private fun drawBlurBlendExample(
         canvas: GmCanvas,
-        bounds: Rect,
+        bounds: RectF32,
         blurFilter: MaskFilter,
         blendMode: BlendMode,
         label: String,
@@ -121,17 +121,17 @@ class EmbossmaskfilterGm : SkiaGm {
         canvas.clipRect(bounds)
         canvas.translate(bounds.left, bounds.top)
 
-        val radius = bounds.width * 0.25f
+        val radius = bounds.width() * 0.25f
         val offset = radius * 0.3f
-        val cx = bounds.width * 0.5f
-        val cy = bounds.height * 0.5f
+        val cx = bounds.width() * 0.5f
+        val cy = bounds.height() * 0.5f
 
         val paint1 = Paint(antiAlias = true, color = Color.RED)
         val paint2 = Paint(antiAlias = true, color = Color.BLUE, maskFilter = blurFilter, blendMode = blendMode)
 
         canvas.drawCircle(cx - offset, cy, radius, paint1)
         canvas.drawRect(
-            Rect(cx + offset - radius, cy - radius, cx + offset + radius, cy + radius),
+            RectF32(cx + offset - radius, cy - radius, cx + offset + radius, cy + radius),
             paint2,
         )
 

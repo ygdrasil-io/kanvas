@@ -23,7 +23,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ImageShaderGm : SkiaGm {
     override val name = "image-shader"
@@ -37,7 +37,7 @@ class ImageShaderGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (fImage == null) {
-            val bounds = Rect.fromLTRB(0f, 0f, 100f, 100f)
+            val bounds = RectF32.ofLTRB(0f, 0f, 100f, 100f)
             val recorder = PictureRecorder()
             val rc = recorder.beginRecording(bounds)
             drawSomething(rc, bounds)
@@ -58,7 +58,7 @@ class ImageShaderGm : SkiaGm {
         }
     }
 
-    private fun drawSomething(c: Canvas, bounds: Rect) {
+    private fun drawSomething(c: Canvas, bounds: RectF32) {
         val paint = Paint(
             antiAlias = true,
             color = Color.RED,
@@ -78,7 +78,7 @@ class ImageShaderGm : SkiaGm {
 
     private fun testImage(canvas: GmCanvas, image: Image) {
         canvas.save()
-        canvas.drawImage(image, Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()))
         canvas.translate(0f, 120f)
         val baseShader = image.makeShader(
             tileModeX = TileMode.REPEAT,

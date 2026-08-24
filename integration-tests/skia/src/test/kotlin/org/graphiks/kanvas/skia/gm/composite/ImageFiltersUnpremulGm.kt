@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefiltersunpremul.cpp`.
@@ -32,6 +32,6 @@ class ImageFiltersUnpremulGm : SkiaGm {
             pixels[i * 4 + 3] = 50.toByte()
         }
         val image = Image.fromPixels(64, 64, pixels, ColorType.RGBA_8888, "unpremul")
-        canvas.drawImage(image, Rect(0f, 0f, 64f, 64f))
+        canvas.drawImage(image, RectF32(0f, 0f, 64f, 64f))
     }
 }

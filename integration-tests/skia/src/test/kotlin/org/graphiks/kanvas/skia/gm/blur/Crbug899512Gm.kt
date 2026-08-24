@@ -7,7 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -33,6 +33,6 @@ class Crbug899512Gm : SkiaGm {
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 6.2735f),
             colorFilter = ColorFilter.Blend(Color.BLACK, BlendMode.SRC_IN),
         )
-        canvas.drawRect(Rect.fromXYWH(0f, 10f, 200f, 200f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 10f, 200f, 200f), paint)
     }
 }

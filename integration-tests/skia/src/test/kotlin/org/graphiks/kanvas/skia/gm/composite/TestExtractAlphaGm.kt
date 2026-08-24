@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmapfilters.cpp::TestExtractAlphaGM`
@@ -26,11 +26,11 @@ class TestExtractAlphaGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val blueCircle = makeBlueCircleImage()
-        canvas.drawImage(blueCircle, Rect.fromXYWH(10f, 10f, 100f, 100f))
+        canvas.drawImage(blueCircle, RectF32.ofOriginSize(10f, 10f, 100f, 100f))
 
         val alphaImage = makeAlphaImage()
         val redPaint = Paint(color = Color.RED)
-        canvas.drawImage(alphaImage, Rect.fromXYWH(120f, 10f, 100f, 100f), redPaint)
+        canvas.drawImage(alphaImage, RectF32.ofOriginSize(120f, 10f, 100f, 100f), redPaint)
     }
 
     private fun makeBlueCircleImage(): Image {

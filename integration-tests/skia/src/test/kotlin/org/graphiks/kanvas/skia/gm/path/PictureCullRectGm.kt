@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/picture.cpp::PictureCullRectGM` (`picture_cull_rect`, 120 × 120).
@@ -28,16 +28,16 @@ class PictureCullRectGm : SkiaGm {
     private val picture: Picture by lazy { makePicture() }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.clipRect(Rect.fromLTRB(0f, 60f, 120f, 120f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 60f, 120f, 120f))
         canvas.translate(10f, 10f)
         canvas.drawPicture(picture)
     }
 
     private fun makePicture(): Picture {
         val rec = PictureRecorder()
-        val recCanvas = rec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val recCanvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         val paint = Paint(color = Color(0x800000FFu))
-        val rect = Rect.fromLTRB(0f, 80f, 100f, 100f)
+        val rect = RectF32.ofLTRB(0f, 80f, 100f, 100f)
         recCanvas.drawRect(rect, paint)
         val oval = Path { }
         oval.addOval(rect)

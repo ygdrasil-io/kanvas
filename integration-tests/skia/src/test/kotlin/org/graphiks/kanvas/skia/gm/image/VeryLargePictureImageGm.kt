@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/verylargebitmap.cpp` VeryLargeBitmapGM with
@@ -53,25 +53,25 @@ class VeryLargePictureImageGm : SkiaGm {
 
         val borderPaint = Paint(style = PaintStyle.STROKE)
 
-        var dstRect = Rect.fromXYWH(0f, 0f, 128f, 128f)
+        var dstRect = RectF32.ofOriginSize(0f, 0f, 128f, 128f)
 
         canvas.save()
         canvas.clipRect(dstRect)
-        canvas.drawImage(image, Rect(0f, 0f, 128f, 128f))
+        canvas.drawImage(image, RectF32(0f, 0f, 128f, 128f))
         canvas.restore()
         canvas.drawRect(dstRect, borderPaint)
 
-        dstRect = Rect.fromXYWH(dstRect.left + 150f, dstRect.top, dstRect.width, dstRect.height)
+        dstRect = RectF32.ofOriginSize(dstRect.left + 150f, dstRect.top, dstRect.width(), dstRect.height())
         val hw = w / 2
         val hh = h / 2
-        val subset = Rect.fromLTRB((hw - 64).toFloat(), (hh - 32).toFloat(), (hw + 64).toFloat(), (hh + 32).toFloat())
+        val subset = RectF32.ofLTRB((hw - 64).toFloat(), (hh - 32).toFloat(), (hw + 64).toFloat(), (hh + 32).toFloat())
         canvas.drawImageRect(image, subset, dstRect)
         canvas.drawRect(dstRect, borderPaint)
 
-        dstRect = Rect.fromXYWH(dstRect.left + 150f, dstRect.top, dstRect.width, dstRect.height)
+        dstRect = RectF32.ofOriginSize(dstRect.left + 150f, dstRect.top, dstRect.width(), dstRect.height())
         canvas.drawImageRect(
             image,
-            Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+            RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
             dstRect,
         )
         canvas.drawRect(dstRect, borderPaint)
@@ -87,7 +87,7 @@ class VeryLargePictureImageGm : SkiaGm {
                     org.graphiks.kanvas.paint.GradientStop(1f, c2),
                 ),
             ))
-            drawRect(Rect.fromXYWH(0f, 0f, width.toFloat(), height.toFloat()), paint)
+            drawRect(RectF32.ofOriginSize(0f, 0f, width.toFloat(), height.toFloat()), paint)
         }
         return surface.makeImageSnapshot()
     }

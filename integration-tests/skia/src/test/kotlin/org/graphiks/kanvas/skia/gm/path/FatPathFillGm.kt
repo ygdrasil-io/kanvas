@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/fatpathfill.cpp::fatpathfill` (288 × 480).
@@ -50,11 +50,11 @@ class FatPathFillGm : SkiaGm {
     private fun drawFatpath(canvas: GmCanvas, surface: Surface, path: Path) {
         val fillPaint = Paint()
         surface.canvas {
-            drawRect(Rect(0f, 0f, smallW.toFloat(), smallH.toFloat()), Paint(color = Color.TRANSPARENT))
+            drawRect(RectF32(0f, 0f, smallW.toFloat(), smallH.toFloat()), Paint(color = Color.TRANSPARENT))
             drawPath(path, fillPaint)
         }
         val image = surface.makeImageSnapshot()
-        canvas.drawImage(image, Rect(0f, 0f, smallW.toFloat(), smallH.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, smallW.toFloat(), smallH.toFloat()))
 
         val strokePaint = Paint(
             style = PaintStyle.STROKE,

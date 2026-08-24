@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/skbug_4868.cpp::skbug_4868` (DEF_SIMPLE_GM, 32 × 32).
@@ -28,7 +28,7 @@ class Skbug4868Gm : SkiaGm {
         canvas.translate(-68f, -3378f)
         val paint = Paint(antiAlias = true, style = PaintStyle.STROKE)
         canvas.scale(0.56692914f, 0.56692914f)
-        val rc = Rect(158f, 5994.80273f, 165f, 5998.80225f)
+        val rc = RectF32(158f, 5994.80273f, 165f, 5998.80225f)
         canvas.clipRect(rc)
         canvas.drawColor(0xCE / 255f, 0xCF / 255f, 0xCE / 255f)
         canvas.drawLine(rc.left, rc.top, rc.right, rc.bottom, paint)

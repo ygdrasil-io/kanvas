@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 private const val K_TILE_SIZE: Int = 1 shl 10
 private const val K_BITMAP_LONG_EDGE: Int = 7 * K_TILE_SIZE
@@ -58,14 +58,14 @@ private fun drawTiles(canvas: GmCanvas, vertical: Boolean) {
     for (i in 0 until 10) {
         val offset = i * 0.1f
         val src = if (vertical) {
-            Rect.fromXYWH(0f, (K_TILE_SIZE - 50) + offset, 32f, 1124f)
+            RectF32.ofOriginSize(0f, (K_TILE_SIZE - 50) + offset, 32f, 1124f)
         } else {
-            Rect.fromXYWH((K_TILE_SIZE - 50) + offset, 0f, 1124f, 32f)
+            RectF32.ofOriginSize((K_TILE_SIZE - 50) + offset, 0f, 1124f, 32f)
         }
         val dst = if (vertical) {
-            Rect.fromXYWH(37f * i, 0f, 32f, 1124f)
+            RectF32.ofOriginSize(37f * i, 0f, 32f, 1124f)
         } else {
-            Rect.fromXYWH(0f, 37f * i, 1124f, 32f)
+            RectF32.ofOriginSize(0f, 37f * i, 1124f, 32f)
         }
         canvas.drawImageRect(image, src, dst)
     }

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class InverseClipGm : SkiaGm {
     override val name = "inverseclip"
@@ -33,8 +33,8 @@ class InverseClipGm : SkiaGm {
             cubicTo(371.905f, 105.23f, 292.905f, 31f, 195.448f, 31f)
             close()
         }.apply { fillType = FillType.INVERSE_WINDING }
-        canvas.clipRect(Rect(0f, 0f, 400f, 400f))
-        canvas.drawRect(Rect(0f, 0f, 400f, 400f), Paint(color = Color.BLUE))
+        canvas.clipRect(RectF32(0f, 0f, 400f, 400f))
+        canvas.drawRect(RectF32(0f, 0f, 400f, 400f), Paint(color = Color.BLUE))
         canvas.drawPath(clip, Paint(color = Color.WHITE))
     }
 }

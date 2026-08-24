@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/surface.cpp::snap_with_mips`.
@@ -35,7 +35,7 @@ class SnapWithMipsGm : SkiaGm {
             val contrastColor = Color(contrastPacked)
             surface.canvas {
                 drawRect(
-                    Rect.fromLTRB(w * 2f / 5f, h * 2f / 5f, w * 3f / 5f, h * 3f / 5f),
+                    RectF32.ofLTRB(w * 2f / 5f, h * 2f / 5f, w * 3f / 5f, h * 3f / 5f),
                     Paint(color = contrastColor),
                 )
             }
@@ -49,7 +49,7 @@ class SnapWithMipsGm : SkiaGm {
             canvas.save()
             for (x in 0 until 2) {
                 val image = nextImage(kColors[x])
-                canvas.drawImage(image, Rect.fromXYWH(0f, 0f, 32f, 32f))
+                canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, 32f, 32f))
                 canvas.translate(40f, 0f)
             }
             canvas.restore()

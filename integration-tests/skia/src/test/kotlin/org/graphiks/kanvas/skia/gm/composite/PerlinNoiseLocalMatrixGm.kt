@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/perlinnoise.cpp::PerlinNoiseLocalMatrixGM` (640 × 480).
@@ -32,7 +32,7 @@ class PerlinNoiseLocalMatrixGm : SkiaGm {
 
         val w = 80f
         val h = 80f
-        var r = Rect.fromXYWH(0f, 0f, w, h)
+        var r = RectF32.ofOriginSize(0f, 0f, w, h)
 
         // Row 1: default scale
         canvas.drawRect(r, paint)
@@ -60,7 +60,7 @@ class PerlinNoiseLocalMatrixGm : SkiaGm {
 
         val lm = Matrix3x3F32.scaling(2f, 2f)
         val lmPaint = Paint(shader = Shader.WithLocalMatrix(baseShader, lm))
-        r = Rect.fromXYWH(0f, 0f, w * 2f, h * 2f)
+        r = RectF32.ofOriginSize(0f, 0f, w * 2f, h * 2f)
 
         canvas.save()
         canvas.translate(0f, h + 10f)

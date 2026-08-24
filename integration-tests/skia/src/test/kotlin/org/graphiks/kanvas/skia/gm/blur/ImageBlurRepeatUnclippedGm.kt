@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imageblurrepeatmode.cpp::DEF_SIMPLE_GM(imageblurrepeatunclipped, …)`.
@@ -55,30 +55,30 @@ class ImageBlurRepeatUnclippedGm : SkiaGm {
         canvas.translate(0f, 50f)
 
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(0f, 0f, bmpW.toFloat(), (bmpH + 30).toFloat()))
-        canvas.drawImage(img, Rect.fromXYWH(0f, 0f, bmpW.toFloat(), bmpH.toFloat()), paint)
+        canvas.clipRect(RectF32.ofOriginSize(0f, 0f, bmpW.toFloat(), (bmpH + 30).toFloat()))
+        canvas.drawImage(img, RectF32.ofOriginSize(0f, 0f, bmpW.toFloat(), bmpH.toFloat()), paint)
         canvas.restore()
 
         canvas.translate(110f, 0f)
         canvas.save()
-        canvas.clipRect(Rect.fromXYWH(0f, -30f, bmpW.toFloat(), 10f))
-        canvas.drawImage(img, Rect.fromXYWH(0f, 0f, bmpW.toFloat(), bmpH.toFloat()), paint)
+        canvas.clipRect(RectF32.ofOriginSize(0f, -30f, bmpW.toFloat(), 10f))
+        canvas.drawImage(img, RectF32.ofOriginSize(0f, 0f, bmpW.toFloat(), bmpH.toFloat()), paint)
         canvas.restore()
 
         val line = Paint(color = Color.BLACK, style = PaintStyle.STROKE)
-        canvas.drawRect(Rect.fromXYWH(0f, -30f, 99f, 9f), line)
+        canvas.drawRect(RectF32.ofOriginSize(0f, -30f, 99f, 9f), line)
     }
 
     private fun drawCheckerboard(canvas: GmCanvas, w: Int, h: Int, checkSize: Int) {
         val c1 = Color.fromRGBA(0.753f, 0.753f, 0.753f, 1f)
         val c2 = Color.fromRGBA(0.502f, 0.502f, 0.502f, 1f)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = c1))
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, w.toFloat(), h.toFloat()), Paint(color = c1))
         var y = 0
         while (y < h) {
             var x = (y / checkSize) % 2 * checkSize
             while (x < w) {
                 canvas.drawRect(
-                    Rect.fromXYWH(x.toFloat(), y.toFloat(), checkSize.toFloat(), checkSize.toFloat()),
+                    RectF32.ofOriginSize(x.toFloat(), y.toFloat(), checkSize.toFloat(), checkSize.toFloat()),
                     Paint(color = c2),
                 )
                 x += 2 * checkSize

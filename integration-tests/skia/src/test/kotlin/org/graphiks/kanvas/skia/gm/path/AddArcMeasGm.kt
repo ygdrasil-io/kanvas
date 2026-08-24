@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -53,7 +53,7 @@ class AddArcMeasGm : SkiaGm {
             color = Color.RED
         )
 
-        val oval = Rect.fromLTRB(-R, -R, R, R)
+        val oval = RectF32.ofLTRB(-R, -R, R, R)
         canvas.drawOval(oval, paint)
 
         var deg = 0f

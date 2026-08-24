@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp::ThresholdRT` (512 x 512).
@@ -75,7 +75,7 @@ class ThresholdRTGm : SkiaGm {
                 ),
             )
             val cellH = h0 / slopes.size
-            canvas.drawRect(Rect(0f, y, w0.toFloat(), y + cellH), Paint(shader = shader))
+            canvas.drawRect(RectF32(0f, y, w0.toFloat(), y + cellH), Paint(shader = shader))
             y += cellH
         }
     }

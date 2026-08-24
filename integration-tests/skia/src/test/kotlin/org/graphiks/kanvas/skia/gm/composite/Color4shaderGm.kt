@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/color4f.cpp::color4shader` (360 × 480).
@@ -32,7 +32,7 @@ class Color4shaderGm : SkiaGm {
             Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f),
         )
 
-        val r = Rect.fromXYWH(0f, 0f, 100f, 100f)
+        val r = RectF32.ofOriginSize(0f, 0f, 100f, 100f)
 
         for (c4 in colors) {
             val shaders = arrayOf(
@@ -44,10 +44,10 @@ class Color4shaderGm : SkiaGm {
             canvas.save()
             for (s in shaders) {
                 canvas.drawRect(r, Paint(shader = s))
-                canvas.translate(r.width * 6f / 5f, 0f)
+                canvas.translate(r.width() * 6f / 5f, 0f)
             }
             canvas.restore()
-            canvas.translate(0f, r.height * 6f / 5f)
+            canvas.translate(0f, r.height() * 6f / 5f)
         }
     }
 }

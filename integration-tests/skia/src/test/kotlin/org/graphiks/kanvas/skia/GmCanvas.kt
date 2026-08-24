@@ -16,7 +16,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -84,9 +84,9 @@ class GmCanvas(
     val height: Int,
 ) {
     private val transformStack = mutableListOf<Matrix3x3F32>()
-    private val clipStack = mutableListOf<Rect?>()
+    private val clipStack = mutableListOf<RectF32?>()
     private var currentTransform = Matrix3x3F32.Identity
-    private var currentClip: Rect? = null
+    private var currentClip: RectF32? = null
 
     fun save() {
         transformStack.add(currentTransform)
@@ -94,7 +94,7 @@ class GmCanvas(
         inner.save()
     }
 
-    fun saveLayer(bounds: Rect? = null, paint: Paint? = null) {
+    fun saveLayer(bounds: RectF32? = null, paint: Paint? = null) {
         transformStack.add(currentTransform)
         clipStack.add(currentClip)
         inner.saveLayer(bounds, paint)
@@ -107,7 +107,7 @@ class GmCanvas(
     }
 
     fun makeImageSnapshot(): Image {
-        return inner.flushAndSnapshot(Rect(0f, 0f, width.toFloat(), height.toFloat()))
+        return inner.flushAndSnapshot(RectF32(0f, 0f, width.toFloat(), height.toFloat()))
     }
 
     fun restore() {
@@ -144,7 +144,7 @@ class GmCanvas(
         inner.resetMatrix()
     }
 
-    fun clipRect(rect: Rect) {
+    fun clipRect(rect: RectF32) {
         currentClip = if (currentClip != null) {
             intersectRects(currentClip!!, rect)
         } else {
@@ -161,7 +161,7 @@ class GmCanvas(
         inner.clipRRect(rrect, op, antiAlias)
     }
 
-    fun quickReject(rect: Rect): Boolean = inner.quickReject(rect)
+    fun quickReject(rect: RectF32): Boolean = inner.quickReject(rect)
 
     fun quickReject(path: Path): Boolean = inner.quickReject(path)
 
@@ -170,7 +170,7 @@ class GmCanvas(
         ky == 0f && sy == 1f && ty == 0f &&
         persp0 == 0f && persp1 == 0f && persp2 == 1f
 
-    private fun transformRect(clip: Rect): Rect? {
+    private fun transformRect(clip: RectF32): RectF32? {
         val t = currentTransform
         val p0 = t.transform(Point2F32(clip.left, clip.top))
         val p1 = t.transform(Point2F32(clip.right, clip.top))
@@ -180,7 +180,7 @@ class GmCanvas(
         val tp = min(min(p0.y, p1.y), min(p2.y, p3.y))
         val r = max(max(p0.x, p1.x), max(p2.x, p3.x))
         val b = max(max(p0.y, p1.y), max(p2.y, p3.y))
-        return if (l < r && tp < b) Rect(l, tp, r, b) else null
+        return if (l < r && tp < b) RectF32(l, tp, r, b) else null
     }
 
     private inline fun withClip(block: () -> Unit) {
@@ -196,7 +196,7 @@ class GmCanvas(
         inner.restore()
     }
 
-    fun drawRect(rect: Rect, paint: Paint) {
+    fun drawRect(rect: RectF32, paint: Paint) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawRect(rect, paint)
@@ -235,7 +235,7 @@ class GmCanvas(
         a: Float = 1f,
     ) {
         drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(r, g, b, a)),
         )
     }
@@ -270,7 +270,7 @@ class GmCanvas(
         drawPath(path, paint)
     }
 
-    fun drawOval(rect: Rect, paint: Paint) {
+    fun drawOval(rect: RectF32, paint: Paint) {
         val path = Path { }
         path.addOval(rect)
         drawPath(path, paint)
@@ -280,11 +280,11 @@ class GmCanvas(
         drawPath(Path { moveTo(x1, y1); lineTo(x2, y2) }, paint)
     }
 
-    fun drawArc(rect: Rect, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
-        val cx = rect.left + rect.width / 2f
-        val cy = rect.top + rect.height / 2f
-        val rx = rect.width / 2f
-        val ry = rect.height / 2f
+    fun drawArc(rect: RectF32, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
+        val cx = rect.left + rect.width() / 2f
+        val cy = rect.top + rect.height() / 2f
+        val rx = rect.width() / 2f
+        val ry = rect.height() / 2f
         val startRad = Math.toRadians(startAngle.toDouble()).toFloat()
         val endRad = Math.toRadians((startAngle + sweepAngle).toDouble()).toFloat()
         val x1 = cx + rx * cos(startRad)
@@ -370,7 +370,7 @@ class GmCanvas(
         }
     }
 
-    fun drawImage(image: Image, rect: Rect, paint: Paint? = null) {
+    fun drawImage(image: Image, rect: RectF32, paint: Paint? = null) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawImage(image, rect, paint)
@@ -382,12 +382,12 @@ class GmCanvas(
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
                 val bottom = max(p0.y, p1.y)
-                inner.drawImage(image, Rect(left, top, right, bottom), paint)
+                inner.drawImage(image, RectF32(left, top, right, bottom), paint)
             }
         }
     }
 
-    fun drawImageRect(image: Image, src: Rect, dst: Rect, paint: Paint? = null) {
+    fun drawImageRect(image: Image, src: RectF32, dst: RectF32, paint: Paint? = null) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawImageRect(image, src, dst, paint)
@@ -399,19 +399,19 @@ class GmCanvas(
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
                 val bottom = max(p0.y, p1.y)
-                inner.drawImageRect(image, src, Rect(left, top, right, bottom), paint)
+                inner.drawImageRect(image, src, RectF32(left, top, right, bottom), paint)
             }
         }
     }
 
-    fun drawImageNine(image: Image, center: Rect, dst: Rect, paint: Paint? = null) {
+    fun drawImageNine(image: Image, center: RectF32, dst: RectF32, paint: Paint? = null) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawImageNine(image, center, dst, paint)
             } else {
                 val p0 = currentTransform.transform(Point2F32(dst.left, dst.top))
                 val p1 = currentTransform.transform(Point2F32(dst.right, dst.bottom))
-                val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
+                val tdst = RectF32(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageNine(image, center, tdst, paint)
             }
         }
@@ -420,7 +420,7 @@ class GmCanvas(
     fun drawImageLattice(
         image: Image,
         lattice: Lattice,
-        dst: Rect,
+        dst: RectF32,
         paint: Paint? = null,
         sampling: SamplingOptions = SamplingOptions.LINEAR,
     ) {
@@ -430,7 +430,7 @@ class GmCanvas(
             } else {
                 val p0 = currentTransform.transform(Point2F32(dst.left, dst.top))
                 val p1 = currentTransform.transform(Point2F32(dst.right, dst.bottom))
-                val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
+                val tdst = RectF32(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageLattice(image, lattice, tdst, paint, sampling)
             }
         }
@@ -439,7 +439,7 @@ class GmCanvas(
     fun drawAtlas(
         atlas: Image,
         transforms: List<Matrix3x3F32>,
-        texRects: List<Rect>,
+        texRects: List<RectF32>,
         colors: List<Color>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint? = null,
@@ -670,12 +670,12 @@ class GmCanvas(
     }
 
     private companion object {
-        private fun intersectRects(a: Rect, b: Rect): Rect? {
+        private fun intersectRects(a: RectF32, b: RectF32): RectF32? {
             val l = max(a.left, b.left)
             val t = max(a.top, b.top)
             val r = min(a.right, b.right)
             val bt = min(a.bottom, b.bottom)
-            return if (l < r && t < bt) Rect(l, t, r, bt) else null
+            return if (l < r && t < bt) RectF32(l, t, r, bt) else null
         }
     }
 }

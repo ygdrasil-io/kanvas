@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class GradientsPowerlessHueLchGm : SkiaGm {
     override val name = "gradients_powerless_hue_LCH"
@@ -77,7 +77,7 @@ private fun drawPowerlessHueGradients(canvas: GmCanvas) {
         val shader = Shader.LinearGradient(
             Point2F32(0f, 0f), Point2F32(200f, 0f), stops, TileMode.CLAMP,
         )
-        canvas.drawRect(Rect(0f, 0f, 200f, 20f), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 200f, 20f), Paint(shader = shader))
         canvas.translate(205f, 0f)
     }
 
@@ -148,7 +148,7 @@ private fun drawCheckerboard(canvas: GmCanvas) {
         for (x in 0 until 420 step 8) {
             val dark = ((x / 8) + (y / 8)) % 2 == 0
             canvas.drawRect(
-                Rect(x.toFloat(), y.toFloat(), (x + 8).toFloat(), (y + 8).toFloat()),
+                RectF32(x.toFloat(), y.toFloat(), (x + 8).toFloat(), (y + 8).toFloat()),
                 Paint(color = if (dark) c1 else c2),
             )
         }

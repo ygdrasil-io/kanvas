@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/gradients.cpp::RadialGradient4GM` nodither variant.
@@ -40,6 +40,6 @@ class RadialGradient4NoditherGm : SkiaGm {
             stops = stops, tileMode = TileMode.CLAMP,
         )
         val paint = Paint(antiAlias = true, shader = shader)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, 500f, 500f), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, 500f, 500f), paint)
     }
 }

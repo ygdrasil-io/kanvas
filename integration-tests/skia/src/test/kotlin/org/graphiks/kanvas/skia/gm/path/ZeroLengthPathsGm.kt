@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.toImage
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 internal enum class ZeroLengthPathVerb(val hasVerb: Boolean) {
     MOVE(false),
@@ -171,10 +171,10 @@ private fun drawValidationCell(
     }
     canvas.drawImage(
         result.toImage(sourceId),
-        Rect.fromXYWH(0f, 0f, 50f, 20f),
+        RectF32.ofOriginSize(0f, 0f, 50f, 20f),
     )
     canvas.drawRect(
-        Rect.fromXYWH(0f, 0f, 50f, 20f),
+        RectF32.ofOriginSize(0f, 0f, 50f, 20f),
         Paint(color = overlay),
     )
 }

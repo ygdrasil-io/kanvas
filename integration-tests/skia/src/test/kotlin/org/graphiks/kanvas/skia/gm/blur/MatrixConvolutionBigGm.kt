@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/matrixconvolution.cpp` — big kernel variant with wide colored bands. */
 class MatrixConvolutionBigGm : SkiaGm {
@@ -19,7 +19,7 @@ class MatrixConvolutionBigGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(1f, 1f, 1f)
-        canvas.drawRect(Rect(30f, 30f, 470f, 130f), Paint(color = Color.fromRGBA(0.2f, 0.4f, 0.8f, 1f)))
-        canvas.drawRect(Rect(30f, 160f, 470f, 270f), Paint(color = Color.fromRGBA(0.8f, 0.3f, 0.1f, 1f)))
+        canvas.drawRect(RectF32(30f, 30f, 470f, 130f), Paint(color = Color.fromRGBA(0.2f, 0.4f, 0.8f, 1f)))
+        canvas.drawRect(RectF32(30f, 160f, 470f, 270f), Paint(color = Color.fromRGBA(0.8f, 0.3f, 0.1f, 1f)))
     }
 }

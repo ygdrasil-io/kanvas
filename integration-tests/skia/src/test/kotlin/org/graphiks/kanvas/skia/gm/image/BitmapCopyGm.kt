@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmapcopy.cpp::BitmapCopyGM`.
@@ -30,7 +30,7 @@ class BitmapCopyGm : SkiaGm {
         val dstBms = COLOR_TYPES.map { ct -> copyTo(src, ct) }
 
         canvas.drawRect(
-            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)),
         )
 
@@ -59,7 +59,7 @@ class BitmapCopyGm : SkiaGm {
             canvas.translate(0f, vertOffset)
             val tx = (cellW - 40f) / 2f
             val img = dstBms[i].toImage()
-            canvas.drawImage(img, Rect(tx, 0f, tx + 40f, 40f))
+            canvas.drawImage(img, RectF32(tx, 0f, tx + 40f, 40f))
             canvas.restore()
 
             canvas.translate(horizOffset, 0f)

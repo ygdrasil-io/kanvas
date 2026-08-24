@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/all_bitmap_configs.cpp::DEF_SIMPLE_GM(all_bitmap_configs, ...)`.
@@ -56,7 +56,7 @@ class AllBitmapConfigsGm : SkiaGm {
     }
 
     private fun draw(canvas: GmCanvas, image: Image, paint: Paint, label: String) {
-        canvas.drawImage(image, Rect(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
+        canvas.drawImage(image, RectF32(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
         canvas.drawString(label, 0f, 12f, font, paint)
     }
 
@@ -102,7 +102,7 @@ class AllBitmapConfigsGm : SkiaGm {
             for (x in 0..((width / size).toInt())) {
                 val color = if ((x + y) % 2 == 0) ltGray else white
                 canvas.drawRect(
-                    Rect(x * size, y * size, (x + 1) * size, (y + 1) * size),
+                    RectF32(x * size, y * size, (x + 1) * size, (y + 1) * size),
                     Paint.fill(color),
                 )
             }

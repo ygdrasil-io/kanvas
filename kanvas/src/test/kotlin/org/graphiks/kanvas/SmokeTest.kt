@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -34,7 +35,7 @@ class KanvasSmokeTest {
     fun `canvas drawRect records command`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRect(Rect.fromXYWH(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
@@ -44,7 +45,7 @@ class KanvasSmokeTest {
     fun `canvas drawRRect records command`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRRect(RRect(Rect.fromXYWH(10f, 10f, 100f, 80f), 10f), Paint.fill(Color.GREEN))
+            drawRRect(RRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), 10f), Paint.fill(Color.GREEN))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
@@ -66,8 +67,8 @@ class KanvasSmokeTest {
     }
 
     @Test
-    fun `Rect fromXYWH creates correct rect`() {
-        val rect = Rect.fromXYWH(5f, 10f, 100f, 200f)
+    fun `RectF32 fromXYWH creates correct rect`() {
+        val rect = RectF32.ofOriginSize(5f, 10f, 100f, 200f)
         assertEquals(5f, rect.left)
         assertEquals(10f, rect.top)
         assertEquals(105f, rect.right)
@@ -75,8 +76,8 @@ class KanvasSmokeTest {
     }
 
     @Test
-    fun `Rect fromLTRB creates correct rect`() {
-        val rect = Rect.fromLTRB(1f, 2f, 3f, 4f)
+    fun `RectF32 fromLTRB creates correct rect`() {
+        val rect = RectF32.ofLTRB(1f, 2f, 3f, 4f)
         assertEquals(1f, rect.left)
         assertEquals(2f, rect.top)
         assertEquals(3f, rect.right)
@@ -87,7 +88,7 @@ class KanvasSmokeTest {
     fun `canvas drawRect produces correct DisplayOp`() {
         val surface = Surface(width = 320, height = 240)
         surface.canvas {
-            drawRect(Rect.fromXYWH(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
+            drawRect(RectF32.ofOriginSize(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
         }
         val result = surface.render()
         assertEquals(1, result.stats.opsDispatched)

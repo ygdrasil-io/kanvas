@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class PictureShaderPerspGm : SkiaGm {
     override val name = "pictureshader_persp"
@@ -37,7 +37,7 @@ class PictureShaderPerspGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (fPicture == null) {
             val recorder = PictureRecorder()
-            val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+            val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
             drawTileContent(rc)
             fPicture = recorder.finishRecordingAsPicture()
         }
@@ -60,8 +60,8 @@ class PictureShaderPerspGm : SkiaGm {
                 style = PaintStyle.STROKE,
                 strokeWidth = 1f,
             )
-            canvas.drawRect(Rect.fromLTRB(-1f, -1f, 101f, 101f), outline)
-            canvas.clipRect(Rect.fromLTRB(0f, 0f, 100f, 100f))
+            canvas.drawRect(RectF32.ofLTRB(-1f, -1f, 101f, 101f), outline)
+            canvas.clipRect(RectF32.ofLTRB(0f, 0f, 100f, 100f))
             canvas.concat(skew)
             drawPicture(canvas, picture, strategy)
             canvas.restore()
@@ -71,7 +71,7 @@ class PictureShaderPerspGm : SkiaGm {
 
     private fun drawTileContent(c: Canvas) {
         val paint = Paint(antiAlias = true, color = Color.GREEN)
-        c.drawRect(Rect.fromXYWH(10f, 10f, 40f, 40f), paint)
+        c.drawRect(RectF32.ofOriginSize(10f, 10f, 40f, 40f), paint)
         val fill = Paint(
             antiAlias = true,
             color = Color.fromRGBA(0f, 0f, 1f, 0.5f),
@@ -82,7 +82,7 @@ class PictureShaderPerspGm : SkiaGm {
     }
 
     private fun drawPicture(canvas: GmCanvas, picture: Picture, strategy: DrawStrategy) {
-        val bounds = Rect.fromLTRB(0f, 0f, 50f, 50f)
+        val bounds = RectF32.ofLTRB(0f, 0f, 50f, 50f)
         when (strategy) {
             DrawStrategy.kDirect -> {
                 canvas.clipRect(bounds)
@@ -96,7 +96,7 @@ class PictureShaderPerspGm : SkiaGm {
                     tile = bounds,
                 )
                 val paint = Paint(shader = shader)
-                canvas.drawRect(Rect.fromLTRB(0f, 0f, 50f, 50f), paint)
+                canvas.drawRect(RectF32.ofLTRB(0f, 0f, 50f, 50f), paint)
             }
         }
     }

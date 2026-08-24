@@ -20,7 +20,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,13 +33,13 @@ class PictureTest {
     @Test
     fun `format 6 preserves expanded text provenance through round trip and playback`() {
         val path = DisplayOp.DrawPath.withSourceOperation(
-            path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+            path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
             paint = Paint.fill(Color.RED),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.WideOpen,
             sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
         )
-        val original = Picture(Rect.fromLTRB(0f, 0f, 8f, 8f), listOf(path))
+        val original = Picture(RectF32.ofLTRB(0f, 0f, 8f, 8f), listOf(path))
 
         val encoded = original.toByteArray()
         assertEquals(6, encoded.readBigEndianInt(offset = 4))
@@ -58,10 +58,10 @@ class PictureTest {
     fun `format 5 DrawPath remains decodable with the truthful legacy source`() {
         val source = "text-expanded"
         val current = Picture(
-            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
                 DisplayOp.DrawPath.withSourceOperation(
-                    path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+                    path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
                     paint = Paint.fill(Color.RED),
                     transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
@@ -81,10 +81,10 @@ class PictureTest {
     @Test
     fun `format 6 leaves non path opcode payload compatible with format 5`() {
         val current = Picture(
-            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
                 DisplayOp.DrawRect(
-                    rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
+                    rect = RectF32.ofLTRB(1f, 2f, 3f, 4f),
                     paint = Paint.fill(Color.BLUE),
                     transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
@@ -99,7 +99,7 @@ class PictureTest {
 
         assertEquals(
             DisplayOp.DrawRect(
-                rect = Rect.fromLTRB(1f, 2f, 3f, 4f),
+                rect = RectF32.ofLTRB(1f, 2f, 3f, 4f),
                 paint = Paint.fill(Color.BLUE),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
@@ -111,10 +111,10 @@ class PictureTest {
     @Test
     fun `format 6 refuses an arbitrary serialized DrawPath source`() {
         val encoded = Picture(
-            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
                 DisplayOp.DrawPath.withSourceOperation(
-                    path = Path().addRect(Rect.fromLTRB(1f, 2f, 3f, 4f)),
+                    path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
                     paint = Paint.fill(Color.RED),
                     transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
@@ -179,11 +179,11 @@ class PictureTest {
     @Test
     fun `PictureRecorder records and produces Picture`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(10f, 10f, 50f, 50f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
-        assertEquals(Rect.fromLTRB(0f, 0f, 100f, 100f), picture.cullRect)
+        assertEquals(RectF32.ofLTRB(0f, 0f, 100f, 100f), picture.cullRect)
         assertEquals(2, picture.approximateOpCount()) // clipRect + drawRect
         assertTrue(picture.uniqueID > 0)
     }
@@ -191,8 +191,8 @@ class PictureTest {
     @Test
     fun `Picture playback replays ops on target canvas`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(10f, 10f, 50f, 50f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
         val targetBuffer = TestBuffer()
@@ -207,12 +207,12 @@ class PictureTest {
     @Test
     fun `approximateOpCount with nested pictures`() {
         val r1 = PictureRecorder()
-        val c1 = r1.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        c1.drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
+        val c1 = r1.beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        c1.drawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), Paint.fill(org.graphiks.kanvas.types.Color.RED))
         val inner = r1.finishRecordingAsPicture()
 
         val r2 = PictureRecorder()
-        val c2 = r2.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val c2 = r2.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         c2.drawPicture(inner)
         val outer = r2.finishRecordingAsPicture()
 
@@ -222,9 +222,9 @@ class PictureTest {
     @Test
     fun `serialize and deserialize roundtrip`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
-        canvas.drawRect(Rect.fromLTRB(60f, 60f, 80f, 80f), Paint.fill(Color.BLUE))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(60f, 60f, 80f, 80f), Paint.fill(Color.BLUE))
         val original = recorder.finishRecordingAsPicture()
 
         val bytes = original.toByteArray()
@@ -238,12 +238,12 @@ class PictureTest {
 
     @Test
     fun `roundtrip preserves a backdrop save layer record`() {
-        val crop = Rect.fromLTRB(0f, 10f, 100f, 90f)
+        val crop = RectF32.ofLTRB(0f, 10f, 100f, 90f)
         val rec = SaveLayerRec(
             backdrop = ImageFilter.Crop(crop, TileMode.DECAL, ImageFilter.Blur(3f, 3f)),
         )
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         canvas.saveLayer(rec)
         canvas.restore()
         val original = recorder.finishRecordingAsPicture()
@@ -255,12 +255,12 @@ class PictureTest {
 
     @Test
     fun `roundtrip preserves deferred outer clip on a save layer`() {
-        val outerClip = Rect.fromLTRB(10f, 10f, 90f, 90f)
+        val outerClip = RectF32.ofLTRB(10f, 10f, 90f, 90f)
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         canvas.clipRect(outerClip, antiAlias = false)
         canvas.saveLayer()
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
         canvas.restore()
         val original = recorder.finishRecordingAsPicture()
 
@@ -273,7 +273,7 @@ class PictureTest {
     fun `decodes fixed version 1 picture layer fixture`() {
         val picture = requireNotNull(Picture.fromByteArray(V1_LAYER_PICTURE_FIXTURE))
 
-        assertEquals(Rect.fromLTRB(0f, 0f, 10f, 10f), picture.cullRect)
+        assertEquals(RectF32.ofLTRB(0f, 0f, 10f, 10f), picture.cullRect)
         assertEquals(listOf(DisplayOp.BeginLayer(SaveLayerRec()), DisplayOp.EndLayer), picture.ops)
     }
 
@@ -281,19 +281,19 @@ class PictureTest {
     fun `decodes fixed version 2 picture layer fixture`() {
         val picture = requireNotNull(Picture.fromByteArray(V2_LAYER_PICTURE_FIXTURE))
 
-        assertEquals(Rect.fromLTRB(0f, 0f, 10f, 10f), picture.cullRect)
+        assertEquals(RectF32.ofLTRB(0f, 0f, 10f, 10f), picture.cullRect)
         assertEquals(listOf(DisplayOp.BeginLayer(SaveLayerRec()), DisplayOp.EndLayer), picture.ops)
     }
 
     @Test
     fun `playback intersects serialized layer clip with the host clip and defers it from children`() {
-        val pictureClip = Rect.fromLTRB(10f, 10f, 50f, 50f)
-        val hostClip = Rect.fromLTRB(30f, 30f, 70f, 70f)
+        val pictureClip = RectF32.ofLTRB(10f, 10f, 50f, 50f)
+        val hostClip = RectF32.ofLTRB(30f, 30f, 70f, 70f)
         val recorder = PictureRecorder()
-        val recordingCanvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val recordingCanvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         recordingCanvas.clipRect(pictureClip, antiAlias = true)
         recordingCanvas.saveLayer()
-        recordingCanvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
+        recordingCanvas.drawRect(RectF32.ofLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
         recordingCanvas.restore()
         val picture = recorder.finishRecordingAsPicture()
 
@@ -307,7 +307,7 @@ class PictureTest {
         val rectOps = compositeClip.ops.filterIsInstance<ClipStackOp.RectOp>()
         assertEquals(
             listOf(
-                Rect.fromLTRB(0f, 0f, 100f, 100f),
+                RectF32.ofLTRB(0f, 0f, 100f, 100f),
                 pictureClip,
                 hostClip,
             ),
@@ -346,9 +346,9 @@ class PictureTest {
     @Test
     fun `opCount returns top-level operation count`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
-        canvas.drawRect(Rect.fromLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
         val picture = recorder.finishRecordingAsPicture()
 
         assertEquals(3, picture.opCount) // clipRect + 2x drawRect
@@ -357,12 +357,12 @@ class PictureTest {
     @Test
     fun `totalOpCount includes nested pictures`() {
         val innerRec = PictureRecorder()
-        val innerCanvas = innerRec.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        innerCanvas.drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+        val innerCanvas = innerRec.beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        innerCanvas.drawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
         val inner = innerRec.finishRecordingAsPicture()
 
         val outerRec = PictureRecorder()
-        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val outerCanvas = outerRec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         outerCanvas.drawPicture(inner)
         val outer = outerRec.finishRecordingAsPicture()
 
@@ -373,9 +373,9 @@ class PictureTest {
     fun `walkImages invokes action for each embedded image`() {
         val img = Image(4, 4, ColorType.RGBA_8888, "test", ByteArray(64) { 0 })
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawImage(img, Rect.fromLTRB(10f, 10f, 50f, 50f))
-        canvas.drawImage(img, Rect.fromLTRB(60f, 60f, 80f, 80f))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawImage(img, RectF32.ofLTRB(10f, 10f, 50f, 50f))
+        canvas.drawImage(img, RectF32.ofLTRB(60f, 60f, 80f, 80f))
         val picture = recorder.finishRecordingAsPicture()
 
         val collected = mutableListOf<Image>()
@@ -388,8 +388,8 @@ class PictureTest {
     @Test
     fun `walkImages does not invoke action when no images present`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
         var called = false
@@ -400,11 +400,11 @@ class PictureTest {
     @Test
     fun `walkNestedPictures invokes action for each nested picture`() {
         val inner = PictureRecorder().apply {
-            beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f)).drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+            beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f)).drawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
         }.finishRecordingAsPicture()
 
         val outerRec = PictureRecorder()
-        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val outerCanvas = outerRec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         outerCanvas.drawPicture(inner)
         outerCanvas.drawPicture(inner)
         val outer = outerRec.finishRecordingAsPicture()
@@ -424,7 +424,7 @@ class PictureTest {
         val blob2 = TextBlob(glyphRuns, tf, 16f) // structurally equal but different reference
 
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 200f, 200f))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 200f, 200f))
         canvas.drawText(blob1, 0f, 50f, Paint.fill(Color.BLACK))
         canvas.drawText(blob1, 0f, 100f, Paint.fill(Color.BLACK)) // same reference -> dedup
         canvas.drawText(blob2, 0f, 150f, Paint.fill(Color.BLACK)) // different reference
@@ -440,8 +440,8 @@ class PictureTest {
     @Test
     fun `walkTextBlobs does not invoke action when no text present`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
         var called = false
@@ -452,9 +452,9 @@ class PictureTest {
     @Test
     fun `forEachOp visits all top-level ops in order`() {
         val recorder = PictureRecorder()
-        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
-        canvas.drawRect(Rect.fromLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
+        canvas.drawRect(RectF32.ofLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
         val picture = recorder.finishRecordingAsPicture()
 
         val ops = mutableListOf<DisplayOp>()
@@ -466,14 +466,14 @@ class PictureTest {
     @Test
     fun `forEachOp nested visits ops from child pictures`() {
         val innerRec = PictureRecorder()
-        val innerCanvas = innerRec.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        innerCanvas.drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+        val innerCanvas = innerRec.beginRecording(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        innerCanvas.drawRect(RectF32.ofLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
         val inner = innerRec.finishRecordingAsPicture()
 
         val outerRec = PictureRecorder()
-        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val outerCanvas = outerRec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         outerCanvas.drawPicture(inner)
-        outerCanvas.drawRect(Rect.fromLTRB(50f, 50f, 80f, 80f), Paint.fill(Color.BLUE))
+        outerCanvas.drawRect(RectF32.ofLTRB(50f, 50f, 80f, 80f), Paint.fill(Color.BLUE))
         val outer = outerRec.finishRecordingAsPicture()
 
         val collected = mutableListOf<DisplayOp>()
@@ -488,9 +488,9 @@ class PictureTest {
 
 private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
     val recorder = PictureRecorder()
-    recorder.beginRecording(Rect.fromLTRB(0f, 0f, 2f, 2f)).drawImage(
+    recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 2f)).drawImage(
         Image(1, 1, ColorType.RGBA_8888, "legacy-alpha", byteArrayOf(1, 2, 3, 4), alphaType = alphaType),
-        Rect.fromLTRB(0f, 0f, 1f, 1f),
+        RectF32.ofLTRB(0f, 0f, 1f, 1f),
     )
     return recorder.finishRecordingAsPicture()
 }

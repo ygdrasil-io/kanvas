@@ -60,7 +60,7 @@ internal fun ClipStack.toGPUClipFacts(target: GPUTargetFacts): GPUClipFacts = wh
 private fun GPUTargetFacts.bounds(): GPUBounds =
     GPUBounds(0f, 0f, width.toFloat(), height.toFloat())
 
-private fun org.graphiks.kanvas.types.Rect.toClipElement(
+private fun org.graphiks.math.geometry.RectF32.toClipElement(
     op: ClipOp,
     antiAlias: Boolean,
 ): GPUClipCoverageElement = GPUClipCoverageElement(
@@ -129,7 +129,7 @@ private fun FillType.toClipFill(): ClipFill = when (this) {
     FillType.INVERSE_EVEN_ODD -> ClipFill(GPUClipFillRule.EvenOdd, inverse = true)
 }
 
-private fun org.graphiks.kanvas.types.Rect.isIntegerAligned(): Boolean =
+private fun org.graphiks.math.geometry.RectF32.isIntegerAligned(): Boolean =
     listOf(left, top, right, bottom).all { it == it.toInt().toFloat() }
 
 /** Converts a Kanvas path to the existing tessellator transport without losing contours. */

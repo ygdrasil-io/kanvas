@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ImageSubsetGm : SkiaGm {
     override val name = "image_subset"
@@ -33,20 +33,20 @@ class ImageSubsetGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val lazyImage = makeLazyImage()
 
-        canvas.drawImage(lazyImage, Rect.fromXYWH(10f, 10f, 200f, 200f))
+        canvas.drawImage(lazyImage, RectF32.ofOriginSize(10f, 10f, 200f, 200f))
 
         val subset = makeSubsetImage(lazyImage, 100, 100, 100, 100)
-        canvas.drawImage(subset, Rect.fromXYWH(220f, 10f, 100f, 100f))
+        canvas.drawImage(subset, RectF32.ofOriginSize(220f, 10f, 100f, 100f))
 
         val roundTripped = pictureSerialDeserial()
         roundTripped?.let {
-            canvas.drawImage(it, Rect.fromXYWH(330f, 10f, 100f, 100f))
+            canvas.drawImage(it, RectF32.ofOriginSize(330f, 10f, 100f, 100f))
         }
     }
 
     private fun makeLazyImage(): Image {
         val recorder = PictureRecorder()
-        val recordCanvas = recorder.beginRecording(Rect.fromXYWH(0f, 0f, 200f, 200f))
+        val recordCanvas = recorder.beginRecording(RectF32.ofOriginSize(0f, 0f, 200f, 200f))
         recordCanvas.drawPath(Path { }.apply { addCircle(100f, 100f, 100f) }, Paint())
         val picture = recorder.finishRecordingAsPicture()
 
@@ -71,7 +71,7 @@ class ImageSubsetGm : SkiaGm {
 
     private fun pictureSerialDeserial(): Image? {
         val recorder = PictureRecorder()
-        val recordCanvas = recorder.beginRecording(Rect.fromXYWH(0f, 0f, 100f, 100f))
+        val recordCanvas = recorder.beginRecording(RectF32.ofOriginSize(0f, 0f, 100f, 100f))
         recordCanvas.drawPath(Path { }.apply { addCircle(50f, 50f, 50f) }, Paint())
         val picture = recorder.finishRecordingAsPicture()
 

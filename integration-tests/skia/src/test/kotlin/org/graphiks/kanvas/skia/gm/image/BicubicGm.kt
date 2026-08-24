@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.canvas.drawLine
 import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bicubic.cpp`.
  *  Creates a small checkerboard image and renders it with a tiled image
@@ -35,11 +35,11 @@ class BicubicGm : SkiaGm {
 
         canvas.scale(40f, 8f)
         for (i in 0 until 3) {
-            canvas.drawImage(img, Rect(0f, 0f, 7f, 7f))
+            canvas.drawImage(img, RectF32(0f, 0f, 7f, 7f))
             canvas.translate(0f, 8f)
         }
 
-        val r = Rect(0f, 0f, 7f, 7f)
+        val r = RectF32(0f, 0f, 7f, 7f)
         for (i in 0 until 2) {
             canvas.drawRect(r, Paint(shader = Shader.Image(img, TileMode.CLAMP, TileMode.CLAMP)))
             canvas.translate(0f, 8f)

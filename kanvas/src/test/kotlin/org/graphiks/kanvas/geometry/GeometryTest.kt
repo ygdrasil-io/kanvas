@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.geometry
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.MutablePoint2F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.vector.MutableVector2F32
@@ -21,7 +22,7 @@ class GeometryTest {
 
     @Test
     fun `isRect on axis-aligned rect path`() {
-        val path = Path().addRect(Rect.fromLTRB(10f, 20f, 110f, 80f))
+        val path = Path().addRect(RectF32.ofLTRB(10f, 20f, 110f, 80f))
         assertTrue(path.isRect())
     }
 
@@ -35,8 +36,8 @@ class GeometryTest {
 
     @Test
     fun `isRect writes bounds via out-param`() {
-        val rect = Rect(0f, 0f, 0f, 0f)
-        val path = Path().addRect(Rect.fromLTRB(10f, 20f, 110f, 80f))
+        val rect = RectF32(0f, 0f, 0f, 0f)
+        val path = Path().addRect(RectF32.ofLTRB(10f, 20f, 110f, 80f))
         assertTrue(path.isRect(rect))
         assertEquals(10f, rect.left)
         assertEquals(20f, rect.top)
@@ -46,7 +47,7 @@ class GeometryTest {
 
     @Test
     fun `isConvex on square returns true`() {
-        assertTrue(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).isConvex())
+        assertTrue(Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f)).isConvex())
     }
 
     @Test
@@ -60,12 +61,12 @@ class GeometryTest {
 
     @Test
     fun `contains point inside rect path`() {
-        assertTrue(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(50f, 50f)))
+        assertTrue(Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(50f, 50f)))
     }
 
     @Test
     fun `contains point outside rect path`() {
-        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(150f, 150f)))
+        assertFalse(Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(150f, 150f)))
     }
 
     @Test
@@ -77,7 +78,7 @@ class GeometryTest {
 
     @Test
     fun `pathMeasure length on closed rect`() {
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 30f, 40f))
+        val path = Path().addRect(RectF32.ofLTRB(0f, 0f, 30f, 40f))
         val pm = PathMeasure(path, forceClosed = true)
         assertEquals(140f, pm.length, 1e-4f)
     }
@@ -103,14 +104,14 @@ class GeometryTest {
 
     @Test
     fun `region isEmpty on region with rect`() {
-        val r = Region(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        val r = Region(RectF32.ofLTRB(0f, 0f, 10f, 10f))
         assertFalse(r.isEmpty)
     }
 
     @Test
     fun `region op union combines two rects`() {
-        val a = Region(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        val b = Region(Rect.fromLTRB(5f, 5f, 15f, 15f))
+        val a = Region(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        val b = Region(RectF32.ofLTRB(5f, 5f, 15f, 15f))
         assertTrue(a.op(b, RegionOp.UNION))
         assertTrue(a.contains(5f, 5f))
         assertTrue(a.contains(12f, 12f))
@@ -118,27 +119,27 @@ class GeometryTest {
 
     @Test
     fun `region contains inside and outside`() {
-        val r = Region(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val r = Region(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         assertTrue(r.contains(50f, 50f))
         assertFalse(r.contains(200f, 200f))
     }
 
     @Test
     fun `region quickReject for disjoint rects`() {
-        val a = Region(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        assertTrue(a.quickReject(Rect.fromLTRB(20f, 20f, 30f, 30f)))
+        val a = Region(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        assertTrue(a.quickReject(RectF32.ofLTRB(20f, 20f, 30f, 30f)))
     }
 
     @Test
     fun `region quickReject for overlapping rects`() {
-        val a = Region(Rect.fromLTRB(0f, 0f, 20f, 20f))
-        assertFalse(a.quickReject(Rect.fromLTRB(10f, 10f, 30f, 30f)))
+        val a = Region(RectF32.ofLTRB(0f, 0f, 20f, 20f))
+        assertFalse(a.quickReject(RectF32.ofLTRB(10f, 10f, 30f, 30f)))
     }
 
     @Test
     fun `pathOps op union of two rects`() {
-        val a = Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f))
-        val b = Path().addRect(Rect.fromLTRB(5f, 5f, 15f, 15f))
+        val a = Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+        val b = Path().addRect(RectF32.ofLTRB(5f, 5f, 15f, 15f))
         val result = PathOps.op(a, b, PathOp.UNION)
         assertNotNull(result)
         val v = result!!.verbs()
@@ -149,31 +150,31 @@ class GeometryTest {
 
     @Test
     fun `conservativelyContainsRect when fully inside`() {
-        val outer = Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f))
-        assertTrue(outer.conservativelyContainsRect(Rect.fromLTRB(10f, 10f, 90f, 90f)))
+        val outer = Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f))
+        assertTrue(outer.conservativelyContainsRect(RectF32.ofLTRB(10f, 10f, 90f, 90f)))
     }
 
     @Test
     fun `conservativelyContainsRect when partially outside`() {
-        val outer = Path().addRect(Rect.fromLTRB(0f, 0f, 50f, 50f))
-        assertFalse(outer.conservativelyContainsRect(Rect.fromLTRB(25f, 25f, 75f, 75f)))
+        val outer = Path().addRect(RectF32.ofLTRB(0f, 0f, 50f, 50f))
+        assertFalse(outer.conservativelyContainsRect(RectF32.ofLTRB(25f, 25f, 75f, 75f)))
     }
 
     @Test
     fun `isOval on addOval path`() {
-        val path = Path().addOval(Rect.fromLTRB(0f, 0f, 100f, 80f))
+        val path = Path().addOval(RectF32.ofLTRB(0f, 0f, 100f, 80f))
         assertTrue(path.isOval())
     }
 
     @Test
     fun `isOval on rect returns false`() {
-        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 80f)).isOval())
+        assertFalse(Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 80f)).isOval())
     }
 
     @Test
     fun `isOval writes bounds`() {
-        val bounds = Rect(0f, 0f, 0f, 0f)
-        assertTrue(Path().addOval(Rect.fromLTRB(10f, 20f, 110f, 100f)).isOval(bounds))
+        val bounds = RectF32(0f, 0f, 0f, 0f)
+        assertTrue(Path().addOval(RectF32.ofLTRB(10f, 20f, 110f, 100f)).isOval(bounds))
         assertEquals(10f, bounds.left)
         assertEquals(20f, bounds.top)
         assertEquals(110f, bounds.right)
@@ -187,7 +188,7 @@ class GeometryTest {
 
     @Test
     fun `isLine on rect returns false`() {
-        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f)).isLine())
+        assertFalse(Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)).isLine())
     }
 
     @Test
@@ -200,7 +201,7 @@ class GeometryTest {
     @Test
     fun `isInterpolatable different verb counts`() {
         val a = Path().apply { moveTo(0f, 0f); lineTo(100f, 0f) }
-        val b = Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        val b = Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
         assertFalse(a.isInterpolatable(b))
     }
 
@@ -219,8 +220,8 @@ class GeometryTest {
     @Test
     fun `pathMeasure nextContour on multi-contour`() {
         val path = Path().apply {
-            addRect(Rect.fromLTRB(0f, 0f, 10f, 10f))
-            addRect(Rect.fromLTRB(20f, 20f, 30f, 30f))
+            addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+            addRect(RectF32.ofLTRB(20f, 20f, 30f, 30f))
         }
         val pm = PathMeasure(path)
         assertTrue(pm.nextContour())
@@ -228,19 +229,19 @@ class GeometryTest {
 
     @Test
     fun `isRRect on addRRect path`() {
-        val path = Path().addRRect(RRect(Rect.fromLTRB(0f, 0f, 100f, 80f), 10f))
+        val path = Path().addRRect(RRect(RectF32.ofLTRB(0f, 0f, 100f, 80f), 10f))
         assertTrue(path.isRRect())
     }
 
     @Test
     fun `isRRect on rect returns false`() {
-        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f)).isRRect())
+        assertFalse(Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)).isRRect())
     }
 
     @Test
     fun `region op intersect`() {
-        val a = Region(Rect.fromLTRB(0f, 0f, 20f, 20f))
-        val b = Region(Rect.fromLTRB(10f, 0f, 30f, 20f))
+        val a = Region(RectF32.ofLTRB(0f, 0f, 20f, 20f))
+        val b = Region(RectF32.ofLTRB(10f, 0f, 30f, 20f))
         assertTrue(a.op(b, RegionOp.INTERSECT))
         assertTrue(a.contains(15f, 10f))
         assertFalse(a.contains(5f, 10f))
@@ -248,7 +249,7 @@ class GeometryTest {
 
     @Test
     fun `pathOps asWinding sets winding fill type`() {
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        val path = Path().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
         path.fillType = FillType.EVEN_ODD
         val wound = PathOps.asWinding(path)
         assertNotNull(wound)
@@ -276,7 +277,7 @@ class GeometryTest {
 
     @Test
     fun `PathOps difference cuts hole`() {
-        val outer = Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val outer = Path().addRect(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         val inner = Path().addCircle(50f, 50f, 20f)
         val result = PathOps.op(outer, inner, PathOp.DIFFERENCE)
         assertNotNull(result)

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/asyncrescaleandread.cpp::AsyncRescaleAndReadAlphaTypeGM`.
@@ -27,19 +27,19 @@ class AsyncRescaleAndReadAlphaTypeGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         for (row in 0..1) {
             val src = makeSource()
-            val dst = Rect(
+            val dst = RectF32(
                 0f, (row * 256).toFloat(),
                 256f, (row * 256 + 256).toFloat(),
             )
-            canvas.drawImageRect(src, Rect(0f, 0f, 64f, 64f), dst)
+            canvas.drawImageRect(src, RectF32(0f, 0f, 64f, 64f), dst)
         }
     }
 
     private fun makeSource(): org.graphiks.kanvas.image.Image {
         val surface = Surface(64, 64)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 64f, 64f), Paint(color = Color(0x8000AAFFu)))
-            drawRect(Rect(16f, 16f, 48f, 48f), Paint(color = Color(0xFFFF5500u)))
+            drawRect(RectF32(0f, 0f, 64f, 64f), Paint(color = Color(0x8000AAFFu)))
+            drawRect(RectF32(16f, 16f, 48f, 48f), Paint(color = Color(0xFFFF5500u)))
         }
         return surface.makeImageSnapshot()
     }

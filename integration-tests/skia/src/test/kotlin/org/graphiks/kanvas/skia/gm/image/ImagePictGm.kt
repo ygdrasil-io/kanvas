@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class ImagePictGm : SkiaGm {
     override val name = "image-picture"
@@ -36,7 +36,7 @@ class ImagePictGm : SkiaGm {
     private lateinit var fImage0: Image
     private lateinit var fImage1: Image
 
-    private fun drawSomething(canvas: Canvas, bounds: Rect) {
+    private fun drawSomething(canvas: Canvas, bounds: RectF32) {
         val strokePaint = Paint(
             antiAlias = true,
             color = Color.RED,
@@ -77,17 +77,17 @@ class ImagePictGm : SkiaGm {
 
         canvas.drawImage(
             fImage0,
-            Rect.fromXYWH(150f, 0f, fImage0.width.toFloat(), fImage0.height.toFloat()),
+            RectF32.ofOriginSize(150f, 0f, fImage0.width.toFloat(), fImage0.height.toFloat()),
         )
         canvas.drawImage(
             fImage1,
-            Rect.fromXYWH(300f, 0f, fImage1.width.toFloat(), fImage1.height.toFloat()),
+            RectF32.ofOriginSize(300f, 0f, fImage1.width.toFloat(), fImage1.height.toFloat()),
         )
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         if (!initialized) {
-            val bounds = Rect.fromXYWH(100f, 100f, 100f, 100f)
+            val bounds = RectF32.ofOriginSize(100f, 100f, 100f, 100f)
             val recorder = PictureRecorder()
             val rc = recorder.beginRecording(bounds)
             drawSomething(rc, bounds)

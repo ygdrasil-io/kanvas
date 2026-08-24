@@ -29,7 +29,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -669,14 +669,14 @@ class GPUPreparedVerticesSemanticBuilderTest {
     )
 
     private fun rect() = DisplayOp.DrawRect(
-        Rect.fromLTRB(1f, 1f, 7f, 7f),
+        RectF32.ofLTRB(1f, 1f, 7f, 7f),
         Paint.fill(Color.GREEN).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,
     )
 
     private fun rrect() = DisplayOp.DrawRRect(
-        RRect(Rect.fromLTRB(1f, 1f, 7f, 7f), radius = 1f),
+        RRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 1f),
         Paint.fill(Color.GREEN).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,

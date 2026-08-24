@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/lattice.cpp::DEF_SIMPLE_GM_BG(lattice_alpha, ...)` (120 × 120).
@@ -33,7 +33,7 @@ class LatticeAlphaGm : SkiaGm {
         val lattice = Lattice(xDivs = divs, yDivs = divs)
         val paint = Paint(color = Color(0xFFFF00FFu)) // magenta
 
-        canvas.drawImageLattice(image, lattice, Rect.fromXYWH(0f, 0f, 120f, 120f), paint)
+        canvas.drawImageLattice(image, lattice, RectF32.ofOriginSize(0f, 0f, 120f, 120f), paint)
     }
 
     private fun makeAlphaImage(): Image {

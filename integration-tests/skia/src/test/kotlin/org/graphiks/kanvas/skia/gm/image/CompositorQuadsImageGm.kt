@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/compositor_quads.cpp::CompositorGM("image", ...)`.
@@ -35,8 +35,8 @@ class CompositorQuadsImageGm : SkiaGm {
                 val paint = Paint(color = Color(0x80000000u))
                 canvas.drawImageRect(
                     image = image,
-                    src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
-                    dst = Rect.fromLTRB(0f, 0f, (3 * 40).toFloat(), (4 * 30).toFloat()),
+                    src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+                    dst = RectF32.ofLTRB(0f, 0f, (3 * 40).toFloat(), (4 * 30).toFloat()),
                     paint = paint,
                 )
                 canvas.translate(0f, 40f + 4 * 30f)

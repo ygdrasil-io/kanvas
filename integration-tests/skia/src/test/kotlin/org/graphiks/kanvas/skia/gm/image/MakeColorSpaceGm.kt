@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.color.TransferFunction
 
 /**
@@ -45,10 +45,10 @@ class MakeColorSpaceGm : SkiaGm {
         val opaqueImage = loadImage("images/mandrill_128.png") ?: return
         val premulImage = loadImage("images/color_wheel.png") ?: return
 
-        canvas.drawImage(opaqueImage, Rect(0f, 0f, 128f, 128f))
+        canvas.drawImage(opaqueImage, RectF32(0f, 0f, 128f, 128f))
         drawColorSpace(canvas, opaqueImage, wideGamut, 128f, 0f)
         drawColorSpace(canvas, opaqueImage, wideGamutLinear, 256f, 0f)
-        canvas.drawImage(premulImage, Rect(0f, 128f, 128f, 256f))
+        canvas.drawImage(premulImage, RectF32(0f, 128f, 128f, 256f))
         drawColorSpace(canvas, premulImage, wideGamut, 128f, 128f)
         drawColorSpace(canvas, premulImage, wideGamutLinear, 256f, 128f)
 
@@ -57,10 +57,10 @@ class MakeColorSpaceGm : SkiaGm {
         val opaqueRaster = loadImage("images/mandrill_128.png") ?: return
         val premulRaster = loadImage("images/color_wheel.png") ?: return
 
-        canvas.drawImage(opaqueRaster, Rect(0f, 0f, 128f, 128f))
+        canvas.drawImage(opaqueRaster, RectF32(0f, 0f, 128f, 128f))
         drawColorSpace(canvas, opaqueRaster, wideGamut, 128f, 0f)
         drawColorSpace(canvas, opaqueRaster, wideGamutLinear, 256f, 0f)
-        canvas.drawImage(premulRaster, Rect(0f, 128f, 128f, 256f))
+        canvas.drawImage(premulRaster, RectF32(0f, 128f, 128f, 256f))
         drawColorSpace(canvas, premulRaster, wideGamut, 128f, 128f)
         drawColorSpace(canvas, premulRaster, wideGamutLinear, 256f, 128f)
     }
@@ -79,7 +79,7 @@ class MakeColorSpaceGm : SkiaGm {
             ColorSpace.SRGB
         }
         val reinterpreted = xform.reinterpretColorSpace(srgb)
-        canvas.drawImage(reinterpreted, Rect(x, y, x + 128f, y + 128f))
+        canvas.drawImage(reinterpreted, RectF32(x, y, x + 128f, y + 128f))
     }
 
     private fun loadImage(path: String): Image? {

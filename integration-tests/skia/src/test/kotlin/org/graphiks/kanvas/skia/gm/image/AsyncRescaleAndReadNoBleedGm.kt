@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/asyncrescaleandread.cpp::AsyncRescaleAndReadNoBleedGM`.
@@ -27,14 +27,14 @@ class AsyncRescaleAndReadNoBleedGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val src = makeSource()
-        canvas.drawImageRect(src, Rect(0f, 0f, 12f, 6f), Rect(0f, 0f, 60f, 60f))
+        canvas.drawImageRect(src, RectF32(0f, 0f, 12f, 6f), RectF32(0f, 0f, 60f, 60f))
     }
 
     private fun makeSource(): Image {
         val surface = Surface(12, 6)
         surface.canvas {
-            drawRect(Rect(0f, 0f, 12f, 6f), Paint(color = Color(0xFFFF0000u)))
-            drawRect(Rect(6f, 0f, 12f, 6f), Paint(color = Color(0xFF0000FFu)))
+            drawRect(RectF32(0f, 0f, 12f, 6f), Paint(color = Color(0xFFFF0000u)))
+            drawRect(RectF32(6f, 0f, 12f, 6f), Paint(color = Color(0xFF0000FFu)))
         }
         return surface.makeImageSnapshot()
     }

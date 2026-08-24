@@ -14,7 +14,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/xfermodeimagefilter.cpp`.
  *  Tests xfermode image filter — renders images and shapes layered
@@ -62,20 +62,20 @@ class XfermodeImageFilterGm : SkiaGm {
             }
         }
 
-        val clipRect = Rect(0f, 0f, cellW + 4f, cellH + 4f)
+        val clipRect = RectF32(0f, 0f, cellW + 4f, cellH + 4f)
 
         run {
             val surface = Surface(stringImage.width, stringImage.height)
             surface.canvas {
                 drawColor(Color.fromRGBA(1f, 1f, 1f, 1f))
                 val checkPaint = Paint(color = Color.fromRGBA(0.63f, 0.63f, 0.63f, 1f))
-                drawRect(Rect(0f, 0f, cellW, cellH), checkPaint)
+                drawRect(RectF32(0f, 0f, cellW, cellH), checkPaint)
             }
             val checkImage = surface.makeImageSnapshot()
             canvas.save()
             canvas.translate(x, y)
             canvas.clipRect(clipRect)
-            canvas.drawImage(stringImage, Rect(0f, 0f, cellW, cellH), Paint())
+            canvas.drawImage(stringImage, RectF32(0f, 0f, cellW, cellH), Paint())
             canvas.restore()
         }
     }
@@ -83,8 +83,8 @@ class XfermodeImageFilterGm : SkiaGm {
     private fun drawBlendCell(canvas: GmCanvas, fgImage: Image, bgImage: Image, mode: BlendMode, x: Float, y: Float) {
         val cellW = fgImage.width.toFloat()
         val cellH = fgImage.height.toFloat()
-        val r = Rect(x, y, x + cellW, y + cellH)
-        val cellRect = Rect(0f, 0f, cellW, cellH)
+        val r = RectF32(x, y, x + cellW, y + cellH)
+        val cellRect = RectF32(0f, 0f, cellW, cellH)
 
         canvas.save()
         canvas.translate(x, y)
@@ -135,7 +135,7 @@ class XfermodeImageFilterGm : SkiaGm {
                 var xx = (yy / size) % 2 * size
                 while (xx < w) {
                     drawRect(
-                        Rect(xx.toFloat(), yy.toFloat(), (xx + size).toFloat(), (yy + size).toFloat()),
+                        RectF32(xx.toFloat(), yy.toFloat(), (xx + size).toFloat(), (yy + size).toFloat()),
                         paint,
                     )
                     xx += 2 * size

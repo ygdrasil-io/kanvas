@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurrect.cpp::blur_matrix_rect` (650 x 685).
@@ -25,11 +25,11 @@ class BlurMatrixRectGm : SkiaGm {
     override val height = 685
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val kRect = Rect.fromXYWH(0f, 0f, 14f, 60f)
+        val kRect = RectF32.ofOriginSize(0f, 0f, 14f, 60f)
         val kSigmas = floatArrayOf(0.5f, 1.2f, 2.3f, 3.9f, 7.4f)
 
-        val cx = kRect.center.x
-        val cy = kRect.center.y
+        val cx = kRect.center().x
+        val cy = kRect.center().y
 
         fun rotateAround(deg: Float, px: Float, py: Float): Matrix3x3F32 =
             Matrix3x3F32.translation(px, py) * Matrix3x3F32.rotation(deg) * Matrix3x3F32.translation(-px, -py)
@@ -48,7 +48,7 @@ class BlurMatrixRectGm : SkiaGm {
 
         matrices.add(rotateAround(197f, cx, cy) * Matrix3x3F32.skewing(0.3f, -0.5f))
 
-        fun mapRect(m: Matrix3x3F32, r: Rect): Rect {
+        fun mapRect(m: Matrix3x3F32, r: RectF32): RectF32 {
             val p0 = m.transform(Point2F32(r.left, r.top))
             val p1 = m.transform(Point2F32(r.right, r.top))
             val p2 = m.transform(Point2F32(r.right, r.bottom))
@@ -57,13 +57,13 @@ class BlurMatrixRectGm : SkiaGm {
             val t = minOf(p0.y, p1.y, p2.y, p3.y)
             val rt = maxOf(p0.x, p1.x, p2.x, p3.x)
             val b = maxOf(p0.y, p1.y, p2.y, p3.y)
-            return Rect(l, t, rt, b)
+            return RectF32(l, t, rt, b)
         }
 
-        var bounds = Rect(0f, 0f, 0f, 0f)
+        var bounds = RectF32(0f, 0f, 0f, 0f)
         for (m in matrices) {
             val mapped = mapRect(m, kRect)
-            bounds = Rect(
+            bounds = RectF32(
                 minOf(bounds.left, mapped.left),
                 minOf(bounds.top, mapped.top),
                 maxOf(bounds.right, mapped.right),
@@ -71,7 +71,7 @@ class BlurMatrixRectGm : SkiaGm {
             )
         }
         val blurPad = 2f * kSigmas[kSigmas.size - 1]
-        bounds = Rect(
+        bounds = RectF32(
             bounds.left - blurPad, bounds.top - blurPad,
             bounds.right + blurPad, bounds.bottom + blurPad,
         )
@@ -88,10 +88,10 @@ class BlurMatrixRectGm : SkiaGm {
                 canvas.concat(m)
                 canvas.drawRect(kRect, paint)
                 canvas.restore()
-                canvas.translate(0f, bounds.height)
+                canvas.translate(0f, bounds.height())
             }
             canvas.restore()
-            canvas.translate(bounds.width, 0f)
+            canvas.translate(bounds.width(), 0f)
         }
     }
 }

@@ -34,7 +34,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -457,7 +457,7 @@ class GPUPreparedMeshProgramMapperTest {
                 positions = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
             ),
             program = program(),
-            bounds = Rect.fromLTRB(0f, 0f, 1f, 1f),
+            bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f),
         ),
         paint = Paint(color = Color.WHITE, blendMode = paintBlendMode),
         blendMode = blendMode,

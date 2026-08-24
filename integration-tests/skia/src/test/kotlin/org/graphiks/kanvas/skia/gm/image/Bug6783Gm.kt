@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/bug6783.cpp`.
  *  Regression test for crbug.com/6783 — renders a surface snapshot with a
@@ -29,13 +29,13 @@ class Bug6783Gm : SkiaGm {
         val surf = Surface(100, 100)
         surf.canvas {
             clear(Color.fromRGBA(1f, 1f, 0f))
-            drawRect(Rect.fromLTRB(0f, 0f, 50f, 100f), Paint(Color.BLUE))
+            drawRect(RectF32.ofLTRB(0f, 0f, 50f, 100f), Paint(Color.BLUE))
         }
         val img = surf.makeImageSnapshot()
         val shader = Shader.WithLocalMatrix(
             img.makeShader(TileMode.REPEAT, TileMode.CLAMP),
             Matrix3x3F32.translation(25f, 214f) * Matrix3x3F32.scaling(2f, 2f) * Matrix3x3F32.skewing(0.5f, 0.5f),
         )
-        canvas.drawRect(Rect(0f, 0f, 500f, 500f), Paint(shader = shader))
+        canvas.drawRect(RectF32(0f, 0f, 500f, 500f), Paint(shader = shader))
     }
 }

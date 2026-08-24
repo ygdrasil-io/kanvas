@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/runtimeshader.cpp` — `null_child_rt`.
@@ -35,7 +35,7 @@ class NullChildRTGm : SkiaGm {
             for (col in 0 until 3) {
                 val x = col * 50f
                 val y = row * 50f
-                canvas.drawRect(Rect(x, y, x + 48f, y + 48f), Paint(shader = shader))
+                canvas.drawRect(RectF32(x, y, x + 48f, y + 48f), Paint(shader = shader))
             }
         }
         canvas.restore()

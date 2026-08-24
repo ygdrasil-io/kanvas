@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/blurroundrect.cpp` (large rrects variant).
  *  Tests blur mask filter on large rounded rectangles — draws filled
@@ -29,7 +29,7 @@ class BlurLargeRRectsGm : SkiaGm {
         val paint = Paint(
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
         )
-        val rect = Rect.fromLTRB(5f, -20000f, 240f, 25f)
+        val rect = RectF32.ofLTRB(5f, -20000f, 240f, 25f)
         val rrect = RRect(rect, 40f)
         for (i in 0 until 4) {
             val r = if ((i and 1) != 0) 0xFF else 0

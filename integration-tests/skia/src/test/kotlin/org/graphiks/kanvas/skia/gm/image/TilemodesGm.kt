@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/tilemodes.cpp`.
  *  Renders a grid of Shader.Image tiles with various TileMode/filter
@@ -37,7 +37,7 @@ class TilemodesGm(
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val font = Font(typeface, size = 12f)
         val size = if (powerOfTwoSize) kPOTSize else kNPOTSize
-        val r = Rect(0f, 0f, (size * 2).toFloat(), (size * 2).toFloat())
+        val r = RectF32(0f, 0f, (size * 2).toFloat(), (size * 2).toFloat())
 
         val configNames = listOf("8888", "565")
         val filters = listOf(SamplingOptions.NEAREST, SamplingOptions.LINEAR)
@@ -54,8 +54,8 @@ class TilemodesGm(
         for (kx in modes.indices) {
             for (ky in modes.indices) {
                 val str = "[${modeNames[kx]},${modeNames[ky]}]"
-                canvas.drawString(str, x + r.width / 2f, y, font, labelPaint)
-                x += r.width * 4f / 3f
+                canvas.drawString(str, x + r.width() / 2f, y, font, labelPaint)
+                x += r.width() * 4f / 3f
             }
         }
         y += 16f
@@ -73,12 +73,12 @@ class TilemodesGm(
                         canvas.translate(x, y)
                         canvas.drawRect(r, paint)
                         canvas.restore()
-                        x += r.width * 4f / 3f
+                        x += r.width() * 4f / 3f
                     }
                 }
                 val tag = "${configNames[i]}, ${filterNames[j]}"
-                canvas.drawString(tag, x, y + r.height * 2f / 3f, font, Paint())
-                y += r.height * 4f / 3f
+                canvas.drawString(tag, x, y + r.height() * 2f / 3f, font, Paint())
+                y += r.height() * 4f / 3f
             }
         }
     }
@@ -101,7 +101,7 @@ class TilemodesGm(
                 val paint = Paint(
                     shader = Shader.LinearGradient(pts[0], pts[1], stops, TileMode.CLAMP),
                 )
-                drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), paint)
+                drawRect(RectF32(0f, 0f, w.toFloat(), h.toFloat()), paint)
             }
             return surface.makeImageSnapshot()
         }

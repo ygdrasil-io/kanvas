@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/animated_gif.cpp`.
@@ -23,7 +23,7 @@ class AnimatedGifGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width0: Int, height0: Int) {
         val data = loadResource("images/test640x479.gif") ?: return
         val image = Image.decode(data, "image/gif")
-        canvas.drawImage(image, Rect.fromXYWH(0f, 0f, image.width.toFloat(), image.height.toFloat()))
+        canvas.drawImage(image, RectF32.ofOriginSize(0f, 0f, image.width.toFloat(), image.height.toFloat()))
     }
 
     private fun loadResource(path: String): ByteArray? =

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bitmappremul.cpp` (bitmap_premul).
@@ -22,10 +22,10 @@ class BitmapPremulGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val slide = SLIDE_SIZE.toFloat()
-        canvas.drawImage(makeArgb8888Gradient(), Rect.fromXYWH(0f, 0f, slide, slide))
-        canvas.drawImage(makeArgb8888Gradient(), Rect.fromXYWH(slide, 0f, slide, slide))
-        canvas.drawImage(makeArgb8888Stripes(), Rect.fromXYWH(0f, slide, slide, slide))
-        canvas.drawImage(makeArgb8888Stripes(), Rect.fromXYWH(slide, slide, slide, slide))
+        canvas.drawImage(makeArgb8888Gradient(), RectF32.ofOriginSize(0f, 0f, slide, slide))
+        canvas.drawImage(makeArgb8888Gradient(), RectF32.ofOriginSize(slide, 0f, slide, slide))
+        canvas.drawImage(makeArgb8888Stripes(), RectF32.ofOriginSize(0f, slide, slide, slide))
+        canvas.drawImage(makeArgb8888Stripes(), RectF32.ofOriginSize(slide, slide, slide, slide))
     }
 
     private companion object {

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 class FlightAnimatedImageGm : SkiaGm {
     override val name = "flight_animated_image"
@@ -34,7 +34,7 @@ class FlightAnimatedImageGm : SkiaGm {
                 for (frame in 0 until 2) {
                     if (usePic) {
                         val recorder = PictureRecorder()
-                        val rc = recorder.beginRecording(Rect.fromLTRB(0f, 0f, cellSize * scale, cellSize * scale))
+                        val rc = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, cellSize * scale, cellSize * scale))
                         val tmp = GmCanvas(rc, (cellSize * scale).toInt(), (cellSize * scale).toInt())
                         drawFrame(tmp, frame, scale)
                         val pic = recorder.finishRecordingAsPicture()
@@ -53,7 +53,7 @@ class FlightAnimatedImageGm : SkiaGm {
     private fun drawFrame(canvas: GmCanvas, frame: Int, scale: Float) {
         val colors = listOf(Color.BLUE, Color(0xFFFF00FFu), Color(0xFF00FFFFu))
         val color = colors[frame % colors.size]
-        val r = Rect.fromLTRB(10f * scale, 10f * scale, 90f * scale, 90f * scale)
+        val r = RectF32.ofLTRB(10f * scale, 10f * scale, 90f * scale, 90f * scale)
         canvas.drawRect(r, Paint(color = color, antiAlias = true))
         canvas.drawCircle(50f * scale, 50f * scale, 40f * scale, Paint(
             color = color,

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imagefilterstransformed.cpp::ImageFilterMatrixWLocalMatrix` (512 × 512).
@@ -38,6 +38,6 @@ class ImageFiltersTransformedGm : SkiaGm {
         val filter: ImageFilter = ImageFilter.Offset(10f, 10f, dilate)
 
         val paint = Paint(imageFilter = filter)
-        canvas.drawImage(image, Rect(128f, 128f, 384f, 384f), paint)
+        canvas.drawImage(image, RectF32(128f, 128f, 384f, 384f), paint)
     }
 }

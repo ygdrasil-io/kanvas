@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/emptyshader.cpp`.
@@ -33,7 +33,7 @@ class EmptyShaderGm : SkiaGm {
 
         val stroke = Paint(style = PaintStyle.STROKE)
 
-        val builders: List<(Rect) -> Shader?> = listOf(
+        val builders: List<(RectF32) -> Shader?> = listOf(
             { _ -> null },
             { r -> degenSweep(r) },
             { r -> degenLinear(r) },
@@ -44,7 +44,7 @@ class EmptyShaderGm : SkiaGm {
         var left = K_PAD.toFloat()
         var top = K_PAD.toFloat()
         for (build in builders) {
-            val r = Rect.fromXYWH(left, top, K_SIZE.toFloat(), K_SIZE.toFloat())
+            val r = RectF32.ofOriginSize(left, top, K_SIZE.toFloat(), K_SIZE.toFloat())
             val p = Paint(color = Color.BLUE, shader = build(r))
             canvas.drawRect(r, p)
             canvas.drawRect(r, stroke)
@@ -56,11 +56,11 @@ class EmptyShaderGm : SkiaGm {
         }
     }
 
-    private fun degenSweep(r: Rect): Shader? {
+    private fun degenSweep(r: RectF32): Shader? {
         val start = 0f
         val end = Math.nextUp(start)
         return Shader.SweepGradient(
-            center = Point2F32(r.center.x, r.center.y),
+            center = Point2F32(r.center().x, r.center().y),
             startAngle = start,
             endAngle = end,
             stops = listOf(
@@ -71,8 +71,8 @@ class EmptyShaderGm : SkiaGm {
         )
     }
 
-    private fun degenLinear(r: Rect): Shader? {
-        val pt = Point2F32(r.center.x, r.center.y)
+    private fun degenLinear(r: RectF32): Shader? {
+        val pt = Point2F32(r.center().x, r.center().y)
         return Shader.LinearGradient(
             start = pt, end = pt,
             stops = listOf(
@@ -83,8 +83,8 @@ class EmptyShaderGm : SkiaGm {
         )
     }
 
-    private fun degenConical(r: Rect): Shader? {
-        val pt = Point2F32(r.center.x, r.center.y)
+    private fun degenConical(r: RectF32): Shader? {
+        val pt = Point2F32(r.center().x, r.center().y)
         return Shader.ConicalGradient(
             start = pt, startRadius = 0f,
             end = pt, endRadius = 0f,

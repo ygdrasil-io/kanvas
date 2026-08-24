@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/imageblurrepeatmode.cpp`.
@@ -62,7 +62,7 @@ class ImageBlurRepeatModeGm : SkiaGm {
                     color = color,
                     imageFilter = filter,
                 )
-                canvas.drawRect(Rect.fromXYWH(x, 0f, bandWidth, IMAGE_HEIGHT.toFloat()), paint)
+                canvas.drawRect(RectF32.ofOriginSize(x, 0f, bandWidth, IMAGE_HEIGHT.toFloat()), paint)
                 x += bandWidth
             }
         }
@@ -75,7 +75,7 @@ class ImageBlurRepeatModeGm : SkiaGm {
                     color = color,
                     imageFilter = filter,
                 )
-                canvas.drawRect(Rect.fromXYWH(0f, y, IMAGE_WIDTH.toFloat(), bandWidth), paint)
+                canvas.drawRect(RectF32.ofOriginSize(0f, y, IMAGE_WIDTH.toFloat(), bandWidth), paint)
                 y += bandWidth
             }
         }

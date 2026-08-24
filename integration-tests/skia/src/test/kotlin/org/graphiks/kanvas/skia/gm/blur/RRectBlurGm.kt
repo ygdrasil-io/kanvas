@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/rrect.cpp` (RRectBlurGM).
@@ -34,7 +34,7 @@ class RRectBlurGm : SkiaGm {
             cellY = 0,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 1.0f),
             color = Color.WHITE,
-            rr = RRect(Rect(0f, 0f, 50f, 50f), CornerRadii(10f, 15f)),
+            rr = RRect(RectF32(0f, 0f, 50f, 50f), CornerRadii(10f, 15f)),
         )
 
         drawBlurryRrect(
@@ -42,11 +42,11 @@ class RRectBlurGm : SkiaGm {
             cellY = 100,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
             color = Color.fromRGBA(1f, 1f, 0f, 1f),
-            rr = RRect(Rect(0f, 0f, 60f, 80f), CornerRadii(3.1f, 1.5f)),
+            rr = RRect(RectF32(0f, 0f, 60f, 80f), CornerRadii(3.1f, 1.5f)),
         )
 
         val ninePatch = RRect(
-            rect = Rect(0f, 0f, 70f, 80f),
+            rect = RectF32(0f, 0f, 70f, 80f),
             topLeft = CornerRadii(5f, 10f),
             topRight = CornerRadii(13f, 10f),
             bottomRight = CornerRadii(13f, 7f),
@@ -61,7 +61,7 @@ class RRectBlurGm : SkiaGm {
         )
 
         val complex = RRect(
-            rect = Rect(0f, 0f, 90f, 90f),
+            rect = RectF32(0f, 0f, 90f, 90f),
             topLeft = CornerRadii(0f, 0f),
             topRight = CornerRadii(20f, 1f),
             bottomRight = CornerRadii(30f, 30f),
@@ -98,8 +98,8 @@ class RRectBlurGm : SkiaGm {
             maskFilter = mf,
         )
 
-        val paddingX = ((kCellSize - rr.rect.width) / 2f).toInt()
-        val paddingY = ((kCellSize - rr.rect.height) / 2f).toInt()
+        val paddingX = ((kCellSize - rr.rect.width()) / 2f).toInt()
+        val paddingY = ((kCellSize - rr.rect.height()) / 2f).toInt()
 
         val leftRRect = offsetRRect(rr, paddingX.toFloat(), paddingY.toFloat() + cellY)
         val leftPath = Path { }.apply { addRRect(leftRRect) }
@@ -111,7 +111,7 @@ class RRectBlurGm : SkiaGm {
     }
 
     private fun offsetRRect(rr: RRect, dx: Float, dy: Float): RRect {
-        val offsetRect = Rect.fromLTRB(
+        val offsetRect = RectF32.ofLTRB(
             rr.rect.left + dx,
             rr.rect.top + dy,
             rr.rect.right + dx,

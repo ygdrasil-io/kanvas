@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's
@@ -47,11 +47,11 @@ class TiledPictureShaderGm : SkiaGm {
     override val height = 400
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val tile = Rect.fromLTRB(0f, 0f, 100f, 100f)
+        val tile = RectF32.ofLTRB(0f, 0f, 100f, 100f)
         val recorder = PictureRecorder()
         val c = recorder.beginRecording(tile)
 
-        val r = Rect.fromLTRB(4f, 4f, 96f, 96f)
+        val r = RectF32.ofLTRB(4f, 4f, 96f, 96f)
         var p = Paint(color = Color.fromRGBA(0x30f / 255f, 0x3Ff / 255f, 0x9Ff / 255f))
         c.drawRect(r, p)
 
@@ -66,17 +66,17 @@ class TiledPictureShaderGm : SkiaGm {
         val picture = recorder.finishRecordingAsPicture()
 
         var paint = Paint(color = Color.fromRGBA(0x8Bf / 255f, 0xC3f / 255f, 0x4Af / 255f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
 
-        canvas.clipRect(Rect.fromXYWH(0f, 0f, 400f, 350f))
+        canvas.clipRect(RectF32.ofOriginSize(0f, 0f, 400f, 350f))
         paint = paint.copy(color = Color.fromRGBA(0xB6f / 255f, 0xB6f / 255f, 0xB6f / 255f))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
 
         paint = paint.copy(shader = picture.asShader(
             tileX = TileMode.REPEAT,
             tileY = TileMode.REPEAT,
             sampling = SamplingOptions.NEAREST,
         ))
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), paint)
     }
 }

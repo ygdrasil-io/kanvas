@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/unpremul.cpp :: unpremul`.
@@ -38,7 +38,7 @@ class UnpremulGm : SkiaGm {
 
         canvas.save()
         val paint = Paint(color = color, blendMode = BlendMode.SRC)
-        canvas.drawRect(Rect(0f, 0f, 100f, 100f), paint)
+        canvas.drawRect(RectF32(0f, 0f, 100f, 100f), paint)
         markGmGood(canvas, 140f, 40f)
         canvas.restore()
 
@@ -47,7 +47,7 @@ class UnpremulGm : SkiaGm {
         val bm = Bitmap(100, 100)
         bm.eraseColor(color)
         canvas.drawImage(
-            bm.toImage(), Rect(0f, 0f, 100f, 100f),
+            bm.toImage(), RectF32(0f, 0f, 100f, 100f),
             Paint(blendMode = BlendMode.SRC),
         )
         markGmGood(canvas, 140f, 40f)

@@ -29,7 +29,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -41,14 +41,14 @@ class GPUImageFilterDispatchTest {
     fun `complex clip blur stays renderable as an unclipped source`() {
         val command = DisplayOp.DrawImage(
             image = Image.fromPixels(4, 4, fixtureRgba, ColorType.RGBA_8888, "fixture"),
-            src = Rect(0f, 0f, 4f, 4f),
-            dst = Rect(20f, 30f, 24f, 34f),
+            src = RectF32(0f, 0f, 4f, 4f),
+            dst = RectF32(20f, 30f, 24f, 34f),
             paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f)),
             transform = Matrix3x3F32.Identity,
             clip = ClipStack.Complex(
                 listOf(
-                    ClipStackOp.RectOp(Rect(8f, 8f, 40f, 48f), ClipOp.INTERSECT),
-                    ClipStackOp.RectOp(Rect(16f, 16f, 24f, 24f), ClipOp.DIFFERENCE),
+                    ClipStackOp.RectOp(RectF32(8f, 8f, 40f, 48f), ClipOp.INTERSECT),
+                    ClipStackOp.RectOp(RectF32(16f, 16f, 24f, 24f), ClipOp.DIFFERENCE),
                 ),
             ),
         ).toImageRectCommand(
@@ -110,8 +110,8 @@ class GPUImageFilterDispatchTest {
             colorType = ColorType.RGBA_8888,
             sourceId = "fixture",
         ),
-        src = Rect(0f, 0f, 4f, 4f),
-        dst = Rect(20f, 30f, 24f, 34f),
+        src = RectF32(0f, 0f, 4f, 4f),
+        dst = RectF32(20f, 30f, 24f, 34f),
         paint = Paint(),
         transform = Matrix3x3F32.Identity,
         clip = ClipStack.WideOpen,

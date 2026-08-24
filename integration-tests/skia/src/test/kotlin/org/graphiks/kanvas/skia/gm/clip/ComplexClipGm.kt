@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/complexclip.cpp::ComplexClipGM`.
@@ -91,12 +91,12 @@ abstract class ComplexClipGm(
         canvas.scale(3f / 4f, 3f / 4f)
 
         if (doSaveLayer) {
-            val bounds = Rect.fromLTRB(
+            val bounds = RectF32.ofLTRB(
                 4f / 3f * -20f,
                 4f / 3f * -20f,
                 4f / 3f * (388f - 20f),
                 4f / 3f * (780f - 20f),
-            ).let { Rect.fromLTRB(it.left + 100f, it.top + 100f, it.right - 100f, it.bottom - 100f) }
+            ).let { RectF32.ofLTRB(it.left + 100f, it.top + 100f, it.right - 100f, it.bottom - 100f) }
 
             canvas.drawRect(bounds, Paint(color = Color.RED, style = PaintStyle.STROKE))
             canvas.clipRect(bounds)
@@ -126,7 +126,7 @@ abstract class ComplexClipGm(
                     canvas.clipPath(clipB, op, doAAClip)
 
                     if (invertDraw) {
-                        val clipBounds = Rect.fromLTRB(-10f, -5f, 205f, 205f)
+                        val clipBounds = RectF32.ofLTRB(-10f, -5f, 205f, 205f)
                         canvas.clipRect(clipBounds)
                     }
                     canvas.drawPath(path, pathPaint)

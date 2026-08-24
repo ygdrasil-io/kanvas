@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Size
 
 /**
@@ -79,7 +79,7 @@ class PerlinNoiseGm : SkiaGm {
     private fun drawRect(canvas: GmCanvas, pt: Point2F32, paint: Paint, size: Size) {
         canvas.save()
         canvas.translate(pt.x, pt.y)
-        canvas.drawRect(Rect.fromXYWH(0f, 0f, size.width, size.height), paint)
+        canvas.drawRect(RectF32.ofOriginSize(0f, 0f, size.width, size.height), paint)
         canvas.restore()
     }
 }

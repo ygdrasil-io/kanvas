@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -45,6 +45,6 @@ class GradientsDegenerate2PointGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val paint = Paint(shader = shader)
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), paint)
+        canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), paint)
     }
 }

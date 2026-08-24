@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurs.cpp::DEF_SIMPLE_GM(TiledBlurBigSigma, …)`.
@@ -33,7 +33,7 @@ class TiledBlurBigSigmaGm : SkiaGm {
             for (x in 0 until 3) {
                 canvas.save()
 
-                canvas.clipRect(Rect(
+                canvas.clipRect(RectF32(
                     (x * kTileWidth).toFloat(),
                     (y * kTileHeight).toFloat(),
                     ((x + 1) * kTileWidth).toFloat(),
@@ -45,7 +45,7 @@ class TiledBlurBigSigmaGm : SkiaGm {
 
                 val p = Paint(imageFilter = blur)
 
-                canvas.clipRect(Rect(0f, 0f, 1970f, 1223f))
+                canvas.clipRect(RectF32(0f, 0f, 1970f, 1223f))
                 canvas.saveLayer(null, p)
 
                 val fill = Paint(color = Color.BLUE)

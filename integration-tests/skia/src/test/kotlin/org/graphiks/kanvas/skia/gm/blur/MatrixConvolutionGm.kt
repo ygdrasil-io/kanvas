@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/matrixconvolution.cpp` — basic kernel variant (3×3).
@@ -29,7 +29,7 @@ open class MatrixConvolutionGm(
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val w = width.toFloat()
         val h = height.toFloat()
-        canvas.drawRect(Rect(0f, 0f, w, h), Paint(color = Color.BLACK))
+        canvas.drawRect(RectF32(0f, 0f, w, h), Paint(color = Color.BLACK))
         val grad = Shader.LinearGradient(
             Point2F32(0f, 0f), Point2F32(0f, 80f),
             listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, colorTwo())),
@@ -41,21 +41,21 @@ open class MatrixConvolutionGm(
                 val oy = 10 + y * 100
                 canvas.save()
                 canvas.translate(ox.toFloat(), oy.toFloat())
-                canvas.drawRect(Rect(0f, 0f, 80f, 80f), patternPaint)
+                canvas.drawRect(RectF32(0f, 0f, 80f, 80f), patternPaint)
                 canvas.restore()
             }
         }
         canvas.save()
         canvas.translate(310f, 10f)
-        canvas.drawRect(Rect(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.3f, 0.3f, 0.3f, 1f)))
+        canvas.drawRect(RectF32(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.3f, 0.3f, 0.3f, 1f)))
         canvas.restore()
         canvas.save()
         canvas.translate(310f, 110f)
-        canvas.drawRect(Rect(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.15f, 0.15f, 0.15f, 1f)))
+        canvas.drawRect(RectF32(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.15f, 0.15f, 0.15f, 1f)))
         canvas.restore()
         canvas.save()
         canvas.translate(310f, 210f)
-        canvas.drawRect(Rect(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)))
+        canvas.drawRect(RectF32(0f, 0f, 60f, 60f), Paint(color = Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)))
         canvas.restore()
     }
 

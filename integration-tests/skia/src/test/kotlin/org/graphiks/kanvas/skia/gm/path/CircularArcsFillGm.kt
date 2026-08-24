@@ -3,7 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -47,10 +47,10 @@ class CircularArcsFillGm : SkiaGm {
             for (sweep in kSweeps) {
                 c.drawArc(kRect, start, sweep, useCenter, p0.copy(color = alphaRed))
                 c.drawArc(kRect, start, -(360f - sweep), useCenter, p1.copy(color = alphaBlue))
-                c.translate(kRect.width + pad, 0f)
+                c.translate(kRect.width() + pad, 0f)
             }
             c.restore()
-            c.translate(0f, kRect.height + pad)
+            c.translate(0f, kRect.height() + pad)
         }
         c.restore()
     }
@@ -60,6 +60,6 @@ class CircularArcsFillGm : SkiaGm {
         const val kH: Int = 1000
         val kStarts: FloatArray = floatArrayOf(0f, 10f, 30f, 45f, 90f, 165f, 180f, 270f)
         val kSweeps: FloatArray = floatArrayOf(1f, 45f, 90f, 130f, 180f, 184f, 300f, 355f)
-        val kRect: Rect = Rect.fromLTRB(0f, 0f, 40f, 40f)
+        val kRect: RectF32 = RectF32.ofLTRB(0f, 0f, 40f, 40f)
     }
 }

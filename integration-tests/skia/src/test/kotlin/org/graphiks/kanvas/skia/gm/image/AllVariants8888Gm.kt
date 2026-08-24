@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/all_bitmap_configs.cpp :: all_variants_8888`.
@@ -37,7 +37,7 @@ class AllVariants8888Gm : SkiaGm {
             canvas.save()
             for (colorType in listOf(ColorType.RGBA_8888, ColorType.BGRA_8888)) {
                 val bm = makeVariant(colorType, alphaType)
-                canvas.drawImage(bm.toImage(), Rect(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
+                canvas.drawImage(bm.toImage(), RectF32(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
                 canvas.translate((SCALE + 10).toFloat(), 0f)
             }
             canvas.restore()
@@ -73,7 +73,7 @@ class AllVariants8888Gm : SkiaGm {
             for (x in 0..((width / size).toInt())) {
                 val color = if ((x + y) % 2 == 0) ltGray else white
                 canvas.drawRect(
-                    Rect(x * size, y * size, (x + 1) * size, (y + 1) * size),
+                    RectF32(x * size, y * size, (x + 1) * size, (y + 1) * size),
                     Paint.fill(color),
                 )
             }

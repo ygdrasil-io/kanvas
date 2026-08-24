@@ -27,7 +27,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.junit.jupiter.api.TestInstance
@@ -214,7 +214,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                                 ),
                                 uniforms = org.graphiks.kanvas.pipeline.UniformBlock {},
                             ),
-                            bounds = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                            bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f),
                         ),
                         paint = validPaint,
                         blendMode = null,
@@ -247,7 +247,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                         transform = Matrix3x3F32.Identity,
                         clip = ClipStack.Complex(listOf(
                             ClipStackOp.PathOp(
-                                Path().addRect(Rect.fromLTRB(0f, 0f, 4f, 4f)),
+                                Path().addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)),
                                 ClipOp.INTERSECT,
                             ),
                         )),

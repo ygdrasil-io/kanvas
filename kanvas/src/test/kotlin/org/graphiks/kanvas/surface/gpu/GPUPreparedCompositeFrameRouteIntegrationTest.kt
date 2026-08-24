@@ -25,7 +25,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Builder-level route test for composite frames.
@@ -41,7 +41,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
                 listOf(
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     rect(),
                     DisplayOp.EndLayer,
                 ),
@@ -79,7 +79,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
                 listOf(
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     rect(),
                     DisplayOp.EndLayer,
                 ),
@@ -106,7 +106,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
             request(
                 listOf(
                     rect(),
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     rect(),
                     DisplayOp.EndLayer,
                 ),
@@ -145,13 +145,13 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     @Test
     fun `draw picture inside a saveLayer scope refuses instead of silently dropping`() {
         val picture = org.graphiks.kanvas.picture.Picture(
-            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            RectF32.ofLTRB(0f, 0f, 64f, 48f),
             listOf(rect()),
         )
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
                 listOf(
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     DisplayOp.DrawPicture(
                         picture = picture,
                         paint = null,
@@ -178,13 +178,13 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     @Test
     fun `mixed rect and picture inside a saveLayer scope refuses loudly`() {
         val picture = org.graphiks.kanvas.picture.Picture(
-            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            RectF32.ofLTRB(0f, 0f, 64f, 48f),
             listOf(rect()),
         )
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
                 listOf(
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     rect(),
                     DisplayOp.DrawPicture(
                         picture = picture,
@@ -211,7 +211,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
             request(
                 listOf(
                     rect(),
-                    DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null),
+                    DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null),
                     rect(),
                     DisplayOp.EndLayer,
                 ),
@@ -230,7 +230,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     @Test
     fun `top level draw picture refuses instead of silently dropping`() {
         val picture = org.graphiks.kanvas.picture.Picture(
-            Rect.fromLTRB(0f, 0f, 64f, 48f),
+            RectF32.ofLTRB(0f, 0f, 64f, 48f),
             listOf(rect()),
         )
         val result = GPUPreparedSurfaceFrameBuilder.build(
@@ -257,7 +257,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     fun `composite frame build refuses stably when capture fails`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
-                listOf(DisplayOp.BeginLayer(Rect.fromLTRB(0f, 0f, 64f, 48f), null)),
+                listOf(DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 64f, 48f), null)),
             ),
         )
 
@@ -324,7 +324,7 @@ class GPUPreparedCompositeFrameRouteIntegrationTest {
     )
 
     private fun rect(): DisplayOp.DrawRect = DisplayOp.DrawRect(
-        Rect.fromLTRB(2f, 3f, 12f, 11f),
+        RectF32.ofLTRB(2f, 3f, 12f, 11f),
         Paint.fill(Color.RED).copy(antiAlias = false),
         Matrix3x3F32.Identity,
         ClipStack.WideOpen,

@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/blurs.cpp::BlurBigSigma` (1024 x 1024).
@@ -25,6 +25,6 @@ class BlurBigSigmaGm : SkiaGm {
         val paint = Paint(
             imageFilter = ImageFilter.Blur(500f, 500f),
         )
-        canvas.drawRect(Rect(0f, 0f, 700f, 800f), paint)
+        canvas.drawRect(RectF32(0f, 0f, 700f, 800f), paint)
     }
 }

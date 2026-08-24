@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/pictureimagefilter.cpp`.
@@ -66,9 +66,9 @@ class PictureImageFilterGm : SkiaGm {
 
         canvas.drawColor(0.5f, 0.5f, 0.5f)
 
-        val srcRect = Rect.fromXYWH(20f, 20f, 30f, 30f)
-        val emptyRect = Rect.fromXYWH(20f, 20f, 0f, 0f)
-        val bounds = Rect.fromLTRB(0f, 0f, 100f, 100f)
+        val srcRect = RectF32.ofOriginSize(20f, 20f, 30f, 30f)
+        val emptyRect = RectF32.ofOriginSize(20f, 20f, 0f, 0f)
+        val bounds = RectF32.ofLTRB(0f, 0f, 100f, 100f)
 
         val pictureSource: ImageFilter = ImageFilter.Picture(pic)
         val pictureSourceSrcRect: ImageFilter = ImageFilter.Picture(pic, srcRect)
@@ -102,22 +102,22 @@ class PictureImageFilterGm : SkiaGm {
 
         // Bottom row: srcRect-scoped pictures drawn at 200% scale.
         canvas.translate(0f, 100f)
-        canvas.scale(200f / srcRect.width, 200f / srcRect.height)
+        canvas.scale(200f / srcRect.width(), 200f / srcRect.height())
         canvas.translate(-srcRect.left, -srcRect.top)
         fillRectFiltered(canvas, srcRect, pictureSource)
 
         // Scaled (same filter — sampling variants not applicable).
-        canvas.translate(srcRect.width, 0f)
+        canvas.translate(srcRect.width(), 0f)
         fillRectFiltered(canvas, srcRect, pictureSource)
 
         // Pixelated (same filter).
-        canvas.translate(srcRect.width, 0f)
+        canvas.translate(srcRect.width(), 0f)
         fillRectFiltered(canvas, srcRect, pictureSource)
     }
 
     private fun makePicture(): Picture {
         val rec = PictureRecorder()
-        val canvas = rec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val canvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         val paint = Paint(color = Color.WHITE)
         val circle = Path { }.apply { addCircle(50f, 50f, 35f) }
         canvas.drawPath(circle, paint)
@@ -126,18 +126,18 @@ class PictureImageFilterGm : SkiaGm {
 
     private fun makeStrokePicture(): Picture {
         val rec = PictureRecorder()
-        val canvas = rec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val canvas = rec.beginRecording(RectF32.ofLTRB(0f, 0f, 100f, 100f))
         val paint = Paint(color = Color.WHITE, style = PaintStyle.STROKE, strokeWidth = 3f)
         val circle = Path { }.apply { addCircle(50f, 50f, 15f) }
         canvas.drawPath(circle, paint)
         return rec.finishRecordingAsPicture()
     }
 
-    private fun fillRectFiltered(canvas: GmCanvas, clipRect: Rect, filter: ImageFilter?) {
+    private fun fillRectFiltered(canvas: GmCanvas, clipRect: RectF32, filter: ImageFilter?) {
         canvas.save()
         canvas.clipRect(clipRect)
         val paint = Paint(imageFilter = filter)
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, clipRect.width, clipRect.height), paint)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, clipRect.width(), clipRect.height()), paint)
         canvas.restore()
     }
 }

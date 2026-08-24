@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.Color
 
 class SimpleBlurRoundRectGm : SkiaGm {
@@ -37,11 +37,11 @@ class SimpleBlurRoundRectGm : SkiaGm {
 
         val blurRadii = floatArrayOf(1f, 5f, 10f, 20f)
         val cornerRadii = floatArrayOf(1f, 5f, 10f, 20f)
-        val r = Rect(0f, 0f, 25f, 25f)
+        val r = RectF32(0f, 0f, 25f, 25f)
 
         for (row in blurRadii.indices) {
             canvas.save()
-            canvas.translate(0f, (r.height + 50f) * row)
+            canvas.translate(0f, (r.height() + 50f) * row)
             for (pair in cornerRadii.indices) {
                 val paint = Paint(
                     color = Color.BLACK,
@@ -50,11 +50,11 @@ class SimpleBlurRoundRectGm : SkiaGm {
                 val cr = cornerRadii[pair]
                 val rrect = RRect(r, CornerRadii(cr, cr), CornerRadii(cr, cr), CornerRadii(cr, cr), CornerRadii(cr, cr))
                 canvas.drawPath(Path { }.apply { addRRect(rrect) }, paint)
-                canvas.translate(r.width + 50f, 0f)
+                canvas.translate(r.width() + 50f, 0f)
 
                 val shaded = paint.copy(shader = makeRadial())
                 canvas.drawPath(Path { }.apply { addRRect(rrect) }, shaded)
-                canvas.translate(r.width + 50f, 0f)
+                canvas.translate(r.width() + 50f, 0f)
             }
             canvas.restore()
         }

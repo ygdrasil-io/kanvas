@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/bug9331.cpp::bug9331`.
@@ -26,14 +26,14 @@ class Bug9331Gm : SkiaGm {
     override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val clip = Rect(0f, 0f, 200f, 150f)
+        val clip = RectF32(0f, 0f, 200f, 150f)
 
         run {
             val p = Paint(color = Color.fromRGBA(0x44 / 255f, 0f, 0f, 1f))
             canvas.drawRect(clip, p)
         }
 
-        fun draw(color: Color, clipRect: Rect) {
+        fun draw(color: Color, clipRect: RectF32) {
             val intervals = floatArrayOf(13f, 17f)
             val p = Paint(
                 color = color,
@@ -43,11 +43,11 @@ class Bug9331Gm : SkiaGm {
             )
             canvas.save()
             canvas.clipRect(clipRect)
-            canvas.drawPath(Path { }.also { it.addRect(Rect(50f, 50f, 150f, 150f)) }, p)
+            canvas.drawPath(Path { }.also { it.addRect(RectF32(50f, 50f, 150f, 150f)) }, p)
             canvas.restore()
         }
 
         draw(Color.BLACK, clip)
-        draw(Color.BLUE, Rect(0f, 150f, 200f, 300f))
+        draw(Color.BLUE, RectF32(0f, 150f, 200f, 300f))
     }
 }

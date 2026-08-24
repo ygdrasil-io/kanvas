@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clipdrawdraw.cpp::clipdrawdraw` (DEF_SIMPLE_GM_BG,
@@ -34,15 +34,15 @@ class ClipDrawDrawGm : SkiaGm {
 
         val paint = Paint(antiAlias = false)
 
-        drawCase(canvas, paint, Rect(136.5f, 137.5f, 338.5f, 293.5f))
-        drawCase(canvas, paint, Rect(207.5f, 179.499f, 530.5f, 429.5f))
+        drawCase(canvas, paint, RectF32(136.5f, 137.5f, 338.5f, 293.5f))
+        drawCase(canvas, paint, RectF32(207.5f, 179.499f, 530.5f, 429.5f))
     }
 
-    private fun drawCase(canvas: GmCanvas, paint: Paint, rect: Rect) {
+    private fun drawCase(canvas: GmCanvas, paint: Paint, rect: RectF32) {
         canvas.save()
         canvas.save()
         canvas.clipRect(rect)
-        canvas.drawRect(Rect(0f, 0f, 600f, 600f), paint)
+        canvas.drawRect(RectF32(0f, 0f, 600f, 600f), paint)
         canvas.restore()
 
         val whitePaint = paint.copy(color = Color.WHITE)

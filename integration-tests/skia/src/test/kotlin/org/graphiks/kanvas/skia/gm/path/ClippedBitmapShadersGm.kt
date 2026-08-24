@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 open class ClippedBitmapShadersBase(
     private val mode: TileMode,
@@ -45,7 +45,7 @@ open class ClippedBitmapShadersBase(
             for (j in 0 until 3) {
                 val xOrigin = SLIDE_SIZE / 3f * j + margin
                 if (i == 1 && j == 1) continue
-                val rect = Rect.fromXYWH(xOrigin, yOrigin, RECT_SIZE, RECT_SIZE)
+                val rect = RectF32.ofOriginSize(xOrigin, yOrigin, RECT_SIZE, RECT_SIZE)
                 canvas.save()
                 canvas.clipRect(rect)
                 canvas.drawRect(rect, paint)

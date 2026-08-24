@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/clippedcubic.cpp` (`ClippedCubicGM`).
@@ -36,7 +36,7 @@ class ClippedCubicGm : SkiaGm {
             cubicTo(140f, 150f, 40f, 10f, 170f, 150f)
         }
         val paint = Paint()
-        val bounds = Rect(0f, 0f, 170f, 150f)
+        val bounds = RectF32(0f, 0f, 170f, 150f)
 
         var dy = -1f
         while (dy <= 1f) {
@@ -49,11 +49,11 @@ class ClippedCubicGm : SkiaGm {
                 canvas.drawPath(path, paint)
                 canvas.restore()
 
-                canvas.translate(bounds.width, 0f)
+                canvas.translate(bounds.width(), 0f)
                 dx += 1f
             }
             canvas.restore()
-            canvas.translate(0f, bounds.height)
+            canvas.translate(0f, bounds.height())
             dy += 1f
         }
     }

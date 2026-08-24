@@ -5,7 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Port of Skia's `gm/encode_srgb.cpp::EncodeSRGBGM`.
@@ -40,7 +40,7 @@ open class EncodeSrgbGm(
                 canvas.save()
                 for (useSRGB in listOf(false, true)) {
                     val src = makeImage(colorType, alpha) ?: continue
-                    canvas.drawImage(src, Rect(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
+                    canvas.drawImage(src, RectF32(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()))
                     canvas.translate(imageWidth.toFloat(), 0f)
                 }
                 canvas.restore()

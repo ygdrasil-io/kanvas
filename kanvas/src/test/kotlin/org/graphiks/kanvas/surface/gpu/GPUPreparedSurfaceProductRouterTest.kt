@@ -49,7 +49,7 @@ import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -66,7 +66,7 @@ class GPUPreparedSurfaceProductRouterTest {
         }
 
         val flushRoute = GPUPreparedSurfaceProductRouter.route(
-            listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
+            listOf(DisplayOp.FlushAndSnapshot(RectF32.ofLTRB(0f, 0f, 4f, 4f))),
             4,
             4,
             PixelFormat.RGBA8,
@@ -77,7 +77,7 @@ class GPUPreparedSurfaceProductRouterTest {
         assertContentEquals(ubyteArrayOf(1u, 2u, 3u, 4u), flushPrepared.result.pixels)
         assertEquals(1, calls)
         assertEquals(
-            listOf(DisplayOp.FlushAndSnapshot(Rect.fromLTRB(0f, 0f, 4f, 4f))),
+            listOf(DisplayOp.FlushAndSnapshot(RectF32.ofLTRB(0f, 0f, 4f, 4f))),
             flushRequest!!.candidate.operations,
         )
 
@@ -243,7 +243,7 @@ class GPUPreparedSurfaceProductRouterTest {
         val operations = listOf(
             DisplayOp.DrawVertices(triangle, paint, Matrix3x3F32.Identity, ClipStack.WideOpen),
             DisplayOp.DrawMesh(
-                Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
+                Mesh(triangle, bounds = RectF32.ofLTRB(0f, 0f, 4f, 4f)),
                 paint,
                 null,
                 Matrix3x3F32.Identity,
@@ -288,7 +288,7 @@ class GPUPreparedSurfaceProductRouterTest {
             clip = ClipStack.WideOpen,
         )
         val meshOp = DisplayOp.DrawMesh(
-            mesh = Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
+            mesh = Mesh(triangle, bounds = RectF32.ofLTRB(0f, 0f, 4f, 4f)),
             paint = paint,
             blendMode = null,
             transform = Matrix3x3F32.Identity,
@@ -334,7 +334,7 @@ class GPUPreparedSurfaceProductRouterTest {
                             ),
                             uniforms = org.graphiks.kanvas.pipeline.UniformBlock {},
                         ),
-                        bounds = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                        bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f),
                     ),
                     paint = paint,
                     blendMode = null,
@@ -607,7 +607,7 @@ class GPUPreparedSurfaceProductRouterTest {
     )
 
     private companion object {
-        val RECT = Rect.fromLTRB(0f, 0f, 4f, 4f)
+        val RECT = RectF32.ofLTRB(0f, 0f, 4f, 4f)
     }
 }
 
@@ -717,16 +717,16 @@ internal fun preparedProductImageOperations(
     return listOf(
         DisplayOp.DrawImage(
             image,
-            Rect.fromLTRB(0f, 0f, 4f, 4f),
-            Rect.fromLTRB(0f, 0f, 4f, 4f),
+            RectF32.ofLTRB(0f, 0f, 4f, 4f),
+            RectF32.ofLTRB(0f, 0f, 4f, 4f),
             paint,
             Matrix3x3F32.Identity,
             clip,
         ) to 1,
         DisplayOp.DrawImageNine(
             image,
-            Rect.fromLTRB(1f, 1f, 3f, 3f),
-            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            RectF32.ofLTRB(1f, 1f, 3f, 3f),
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
             paint,
             Matrix3x3F32.Identity,
             clip,
@@ -734,7 +734,7 @@ internal fun preparedProductImageOperations(
         DisplayOp.DrawImageLattice(
             image,
             Lattice(listOf(2), listOf(2)),
-            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
             paint,
             Matrix3x3F32.Identity,
             clip,
@@ -742,7 +742,7 @@ internal fun preparedProductImageOperations(
         DisplayOp.DrawAtlas(
             image,
             listOf(Matrix3x3F32.Identity),
-            listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+            listOf(RectF32.ofLTRB(0f, 0f, 2f, 2f)),
             listOf(Color.WHITE),
             BlendMode.SRC_OVER,
             paint ?: Paint.fill(Color.WHITE),

@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.text
 
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 
 /**
@@ -32,7 +32,7 @@ data class TextBlob(
     val variationCoordinates: Map<String, Float> = emptyMap(),
 ) {
     /** Conservative ink bounds computed from the available glyph outlines. */
-    fun computeBounds(typeface: Typeface): Rect {
+    fun computeBounds(typeface: Typeface): RectF32 {
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
@@ -62,6 +62,6 @@ data class TextBlob(
                 if (bottom > maxY) maxY = bottom
             }
         }
-        return if (minX.isFinite()) Rect(minX, minY, maxX, maxY) else Rect.EMPTY
+        return if (minX.isFinite()) RectF32(minX, minY, maxX, maxY) else RectF32.Empty
     }
 }

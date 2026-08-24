@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/compositor_quads.cpp` (compositor variant).
  *  Tests compositor quad rendering — draws a grid of coloured filled
@@ -47,7 +47,7 @@ class CompositorGm : SkiaGm {
             val gridPaint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
             for (i in 0 until kRowCount) {
                 for (j in 0 until kColCount) {
-                    val tile = Rect.fromXYWH(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
+                    val tile = RectF32.ofOriginSize(j * kTileWidth, i * kTileHeight, kTileWidth, kTileHeight)
                     canvas.drawRect(tile, Paint(color = Color.fromRGBA(0.2f, 0.8f, 0.3f, 1f)))
                     canvas.drawRect(tile, gridPaint)
                 }

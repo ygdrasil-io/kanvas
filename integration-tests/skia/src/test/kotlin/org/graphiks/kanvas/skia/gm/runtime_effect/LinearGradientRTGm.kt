@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Tests linear-gradient runtime effect with a vertical red-to-blue gradient. */
 class LinearGradientRTGm : SkiaGm {
@@ -22,7 +22,7 @@ class LinearGradientRTGm : SkiaGm {
         canvas.save()
         for (i in 0 until 16) {
             val t = i / 15f
-            canvas.drawRect(Rect(0f, i * 16f, width.toFloat(), (i + 1) * 16f), Paint(color = Color.fromRGBA(t, 0f, 1f - t, 1f)))
+            canvas.drawRect(RectF32(0f, i * 16f, width.toFloat(), (i + 1) * 16f), Paint(color = Color.fromRGBA(t, 0f, 1f - t, 1f)))
         }
         canvas.restore()
     }

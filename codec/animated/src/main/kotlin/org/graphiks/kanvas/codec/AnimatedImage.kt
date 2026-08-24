@@ -10,7 +10,7 @@ import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.geometry.RectI32
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Mirrors Skia's
@@ -176,7 +176,7 @@ public class AnimatedImage private constructor(
      */
     public fun makePictureSnapshot(): Picture {
         val recorder = PictureRecorder()
-        val bounds = Rect.fromXYWH(
+        val bounds = RectF32.ofOriginSize(
             0f,
             0f,
             cropRect.width().toFloat(),
@@ -244,7 +244,7 @@ public class AnimatedImage private constructor(
     private fun applyPostProcess() {
         val picture = postProcess ?: return
         val frame = displayFrame
-        val bounds = Rect.fromXYWH(0f, 0f, frame.width.toFloat(), frame.height.toFloat())
+        val bounds = RectF32.ofOriginSize(0f, 0f, frame.width.toFloat(), frame.height.toFloat())
         val image = requireNotNull(frame.toImageOrNull()) {
             "unsupported image color profile: ${frame.colorSpace.profileRefusalCode}"
         }

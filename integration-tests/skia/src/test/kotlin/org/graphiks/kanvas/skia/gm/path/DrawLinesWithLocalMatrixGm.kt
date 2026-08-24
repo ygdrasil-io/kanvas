@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/drawlines_with_local_matrix.cpp`.
  *  Tests drawLines with local matrix — draws lines and points with
@@ -29,7 +29,7 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.clipRect(Rect.fromLTRB(0f, 0f, 500f, 500f))
+        canvas.clipRect(RectF32.ofLTRB(0f, 0f, 500f, 500f))
 
         val indigo = Color.fromRGBA(0x4b / 255f, 0f, 0x82 / 255f, 1f)
         val violet = Color.fromRGBA(0xee / 255f, 0x82 / 255f, 0xee / 255f, 1f)
@@ -53,7 +53,7 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
             strokeCap = StrokeCap.SQUARE,
             shader = radial,
         )
-        canvas.drawRect(Rect.fromLTRB(0f, 0f, 500f, 500f), grad)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 500f, 500f), grad)
 
         val white = Paint(
             antiAlias = true,
