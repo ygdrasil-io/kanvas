@@ -132,6 +132,10 @@ class VerifyEvidenceCliRunner(
             val results = entries.map { directory ->
                 val sceneId = directory.fileName.toString()
                 val evidenceCase = requireNotNull(expectedById[sceneId])
+                val promotion = directory.resolve("promotion.json")
+                require(Files.isRegularFile(promotion, NOFOLLOW_LINKS) && !Files.isSymbolicLink(promotion)) {
+                    "$sceneId: historical bundle requires a regular promotion.json"
+                }
                 val expected = EvidenceVerificationExpectation.fromCase(
                     evidenceCase = evidenceCase,
                     sourceCommit = commit,

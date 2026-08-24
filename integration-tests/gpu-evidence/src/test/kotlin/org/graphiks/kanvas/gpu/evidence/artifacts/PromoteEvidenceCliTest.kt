@@ -186,6 +186,28 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `rebaseline rejects a historical subset missing promotion metadata before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        Files.delete(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        val leftovers = Files.list(promotedRoot(repository).parent).use { stream ->
+            stream.iterator().asSequence().filter { it.fileName.toString().startsWith(".promoted.staged-") }.toList()
+        }
+        assertTrue(leftovers.isEmpty())
+    }
+
+    @Test
     fun `late catalog root swap failure restores the old promoted tree byte for byte`() {
         writeAllBundles(repository, COMMIT)
         assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
