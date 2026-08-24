@@ -96,6 +96,7 @@ internal object KotlinEmitter {
                 addImport("kotlin.math", "abs", "sqrt")
             }
             .addType(vector)
+            .addFunction(factoryFunction("vectorOf", model, vectorType, mutable = false))
             .addFunction(
                 FunSpec.builder("times")
                     .addModifiers(KModifier.PUBLIC, KModifier.OPERATOR)
@@ -183,6 +184,7 @@ internal object KotlinEmitter {
         val file = baseFile(model, model.mutableTypeName)
             .addImport("kotlin.math", "abs")
             .addType(mutable)
+            .addFunction(factoryFunction("mutableVectorOf", model, mutableType, mutable = true))
             .build()
         return generatedFile(model, model.mutableTypeName, file)
     }
@@ -264,6 +266,7 @@ internal object KotlinEmitter {
                 }
             }
             .addType(point)
+            .addFunction(factoryFunction("pointOf", model, pointType, mutable = false))
             .apply {
                 pointScalarConversions(model, models).forEach(::addFunction)
             }
@@ -355,6 +358,7 @@ internal object KotlinEmitter {
             .build()
         val file = baseFile(model, model.mutableTypeName)
             .addType(mutable)
+            .addFunction(factoryFunction("mutablePointOf", model, mutableType, mutable = true))
             .build()
         return generatedFile(model, model.mutableTypeName, file)
     }
@@ -387,6 +391,26 @@ internal object KotlinEmitter {
             .addStatement("return %T(${expressions.joinToString()})", type)
             .build()
     }
+
+    private fun factoryFunction(
+        name: String,
+        model: SemanticPrimitiveModel,
+        type: ClassName,
+        mutable: Boolean,
+    ): FunSpec = FunSpec.builder(name)
+        .addModifiers(KModifier.PUBLIC)
+        .addKdoc(
+            "Creates a ${if (mutable) "mutable " else ""}${model.spec.dimension}D " +
+                "${model.spec.semantic.name.lowercase()}.\n",
+        )
+        .apply {
+            model.components.forEach { component ->
+                addParameter(component, model.scalar.typeName())
+            }
+        }
+        .returns(type)
+        .addStatement("return %T(${model.components.joinToString()})", type)
+        .build()
 
     private fun pointOffsetFunction(
         name: String,

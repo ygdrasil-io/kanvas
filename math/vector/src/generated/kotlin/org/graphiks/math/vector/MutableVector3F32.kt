@@ -63,3 +63,12 @@ public class MutableVector3F32(
    */
   public fun toImmutable(): Vector3F32 = Vector3F32(x, y, z)
 }
+
+/**
+ * Creates a mutable 3D vector.
+ */
+public fun mutableVectorOf(
+  x: Float,
+  y: Float,
+  z: Float,
+): MutableVector3F32 = MutableVector3F32(x, y, z)

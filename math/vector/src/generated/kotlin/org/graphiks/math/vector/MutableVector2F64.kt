@@ -58,3 +58,8 @@ public class MutableVector2F64(
    */
   public fun toImmutable(): Vector2F64 = Vector2F64(x, y)
 }
+
+/**
+ * Creates a mutable 2D vector.
+ */
+public fun mutableVectorOf(x: Double, y: Double): MutableVector2F64 = MutableVector2F64(x, y)

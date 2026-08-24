@@ -90,4 +90,13 @@ public class Vector3F32(
   }
 }
 
+/**
+ * Creates a 3D vector.
+ */
+public fun vectorOf(
+  x: Float,
+  y: Float,
+  z: Float,
+): Vector3F32 = Vector3F32(x, y, z)
+
 public operator fun Float.times(vector: Vector3F32): Vector3F32 = vector * this
