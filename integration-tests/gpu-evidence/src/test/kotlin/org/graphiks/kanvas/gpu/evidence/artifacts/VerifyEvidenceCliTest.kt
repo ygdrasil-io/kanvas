@@ -65,8 +65,8 @@ class VerifyEvidenceCliTest {
     fun `verifier rejects inconsistent source commits and non-pass verdicts`() {
         writeAll(COMMIT)
         val descriptor = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
-        val env = EvidenceEnvironment(OTHER_COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-            val route = RouteEvidence("kanvas.surface.render", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
+        val env = EvidenceEnvironment(OTHER_COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
+            val route = RouteEvidence("kanvas.surface.render", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
         val otherRoot = Files.createTempDirectory("other-evidence")
         val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
@@ -77,8 +77,8 @@ class VerifyEvidenceCliTest {
 
         writeAll(COMMIT)
         val failedDescriptor = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
-        val failedEnvironment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-        val failedRoute = RouteEvidence("kanvas.surface.render", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
+        val failedEnvironment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
+        val failedRoute = RouteEvidence("kanvas.surface.render", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val failedPixels = ByteArray(failedDescriptor.width * failedDescriptor.height * 4)
         val failedOracle = requireNotNull(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(failedDescriptor.width, failedDescriptor.height)
         val failedComparison = EvidenceComparator().compare(failedPixels, failedOracle, failedDescriptor.width, failedDescriptor.height, requireNotNull(failedDescriptor.comparison))
@@ -109,16 +109,25 @@ class VerifyEvidenceCliTest {
         assertFalse(stderr.toString().contains("invalid JSON"))
     }
 
+    @Test
+    fun `verifier rejects a root with one coherent bundle from a different environment`() {
+        writeAll(COMMIT)
+        val scene = generatedRoot().resolve("solid-card-stack")
+        replaceAndRefresh(scene, "environment.json", "\"osVersion\":\"1\"", "\"osVersion\":\"different\"")
+
+        assertTrue(verify(COMMIT) != 0)
+    }
+
     private fun verify(commit: String) = VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--source-commit", commit))
 
     private fun writeAll(commit: String) {
         val writer = EvidenceBundleWriter(repository, commit)
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
             val descriptor = evidenceCase.descriptor
-            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
+            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
             val routeId = routeId(evidenceCase.program)
-            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = if (rendered) {
                 val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
                 val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))

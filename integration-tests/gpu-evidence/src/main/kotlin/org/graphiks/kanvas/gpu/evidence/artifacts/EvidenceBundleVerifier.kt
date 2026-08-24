@@ -24,9 +24,30 @@ import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.test.ComparisonUtils
 
 sealed interface EvidenceBundleVerification {
-    data class Verified(val sceneId: String, val verdict: EvidenceVerdict) : EvidenceBundleVerification
+    data class Verified(
+        val sceneId: String,
+        val verdict: EvidenceVerdict,
+        val environment: EvidenceEnvironmentIdentity,
+    ) : EvidenceBundleVerification
     data class Invalid(val sceneId: String?, val errors: List<String>) : EvidenceBundleVerification
 }
+
+data class EvidenceEnvironmentIdentity(
+    val sourceCommit: String,
+    val osName: String,
+    val osVersion: String,
+    val osArchitecture: String,
+    val javaVersion: String,
+    val deviceGeneration: Long?,
+    val capabilityImplementation: String?,
+    val available: Boolean,
+    val adapterSummary: String?,
+    val adapterVendor: String?,
+    val adapterDevice: String?,
+    val adapterArchitecture: String?,
+    val adapterDescription: String?,
+    val adapterIsFallback: Boolean?,
+)
 
 object EvidenceBundleVerifier {
     fun verify(directory: Path, expected: EvidenceVerificationExpectation): EvidenceBundleVerification {
@@ -117,19 +138,15 @@ object EvidenceBundleVerifier {
                 require(oracleSha256 == sha256(Files.readAllBytes(directory.resolve("skia.png")))) { "checked-in oracle sha256 mismatch" }
             } else require(oracleSha256 == null) { "generated oracle must not declare checked-in sha256" }
             val environment = readObject(directory.resolve("environment.json"), "environment")
-            environment.requireKeys(setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "capabilityImplementation", "available", "adapter"))
-            require(manifest.requiredString("sourceCommit") == environment.requiredString("sourceCommit")) { "environment sourceCommit mismatch" }
-            environment.requiredString("osName"); environment.requiredString("osVersion"); environment.requiredString("osArchitecture"); environment.requiredString("javaVersion"); environment.optionalNullableLong("deviceGeneration"); environment.optionalNullableString("capabilityImplementation"); val environmentAvailable = environment.requiredBoolean("available")
+            val environmentIdentity = EnvironmentIdentityReader.read(environment)
+            require(manifest.requiredString("sourceCommit") == environmentIdentity.sourceCommit) { "environment sourceCommit mismatch" }
+            val environmentAvailable = environmentIdentity.available
             require(if (observed == "unavailable") !environmentAvailable else environmentAvailable) { "environment availability contradicts observed outcome" }
-            val adapter = environment["adapter"]
-            if (adapter != null && adapter !is JsonNull) {
-                val adapterObject = adapter.jsonObject
-                adapterObject.requireKeys(setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter"))
-                val adapterSummary = adapterObject.optionalNullableString("summary")
-                require(!environmentAvailable || !adapterSummary.isNullOrBlank()) { "available evidence requires a nonblank adapter summary" }
-                adapterObject.optionalNullableString("vendor"); adapterObject.optionalNullableString("device"); adapterObject.optionalNullableString("architecture"); adapterObject.optionalNullableString("description"); adapterObject.optionalNullableBoolean("isFallbackAdapter")
-            } else {
-                require(!environmentAvailable) { "available evidence requires a nonblank adapter summary" }
+            if (environmentAvailable) {
+                require(environmentIdentity.capabilityImplementation == "native") { "available evidence requires native capability implementation" }
+                require(!environmentIdentity.adapterSummary.isNullOrBlank()) { "available evidence requires a nonblank adapter summary" }
+                require(!environmentIdentity.adapterDevice.isNullOrBlank()) { "available evidence requires a nonblank adapter device" }
+                require(environmentIdentity.adapterIsFallback == false) { "available evidence requires a non-fallback adapter" }
             }
             val route = readObject(directory.resolve("route.json"), "route")
             route.requireKeys(setOf("routeId", "attemptId", "furthestPhase", "outcome", "encodedScopeKinds", "structuralEvents", "structuralCounters", "runtimeTelemetryDelta"))
@@ -146,6 +163,7 @@ object EvidenceBundleVerifier {
                 val counter = value.jsonPrimitive.takeUnless { it.isString }?.longOrNull ?: error("structural counter must be a long")
                 require(counter >= 0L) { "structural counter must be non-negative" }
             }
+            val structuralCounters = route.requiredObject("structuralCounters")
             val telemetry = route.requiredObject("runtimeTelemetryDelta")
             telemetry.requireKeys(TELEMETRY_FIELDS)
             TELEMETRY_FIELDS.forEach { require(telemetry.requiredLong(it) >= 0L) { "runtime telemetry counter must be non-negative: $it" } }
@@ -175,15 +193,18 @@ object EvidenceBundleVerifier {
             val routeOutcome = route.requiredString("outcome")
             require(routeOutcome == observed) { "route outcome does not match observed outcome" }
             val telemetrySubmissions = telemetry.requiredLong("submissions")
-            val structuralSubmissions = route.requiredObject("structuralCounters")["queue.submit"]?.jsonPrimitive?.longOrNull ?: 0L
+            val structuralSubmissions = structuralCounters["queue.submit"]?.jsonPrimitive?.longOrNull ?: 0L
             require(structuralSubmissions == telemetrySubmissions && structuralSubmissions == submissionDelta) {
                 "structural queue.submit count differs from submission telemetry"
             }
             require(telemetrySubmissions == submissionDelta) { "route submissions differ from diagnostics" }
             if (observed == "rendered") {
                 require(furthestPhase == "Completed") { "rendered evidence must reach Completed" }
-                require((route.requiredObject("structuralCounters")["queue.submit"]?.jsonPrimitive?.longOrNull ?: 0L) > 0L) { "rendered evidence requires queue.submit proof" }
-                require(telemetrySubmissions > 0L) { "rendered evidence requires submission telemetry" }
+                require(structuralSubmissions == 1L) { "rendered evidence requires exactly one structural queue.submit" }
+                require(telemetrySubmissions == 1L) { "rendered evidence requires exactly one runtime submission" }
+                require(submissionDelta == 1L) { "rendered evidence requires exactly one diagnostic submission" }
+                require(structuralCounters["render.draw"]?.jsonPrimitive?.longOrNull?.let { it > 0L } == true) { "rendered evidence requires positive render.draw work" }
+                require(structuralCounters["render.pipelineBind"]?.jsonPrimitive?.longOrNull?.let { it > 0L } == true) { "rendered evidence requires positive render.pipelineBind work" }
             }
             val expectedRefusalReason = when {
                 expected?.descriptor?.expectation is EvidenceExpectation.ShouldRefuse -> (expected.descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
@@ -252,7 +273,7 @@ object EvidenceBundleVerifier {
                 require(pass == recomputed.passed) { "pass does not match recomputed comparison" }
                 require(decodePng(directory.resolve("diff.png"), width, height).contentEquals(recomputed.diffRgba)) { "diff PNG does not match recomputed comparison" }
             }
-            return EvidenceBundleVerification.Verified(sceneId, reconstructed)
+            return EvidenceBundleVerification.Verified(sceneId, reconstructed, environmentIdentity)
         } catch (failure: Throwable) {
             errors += failure.message ?: failure::class.simpleName.orEmpty()
             return EvidenceBundleVerification.Invalid(sceneId, errors)
@@ -265,6 +286,32 @@ object EvidenceBundleVerifier {
         rejectDuplicateKeys(text)
         val parsed = EvidenceJson.parseToJsonElement(text)
         return parsed.jsonObject
+    }
+
+    private object EnvironmentIdentityReader {
+        fun read(environment: JsonObject): EvidenceEnvironmentIdentity {
+            environment.requireKeys(setOf("sourceCommit", "osName", "osVersion", "osArchitecture", "javaVersion", "deviceGeneration", "capabilityImplementation", "available", "adapter"))
+            val adapter = environment["adapter"]
+            val adapterObject = if (adapter != null && adapter !is JsonNull) adapter.jsonObject.also {
+                it.requireKeys(setOf("summary", "vendor", "device", "architecture", "description", "isFallbackAdapter"))
+            } else null
+            return EvidenceEnvironmentIdentity(
+                sourceCommit = environment.requiredString("sourceCommit"),
+                osName = environment.requiredString("osName"),
+                osVersion = environment.requiredString("osVersion"),
+                osArchitecture = environment.requiredString("osArchitecture"),
+                javaVersion = environment.requiredString("javaVersion"),
+                deviceGeneration = environment.optionalNullableLong("deviceGeneration"),
+                capabilityImplementation = environment.optionalNullableString("capabilityImplementation"),
+                available = environment.requiredBoolean("available"),
+                adapterSummary = adapterObject?.optionalNullableString("summary"),
+                adapterVendor = adapterObject?.optionalNullableString("vendor"),
+                adapterDevice = adapterObject?.optionalNullableString("device"),
+                adapterArchitecture = adapterObject?.optionalNullableString("architecture"),
+                adapterDescription = adapterObject?.optionalNullableString("description"),
+                adapterIsFallback = adapterObject?.optionalNullableBoolean("isFallbackAdapter"),
+            )
+        }
     }
 
     private fun JsonObject.requiredString(key: String): String {

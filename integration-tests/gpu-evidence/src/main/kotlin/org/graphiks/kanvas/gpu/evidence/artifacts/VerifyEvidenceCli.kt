@@ -91,6 +91,7 @@ class VerifyEvidenceCliRunner(
         require(entries.all { Files.isDirectory(it, NOFOLLOW_LINKS) }) { "evidence root contains a non-directory entry" }
 
         val commit = request.sourceCommit ?: commonManifestCommit(entries)
+        var canonicalEnvironment: EvidenceEnvironmentIdentity? = null
         val results = GpuEvidenceCatalog.cases.map { evidenceCase ->
             val sceneId = evidenceCase.descriptor.id.value
             val directory = request.root.resolve(sceneId)
@@ -108,7 +109,12 @@ class VerifyEvidenceCliRunner(
                     val passed = result.verdict is EvidenceVerdict.Pass
                     stdout.println("$sceneId: ${result.verdict.kind()}")
                     if (!passed) stderr.println("$sceneId: ${result.verdict.reason()}")
-                    passed
+                    val coherent = canonicalEnvironment?.let { it == result.environment } ?: run {
+                        canonicalEnvironment = result.environment
+                        true
+                    }
+                    if (!coherent) stderr.println("$sceneId: environment identity differs from the evidence root")
+                    passed && coherent
                 }
             }
         }

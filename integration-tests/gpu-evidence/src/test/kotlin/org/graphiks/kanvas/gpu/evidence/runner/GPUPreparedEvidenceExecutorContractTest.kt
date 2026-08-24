@@ -9,6 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
+import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerification
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleVerifier
@@ -46,7 +47,23 @@ class GPUPreparedEvidenceExecutorContractTest {
         val observation = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(result).observation)
         assertEquals("fake-adapter", assertNotNull(observation.environment.adapter).summary)
         val root = temporaryRoot.resolve("adapter-bundle")
-        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(fixture, observation, requireNotNull(fixture.oracle).render(fixture.descriptor.width, fixture.descriptor.height))
+        val promotableObservation = SceneObservation.Rendered(
+            rgba = observation.rgba,
+            route = RouteEvidence(
+                observation.route.routeId,
+                observation.route.attemptId,
+                observation.route.furthestPhase,
+                observation.route.outcome,
+                observation.route.encodedScopeKinds,
+                observation.route.structuralEvents,
+                observation.route.structuralCounters + mapOf("render.draw" to 1L, "render.pipelineBind" to 1L),
+                observation.route.runtimeTelemetryDelta,
+            ),
+            diagnostics = observation.diagnostics,
+            environment = observation.environment,
+            comparison = observation.comparison,
+        )
+        val path = EvidenceBundleWriter(root, "a".repeat(40)).writeGenerated(fixture, promotableObservation, requireNotNull(fixture.oracle).render(fixture.descriptor.width, fixture.descriptor.height))
         val environment = EvidenceJson.parseToJsonElement(Files.readString(path.resolve("environment.json"))).jsonObject
         val adapter = environment["adapter"]!!.jsonObject
         assertEquals("fake-adapter", adapter["summary"]!!.jsonPrimitive.content)
@@ -127,7 +144,7 @@ class GPUPreparedEvidenceExecutorContractTest {
 
     private enum class CompletionKind { Success, Timeout, Failed, MissingReadback, WrongReadback, Incomplete, NoStructuralSubmit, RuntimeDeltaZero, Diagnostic, FatalError }
     private class FakePort(val events: MutableList<String>, private val capabilitiesAvailable: Boolean = true, private val completion: CompletionKind = CompletionKind.Success, private val completionDiagnostic: GPUDiagnostic? = null, override val adapter: EvidenceAdapter? = EvidenceAdapter("fake-adapter", null, null, null, null, null)) : EvidenceBackendPort {
-        override val capabilities = if (capabilitiesAvailable) EvidenceCapabilities("test") else null
+        override val capabilities = if (capabilitiesAvailable) EvidenceCapabilities("native") else null
         override val deviceGeneration = 1L
         private var submissions = 0L
         private var telemetryCalls = 0

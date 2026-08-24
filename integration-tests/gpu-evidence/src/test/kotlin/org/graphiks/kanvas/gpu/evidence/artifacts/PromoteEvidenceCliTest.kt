@@ -66,8 +66,8 @@ class PromoteEvidenceCliTest {
     fun `promotion rejects a coherent fail bundle without mutating the destination`() {
         writeAllBundles(repository, COMMIT)
         val descriptor = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
-        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
-        val route = RouteEvidence("fail-route", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
+        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
+        val route = RouteEvidence("fail-route", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
         val pixels = ByteArray(descriptor.width * descriptor.height * 4)
         val oracle = requireNotNull(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(descriptor.width, descriptor.height)
         val comparison = EvidenceComparator().compare(pixels, oracle, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
@@ -89,6 +89,17 @@ class PromoteEvidenceCliTest {
         assertTrue(result != 0)
         assertFalse(Files.exists(promotedRoot(repository)))
         assertTrue(stderr.toString().contains("generated evidence failed independent verification"))
+    }
+
+    @Test
+    fun `promotion preflight rejects hardened environment tampering without mutation`() {
+        writeAllBundles(repository, COMMIT)
+        val scene = generatedRoot(repository).resolve("solid-card-stack")
+        Files.writeString(scene.resolve("environment.json"), Files.readString(scene.resolve("environment.json")).replace("\"capabilityImplementation\":\"native\"", "\"capabilityImplementation\":\"software\""))
+        refreshHash(scene, "environment.json")
+
+        assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT)) != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
     }
 
     @Test
@@ -436,9 +447,9 @@ class PromoteEvidenceCliTest {
         val writer = EvidenceBundleWriter(root, commit)
         GpuEvidenceCatalog.cases.forEach { evidenceCase ->
             val descriptor = evidenceCase.descriptor
-            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("fake-adapter", null, null, null, null, null), null, null, true)
+            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
-            val route = RouteEvidence(routeId(evidenceCase.program), "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val route = RouteEvidence(routeId(evidenceCase.program), "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = when (descriptor.expectation) {
                 EvidenceExpectation.ShouldRender -> {
                     val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
