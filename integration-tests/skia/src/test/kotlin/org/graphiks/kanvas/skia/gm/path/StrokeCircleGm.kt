@@ -36,7 +36,7 @@ class StrokeCircleGm : SkiaGm {
         var r = RectF32.ofOriginSize(-12f, -12f, 24f, 24f)
         val rand = Random(0)
 
-        while (r.width > strokeWidth * 2f) {
+        while (r.width() > strokeWidth * 2f) {
             canvas.save()
             val raw = rand.nextInt()
             val paint = Paint(

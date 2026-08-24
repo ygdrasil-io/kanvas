@@ -79,8 +79,8 @@ class MixedTextBlobsGm : SkiaGm {
         canvas.drawColor(r = 0.5f, g = 0.5f, b = 0.5f)
         canvas.translate(10f, 40f)
 
-        val bHalfW = blobBounds.width * 0.5f
-        val bHalfH = blobBounds.height * 0.5f
+        val bHalfW = blobBounds.width() * 0.5f
+        val bHalfH = blobBounds.height() * 0.5f
         val bQuarterW = bHalfW * 0.5f
         val bQuarterH = bHalfH * 0.5f
 
@@ -96,11 +96,11 @@ class MixedTextBlobsGm : SkiaGm {
             drawBlob(canvas, blob, clipRects[x])
             if (x == (count shr 1) - 1) {
                 canvas.translate(
-                    floor(blobBounds.width + 25f),
-                    -(x * floor(blobBounds.height + 25f)),
+                    floor(blobBounds.width() + 25f),
+                    -(x * floor(blobBounds.height() + 25f)),
                 )
             } else {
-                canvas.translate(0f, floor(blobBounds.height + 25f))
+                canvas.translate(0f, floor(blobBounds.height() + 25f))
             }
         }
     }

@@ -124,8 +124,8 @@ class RRectGm : SkiaGm {
         val r = insetRect(src.rect, dx, dy) ?: return RRectF32.of(RectF32(0f, 0f, 0f, 0f), 0f)
         val ow = src.rect.width()
         val oh = src.rect.height()
-        val nw = r.width
-        val nh = r.height
+        val nw = r.width()
+        val nh = r.height()
         return RRectF32.of(
             r,
             CornerRadiiF32.of(nw * src.topLeft.x / ow, nh * src.topLeft.y / oh),
@@ -152,8 +152,8 @@ class RRectGm : SkiaGm {
             rr.bottomLeft.x == 0f && rr.bottomLeft.y == 0f
 
     private fun isOval(rr: RRectF32): Boolean {
-        val w2 = rr.rect.width / 2f
-        val h2 = rr.rect.height / 2f
+        val w2 = rr.rect.width() / 2f
+        val h2 = rr.rect.height() / 2f
         return rr.topLeft.x == w2 && rr.topLeft.y == h2 &&
             rr.topRight.x == w2 && rr.topRight.y == h2 &&
             rr.bottomRight.x == w2 && rr.bottomRight.y == h2 &&

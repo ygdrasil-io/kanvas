@@ -58,8 +58,8 @@ class TextBlobMixedSizesGm : SkiaGm {
 
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
 
-        val kPadX = (blobBounds.width / 3f).toInt()
-        val kPadY = (blobBounds.height / 3f).toInt()
+        val kPadX = (blobBounds.width() / 3f).toInt()
+        val kPadY = (blobBounds.height() / 3f).toInt()
 
         var rowCount = 0
         canvas.translate(kPadX.toFloat(), kPadY.toFloat())
@@ -84,11 +84,11 @@ class TextBlobMixedSizesGm : SkiaGm {
             canvas.drawTextBlob(blob, 0f, 0f, paint)
 
             canvas.restore()
-            canvas.translate(blobBounds.width + kPadX.toFloat(), 0f)
+            canvas.translate(blobBounds.width() + kPadX.toFloat(), 0f)
             ++rowCount
-            if ((blobBounds.width + 2 * kPadX) * rowCount > width) {
+            if ((blobBounds.width() + 2 * kPadX) * rowCount > width) {
                 canvas.restore()
-                canvas.translate(0f, blobBounds.height + kPadY.toFloat())
+                canvas.translate(0f, blobBounds.height() + kPadY.toFloat())
                 canvas.save()
                 rowCount = 0
             }

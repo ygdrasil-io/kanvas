@@ -8,6 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
@@ -57,6 +58,6 @@ class ImageMaskSubsetGm : SkiaGm {
                 bitmap.setPixel(x, y, ColorARGB.fromRGBA(0f, 0f, 0f, a / 255f))
             }
         }
-        return bitmap.toImage()
+        return bitmap.toImageForGm()
     }
 }

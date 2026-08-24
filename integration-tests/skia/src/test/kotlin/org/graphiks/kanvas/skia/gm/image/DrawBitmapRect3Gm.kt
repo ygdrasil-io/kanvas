@@ -5,6 +5,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
@@ -24,7 +25,7 @@ class DrawBitmapRect3Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bitmap = make3x3Bitmap()
-        val image = bitmap.toImage()
+        val image = bitmap.toImageForGm()
         val srcR = RectF32.ofLTRB(0.5f, 0.5f, 2.5f, 2.5f)
         val dstR = RectF32.ofLTRB(100f, 100f, 300f, 200f)
         canvas.drawImageRect(image, srcR, dstR)

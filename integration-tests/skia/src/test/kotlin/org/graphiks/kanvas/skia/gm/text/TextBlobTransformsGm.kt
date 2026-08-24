@@ -64,8 +64,8 @@ class TextBlobTransformsGm : SkiaGm {
         //   xOffset = SkScalarCeilToScalar(bounds.width());
         //   yOffset = SkScalarCeilToScalar(bounds.height());
         val bounds = blob.computeBounds(typeface)
-        val xOffset = ceil(bounds.width)
-        val yOffset = ceil(bounds.height)
+        val xOffset = ceil(bounds.width())
+        val yOffset = ceil(bounds.height())
 
         canvas.translate(20f, 20f)
 
