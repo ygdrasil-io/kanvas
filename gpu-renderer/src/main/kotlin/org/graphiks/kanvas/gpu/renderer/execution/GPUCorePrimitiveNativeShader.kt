@@ -287,7 +287,7 @@ private fun corePrimitiveGradientNativeWgsl(
         let axis_length_squared = dot(axis, axis);
         var t_raw = 0.0;
         if (axis_length_squared > 0.0) {
-            t_raw = dot(position - gradient.start, axis) / dot(axis, axis);
+            t_raw = dot(position - gradient.start, axis) / axis_length_squared;
         }
         """.trimIndent()
     } else if (radial) {

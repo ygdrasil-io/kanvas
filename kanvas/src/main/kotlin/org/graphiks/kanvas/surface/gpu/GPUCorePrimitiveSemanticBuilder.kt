@@ -364,6 +364,10 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         if (!dx.isFinite() || !dy.isFinite() || (dx == 0f && dy == 0f)) {
             refuseCoreMaterial("unsupported.core_primitive.material.linear.axis", facts)
         }
+        val axisLengthSquared = dx * dx + dy * dy
+        if (!axisLengthSquared.isFinite() || axisLengthSquared <= 0f) {
+            refuseCoreMaterial("unsupported.core_primitive.material.linear.axis", facts)
+        }
         if (!listOf(startR, startG, startB, startA, endR, endG, endB, endA).isNormalizedFinite()) {
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }

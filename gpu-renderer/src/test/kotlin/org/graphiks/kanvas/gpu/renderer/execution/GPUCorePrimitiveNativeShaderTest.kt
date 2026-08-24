@@ -42,7 +42,9 @@ class GPUCorePrimitiveNativeShaderTest {
             block.members.map { it.name to (it.offset to it.size) },
         )
         assertContains(ready.plan.wgslSource, "let axis = gradient.end - gradient.start;")
-        assertContains(ready.plan.wgslSource, "dot(position - gradient.start, axis) / dot(axis, axis)")
+        assertContains(ready.plan.wgslSource, "let axis_length_squared = dot(axis, axis);")
+        assertContains(ready.plan.wgslSource, "dot(position - gradient.start, axis) / axis_length_squared")
+        assertFalse(ready.plan.wgslSource.contains("dot(position - gradient.start, axis) / dot(axis, axis)"))
     }
 
     @Test

@@ -634,6 +634,12 @@ class GPUCorePrimitivePayloadContractsTest {
             "nonfinite-axis" to { linearMaterial(startX = Float.NaN) },
             "zero-axis" to { linearMaterial(endX = 0f, endY = 0f) },
             "overflow-axis" to { linearMaterial(startX = -Float.MAX_VALUE, endX = Float.MAX_VALUE) },
+            "one-sided-squared-overflow-axis" to {
+                linearMaterial(startX = -Float.MAX_VALUE, endX = 0f, startY = 0f, endY = 0f)
+            },
+            "squared-underflow-axis" to {
+                linearMaterial(startX = 0f, endX = Float.MIN_VALUE, startY = 0f, endY = 0f)
+            },
         )
 
         invalidCases.forEach { (name, create) ->

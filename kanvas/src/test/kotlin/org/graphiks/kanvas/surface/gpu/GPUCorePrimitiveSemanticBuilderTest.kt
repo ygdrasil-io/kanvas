@@ -231,6 +231,10 @@ class GPUCorePrimitiveSemanticBuilderTest {
                 "unsupported.core_primitive.material.matrix",
             linearDescriptor(startX = Float.NaN) to "unsupported.core_primitive.material.non_finite",
             linearDescriptor(endX = 0f, endY = 4f) to "unsupported.core_primitive.material.linear.axis",
+            linearDescriptor(startX = -Float.MAX_VALUE, endX = 0f, startY = 0f, endY = 0f) to
+                "unsupported.core_primitive.material.linear.axis",
+            linearDescriptor(startX = 0f, endX = Float.MIN_VALUE, startY = 0f, endY = 0f) to
+                "unsupported.core_primitive.material.linear.axis",
             linearDescriptor(positions = floatArrayOf(0f, Float.NaN)) to "unsupported.core_primitive.material.stops",
         )
 

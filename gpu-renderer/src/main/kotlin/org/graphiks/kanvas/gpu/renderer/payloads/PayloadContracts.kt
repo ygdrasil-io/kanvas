@@ -305,6 +305,12 @@ sealed interface GPUCorePrimitiveMaterialPayload {
             require(this.materialHash == contentMaterialHash) {
                 "Core linear gradient material hash must match its immutable facts"
             }
+            val dx = endX - startX
+            val dy = endY - startY
+            val axisLengthSquared = dx * dx + dy * dy
+            require(dx.isFinite() && dy.isFinite() && axisLengthSquared.isFinite() && axisLengthSquared > 0f) {
+                "Core linear gradient axis must be finite and nondegenerate"
+            }
             validateGradientMaterial(
                 kind = kind,
                 center = emptyList(),
@@ -317,6 +323,7 @@ sealed interface GPUCorePrimitiveMaterialPayload {
                 positions = this.positions,
                 colors = this.colors,
                 materialHash = this.materialHash,
+                linearAxisLengthSquared = axisLengthSquared,
             )
         }
 
@@ -540,6 +547,7 @@ private fun validateGradientMaterial(
     positions: List<Float>,
     colors: List<Float>,
     materialHash: String,
+    linearAxisLengthSquared: Float? = null,
 ) {
     require(center.all(Float::isFinite)) { "Core gradient center must be finite" }
     require(angles.all(Float::isFinite)) {
@@ -576,8 +584,8 @@ private fun validateGradientMaterial(
     when (kind) {
         GPUCorePrimitiveMaterialKind.LinearGradient -> {
             require(center.isEmpty() && angles.isEmpty() && radius == null && axis.size == 4 &&
-                (axis[2] - axis[0]).isFinite() && (axis[3] - axis[1]).isFinite() &&
-                ((axis[2] - axis[0]) != 0f || (axis[3] - axis[1]) != 0f)
+                linearAxisLengthSquared != null && linearAxisLengthSquared.isFinite() &&
+                linearAxisLengthSquared > 0f
             ) {
                 "Core linear gradient axis must be finite and nondegenerate"
             }
