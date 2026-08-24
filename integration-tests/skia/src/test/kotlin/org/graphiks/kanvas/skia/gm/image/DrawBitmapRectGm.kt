@@ -13,6 +13,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -77,7 +78,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
         // Mask-filter chessboard draw
         val maskPaint = Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.57735f * 5f + 0.5f))
         val chessBm = makeChessBm(5, 5)
-        val chessImage = chessBm.toImage()
+        val chessImage = chessBm.toImageForGm()
         runProc(canvas, chessImage, chessBm, RectF32.ofOriginSize(1f, 1f, 3f, 3f), dstRect, maskPaint)
     }
 
@@ -87,7 +88,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
             Variant.BITMAP_SUBSET -> {
                 if (srcR.left >= 0 && srcR.top >= 0 && srcR.right <= bitmap.width && srcR.bottom <= bitmap.height) {
                     val subset = bitmap.extractSubset(srcR)
-                    canvas.drawImageRect(subset.toImage(), RectF32.ofOriginSize(0f, 0f, subset.width.toFloat(), subset.height.toFloat()), dstR, paint)
+                    canvas.drawImageRect(subset.toImageForGm(), RectF32.ofOriginSize(0f, 0f, subset.width.toFloat(), subset.height.toFloat()), dstR, paint)
                 } else {
                     canvas.drawImageRect(image, srcR, dstR, paint)
                 }

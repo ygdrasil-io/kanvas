@@ -13,7 +13,7 @@
   "manifestEntryJson": "release/kan-056-glyph-atlas-route-hardening/pm-bundle-manifest-entry.json",
   "nativeKadreCiRequired": false,
   "notice": "KAN-056 hardens the selected glyph atlas WebGPU route with PM support/refusal gates and diagnostics. It does not broaden text, font, LCD/SDF, color-font, alpha-mask, performance, or Kadre CI claims.",
-  "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+  "pmPackageCommand": "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
   "readinessDelta": 0.0,
   "releaseBlocking": false
 }

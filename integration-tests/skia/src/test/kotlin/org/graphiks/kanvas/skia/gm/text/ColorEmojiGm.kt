@@ -128,8 +128,8 @@ class ColorEmojiGm : SkiaGm {
         val textHeight = 40f // approximate — Kanvas Font has no getMetrics
 
         val bounds = RectF32(0f, 0f, textWidth, textHeight)
-        val boundsHalfWidth = bounds.width * 0.5f
-        val boundsHalfHeight = bounds.height * 0.5f
+        val boundsHalfWidth = bounds.width() * 0.5f
+        val boundsHalfHeight = bounds.height() * 0.5f
         val boundsQuarterWidth = boundsHalfWidth * 0.5f
         val boundsQuarterHeight = boundsHalfHeight * 0.5f
 

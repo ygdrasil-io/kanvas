@@ -281,7 +281,7 @@
   "requiredValidation": [
     "validateKan046TileModesMipmapBoundary",
     "pipelineSceneDashboardGate",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "validationRows": [
     {

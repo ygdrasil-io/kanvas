@@ -65,6 +65,6 @@ The KAN-008 validator requires:
 ```text
 rtk python3 scripts/validate_kan008_image_filter_dag_refusals.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan008ImageFilterDagRefusals
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

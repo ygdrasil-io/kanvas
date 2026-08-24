@@ -112,7 +112,7 @@ class StrokeRectRRectsGm : SkiaGm {
         } else rect
 
         if (rrect) {
-            val cornerScale = min(finalRect.width, finalRect.height)
+            val cornerScale = min(finalRect.width(), finalRect.height())
             val strokeRadii = arrayOf(
                 CornerRadiiF32.of(0.25f * cornerScale, 0.25f * cornerScale),
                 CornerRadiiF32.of(0f, 0f),

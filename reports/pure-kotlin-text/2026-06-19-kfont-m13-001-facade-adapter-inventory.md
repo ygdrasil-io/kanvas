@@ -53,7 +53,7 @@ Status: implementation evidence.
 
 ## PM bundle
 
-`pipelinePmBundle` now carries the facade inventory JSON and this markdown
+`pipelineSceneDashboardGate` now carries the facade inventory JSON and this markdown
 summary as advisory coordination evidence. The dashboard row remains
 `tracked-gap`, warning-only, and non-promotional.
 

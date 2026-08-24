@@ -10,6 +10,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -124,6 +125,6 @@ class DisplacementGm : SkiaGm {
             }
             y += size
         }
-        return bitmap.toImage()
+        return bitmap.toImageForGm()
     }
 }

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
@@ -47,7 +48,7 @@ class UnpremulGm : SkiaGm {
         val bm = Bitmap(100, 100)
         bm.eraseColor(color)
         canvas.drawImage(
-            bm.toImage(), RectF32(0f, 0f, 100f, 100f),
+            bm.toImageForGm(), RectF32(0f, 0f, 100f, 100f),
             Paint(blendMode = BlendMode.SRC),
         )
         markGmGood(canvas, 140f, 40f)

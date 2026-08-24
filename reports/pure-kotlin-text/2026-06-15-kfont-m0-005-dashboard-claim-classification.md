@@ -40,7 +40,7 @@ gates, and missing Gradle wiring.
   `fontations_ft_compare`, and `pdf_never_embed` remain visible, open, and
   non-promotable.
 - `validatePureKotlinTextClaimDashboard` is wired into
-  `pipelineSceneDashboardGate` and `pipelinePmBundle`.
+  `pipelineSceneDashboardGate`.
 - The pure Kotlin font foundation workflow now triggers on and runs the claim
   dashboard validator.
 

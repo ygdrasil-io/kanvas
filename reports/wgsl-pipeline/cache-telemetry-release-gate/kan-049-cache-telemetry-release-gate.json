@@ -675,7 +675,7 @@
       "counterName": "broad-webgpu-cache-hit-callbacks",
       "sourceClass": "unavailable",
       "provenance": {
-        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceArtifact": ".upstream/target/skia-like-realtime-renderer-target.md",
         "sourceRowId": "broad-webgpu-cache-hit-callbacks",
         "blockerOwner": "external Kadre/wgpu4k integration",
         "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
@@ -694,7 +694,7 @@
       "counterName": "bind-group-cache-callbacks",
       "sourceClass": "unavailable",
       "provenance": {
-        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceArtifact": ".upstream/target/skia-like-realtime-renderer-target.md",
         "sourceRowId": "bind-group-cache-callbacks",
         "blockerOwner": "external Kadre/wgpu4k integration",
         "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
@@ -713,7 +713,7 @@
       "counterName": "native-resource-free-callbacks",
       "sourceClass": "unavailable",
       "provenance": {
-        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceArtifact": ".upstream/target/skia-like-realtime-renderer-target.md",
         "sourceRowId": "native-resource-free-callbacks",
         "blockerOwner": "external Kadre/wgpu4k integration",
         "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
@@ -732,7 +732,7 @@
       "counterName": "adapter-owned-memory-snapshots",
       "sourceClass": "unavailable",
       "provenance": {
-        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceArtifact": ".upstream/target/skia-like-realtime-renderer-target.md",
         "sourceRowId": "adapter-owned-memory-snapshots",
         "blockerOwner": "external Kadre/wgpu4k integration",
         "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
@@ -926,7 +926,7 @@
   "requiredValidation": [
     "validateKan049CacheTelemetryReleaseGateCriteria",
     "pipelineConformance",
-    "pipelinePmBundle"
+    "pipelineSceneDashboardGate"
   ],
   "claimGuard": {
     "invalidSourceClasses": [],

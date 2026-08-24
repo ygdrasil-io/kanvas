@@ -29,10 +29,10 @@ Implemented and independently reviewed.
 
 ## Root PM Packaging Boundary
 
-- Root `pipelinePmBundle` packaging remains adapter-independent for the R6
+- Root `pipelineSceneDashboardGate` packaging remains adapter-independent for the R6
   activation-candidate evidence.
 - Adapter-backed executed R6 PM evidence is opt-in diagnostic evidence and must
-  not become a root `pipelinePmBundle` dependency.
+  not become a root `pipelineSceneDashboardGate` dependency.
 - `productRouteActivated=false`, `releaseBlocking=false`, and
   `readinessDelta=0.0` remain required for this inventory wave.
 

@@ -96,6 +96,6 @@ The default for a new support slice without a real performance payload is
 ```text
 rtk python3 scripts/validate_kan020_performance_proof_minimum.py /Users/chaos/.codex/worktrees/7ac1/kanvas
 rtk ./gradlew --no-daemon :validateKan020PerformanceProofMinimum
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

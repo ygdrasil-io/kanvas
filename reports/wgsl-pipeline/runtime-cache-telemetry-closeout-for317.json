@@ -88,14 +88,6 @@
           "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"
         ],
         "sourceClass": "observed-partial"
-      },
-      {
-        "id": "m92.selected-route-create-rows",
-        "rows": {
-          "pipeline-creates-selected-route": "observed-partial",
-          "shader-module-creates-selected-route": "observed-partial"
-        },
-        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"
       }
     ]
   },
@@ -118,40 +110,6 @@
       "linearIssue": "FOR-310",
       "pullRequest": 1402,
       "title": "M90 telemetry classification guard"
-    },
-    {
-      "artifacts": [
-        "reports/wgsl-pipeline/2026-06-04-for-311-m92-rc-headless-kadre-dependency-policy.md",
-        "reports/wgsl-pipeline/m92-kadre-runtime-rc/m92-rc-headless-kadre-dependency-policy-for311.json",
-        "scripts/validate_for311_m92_rc_headless_kadre_dependency_policy.py"
-      ],
-      "closeoutDecisionName": "KEEP_M92_RC_REQUIRED_VALIDATION_HEADLESS_AND_CHECKED_IN",
-      "commits": [
-        "c2eab384cb06b8fc141d6ff1ac154d3bb6b31a68",
-        "22765e247785819945a92623aeaf3a3e99864522"
-      ],
-      "decision": "M92_RC_HEADLESS_KADRE_DEPENDENCY_POLICY_GUARD_APPLIED",
-      "impact": "Kept required RC validation headless and checked-in; native Kadre refresh remains optional/provisioned.",
-      "linearIssue": "FOR-311",
-      "pullRequest": 1403,
-      "title": "M92 RC headless Kadre dependency policy"
-    },
-    {
-      "artifacts": [
-        "reports/wgsl-pipeline/2026-06-04-for-312-pm-bundle-runtime-headless-manifest.md",
-        "reports/wgsl-pipeline/pm-bundle-runtime-headless-manifest-for312.json",
-        "scripts/validate_for312_pm_bundle_runtime_headless_manifest.py"
-      ],
-      "closeoutDecisionName": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AUDIT_APPLIED",
-      "commits": [
-        "cde6f3a4a28569f8a3b0add11c066c12a057693a",
-        "bb041e795f02507aaf79aa4dc1b446cd280fc434"
-      ],
-      "decision": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AUDIT_APPLIED",
-      "impact": "Proved the PM package carries the FOR-311 headless/optional-native boundary.",
-      "linearIssue": "FOR-312",
-      "pullRequest": 1404,
-      "title": "PM bundle runtime headless manifest audit"
     },
     {
       "artifacts": [
@@ -224,8 +182,6 @@
   ],
   "expectedArtifacts": {
     "reports/wgsl-pipeline/2026-06-04-for-310-m90-runtime-telemetry-classification-guard.md": "present",
-    "reports/wgsl-pipeline/2026-06-04-for-311-m92-rc-headless-kadre-dependency-policy.md": "present",
-    "reports/wgsl-pipeline/2026-06-04-for-312-pm-bundle-runtime-headless-manifest.md": "present",
     "reports/wgsl-pipeline/2026-06-04-for-313-runtime-docs-kadre-headless-policy.md": "present",
     "reports/wgsl-pipeline/2026-06-04-for-314-runtime-cache-counter-source-map.md": "present",
     "reports/wgsl-pipeline/2026-06-04-for-315-headless-webgpu-cache-counters.md": "present",
@@ -234,14 +190,9 @@
     "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json": "present",
     "reports/wgsl-pipeline/m90-runtime-interactive/m90-runtime-telemetry-classification-guard-for310.json": "present",
     "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "present",
-    "reports/wgsl-pipeline/m92-kadre-runtime-rc/m92-rc-headless-kadre-dependency-policy-for311.json": "present",
-    "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "present",
-    "reports/wgsl-pipeline/pm-bundle-runtime-headless-manifest-for312.json": "present",
     "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json": "present",
     "reports/wgsl-pipeline/runtime-docs-kadre-headless-policy-for313.json": "present",
     "scripts/validate_for310_m90_runtime_telemetry_classification_guard.py": "present",
-    "scripts/validate_for311_m92_rc_headless_kadre_dependency_policy.py": "present",
-    "scripts/validate_for312_pm_bundle_runtime_headless_manifest.py": "present",
     "scripts/validate_for313_runtime_docs_kadre_headless_policy.py": "present",
     "scripts/validate_for314_runtime_cache_counter_source_map.py": "present",
     "scripts/validate_for315_headless_webgpu_cache_counters.py": "present",

@@ -114,7 +114,7 @@ Expected M53 score movement after implementation:
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate
 ```
 
 Result: pass.

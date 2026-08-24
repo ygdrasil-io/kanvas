@@ -79,7 +79,7 @@ Also deleted: `benchmarks/` directory, `testing/CrossTestHarness.kt`, `testing/C
 - `requiredPipelineConformanceSuites` reduced to non-deleted entries
 - `gpuAdapterEvidenceForReport` updated to use BlendPlanTest + RuntimeEffectDescriptorWebGpuTest
 - Removed `inputs.file("gpu-raster/.../SkWebGpuDevice.kt")` from `pipelineRuntimeChildShaderEffectLaneReport` and `pipelineRuntimeBlenderBoundaryReport`
-- Removed `:gpu-raster:validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle` dependsOn + executedSummary from `validateGpuRendererR6AdapterBackedPromotionReadinessBoundary`
+- Retired the root/executed promotion-boundary integration; executed evidence remains a standalone opt-in validator.
 
 ## Verification Results
 
@@ -130,7 +130,7 @@ All 31 `validateKan*` Exec task registrations and 2 `injectKan*` tasks were
 REMOVED from root `build.gradle.kts` because they referenced deleted
 `:gpu-raster` files (`SkWebGpuDevice.kt`, `WebGpuCoveragePlanSelector.kt`) via
 `inputs.file(...)`, causing Gradle configuration failure when
-`pipelineSceneDashboardGate` or `pipelinePmBundle` pulled them into the task
+`pipelineSceneDashboardGate` or `pipelineSceneDashboardGate` pulled them into the task
 graph.
 
 ### (b) GPU smoke job repointed

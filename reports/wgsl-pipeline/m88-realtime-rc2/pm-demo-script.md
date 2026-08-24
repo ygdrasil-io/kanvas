@@ -1,6 +1,6 @@
 # M88 PM Demo Script
 
-1. Open the PM bundle dashboard from `build/reports/wgsl-pipeline-pm-bundle/dashboard/index.html`.
+1. Run `rtk ./gradlew --no-daemon validateM88ReleaseCandidate2`.
 2. Filter to pass rows to show current selected rendering support.
 3. Filter to expected-unsupported rows to show stable refusal policy.
 4. Explain shader wording: WGSL is the implementation target; SkSL only names Skia API compatibility that is not dynamically compiled by Kanvas.

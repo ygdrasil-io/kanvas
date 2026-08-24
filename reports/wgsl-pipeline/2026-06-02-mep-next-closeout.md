@@ -30,7 +30,7 @@ Headless gates:
 ./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 scripts/validate_mep_next_feature_breadth.py .
 python3 scripts/validate_mep_next_runtime_interactive.py .
-./gradlew --no-daemon pipelinePmBundle
+./gradlew --no-daemon pipelineSceneDashboardGate
 ```
 
 Optional/provisioned Kadre runtime refresh:
@@ -62,7 +62,7 @@ Opt-in native PM demo commands:
 - `reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md`
 - `reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md`
 
-After `pipelinePmBundle`, PM evidence is available in:
+After `pipelineSceneDashboardGate`, PM evidence is available in:
 
 - `manifest.json#m89FeatureBreadth`
 - `manifest.json#m90RuntimeInteractive`

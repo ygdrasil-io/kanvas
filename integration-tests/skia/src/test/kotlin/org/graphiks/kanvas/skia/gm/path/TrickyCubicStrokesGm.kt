@@ -73,9 +73,9 @@ open class TrickyCubicStrokesGm(
                 makeRectToRect(sb, cellRect, ScaleToFit.kCenter)
             } else {
             val tx = cellRect.left + K_STROKE_WIDTH +
-                (cellRect.width - (strokeBounds.right - strokeBounds.left) - 2f * K_STROKE_WIDTH) / 2f
+                (cellRect.width() - (strokeBounds.right - strokeBounds.left) - 2f * K_STROKE_WIDTH) / 2f
             val ty = cellRect.top + K_STROKE_WIDTH +
-                (cellRect.height - (strokeBounds.bottom - strokeBounds.top) - 2f * K_STROKE_WIDTH) / 2f
+                (cellRect.height() - (strokeBounds.bottom - strokeBounds.top) - 2f * K_STROKE_WIDTH) / 2f
                 Matrix3x3F32.translation(tx, ty)
             }
 
@@ -145,16 +145,16 @@ open class TrickyCubicStrokesGm(
         Pair((b.first - a.first) * t + a.first, (b.second - a.second) * t + a.second)
 
     private fun makeRectToRect(src: RectF32, dst: RectF32, fit: ScaleToFit): Matrix3x3F32 {
-        val sx = dst.width / src.width
-        val sy = dst.height / src.height
+        val sx = dst.width() / src.width()
+        val sy = dst.height() / src.height()
         val s = when (fit) {
             ScaleToFit.kCenter -> min(sx, sy)
             ScaleToFit.kStart -> min(sx, sy)
             ScaleToFit.kEnd -> min(sx, sy)
             ScaleToFit.kFill -> sy /* doesn't matter, just use sy */
         }
-        val tx = dst.left + (dst.width - src.width * s) / 2f - src.left * s
-        val ty = dst.top + (dst.height - src.height * s) / 2f - src.top * s
+        val tx = dst.left + (dst.width() - src.width() * s) / 2f - src.left * s
+        val ty = dst.top + (dst.height() - src.height() * s) / 2f - src.top * s
         return Matrix3x3F32.of(s, 0f, tx, 0f, s, ty)
     }
 

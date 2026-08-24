@@ -388,7 +388,7 @@ def validate_gradle_wiring_evidence(wiring: Any) -> None:
     require(wiring["taskName"] == TASK_NAME, "gradleWiring.taskName changed")
     require(wiring["validatorCommand"] == VALIDATOR_COMMAND, "gradleWiring.validatorCommand changed")
     require(wiring["sceneGateTask"] == "pipelineSceneDashboardGate", "gradleWiring.sceneGateTask changed")
-    require(wiring["pmBundleTask"] == "pipelinePmBundle", "gradleWiring.pmBundleTask changed")
+    require(wiring["pmBundleTask"] == "pipelineSceneDashboardGate", "gradleWiring.pmBundleTask changed")
 
 
 def validate_validation_commands(commands: Any) -> None:
@@ -494,8 +494,6 @@ def validate_gradle_wiring(build_text: str) -> None:
     scene_block = gradle_block(build_text, 'tasks.register("pipelineSceneDashboardGate")')
     require(line_contains(scene_block, f'dependsOn("{TASK_NAME}")'), f"pipelineSceneDashboardGate must depend on {TASK_NAME}")
 
-    pm_block = gradle_block(build_text, 'tasks.register("pipelinePmBundle")')
-    require(line_contains(pm_block, f'"{TASK_NAME}"'), f"pipelinePmBundle must depend on {TASK_NAME}")
 
 
 def main() -> int:

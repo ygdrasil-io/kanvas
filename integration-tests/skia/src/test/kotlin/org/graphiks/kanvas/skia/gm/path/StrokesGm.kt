@@ -45,7 +45,7 @@ class StrokesGm : SkiaGm {
                 ))
 
                 val (r2, c2) = rndRect(rand)
-                val cr = CornerRadiiF32.of(r2.width / 4f, r2.height / 4f)
+                val cr = CornerRadiiF32.of(r2.width() / 4f, r2.height() / 4f)
                 canvas.drawPath(
                     Path { }.apply { addRRect(RRectF32.of(r2, cr, cr, cr, cr)) },
                     Paint(

@@ -64,6 +64,6 @@ rtk python3 scripts/validate_kan003_caps_joins_aa.py /Users/chaos/.codex/worktre
 rtk ./gradlew --no-daemon :validateKan003CapsJoinsAa
 rtk python3 scripts/validate_for266_stroke_cap_join_aa_residual.py
 rtk python3 scripts/validate_for267_round_cap_join_coverage_equivalence.py
-rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelinePmBundle
+rtk ./gradlew --no-daemon :pipelineSceneDashboardGate :pipelineSceneDashboardGate
 rtk git diff --check
 ```

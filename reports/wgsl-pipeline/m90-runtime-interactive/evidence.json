@@ -362,7 +362,6 @@
     "sourceEvidence": [
         "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
         "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
-        "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
         "kadre-runtime/src/main/kotlin/org/skia/kadre/runtime/M69KadreNativeSmoke.kt",
         "kadre-runtime/src/main/kotlin/org/skia/kadre/runtime/ReplaySceneRegistry.kt"
     ],

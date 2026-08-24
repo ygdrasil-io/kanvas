@@ -40,28 +40,15 @@ rtk ./gradlew --no-daemon pipelineGeneratedSceneExport
 `pipelineSceneDashboard` depends on that exporter and merges generated rows
 with static rows before writing the dashboard.
 
-M49 adds the portable PM package command:
+The historical portable PM package, its manifest, and the associated M49 report
+were retired from the working tree. Recover them from Git history only when
+reviewing historical evidence; they are not current commands or acceptance
+criteria.
 
-```bash
-rtk ./gradlew --no-daemon pipelinePmBundle
-```
+## PM Demo Inputs
 
-Output:
-
-```text
-build/reports/wgsl-pipeline-pm-bundle/
-```
-
-The bundle is documented by:
-
-```text
-reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md
-```
-
-## PM Demo Package
-
-The current PM demo package is `pipelinePmBundle`. It should continue to
-contain:
+Current PM review uses the dashboard export plus the focused, headless
+evidence validators. The review inputs should contain or link:
 
 - dashboard export path or deployed URL;
 - scene count summary;
@@ -71,97 +58,44 @@ contain:
 - expected unsupported rows and reasons;
 - validation commands and results;
 - linked reports for each changed scene family;
-- raw artifact root for reviewers.
-
-The M49 bundle also includes dashboard data, copied artifacts, source reports,
-gate output, a manifest, limitations, unavailable reference checks, and local
-serve instructions.
+- raw artifact paths for reviewers.
 
 The package should avoid rendering implementation details unless they explain a
 support claim, gap, or refusal.
 
 ## Review Flow
 
-1. Generate the dashboard or PM bundle.
-2. Open the dashboard export or bundle dashboard.
-3. Verify summary counters match the milestone report and manifest.
+1. Generate the dashboard and relevant focused validators.
+2. Open the dashboard export.
+3. Verify summary counters match the milestone report and source evidence.
 4. Filter to changed rows or relevant tags.
 5. Inspect one pass row and one expected-unsupported row.
 6. Confirm raw artifact links are reachable.
-7. Capture screenshot or attach the static export or PM bundle path.
+7. Capture a screenshot or attach the static export path.
 8. Record validation commands in the milestone closeout.
 
-## Manifest And Front Summary
+## Dashboard And Focused Evidence Summary
 
-Do not introduce a competing `front-summary.json` while
-`pipelinePmBundle/manifest.json` owns portable PM summary metadata. The manifest
-is the current front/readiness summary and should remain the first integration
-target for non-technical reviewers.
+There is no root PM manifest contract. The dashboard export is the front
+summary, while each focused headless validator owns its own evidence schema and
+generation command. A future front-specific summary must state which dashboard
+and evidence fields it adds; changed rows must come from explicit milestone
+metadata, scene tags, or a stored export diff, never pass/fail status alone.
 
-The M49 manifest includes or is expected to preserve:
-
-```json
-{
-  "generatedBy": "pipelinePmBundle",
-  "generationCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
-  "serveCommand": "python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard",
-  "dashboardEntry": "dashboard/index.html",
-  "mergedSceneJson": "dashboard/data/scenes.json",
-  "gateReport": "gate/scene-dashboard-gate.md",
-  "counters": {
-    "total": 23,
-    "statuses": {
-      "expected-unsupported": 5,
-      "pass": 18
-    },
-    "maturity": {
-      "maturity.generated-evidence": 21,
-      "maturity.static-evidence": 2,
-      "maturity.adapter-backed": 7
-    },
-    "adapterBacked": 7,
-    "expectedUnsupported": 5,
-    "unavailableReferences": 0
-  },
-  "expectedUnsupportedRows": [],
-  "adapterBackedRows": [],
-  "knownLimitations": [],
-  "unavailableReferences": []
-}
-```
-
-If a future front-specific summary is still needed, it must either be generated
-from this manifest or state the fields it adds beyond the PM bundle contract.
-Changed rows should be derived from explicit milestone metadata when present.
-If milestone metadata is absent, they should be derived from scene tags or a
-stored previous export diff, and the report should name the derivation method.
-Changed rows must not be inferred from pass/fail status alone.
-
-The manifest is a front/readiness summary. It does not replace raw scene
-evidence, gate reports, or rendering reports.
-The zero `tracked-gap` and zero `fail` promoted-dashboard guarantees are
-verified by `pipelineSceneDashboardGate` and the M49 checklist; consumers should
-not require absent zero-count status keys in the manifest.
+The zero `tracked-gap` and zero `fail` promoted-dashboard guarantees remain
+owned by `pipelineSceneDashboardGate`; raw scene evidence and focused validator
+reports remain the source for their respective claims.
 
 ## Deployable Static Artifact
 
-The current release workflow publishes or archives the M49 PM bundle:
+The dashboard export is available at:
 
 ```text
-build/reports/wgsl-pipeline-pm-bundle/
+build/reports/wgsl-pipeline-scenes/
 ```
 
-with:
-
-- `dashboard/index.html`;
-- `dashboard/data/scenes.json`;
-- `dashboard/artifacts/`;
-- `reports/`;
-- `gate/`;
-- `manifest.json`;
-- `README.md`.
-
-The artifact should be reviewable without running Gradle locally.
+It should be reviewed alongside the focused, headless validator output rather
+than copied into a root package.
 
 ## Demo Script Shape
 
@@ -180,14 +114,16 @@ Each milestone demo should be short and repeatable:
 - Do not require a live server for local review.
 - Do not edit generated artifacts from the frontend.
 - Do not add unsupported row suppression for cleaner demos.
-- Do not fork the PM bundle manifest into a second summary format without a
-  field-level reason.
+- Do not reintroduce a root PM manifest without an approved architecture
+  decision.
 
 ## Acceptance Criteria
 
 - A reviewer can reproduce the dashboard from one documented command.
-- A PM can reproduce the portable bundle from `pipelinePmBundle`.
+- A PM can reproduce the dashboard and focused evidence from their documented
+  commands.
 - A PM can understand readiness counters without reading raw JSON.
 - Milestone reports link the dashboard and source reports.
 - Expected unsupported rows are included in demo flow when relevant.
-- The PM bundle can be archived as a release-review artifact.
+- The dashboard export and focused evidence may be archived independently as
+  release-review artifacts.

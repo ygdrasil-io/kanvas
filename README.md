@@ -74,9 +74,6 @@ path is headless/offscreen.
 | M78 | Clip Replay V1 | The Kadre replay command contract now records bounded `ClipRect` intersect commands for 2 renderable clipped rect scenes plus 1 complex clip refusal fixture. Readiness stays at 67.75% because this is replay contract/evidence work, not broad clip-stack support. |
 | M79 | Bitmap Replay V1 | The Kadre replay command contract now records bounded fixture-backed `BitmapRect` commands for 3 renderable bitmap scenes, including one clipped bitmap scene, plus 1 unsupported mipmap sampler refusal fixture. Readiness stays at 67.75% because this is replay contract/evidence work, not broad image/texture support. |
 | M80 | Shared Replay CPU Oracle | Bounded replay CPU reference rendering now flows through `ReplayCpuOracle` typed result fields for native smoke, tests, M75-M79 evidence, and the M80 PM report. Readiness stays at 67.75% because this is reference hardening, not broad display-list replay or new rendering breadth. |
-| M81 | Native Frame Artifact Capture | Current M69/M70 Kadre/WebGPU native/offscreen readback evidence is packaged under `reports/wgsl-pipeline/m81-native-frame-capture/` with explicit artifact paths, host/adapter/surface metadata, frame counts, and a stable window-surface readback refusal. Readiness stays at 67.75% because this is PM evidence packaging and does not add window-surface screenshot/readback support. |
-| M82 | Kadre Input And Resize Runtime Loop | Deterministic Kadre-backed event fixtures now cover frame ticks, resize, scale-factor, pointer, keyboard, close, telemetry, resource-generation invalidation, and stable unsupported diagnostics under `reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/`. Readiness stays at 67.75% because CI does not synthesize real desktop OS events and timing remains reporting-only. |
-| M83 | Kanvas Display-List Replay Through Kadre | One bounded Kanvas display-list scene now routes through the native Kadre/WebGPU demo path with nonblank offscreen readback evidence under `reports/wgsl-pipeline/m83-display-list-replay/`; text, image-filter DAG, runtime-effect, broad SkCanvas op replay, and release-grade timing remain explicit non-claims. Readiness stays at 67.75% because this proves one selected display-list scene, not broad display-list replay. |
 | M84 | Native Frame Timing Candidate Gate | Native Kadre timing now has a candidate/reporting-only payload under `reports/wgsl-pipeline/m84-native-frame-timing/` with warmup/measured samples, p50/p95/worst, host/adapter/JDK metadata, cache-counter schema placeholders, quarantine reasons, and a negative threshold fixture. Readiness stays at 67.75% because `frame.kadre-windowed` is not release-blocking and is not counted as a measured release gate. |
 | M85 | Runtime Resource Lifetime And Cache Hardening | Selected realtime resource/cache ledger evidence now lives under `reports/wgsl-pipeline/m85-resource-lifetime-cache/` with deterministic per-frame counters, bounded cache key spaces, resize resource-generation invalidation, cache pressure before/after, and stable device-loss unsupported diagnostics. Readiness stays at 67.75% because the counters are not observed WebGPU runtime cache telemetry and are not counted as a cache readiness gate. |
 | M86 | Fidelity Burn-Down Wave 2 | Selected GM/reference rows now have a ranked burn-down queue under `reports/wgsl-pipeline/m86-fidelity-burndown/`, including family/reference counters, root-cause classifications, and high-value remediation targets. Readiness stays at 67.75% because M86 does not add new support rows, Skia-comparable denominators, measured gates, or renderer before/after fixes. |
@@ -85,7 +82,6 @@ path is headless/offscreen.
 | M89 | MEP-NEXT Feature Breadth Evidence | Post-RC-MEP feature breadth evidence now lives under `reports/wgsl-pipeline/m89-feature-breadth/`, aggregating bounded image-filter, clip/Path AA, bitmap sampling, and registered WGSL runtime-effect rows with stable refusals. Readiness stays at 67.75% because this is PM evidence aggregation over existing bounded rows, not new renderer breadth implementation or broad parity. |
 | M90 | MEP-NEXT Runtime Interactive Evidence | Bounded Kadre runtime evidence now lives under `reports/wgsl-pipeline/m90-runtime-interactive/`, including autonomous loop semantics, scene switching, input telemetry, and observed-partial/derived resource counters. Readiness stays at 67.75% because native demo/benchmark tasks remain opt-in, timing remains reporting-only, and broad cache/runtime/display-list claims remain out of scope. |
 | M91 | MEP RC Scene Pack | Release-candidate scene selection now lives under `reports/wgsl-pipeline/m91-mep-rc-scene-pack/`, with 10 supported, partial, expected-unsupported, and blocked-dependency rows validated by a headless gate. Readiness stays at 67.75% because this is existing evidence assembly, not new renderer support. |
-| M92 | Kadre Runtime RC Closeout | Kadre runtime RC evidence now lives under `reports/wgsl-pipeline/m92-kadre-runtime-rc/` with a single opt-in native command, PM demo script, and observed/derived/not-observable telemetry classification. Readiness stays at 67.75% because no release-blocking native timing gate or broad observed WebGPU cache counter is added. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)
@@ -148,15 +144,15 @@ warning-only performance metadata; no performance gate became release-blocking.
 M55 performance gate candidate evidence is complete for seven selected rows: 4
 candidate `pass` rows with measured CPU and GPU/cache payloads, 3 candidate
 `deferred` rows with stable reasons, 0 `warn`, and 0 `fail-candidate`. The
-candidate is generated by `pipelinePerformanceTrendWarnings`, exposed through
-`pipelinePmBundle`, and remains non-blocking.
+candidate is generated by `pipelinePerformanceTrendWarnings` and remains
+non-blocking.
 
 M59 performance release gate evidence is complete for the same seven selected
 rows: all 7 rows now have release-blocking measured CPU and GPU/cache
 thresholds, 0 rows remain `not-measured`, and the generated gate reports
 0 blocking failures. The gate is generated by `pipelinePerformanceReleaseGate`,
-writes JSON/Markdown under `build/reports/wgsl-pipeline-performance-release-gate/`,
-and is exposed through `pipelinePmBundle`. M59 raises readiness to 100%.
+writes JSON/Markdown under `build/reports/wgsl-pipeline-performance-release-gate/`.
+M59 raises readiness to 100%.
 
 M56 unsupported-to-pass work is partially complete: `m53-sweep-gradient-clamp`
 now maps to `skia-gm-sweepgradient` and renders as a real `pass` row with
@@ -183,9 +179,9 @@ rows, and 33 inventory-derived generated rows.
 |---|---:|---|---:|---|
 | Evidence foundation | 25% | Done through M57 | 100% | Generated dashboard, 59 generated rows, 0 tracked-gap, 0 fail, release gate report |
 | Skia integration coverage | 25% | Adapter-backed + bounded Path AA / clip micro-promotion | 100% | M57 adds one bounded AA clip support row while keeping image-filter and broad Path AA blockers explicit |
-| CI and release gates | 20% | Release-blocking measured performance gate | 100% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, PM bundle, M54 metadata checks, M55 candidate output, M56/M57 generated evidence, and M59 final selected performance release gate |
+| CI and release gates | 20% | Release-blocking measured performance gate | 100% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, M54 metadata checks, M55 candidate output, M56/M57 generated evidence, and M59 final selected performance release gate |
 | Performance readiness | 15% | Blocking for final selected rows | 100% | Seven M59 rows have measured CPU and GPU/cache lanes: 7 pass rows, 14 blocking measured lanes, 0 not-measured rows, 0 blocking failures |
-| PM demo and reporting workflow | 15% | PM bundle + front QA + M59 counters | 100% | `pipelinePmBundle` includes manifest, dashboard, artifacts, front QA, gate, performance warnings, inventory reports, M52/M53/M54 counters, M55 candidate counters, M56/M57 evidence, and M59 release-gate counters |
+| PM demo and reporting workflow | 15% | Headless reports + front QA + M59 counters | 100% | The scene dashboard, front QA, and standalone performance reports expose the current evidence without a root packaging bundle |
 
 Weighted PM readiness: 100% after rounding.
 
@@ -274,40 +270,29 @@ Historical MEP evidence:
 - M49 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md)
 - M49 gate invariants: [reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md](reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md)
 - M49 CI validation task: [reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md](reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md)
-- M49 portable PM bundle: [reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md](reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md)
 - M49 adapter-backed expansion: [reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md](reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md)
 - M49 performance trend gate contract: [reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md](reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md)
-- M49 release readiness checklist: [reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md](reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md)
-- M49 sprint review: [reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
 - M50 sprint plan: [reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md)
-- M50 sprint review: [reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md)
 - M50 verification report: [reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md](reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md)
 - M51 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md)
-- M51 sprint review: [reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md)
 - M51 PM report: [reports/wgsl-pipeline/2026-05-31-m51-pm-report.md](reports/wgsl-pipeline/2026-05-31-m51-pm-report.md)
 - M52 PM report: [reports/wgsl-pipeline/2026-05-31-m52-pm-report.md](reports/wgsl-pipeline/2026-05-31-m52-pm-report.md)
-- M53 sprint review: [reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md)
 - M53 PM report: [reports/wgsl-pipeline/2026-05-31-m53-pm-report.md](reports/wgsl-pipeline/2026-05-31-m53-pm-report.md)
-- M54 sprint review: [reports/wgsl-pipeline/2026-05-31-m54-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m54-sprint-review.md)
 - M54 PM report: [reports/wgsl-pipeline/2026-05-31-m54-pm-report.md](reports/wgsl-pipeline/2026-05-31-m54-pm-report.md)
 - M55 performance gate candidate selection: [reports/wgsl-pipeline/2026-05-31-m55-performance-gate-candidate-selection.md](reports/wgsl-pipeline/2026-05-31-m55-performance-gate-candidate-selection.md)
 - M55 baseline payloads: [reports/wgsl-pipeline/2026-05-31-m55-official-performance-baseline-payloads.md](reports/wgsl-pipeline/2026-05-31-m55-official-performance-baseline-payloads.md)
 - M55 quarantine/rebaseline/rollback policy: [reports/wgsl-pipeline/2026-05-31-m55-quarantine-rebaseline-rollback-policy.md](reports/wgsl-pipeline/2026-05-31-m55-quarantine-rebaseline-rollback-policy.md)
-- M55 sprint review: [reports/wgsl-pipeline/2026-05-31-m55-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m55-sprint-review.md)
 - M55 PM report: [reports/wgsl-pipeline/2026-05-31-m55-pm-report.md](reports/wgsl-pipeline/2026-05-31-m55-pm-report.md)
 - M56 selection: [reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md](reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md)
-- M56 image-filter decision: [reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md](reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md)
 - M56 Path AA / clip review: [reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md](reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md)
 - M56 sprint review: [reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md)
 - M56 PM report: [reports/wgsl-pipeline/2026-05-31-m56-pm-report.md](reports/wgsl-pipeline/2026-05-31-m56-pm-report.md)
 - M58 performance release gate selection: [reports/wgsl-pipeline/2026-05-31-m58-performance-release-gate-selection.md](reports/wgsl-pipeline/2026-05-31-m58-performance-release-gate-selection.md)
 - M58 threshold policy: [reports/wgsl-pipeline/2026-05-31-m58-performance-threshold-policy.md](reports/wgsl-pipeline/2026-05-31-m58-performance-threshold-policy.md)
-- M58 sprint review: [reports/wgsl-pipeline/2026-05-31-m58-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m58-sprint-review.md)
 - M58 PM report: [reports/wgsl-pipeline/2026-05-31-m58-pm-report.md](reports/wgsl-pipeline/2026-05-31-m58-pm-report.md)
 - M58 non-claims: [reports/wgsl-pipeline/2026-05-31-m58-non-claims.md](reports/wgsl-pipeline/2026-05-31-m58-non-claims.md)
 - M59 performance gap decision: [reports/wgsl-pipeline/2026-05-31-m59-performance-gap-decision.md](reports/wgsl-pipeline/2026-05-31-m59-performance-gap-decision.md)
 - M59 performance release gate selection: [reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md](reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md)
-- M59 sprint review: [reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md)
 - M59 PM report: [reports/wgsl-pipeline/2026-05-31-m59-pm-report.md](reports/wgsl-pipeline/2026-05-31-m59-pm-report.md)
 - M59 non-claims: [reports/wgsl-pipeline/2026-05-31-m59-non-claims.md](reports/wgsl-pipeline/2026-05-31-m59-non-claims.md)
 
@@ -483,18 +468,7 @@ Closed post-MVP milestones:
   simple text baseline, plus dependency-gated rows, but does not clear those
   gaps without implementation evidence.
 
-Sprint reviews:
-[reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md)
-[reports/wgsl-pipeline/2026-05-31-m52-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m52-sprint-review.md)
-
-M46 closeout:
-[reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md](reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md)
+Historical sprint reviews and closeouts are available from Git history only.
 
 Support claims after the MVP require visible evidence: reference, CPU/GPU
 render or explicit refusal, diffs, stats, route diagnostics, and stable fallback

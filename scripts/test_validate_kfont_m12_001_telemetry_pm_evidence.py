@@ -24,35 +24,20 @@ def load_validator():
 
 
 class KfontM12001TelemetryPmEvidenceTest(unittest.TestCase):
-    def test_pipeline_pm_bundle_block_keeps_real_task_block(self) -> None:
+    def test_telemetry_validator_block_keeps_real_task_block(self) -> None:
         validator = load_validator()
         build_gradle = validator.load_text(PROJECT_ROOT, validator.BUILD_GRADLE_PATH)
-        block = validator.pipeline_pm_bundle_block(build_gradle)
+        block = validator.telemetry_validator_block(build_gradle)
 
-        self.assertIn('tasks.register("pipelinePmBundle")', block)
+        self.assertIn('tasks.register<Exec>("validateKfontM12001TelemetryPmEvidence")', block)
         self.assertIn(validator.GPU_REPORT_PATH, block)
         self.assertIn(validator.ADVISORY_MD_PATH, block)
-        self.assertNotIn('tasks.named("pipelinePmBundle")', block)
 
-    def test_pipeline_pm_bundle_block_rejects_missing_task(self) -> None:
+    def test_telemetry_validator_block_rejects_missing_task(self) -> None:
         validator = load_validator()
         with self.assertRaises(validator.ValidationError) as missing:
-            validator.pipeline_pm_bundle_block("tasks.register(\"otherTask\") {}")
+            validator.telemetry_validator_block("tasks.register(\"otherTask\") {}")
         self.assertIn("missing Gradle marker", str(missing.exception))
-
-    def test_pipeline_pm_bundle_block_excludes_later_named_hooks(self) -> None:
-        validator = load_validator()
-        synthetic = """
-tasks.register("pipelinePmBundle") {
-    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/parser-metrics.json"))
-}
-tasks.named("pipelinePmBundle") {
-    inputs.file(layout.projectDirectory.file("reports/pure-kotlin-text/2026-06-19-kfont-m12-005-gpu-handoff-metrics.md"))
-}
-"""
-        block = validator.pipeline_pm_bundle_block(synthetic)
-        self.assertIn("parser-metrics.json", block)
-        self.assertNotIn(validator.GPU_REPORT_PATH, block)
 
 
 if __name__ == "__main__":

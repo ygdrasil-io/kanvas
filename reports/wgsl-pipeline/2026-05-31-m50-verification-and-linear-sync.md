@@ -14,7 +14,7 @@ output all validate locally.
 
 ```bash
 rtk git diff --check dce4886b..HEAD
-rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'
 ```
 

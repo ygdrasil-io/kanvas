@@ -9,6 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
@@ -41,8 +42,8 @@ class Skbug9819Gm : SkiaGm {
 
         canvas.save()
         canvas.scale(128f, 128f)
-        canvas.drawImage(rgba.toImage(), RectF32(0f, 0f, 1f, 1f))
-        canvas.drawImage(bgra.toImage(), RectF32(0f, 1f, 1f, 2f))
+        canvas.drawImage(rgba.toImageForGm(), RectF32(0f, 0f, 1f, 1f))
+        canvas.drawImage(bgra.toImageForGm(), RectF32(0f, 1f, 1f, 2f))
         canvas.restore()
 
         markGmGood(canvas, 192f, 64f)

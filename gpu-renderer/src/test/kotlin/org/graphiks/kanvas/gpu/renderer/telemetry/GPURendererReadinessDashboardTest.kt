@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.telemetry
 
+import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -14,8 +16,8 @@ class GPURendererReadinessDashboardTest {
 
         val dashboard = GPURendererReadinessDashboardIntegrator.integrate(
             dashboardId = "m9-gpu-renderer-readiness",
-            correctnessEvidenceRows = listOf("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md"),
-            activationEvidenceRows = listOf("pipelinePmBundle"),
+            correctnessEvidenceRows = listOf("gpuEvidenceVerification"),
+            activationEvidenceRows = listOf("headless-offscreen-only"),
             cacheReport = cacheReport,
             frameGatePolicyReport = frameReport,
         )
@@ -32,8 +34,8 @@ class GPURendererReadinessDashboardTest {
         assertEquals(
             listOf(
                 "readiness-dashboard id=m9-gpu-renderer-readiness row=gpu-renderer.readiness classification=PolicyGated rows=5 readinessDelta=0.0 releaseBlocking=false productRouteActivated=false",
-                "readiness-row area=correctness state=evidence-present classification=PolicyGated source=reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
-                "readiness-row area=activation state=policy-gated classification=PolicyGated source=pipelinePmBundle readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
+                "readiness-row area=correctness state=evidence-present classification=PolicyGated source=gpuEvidenceVerification readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
+                "readiness-row area=activation state=policy-gated classification=PolicyGated source=headless-offscreen-only readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
                 "readiness-row area=performance state=candidate-nonblocking classification=PolicyGated source=m9-frame-gate-policy readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
                 "readiness-row area=cache state=observed-and-reporting classification=PolicyGated source=m9-cache-source-map readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
                 "readiness-row area=release state=non-release-blocking classification=PolicyGated source=m9-frame-gate-policy readinessDelta=0.0 releaseBlocking=false productRouteActivated=false reportingOnly=true",
@@ -42,6 +44,27 @@ class GPURendererReadinessDashboardTest {
             ),
             dashboard.dumpLines(),
         )
+    }
+
+    @Test
+    fun `default PM evidence export is standalone from the retired root bundle`() {
+        val outputDirectory = Files.createTempDirectory("gpu-renderer-m9-readiness").toFile()
+        try {
+            writeRendererReadinessPMEvidenceBundle(outputDirectory)
+
+            val lines = outputDirectory.resolve("gpu-renderer-readiness-dashboard-lines.txt").readText()
+            val sidecar = outputDirectory.resolve("pm-bundle-manifest-entry.json").readText()
+
+            assertContains(lines, "source=gpuEvidenceVerification")
+            assertContains(lines, "source=headless-offscreen-only")
+            assertFalse(lines.contains("pipeline" + "PmBundle"))
+            assertContains(
+                sidecar,
+                "\"pmPackageCommand\": \"rtk ./gradlew --no-daemon :gpu-renderer:gpuRendererM9ReadinessPmEvidenceBundle\"",
+            )
+        } finally {
+            outputDirectory.deleteRecursively()
+        }
     }
 
     @Test
@@ -65,8 +88,8 @@ class GPURendererReadinessDashboardTest {
         assertFailsWith<IllegalArgumentException> {
             GPURendererReadinessDashboardIntegrator.integrate(
                 dashboardId = "m9-gpu-renderer-readiness",
-                correctnessEvidenceRows = listOf("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md"),
-                activationEvidenceRows = listOf("pipelinePmBundle"),
+                correctnessEvidenceRows = listOf("gpuEvidenceVerification"),
+                activationEvidenceRows = listOf("headless-offscreen-only"),
                 cacheReport = cacheSourceMapReport(readinessDelta = 0.25),
                 frameGatePolicyReport = frameGatePolicyReport(),
             )
@@ -74,8 +97,8 @@ class GPURendererReadinessDashboardTest {
         assertFailsWith<IllegalArgumentException> {
             GPURendererReadinessDashboardIntegrator.integrate(
                 dashboardId = "m9-gpu-renderer-readiness",
-                correctnessEvidenceRows = listOf("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md"),
-                activationEvidenceRows = listOf("pipelinePmBundle"),
+                correctnessEvidenceRows = listOf("gpuEvidenceVerification"),
+                activationEvidenceRows = listOf("headless-offscreen-only"),
                 cacheReport = cacheSourceMapReport(),
                 frameGatePolicyReport = frameGatePolicyReport(releaseBlocking = true),
             )

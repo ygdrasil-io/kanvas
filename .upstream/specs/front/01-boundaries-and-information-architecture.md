@@ -103,8 +103,8 @@ missing.
 
 ### PM Report Package
 
-The target front should produce or point to a PM-readable report package. M49
-currently provides this through `pipelinePmBundle`:
+The target front should produce or point to PM-readable dashboard and focused
+headless evidence outputs:
 
 - milestone summary;
 - dashboard URL or local export path;
@@ -113,8 +113,8 @@ currently provides this through `pipelinePmBundle`:
 - remaining expected unsupported rows;
 - validation commands;
 - links to source reports and raw artifacts.
-- manifest with generation metadata, counters, limitations, and unavailable
-  reference checks.
+- focused validation output with generation metadata, counters, limitations,
+  and unavailable-reference checks where applicable.
 
 ## Navigation Model
 

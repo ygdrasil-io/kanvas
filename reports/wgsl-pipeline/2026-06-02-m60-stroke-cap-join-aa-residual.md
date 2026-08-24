@@ -96,6 +96,6 @@ The refined root-cause accounting is:
 ```text
 rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk git diff --check
 ```

@@ -56,7 +56,7 @@ The generated `graph-diagnostics.json` records:
 ## Validation
 
 ```text
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk git diff --check
 ```
 

@@ -51,7 +51,7 @@ The owner is `text-glyph-infrastructure`; coverage consumes opaque mask refs onl
 - `validateKan044GlyphMaskAtlasOwnership`
 - `:render-pipeline:pipelineConformanceTest -- includes GeometryCoverageContractsTest`
 - `:gpu-raster:pipelineConformanceTest -- includes SkWebGpuGlyphAtlasTest and SimpleLatinLineSceneEvidenceTest`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

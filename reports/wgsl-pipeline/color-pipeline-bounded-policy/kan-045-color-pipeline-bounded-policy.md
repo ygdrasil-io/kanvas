@@ -46,7 +46,7 @@ behavior or thresholds.
 - `validateKan045ColorPipelineBoundedPolicy`
 - `:gpu-raster:pipelineConformanceTest -- includes SimpleSrcOverAlphaSceneEvidenceTest and SimpleColorFilterSceneEvidenceTest`
 - `:gpu-raster:wgslValidateStrict -- generated/registered WGSL parser validation`
-- `pipelinePmBundle`
+- `pipelineSceneDashboardGate`
 
 ## Validation
 

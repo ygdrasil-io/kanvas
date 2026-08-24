@@ -72,7 +72,7 @@ class ShadowUtilsGm : SkiaGm {
         // Shadow drawing would require SkShadowUtils which may not be available
         for (path in paths) {
             val postM = RectF32(0f, 0f, 50f, 50f)
-            val w = postM.width + kHeight
+            val w = postM.width() + kHeight
             val dx = w + kPad
             if (x + dx > width - 3f * kPad) {
                 canvas.restore()
@@ -96,7 +96,7 @@ class ShadowUtilsGm : SkiaGm {
 
             canvas.translate(dx, 0f)
             x += dx
-            dy = max(dy, postM.height + kPad + kHeight)
+            dy = max(dy, postM.height() + kPad + kHeight)
         }
 
         // Draw concave paths
@@ -107,7 +107,7 @@ class ShadowUtilsGm : SkiaGm {
         dy = 0f
         for (path in concavePaths) {
             val postM = RectF32(0f, 0f, 50f, 50f)
-            val w = postM.width + kHeight
+            val w = postM.width() + kHeight
             val dx = w + kPad
 
             canvas.save()
@@ -122,7 +122,7 @@ class ShadowUtilsGm : SkiaGm {
 
             canvas.translate(dx, 0f)
             x += dx
-            dy = max(dy, postM.height + kPad + kHeight)
+            dy = max(dy, postM.height() + kPad + kHeight)
         }
     }
 }

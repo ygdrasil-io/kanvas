@@ -74,7 +74,7 @@ rtk ./gradlew --no-daemon --rerun-tasks :kanvas-skia:test --tests 'org.skia.foun
 rtk python3 scripts/validate_for243_crop_prepass_bounds.py
 rtk python3 scripts/validate_for242_crop_prepass_fidelity.py
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk git diff --check
 ```
 

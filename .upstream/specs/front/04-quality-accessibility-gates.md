@@ -23,11 +23,8 @@ Release-gate or promoted-dashboard changes must also run:
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 ```
 
-PM packaging changes must also run:
-
-```bash
-rtk ./gradlew --no-daemon pipelinePmBundle
-```
+Focused evidence-pack changes must run the validator that owns the changed
+pack, in addition to any affected dashboard validation.
 
 If generated evidence behavior is touched, also run:
 
@@ -80,7 +77,7 @@ Rules:
 
 ## Artifact QA
 
-The front export and PM bundle are valid only when:
+The front export and focused evidence are valid only when:
 
 - every required pass-row artifact exists;
 - expected unsupported rows explain missing GPU artifacts when absent;
@@ -88,9 +85,7 @@ The front export and PM bundle are valid only when:
   them;
 - image links resolve inside the exported artifact directory;
 - source reports are linked as relative repository paths;
-- the PM bundle manifest reports no unavailable dashboard references;
-- the PM bundle includes dashboard data, artifacts, reports, gate output, and
-  local open instructions.
+- each focused validator reports unavailable references explicitly.
 
 Artifact existence validation is owned by the Gradle export tasks. The frontend
 must still render missing states defensively.
@@ -145,7 +140,6 @@ A release-ready front export must prove:
 
 - `pipelineSceneDashboard` passed;
 - `pipelineSceneDashboardGate` passed;
-- `pipelinePmBundle` passed when producing PM/release artifacts;
 - dashboard artifact is archived or linked;
 - summary counters match the PM closeout;
 - filters and expected unsupported visibility were manually or automatically

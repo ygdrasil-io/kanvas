@@ -131,10 +131,15 @@ class GpuRendererR6PmEvidenceValidatorTest(unittest.TestCase):
         self.assertEqual("activation-candidate", entry["packagingState"])
         self.assertEqual("Incomplete", entry["validationReportStatus"])
         self.assertEqual(
-            "reports/gpu-renderer/2026-06-14-m1-promotion-policy-decision.md",
+            ".upstream/target/skia-like-realtime-renderer-target.md",
             entry["activationDecisionRef"],
         )
         self.assertEqual("opt-in-adapter-backed-r6-executed-diagnostic", entry["adapterEvidenceProvenance"])
+        self.assertEqual(
+            "rtk ./gradlew --no-daemon :gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle",
+            entry["pmPackageCommand"],
+        )
+        self.assertFalse(hasattr(validator, "inject_pm_bundle"))
         self.assertEqual("required-before-product-activation", entry["adapterEvidenceRequirement"])
         self.assertFalse(entry["productRouteActivated"])
         self.assertFalse(entry["releaseBlocking"])
@@ -180,31 +185,6 @@ class GpuRendererR6PmEvidenceValidatorTest(unittest.TestCase):
 
             with self.assertRaisesRegex(validator.ValidationError, "duplicate JSON key: productRouteActivated"):
                 validator.validate_output(output_dir)
-
-    def test_inject_pm_bundle_rejects_duplicate_target_manifest_keys_before_copy(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            temp_root = Path(temp)
-            output_dir = write_fixture_bundle(temp_root)
-            _, _, entry = validator.validate_output(output_dir)
-            bundle_dir = temp_root / "pm-bundle"
-            bundle_dir.mkdir()
-            manifest_path = bundle_dir / "manifest.json"
-            manifest_path.write_text(
-                "{\n"
-                '  "generatedBy": "pipelinePmBundle",\n'
-                '  "gpuRendererR6FirstRoutePmEvidence": {"promotionGatePassed": true},\n'
-                '  "gpuRendererR6FirstRoutePmEvidence": {"promotionGatePassed": false}\n'
-                "}\n",
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                validator.ValidationError,
-                "duplicate JSON key: gpuRendererR6FirstRoutePmEvidence",
-            ):
-                validator.inject_pm_bundle(output_dir, bundle_dir, entry)
-
-            self.assertFalse((bundle_dir / validator.RELEASE_DIR).exists())
 
     def test_validate_output_rejects_root_manifest_diagnostic_drift(self) -> None:
         unsafe_replacements = [

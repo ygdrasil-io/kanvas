@@ -84,6 +84,6 @@ Required:
 - `rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter="Apple M2 Max" pipelineMeasuredGpuPerformance`
 - `rtk ./gradlew pipelineSceneDashboardGate`
 - `rtk ./gradlew pipelinePerformanceTrendWarnings`
-- `rtk ./gradlew pipelinePmBundle`
+- `rtk ./gradlew pipelineSceneDashboardGate`
 - `rtk python3 -m json.tool reports/wgsl-pipeline/for-305-measured-performance-lanes.json`
 - `rtk git diff --check origin/master...HEAD`

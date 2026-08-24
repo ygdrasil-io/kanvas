@@ -36,7 +36,7 @@ runtime effects require registered Kanvas descriptors with Kotlin/CPU behavior
 and parser-validated WGSL GPU implementations.
 
 For RC/MEP CI and PM packages, keep headless validation separate from any
-future native demo execution. `pipelinePmBundle` and checked-in RC validators
+future native demo execution. `pipelineSceneDashboardGate` and checked-in RC validators
 must not resolve unpublished native-windowing artifacts or require a native
 windowing submodule. Native interactive windowing is retired from the current
 Kanvas runtime; historical native evidence must remain labeled as historical.

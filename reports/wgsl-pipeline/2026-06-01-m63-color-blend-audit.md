@@ -60,7 +60,7 @@ exist to make the advanced color/blend boundary visible in the PM dashboard.
 Required implementation validation:
 
 ```bash
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk git diff --check
 ```
 

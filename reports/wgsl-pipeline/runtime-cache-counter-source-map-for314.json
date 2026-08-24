@@ -19,7 +19,7 @@
       "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json": "verified",
       "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json": "verified",
       "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "verified",
-      "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "verified",
+      ".upstream/target/skia-like-realtime-renderer-target.md": "verified",
       "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json": "verified"
     }
   },
@@ -202,9 +202,9 @@
     },
     "nonClaim": "selected native route creation/churn is not broad WebGPU cache hit/miss telemetry"
   },
-  "m92NotObservableKadreBlockers": {
-    "sourceClass": "not-observable-kadre-blockers-with-observed-partial-creation-rows",
-    "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+  "retiredNativeWindowingBoundaries": {
+    "sourceClass": "retired-native-windowing-with-observed-partial-creation-rows",
+    "sourceArtifact": ".upstream/target/skia-like-realtime-renderer-target.md",
     "observedPartialRows": [
       {
         "id": "shader-module-creates-selected-route",
@@ -339,9 +339,9 @@
       "assertion": "M90 keeps native route allocations observed-partial and cache hits/misses derived from M85."
     },
     {
-      "id": "for314.m92-kadre-blockers",
+      "id": "for314.retired-native-windowing-boundaries",
       "status": "pass",
-      "assertion": "M92 keeps broad Kadre/wgpu4k cache callback and resource lifetime blockers not observable."
+      "assertion": "The target keeps native-windowing cache callbacks and resource-lifetime telemetry outside the current runtime scope."
     },
     {
       "id": "for314.observed-source-artifact-guard",

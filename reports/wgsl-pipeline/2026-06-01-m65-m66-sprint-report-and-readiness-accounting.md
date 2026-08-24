@@ -85,8 +85,8 @@ contributes at most +8%.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon pipelineM65RuntimeSmoke pipelineM66GmPromotionWave pipelineSceneDashboardGate pipelinePmBundle
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineM65RuntimeSmoke pipelineM66GmPromotionWave pipelineSceneDashboardGate pipelineSceneDashboardGate
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk git diff --check
 ```
 

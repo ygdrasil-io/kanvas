@@ -32,5 +32,5 @@ It is a headless evidence slice, not a renderer runtime change.
 ```text
 rtk ./gradlew --no-daemon validateMepNextFeatureBreadth
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 ```

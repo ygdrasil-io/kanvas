@@ -8,6 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.math.color.ColorARGB
@@ -80,7 +81,7 @@ class AllBitmapConfigsGm : SkiaGm {
                 dst.setPixel(x, y, srcBitmap.getPixel(x, y))
             }
         }
-        return Image(dst.width, dst.height, dst.colorType, sourceId, dst.pixels.copyOf(), dst.colorSpace)
+        return dst.toImageForGm(sourceId)
     }
 
     private fun makeRampImage(colorType: ColorType, sourceId: String): Image {
@@ -91,7 +92,7 @@ class AllBitmapConfigsGm : SkiaGm {
                 bitmap.setPixel(x, y, ColorARGB.fromRGBA(value, value, value, value))
             }
         }
-        return Image(bitmap.width, bitmap.height, bitmap.colorType, sourceId, bitmap.pixels.copyOf(), bitmap.colorSpace)
+        return bitmap.toImageForGm(sourceId)
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {

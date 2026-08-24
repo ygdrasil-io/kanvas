@@ -98,10 +98,10 @@ def main() -> int:
     gate_freeze = evidence.get("gateFreeze", {})
     require(gate_freeze == standalone_gate_freeze, "gate-freeze.json diverges from rc2-evidence.json")
     required_gates = gate_freeze.get("requiredCorrectnessGates", [])
-    require(any(gate.get("name") == "pipelinePmBundle" and gate.get("phase") == "blocking" for gate in required_gates), "pipelinePmBundle must remain a blocking correctness gate")
+    require(any(gate.get("name") == "validateM88ReleaseCandidate2" and gate.get("phase") == "blocking" for gate in required_gates), "validateM88ReleaseCandidate2 must remain a blocking correctness gate")
 
     pm_package = evidence.get("pmPackage", {})
-    require(pm_package.get("generationCommand") == "rtk ./gradlew --no-daemon pipelinePmBundle", "PM bundle generation must stay headless")
+    require(pm_package.get("generationCommand") == "rtk ./gradlew --no-daemon validateM88ReleaseCandidate2", "PM bundle generation must stay headless")
     require(pm_package.get("headlessCiRequiresKadreSubmodule") is False, "Headless PM package must not require Kadre submodule")
 
     non_claims = "\n".join(evidence.get("nonClaims", []))

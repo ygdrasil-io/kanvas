@@ -99,14 +99,14 @@ Definition of Done:
 - Dashboard includes clear notices for routes and reference/oracle meaning.
 - Browser QA captures desktop and mobile screenshots.
 - Accessibility report has no critical issue for the PM dashboard path.
-- `pipelinePmBundle` includes the front QA report and screenshot paths.
+- `pipelineSceneDashboardGate` includes the front QA report and screenshot paths.
 
 Validation:
 
 ```bash
 rtk git diff --check
 rtk ./gradlew --no-daemon pipelineSceneDashboard
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 ```
 
 ### M50-C Adapter-Backed Scene Expansion V2
@@ -212,7 +212,7 @@ M50 may claim 80% only when all of these are true:
 
 - `pipelineSceneDashboardGate` is release-owned or required on the accepted
   release path.
-- `pipelinePmBundle` contains current dashboard data, artifacts, manifest,
+- `pipelineSceneDashboardGate` contains current dashboard data, artifacts, manifest,
   limitations, front QA evidence, and local serve instructions.
 - Adapter-backed support rows are at least 14.
 - First font/text generated evidence pack is present, with pass and explicit

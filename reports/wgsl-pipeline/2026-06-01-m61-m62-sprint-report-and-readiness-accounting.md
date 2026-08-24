@@ -28,7 +28,7 @@ M62 clarified current text support: Kanvas renders selected simple text through 
 
 ## Dashboard State
 
-Validation source: `rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle`
+Validation source: `rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate`
 
 The post-M62 dashboard has:
 
@@ -85,6 +85,6 @@ The PM answer for glyph atlas is: not yet. Current text pass rows are outline/pa
 ## Validation
 
 ```text
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate pipelineSceneDashboardGate
 rtk git diff --check
 ```

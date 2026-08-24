@@ -53,4 +53,4 @@ Each phase contains `skia.png`, `cpu.png`, `gpu.png`, `cpu-diff.png`,
 - `rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon validateKan051RendererVisualDelta`
 - `rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest`
 - `rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon pipelineConformance`
-- `rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon pipelinePmBundle`
+- `rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon pipelineSceneDashboardGate`

@@ -40,7 +40,7 @@ class StrokeRectShaderGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
 
-        canvas.translate(rect.center.x, rect.center.y)
+        canvas.translate(rect.center().x, rect.center().y)
         val pad = 20f
 
         for (aa in arrayOf(false, true)) {
@@ -54,25 +54,25 @@ class StrokeRectShaderGm : SkiaGm {
             val strokeWidth = 10f
             var p = paint.copy(strokeWidth = strokeWidth, strokeJoin = StrokeJoin.BEVEL)
             canvas.drawRect(rect, p)
-            canvas.translate(rect.width + pad, 0f)
+            canvas.translate(rect.width() + pad, 0f)
 
             p = paint.copy(strokeWidth = strokeWidth, strokeJoin = StrokeJoin.MITER)
             canvas.drawRect(rect, p)
-            canvas.translate(rect.width + pad, 0f)
+            canvas.translate(rect.width() + pad, 0f)
 
             p = paint.copy(strokeWidth = strokeWidth, strokeJoin = StrokeJoin.MITER, strokeMiter = 0.01f)
             canvas.drawRect(rect, p)
-            canvas.translate(rect.width + pad, 0f)
+            canvas.translate(rect.width() + pad, 0f)
 
             p = paint.copy(strokeWidth = strokeWidth, strokeJoin = StrokeJoin.ROUND)
             canvas.drawRect(rect, p)
-            canvas.translate(rect.width + pad, 0f)
+            canvas.translate(rect.width() + pad, 0f)
 
             p = paint.copy(strokeWidth = 0f)
             canvas.drawRect(rect, p)
 
             canvas.restore()
-            canvas.translate(0f, rect.height + pad)
+            canvas.translate(0f, rect.height() + pad)
         }
     }
 }
