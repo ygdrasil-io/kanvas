@@ -9,13 +9,13 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.math.geometry.Point2F32
 
 internal enum class DrawPathSourceOperation(internal val stableName: String) {
     DRAW_PATH("drawPath"),
@@ -126,7 +126,7 @@ sealed interface DisplayOp {
     data class DrawPoint(val x: Float, val y: Float, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw multiple points with a point mode. */
-    data class DrawPoints(val mode: PointMode, val points: List<Point>, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
+    data class DrawPoints(val mode: PointMode, val points: List<Point2F32>, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp
 
     /** Draw a double rounded rectangle (outer + inner). */
     data class DrawDRRect(val outer: RRect, val inner: RRect, val paint: Paint, val transform: Matrix3x3F32, val clip: ClipStack) : DisplayOp

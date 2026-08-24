@@ -11,8 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -39,10 +38,10 @@ class BigMatrixGm : SkiaGm {
         val inv = invert33(m)
         val small = 1f / 500f
 
-        var pt = inv.mapPoint(Point(10f, 10f))
+        var pt = inv.transform(Point2F32(10f, 10f))
         canvas.drawCircle(pt.x, pt.y, small, Paint(color = Color.RED, antiAlias = true))
 
-        pt = inv.mapPoint(Point(30f, 10f))
+        pt = inv.transform(Point2F32(30f, 10f))
         canvas.drawRect(
             Rect.fromLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
             Paint(color = Color.RED, antiAlias = true),
@@ -56,7 +55,7 @@ class BigMatrixGm : SkiaGm {
         )
         val bmp = Image.fromPixels(2, 2, bmpPixels, ColorType.RGBA_8888, "bigmatrix-bmp")
 
-        pt = inv.mapPoint(Point(30f, 30f))
+        pt = inv.transform(Point2F32(30f, 30f))
         val s = Matrix3x3F32.scaling(1f / 1000f, 1f / 1000f)
         val shader = Shader.WithLocalMatrix(bmp.makeShader(TileMode.REPEAT, TileMode.REPEAT), s)
         canvas.drawRect(

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -402,7 +402,7 @@ class GPUPreparedCompositeCaptureSemanticTest {
     fun `vertices inside layer and picture composites stay refused`() {
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
-            positions = listOf(Point(0f, 0f), Point(10f, 0f), Point(10f, 10f)),
+            positions = listOf(Point2F32(0f, 0f), Point2F32(10f, 0f), Point2F32(10f, 10f)),
         )
         val verticesOp = DisplayOp.DrawVertices(triangle, black, identity, open)
 

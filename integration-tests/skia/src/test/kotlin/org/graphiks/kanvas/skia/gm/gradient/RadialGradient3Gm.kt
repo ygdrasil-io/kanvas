@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -27,7 +27,7 @@ class RadialGradient3Gm : SkiaGm {
     override val height = 500
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val center = Point(0f, 0f)
+        val center = Point2F32(0f, 0f)
         val radius = 3000f
         val stops = listOf(
             GradientStop(0f, Color.fromRGBA(1f, 1f, 1f, 1f)),

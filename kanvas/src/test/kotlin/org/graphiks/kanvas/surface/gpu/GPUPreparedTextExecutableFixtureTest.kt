@@ -52,7 +52,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -109,14 +109,14 @@ class GPUPreparedTextExecutableFixtureTest {
         )
         val materials = linkedMapOf(
             "solid" to Paint.fill(Color.RED),
-            "linear" to Paint(shader = Shader.LinearGradient(Point(0f, 0f), Point(16f, 0f), stops)),
-            "radial" to Paint(shader = Shader.RadialGradient(Point(8f, 8f), 8f, stops)),
-            "sweep" to Paint(shader = Shader.SweepGradient(Point(8f, 8f), stops = stops)),
+            "linear" to Paint(shader = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(16f, 0f), stops)),
+            "radial" to Paint(shader = Shader.RadialGradient(Point2F32(8f, 8f), 8f, stops)),
+            "sweep" to Paint(shader = Shader.SweepGradient(Point2F32(8f, 8f), stops = stops)),
             "conical" to Paint(
                 shader = Shader.ConicalGradient(
-                    Point(0f, 0f),
+                    Point2F32(0f, 0f),
                     1f,
-                    Point(16f, 16f),
+                    Point2F32(16f, 16f),
                     8f,
                     stops,
                 ),
@@ -659,7 +659,7 @@ class GPUPreparedTextExecutableFixtureTest {
             listOf(
                 KanvasGlyphRun(
                     glyphIds.map(Int::toUShort),
-                    glyphIds.indices.map { index -> Point(index * 12f, 0f) },
+                    glyphIds.indices.map { index -> Point2F32(index * 12f, 0f) },
                     fontSize = 48f,
                 ),
             ),

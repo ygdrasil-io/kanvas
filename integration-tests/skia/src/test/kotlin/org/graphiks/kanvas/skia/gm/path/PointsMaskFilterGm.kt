@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
 
@@ -31,7 +31,7 @@ class PointsMaskFilterGm : SkiaGm {
         val n = 30
         val rand = Random(0)
         val pts = List(n) {
-            Point(rand.nextFloat() * 220f + 18f, rand.nextFloat() * 220f + 18f)
+            Point2F32(rand.nextFloat() * 220f + 18f, rand.nextFloat() * 220f + 18f)
         }
 
         val sigma = 0.57735f * 6f + 0.5f

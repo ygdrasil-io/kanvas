@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -38,7 +38,7 @@ class ShallowGradientRadialNoditherGm : SkiaGm {
         )
         val paint = Paint(
             shader = Shader.RadialGradient(
-                center = Point(w / 2f, h / 2f), radius = w / 2f,
+                center = Point2F32(w / 2f, h / 2f), radius = w / 2f,
                 stops = stops, tileMode = TileMode.CLAMP,
             ),
         )

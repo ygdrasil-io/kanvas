@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -31,7 +31,7 @@ open class MatrixConvolutionGm(
         val h = height.toFloat()
         canvas.drawRect(Rect(0f, 0f, w, h), Paint(color = Color.BLACK))
         val grad = Shader.LinearGradient(
-            Point(0f, 0f), Point(0f, 80f),
+            Point2F32(0f, 0f), Point2F32(0f, 80f),
             listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, colorTwo())),
         )
         val patternPaint = Paint(shader = grad)

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -60,7 +60,7 @@ class LocalMatrixShaderPerspGm : SkiaGm {
         canvas.translate(0f, fh + 10f)
 
         val gradShader = Shader.RadialGradient(
-            center = Point(fw / 2f, fh / 2f), radius = fw / 2f,
+            center = Point2F32(fw / 2f, fh / 2f), radius = fw / 2f,
             stops = listOf(
                 GradientStop(0f, Color.BLACK),
                 GradientStop(1f, Color.TRANSPARENT),

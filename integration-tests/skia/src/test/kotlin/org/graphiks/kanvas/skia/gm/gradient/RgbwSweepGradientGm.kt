@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -37,7 +37,7 @@ class RgbwSweepGradientGm : SkiaGm {
             GradientStop(1f, Color.GREEN),
         )
         val shader = Shader.SweepGradient(
-            center = Point(50f, 50f),
+            center = Point2F32(50f, 50f),
             stops = stops,
             tileMode = TileMode.CLAMP,
         )

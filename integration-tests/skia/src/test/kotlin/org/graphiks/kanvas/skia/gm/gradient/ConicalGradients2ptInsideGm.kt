@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -30,7 +30,7 @@ class ConicalGradients2ptInsideGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val pts = arrayOf(Point(0f, 0f), Point(100f, 100f))
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(100f, 100f))
         val rect = Rect.fromXYWH(0f, 0f, 100f, 100f)
 
         canvas.translate(20f, 20f)
@@ -63,9 +63,9 @@ class ConicalGradients2ptInsideGm : SkiaGm {
     private fun midpoint(a: Float, b: Float): Float = (a + b) * 0.5f
     private fun interp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
-    private fun makeInside(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
-        val c1 = Point(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
+    private fun makeInside(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+        val c1 = Point2F32(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c1, startRadius = (pts[1].x - pts[0].x) / 7f,
@@ -76,9 +76,9 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeInsideFlip(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
-        val c1 = Point(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
+    private fun makeInsideFlip(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+        val c1 = Point2F32(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c0, startRadius = (pts[1].x - pts[0].x) / 2f,
@@ -89,8 +89,8 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeInsideCenter(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+    private fun makeInsideCenter(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c0, startRadius = (pts[1].x - pts[0].x) / 7f,
@@ -101,8 +101,8 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeInsideCenterReversed(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+    private fun makeInsideCenterReversed(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c0, startRadius = (pts[1].x - pts[0].x) / 2f,
@@ -113,9 +113,9 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeZeroRad(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
-        val c1 = Point(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
+    private fun makeZeroRad(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+        val c1 = Point2F32(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c1, startRadius = 0f,
@@ -126,9 +126,9 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeZeroRadFlip(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
-        val c1 = Point(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
+    private fun makeZeroRadFlip(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+        val c1 = Point2F32(interp(pts[0].x, pts[1].x, 3f / 5f), interp(pts[0].y, pts[1].y, 1f / 4f))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c1, startRadius = (pts[1].x - pts[0].x) / 2f,
@@ -139,8 +139,8 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private fun makeZeroRadCenter(pts: Array<Point>, data: GradData, lm: Matrix3x3F32): Shader? {
-        val c0 = Point(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
+    private fun makeZeroRadCenter(pts: Array<Point2F32>, data: GradData, lm: Matrix3x3F32): Shader? {
+        val c0 = Point2F32(midpoint(pts[0].x, pts[1].x), midpoint(pts[0].y, pts[1].y))
         return Shader.WithLocalMatrix(
             Shader.ConicalGradient(
                 start = c0, startRadius = 0f,
@@ -151,7 +151,7 @@ class ConicalGradients2ptInsideGm : SkiaGm {
         )
     }
 
-    private val makerFns: List<(Array<Point>, GradData, Matrix3x3F32) -> Shader?> = listOf(
+    private val makerFns: List<(Array<Point2F32>, GradData, Matrix3x3F32) -> Shader?> = listOf(
         ::makeInside, ::makeInsideFlip, ::makeInsideCenter,
         ::makeZeroRad, ::makeZeroRadFlip, ::makeZeroRadCenter,
         ::makeInsideCenterReversed,

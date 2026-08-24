@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -70,19 +70,19 @@ class Tiling2GradientGm : SkiaGm {
                 val kyMode = modes[ky]
                 val shader = when (kyMode) {
                     TileMode.CLAMP -> Shader.LinearGradient(
-                        start = Point(0f, 0f),
-                        end = Point(w, h),
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(w, h),
                         stops = stops,
                         tileMode = modes[kx],
                     )
                     TileMode.REPEAT -> Shader.RadialGradient(
-                        center = Point(w / 2f, h / 2f),
+                        center = Point2F32(w / 2f, h / 2f),
                         radius = w / 2f,
                         stops = stops,
                         tileMode = modes[kx],
                     )
                     TileMode.MIRROR -> Shader.SweepGradient(
-                        center = Point(w / 2f, h / 2f),
+                        center = Point2F32(w / 2f, h / 2f),
                         startAngle = 135f,
                         endAngle = 225f,
                         stops = stops,

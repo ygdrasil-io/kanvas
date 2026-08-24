@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -60,7 +60,7 @@ class EmptyShaderGm : SkiaGm {
         val start = 0f
         val end = Math.nextUp(start)
         return Shader.SweepGradient(
-            center = Point(r.center.x, r.center.y),
+            center = Point2F32(r.center.x, r.center.y),
             startAngle = start,
             endAngle = end,
             stops = listOf(
@@ -72,7 +72,7 @@ class EmptyShaderGm : SkiaGm {
     }
 
     private fun degenLinear(r: Rect): Shader? {
-        val pt = Point(r.center.x, r.center.y)
+        val pt = Point2F32(r.center.x, r.center.y)
         return Shader.LinearGradient(
             start = pt, end = pt,
             stops = listOf(
@@ -84,7 +84,7 @@ class EmptyShaderGm : SkiaGm {
     }
 
     private fun degenConical(r: Rect): Shader? {
-        val pt = Point(r.center.x, r.center.y)
+        val pt = Point2F32(r.center.x, r.center.y)
         return Shader.ConicalGradient(
             start = pt, startRadius = 0f,
             end = pt, endRadius = 0f,

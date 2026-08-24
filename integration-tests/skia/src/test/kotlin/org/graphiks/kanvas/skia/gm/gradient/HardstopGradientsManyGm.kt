@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -26,8 +26,8 @@ class HardstopGradientsManyGm : SkiaGm {
     override val height = 2000
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val p0 = Point(0f, (RECT_HEIGHT / 2).toFloat())
-        val p1 = Point(WIDTH.toFloat(), (RECT_HEIGHT / 2).toFloat())
+        val p0 = Point2F32(0f, (RECT_HEIGHT / 2).toFloat())
+        val p1 = Point2F32(WIDTH.toFloat(), (RECT_HEIGHT / 2).toFloat())
 
         for (row in 1..NUM_ROWS) {
             val stops = mutableListOf<GradientStop>()

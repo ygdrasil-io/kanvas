@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -76,8 +76,8 @@ open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
             drawColor(Color.RED)
             val path = Path { }.apply { addCircle(32f, 32f, 32f) }
             val shader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(64f, 64f),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(64f, 64f),
                 stops = listOf(
                     GradientStop(0f, Color.WHITE),
                     GradientStop(1f, Color.BLUE),

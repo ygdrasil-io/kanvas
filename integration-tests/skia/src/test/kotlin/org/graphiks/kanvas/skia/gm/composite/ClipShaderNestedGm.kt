@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
@@ -33,7 +33,7 @@ class ClipShaderNestedGm : SkiaGm {
         val h = 64f
 
         val gradShader = Shader.RadialGradient(
-            center = Point(0.5f * w, 0.5f * h),
+            center = Point2F32(0.5f * w, 0.5f * h),
             radius = 0.1f * w,
             stops = listOf(
                 GradientStop(0f, Color.BLACK),

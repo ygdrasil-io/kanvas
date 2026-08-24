@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -29,7 +29,7 @@ class RadialGradientGm : SkiaGm {
         val w = width.toFloat()
         val h = height.toFloat()
         canvas.drawColor(0f, 0f, 0f, 1f)
-        val center = Point(w / 2f, h / 2f)
+        val center = Point2F32(w / 2f, h / 2f)
         val radius = w / 2f
         val stops = listOf(
             GradientStop(0f, Color.fromRGBA(0x7f / 255f, 0x7f / 255f, 0x7f / 255f, 0x7f / 255f)),

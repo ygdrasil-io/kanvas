@@ -64,8 +64,7 @@ class FontTypefaceIdentityTest {
         assertEquals(scaler.unitsPerEmInt.toFloat(), typeface.unitsPerEm)
         assertEquals(glyphId, typeface.glyphIdForCodepoint('A'.code))
         assertEquals(scaled.advanceWidth, typeface.getAdvance(glyphId, fontSize))
-        assertEquals(expectedPath.verbs(), actualPath.verbs())
-        assertEquals(expectedPath.points(), actualPath.points())
+        assertEquals(expectedPath.commands(), actualPath.commands())
     }
 
     @Test

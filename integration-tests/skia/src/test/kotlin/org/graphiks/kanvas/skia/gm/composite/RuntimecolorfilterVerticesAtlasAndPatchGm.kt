@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -34,10 +34,10 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
         val r = Rect(0f, 0f, 128f, 128f)
 
         val pos = listOf(
-            Point(r.left, r.top),
-            Point(r.right, r.top),
-            Point(r.right, r.bottom),
-            Point(r.left, r.bottom),
+            Point2F32(r.left, r.top),
+            Point2F32(r.right, r.top),
+            Point2F32(r.right, r.bottom),
+            Point2F32(r.left, r.bottom),
         )
         val kColors = listOf(
             Color.BLUE, Color.GREEN,
@@ -62,10 +62,10 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
         val vx3 = vx / 3f
         val vy3 = vy / 3f
         val cubics = listOf(
-            pos[0], Point(pos[0].x + vx3, pos[0].y), Point(pos[1].x - vx3, pos[1].y),
-            pos[1], Point(pos[1].x, pos[1].y + vy3), Point(pos[2].x, pos[2].y - vy3),
-            pos[2], Point(pos[2].x - vx3, pos[2].y), Point(pos[3].x + vx3, pos[3].y),
-            pos[3], Point(pos[3].x, pos[3].y - vy3), Point(pos[0].x, pos[0].y + vy3),
+            pos[0], Point2F32(pos[0].x + vx3, pos[0].y), Point2F32(pos[1].x - vx3, pos[1].y),
+            pos[1], Point2F32(pos[1].x, pos[1].y + vy3), Point2F32(pos[2].x, pos[2].y - vy3),
+            pos[2], Point2F32(pos[2].x - vx3, pos[2].y), Point2F32(pos[3].x + vx3, pos[3].y),
+            pos[3], Point2F32(pos[3].x, pos[3].y - vy3), Point2F32(pos[0].x, pos[0].y + vy3),
         )
 
         val cf: ColorFilter = ColorFilter.Luma
@@ -115,7 +115,7 @@ class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
     }
 
     private fun drawPatch(
-        canvas: GmCanvas, x: Float, cubics: List<Point>, pos: List<Point>,
+        canvas: GmCanvas, x: Float, cubics: List<Point2F32>, pos: List<Point2F32>,
         cf: ColorFilter, useCF: Boolean,
     ) {
         canvas.save()

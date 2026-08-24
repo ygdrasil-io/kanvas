@@ -10,8 +10,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 private const val kTileWidth = 40f
@@ -126,13 +125,13 @@ val m4 = Matrix3x3F32.Identity
     private fun drawTileBoundaries(canvas: GmCanvas, local: Matrix3x3F32) {
         val paint = Paint(color = Color.RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 0f)
         for (x in 1 until kColCount) {
-            val p1 = local.mapPoint(Point(x * kTileWidth, 0f))
-            val p2 = local.mapPoint(Point(x * kTileWidth, kRowCount * kTileHeight))
+            val p1 = local.transform(Point2F32(x * kTileWidth, 0f))
+            val p2 = local.transform(Point2F32(x * kTileWidth, kRowCount * kTileHeight))
             canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint)
         }
         for (y in 1 until kRowCount) {
-            val p1 = local.mapPoint(Point(0f, y * kTileHeight))
-            val p2 = local.mapPoint(Point(kColCount * kTileWidth, y * kTileHeight))
+            val p1 = local.transform(Point2F32(0f, y * kTileHeight))
+            val p2 = local.transform(Point2F32(kColCount * kTileWidth, y * kTileHeight))
             canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint)
         }
     }

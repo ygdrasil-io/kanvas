@@ -3,7 +3,7 @@ package org.graphiks.kanvas.svg
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 class SvgGradientParser {
     private val paintParser = SvgPaintParser()
@@ -21,8 +21,8 @@ class SvgGradientParser {
             GradientStop(stop.offset ?: 0f, Color.fromRGBA(r, g, b))
         }
         return Shader.LinearGradient(
-            start = Point(x1, y1),
-            end = Point(x2, y2),
+            start = Point2F32(x1, y1),
+            end = Point2F32(x2, y2),
             stops = gradientStops,
         )
     }
@@ -39,7 +39,7 @@ class SvgGradientParser {
             GradientStop(stop.offset ?: 0f, Color.fromRGBA(r, g, b))
         }
         return Shader.RadialGradient(
-            center = Point(cx, cy),
+            center = Point2F32(cx, cy),
             radius = r,
             stops = gradientStops,
         )

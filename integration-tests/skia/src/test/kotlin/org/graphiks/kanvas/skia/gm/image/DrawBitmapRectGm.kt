@@ -18,7 +18,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/bitmaprect.cpp` (draw-bitmap-rect variant 1).
@@ -119,7 +119,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
             val surface = Surface(w, h)
             surface.canvas {
                 val wF = w.toFloat(); val hF = h.toFloat()
-                val pt = Point(wF / 2f, hF / 2f); val radius = 4f * maxOf(wF, hF)
+                val pt = Point2F32(wF / 2f, hF / 2f); val radius = 4f * maxOf(wF, hF)
                 val colors = listOf(Color.RED, Color.fromRGBA(1f, 1f, 0f), Color.GREEN, Color.fromRGBA(1f, 0f, 1f), Color.BLUE, Color.fromRGBA(0f, 1f, 1f), Color.RED)
                 val pos = floatArrayOf(0f, 1f / 6f, 2f / 6f, 3f / 6f, 4f / 6f, 5f / 6f, 1f)
                 val stops = colors.mapIndexed { i, c -> GradientStop(pos[i], c) }

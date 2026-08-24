@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -33,8 +33,8 @@ class SurfaceUnderdrawGm : SkiaGm {
 
         surf.canvas {
             val bgShader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(40f, 50f),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(40f, 50f),
                 stops = listOf(
                     GradientStop(0f, Color.RED),
                     GradientStop(1f, Color.BLUE),
@@ -58,8 +58,8 @@ class SurfaceUnderdrawGm : SkiaGm {
             }
 
             val fadeShader = Shader.LinearGradient(
-                start = Point(subset.left, 0f),
-                end = Point(subset.right, 0f),
+                start = Point2F32(subset.left, 0f),
+                end = Point2F32(subset.right, 0f),
                 stops = listOf(
                     GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 1f)),
                     GradientStop(1f, Color.fromRGBA(0f, 0f, 0f, 0f)),

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/srcmode.cpp`.
@@ -76,8 +76,8 @@ class SrcModeGm : SkiaGm {
 
     private fun gradientPaint(p: Paint): Paint = p.copy(
         shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(W, H),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(W, H),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0f, 1f, 0f, 1f)),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),

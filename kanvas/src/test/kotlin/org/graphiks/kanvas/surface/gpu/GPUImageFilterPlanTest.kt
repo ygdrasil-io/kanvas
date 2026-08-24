@@ -21,7 +21,8 @@ import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -146,19 +147,19 @@ class GPUImageFilterPlanTest {
                 ImageFilter.Blend(org.graphiks.kanvas.paint.BlendMode.SRC_OVER, nestedBlur, nestedBlur),
                 ImageFilter.Dilate(1f, 1f),
                 ImageFilter.Erode(1f, 1f),
-                ImageFilter.DistantLitDiffuse(Point(1f, 1f), Color.WHITE, 1f, 1f),
-                ImageFilter.PointLitDiffuse(Point(1f, 1f), Color.WHITE, 1f, 1f),
-                ImageFilter.SpotLitDiffuse(Point(1f, 1f), Point(0f, 0f), 1f, 1f, Color.WHITE, 1f, 1f),
-                ImageFilter.DistantLitSpecular(Point(1f, 1f), Color.WHITE, 1f, 1f, 1f),
-                ImageFilter.PointLitSpecular(Point(1f, 1f), Color.WHITE, 1f, 1f, 1f),
-                ImageFilter.SpotLitSpecular(Point(1f, 1f), Point(0f, 0f), 1f, 1f, Color.WHITE, 1f, 1f, 1f),
+                ImageFilter.DistantLitDiffuse(Vector2F32(1f, 1f), Color.WHITE, 1f, 1f),
+                ImageFilter.PointLitDiffuse(Point2F32(1f, 1f), Color.WHITE, 1f, 1f),
+                ImageFilter.SpotLitDiffuse(Point2F32(1f, 1f), Point2F32(0f, 0f), 1f, 1f, Color.WHITE, 1f, 1f),
+                ImageFilter.DistantLitSpecular(Vector2F32(1f, 1f), Color.WHITE, 1f, 1f, 1f),
+                ImageFilter.PointLitSpecular(Point2F32(1f, 1f), Color.WHITE, 1f, 1f, 1f),
+                ImageFilter.SpotLitSpecular(Point2F32(1f, 1f), Point2F32(0f, 0f), 1f, 1f, Color.WHITE, 1f, 1f, 1f),
                 ImageFilter.Offset(1f, 1f),
                 ImageFilter.Tile(defaultDst, defaultDst),
                 ImageFilter.Merge(listOf(nestedBlur)),
                 ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.G, 1f, nestedBlur),
                 ImageFilter.Picture(picture),
                 ImageFilter.Magnifier(defaultDst, 2f, 1f),
-                ImageFilter.MatrixConvolution(Size(1f, 1f), floatArrayOf(1f), 1f, 0f, Point(0f, 0f), TileMode.CLAMP, true),
+                ImageFilter.MatrixConvolution(Size(1f, 1f), floatArrayOf(1f), 1f, 0f, Vector2F32(0f, 0f), TileMode.CLAMP, true),
                 ImageFilter.RuntimeEffect(runtimeEffect, UniformBlock.EMPTY),
             )
 

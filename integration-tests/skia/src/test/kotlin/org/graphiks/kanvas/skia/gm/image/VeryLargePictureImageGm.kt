@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -81,7 +81,7 @@ class VeryLargePictureImageGm : SkiaGm {
         val surface = Surface(width, height)
         surface.canvas {
             val paint = Paint(shader = org.graphiks.kanvas.paint.Shader.LinearGradient(
-                start = Point(0f, 0f), end = Point(width.toFloat(), height.toFloat()),
+                start = Point2F32(0f, 0f), end = Point2F32(width.toFloat(), height.toFloat()),
                 stops = listOf(
                     org.graphiks.kanvas.paint.GradientStop(0f, c1),
                     org.graphiks.kanvas.paint.GradientStop(1f, c2),

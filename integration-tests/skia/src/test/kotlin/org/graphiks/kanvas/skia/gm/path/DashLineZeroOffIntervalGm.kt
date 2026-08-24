@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -40,13 +40,13 @@ class DashLineZeroOffIntervalGm : SkiaGm {
             strokeWidth = 20f,
         )
 
-        data class Line(val a: Point, val b: Point)
+        data class Line(val a: Point2F32, val b: Point2F32)
 
         val lines = listOf(
-            Line(Point(0.5f, 0.5f), Point(30.5f, 0.5f)),   // horizontal
-            Line(Point(0.5f, 0.5f), Point(0.5f, 30.5f)),   // vertical
-            Line(Point(0.5f, 0.5f), Point(0.5f, 0.5f)),    // point (degenerate)
-            Line(Point(0.5f, 0.5f), Point(25.5f, 25.5f)),  // diagonal
+            Line(Point2F32(0.5f, 0.5f), Point2F32(30.5f, 0.5f)),   // horizontal
+            Line(Point2F32(0.5f, 0.5f), Point2F32(0.5f, 30.5f)),   // vertical
+            Line(Point2F32(0.5f, 0.5f), Point2F32(0.5f, 0.5f)),    // point (degenerate)
+            Line(Point2F32(0.5f, 0.5f), Point2F32(25.5f, 25.5f)),  // diagonal
         )
 
         val pad = 5f + dashPaint.strokeWidth

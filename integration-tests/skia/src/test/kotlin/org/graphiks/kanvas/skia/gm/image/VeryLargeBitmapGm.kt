@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/verylargebitmap.cpp`.
@@ -79,7 +79,7 @@ class VeryLargeBitmapGm : SkiaGm {
     private fun makeRasterImage(width: Int, height: Int, c1: Color, c2: Color): Image {
         val surface = Surface(width, height)
         surface.canvas {
-            val center = Point(width / 2f, height / 2f)
+            val center = Point2F32(width / 2f, height / 2f)
             val radius = 40f
             val shader = Shader.RadialGradient(
                 center = center,

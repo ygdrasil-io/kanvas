@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
@@ -137,7 +137,7 @@ class RoundRectGm : SkiaGm {
 
         // Radial-gradient row
         val gradient = Shader.RadialGradient(
-            center = Point(0f, 0f), radius = 20f,
+            center = Point2F32(0f, 0f), radius = 20f,
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0f, 0f, 1f)),
                 GradientStop(0.5f, Color.fromRGBA(1f, 0f, 0f)),

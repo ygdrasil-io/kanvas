@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -44,11 +44,11 @@ class Skbug13047Gm : SkiaGm {
         val image = Image.fromPixels(w, h, pixels, ColorType.RGBA_8888, "gradient-standin")
 
         val positions = listOf(
-            Point(0f, 0f), Point(200f, 0f), Point(200f, 200f), Point(0f, 200f),
+            Point2F32(0f, 0f), Point2F32(200f, 0f), Point2F32(200f, 200f), Point2F32(0f, 200f),
         )
         val texCoords = listOf(
-            Point(0f, 0f), Point(w.toFloat(), 0f),
-            Point(w.toFloat(), h.toFloat()), Point(0f, h.toFloat()),
+            Point2F32(0f, 0f), Point2F32(w.toFloat(), 0f),
+            Point2F32(w.toFloat(), h.toFloat()), Point2F32(0f, h.toFloat()),
         )
         val indices = listOf(0, 1, 2, 2, 3, 0)
 

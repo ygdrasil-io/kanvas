@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -34,7 +34,7 @@ class PictureMeshGm : SkiaGm {
         val rectW = RECT_W
         val rectH = RECT_H
         val shader = Shader.SweepGradient(
-            center = Point(rectW / 2f, rectH / 2f),
+            center = Point2F32(rectW / 2f, rectH / 2f),
             startAngle = 0f,
             endAngle = 360f,
             stops = listOf(
@@ -75,13 +75,13 @@ class PictureMeshGm : SkiaGm {
         private const val RECT_W = 40f
         private const val RECT_H = 40f
         private val allPositions = listOf(
-            Point(1000f, 1000f), // sentinel, skipped via offset
-            Point(0f, 0f),
-            Point(RECT_W, 0f),
-            Point(0f, RECT_H),
-            Point(RECT_W, RECT_H),
-            Point(0f, RECT_H),
-            Point(RECT_W, 0f),
+            Point2F32(1000f, 1000f), // sentinel, skipped via offset
+            Point2F32(0f, 0f),
+            Point2F32(RECT_W, 0f),
+            Point2F32(0f, RECT_H),
+            Point2F32(RECT_W, RECT_H),
+            Point2F32(0f, RECT_H),
+            Point2F32(RECT_W, 0f),
         )
         private val indices = listOf(1, 2, 3, 4, 5, 6)
 

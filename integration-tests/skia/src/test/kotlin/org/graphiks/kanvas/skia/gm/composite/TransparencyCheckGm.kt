@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -45,7 +45,7 @@ class TransparencyCheckGm : SkiaGm {
         val rowHeight = 9f / kColors.size
         for (i in kColors.indices) {
             val shader = Shader.LinearGradient(
-                start = Point(0f, 0f), end = Point(256f, 0f),
+                start = Point2F32(0f, 0f), end = Point2F32(256f, 0f),
                 stops = listOf(
                     GradientStop(0f, Color.TRANSPARENT),
                     GradientStop(1f, kColors[i]),

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import kotlin.test.assertFailsWith
@@ -61,7 +61,7 @@ class GPUSaveLayerCompositeRegressionTest {
         listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
             listOf(
                 OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
-                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
             ).forEach { outerClip ->
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
@@ -98,7 +98,7 @@ class GPUSaveLayerCompositeRegressionTest {
 
             listOf(
                 OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
-                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point2F32(12f, 16f)),
             ).forEach { outerClip ->
                 val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                     Surface(width = 32, height = 32).run {
@@ -715,7 +715,7 @@ class GPUSaveLayerCompositeRegressionTest {
         val name: String,
         val rect: Rect,
         val antiAlias: Boolean,
-        val edge: Point?,
+        val edge: Point2F32?,
     )
 
     private data class MixedClipFixture(

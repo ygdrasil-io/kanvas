@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -29,7 +29,7 @@ class GradientsGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xDD / 255f, 0xDD / 255f)
 
-        val pts = arrayOf(Point(0f, 0f), Point(100f, 100f))
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(100f, 100f))
         val rect = Rect(0f, 0f, 100f, 100f)
 
         val base5 = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE, Color.BLACK)
@@ -53,22 +53,22 @@ class GradientsGm : SkiaGm {
             ),
         )
 
-        val makers: List<(Array<Point>, List<GradientStop>) -> Shader> = listOf(
+        val makers: List<(Array<Point2F32>, List<GradientStop>) -> Shader> = listOf(
             { p, stops ->
                 Shader.LinearGradient(start = p[0], end = p[1], stops = stops, tileMode = TileMode.CLAMP)
             },
             { p, stops ->
                 val cx = (p[0].x + p[1].x) * 0.5f; val cy = (p[0].y + p[1].y) * 0.5f
-                Shader.RadialGradient(center = Point(cx, cy), radius = cx, stops = stops, tileMode = TileMode.CLAMP)
+                Shader.RadialGradient(center = Point2F32(cx, cy), radius = cx, stops = stops, tileMode = TileMode.CLAMP)
             },
             { p, stops ->
                 val cx = (p[0].x + p[1].x) * 0.5f; val cy = (p[0].y + p[1].y) * 0.5f
-                Shader.SweepGradient(center = Point(cx, cy), stops = stops, tileMode = TileMode.CLAMP)
+                Shader.SweepGradient(center = Point2F32(cx, cy), stops = stops, tileMode = TileMode.CLAMP)
             },
             { p, stops ->
                 val cx = (p[0].x + p[1].x) * 0.5f; val cy = (p[0].y + p[1].y) * 0.5f
-                val c0 = Point(cx, cy)
-                val c1 = Point(p[0].x + 0.6f * (p[1].x - p[0].x), p[0].y + 0.25f * (p[1].y - p[0].y))
+                val c0 = Point2F32(cx, cy)
+                val c1 = Point2F32(p[0].x + 0.6f * (p[1].x - p[0].x), p[0].y + 0.25f * (p[1].y - p[0].y))
                 Shader.ConicalGradient(
                     start = c1, startRadius = (p[1].x - p[0].x) / 7f,
                     end = c0, endRadius = (p[1].x - p[0].x) / 2f,
@@ -78,8 +78,8 @@ class GradientsGm : SkiaGm {
             { p, stops ->
                 val r0 = (p[1].x - p[0].x) / 10f
                 val r1 = (p[1].x - p[0].x) / 3f
-                val c0 = Point(p[0].x + r0, p[0].y + r0)
-                val c1 = Point(p[1].x - r1, p[1].y - r1)
+                val c0 = Point2F32(p[0].x + r0, p[0].y + r0)
+                val c1 = Point2F32(p[1].x - r1, p[1].y - r1)
                 Shader.ConicalGradient(
                     start = c1, startRadius = r1,
                     end = c0, endRadius = r0,

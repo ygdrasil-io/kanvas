@@ -21,7 +21,7 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -385,7 +385,7 @@ class PreparedVerticesFrameInventoryTest {
         operationIndex: Int,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
         color: Color = Color.WHITE,
-        positions: List<Point> = points(),
+        positions: List<Point2F32> = points(),
         colors: List<Color>? = null,
         indices: List<Int>? = null,
     ): GPUPreparedVerticesDraw {
@@ -466,7 +466,7 @@ class PreparedVerticesFrameInventoryTest {
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
     private fun points(scale: Float = 1f) = listOf(
-        Point(0f, 0f), Point(2f * scale, 0f), Point(0f, 2f * scale),
+        Point2F32(0f, 0f), Point2F32(2f * scale, 0f), Point2F32(0f, 2f * scale),
     )
 
     private fun assertNonOverlapping(ranges: List<PreparedVerticesUploadRange>) {

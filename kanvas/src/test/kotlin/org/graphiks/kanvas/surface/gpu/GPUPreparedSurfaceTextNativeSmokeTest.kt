@@ -33,7 +33,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
@@ -55,8 +55,8 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
                     )
                     val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
                     val shader = Shader.LinearGradient(
-                        start = Point(0f, 0f),
-                        end = Point(40f, 0f),
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(40f, 0f),
                         stops = listOf(
                             GradientStop(0f, shaderColor),
                             GradientStop(1f, shaderColor),
@@ -576,7 +576,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(glyphId.toUShort()),
-                    positions = listOf(Point(0f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f)),
                     fontSize = 48f,
                 ),
             ),

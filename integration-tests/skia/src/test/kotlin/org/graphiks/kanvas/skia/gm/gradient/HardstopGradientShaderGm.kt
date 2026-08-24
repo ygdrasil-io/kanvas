@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -93,11 +93,11 @@ class HardstopGradientShaderGm : SkiaGm {
         canvas.drawRect(rect, paint)
     }
 
-    private fun createGradientPoints(cellRow: Int, cellCol: Int): Array<Point> {
+    private fun createGradientPoints(cellRow: Int, cellCol: Int): Array<Point2F32> {
         val x0 = (cellCol * CELL_WIDTH + PAD_WIDTH + X_OFFSET).toFloat()
         val x1 = ((cellCol + 1) * CELL_WIDTH - PAD_WIDTH - X_OFFSET).toFloat()
         val y = (cellRow * CELL_HEIGHT + PAD_HEIGHT + RECT_HEIGHT / 2).toFloat()
-        return arrayOf(Point(x0, y), Point(x1, y))
+        return arrayOf(Point2F32(x0, y), Point2F32(x1, y))
     }
 
     private companion object {

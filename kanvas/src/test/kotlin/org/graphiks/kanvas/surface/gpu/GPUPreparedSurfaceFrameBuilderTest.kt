@@ -59,7 +59,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -630,8 +630,8 @@ class GPUPreparedSurfaceFrameBuilderTest {
     @Test
     fun `refusal matrix preserves true diagnostics while sRGB translucent solid is ready`() {
         val gradient = Shader.LinearGradient(
-            Point(0f, 0f),
-            Point(8f, 8f),
+            Point2F32(0f, 0f),
+            Point2F32(8f, 8f),
             listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
         )
         val complexClip = ClipStack.Complex(
@@ -662,7 +662,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
-                listOf(Point(2f, 2f), Point(12f, 2f)),
+                listOf(Point2F32(2f, 2f), Point2F32(12f, 2f)),
                 Paint.stroke(Color.RED, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
@@ -1304,7 +1304,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     private fun vertices(): DisplayOp.DrawVertices = DisplayOp.DrawVertices(
         vertices = Vertices(
             mode = VertexMode.TRIANGLES,
-            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
+            positions = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f)),
         ),
         paint = Paint.fill(Color.RED),
         transform = Matrix3x3F32.Identity,

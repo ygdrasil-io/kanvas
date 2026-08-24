@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Color
@@ -64,9 +64,9 @@ class SimpleBlurRoundRectGm : SkiaGm {
         val colors = listOf(Color.RED, Color.GREEN)
         val positions = floatArrayOf(0.25f, 0.75f)
         return Shader.ConicalGradient(
-            start = Point(60f, 25f),
+            start = Point2F32(60f, 25f),
             startRadius = 100f / 7f,
-            end = Point(50f, 50f),
+            end = Point2F32(50f, 50f),
             endRadius = 50f,
             stops = colors.indices.map { i -> GradientStop(positions[i], colors[i]) },
             tileMode = TileMode.CLAMP,

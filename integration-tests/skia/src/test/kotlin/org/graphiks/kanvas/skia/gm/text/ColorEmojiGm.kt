@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -164,8 +164,8 @@ class ColorEmojiGm : SkiaGm {
     // ─── helpers ─────────────────────────────────────────────────
 
     private fun makeLinear(): Shader = Shader.LinearGradient(
-        start = Point(0f, 0f),
-        end = Point(32f, 32f),
+        start = Point2F32(0f, 0f),
+        end = Point2F32(32f, 32f),
         stops = listOf(
             GradientStop(0f, Color.fromRGBA(0.5f, 0f, 0.5f, 0.5f)),
             GradientStop(0.5f, Color.fromRGBA(0.94f, 0.94f, 0f, 0.94f)),

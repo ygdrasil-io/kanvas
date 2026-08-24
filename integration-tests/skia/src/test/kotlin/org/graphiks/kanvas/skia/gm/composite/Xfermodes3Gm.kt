@@ -18,7 +18,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/xfermodes3.cpp`.
@@ -134,7 +134,7 @@ class Xfermodes3Gm : SkiaGm {
     }
 
     private fun makeBmpShader(): Shader {
-        val center = Point(kSize / 2f, kSize / 2f)
+        val center = Point2F32(kSize / 2f, kSize / 2f)
         val colors = listOf<GradientStop>(
             GradientStop(0f, Color.TRANSPARENT),
             GradientStop(0.5f, Color.fromRGBA(0.5f, 0f, 0f, 0.5f)),

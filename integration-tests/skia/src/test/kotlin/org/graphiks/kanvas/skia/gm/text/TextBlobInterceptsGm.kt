@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -56,10 +56,10 @@ class TextBlobInterceptsGm : SkiaGm {
     }
 
     private fun makeTextBlob(font: Font, glyphIds: List<UShort>): TextBlob {
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var x = 0f
         for (gid in glyphIds) {
-            positions.add(Point(x, 0f))
+            positions.add(Point2F32(x, 0f))
             x += typeface.getAdvance(gid.toInt(), font.size)
         }
         return TextBlob(
@@ -79,7 +79,7 @@ class TextBlobInterceptsGm : SkiaGm {
         for (i in 1 until glyphIds.size) {
             xpos[i] = xpos[i] + spacing * i
         }
-        val positions = xpos.map { Point(it, 0f) }
+        val positions = xpos.map { Point2F32(it, 0f) }
         return TextBlob(
             glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),
             typeface = typeface,
@@ -88,14 +88,14 @@ class TextBlobInterceptsGm : SkiaGm {
     }
 
     private fun makePosBlob(font: Font, glyphIds: List<UShort>, spacing: Float): TextBlob {
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var x = 0f
         for (gid in glyphIds) {
-            positions.add(Point(x, 0f))
+            positions.add(Point2F32(x, 0f))
             x += typeface.getAdvance(gid.toInt(), font.size)
         }
         for (i in 1 until glyphIds.size) {
-            positions[i] = Point(positions[i].x + spacing * i, 0f)
+            positions[i] = Point2F32(positions[i].x + spacing * i, 0f)
         }
         return TextBlob(
             glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),

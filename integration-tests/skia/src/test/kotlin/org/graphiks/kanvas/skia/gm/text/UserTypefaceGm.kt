@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.FontMetrics
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/userfont.cpp`.
@@ -103,7 +103,7 @@ class UserTypefaceGm : SkiaGm {
             blob.glyphRuns.forEach { run ->
                 canvas.drawGlyphs(
                     run.glyphs.map { it.toInt() },
-                    run.positions.map { position -> Point(position.x + x + 20f, position.y + y) },
+                    run.positions.map { position -> Point2F32(position.x + x + 20f, position.y + y) },
                     font,
                     Paint.fill(Color.BLACK),
                 )

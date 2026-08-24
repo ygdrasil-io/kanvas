@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -45,8 +45,8 @@ class GradientMatrixGm : SkiaGm {
 
     private fun drawGradients(
         canvas: GmCanvas,
-        makeShader: (Array<Point>) -> Shader,
-        ptsArray: Array<Array<Point>>,
+        makeShader: (Array<Point2F32>) -> Shader,
+        ptsArray: Array<Array<Point2F32>>,
     ) {
         val rectGrad = Rect.fromLTRB(43f, 61f, 181f, 167f)
         val tw = rectGrad.width
@@ -63,8 +63,8 @@ class GradientMatrixGm : SkiaGm {
             }
             val raw = ptsArray[i]
             val pts = arrayOf(
-                Point(raw[0].x * tw + tl, raw[0].y * th + tt),
-                Point(raw[1].x * tw + tl, raw[1].y * th + tt),
+                Point2F32(raw[0].x * tw + tl, raw[0].y * th + tt),
+                Point2F32(raw[1].x * tw + tl, raw[1].y * th + tt),
             )
             val paint = Paint(shader = makeShader(pts))
             canvas.drawRect(rectGrad, paint)
@@ -73,21 +73,21 @@ class GradientMatrixGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun makeLinearGradient(pts: Array<Point>): Shader {
+    private fun makeLinearGradient(pts: Array<Point2F32>): Shader {
         return Shader.LinearGradient(
             start = pts[0], end = pts[1],
             stops = gradStops, tileMode = TileMode.CLAMP,
         )
     }
 
-    private fun makeRadialGradient(pts: Array<Point>): Shader {
+    private fun makeRadialGradient(pts: Array<Point2F32>): Shader {
         val cx = (pts[0].x + pts[1].x) * 0.5f
         val cy = (pts[0].y + pts[1].y) * 0.5f
         val dx = cx - pts[0].x
         val dy = cy - pts[0].y
         val radius = sqrt(dx * dx + dy * dy)
         return Shader.RadialGradient(
-            center = Point(cx, cy), radius = radius,
+            center = Point2F32(cx, cy), radius = radius,
             stops = gradStops, tileMode = TileMode.CLAMP,
         )
     }
@@ -101,26 +101,26 @@ class GradientMatrixGm : SkiaGm {
         const val sHalf: Float = 0.5f
         const val sOne: Float = 1f
 
-        val linearPts: Array<Array<Point>> = arrayOf(
-            arrayOf(Point(sZero, sZero), Point(sOne, sZero)),
-            arrayOf(Point(sZero, sZero), Point(sZero, sOne)),
-            arrayOf(Point(sOne, sZero), Point(sZero, sZero)),
-            arrayOf(Point(sZero, sOne), Point(sZero, sZero)),
-            arrayOf(Point(sZero, sZero), Point(sOne, sOne)),
-            arrayOf(Point(sOne, sOne), Point(sZero, sZero)),
-            arrayOf(Point(sOne, sZero), Point(sZero, sOne)),
-            arrayOf(Point(sZero, sOne), Point(sOne, sZero)),
+        val linearPts: Array<Array<Point2F32>> = arrayOf(
+            arrayOf(Point2F32(sZero, sZero), Point2F32(sOne, sZero)),
+            arrayOf(Point2F32(sZero, sZero), Point2F32(sZero, sOne)),
+            arrayOf(Point2F32(sOne, sZero), Point2F32(sZero, sZero)),
+            arrayOf(Point2F32(sZero, sOne), Point2F32(sZero, sZero)),
+            arrayOf(Point2F32(sZero, sZero), Point2F32(sOne, sOne)),
+            arrayOf(Point2F32(sOne, sOne), Point2F32(sZero, sZero)),
+            arrayOf(Point2F32(sOne, sZero), Point2F32(sZero, sOne)),
+            arrayOf(Point2F32(sZero, sOne), Point2F32(sOne, sZero)),
         )
 
-        val radialPts: Array<Array<Point>> = arrayOf(
-            arrayOf(Point(sZero, sHalf), Point(sOne, sHalf)),
-            arrayOf(Point(sHalf, sZero), Point(sHalf, sOne)),
-            arrayOf(Point(sOne, sHalf), Point(sZero, sHalf)),
-            arrayOf(Point(sHalf, sOne), Point(sHalf, sZero)),
-            arrayOf(Point(sZero, sZero), Point(sOne, sOne)),
-            arrayOf(Point(sOne, sOne), Point(sZero, sZero)),
-            arrayOf(Point(sOne, sZero), Point(sZero, sOne)),
-            arrayOf(Point(sZero, sOne), Point(sOne, sZero)),
+        val radialPts: Array<Array<Point2F32>> = arrayOf(
+            arrayOf(Point2F32(sZero, sHalf), Point2F32(sOne, sHalf)),
+            arrayOf(Point2F32(sHalf, sZero), Point2F32(sHalf, sOne)),
+            arrayOf(Point2F32(sOne, sHalf), Point2F32(sZero, sHalf)),
+            arrayOf(Point2F32(sHalf, sOne), Point2F32(sHalf, sZero)),
+            arrayOf(Point2F32(sZero, sZero), Point2F32(sOne, sOne)),
+            arrayOf(Point2F32(sOne, sOne), Point2F32(sZero, sZero)),
+            arrayOf(Point2F32(sOne, sZero), Point2F32(sZero, sOne)),
+            arrayOf(Point2F32(sZero, sOne), Point2F32(sOne, sZero)),
         )
     }
 }

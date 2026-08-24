@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -35,8 +35,8 @@ class CustomMeshGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val shader = Shader.LinearGradient(
-            start = Point(20f, 20f),
-            end = Point(120f, 120f),
+            start = Point2F32(20f, 20f),
+            end = Point2F32(120f, 120f),
             stops = listOf(
                 GradientStop(0f, Color.WHITE),
                 GradientStop(1f, Color.TRANSPARENT),
@@ -69,8 +69,8 @@ class CustomMeshGm : SkiaGm {
 
     private companion object {
         private val quadPositions = listOf(
-            Point(20f, 20f), Point(120f, 20f),
-            Point(20f, 120f), Point(120f, 120f),
+            Point2F32(20f, 20f), Point2F32(120f, 20f),
+            Point2F32(20f, 120f), Point2F32(120f, 120f),
         )
         private val quadColors = listOf(
             Color(0xFFFFFF00u),
@@ -79,9 +79,9 @@ class CustomMeshGm : SkiaGm {
             Color(0xFF00FFFFu),
         )
         private val indexedPositions = listOf(
-            Point(20f, 20f), Point(100f, 0f),
-            Point(120f, 20f), Point(200f, 10f),
-            Point(20f, 120f), Point(120f, 120f),
+            Point2F32(20f, 20f), Point2F32(100f, 0f),
+            Point2F32(120f, 20f), Point2F32(200f, 10f),
+            Point2F32(20f, 120f), Point2F32(120f, 120f),
         )
         private val indexedColors = listOf(
             Color(0xFFFFFF00u),

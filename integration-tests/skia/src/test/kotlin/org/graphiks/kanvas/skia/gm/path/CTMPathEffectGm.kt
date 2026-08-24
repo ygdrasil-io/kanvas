@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.sqrt
 
 /**
@@ -29,8 +29,8 @@ class CTMPathEffectGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val strokeWidth = 16f
         val pxInflate = 0.5f
-        val p0 = Point(100f, 100f)
-        val p1 = Point(200f, 200f)
+        val p0 = Point2F32(100f, 100f)
+        val p1 = Point2F32(200f, 200f)
 
         val inflatedPaint = Paint(color = Color.BLUE, antiAlias = true)
         val strokePaint = Paint(
@@ -69,7 +69,7 @@ class CTMPathEffectGm : SkiaGm {
      * in source space so the canvas can apply its current transform naturally.
      */
     private fun inflatedQuad(
-        p0: Point, p1: Point,
+        p0: Point2F32, p1: Point2F32,
         strokeWidth: Float, pxInflate: Float,
         scaleX: Float, scaleY: Float,
     ): Path {

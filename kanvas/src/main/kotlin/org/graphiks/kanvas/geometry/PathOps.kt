@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.geometry
 
-import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -67,20 +67,25 @@ object PathOps {
         val result = Path()
         result.fillType = path.fillType
         result.apply {
-            val v = path.verbs()
-            val p = path.points()
-            var pi = 0
-            for (verb in v) {
-                when (verb) {
-                    PathVerb.MOVE -> { moveTo(p[pi].x, p[pi].y); pi++ }
-                    PathVerb.LINE -> { lineTo(p[pi].x, p[pi].y); pi++ }
-                    PathVerb.QUAD -> { quadTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y); pi += 2 }
-                    PathVerb.CUBIC -> { cubicTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y, p[pi + 2].x, p[pi + 2].y); pi += 3 }
-                    PathVerb.ARC_TO -> {
-                        arcTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y > 0f, p[pi + 2].x > 0f, p[pi + 3].x, p[pi + 3].y)
-                        pi += 4
-                    }
-                    PathVerb.CLOSE -> close()
+            for (command in path.commands()) {
+                when (command) {
+                    is PathCommand.Move -> moveTo(command.point.x, command.point.y)
+                    is PathCommand.Line -> lineTo(command.endpoint.x, command.endpoint.y)
+                    is PathCommand.Quad -> quadTo(
+                        command.control.x, command.control.y,
+                        command.endpoint.x, command.endpoint.y,
+                    )
+                    is PathCommand.Cubic -> cubicTo(
+                        command.control1.x, command.control1.y,
+                        command.control2.x, command.control2.y,
+                        command.endpoint.x, command.endpoint.y,
+                    )
+                    is PathCommand.ArcTo -> arcTo(
+                        command.radius.x, command.radius.y,
+                        command.xAxisRotation, command.largeArc, command.sweep,
+                        command.endpoint.x, command.endpoint.y,
+                    )
+                    PathCommand.Close -> close()
                 }
             }
         }
@@ -90,20 +95,25 @@ object PathOps {
     fun asWinding(path: Path): Path? {
         val result = Path()
         result.fillType = FillType.WINDING
-        val v = path.verbs()
-        val p = path.points()
-        var pi = 0
-        for (verb in v) {
-            when (verb) {
-                PathVerb.MOVE -> { result.moveTo(p[pi].x, p[pi].y); pi++ }
-                PathVerb.LINE -> { result.lineTo(p[pi].x, p[pi].y); pi++ }
-                PathVerb.QUAD -> { result.quadTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y); pi += 2 }
-                PathVerb.CUBIC -> { result.cubicTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y, p[pi + 2].x, p[pi + 2].y); pi += 3 }
-                PathVerb.ARC_TO -> {
-                    result.arcTo(p[pi].x, p[pi].y, p[pi + 1].x, p[pi + 1].y > 0f, p[pi + 2].x > 0f, p[pi + 3].x, p[pi + 3].y)
-                    pi += 4
-                }
-                PathVerb.CLOSE -> result.close()
+        for (command in path.commands()) {
+            when (command) {
+                is PathCommand.Move -> result.moveTo(command.point.x, command.point.y)
+                is PathCommand.Line -> result.lineTo(command.endpoint.x, command.endpoint.y)
+                is PathCommand.Quad -> result.quadTo(
+                    command.control.x, command.control.y,
+                    command.endpoint.x, command.endpoint.y,
+                )
+                is PathCommand.Cubic -> result.cubicTo(
+                    command.control1.x, command.control1.y,
+                    command.control2.x, command.control2.y,
+                    command.endpoint.x, command.endpoint.y,
+                )
+                is PathCommand.ArcTo -> result.arcTo(
+                    command.radius.x, command.radius.y,
+                    command.xAxisRotation, command.largeArc, command.sweep,
+                    command.endpoint.x, command.endpoint.y,
+                )
+                PathCommand.Close -> result.close()
             }
         }
         return result
@@ -111,55 +121,52 @@ object PathOps {
 
     // --- Flatten path to polygon ---
 
-    private fun flattenPath(path: Path): List<List<Point>>? {
-        val v = path.verbs(); val p = path.points()
-        if (v.isEmpty()) return null
+    private fun flattenPath(path: Path): List<List<Point2F32>>? {
+        val commands = path.commands()
+        if (commands.isEmpty()) return null
 
-        val contours = mutableListOf<MutableList<Point>>()
-        var currentContour = mutableListOf<Point>()
-        var pi = 0
+        val contours = mutableListOf<MutableList<Point2F32>>()
+        var currentContour = mutableListOf<Point2F32>()
         var prevX = 0f; var prevY = 0f
         var firstX = 0f; var firstY = 0f
         var hasPrev = false
 
-        for (verb in v) {
-            when (verb) {
-                PathVerb.MOVE -> {
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move -> {
                     if (currentContour.size >= 3) {
                         contours.add(currentContour.toMutableList())
                     }
                     currentContour.clear()
-                    firstX = p[pi].x; firstY = p[pi].y
-                    currentContour.add(Point(firstX, firstY))
+                    firstX = command.point.x; firstY = command.point.y
+                    currentContour.add(command.point)
                     prevX = firstX; prevY = firstY
-                    hasPrev = true; pi++
+                    hasPrev = true
                 }
-                PathVerb.LINE -> {
-                    val x = p[pi].x; val y = p[pi].y
-                    currentContour.add(Point(x, y))
-                    prevX = x; prevY = y; pi++
+                is PathCommand.Line -> {
+                    currentContour.add(command.endpoint)
+                    prevX = command.endpoint.x; prevY = command.endpoint.y
                 }
-                PathVerb.QUAD -> {
-                    val cx = p[pi].x; val cy = p[pi].y
-                    val x = p[pi + 1].x; val y = p[pi + 1].y
+                is PathCommand.Quad -> {
+                    val cx = command.control.x; val cy = command.control.y
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     linearizeQuad(prevX, prevY, cx, cy, x, y, currentContour)
-                    prevX = x; prevY = y; pi += 2
+                    prevX = x; prevY = y
                 }
-                PathVerb.CUBIC -> {
-                    val cx1 = p[pi].x; val cy1 = p[pi].y
-                    val cx2 = p[pi + 1].x; val cy2 = p[pi + 1].y
-                    val x = p[pi + 2].x; val y = p[pi + 2].y
+                is PathCommand.Cubic -> {
+                    val cx1 = command.control1.x; val cy1 = command.control1.y
+                    val cx2 = command.control2.x; val cy2 = command.control2.y
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     linearizeCubic(prevX, prevY, cx1, cy1, cx2, cy2, x, y, currentContour)
-                    prevX = x; prevY = y; pi += 3
+                    prevX = x; prevY = y
                 }
-                PathVerb.ARC_TO -> {
-                    val x = p[pi + 3].x; val y = p[pi + 3].y
-                    currentContour.add(Point(x, y))
-                    prevX = x; prevY = y; pi += 4
+                is PathCommand.ArcTo -> {
+                    currentContour.add(command.endpoint)
+                    prevX = command.endpoint.x; prevY = command.endpoint.y
                 }
-                PathVerb.CLOSE -> {
+                PathCommand.Close -> {
                     if (hasPrev && (prevX != firstX || prevY != firstY)) {
-                        currentContour.add(Point(firstX, firstY))
+                        currentContour.add(Point2F32(firstX, firstY))
                         prevX = firstX; prevY = firstY
                     }
                 }
@@ -173,31 +180,31 @@ object PathOps {
         return if (contours.isEmpty()) null else contours
     }
 
-    private fun linearizeQuad(x0: Float, y0: Float, cx: Float, cy: Float, x1: Float, y1: Float, out: MutableList<Point>) {
+    private fun linearizeQuad(x0: Float, y0: Float, cx: Float, cy: Float, x1: Float, y1: Float, out: MutableList<Point2F32>) {
         val steps = 8
         for (i in 1..steps) {
             val t = i.toFloat() / steps
             val u = 1f - t
             val x = u * u * x0 + 2f * u * t * cx + t * t * x1
             val y = u * u * y0 + 2f * u * t * cy + t * t * y1
-            out.add(Point(x, y))
+            out.add(Point2F32(x, y))
         }
     }
 
-    private fun linearizeCubic(x0: Float, y0: Float, cx1: Float, cy1: Float, cx2: Float, cy2: Float, x1: Float, y1: Float, out: MutableList<Point>) {
+    private fun linearizeCubic(x0: Float, y0: Float, cx1: Float, cy1: Float, cx2: Float, cy2: Float, x1: Float, y1: Float, out: MutableList<Point2F32>) {
         val steps = 16
         for (i in 1..steps) {
             val t = i.toFloat() / steps
             val u = 1f - t
             val x = u * u * u * x0 + 3f * u * u * t * cx1 + 3f * u * t * t * cx2 + t * t * t * x1
             val y = u * u * u * y0 + 3f * u * u * t * cy1 + 3f * u * t * t * cy2 + t * t * t * y1
-            out.add(Point(x, y))
+            out.add(Point2F32(x, y))
         }
     }
 
     // --- Polygon utilities ---
 
-    private fun signedArea(polygon: List<Point>): Float {
+    private fun signedArea(polygon: List<Point2F32>): Float {
         var area = 0f
         val n = polygon.size
         for (i in 0 until n) {
@@ -208,15 +215,15 @@ object PathOps {
         return area / 2f
     }
 
-    private fun ensureCCW(polygon: List<Point>): List<Point> {
+    private fun ensureCCW(polygon: List<Point2F32>): List<Point2F32> {
         return if (signedArea(polygon) < 0f) polygon else polygon.reversed()
     }
 
-    private fun ensureCW(polygon: List<Point>): List<Point> {
+    private fun ensureCW(polygon: List<Point2F32>): List<Point2F32> {
         return if (signedArea(polygon) > 0f) polygon else polygon.reversed()
     }
 
-    private fun isConvexPolygon(polygon: List<Point>): Boolean {
+    private fun isConvexPolygon(polygon: List<Point2F32>): Boolean {
         val n = polygon.size
         if (n < 3) return true
         var sign = 0f
@@ -234,7 +241,7 @@ object PathOps {
         return true
     }
 
-    private fun pointInPolygon(point: Point, polygon: List<Point>): Boolean {
+    private fun pointInPolygon(point: Point2F32, polygon: List<Point2F32>): Boolean {
         val px = point.x; val py = point.y
         var winding = 0
         val n = polygon.size
@@ -255,7 +262,7 @@ object PathOps {
 
     private data class Edge(val x1: Float, val y1: Float, val x2: Float, val y2: Float)
 
-    private fun segmentIntersection(e1: Edge, e2: Edge): Point? {
+    private fun segmentIntersection(e1: Edge, e2: Edge): Point2F32? {
         val denom = (e1.x1 - e1.x2) * (e2.y1 - e2.y2) - (e1.y1 - e1.y2) * (e2.x1 - e2.x2)
         if (abs(denom) < 1e-10f) return null
 
@@ -267,12 +274,12 @@ object PathOps {
 
         val x = e1.x1 + t * (e1.x2 - e1.x1)
         val y = e1.y1 + t * (e1.y2 - e1.y1)
-        return Point(x, y)
+        return Point2F32(x, y)
     }
 
     // --- Sutherland-Hodgman convex polygon clipping ---
 
-    private fun sutherlandHodgmanClip(subject: List<Point>, clip: List<Point>): List<Point>? {
+    private fun sutherlandHodgmanClip(subject: List<Point2F32>, clip: List<Point2F32>): List<Point2F32>? {
         var output = subject.toMutableList()
         val n = clip.size
         for (i in 0 until n) {
@@ -301,21 +308,21 @@ object PathOps {
         return if (output.size >= 3) output else null
     }
 
-    private fun isInsideHalfPlane(point: Point, edgeStart: Point, edgeEnd: Point): Boolean {
+    private fun isInsideHalfPlane(point: Point2F32, edgeStart: Point2F32, edgeEnd: Point2F32): Boolean {
         return (edgeEnd.x - edgeStart.x) * (point.y - edgeStart.y) -
             (edgeEnd.y - edgeStart.y) * (point.x - edgeStart.x) >= -1e-8f
     }
 
-    private fun lineEdgeIntersection(p1: Point, p2: Point, e1: Point, e2: Point): Point? {
+    private fun lineEdgeIntersection(p1: Point2F32, p2: Point2F32, e1: Point2F32, e2: Point2F32): Point2F32? {
         val denom = (p1.x - p2.x) * (e1.y - e2.y) - (p1.y - p2.y) * (e1.x - e2.x)
         if (abs(denom) < 1e-10f) return null
         val t = ((p1.x - e1.x) * (e1.y - e2.y) - (p1.y - e1.y) * (e1.x - e2.x)) / denom
         val x = p1.x + t * (p2.x - p1.x)
         val y = p1.y + t * (p2.y - p1.y)
-        return Point(x, y)
+        return Point2F32(x, y)
     }
 
-    private fun convexOps(poly1: List<Point>, poly2: List<Point>, op: PathOp): Path? {
+    private fun convexOps(poly1: List<Point2F32>, poly2: List<Point2F32>, op: PathOp): Path? {
         return when (op) {
             PathOp.INTERSECT -> {
                 val result = sutherlandHodgmanClip(poly1, poly2)
@@ -335,18 +342,18 @@ object PathOps {
         }
     }
 
-    private fun polygonUnionToPath(poly1: List<Point>, poly2: List<Point>, intersection: List<Point>): Path? {
+    private fun polygonUnionToPath(poly1: List<Point2F32>, poly2: List<Point2F32>, intersection: List<Point2F32>): Path? {
         val allPoints = poly1 + poly2
         val hull = convexHull(allPoints)
         if (hull != null) return polygonsToPath(listOf(hull), FillType.WINDING)
         return polygonsToPath(listOf(poly1, poly2), FillType.WINDING)
     }
 
-    private fun convexHull(points: List<Point>): List<Point>? {
+    private fun convexHull(points: List<Point2F32>): List<Point2F32>? {
         if (points.size < 3) return null
         val sorted = points.sortedWith(compareBy({ it.x }, { it.y }))
         val n = sorted.size
-        val hull = Array<Point?>(2 * n) { null }
+        val hull = Array<Point2F32?>(2 * n) { null }
         var k = 0
 
         for (i in 0 until n) {
@@ -364,14 +371,14 @@ object PathOps {
         return hull.take(k - 1).filterNotNull()
     }
 
-    private fun cross(o: Point, a: Point, b: Point): Float {
+    private fun cross(o: Point2F32, a: Point2F32, b: Point2F32): Float {
         return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
     }
 
     // --- Greiner-Hormann general boolean operation ---
 
     private class PolyState {
-        val pts = mutableListOf<Point>()
+        val pts = mutableListOf<Point2F32>()
         val isInter = mutableListOf<Boolean>()
         val neighbor = mutableListOf<Int>()
         val isEntry = mutableListOf<Boolean>()
@@ -394,7 +401,7 @@ object PathOps {
         }
     }
 
-    private fun generalBooleanOp(poly1: List<Point>, poly2: List<Point>, op: PathOp): List<List<Point>>? {
+    private fun generalBooleanOp(poly1: List<Point2F32>, poly2: List<Point2F32>, op: PathOp): List<List<Point2F32>>? {
         if (op == PathOp.XOR) return xorOp(poly1, poly2)
 
         val state1 = buildPolyState(poly1)
@@ -418,19 +425,19 @@ object PathOps {
         return ghTraverse(state1, state2, startPhase, dir1, dir2)
     }
 
-    private fun xorOp(poly1: List<Point>, poly2: List<Point>): List<List<Point>>? {
+    private fun xorOp(poly1: List<Point2F32>, poly2: List<Point2F32>): List<List<Point2F32>>? {
         val diff12 = generalBooleanOp(poly1, poly2, PathOp.DIFFERENCE)
         val diff21 = generalBooleanOp(poly2, poly1, PathOp.DIFFERENCE)
-        val result = mutableListOf<List<Point>>()
+        val result = mutableListOf<List<Point2F32>>()
         if (diff12 != null) result.addAll(diff12)
         if (diff21 != null) result.addAll(diff21)
         return if (result.isNotEmpty()) result else null
     }
 
-    private fun buildPolyState(polygon: List<Point>): PolyState {
+    private fun buildPolyState(polygon: List<Point2F32>): PolyState {
         val state = PolyState()
         for (pt in polygon) {
-            state.pts.add(Point(pt.x, pt.y))
+            state.pts.add(Point2F32(pt.x, pt.y))
             state.isInter.add(false)
             state.neighbor.add(-1)
             state.isEntry.add(false)
@@ -440,7 +447,7 @@ object PathOps {
     }
 
     private data class InterRec(
-        val pt: Point, val s1Edge: Int, val t1: Float, val s2Edge: Int, val t2: Float,
+        val pt: Point2F32, val s1Edge: Int, val t1: Float, val s2Edge: Int, val t2: Float,
     )
 
     private fun findAndInsertIntersections(s1: PolyState, s2: PolyState) {
@@ -473,7 +480,7 @@ object PathOps {
             var offset = 1
             for (rec in sorted) {
                 val insertIdx = edgeIdx + cumulativeOffset + offset
-                s1.pts.add(insertIdx, Point(rec.pt.x, rec.pt.y))
+                s1.pts.add(insertIdx, Point2F32(rec.pt.x, rec.pt.y))
                 s1.isInter.add(insertIdx, true)
                 s1.neighbor.add(insertIdx, -1)
                 s1.isEntry.add(insertIdx, false)
@@ -491,7 +498,7 @@ object PathOps {
             var offset = 1
             for (rec in sorted) {
                 val insertIdx = edgeIdx + cumulativeOffset + offset
-                s2.pts.add(insertIdx, Point(rec.pt.x, rec.pt.y))
+                s2.pts.add(insertIdx, Point2F32(rec.pt.x, rec.pt.y))
                 s2.isInter.add(insertIdx, true)
                 s2.neighbor.add(insertIdx, -1)
                 s2.isEntry.add(insertIdx, false)
@@ -510,7 +517,7 @@ object PathOps {
         }
     }
 
-    private fun distance(e: Edge, p: Point): Float {
+    private fun distance(e: Edge, p: Point2F32): Float {
         val dx = e.x2 - e.x1; val dy = e.y2 - e.y1
         if (abs(dx) > abs(dy)) return (p.x - e.x1) / dx
         if (abs(dy) > 1e-10f) return (p.y - e.y1) / dy
@@ -537,14 +544,14 @@ object PathOps {
     private fun ghTraverse(
         s1: PolyState, s2: PolyState,
         startPhase: Boolean, dir1: Int, dir2: Int
-    ): List<List<Point>>? {
-        val result = mutableListOf<List<Point>>()
+    ): List<List<Point2F32>>? {
+        val result = mutableListOf<List<Point2F32>>()
 
         for (startIdx in s1.pts.indices) {
             if (!s1.isInter[startIdx] || s1.visited[startIdx]) continue
             if (s1.isEntry[startIdx] != startPhase) continue
 
-            val contour = mutableListOf<Point>()
+            val contour = mutableListOf<Point2F32>()
             var onP = true
             var currIdx = startIdx
 
@@ -593,7 +600,7 @@ object PathOps {
         return if (result.isNotEmpty()) result else null
     }
 
-    private fun handleNoIntersections(poly1: List<Point>, poly2: List<Point>, op: PathOp): List<List<Point>>? {
+    private fun handleNoIntersections(poly1: List<Point2F32>, poly2: List<Point2F32>, op: PathOp): List<List<Point2F32>>? {
         val p1inP2 = poly1.all { pointInPolygon(it, poly2) }
         val p2inP1 = poly2.all { pointInPolygon(it, poly1) }
 
@@ -624,7 +631,7 @@ object PathOps {
 
     // --- Convert polygons back to Path ---
 
-    private fun polygonsToPath(polygons: List<List<Point>>, fillType: FillType): Path {
+    private fun polygonsToPath(polygons: List<List<Point2F32>>, fillType: FillType): Path {
         val path = Path()
         path.fillType = fillType
         for (poly in polygons) {

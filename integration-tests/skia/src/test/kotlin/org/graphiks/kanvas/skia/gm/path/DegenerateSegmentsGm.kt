@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
@@ -29,10 +29,10 @@ class DegenerateSegmentsGm : SkiaGm {
     override val height = 930
 
     private fun interface AddSegment {
-        fun add(path: Path, start: Point): Point
+        fun add(path: Path, start: Point2F32): Point2F32
     }
 
-    private fun pt(x: Float, y: Float) = Point(x, y)
+    private fun pt(x: Float, y: Float) = Point2F32(x, y)
 
     private val addMove = AddSegment { path, startPt ->
         val moveTo = pt(startPt.x, startPt.y + 10f)
@@ -184,7 +184,7 @@ class DegenerateSegmentsGm : SkiaGm {
                 val s4 = rand.nextInt(segments.size)
                 val s5 = rand.nextInt(segments.size)
 
-                var pt = Point(10f, 0f)
+                var pt = Point2F32(10f, 0f)
                 val path = Path { }
                 pt = segments[s1].add(path, pt)
                 pt = segments[s2].add(path, pt)

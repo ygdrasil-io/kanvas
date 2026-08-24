@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -30,22 +30,22 @@ class LinearGradientTinyGm : SkiaGm {
         val green = Color.fromRGBA(0f, 1f, 0f, 1f)
         val red = Color.fromRGBA(1f, 0f, 0f, 1f)
 
-        data class Config(val p0: Point, val p1: Point, val pos: FloatArray)
+        data class Config(val p0: Point2F32, val p1: Point2F32, val pos: FloatArray)
         val configs = listOf(
-            Config(Point(0f, 0f), Point(10f, 0f),       floatArrayOf(0f, 0.999999f,    1f)),
-            Config(Point(0f, 0f), Point(10f, 0f),       floatArrayOf(0f, 0.000001f,    1f)),
-            Config(Point(0f, 0f), Point(10f, 0f),       floatArrayOf(0f, 0.999999999f, 1f)),
-            Config(Point(0f, 0f), Point(10f, 0f),       floatArrayOf(0f, 0.000000001f, 1f)),
+            Config(Point2F32(0f, 0f), Point2F32(10f, 0f),       floatArrayOf(0f, 0.999999f,    1f)),
+            Config(Point2F32(0f, 0f), Point2F32(10f, 0f),       floatArrayOf(0f, 0.000001f,    1f)),
+            Config(Point2F32(0f, 0f), Point2F32(10f, 0f),       floatArrayOf(0f, 0.999999999f, 1f)),
+            Config(Point2F32(0f, 0f), Point2F32(10f, 0f),       floatArrayOf(0f, 0.000000001f, 1f)),
 
-            Config(Point(0f, 0f), Point(0f, 10f),       floatArrayOf(0f, 0.999999f,    1f)),
-            Config(Point(0f, 0f), Point(0f, 10f),       floatArrayOf(0f, 0.000001f,    1f)),
-            Config(Point(0f, 0f), Point(0f, 10f),       floatArrayOf(0f, 0.999999999f, 1f)),
-            Config(Point(0f, 0f), Point(0f, 10f),       floatArrayOf(0f, 0.000000001f, 1f)),
+            Config(Point2F32(0f, 0f), Point2F32(0f, 10f),       floatArrayOf(0f, 0.999999f,    1f)),
+            Config(Point2F32(0f, 0f), Point2F32(0f, 10f),       floatArrayOf(0f, 0.000001f,    1f)),
+            Config(Point2F32(0f, 0f), Point2F32(0f, 10f),       floatArrayOf(0f, 0.999999999f, 1f)),
+            Config(Point2F32(0f, 0f), Point2F32(0f, 10f),       floatArrayOf(0f, 0.000000001f, 1f)),
 
-            Config(Point(0f, 0f),       Point(0.00001f, 0f), floatArrayOf(0f, 0.5f, 1f)),
-            Config(Point(9.99999f, 0f), Point(10f, 0f),      floatArrayOf(0f, 0.5f, 1f)),
-            Config(Point(0f, 0f),       Point(0f, 0.00001f), floatArrayOf(0f, 0.5f, 1f)),
-            Config(Point(0f, 9.99999f), Point(0f, 10f),      floatArrayOf(0f, 0.5f, 1f)),
+            Config(Point2F32(0f, 0f),       Point2F32(0.00001f, 0f), floatArrayOf(0f, 0.5f, 1f)),
+            Config(Point2F32(9.99999f, 0f), Point2F32(10f, 0f),      floatArrayOf(0f, 0.5f, 1f)),
+            Config(Point2F32(0f, 0f),       Point2F32(0f, 0.00001f), floatArrayOf(0f, 0.5f, 1f)),
+            Config(Point2F32(0f, 9.99999f), Point2F32(0f, 10f),      floatArrayOf(0f, 0.5f, 1f)),
         )
 
         for (i in configs.indices) {

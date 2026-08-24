@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/stroketext.cpp` (DEF_SIMPLE_GM, 1200 × 480).
@@ -56,7 +56,7 @@ class StrokeTextGm : SkiaGm {
     }
 
     private fun drawTextStroked(canvas: GmCanvas, paint: Paint, font: Font, strokeWidth: Float) {
-        val loc = Point(20f, 435f)
+        val loc = Point2F32(20f, 435f)
 
         if (strokeWidth > 0f) {
             val fillPaint = paint.copy(style = PaintStyle.FILL)
@@ -73,13 +73,13 @@ class StrokeTextGm : SkiaGm {
         canvas.drawTextBlob(makeSingleGlyphBlob("P", loc, font), 0f, 0f, strokePaint)
     }
 
-    private fun makeSingleGlyphBlob(text: String, loc: Point, font: Font): TextBlob {
+    private fun makeSingleGlyphBlob(text: String, loc: Point2F32, font: Font): TextBlob {
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         for (cp in text.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(loc.x, loc.y))
+            positions.add(Point2F32(loc.x, loc.y))
         }
         return TextBlob(
             glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),

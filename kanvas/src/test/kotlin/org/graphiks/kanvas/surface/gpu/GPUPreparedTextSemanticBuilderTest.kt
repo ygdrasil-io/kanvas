@@ -25,7 +25,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 class GPUPreparedTextSemanticBuilderTest {
     @Test
@@ -449,7 +449,7 @@ class GPUPreparedTextSemanticBuilderTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(36u),
-                    positions = listOf(Point(0f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f)),
                     fontSize = 16f,
                 ),
             ),
@@ -497,7 +497,7 @@ class GPUPreparedTextSemanticBuilderTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = List(glyphCount) { 2u },
-                        positions = List(glyphCount) { index -> Point(4f + index * 6f, 32f) },
+                        positions = List(glyphCount) { index -> Point2F32(4f + index * 6f, 32f) },
                         fontSize = 16f,
                     ),
                 ),
@@ -565,12 +565,12 @@ class GPUPreparedTextSemanticBuilderTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = listOf(2u),
-                        positions = listOf(Point(8.25f, 16.25f)),
+                        positions = listOf(Point2F32(8.25f, 16.25f)),
                         fontSize = 8f,
                     ),
                     KanvasGlyphRun(
                         glyphs = listOf(2u),
-                        positions = listOf(Point(24.5f, 32.5f)),
+                        positions = listOf(Point2F32(24.5f, 32.5f)),
                         fontSize = 16f,
                     ),
                 ),

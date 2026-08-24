@@ -35,8 +35,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.mapPoint
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -132,11 +131,11 @@ class GPUPreparedAtlasLowererTest {
             val combined = outer * spriteTransforms[index]
             val rect = rects[index]
             val expectedPositions = listOf(
-                Point(rect.left, rect.top),
-                Point(rect.right, rect.top),
-                Point(rect.right, rect.bottom),
-                Point(rect.left, rect.bottom),
-            ).map(combined::mapPoint).map { it.x to it.y }
+                Point2F32(rect.left, rect.top),
+                Point2F32(rect.right, rect.top),
+                Point2F32(rect.right, rect.bottom),
+                Point2F32(rect.left, rect.bottom),
+            ).map(combined::transform).map { it.x to it.y }
             val geometry = requireNotNull(command.preparedImage).geometry
             assertEquals(expectedPositions, geometry.vertices.map { it.x to it.y }, "positions $index")
             assertEquals(

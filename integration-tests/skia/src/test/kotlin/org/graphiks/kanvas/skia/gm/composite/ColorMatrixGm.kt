@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -79,8 +79,8 @@ class ColorMatrixGm : SkiaGm {
         val surface = Surface(w, h)
         surface.canvas {
             val shader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(w.toFloat(), h.toFloat()),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(w.toFloat(), h.toFloat()),
                 stops = listOf(
                     GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 0f)),
                     GradientStop(1f, Color.WHITE),

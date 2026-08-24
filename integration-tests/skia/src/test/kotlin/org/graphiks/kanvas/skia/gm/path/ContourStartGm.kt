@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
@@ -48,7 +48,7 @@ class ContourStartGm : SkiaGm {
 
         val rect = Rect(10f, 10f, 100f, 70f)
         val zeroRadii = CornerRadii(0f, 0f)
-        val rectCorners = listOf(Point(rect.left, rect.top), Point(rect.right, rect.top), Point(rect.right, rect.bottom), Point(rect.left, rect.bottom))
+        val rectCorners = listOf(Point2F32(rect.left, rect.top), Point2F32(rect.right, rect.top), Point2F32(rect.right, rect.bottom), Point2F32(rect.left, rect.bottom))
 
         fun rectPath(cw: Boolean, startIndex: Int): Path {
             val ordered = if (cw) rectCorners else rectCorners.reversed()

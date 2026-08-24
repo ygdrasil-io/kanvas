@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -34,8 +34,8 @@ class StrokeRectShaderGm : SkiaGm {
             GradientStop(1f, Color.BLUE),
         )
         val shader = Shader.LinearGradient(
-            start = Point(rect.left, rect.top),
-            end = Point(rect.right, rect.bottom),
+            start = Point2F32(rect.left, rect.top),
+            end = Point2F32(rect.right, rect.bottom),
             stops = stops,
             tileMode = TileMode.CLAMP,
         )

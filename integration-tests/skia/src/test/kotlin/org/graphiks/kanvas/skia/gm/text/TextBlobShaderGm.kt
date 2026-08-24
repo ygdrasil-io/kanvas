@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.sin
 
 /**
@@ -43,29 +43,29 @@ class TextBlobShaderGm : SkiaGm {
 
         // Run 1: allocRun equivalent — origin at (10, 10)
         val run1Glyphs = mutableListOf<UShort>()
-        val run1Positions = mutableListOf<Point>()
+        val run1Positions = mutableListOf<Point2F32>()
         var x = 10f
         for (gid in glyphIds) {
             run1Glyphs.add(gid)
-            run1Positions.add(Point(x, 10f))
+            run1Positions.add(Point2F32(x, 10f))
             x += typeface.getAdvance(gid.toInt(), font.size)
         }
 
         // Run 2: allocRunPosH equivalent — y=80, per-glyph x
         val run2Glyphs = mutableListOf<UShort>()
-        val run2Positions = mutableListOf<Point>()
+        val run2Positions = mutableListOf<Point2F32>()
         for (i in 0 until glyphCount) {
             run2Glyphs.add(glyphIds[i])
-            run2Positions.add(Point(font.size * i * 0.75f, 80f))
+            run2Positions.add(Point2F32(font.size * i * 0.75f, 80f))
         }
 
         // Run 3: allocRunPos equivalent — sinusoidal y
         val run3Glyphs = mutableListOf<UShort>()
-        val run3Positions = mutableListOf<Point>()
+        val run3Positions = mutableListOf<Point2F32>()
         for (i in 0 until glyphCount) {
             run3Glyphs.add(glyphIds[i])
             run3Positions.add(
-                Point(
+                Point2F32(
                     font.size * i * 0.75f,
                     150f + 5f * sin(i.toFloat() * 8f / glyphCount),
                 ),
@@ -83,7 +83,7 @@ class TextBlobShaderGm : SkiaGm {
         )
 
         val shader = Shader.RadialGradient(
-            center = Point(width / 2f, height / 2f),
+            center = Point2F32(width / 2f, height / 2f),
             radius = width * 0.66f,
             stops = listOf(
                 GradientStop(0f, Color.RED),

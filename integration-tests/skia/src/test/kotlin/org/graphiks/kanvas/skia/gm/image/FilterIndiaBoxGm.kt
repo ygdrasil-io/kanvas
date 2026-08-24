@@ -6,8 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/filterindiabox.cpp`.
@@ -59,8 +58,8 @@ class FilterIndiaBoxGm : SkiaGm {
 
     private fun computeSize(w: Float, h: Float, mat: Matrix3x3F32): Pair<Float, Float> {
         val corners = listOf(
-            mat.mapPoint(Point(0f, 0f)), mat.mapPoint(Point(w, 0f)),
-            mat.mapPoint(Point(w, h)), mat.mapPoint(Point(0f, h)),
+            mat.transform(Point2F32(0f, 0f)), mat.transform(Point2F32(w, 0f)),
+            mat.transform(Point2F32(w, h)), mat.transform(Point2F32(0f, h)),
         )
         val minX = corners.minOf { it.x }
         val minY = corners.minOf { it.y }

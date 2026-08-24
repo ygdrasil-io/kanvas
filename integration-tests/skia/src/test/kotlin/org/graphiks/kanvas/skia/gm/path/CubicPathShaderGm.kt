@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -33,8 +33,8 @@ class CubicPathShaderGm : SkiaGm {
         }
 
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(50f, 50f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(50f, 50f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0x80 / 255f, 0xF0 / 255f, 0x00 / 255f, 0x80 / 255f)),
                 GradientStop(0.5f, Color.fromRGBA(0xF0 / 255f, 0xF0 / 255f, 0x80 / 255f, 0xF0 / 255f)),

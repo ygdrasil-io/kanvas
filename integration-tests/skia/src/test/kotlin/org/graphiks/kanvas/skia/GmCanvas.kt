@@ -13,9 +13,8 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Mesh
@@ -173,10 +172,10 @@ class GmCanvas(
 
     private fun transformRect(clip: Rect): Rect? {
         val t = currentTransform
-        val p0 = t.mapPoint(Point(clip.left, clip.top))
-        val p1 = t.mapPoint(Point(clip.right, clip.top))
-        val p2 = t.mapPoint(Point(clip.right, clip.bottom))
-        val p3 = t.mapPoint(Point(clip.left, clip.bottom))
+        val p0 = t.transform(Point2F32(clip.left, clip.top))
+        val p1 = t.transform(Point2F32(clip.right, clip.top))
+        val p2 = t.transform(Point2F32(clip.right, clip.bottom))
+        val p3 = t.transform(Point2F32(clip.left, clip.bottom))
         val l = min(min(p0.x, p1.x), min(p2.x, p3.x))
         val tp = min(min(p0.y, p1.y), min(p2.y, p3.y))
         val r = max(max(p0.x, p1.x), max(p2.x, p3.x))
@@ -203,10 +202,10 @@ class GmCanvas(
                 inner.drawRect(rect, paint)
             } else {
                 val t = currentTransform
-                val p0 = t.mapPoint(Point(rect.left, rect.top))
-                val p1 = t.mapPoint(Point(rect.right, rect.top))
-                val p2 = t.mapPoint(Point(rect.right, rect.bottom))
-                val p3 = t.mapPoint(Point(rect.left, rect.bottom))
+                val p0 = t.transform(Point2F32(rect.left, rect.top))
+                val p1 = t.transform(Point2F32(rect.right, rect.top))
+                val p2 = t.transform(Point2F32(rect.right, rect.bottom))
+                val p3 = t.transform(Point2F32(rect.left, rect.bottom))
                 val path = Path {
                     moveTo(p0.x, p0.y)
                     lineTo(p1.x, p1.y)
@@ -330,12 +329,12 @@ class GmCanvas(
         }
     }
 
-    fun drawPoints(mode: PointMode, points: List<Point>, paint: Paint) {
+    fun drawPoints(mode: PointMode, points: List<Point2F32>, paint: Paint) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawPoints(mode, points, paint)
             } else {
-                val transformed = points.map(currentTransform::mapPoint)
+                val transformed = points.map { currentTransform.transform(it) }
                 inner.drawPoints(mode, transformed, paint)
             }
         }
@@ -343,7 +342,7 @@ class GmCanvas(
 
     fun drawPoint(x: Float, y: Float, paint: Paint) {
         withClip {
-            val pt = currentTransform.mapPoint(Point(x, y))
+            val pt = currentTransform.transform(Point2F32(x, y))
             inner.drawPoint(pt.x, pt.y, paint)
         }
     }
@@ -353,7 +352,7 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawVertices(vertices, paint)
             } else {
-                val transformed = vertices.positions.map(currentTransform::mapPoint)
+                val transformed = vertices.positions.map { currentTransform.transform(it) }
                 inner.drawVertices(vertices.copy(positions = transformed), paint)
             }
         }
@@ -364,7 +363,7 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawMesh(mesh, paint, blendMode)
             } else {
-                val transformed = mesh.vertices.positions.map(currentTransform::mapPoint)
+                val transformed = mesh.vertices.positions.map { currentTransform.transform(it) }
                 val transformedVerts = mesh.vertices.copy(positions = transformed)
                 inner.drawMesh(mesh.copy(vertices = transformedVerts), paint, blendMode)
             }
@@ -377,8 +376,8 @@ class GmCanvas(
                 inner.drawImage(image, rect, paint)
             } else {
                 val t = currentTransform
-                val p0 = t.mapPoint(Point(rect.left, rect.top))
-                val p1 = t.mapPoint(Point(rect.right, rect.bottom))
+                val p0 = t.transform(Point2F32(rect.left, rect.top))
+                val p1 = t.transform(Point2F32(rect.right, rect.bottom))
                 val left = min(p0.x, p1.x)
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
@@ -394,8 +393,8 @@ class GmCanvas(
                 inner.drawImageRect(image, src, dst, paint)
             } else {
                 val t = currentTransform
-                val p0 = t.mapPoint(Point(dst.left, dst.top))
-                val p1 = t.mapPoint(Point(dst.right, dst.bottom))
+                val p0 = t.transform(Point2F32(dst.left, dst.top))
+                val p1 = t.transform(Point2F32(dst.right, dst.bottom))
                 val left = min(p0.x, p1.x)
                 val top = min(p0.y, p1.y)
                 val right = max(p0.x, p1.x)
@@ -410,8 +409,8 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawImageNine(image, center, dst, paint)
             } else {
-                val p0 = currentTransform.mapPoint(Point(dst.left, dst.top))
-                val p1 = currentTransform.mapPoint(Point(dst.right, dst.bottom))
+                val p0 = currentTransform.transform(Point2F32(dst.left, dst.top))
+                val p1 = currentTransform.transform(Point2F32(dst.right, dst.bottom))
                 val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageNine(image, center, tdst, paint)
             }
@@ -429,8 +428,8 @@ class GmCanvas(
             if (currentTransform.isIdentity()) {
                 inner.drawImageLattice(image, lattice, dst, paint, sampling)
             } else {
-                val p0 = currentTransform.mapPoint(Point(dst.left, dst.top))
-                val p1 = currentTransform.mapPoint(Point(dst.right, dst.bottom))
+                val p0 = currentTransform.transform(Point2F32(dst.left, dst.top))
+                val p1 = currentTransform.transform(Point2F32(dst.right, dst.bottom))
                 val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
                 inner.drawImageLattice(image, lattice, tdst, paint, sampling)
             }
@@ -491,7 +490,7 @@ class GmCanvas(
 
     /** Draw individual glyphs at explicit positions. Renders monochrome outlines
      * via the path pipeline; color glyph layers require the GPU text pipeline. */
-    fun drawGlyphs(glyphIds: List<Int>, positions: List<Point>, font: Font, paint: Paint) {
+    fun drawGlyphs(glyphIds: List<Int>, positions: List<Point2F32>, font: Font, paint: Paint) {
         require(glyphIds.size == positions.size)
         val emboldenWidth = font.size * 0.02f
         val glyphPaint = when {
@@ -543,9 +542,9 @@ class GmCanvas(
      * @param paint     paint (shader is sampled at texCoords when provided)
      */
     fun drawPatch(
-        cubics: List<Point>,
+        cubics: List<Point2F32>,
         colors: List<Color>? = null,
-        texCoords: List<Point>? = null,
+        texCoords: List<Point2F32>? = null,
         blendMode: BlendMode = BlendMode.SRC_OVER,
         paint: Paint,
     ) {
@@ -558,9 +557,9 @@ class GmCanvas(
             CubicEdge(cubics[9], cubics[10], cubics[11], cubics[0]),
         )
         val divisions = 20
-        val verts = mutableListOf<Point>()
+        val verts = mutableListOf<Point2F32>()
         val vertColors = mutableListOf<Color>()
-        val vertTexCoords = mutableListOf<Point>()
+        val vertTexCoords = mutableListOf<Point2F32>()
         val indices = mutableListOf<Int>()
 
         for (j in 0..divisions) {
@@ -568,7 +567,7 @@ class GmCanvas(
             for (i in 0..divisions) {
                 val u = i.toFloat() / divisions
                 val pu = coonsPatchPoint(u, v, curves, corners)
-                verts.add(currentTransform.mapPoint(pu))
+                verts.add(currentTransform.transform(pu))
                 if (colors != null) {
                     vertColors.add(bilinearInterp(u, v, colors))
                 }
@@ -612,19 +611,19 @@ class GmCanvas(
     private fun coonsPatchPoint(
         u: Float, v: Float,
         curves: List<CubicEdge>,
-        corners: List<Point>,
-    ): Point {
+        corners: List<Point2F32>,
+    ): Point2F32 {
         val top = curves[0].eval(u)
         val bottom = curves[2].eval(u)
         val left = curves[3].eval(v)
         val right = curves[1].eval(v)
-        val bilinear = Point(
+        val bilinear = Point2F32(
             corners[0].x * (1 - u) * (1 - v) + corners[1].x * u * (1 - v) +
             corners[2].x * u * v + corners[3].x * (1 - u) * v,
             corners[0].y * (1 - u) * (1 - v) + corners[1].y * u * (1 - v) +
             corners[2].y * u * v + corners[3].y * (1 - u) * v,
         )
-        return Point(
+        return Point2F32(
             (1 - v) * top.x + v * bottom.x + (1 - u) * left.x + u * right.x - bilinear.x,
             (1 - v) * top.y + v * bottom.y + (1 - u) * left.y + u * right.y - bilinear.y,
         )
@@ -649,10 +648,10 @@ class GmCanvas(
         return Color.fromRGBA(r, g, b, a)
     }
 
-    private fun bilinearInterp(u: Float, v: Float, texCoords: List<Point>): Point {
+    private fun bilinearInterp(u: Float, v: Float, texCoords: List<Point2F32>): Point2F32 {
         val t00 = texCoords[0]; val t10 = texCoords[1]
         val t01 = texCoords[3]; val t11 = texCoords[2]
-        return Point(
+        return Point2F32(
             (1 - u) * (1 - v) * t00.x + u * (1 - v) * t10.x +
             (1 - u) * v * t01.x + u * v * t11.x,
             (1 - u) * (1 - v) * t00.y + u * (1 - v) * t10.y +
@@ -660,10 +659,10 @@ class GmCanvas(
         )
     }
 
-    private data class CubicEdge(val p0: Point, val p1: Point, val p2: Point, val p3: Point) {
-        fun eval(t: Float): Point {
+    private data class CubicEdge(val p0: Point2F32, val p1: Point2F32, val p2: Point2F32, val p3: Point2F32) {
+        fun eval(t: Float): Point2F32 {
             val t1 = 1f - t
-            return Point(
+            return Point2F32(
                 t1 * t1 * t1 * p0.x + 3 * t1 * t1 * t * p1.x + 3 * t1 * t * t * p2.x + t * t * t * p3.x,
                 t1 * t1 * t1 * p0.y + 3 * t1 * t1 * t * p1.y + 3 * t1 * t * t * p2.y + t * t * t * p3.y,
             )

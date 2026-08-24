@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.floor
 
 /**
@@ -48,7 +48,7 @@ class TextBlobColorTransGm : SkiaGm {
         val offsetRuns = blob28.glyphRuns.map { run ->
             KanvasGlyphRun(
                 glyphs = run.glyphs,
-                positions = run.positions.map { Point(it.x, it.y + yOffset256 - 30f) },
+                positions = run.positions.map { Point2F32(it.x, it.y + yOffset256 - 30f) },
                 fontSize = 28f,
             )
         }

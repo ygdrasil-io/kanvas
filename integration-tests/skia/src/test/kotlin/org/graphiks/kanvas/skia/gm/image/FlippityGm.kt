@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/flippity.cpp`.
@@ -126,7 +126,7 @@ class FlippityGm : SkiaGm {
         const val kCellSize = kImageSize + 2 * kLabelSize
         const val kGMWidth = kNumMatrices * kCellSize; const val kGMHeight = 4 * kCellSize
 
-        val kPoints = listOf(Point(0f, kImageSize.toFloat()), Point(kImageSize.toFloat(), kImageSize.toFloat()), Point(0f, 0f), Point(kImageSize.toFloat(), 0f))
+        val kPoints = listOf(Point2F32(0f, kImageSize.toFloat()), Point2F32(kImageSize.toFloat(), kImageSize.toFloat()), Point2F32(0f, 0f), Point2F32(kImageSize.toFloat(), 0f))
         val kLabelText = arrayOf("LL", "LR", "UL", "UR")
         val kLabelColors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.fromRGBA(0f, 1f, 1f))
     }

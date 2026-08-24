@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -40,12 +40,12 @@ class VerticesCollapsedGm : SkiaGm {
         val shader = src.makeShader()
 
         val positions = listOf(
-            Point(5f, 5f), Point(45f, 5f),
-            Point(45f, 45f), Point(5f, 45f),
+            Point2F32(5f, 5f), Point2F32(45f, 5f),
+            Point2F32(45f, 45f), Point2F32(5f, 45f),
         )
         val texs = listOf(
-            Point(0f, 0f), Point(0f, 0f),
-            Point(0f, 0f), Point(0f, 0f),
+            Point2F32(0f, 0f), Point2F32(0f, 0f),
+            Point2F32(0f, 0f), Point2F32(0f, 0f),
         )
         val indices = listOf(0, 1, 2, 2, 3, 0)
 

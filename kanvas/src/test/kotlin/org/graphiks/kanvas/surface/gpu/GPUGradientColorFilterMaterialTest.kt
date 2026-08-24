@@ -8,7 +8,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -16,8 +16,8 @@ class GPUGradientColorFilterMaterialTest {
     @Test
     fun `paint matrix color filter transforms linear gradient stops`() {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(10f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(10f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f, Color.BLUE),
@@ -42,9 +42,9 @@ class GPUGradientColorFilterMaterialTest {
     @Test
     fun `shader color filter applies source blend to conical gradient`() {
         val shader = Shader.ConicalGradient(
-            start = Point(0f, 0f),
+            start = Point2F32(0f, 0f),
             startRadius = 0f,
-            end = Point(20f, 20f),
+            end = Point2F32(20f, 20f),
             endRadius = 20f,
             stops = listOf(
                 GradientStop(0f, Color.RED),
@@ -68,8 +68,8 @@ class GPUGradientColorFilterMaterialTest {
     @Test
     fun `matrix color filter is not folded into gradient stops when clamping would be required`() {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(10f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(10f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.BLACK),
                 GradientStop(1f, Color.WHITE),
@@ -92,8 +92,8 @@ class GPUGradientColorFilterMaterialTest {
     @Test
     fun `source blend color filter is not folded into decal gradients`() {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(10f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(10f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f, Color.GREEN),

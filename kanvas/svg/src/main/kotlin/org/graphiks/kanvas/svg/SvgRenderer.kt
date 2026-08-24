@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.svg
 
 import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.geometry.Path

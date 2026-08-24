@@ -4,7 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -33,7 +33,7 @@ class LinearGradientRTGm : SkiaGm {
         )
 
         val paint = Paint(shader = Shader.LinearGradient(
-            start = Point(0f, 0f), end = Point(256f, 0f),
+            start = Point2F32(0f, 0f), end = Point2F32(256f, 0f),
             stops = stops, tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
         ))
 

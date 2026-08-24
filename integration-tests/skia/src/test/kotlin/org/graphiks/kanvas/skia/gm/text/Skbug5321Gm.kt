@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /** Port of Skia's `gm/skbug_5321.cpp`.
  *  Regression test for skbug.com/5321 — draws text blobs to test glyph
@@ -40,12 +40,12 @@ class Skbug5321Gm : SkiaGm {
 
         val codepoints = text.codePoints().toArray()
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = x
         for (cp in codepoints) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(cursorX, y))
+            positions.add(Point2F32(cursorX, y))
             cursorX += typeface.getAdvance(gid, 30f)
         }
 

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -61,8 +61,8 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
 
     private val shader1: Shader = run {
         val base = Shader.LinearGradient(
-            start = Point(K_SHADER_SIZE / 4f, 0f),
-            end = Point(3f * K_SHADER_SIZE / 4f, K_SHADER_SIZE),
+            start = Point2F32(K_SHADER_SIZE / 4f, 0f),
+            end = Point2F32(3f * K_SHADER_SIZE / 4f, K_SHADER_SIZE),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f / 6f, Color(0xFF00FFFFu)),
@@ -86,14 +86,14 @@ open class VerticesGm(private val shaderScale: Float = 1f) : SkiaGm {
     private companion object {
         const val K_SHADER_SIZE: Float = 40f
         val MESH_POSITIONS = listOf(
-            Point(0f, 0f), Point(15f, 3f), Point(30f, 0f),
-            Point(3f, 15f), Point(15f, 15f), Point(27f, 15f),
-            Point(0f, 30f), Point(15f, 27f), Point(30f, 30f),
+            Point2F32(0f, 0f), Point2F32(15f, 3f), Point2F32(30f, 0f),
+            Point2F32(3f, 15f), Point2F32(15f, 15f), Point2F32(27f, 15f),
+            Point2F32(0f, 30f), Point2F32(15f, 27f), Point2F32(30f, 30f),
         )
         val MESH_TEX_COORDS = listOf(
-            Point(0f, 0f), Point(20f, 0f), Point(40f, 0f),
-            Point(0f, 20f), Point(20f, 20f), Point(40f, 20f),
-            Point(0f, 40f), Point(20f, 40f), Point(40f, 40f),
+            Point2F32(0f, 0f), Point2F32(20f, 0f), Point2F32(40f, 0f),
+            Point2F32(0f, 20f), Point2F32(20f, 20f), Point2F32(40f, 20f),
+            Point2F32(0f, 40f), Point2F32(20f, 40f), Point2F32(40f, 40f),
         )
         val MESH_FAN_INDICES = listOf(4, 0, 1, 2, 5, 8, 7, 6, 3, 0)
 

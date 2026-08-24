@@ -8,8 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -50,10 +49,10 @@ class BlurMatrixRectGm : SkiaGm {
         matrices.add(rotateAround(197f, cx, cy) * Matrix3x3F32.skewing(0.3f, -0.5f))
 
         fun mapRect(m: Matrix3x3F32, r: Rect): Rect {
-            val p0 = m.mapPoint(Point(r.left, r.top))
-            val p1 = m.mapPoint(Point(r.right, r.top))
-            val p2 = m.mapPoint(Point(r.right, r.bottom))
-            val p3 = m.mapPoint(Point(r.left, r.bottom))
+            val p0 = m.transform(Point2F32(r.left, r.top))
+            val p1 = m.transform(Point2F32(r.right, r.top))
+            val p2 = m.transform(Point2F32(r.right, r.bottom))
+            val p3 = m.transform(Point2F32(r.left, r.bottom))
             val l = minOf(p0.x, p1.x, p2.x, p3.x)
             val t = minOf(p0.y, p1.y, p2.y, p3.y)
             val rt = maxOf(p0.x, p1.x, p2.x, p3.x)

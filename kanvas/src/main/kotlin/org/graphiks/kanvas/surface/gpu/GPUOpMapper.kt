@@ -84,8 +84,7 @@ import org.graphiks.kanvas.types.mapAxisAligned
 import org.graphiks.kanvas.types.mapAxisAlignedRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.a
@@ -695,7 +694,7 @@ internal object GPUOpMapper {
             is DisplayOp.Clear -> operation.toNormalizedCommand(commandId, target)
             is DisplayOp.DrawPoint -> DisplayOp.DrawPoints(
                 PointMode.POINTS,
-                listOf(Point(operation.x, operation.y)),
+                listOf(Point2F32(operation.x, operation.y)),
                 operation.paint,
                 operation.transform,
                 operation.clip,
@@ -1605,16 +1604,16 @@ private fun GPUBounds.outset(amount: Float): GPUBounds = if (amount == 0f) {
 
 private fun GPUBounds.mappedBy(matrix: Matrix3x3F32): GPUBounds {
     val corners = listOf(
-        matrix.mapPoint(Point(left, top)),
-        matrix.mapPoint(Point(right, top)),
-        matrix.mapPoint(Point(right, bottom)),
-        matrix.mapPoint(Point(left, bottom)),
+        matrix.transform(Point2F32(left, top)),
+        matrix.transform(Point2F32(right, top)),
+        matrix.transform(Point2F32(right, bottom)),
+        matrix.transform(Point2F32(left, bottom)),
     )
     return GPUBounds(
-        left = corners.minOf(Point::x),
-        top = corners.minOf(Point::y),
-        right = corners.maxOf(Point::x),
-        bottom = corners.maxOf(Point::y),
+        left = corners.minOf(Point2F32::x),
+        top = corners.minOf(Point2F32::y),
+        right = corners.maxOf(Point2F32::x),
+        bottom = corners.maxOf(Point2F32::y),
     )
 }
 

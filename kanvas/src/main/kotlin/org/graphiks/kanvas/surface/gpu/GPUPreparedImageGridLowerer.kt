@@ -18,8 +18,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 data class GPUPreparedImageLoweringContext(
@@ -547,12 +546,12 @@ internal object GPUPreparedImageGridLowerer {
 
     private fun ImageCell.hasFiniteTransformedCorners(transform: Matrix3x3F32): Boolean =
         listOf(
-            Point(dst.left, dst.top),
-            Point(dst.right, dst.top),
-            Point(dst.right, dst.bottom),
-            Point(dst.left, dst.bottom),
+            Point2F32(dst.left, dst.top),
+            Point2F32(dst.right, dst.top),
+            Point2F32(dst.right, dst.bottom),
+            Point2F32(dst.left, dst.bottom),
         ).all { point ->
-            val transformed = transform.mapPoint(point)
+            val transformed = transform.transform(point)
             transformed.x.isFinite() && transformed.y.isFinite()
         }
 

@@ -103,7 +103,7 @@ class ImageFiltersGraphGm : SkiaGm {
             val convolve = ImageFilter.MatrixConvolution(
                 kernelSize = Size(3f, 3f),
                 kernel = kernel, gain = 1f, bias = 0f,
-                kernelOffset = org.graphiks.kanvas.types.Point(1f, 1f),
+                kernelOffset = org.graphiks.math.vector.Vector2F32(1f, 1f),
                 tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
                 convolveAlpha = false, input = dilate,
             )

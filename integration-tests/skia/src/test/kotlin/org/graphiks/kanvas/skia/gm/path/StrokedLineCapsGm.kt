@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.max
 
 /**
@@ -34,8 +34,8 @@ class StrokedLineCapsGm : SkiaGm {
         val lengths = floatArrayOf(4f * kStrokeWidth, kStrokeWidth, kStrokeWidth / 2f, kStrokeWidth / 4f)
 
         val gradient = Shader.LinearGradient(
-            start = Point(-kStrokeWidth, -kStrokeWidth),
-            end = Point(2f * kStrokeWidth, 4f * kStrokeWidth),
+            start = Point2F32(-kStrokeWidth, -kStrokeWidth),
+            end = Point2F32(2f * kStrokeWidth, 4f * kStrokeWidth),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(0.75f, Color.fromRGBA(0f, 1f, 0f, 1f)),

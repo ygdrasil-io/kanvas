@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.graphiks.math.geometry.Point2F32
 
 class RectTest {
     @Test
@@ -29,7 +30,7 @@ class RectTest {
         val r = Rect.fromLTRB(0f, 0f, 100f, 50f)
         assertEquals(100f, r.width, 0.01f)
         assertEquals(50f, r.height, 0.01f)
-        assertEquals(Point(50f, 25f), r.center)
+        assertEquals(Point2F32(50f, 25f), r.center)
         assertFalse(r.isEmpty)
     }
 
@@ -43,7 +44,7 @@ class RectTest {
     @Test
     fun `Rect contains point`() {
         val r = Rect.fromLTRB(0f, 0f, 100f, 100f)
-        assertTrue(Point(50f, 50f) in r)
-        assertFalse(Point(150f, 50f) in r)
+        assertTrue(Point2F32(50f, 50f) in r)
+        assertFalse(Point2F32(150f, 50f) in r)
     }
 }

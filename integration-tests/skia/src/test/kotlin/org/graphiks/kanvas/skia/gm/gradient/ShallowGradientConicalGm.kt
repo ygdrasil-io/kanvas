@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -28,7 +28,7 @@ class ShallowGradientConicalGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val w = width.toFloat()
         val h = height.toFloat()
-        val center = Point(w / 2f, h / 2f)
+        val center = Point2F32(w / 2f, h / 2f)
         val stops = listOf(
             GradientStop(0f, Color.fromRGBA(0x55 / 255f, 0x55 / 255f, 0x55 / 255f, 1f)),
             GradientStop(1f, Color.fromRGBA(0x44 / 255f, 0x44 / 255f, 0x44 / 255f, 1f)),

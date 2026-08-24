@@ -37,8 +37,7 @@ import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 
 private const val PREPARED_TEXT_MATERIAL_DICTIONARY_VERSION =
     "material-dictionary:prepared-material:v1"
@@ -317,7 +316,7 @@ object GPUPreparedTextLowerer {
                     "Effective glyph positions must remain finite after applying the text origin",
                 )
             }
-            val deviceAnchor = operation.transform.mapPoint(Point(effectiveX, effectiveY))
+            val deviceAnchor = operation.transform.transform(Point2F32(effectiveX, effectiveY))
             if (!deviceAnchor.x.isFinite() || !deviceAnchor.y.isFinite()) {
                 return refused(
                     GPUTextRefusalCodes.POSITION_NONFINITE,

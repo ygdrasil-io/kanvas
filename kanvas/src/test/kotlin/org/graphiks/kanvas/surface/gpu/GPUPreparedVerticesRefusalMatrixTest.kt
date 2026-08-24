@@ -26,7 +26,7 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -146,9 +146,9 @@ class GPUPreparedVerticesRefusalMatrixTest {
                     DisplayOp.DrawVertices(
                         vertices = triangle.copy(
                             positions = listOf(
-                                Point(Float.NaN, 0f),
-                                Point(1f, 0f),
-                                Point(0f, 1f),
+                                Point2F32(Float.NaN, 0f),
+                                Point2F32(1f, 0f),
+                                Point2F32(0f, 1f),
                             ),
                         ),
                         paint = validPaint,
@@ -164,7 +164,7 @@ class GPUPreparedVerticesRefusalMatrixTest {
                 operations = listOf(
                     DisplayOp.DrawVertices(
                         vertices = triangle.copy(
-                            positions = listOf(Point(0f, 0f), Point(1f, 0f)),
+                            positions = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f)),
                         ),
                         paint = validPaint,
                         transform = Matrix3x3F32.Identity,
@@ -181,9 +181,9 @@ class GPUPreparedVerticesRefusalMatrixTest {
                         vertices = Vertices(
                             mode = VertexMode.TRIANGLES,
                             positions = listOf(
-                                Point(0f, 0f),
-                                Point(1f, 0f),
-                                Point(0f, 1f),
+                                Point2F32(0f, 0f),
+                                Point2F32(1f, 0f),
+                                Point2F32(0f, 1f),
                             ),
                             indices = listOf(0, 1, 9),
                         ),
@@ -349,9 +349,9 @@ class GPUPreparedVerticesRefusalMatrixTest {
     private fun triangleVertices(): Vertices = Vertices(
         mode = VertexMode.TRIANGLES,
         positions = listOf(
-            Point(0f, 0f),
-            Point(2f, 0f),
-            Point(0f, 2f),
+            Point2F32(0f, 0f),
+            Point2F32(2f, 0f),
+            Point2F32(0f, 2f),
         ),
     )
 }

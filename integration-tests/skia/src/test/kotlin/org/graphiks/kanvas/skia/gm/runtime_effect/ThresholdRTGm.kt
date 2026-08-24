@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -36,7 +36,7 @@ class ThresholdRTGm : SkiaGm {
         val h0 = height
 
         val beforeGrad = Shader.LinearGradient(
-            Point(0f, 0f), Point(w0.toFloat(), h0.toFloat()),
+            Point2F32(0f, 0f), Point2F32(w0.toFloat(), h0.toFloat()),
             listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(0.5f, Color.GREEN),
@@ -44,7 +44,7 @@ class ThresholdRTGm : SkiaGm {
             ),
         )
         val afterGrad = Shader.LinearGradient(
-            Point(0f, 0f), Point(w0.toFloat(), 0f),
+            Point2F32(0f, 0f), Point2F32(w0.toFloat(), 0f),
             listOf(
                 GradientStop(0f, Color(0xFF00FFFFu)),
                 GradientStop(0.5f, Color(0xFFFF00FFu)),
@@ -52,7 +52,7 @@ class ThresholdRTGm : SkiaGm {
             ),
         )
         val thresholdGrad = Shader.RadialGradient(
-            Point(w0 / 2f, h0 / 2f), w0 / 4f,
+            Point2F32(w0 / 2f, h0 / 2f), w0 / 4f,
             listOf(
                 GradientStop(0f, Color.BLACK),
                 GradientStop(1f, Color.WHITE),

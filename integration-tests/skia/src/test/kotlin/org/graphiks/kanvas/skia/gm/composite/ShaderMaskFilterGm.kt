@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -31,8 +31,8 @@ class ShaderMaskFilterGm : SkiaGm {
         val r = Rect.fromLTRB(0f, 0f, 100f, 150f)
 
         val shader = Shader.LinearGradient(
-            start = Point(r.left, r.top),
-            end = Point(r.right, r.bottom),
+            start = Point2F32(r.left, r.top),
+            end = Point2F32(r.right, r.bottom),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 0f)),
                 GradientStop(1f, Color.WHITE),

@@ -13,6 +13,7 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
@@ -66,17 +67,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Return true if [path]'s bounds are fully outside the current clip. */
-    fun quickReject(path: Path): Boolean {
-        // Compute conservative bounds from path points
-        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE; var maxY = Float.MIN_VALUE
-        for (pt in path.points()) {
-            if (pt.x < minX) minX = pt.x; if (pt.y < minY) minY = pt.y
-            if (pt.x > maxX) maxX = pt.x; if (pt.y > maxY) maxY = pt.y
-        }
-        if (minX == Float.MAX_VALUE) return false
-        return quickReject(Rect.fromLTRB(minX, minY, maxX, maxY))
-    }
+    fun quickReject(path: Path): Boolean = path.computeBounds()?.let(::quickReject) ?: false
 
     /** True if the current clip region is empty (nothing visible). */
     val isClipEmpty: Boolean get() = currentClip.isEmpty
@@ -219,7 +210,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Draw a list of [points] with the given point [mode]. */
-    fun drawPoints(mode: PointMode, points: List<Point>, paint: Paint) {
+    fun drawPoints(mode: PointMode, points: List<Point2F32>, paint: Paint) {
         buffer.append(DisplayOp.DrawPoints(mode, points, paint, currentTransform, currentRecordedClip))
     }
 

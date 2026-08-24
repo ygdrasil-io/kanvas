@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -39,8 +39,8 @@ class ShaderText3Gm : SkiaGm {
         )
 
         val gradientBase = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(75f, 75f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(75f, 75f),
             stops = listOf(
                 GradientStop(0f, Color(0x80F00080u)),
                 GradientStop(0.5f, Color(0xF0F08000u)),
@@ -66,7 +66,7 @@ class ShaderText3Gm : SkiaGm {
             for (tmY in tileModes) {
                 val fillShader = Shader.WithLocalMatrix(
                     Shader.LinearGradient(
-                        start = Point(0f, 0f), end = Point(75f, 75f),
+                        start = Point2F32(0f, 0f), end = Point2F32(75f, 75f),
                         stops = listOf(
                             GradientStop(0f, Color(0x80F00080u)),
                             GradientStop(0.5f, Color(0xF0F08000u)),

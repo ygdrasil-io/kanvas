@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -35,7 +35,7 @@ class GradientsHueMethodGm : SkiaGm {
         canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = gray))
         canvas.translate(5f, 5f)
 
-        val pts = Point(0f, 0f) to Point(200f, 0f)
+        val pts = Point2F32(0f, 0f) to Point2F32(200f, 0f)
         val rect = Rect.fromXYWH(0f, 0f, 200f, 20f)
         val font = Font(typeface, size = 12f)
 

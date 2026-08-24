@@ -27,7 +27,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUCorePrimitiveSemanticBuilderTest {

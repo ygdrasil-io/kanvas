@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.geometry.Point2F32
+
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts

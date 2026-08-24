@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
 
@@ -33,7 +33,7 @@ class PointsGm : SkiaGm {
         val pts = List(n) {
             val y = rand.nextFloat() * 480f
             val x = rand.nextFloat() * 640f
-            Point(x, y)
+            Point2F32(x, y)
         }
 
         val p0 = Paint(color = Color.RED, style = PaintStyle.STROKE, strokeWidth = 4f)

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.alphaByte
@@ -196,7 +196,7 @@ class GPUColorGlyphPaintAlphaTest {
                         glyphRuns = listOf(
                             KanvasGlyphRun(
                                 glyphs = listOf(fixture.glyphId.toUShort()),
-                                positions = listOf(Point(48f, 144f)),
+                                positions = listOf(Point2F32(48f, 144f)),
                                 fontSize = FIXTURE_FONT_SIZE,
                             ),
                         ),

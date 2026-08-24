@@ -22,8 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSaveLayerFrameHandling
@@ -857,10 +856,10 @@ private fun layerDeviceBounds(
     val right = Float.fromBits(localBounds.rightBits)
     val bottom = Float.fromBits(localBounds.bottomBits)
     val corners = listOf(
-        matrix.mapPoint(Point(left, top)),
-        matrix.mapPoint(Point(right, top)),
-        matrix.mapPoint(Point(right, bottom)),
-        matrix.mapPoint(Point(left, bottom)),
+        matrix.transform(Point2F32(left, top)),
+        matrix.transform(Point2F32(right, top)),
+        matrix.transform(Point2F32(right, bottom)),
+        matrix.transform(Point2F32(left, bottom)),
     )
     val mappedLeft = kotlin.math.floor(corners.minOf { it.x })
     val mappedTop = kotlin.math.floor(corners.minOf { it.y })

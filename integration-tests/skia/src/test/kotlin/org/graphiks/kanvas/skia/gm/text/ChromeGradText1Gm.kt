@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -35,8 +35,8 @@ class ChromeGradText1Gm : SkiaGm {
         canvas.drawRect(r, Paint(color = Color.RED))
 
         val paint = Paint(shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(1f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(1f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.GREEN),
                 GradientStop(1f, Color.GREEN),

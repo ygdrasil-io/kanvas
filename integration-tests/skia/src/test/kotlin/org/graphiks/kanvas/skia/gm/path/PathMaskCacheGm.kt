@@ -8,8 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -72,10 +71,10 @@ class PathMaskCacheGm : SkiaGm {
     }
 
     private fun mappedBounds(srcBounds: Rect, m: Matrix3x3F32): Rect {
-        val bl = m.mapPoint(Point(srcBounds.left, srcBounds.top))
-        val br = m.mapPoint(Point(srcBounds.right, srcBounds.top))
-        val tl = m.mapPoint(Point(srcBounds.left, srcBounds.bottom))
-        val tr = m.mapPoint(Point(srcBounds.right, srcBounds.bottom))
+        val bl = m.transform(Point2F32(srcBounds.left, srcBounds.top))
+        val br = m.transform(Point2F32(srcBounds.right, srcBounds.top))
+        val tl = m.transform(Point2F32(srcBounds.left, srcBounds.bottom))
+        val tr = m.transform(Point2F32(srcBounds.right, srcBounds.bottom))
         val xs = listOf(bl.x, br.x, tl.x, tr.x)
         val ys = listOf(bl.y, br.y, tl.y, tr.y)
         return Rect(floor(xs.min()), floor(ys.min()), ceil(xs.max()), ceil(ys.max()))

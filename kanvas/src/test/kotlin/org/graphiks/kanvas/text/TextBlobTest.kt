@@ -1,13 +1,13 @@
 package org.graphiks.kanvas.text
 
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
 class TextBlobTest {
-    @Test fun `KanvasGlyphRun`() { val r = KanvasGlyphRun(listOf(65u,66u,67u), listOf(Point(0f,0f),Point(10f,0f),Point(20f,0f))); assertEquals(3, r.glyphs.size) }
-    @Test fun `TextBlob with typeface`() { val b = TextBlob(listOf(KanvasGlyphRun(listOf(72u), listOf(Point(0f,0f)))), KanvasTypeface("f.ttf"), 16f); assertEquals("f.ttf", (b.typeface as KanvasTypeface).resourcePath) }
-    @Test fun `TextBlob without typeface`() { val b = TextBlob(listOf(KanvasGlyphRun(listOf(65u), listOf(Point(0f,0f))))); assertEquals(null, b.typeface); assertEquals(12f, b.fontSize) }
+    @Test fun `KanvasGlyphRun`() { val r = KanvasGlyphRun(listOf(65u,66u,67u), listOf(Point2F32(0f,0f),Point2F32(10f,0f),Point2F32(20f,0f))); assertEquals(3, r.glyphs.size) }
+    @Test fun `TextBlob with typeface`() { val b = TextBlob(listOf(KanvasGlyphRun(listOf(72u), listOf(Point2F32(0f,0f)))), KanvasTypeface("f.ttf"), 16f); assertEquals("f.ttf", (b.typeface as KanvasTypeface).resourcePath) }
+    @Test fun `TextBlob without typeface`() { val b = TextBlob(listOf(KanvasGlyphRun(listOf(65u), listOf(Point2F32(0f,0f))))); assertEquals(null, b.typeface); assertEquals(12f, b.fontSize) }
 
     @Test
     fun `Font toTextBlob stores local positions from requested local origin`() {
@@ -17,7 +17,7 @@ class TextBlobTest {
         val blob = font.toTextBlob("AB", 3f, 4f)
 
         assertEquals(
-            listOf(Point(3f, 4f), Point(13f, 4f)),
+            listOf(Point2F32(3f, 4f), Point2F32(13f, 4f)),
             blob.glyphRuns.single().positions,
         )
     }
@@ -33,7 +33,7 @@ class TextBlobTest {
         val op = surface.snapshotOps().filterIsInstance<org.graphiks.kanvas.canvas.DisplayOp.DrawText>().single()
         assertEquals(15f, op.x)
         assertEquals(25f, op.y)
-        assertEquals(listOf(Point(0f, 0f)), op.blob.glyphRuns.single().positions)
+        assertEquals(listOf(Point2F32(0f, 0f)), op.blob.glyphRuns.single().positions)
     }
 
     private class RecordingTypeface : Typeface {

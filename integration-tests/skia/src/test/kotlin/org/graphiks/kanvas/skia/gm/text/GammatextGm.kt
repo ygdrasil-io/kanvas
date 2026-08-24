@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -34,8 +34,8 @@ class GammatextGm : SkiaGm {
         val font = Font(typeface, size = 16f)
 
         val grad = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(0f, 480f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(0f, 480f),
             stops = listOf(
                 GradientStop(0f, Color.BLACK),
                 GradientStop(1f, Color.WHITE),

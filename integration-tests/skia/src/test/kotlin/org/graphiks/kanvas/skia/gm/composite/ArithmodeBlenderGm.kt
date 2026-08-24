@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -78,7 +78,7 @@ class ArithmodeBlenderGm : SkiaGm {
             drawRect(
                 Rect(0f, 0f, w.toFloat(), h.toFloat()),
                 Paint(shader = Shader.LinearGradient(
-                    Point(0f, 0f), Point(w.toFloat(), h.toFloat()),
+                    Point2F32(0f, 0f), Point2F32(w.toFloat(), h.toFloat()),
                     listOf(
                         GradientStop(0f, Color.TRANSPARENT),
                         GradientStop(0.2f, Color.GREEN),
@@ -100,7 +100,7 @@ class ArithmodeBlenderGm : SkiaGm {
             drawRect(
                 Rect(0f, 0f, w.toFloat(), h.toFloat()),
                 Paint(shader = Shader.LinearGradient(
-                    Point(0f, h.toFloat()), Point(w.toFloat(), 0f),
+                    Point2F32(0f, h.toFloat()), Point2F32(w.toFloat(), 0f),
                     listOf(
                         GradientStop(0f, Color.BLUE),
                         GradientStop(0.25f, Color(0xFFFFFF00u)),

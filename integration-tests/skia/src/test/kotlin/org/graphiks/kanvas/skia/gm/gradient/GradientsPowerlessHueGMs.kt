@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 class GradientsPowerlessHueLchGm : SkiaGm {
@@ -75,7 +75,7 @@ private fun drawPowerlessHueGradients(canvas: GmCanvas) {
 
     fun gradient(stops: List<GradientStop>) {
         val shader = Shader.LinearGradient(
-            Point(0f, 0f), Point(200f, 0f), stops, TileMode.CLAMP,
+            Point2F32(0f, 0f), Point2F32(200f, 0f), stops, TileMode.CLAMP,
         )
         canvas.drawRect(Rect(0f, 0f, 200f, 20f), Paint(shader = shader))
         canvas.translate(205f, 0f)

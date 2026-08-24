@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sqrt
 
@@ -110,8 +110,8 @@ class TableColorFilterGm : SkiaGm {
             GradientStop(1f, Color.WHITE),
         )
         return Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(w.toFloat(), h.toFloat()),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(w.toFloat(), h.toFloat()),
             stops = stops,
         )
     }
@@ -132,7 +132,7 @@ class TableColorFilterGm : SkiaGm {
         val cx = w / 2f
         val cy = h / 2f
         return Shader.RadialGradient(
-            center = Point(cx, cy),
+            center = Point2F32(cx, cy),
             radius = cx,
             stops = listOf(
                 GradientStop(0f, Color.RED),

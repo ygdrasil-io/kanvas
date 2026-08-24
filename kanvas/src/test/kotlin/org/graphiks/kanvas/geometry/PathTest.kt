@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.geometry
 
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
+
 import org.graphiks.kanvas.types.*
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
@@ -68,13 +71,19 @@ class PathTest {
         }
 
         val transformed = path.transform(100f, 50f, 2f, 2f)
-        val points = transformed.points()
-
-        assertEquals(Point(120f, 50f), points[0])
-        assertEquals(Point(20f, 40f), points[1])
-        assertEquals(Point(30f, 1f), points[2])
-        assertEquals(Point(0f, 0f), points[3])
-        assertEquals(Point(100f, 90f), points[4])
+        assertEquals(
+            listOf(
+                PathCommand.Move(Point2F32(120f, 50f)),
+                PathCommand.ArcTo(
+                    radius = Vector2F32(20f, 40f),
+                    xAxisRotation = 30f,
+                    largeArc = true,
+                    sweep = false,
+                    endpoint = Point2F32(100f, 90f),
+                ),
+            ),
+            transformed.commands(),
+        )
     }
 
     @Test
@@ -85,15 +94,15 @@ class PathTest {
         }
 
         val transformed = path.transform(Matrix3x3F32.scaling(2f, 1f))
-        val points = transformed.points()
+        val commands = transformed.commands()
 
-        assertEquals(Point(20f, 0f), points[0])
-        assertEquals(20f, points[1].x, 0.001f)
-        assertEquals(10f, points[1].y, 0.001f)
-        assertEquals(0f, points[2].x, 0.001f)
-        assertEquals(0f, points[2].y)
-        assertEquals(Point(1f, 0f), points[3])
-        assertEquals(Point(0f, 10f), points[4])
+        assertEquals(PathCommand.Move(Point2F32(20f, 0f)), commands[0])
+        val arc = commands[1] as PathCommand.ArcTo
+        assertEquals(20f, arc.radius.x, 0.001f)
+        assertEquals(10f, arc.radius.y, 0.001f)
+        assertEquals(0f, arc.xAxisRotation, 0.001f)
+        assertTrue(arc.sweep)
+        assertEquals(Point2F32(0f, 10f), arc.endpoint)
     }
 
     @Test
@@ -105,12 +114,12 @@ class PathTest {
         }
 
         val transformed = path.transform(Matrix3x3F32.skewing(1f, 0f))
-        val points = transformed.points()
+        val arc = transformed.commands()[1] as PathCommand.ArcTo
 
-        assertEquals(0.000809f, points[1].x, 0.000001f)
-        assertEquals(0.000309f, points[1].y, 0.000001f)
-        assertEquals(31.717f, points[2].x, 0.001f)
-        assertEquals(Point(1f, 0f), points[3])
+        assertEquals(0.000809f, arc.radius.x, 0.000001f)
+        assertEquals(0.000309f, arc.radius.y, 0.000001f)
+        assertEquals(31.717f, arc.xAxisRotation, 0.001f)
+        assertTrue(arc.sweep)
     }
 
     @Test
@@ -121,13 +130,12 @@ class PathTest {
         }
 
         val transformed = path.transform(Matrix3x3F32.scaling(-1f, 1f))
-        val points = transformed.points()
-
-        assertEquals(Point(-5f, 0f), points[0])
-        assertEquals(Point(5f, 8f), points[1])
-        assertEquals(1f, points[2].y)
-        assertEquals(Point(0f, 0f), points[3])
-        assertEquals(Point(-4f, 6f), points[4])
+        assertEquals(PathCommand.Move(Point2F32(-5f, 0f)), transformed.commands()[0])
+        val arc = transformed.commands()[1] as PathCommand.ArcTo
+        assertEquals(Vector2F32(5f, 8f), arc.radius)
+        assertTrue(arc.largeArc)
+        assertTrue(!arc.sweep)
+        assertEquals(Point2F32(-4f, 6f), arc.endpoint)
     }
 
     @Test

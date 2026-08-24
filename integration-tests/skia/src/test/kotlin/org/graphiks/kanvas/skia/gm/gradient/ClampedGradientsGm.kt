@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -46,7 +46,7 @@ class ClampedGradientsGm : SkiaGm {
         val paint = Paint(
             antiAlias = true,
             shader = Shader.RadialGradient(
-                center = Point(0f, 300f),
+                center = Point2F32(0f, 300f),
                 radius = 200f,
                 stops = listOf(
                     GradientStop(0f, Color.RED),

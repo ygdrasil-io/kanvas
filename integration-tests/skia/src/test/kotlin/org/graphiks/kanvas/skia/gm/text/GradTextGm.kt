@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -58,8 +58,8 @@ class GradTextGm : SkiaGm {
     }
 
     private fun makeGrad(width: Float) = Shader.LinearGradient(
-        start = Point(0f, 0f),
-        end = Point(width, 0f),
+        start = Point2F32(0f, 0f),
+        end = Point2F32(width, 0f),
         stops = listOf(
             GradientStop(0f, Color.RED),
             GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 0f)),
@@ -69,8 +69,8 @@ class GradTextGm : SkiaGm {
     )
 
     private fun makeGrad2(width: Float) = Shader.LinearGradient(
-        start = Point(0f, 0f),
-        end = Point(width, 0f),
+        start = Point2F32(0f, 0f),
+        end = Point2F32(width, 0f),
         stops = listOf(
             GradientStop(0f, Color.RED),
             GradientStop(0.5f, Color.GREEN),

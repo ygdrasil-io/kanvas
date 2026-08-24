@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 class GPUPreparedEmojiTextTest {
     @Test
@@ -49,7 +49,7 @@ class GPUPreparedEmojiTextTest {
             lower(
                 glyphIds = listOf(44, 45),
                 representation = GPUPreparedTextSourceRepresentation.OUTLINE,
-                positions = listOf(Point(0f, 0f)),
+                positions = listOf(Point2F32(0f, 0f)),
             ),
         )
         val fallback = assertIs<GPUPreparedTextLowering.Refused>(
@@ -88,8 +88,8 @@ class GPUPreparedEmojiTextTest {
     private fun lower(
         glyphIds: List<Int>,
         representation: GPUPreparedTextSourceRepresentation,
-        positions: List<Point> = glyphIds.indices.map { index ->
-            Point(index * 8f, 0f)
+        positions: List<Point2F32> = glyphIds.indices.map { index ->
+            Point2F32(index * 8f, 0f)
         },
         typefacePresent: Boolean = true,
     ): GPUPreparedTextLowering {

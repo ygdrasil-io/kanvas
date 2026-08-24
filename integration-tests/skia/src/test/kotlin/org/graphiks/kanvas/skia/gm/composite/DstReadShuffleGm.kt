@@ -15,8 +15,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.r
@@ -81,10 +80,10 @@ class DstReadShuffleGm : SkiaGm {
             ShapeType.Rect -> canvas.drawRect(kRect, paint)
             ShapeType.ConvexPath -> {
                 if (fConvexPath == null) {
-                    val p0 = Point(kRect.left, kRect.top)
-                    val p1 = Point(kRect.right, kRect.top)
-                    val p2 = Point(kRect.right, kRect.bottom)
-                    val p3 = Point(kRect.left, kRect.bottom)
+                    val p0 = Point2F32(kRect.left, kRect.top)
+                    val p1 = Point2F32(kRect.right, kRect.top)
+                    val p2 = Point2F32(kRect.right, kRect.bottom)
+                    val p3 = Point2F32(kRect.left, kRect.bottom)
                     fConvexPath = Path {
                         moveTo(p0.x, p0.y)
                         quadTo(p1.x, p1.y, p2.x, p2.y)
@@ -97,13 +96,13 @@ class DstReadShuffleGm : SkiaGm {
             ShapeType.ConcavePath -> {
                 if (fConcavePath == null) {
                     val pts = arrayOf(
-                        Point(50f, 0f), Point(0f, 0f), Point(0f, 0f),
-                        Point(0f, 0f), Point(0f, 0f),
+                        Point2F32(50f, 0f), Point2F32(0f, 0f), Point2F32(0f, 0f),
+                        Point2F32(0f, 0f), Point2F32(0f, 0f),
                     )
                     val rot = Matrix3x3F32.rotation(360f / 5f)
                     for (i in 1 until 5) {
-                        val dst = rot.mapPoint(Point(pts[i - 1].x - 50f, pts[i - 1].y - 70f))
-                        pts[i] = Point(50f + dst.x, 70f + dst.y)
+                        val dst = rot.transform(Point2F32(pts[i - 1].x - 50f, pts[i - 1].y - 70f))
+                        pts[i] = Point2F32(50f + dst.x, 70f + dst.y)
                     }
                     fConcavePath = Path {
                         moveTo(pts[0].x, pts[0].y)

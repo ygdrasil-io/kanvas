@@ -12,8 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sqrt
 
@@ -72,13 +71,13 @@ class DrawImageSetGm : SkiaGm {
                 val redPaint = Paint(color = Color.RED, antiAlias = true, strokeWidth = 0f)
 
                 for (x in 1 until kM) {
-                    val p1 = mat.mapPoint(Point(x * kTileW.toFloat(), 0f))
-                    val p2 = mat.mapPoint(Point(x * kTileW.toFloat(), nh))
+                    val p1 = mat.transform(Point2F32(x * kTileW.toFloat(), 0f))
+                    val p2 = mat.transform(Point2F32(x * kTileW.toFloat(), nh))
                     canvas.drawLine(p1.x, p1.y, p2.x, p2.y, redPaint)
                 }
                 for (y in 1 until kN) {
-                    val p1 = mat.mapPoint(Point(0f, y * kTileH.toFloat()))
-                    val p2 = mat.mapPoint(Point(mw, y * kTileH.toFloat()))
+                    val p1 = mat.transform(Point2F32(0f, y * kTileH.toFloat()))
+                    val p2 = mat.transform(Point2F32(mw, y * kTileH.toFloat()))
                     canvas.drawLine(p1.x, p1.y, p2.x, p2.y, redPaint)
                 }
 

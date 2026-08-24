@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/patch.cpp::patch_image`
@@ -70,27 +70,27 @@ class PatchImageGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun loadImageWithTexCoords(): Pair<Shader?, List<Point>> {
+    private fun loadImageWithTexCoords(): Pair<Shader?, List<Point2F32>> {
         val bytes = this::class.java.classLoader?.getResourceAsStream("images/mandrill_128.png")?.readBytes()
         if (bytes != null) {
             val image = Image.decode(bytes)
             if (image.width > 0) {
                 val w = image.width.toFloat()
                 val h = image.height.toFloat()
-                val tex = listOf(Point(0f, 0f), Point(w, 0f), Point(w, h), Point(0f, h))
+                val tex = listOf(Point2F32(0f, 0f), Point2F32(w, 0f), Point2F32(w, h), Point2F32(0f, h))
                 val imgShader = image.makeShader(TileMode.CLAMP, TileMode.CLAMP)
                 return imgShader to tex
             }
         }
-        return null to listOf(Point(0f, 0f), Point(100f, 0f), Point(100f, 100f), Point(0f, 100f))
+        return null to listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(100f, 100f), Point2F32(0f, 100f))
     }
 
     private companion object {
-        private val GCubics: List<Point> = listOf(
-            Point(100f, 100f), Point(150f, 50f), Point(250f, 150f), Point(300f, 100f),
-            Point(250f, 150f), Point(350f, 250f),
-            Point(300f, 300f), Point(250f, 250f), Point(150f, 350f), Point(100f, 300f),
-            Point(50f, 250f), Point(150f, 150f),
+        private val GCubics: List<Point2F32> = listOf(
+            Point2F32(100f, 100f), Point2F32(150f, 50f), Point2F32(250f, 150f), Point2F32(300f, 100f),
+            Point2F32(250f, 150f), Point2F32(350f, 250f),
+            Point2F32(300f, 300f), Point2F32(250f, 250f), Point2F32(150f, 350f), Point2F32(100f, 300f),
+            Point2F32(50f, 250f), Point2F32(150f, 150f),
         )
     }
 }
