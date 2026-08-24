@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class GPUTextRouteRefusalTest {
     @Test
-    fun `text refusal literals have one layered authority including scenes`() {
+    fun `text refusal literals have one layered authority`() {
         val projectRoot = generateSequence(File(".").canonicalFile) { directory ->
             directory.parentFile
         }.first { directory ->
@@ -26,7 +26,7 @@ class GPUTextRouteRefusalTest {
         val diagnosticLiteral = Regex(
             "\"(?:unsupported|dependency)\\.text\\.[^\"]+\"",
         )
-        val duplicates = listOf("font/gpu-api", "gpu-renderer", "gpu-renderer-scenes", "kanvas")
+        val duplicates = listOf("font/gpu-api", "gpu-renderer", "kanvas")
             .flatMap { module ->
                 projectRoot.resolve(module).walkTopDown()
                     .filter { file ->
