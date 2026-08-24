@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.FontEdging
 import org.graphiks.kanvas.text.FontHinting
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /** Port of Skia's `gm/typeface.cpp` (typeface rendering variant).
  *  Draws glyph shapes rendered from typefaces across multiple sizes
@@ -77,7 +77,7 @@ class TypefaceRenderingGm : SkiaGm {
                             }
                             canvas.drawGlyphs(
                                 listOf(glyphId),
-                                listOf(Point(x + subpixel.offsetX, y + subpixel.offsetY)),
+                                listOf(Point2F32(x + subpixel.offsetX, y + subpixel.offsetY)),
                                 currentFont,
                                 Paint(),
                             )
@@ -113,7 +113,7 @@ class TypefaceRenderingGm : SkiaGm {
                 for (style in styleTypes) {
                     canvas.drawGlyphs(
                         listOf(glyphId),
-                        listOf(Point(x, y)),
+                        listOf(Point2F32(x, y)),
                         currentFont,
                         Paint(style = style.style, strokeWidth = style.strokeWidth),
                     )
@@ -140,7 +140,7 @@ class TypefaceRenderingGm : SkiaGm {
             for (mask in maskTypes) {
                 canvas.drawGlyphs(
                     listOf(glyphId),
-                    listOf(Point(x, y)),
+                    listOf(Point2F32(x, y)),
                     currentFont,
                     Paint(maskFilter = MaskFilter.Blur(mask.style, mask.sigma)),
                 )

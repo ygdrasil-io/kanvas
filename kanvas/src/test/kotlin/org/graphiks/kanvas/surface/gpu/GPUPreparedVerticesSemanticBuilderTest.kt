@@ -28,7 +28,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.VertexMode
@@ -688,7 +688,7 @@ class GPUPreparedVerticesSemanticBuilderTest {
     ) = DisplayOp.DrawVertices(
         Vertices(
             VertexMode.TRIANGLES,
-            listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+            listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f)),
         ),
         Paint.fill(color),
         transform,

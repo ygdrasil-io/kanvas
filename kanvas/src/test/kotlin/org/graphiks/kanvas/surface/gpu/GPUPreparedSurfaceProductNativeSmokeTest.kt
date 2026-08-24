@@ -33,7 +33,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -633,9 +633,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 vertices = Vertices(
                     mode = VertexMode.TRIANGLES,
                     positions = listOf(
-                        Point(0f, 0f),
-                        Point(4f, 0f),
-                        Point(0f, 4f),
+                        Point2F32(0f, 0f),
+                        Point2F32(4f, 0f),
+                        Point2F32(0f, 4f),
                     ),
                 ),
                 paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
@@ -787,7 +787,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             DisplayOp.DrawVertices(
                 vertices = Vertices(
                     mode = VertexMode.TRIANGLES,
-                    positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+                    positions = listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f)),
                 ),
                 paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
                 transform = Matrix3x3F32.Identity,
@@ -852,7 +852,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     fun `unregistered mesh program is terminal through the product gate`() {
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
-            positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+            positions = listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f)),
         )
 
         val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
@@ -916,7 +916,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(glyphId.toUShort()),
-                    positions = listOf(Point(0f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f)),
                     fontSize = 48f,
                 ),
             ),

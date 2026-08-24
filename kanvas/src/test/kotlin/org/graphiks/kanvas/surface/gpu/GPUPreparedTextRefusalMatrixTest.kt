@@ -25,7 +25,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.params.ParameterizedTest
@@ -91,7 +91,7 @@ class GPUPreparedTextRefusalMatrixTest {
             ),
             RefusalCase(
                 "mismatched positions",
-                valid.withRun(glyphs = listOf(5u, 9u), positions = listOf(Point(1f, 2f))),
+                valid.withRun(glyphs = listOf(5u, 9u), positions = listOf(Point2F32(1f, 2f))),
                 GPUTextRefusalCodes.POSITION_COUNT_MISMATCH,
             ),
             RefusalCase(
@@ -101,7 +101,7 @@ class GPUPreparedTextRefusalMatrixTest {
             ),
             RefusalCase(
                 "non finite position",
-                valid.withRun(positions = listOf(Point(Float.POSITIVE_INFINITY, 2f))),
+                valid.withRun(positions = listOf(Point2F32(Float.POSITIVE_INFINITY, 2f))),
                 GPUTextRefusalCodes.POSITION_NONFINITE,
             ),
             RefusalCase(
@@ -248,7 +248,7 @@ class GPUPreparedTextRefusalMatrixTest {
                 "priority run structure before glyph and origin",
                 valid.withRun(
                     glyphs = listOf(UShort.MAX_VALUE, 5u),
-                    positions = listOf(Point(Float.NaN, 0f)),
+                    positions = listOf(Point2F32(Float.NaN, 0f)),
                 ).copy(x = Float.NaN),
                 GPUTextRefusalCodes.POSITION_COUNT_MISMATCH,
             ),
@@ -287,12 +287,12 @@ class GPUPreparedTextRefusalMatrixTest {
         val valid = validOperation()
         val malformedStructure = KanvasGlyphRun(
             glyphs = listOf(5u, 9u),
-            positions = listOf(Point(1f, 2f)),
+            positions = listOf(Point2F32(1f, 2f)),
             fontSize = 16f,
         )
         val nonFinitePosition = KanvasGlyphRun(
             glyphs = listOf(5u),
-            positions = listOf(Point(Float.NaN, 2f)),
+            positions = listOf(Point2F32(Float.NaN, 2f)),
             fontSize = 16f,
         )
 
@@ -319,7 +319,7 @@ class GPUPreparedTextRefusalMatrixTest {
                 lower(
                     valid.withRun(
                         glyphs = glyphs,
-                        positions = glyphs.indices.map { index -> Point(index.toFloat(), 2f) },
+                        positions = glyphs.indices.map { index -> Point2F32(index.toFloat(), 2f) },
                     ),
                     resolver = overridingRepresentation(
                         GPUPreparedTextSourceRepresentation.MISSING,
@@ -400,7 +400,7 @@ class GPUPreparedTextRefusalMatrixTest {
                         lower(
                             operation = validOperation().withRun(
                                 glyphs = glyphs,
-                                positions = glyphs.indices.map { Point(it.toFloat(), 2f) },
+                                positions = glyphs.indices.map { Point2F32(it.toFloat(), 2f) },
                             ),
                             resolver = resolver,
                         ),
@@ -443,7 +443,7 @@ class GPUPreparedTextRefusalMatrixTest {
                 lower(
                     operation = valid.withRun(
                         glyphs = glyphs,
-                        positions = glyphs.indices.map { Point(it.toFloat(), 2f) },
+                        positions = glyphs.indices.map { Point2F32(it.toFloat(), 2f) },
                     ),
                     resolver = resolver,
                 ),
@@ -457,7 +457,7 @@ class GPUPreparedTextRefusalMatrixTest {
         val result = assertIs<GPUPreparedTextLowering.Refused>(
             lower(
                 validOperation().withRun(
-                    positions = listOf(Point(Float.MAX_VALUE, Float.MAX_VALUE)),
+                    positions = listOf(Point2F32(Float.MAX_VALUE, Float.MAX_VALUE)),
                 ).copy(
                     x = Float.MAX_VALUE,
                     y = Float.MAX_VALUE,
@@ -539,7 +539,7 @@ class GPUPreparedTextRefusalMatrixTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(5u),
-                    positions = listOf(Point(2f, 3f)),
+                    positions = listOf(Point2F32(2f, 3f)),
                     fontSize = 16f,
                 ),
             ),
@@ -557,7 +557,7 @@ class GPUPreparedTextRefusalMatrixTest {
 
     private fun DisplayOp.DrawText.withRun(
         glyphs: List<UShort> = listOf(5u),
-        positions: List<Point> = listOf(Point(2f, 3f)),
+        positions: List<Point2F32> = listOf(Point2F32(2f, 3f)),
         fontSize: Float = 16f,
     ): DisplayOp.DrawText = copy(
         blob = blob.copy(

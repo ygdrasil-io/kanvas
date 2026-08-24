@@ -33,7 +33,6 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.a
@@ -376,8 +375,8 @@ private fun Matrix3x3F32.snapshotForPreparedVertices(): Matrix3x3F32 = Matrix3x3
 
 private fun Vertices.snapshotForPreparedVertices(): Vertices = Vertices(
     mode = mode,
-    positions = positions.map { org.graphiks.kanvas.types.Point(it.x, it.y) },
-    texCoords = texCoords?.map { org.graphiks.kanvas.types.Point(it.x, it.y) },
+    positions = positions.map { org.graphiks.math.geometry.Point2F32(it.x, it.y) },
+    texCoords = texCoords?.map { org.graphiks.math.geometry.Point2F32(it.x, it.y) },
     colors = colors?.toList(),
     indices = indices?.toList(),
 )
@@ -689,11 +688,11 @@ private fun prepareClip(
 private fun org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
     .transformConservatively(transform: Matrix3x3F32): GPUBounds? {
     val corners = listOf(
-        org.graphiks.kanvas.types.Point(left, top),
-        org.graphiks.kanvas.types.Point(right, top),
-        org.graphiks.kanvas.types.Point(right, bottom),
-        org.graphiks.kanvas.types.Point(left, bottom),
-    ).map(transform::mapPoint)
+        org.graphiks.math.geometry.Point2F32(left, top),
+        org.graphiks.math.geometry.Point2F32(right, top),
+        org.graphiks.math.geometry.Point2F32(right, bottom),
+        org.graphiks.math.geometry.Point2F32(left, bottom),
+    ).map(transform::transform)
     if (corners.any { !it.x.isFinite() || !it.y.isFinite() }) return null
     return GPUBounds(
         corners.minOf { it.x }, corners.minOf { it.y }, corners.maxOf { it.x }, corners.maxOf { it.y },

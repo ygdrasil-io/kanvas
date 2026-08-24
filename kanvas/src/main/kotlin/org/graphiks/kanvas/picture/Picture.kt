@@ -13,6 +13,7 @@ import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.ceil
@@ -34,6 +35,8 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -300,7 +303,8 @@ private class Writer {
     fun result(): ByteArray = baos.toByteArray()
 
     fun rect(r: Rect) { float(r.left); float(r.top); float(r.right); float(r.bottom) }
-    fun point(p: Point) { float(p.x); float(p.y) }
+    fun point2(p: Point2F32) { float(p.x); float(p.y) }
+    fun vector2(v: Vector2F32) { float(v.x); float(v.y) }
     fun size(s: Size) { float(s.width); float(s.height) }
     fun color(c: Color) { int(c.packed.toInt()) }
     fun samplingOptions(sampling: SamplingOptions) {
@@ -325,12 +329,34 @@ private class Writer {
 
     fun path(p: Path) {
         byte(p.fillType.ordinal.toByte())
-        val verbs = p.verbs()
-        int(verbs.size)
-        for (v in verbs) byte(v.ordinal.toByte())
-        val pts = p.points()
-        int(pts.size)
-        for (pt in pts) point(pt)
+        val commands = p.commands()
+        int(commands.size)
+        for (command in commands) byte(command.verb.ordinal.toByte())
+        int(commands.sumOf { it.serializedPairCount })
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move -> point2(command.point)
+                is PathCommand.Line -> point2(command.endpoint)
+                is PathCommand.Quad -> {
+                    point2(command.control)
+                    point2(command.endpoint)
+                }
+                is PathCommand.Cubic -> {
+                    point2(command.control1)
+                    point2(command.control2)
+                    point2(command.endpoint)
+                }
+                is PathCommand.ArcTo -> {
+                    vector2(command.radius)
+                    float(command.xAxisRotation)
+                    float(if (command.largeArc) 1f else 0f)
+                    float(if (command.sweep) 1f else 0f)
+                    float(0f)
+                    point2(command.endpoint)
+                }
+                PathCommand.Close -> Unit
+            }
+        }
     }
 
     fun image(img: Image) {
@@ -376,19 +402,19 @@ private class Writer {
         when (s) {
             is Shader.SolidColor -> { byte(0); color(s.color) }
             is Shader.LinearGradient -> {
-                byte(1); point(s.start); point(s.end)
+                byte(1); point2(s.start); point2(s.end)
                 gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
             }
             is Shader.RadialGradient -> {
-                byte(2); point(s.center); float(s.radius)
+                byte(2); point2(s.center); float(s.radius)
                 gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
             }
             is Shader.SweepGradient -> {
-                byte(3); point(s.center); float(s.startAngle); float(s.endAngle)
+                byte(3); point2(s.center); float(s.startAngle); float(s.endAngle)
                 gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
             }
             is Shader.ConicalGradient -> {
-                byte(4); point(s.start); float(s.startRadius); point(s.end); float(s.endRadius)
+                byte(4); point2(s.start); float(s.startRadius); point2(s.end); float(s.endRadius)
                 gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
             }
             is Shader.Image -> { byte(5); image(s.image); tileMode(s.tileModeX); tileMode(s.tileModeY) }
@@ -557,12 +583,12 @@ private class Writer {
             is ImageFilter.Blend -> { byte(4); blendMode(imageFilter.mode); imageFilter(imageFilter.background); imageFilter(imageFilter.foreground) }
             is ImageFilter.Dilate -> { byte(5); float(imageFilter.radiusX); float(imageFilter.radiusY); imageFilter(imageFilter.input) }
             is ImageFilter.Erode -> { byte(6); float(imageFilter.radiusX); float(imageFilter.radiusY); imageFilter(imageFilter.input) }
-            is ImageFilter.DistantLitDiffuse -> { byte(7); point(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.PointLitDiffuse -> { byte(8); point(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.SpotLitDiffuse -> { byte(9); point(imageFilter.location); point(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.DistantLitSpecular -> { byte(10); point(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
-            is ImageFilter.PointLitSpecular -> { byte(11); point(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
-            is ImageFilter.SpotLitSpecular -> { byte(12); point(imageFilter.location); point(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
+            is ImageFilter.DistantLitDiffuse -> { byte(7); vector2(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
+            is ImageFilter.PointLitDiffuse -> { byte(8); point2(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
+            is ImageFilter.SpotLitDiffuse -> { byte(9); point2(imageFilter.location); point2(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
+            is ImageFilter.DistantLitSpecular -> { byte(10); vector2(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
+            is ImageFilter.PointLitSpecular -> { byte(11); point2(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
+            is ImageFilter.SpotLitSpecular -> { byte(12); point2(imageFilter.location); point2(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
             is ImageFilter.Offset -> { byte(13); float(imageFilter.dx); float(imageFilter.dy); imageFilter(imageFilter.input) }
             is ImageFilter.Tile -> { byte(14); rect(imageFilter.src); rect(imageFilter.dst); imageFilter(imageFilter.input) }
             is ImageFilter.Merge -> { byte(15); int(imageFilter.inputs.size); for (f in imageFilter.inputs) imageFilter(f) }
@@ -572,7 +598,7 @@ private class Writer {
                 byte(18); size(imageFilter.kernelSize); int(imageFilter.kernel.size)
                 for (f in imageFilter.kernel) float(f)
                 float(imageFilter.gain); float(imageFilter.bias)
-                point(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
+                vector2(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
                 bool(imageFilter.convolveAlpha); imageFilter(imageFilter.input)
             }
             is ImageFilter.Picture -> {
@@ -615,7 +641,7 @@ private class Writer {
             int(run.glyphs.size)
             for (g in run.glyphs) int(g.toInt())
             int(run.positions.size)
-            for (p in run.positions) point(p)
+            for (p in run.positions) point2(p)
         }
         val tf = blob.typeface
         if (tf != null) { bool(true); string((tf as? KanvasTypeface)?.resourcePath ?: tf.fontName) } else bool(false)
@@ -624,8 +650,8 @@ private class Writer {
 
     fun vertices(v: Vertices) {
         vertexMode(v.mode)
-        int(v.positions.size); for (p in v.positions) point(p)
-        if (v.texCoords != null) { bool(true); int(v.texCoords.size); for (p in v.texCoords) point(p) } else bool(false)
+        int(v.positions.size); for (p in v.positions) point2(p)
+        if (v.texCoords != null) { bool(true); int(v.texCoords.size); for (p in v.texCoords) point2(p) } else bool(false)
         if (v.colors != null) { bool(true); int(v.colors.size); for (c in v.colors) color(c) } else bool(false)
         if (v.indices != null) { bool(true); int(v.indices.size); for (i in v.indices) int(i) } else bool(false)
     }
@@ -700,7 +726,7 @@ private class Writer {
             }
             is DisplayOp.DrawPoints -> {
                 byte(OP_DRAW_POINTS); pointMode(op.mode); int(op.points.size)
-                for (p in op.points) point(p); paint(op.paint)
+                for (p in op.points) point2(p); paint(op.paint)
                 matrix33(op.transform); clipStack(op.clip)
             }
             is DisplayOp.DrawImage -> {
@@ -801,7 +827,8 @@ private class Reader(private val data: ByteArray) {
     fun bytes(len: Int): ByteArray { val v = ByteArray(len); guard { if (valid) dis.readFully(v) }; return v }
 
     fun rect(): Rect = Rect(float(), float(), float(), float())
-    fun point(): Point = Point(float(), float())
+    fun point2(): Point2F32 = Point2F32(float(), float())
+    fun vector2(): Vector2F32 = Vector2F32(float(), float())
     fun size(): Size = Size(float(), float())
     fun color(): Color = Color(int().toUInt())
     fun samplingOptions(): SamplingOptions = when (byte().toInt()) {
@@ -831,12 +858,46 @@ private class Reader(private val data: ByteArray) {
         val verbCount = int()
         val verbs = List(verbCount) { PathVerb.entries[byte().toInt()] }
         val ptCount = int()
-        val pts = List(ptCount) { point() }
+        val values = FloatArray(ptCount * 2) { float() }
         val p = Path()
         p.fillType = fillType
-        // Add verbs and points via internal methods
-        for (v in verbs) if (!p.addVerb(v)) { valid = false; return p }
-        for (pt in pts) if (!p.addPoint(pt)) { valid = false; return p }
+        var pointIndex = 0
+        fun nextPair(): Pair<Float, Float> {
+            if (pointIndex + 1 >= values.size) {
+                valid = false
+                return 0f to 0f
+            }
+            val pair = values[pointIndex] to values[pointIndex + 1]
+            pointIndex += 2
+            return pair
+        }
+        for (verb in verbs) {
+            when (verb) {
+                PathVerb.MOVE -> nextPair().let { (x, y) -> p.moveTo(x, y) }
+                PathVerb.LINE -> nextPair().let { (x, y) -> p.lineTo(x, y) }
+                PathVerb.QUAD -> {
+                    val (controlX, controlY) = nextPair()
+                    val (endX, endY) = nextPair()
+                    p.quadTo(controlX, controlY, endX, endY)
+                }
+                PathVerb.CUBIC -> {
+                    val (control1X, control1Y) = nextPair()
+                    val (control2X, control2Y) = nextPair()
+                    val (endX, endY) = nextPair()
+                    p.cubicTo(control1X, control1Y, control2X, control2Y, endX, endY)
+                }
+                PathVerb.ARC_TO -> {
+                    val (radiusX, radiusY) = nextPair()
+                    val (rotation, largeArcValue) = nextPair()
+                    val (sweepValue, _) = nextPair()
+                    val (endX, endY) = nextPair()
+                    p.arcTo(radiusX, radiusY, rotation, largeArcValue > 0f, sweepValue > 0f, endX, endY)
+                }
+                PathVerb.CLOSE -> p.close()
+            }
+            if (!valid) return p
+        }
+        if (pointIndex != values.size) valid = false
         return p
     }
 
@@ -881,10 +942,10 @@ private class Reader(private val data: ByteArray) {
         if (disc == 0xFF.toByte()) return null
         return when (disc.toInt()) {
             0 -> Shader.SolidColor(color())
-            1 -> Shader.LinearGradient(point(), point(), gradientStops(), tileMode(), colorSpaceInterpolation())
-            2 -> Shader.RadialGradient(point(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
-            3 -> Shader.SweepGradient(point(), float(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
-            4 -> Shader.ConicalGradient(point(), float(), point(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
+            1 -> Shader.LinearGradient(point2(), point2(), gradientStops(), tileMode(), colorSpaceInterpolation())
+            2 -> Shader.RadialGradient(point2(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
+            3 -> Shader.SweepGradient(point2(), float(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
+            4 -> Shader.ConicalGradient(point2(), float(), point2(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
             5 -> Shader.Image(image(), tileMode(), tileMode())
             6 -> Shader.Blend(blendMode(), shader()!!, shader()!!)
             7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub, readShaderMap()) } }
@@ -1048,18 +1109,18 @@ private class Reader(private val data: ByteArray) {
             4 -> ImageFilter.Blend(blendMode(), imageFilter()!!, imageFilter()!!)
             5 -> ImageFilter.Dilate(float(), float(), imageFilter())
             6 -> ImageFilter.Erode(float(), float(), imageFilter())
-            7 -> ImageFilter.DistantLitDiffuse(point(), color(), float(), float(), imageFilter())
-            8 -> ImageFilter.PointLitDiffuse(point(), color(), float(), float(), imageFilter())
-            9 -> ImageFilter.SpotLitDiffuse(point(), point(), float(), float(), color(), float(), float(), imageFilter())
-            10 -> ImageFilter.DistantLitSpecular(point(), color(), float(), float(), float(), imageFilter())
-            11 -> ImageFilter.PointLitSpecular(point(), color(), float(), float(), float(), imageFilter())
-            12 -> ImageFilter.SpotLitSpecular(point(), point(), float(), float(), color(), float(), float(), float(), imageFilter())
+            7 -> ImageFilter.DistantLitDiffuse(vector2(), color(), float(), float(), imageFilter())
+            8 -> ImageFilter.PointLitDiffuse(point2(), color(), float(), float(), imageFilter())
+            9 -> ImageFilter.SpotLitDiffuse(point2(), point2(), float(), float(), color(), float(), float(), imageFilter())
+            10 -> ImageFilter.DistantLitSpecular(vector2(), color(), float(), float(), float(), imageFilter())
+            11 -> ImageFilter.PointLitSpecular(point2(), color(), float(), float(), float(), imageFilter())
+            12 -> ImageFilter.SpotLitSpecular(point2(), point2(), float(), float(), color(), float(), float(), float(), imageFilter())
             13 -> ImageFilter.Offset(float(), float(), imageFilter())
             14 -> ImageFilter.Tile(rect(), rect(), imageFilter())
             15 -> ImageFilter.Merge(List(int()) { imageFilter()!! })
             16 -> ImageFilter.DisplacementMap(colorChannel(), colorChannel(), float(), imageFilter()!!, imageFilter())
             17 -> ImageFilter.Magnifier(rect(), float(), float(), imageFilter())
-            18 -> ImageFilter.MatrixConvolution(size(), FloatArray(int()) { float() }, float(), float(), point(), tileMode(), bool(), imageFilter())
+            18 -> ImageFilter.MatrixConvolution(size(), FloatArray(int()) { float() }, float(), float(), vector2(), tileMode(), bool(), imageFilter())
             19 -> {
                 val nestedLen = int()
                 val nestedData = bytes(nestedLen)
@@ -1096,7 +1157,7 @@ private class Reader(private val data: ByteArray) {
     fun textBlob(): TextBlob {
         val runs = List(int()) {
             val glyphs = List<UShort>(int()) { int().toUShort() }
-            val positions = List(int()) { point() }
+            val positions = List(int()) { point2() }
             KanvasGlyphRun(glyphs, positions)
         }
         val typeface = if (bool()) KanvasTypeface(string()) else null
@@ -1106,8 +1167,8 @@ private class Reader(private val data: ByteArray) {
 
     fun vertices(): Vertices {
         val mode = vertexMode()
-        val positions = List(int()) { point() }
-        val texCoords = if (bool()) List(int()) { point() } else null
+        val positions = List(int()) { point2() }
+        val texCoords = if (bool()) List(int()) { point2() } else null
         val colors = if (bool()) List(int()) { color() } else null
         val indices = if (bool()) List(int()) { int() } else null
         return Vertices(mode, positions, texCoords, colors, indices)
@@ -1196,7 +1257,7 @@ private class Reader(private val data: ByteArray) {
             OP_DRAW_POINT.toInt() -> DisplayOp.DrawPoint(float(), float(), paint(), matrix33(), clipStack())
             OP_DRAW_POINTS.toInt() -> {
                 val mode = pointMode()
-                val pts = List(int()) { point() }
+                val pts = List(int()) { point2() }
                 DisplayOp.DrawPoints(mode, pts, paint(), matrix33(), clipStack())
             }
             OP_DRAW_IMAGE.toInt() -> {
@@ -1308,19 +1369,11 @@ private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout:
     constructor.newInstance(id, module, uniformLayout, children)
 } catch (_: Exception) { null }
 
-// Add missing methods to Path for serialization construction
-internal fun Path.addVerb(verb: PathVerb): Boolean = try {
-    val field = Path::class.java.getDeclaredField("verbs")
-    field.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    (field.get(this) as MutableList<PathVerb>).add(verb)
-    true
-} catch (_: Exception) { false }
-
-internal fun Path.addPoint(pt: Point): Boolean = try {
-    val field = Path::class.java.getDeclaredField("points")
-    field.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    (field.get(this) as MutableList<Point>).add(pt)
-    true
-} catch (_: Exception) { false }
+private val PathCommand.serializedPairCount: Int
+    get() = when (this) {
+        is PathCommand.Move, is PathCommand.Line -> 1
+        is PathCommand.Quad -> 2
+        is PathCommand.Cubic -> 3
+        is PathCommand.ArcTo -> 4
+        PathCommand.Close -> 0
+    }

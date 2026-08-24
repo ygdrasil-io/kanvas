@@ -5,6 +5,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.*
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.PI
 
 /** Draw an oval inscribed in [rect] filled/stroked with [paint]. */
@@ -64,16 +65,16 @@ fun Canvas.drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint) {
  * @param paint The paint used for filling.
  */
 fun Canvas.drawPatch(
-    cubics: List<Point>,
+    cubics: List<Point2F32>,
     colors: List<Color>? = null,
-    texCoords: List<Point>? = null,
+    texCoords: List<Point2F32>? = null,
     paint: Paint,
 ) {
     // Tessellate Coons patch into a triangle mesh (4x4 subdivision = 32 triangles)
     val w = 4
-    val positions = mutableListOf<Point>()
+    val positions = mutableListOf<Point2F32>()
     val vColors = colors?.let { mutableListOf<Color>() }
-    val vTexs = texCoords?.let { mutableListOf<Point>() }
+    val vTexs = texCoords?.let { mutableListOf<Point2F32>() }
     val tl = colors?.getOrNull(0); val tr = colors?.getOrNull(1)
     val br = colors?.getOrNull(2); val bl = colors?.getOrNull(3)
     val ttl = texCoords?.getOrNull(0); val ttr = texCoords?.getOrNull(1)
@@ -96,7 +97,7 @@ fun Canvas.drawPatch(
                 ))
             }
             if (ttl != null && ttr != null && tbr != null && tbl != null) {
-                vTexs!!.add(Point(
+                vTexs!!.add(Point2F32(
                     lerp(lerp(ttl.x, ttr.x, uu), lerp(tbl.x, tbr.x, uu), vv),
                     lerp(lerp(ttl.y, ttr.y, uu), lerp(tbl.y, tbr.y, uu), vv),
                 ))
@@ -116,22 +117,22 @@ fun Canvas.drawPatch(
 
 private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
-private fun evalCubicPatch(cubics: List<Point>, u: Float, v: Float): Point {
+private fun evalCubicPatch(cubics: List<Point2F32>, u: Float, v: Float): Point2F32 {
     val pts = cubics.toList()
     val omu = 1f - u; val omv = 1f - v
     val top = cubicAt(pts[0], pts[1], pts[2], pts[3], u)
     val bot = cubicAt(pts[9], pts[10], pts[11], pts[0], u) // reuse corner
     val left = cubicAt(pts[0], pts[6], pts[7], pts[3], v) // approximate
     val right = cubicAt(pts[3], pts[4], pts[5], pts[9], v) // approximate
-    return Point(
+    return Point2F32(
         omv * top.x + v * bot.x,
         omv * top.y + v * bot.y,
     )
 }
 
-private fun cubicAt(p0: Point, p1: Point, p2: Point, p3: Point, t: Float): Point {
+private fun cubicAt(p0: Point2F32, p1: Point2F32, p2: Point2F32, p3: Point2F32, t: Float): Point2F32 {
     val omt = 1f - t; val omt2 = omt * omt; val t2 = t * t
-    return Point(
+    return Point2F32(
         omt2 * omt * p0.x + 3 * omt2 * t * p1.x + 3 * omt * t2 * p2.x + t2 * t * p3.x,
         omt2 * omt * p0.y + 3 * omt2 * t * p1.y + 3 * omt * t2 * p2.y + t2 * t * p3.y,
     )

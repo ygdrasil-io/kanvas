@@ -17,7 +17,7 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -64,14 +64,14 @@ class Skbug257Gm : SkiaGm {
         val delta = 1f / 64f
         val mid = size / 2
         val points = listOf(
-            Point(mid, 8f + translate),
-            Point(mid, 8f + translate + delta),
-            Point(8f, mid + translate),
-            Point(8f, mid + translate + delta),
-            Point(mid, size - 8f + translate),
-            Point(mid, size - 8f + translate + delta),
-            Point(size - 8f, mid + translate),
-            Point(size - 8f, mid + translate + delta),
+            Point2F32(mid, 8f + translate),
+            Point2F32(mid, 8f + translate + delta),
+            Point2F32(8f, mid + translate),
+            Point2F32(8f, mid + translate + delta),
+            Point2F32(mid, size - 8f + translate),
+            Point2F32(mid, size - 8f + translate + delta),
+            Point2F32(size - 8f, mid + translate),
+            Point2F32(size - 8f, mid + translate + delta),
         )
         val strokePaint = paint.copy(
             style = PaintStyle.STROKE, strokeWidth = 8f, strokeCap = org.graphiks.kanvas.paint.StrokeCap.ROUND,
@@ -124,12 +124,12 @@ class Skbug257Gm : SkiaGm {
         val lineSpacing = if (metrics != null) metrics.descent - metrics.ascent + metrics.leading else 28f
         val baseY = size / 2f + translateY + lineSpacing
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = 32f
         for (cp in text.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(cursorX, baseY))
+            positions.add(Point2F32(cursorX, baseY))
             cursorX += typeface.getAdvance(gid, font.size)
         }
         val blob1 = TextBlob(listOf(KanvasGlyphRun(glyphIds, positions, fontSize = font.size)), typeface, font.size)
@@ -137,12 +137,12 @@ class Skbug257Gm : SkiaGm {
 
         val baseY2 = baseY + lineSpacing
         val glyphIds2 = mutableListOf<UShort>()
-        val positions2 = mutableListOf<Point>()
+        val positions2 = mutableListOf<Point2F32>()
         cursorX = 32f
         for (cp in text.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds2.add(gid.toUShort())
-            positions2.add(Point(cursorX, baseY2))
+            positions2.add(Point2F32(cursorX, baseY2))
             cursorX += typeface.getAdvance(gid, font.size)
         }
         val blob2 = TextBlob(listOf(KanvasGlyphRun(glyphIds2, positions2, fontSize = font.size)), typeface, font.size)

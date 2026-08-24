@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -52,8 +52,8 @@ class ComposeShaderGridGm : SkiaGm {
 
     private fun makeSrcShader(size: Float): Shader {
         return Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(0f, size),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(0f, size),
             stops = listOf(
                 GradientStop(0f, Color.BLUE),
                 GradientStop(1f, Color.TRANSPARENT),
@@ -63,8 +63,8 @@ class ComposeShaderGridGm : SkiaGm {
 
     private fun makeDstShader(size: Float): Shader {
         return Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(size, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(size, 0f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f, Color.TRANSPARENT),

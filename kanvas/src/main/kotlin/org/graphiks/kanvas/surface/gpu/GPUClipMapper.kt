@@ -12,7 +12,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -136,54 +136,46 @@ private fun org.graphiks.kanvas.types.Rect.isIntegerAligned(): Boolean =
 internal fun Path.toPathTessellatorData(): PathData {
     val verbs = mutableListOf<GpuPathVerb>()
     val points = mutableListOf<Point>()
-    val kanvasVerbs = this.verbs()
-    val kanvasPoints = this.points()
-    var pointIndex = 0
     var currentPoint = Point(0f, 0f)
     var contourStart = currentPoint
-    for (verb in kanvasVerbs) {
-        when (verb) {
-            PathVerb.MOVE -> {
-                val point = kanvasPoints[pointIndex++]
-                currentPoint = Point(point.x, point.y)
+    for (command in commands()) {
+        when (command) {
+            is PathCommand.Move -> {
+                currentPoint = Point(command.point.x, command.point.y)
                 contourStart = currentPoint
                 verbs.add(GpuPathVerb.MoveTo(currentPoint))
             }
-            PathVerb.LINE -> {
-                val point = kanvasPoints[pointIndex++]
-                currentPoint = Point(point.x, point.y)
+            is PathCommand.Line -> {
+                currentPoint = Point(command.endpoint.x, command.endpoint.y)
                 verbs.add(GpuPathVerb.LineTo(currentPoint))
             }
-            PathVerb.QUAD -> {
-                val control = kanvasPoints[pointIndex++]
-                val point = kanvasPoints[pointIndex++]
-                currentPoint = Point(point.x, point.y)
-                verbs.add(GpuPathVerb.QuadTo(Point(control.x, control.y), currentPoint))
+            is PathCommand.Quad -> {
+                currentPoint = Point(command.endpoint.x, command.endpoint.y)
+                verbs.add(GpuPathVerb.QuadTo(Point(command.control.x, command.control.y), currentPoint))
             }
-            PathVerb.CUBIC -> {
-                val control1 = kanvasPoints[pointIndex++]
-                val control2 = kanvasPoints[pointIndex++]
-                val point = kanvasPoints[pointIndex++]
-                currentPoint = Point(point.x, point.y)
-                verbs.add(GpuPathVerb.CubicTo(Point(control1.x, control1.y), Point(control2.x, control2.y), currentPoint))
+            is PathCommand.Cubic -> {
+                currentPoint = Point(command.endpoint.x, command.endpoint.y)
+                verbs.add(
+                    GpuPathVerb.CubicTo(
+                        Point(command.control1.x, command.control1.y),
+                        Point(command.control2.x, command.control2.y),
+                        currentPoint,
+                    ),
+                )
             }
-            PathVerb.ARC_TO -> {
-                val radius = kanvasPoints[pointIndex++]
-                val rotationAndLargeArc = kanvasPoints[pointIndex++]
-                val sweep = kanvasPoints[pointIndex++]
-                val endpoint = kanvasPoints[pointIndex++]
-                val arcEndpoint = Point(endpoint.x, endpoint.y)
+            is PathCommand.ArcTo -> {
+                val arcEndpoint = Point(command.endpoint.x, command.endpoint.y)
                 flattenSvgArc(
                     start = currentPoint,
-                    radius = Point(radius.x, radius.y),
-                    xAxisRotation = rotationAndLargeArc.x,
-                    largeArc = rotationAndLargeArc.y > 0f,
-                    sweep = sweep.x > 0f,
+                    radius = Point(command.radius.x, command.radius.y),
+                    xAxisRotation = command.xAxisRotation,
+                    largeArc = command.largeArc,
+                    sweep = command.sweep,
                     endpoint = arcEndpoint,
                 ).forEach { verbs.add(GpuPathVerb.LineTo(it)) }
                 currentPoint = arcEndpoint
             }
-            PathVerb.CLOSE -> {
+            PathCommand.Close -> {
                 verbs.add(GpuPathVerb.Close)
                 currentPoint = contourStart
             }

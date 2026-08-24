@@ -14,7 +14,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/tilemodes.cpp`.
@@ -92,7 +92,7 @@ class TilemodesGm(
         fun makebm(ct: String, w: Int, h: Int): Image {
             val surface = Surface(w, h)
             surface.canvas {
-                val pts = listOf(Point(0f, 0f), Point(w.toFloat(), h.toFloat()))
+                val pts = listOf(Point2F32(0f, 0f), Point2F32(w.toFloat(), h.toFloat()))
         val stops = listOf<GradientStop>(
             GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
             GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),

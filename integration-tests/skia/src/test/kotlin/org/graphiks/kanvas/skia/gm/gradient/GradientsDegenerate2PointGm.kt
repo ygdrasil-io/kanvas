@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -28,9 +28,9 @@ class GradientsDegenerate2PointGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0f, 0f, 1f)
 
-        val c0 = Point(-80f, 25f)
+        val c0 = Point2F32(-80f, 25f)
         val r0 = 70f
-        val c1 = Point(0f, 25f)
+        val c1 = Point2F32(0f, 25f)
         val r1 = 150f
 
         val shader = Shader.ConicalGradient(

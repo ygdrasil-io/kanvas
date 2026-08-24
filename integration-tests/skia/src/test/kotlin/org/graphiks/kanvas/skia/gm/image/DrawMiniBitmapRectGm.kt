@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
@@ -102,7 +102,7 @@ class DrawMiniBitmapRectGm : SkiaGm {
             val surface = Surface(w, h)
             val wScalar = w.toFloat()
             val hScalar = h.toFloat()
-            val pt = Point(wScalar / 2f, hScalar / 2f)
+            val pt = Point2F32(wScalar / 2f, hScalar / 2f)
             val radius = 4f * maxOf(wScalar, hScalar)
 
             val colors = listOf(

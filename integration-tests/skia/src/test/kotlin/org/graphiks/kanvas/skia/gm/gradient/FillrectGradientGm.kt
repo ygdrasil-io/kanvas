@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -53,8 +53,8 @@ class FillrectGradientGm : SkiaGm {
         val cellRect = Rect.fromXYWH(0f, 0f, kCellSize.toFloat(), kCellSize.toFloat())
 
         val linear = Shader.LinearGradient(
-            start = Point(kCellSize.toFloat(), 0f),
-            end = Point(kCellSize.toFloat(), kCellSize.toFloat()),
+            start = Point2F32(kCellSize.toFloat(), 0f),
+            end = Point2F32(kCellSize.toFloat(), kCellSize.toFloat()),
             stops = stops, tileMode = TileMode.CLAMP,
         )
         var paint = Paint(antiAlias = true, shader = linear)
@@ -64,7 +64,7 @@ class FillrectGradientGm : SkiaGm {
         canvas.translate((kCellSize + kPadSize).toFloat(), 0f)
 
         val radial = Shader.RadialGradient(
-            center = Point(kCellSize / 2f, kCellSize / 2f),
+            center = Point2F32(kCellSize / 2f, kCellSize / 2f),
             radius = kCellSize / 2f,
             stops = stops, tileMode = TileMode.CLAMP,
         )

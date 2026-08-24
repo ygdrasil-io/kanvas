@@ -36,7 +36,7 @@ class FillTypePerspGm : SkiaGm {
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val bgCenter = org.graphiks.kanvas.types.Point(100f, 100f)
+        val bgCenter = org.graphiks.math.geometry.Point2F32(100f, 100f)
         val bgStops = listOf(
             GradientStop(0f, Color.BLACK),
             GradientStop(0.25f, Color.fromRGBA(0f, 1f, 1f, 1f)),
@@ -65,7 +65,7 @@ class FillTypePerspGm : SkiaGm {
     }
 
     private fun showFour(canvas: GmCanvas, scale: Float, aa: Boolean) {
-        val center = org.graphiks.kanvas.types.Point(100f, 100f)
+        val center = org.graphiks.math.geometry.Point2F32(100f, 100f)
         val stops = listOf(
             GradientStop(0f, Color.BLUE),
             GradientStop(0.5f, Color.RED),

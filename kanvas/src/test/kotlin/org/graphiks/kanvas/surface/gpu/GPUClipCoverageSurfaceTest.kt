@@ -37,7 +37,7 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Mesh
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -632,8 +632,8 @@ class GPUClipCoverageSurfaceTest {
             DisplayOp.DrawVertices(
                 vertices = Vertices(
                     mode = VertexMode.TRIANGLES,
-                    positions = listOf(Point(0f, 0f), Point(8f, 0f), Point(0f, 8f)),
-                    texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+                    positions = listOf(Point2F32(0f, 0f), Point2F32(8f, 0f), Point2F32(0f, 8f)),
+                    texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
                 ),
                 paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(image)),
                 transform = Matrix3x3F32.translation(20f, 20f),
@@ -882,7 +882,7 @@ class GPUClipCoverageSurfaceTest {
                 listOf(
                     DisplayOp.DrawPoints(
                         PointMode.POINTS,
-                        listOf(Point(4f, 4f), Point(20f, 4f)),
+                        listOf(Point2F32(4f, 4f), Point2F32(20f, 4f)),
                         Paint.fill(Color.RED),
                         Matrix3x3F32.Identity,
                         complexFullClip(),
@@ -965,7 +965,7 @@ class GPUClipCoverageSurfaceTest {
         val mesh = Mesh(
             vertices = Vertices(
                 VertexMode.TRIANGLES,
-                listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
+                listOf(Point2F32(2f, 2f), Point2F32(8f, 2f), Point2F32(2f, 8f)),
             ),
             program = MeshProgram(effect),
             bounds = Rect(2f, 2f, 8f, 8f),
@@ -1030,8 +1030,8 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val vertices = Vertices(
             VertexMode.TRIANGLES,
-            positions = listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
-            texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            positions = listOf(Point2F32(2f, 2f), Point2F32(8f, 2f), Point2F32(2f, 8f)),
+            texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
         )
         val operations = listOf(
             DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen),
@@ -1073,8 +1073,8 @@ class GPUClipCoverageSurfaceTest {
         // before lowering, so an integer-scissor clip keeps the transform and
         // material refusals reachable.
         val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
-        val triangle = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f))
-        val uvs = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f))
+        val triangle = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f))
+        val uvs = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))
         val paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel()))
 
         val perspective = assertFailsWith<GPUPreparedSurfaceTerminalException> {
@@ -1126,7 +1126,7 @@ class GPUClipCoverageSurfaceTest {
         )
         val vertices = Vertices(
             VertexMode.TRIANGLES,
-            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
+            positions = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f)),
             colors = listOf(Color.RED, Color.GREEN, Color.BLUE),
             indices = listOf(0, 1, 2),
         )
@@ -1158,8 +1158,8 @@ class GPUClipCoverageSurfaceTest {
         val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
         val vertices = Vertices(
             VertexMode.TRIANGLES,
-            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
-            texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            positions = listOf(Point2F32(1f, 1f), Point2F32(8f, 1f), Point2F32(1f, 8f)),
+            texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
             indices = listOf(0, 1, 3),
         )
 
@@ -1225,7 +1225,7 @@ class GPUClipCoverageSurfaceTest {
                                 glyphRuns = listOf(
                                     KanvasGlyphRun(
                                         glyphs = listOf(1u),
-                                        positions = listOf(Point(0f, 0f)),
+                                        positions = listOf(Point2F32(0f, 0f)),
                                     ),
                                 ),
                             ),
@@ -1324,14 +1324,14 @@ class GPUClipCoverageSurfaceTest {
         val image = opaqueImage(size = 3)
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
-            positions = listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
+            positions = listOf(Point2F32(2f, 2f), Point2F32(8f, 2f), Point2F32(2f, 8f)),
         )
         val picture = Picture(
             Rect(0f, 0f, 10f, 10f),
             listOf(DisplayOp.DrawRect(Rect(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)),
         )
         val ops = listOf(
-            DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(3f, 3f), Point(6f, 6f)), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
+            DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point2F32(3f, 3f), Point2F32(6f, 6f)), Paint.fill(Color.RED), Matrix3x3F32.Identity, clip),
             DisplayOp.DrawDRRect(
                 RRect(Rect(2f, 20f, 10f, 28f), radius = 1f),
                 RRect(Rect(4f, 22f, 8f, 26f), radius = 1f),
@@ -1558,8 +1558,8 @@ class GPUClipCoverageSurfaceTest {
 
     private fun texturedScissorTriangle(): Vertices = Vertices(
         mode = VertexMode.TRIANGLES,
-        positions = listOf(Point(1f, 1f), Point(15f, 1f), Point(1f, 15f)),
-        texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+        positions = listOf(Point2F32(1f, 1f), Point2F32(15f, 1f), Point2F32(1f, 15f)),
+        texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
     )
 
     private fun advancedBlackImagePaint(): Paint = Paint.fill(Color.WHITE).copy(

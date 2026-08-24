@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -39,10 +39,10 @@ class CustomMeshCsUniformsGm : SkiaGm {
         val rectR = 80f
         val rectB = 80f
         val positions = listOf(
-            Point(rectL, rectT),
-            Point(rectR, rectT),
-            Point(rectL, rectB),
-            Point(rectR, rectB),
+            Point2F32(rectL, rectT),
+            Point2F32(rectR, rectT),
+            Point2F32(rectL, rectB),
+            Point2F32(rectR, rectB),
         )
 
         // Uniform = (1, 0, 0, 1) — red at full alpha
@@ -77,10 +77,10 @@ class CustomMeshCsUniformsGm : SkiaGm {
 
             // Draw reference swatch to the right
             val swatchPositions = listOf(
-                Point(100f, rectT),
-                Point(160f, rectT),
-                Point(100f, rectB),
-                Point(160f, rectB),
+                Point2F32(100f, rectT),
+                Point2F32(160f, rectT),
+                Point2F32(100f, rectB),
+                Point2F32(160f, rectB),
             )
             val swatch = Vertices(
                 mode = VertexMode.TRIANGLE_STRIP,

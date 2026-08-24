@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -101,12 +101,12 @@ class DfTextGm : SkiaGm {
         canvas.scale(2.0f, 2.0f)
         font = font.copy(size = textSizes[0])
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = 340f
         for (cp in text.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(cursorX, 75f))
+            positions.add(Point2F32(cursorX, 75f))
             cursorX += typeface.getAdvance(gid, font.size)
         }
         val blob = TextBlob(

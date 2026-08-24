@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 class BackdropHintrectClippingGm : SkiaGm {
@@ -66,7 +66,7 @@ private fun makeSweepShader(cx: Float, cy: Float): Shader {
         GradientStop(6f / 6f, Color(0xFF00FF00u)),
     )
     return Shader.SweepGradient(
-        center = Point(cx, cy),
+        center = Point2F32(cx, cy),
         startAngle = 0f,
         endAngle = 360f,
         stops = stops,

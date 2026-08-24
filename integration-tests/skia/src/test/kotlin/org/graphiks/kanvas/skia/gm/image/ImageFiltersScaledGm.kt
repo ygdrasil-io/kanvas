@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/imagefiltersscaled.cpp`.
@@ -33,16 +33,16 @@ class ImageFiltersScaledGm : SkiaGm {
             ImageFilter.Dilate(1f, 1f, null),
             ImageFilter.Erode(1f, 1f, null),
             ImageFilter.Offset(32f, 0f, null),
-            ImageFilter.PointLitDiffuse(Point(0f, 0f), Color.WHITE, 1f, 2f, null),
-            ImageFilter.SpotLitDiffuse(Point(-10f, -10f), Point(40f, 40f), 1f, 15f, Color.WHITE, 1f, 2f, null),
+            ImageFilter.PointLitDiffuse(Point2F32(0f, 0f), Color.WHITE, 1f, 2f, null),
+            ImageFilter.SpotLitDiffuse(Point2F32(-10f, -10f), Point2F32(40f, 40f), 1f, 15f, Color.WHITE, 1f, 2f, null),
         )
 
         val scales = listOf(
-            Point(0.5f, 0.5f),
-            Point(1f, 1f),
-            Point(1f, 2f),
-            Point(2f, 1f),
-            Point(2f, 2f),
+            Point2F32(0.5f, 0.5f),
+            Point2F32(1f, 1f),
+            Point2F32(1f, 2f),
+            Point2F32(2f, 1f),
+            Point2F32(2f, 2f),
         )
 
         val r = Rect.fromXYWH(0f, 0f, 64f, 64f)

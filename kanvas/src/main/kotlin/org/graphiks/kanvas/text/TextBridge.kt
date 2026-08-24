@@ -6,7 +6,7 @@ import org.graphiks.kanvas.font.glyph.A8Bitmap
 import org.graphiks.kanvas.font.glyph.A8Rasterizer
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.font.scaler.GlyphScaler
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -74,7 +74,7 @@ object TextBridge {
     /** Convert a single shaped run to a [KanvasGlyphRun]. */
     fun toKanvasGlyphRun(run: ShapedGlyphRun, startX: Float = 0f, startY: Float = 0f): KanvasGlyphRun {
         val glyphs = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = startX
         val cursorY = startY
         for (cluster in run.clusters) {
@@ -82,7 +82,7 @@ object TextBridge {
             for (i in 0 until count) {
                 val gid = run.glyphIds.getOrNull(cluster.glyphRange.first + i) ?: 0
                 glyphs.add(gid.toUShort())
-                positions.add(Point(cursorX + cluster.offsetX + cluster.advanceX * i, cursorY + cluster.offsetY))
+                positions.add(Point2F32(cursorX + cluster.offsetX + cluster.advanceX * i, cursorY + cluster.offsetY))
             }
             cursorX += cluster.advanceX
         }

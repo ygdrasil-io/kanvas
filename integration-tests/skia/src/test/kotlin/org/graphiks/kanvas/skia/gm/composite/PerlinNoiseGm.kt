@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 
@@ -28,29 +28,29 @@ class PerlinNoiseGm : SkiaGm {
         val kBox = Size(80f, 80f)
         val tile40 = Size(40f, 40f)
 
-        test(canvas, Point(0f, 0f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
-        test(canvas, Point(100f, 0f), Type.TURBULENCE, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
-        test(canvas, Point(0f, 100f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 2, seed = 0f, kSize = kBox)
-        test(canvas, Point(100f, 100f), Type.FRACTAL, stitch = true, fx = 0.05f, fy = 0.1f, oct = 1, seed = 0f, tile = tile40)
-        test(canvas, Point(0f, 200f), Type.TURBULENCE, stitch = true, fx = 0.1f, fy = 0.1f, oct = 1, seed = 0f, tile = tile40)
-        test(canvas, Point(100f, 200f), Type.TURBULENCE, stitch = false, fx = 0.2f, fy = 0.4f, oct = 5, seed = 0f, kSize = kBox)
-        test(canvas, Point(0f, 300f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 3, seed = 1f, kSize = kBox)
-        test(canvas, Point(100f, 300f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 3, seed = 4f, kSize = kBox)
+        test(canvas, Point2F32(0f, 0f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(100f, 0f), Type.TURBULENCE, stitch = false, fx = 0.1f, fy = 0.1f, oct = 0, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(0f, 100f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 2, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(100f, 100f), Type.FRACTAL, stitch = true, fx = 0.05f, fy = 0.1f, oct = 1, seed = 0f, tile = tile40)
+        test(canvas, Point2F32(0f, 200f), Type.TURBULENCE, stitch = true, fx = 0.1f, fy = 0.1f, oct = 1, seed = 0f, tile = tile40)
+        test(canvas, Point2F32(100f, 200f), Type.TURBULENCE, stitch = false, fx = 0.2f, fy = 0.4f, oct = 5, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(0f, 300f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 3, seed = 1f, kSize = kBox)
+        test(canvas, Point2F32(100f, 300f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 3, seed = 4f, kSize = kBox)
 
         canvas.save()
         canvas.scale(0.75f, 1.0f)
-        test(canvas, Point(0f, 400f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 2, seed = 0f, kSize = kBox)
-        test(canvas, Point(100f, 400f), Type.FRACTAL, stitch = true, fx = 0.1f, fy = 0.05f, oct = 1, seed = 0f, tile = tile40)
+        test(canvas, Point2F32(0f, 400f), Type.FRACTAL, stitch = false, fx = 0.1f, fy = 0.1f, oct = 2, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(100f, 400f), Type.FRACTAL, stitch = true, fx = 0.1f, fy = 0.05f, oct = 1, seed = 0f, tile = tile40)
         canvas.restore()
 
-        test(canvas, Point(0f, 500f), Type.TURBULENCE, stitch = true, fx = 0.03f, fy = 0.03f, oct = 1, seed = 0f, tile = Size(50f, 50f))
-        test(canvas, Point(120f, 500f), Type.TURBULENCE, stitch = false, fx = 0.05f, fy = 0.05f, oct = 2, seed = 0f, kSize = kBox)
+        test(canvas, Point2F32(0f, 500f), Type.TURBULENCE, stitch = true, fx = 0.03f, fy = 0.03f, oct = 1, seed = 0f, tile = Size(50f, 50f))
+        test(canvas, Point2F32(120f, 500f), Type.TURBULENCE, stitch = false, fx = 0.05f, fy = 0.05f, oct = 2, seed = 0f, kSize = kBox)
     }
 
     private enum class Type { FRACTAL, TURBULENCE }
 
     private fun test(
-        canvas: GmCanvas, pt: Point, type: Type,
+        canvas: GmCanvas, pt: Point2F32, type: Type,
         stitch: Boolean, fx: Float, fy: Float, oct: Int, seed: Float,
         kSize: Size? = null, tile: Size? = null,
     ) {
@@ -67,16 +67,16 @@ class PerlinNoiseGm : SkiaGm {
         }
         val paint = Paint(shader = shader)
         if (stitch && tile != null) {
-            drawRect(canvas, Point(pt.x, pt.y), paint, tile)
-            drawRect(canvas, Point(pt.x + tile.width, pt.y), paint, tile)
-            drawRect(canvas, Point(pt.x + tile.width, pt.y + tile.height), paint, tile)
-            drawRect(canvas, Point(pt.x, pt.y + tile.height), paint, tile)
+            drawRect(canvas, Point2F32(pt.x, pt.y), paint, tile)
+            drawRect(canvas, Point2F32(pt.x + tile.width, pt.y), paint, tile)
+            drawRect(canvas, Point2F32(pt.x + tile.width, pt.y + tile.height), paint, tile)
+            drawRect(canvas, Point2F32(pt.x, pt.y + tile.height), paint, tile)
         } else {
             drawRect(canvas, pt, paint, kSize ?: Size(80f, 80f))
         }
     }
 
-    private fun drawRect(canvas: GmCanvas, pt: Point, paint: Paint, size: Size) {
+    private fun drawRect(canvas: GmCanvas, pt: Point2F32, paint: Paint, size: Size) {
         canvas.save()
         canvas.translate(pt.x, pt.y)
         canvas.drawRect(Rect.fromXYWH(0f, 0f, size.width, size.height), paint)

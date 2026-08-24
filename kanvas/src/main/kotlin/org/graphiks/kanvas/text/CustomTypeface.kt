@@ -6,6 +6,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
@@ -149,14 +150,35 @@ class CustomTypeface private constructor(
 
         private fun writePath(output: DataOutputStream, path: Path) {
             output.writeInt(path.fillType.ordinal)
-            val verbs = path.verbs()
-            output.writeInt(verbs.size)
-            verbs.forEach { output.writeByte(it.ordinal) }
-            val points = path.points()
-            output.writeInt(points.size)
-            points.forEach { point ->
-                output.writeFloat(point.x)
-                output.writeFloat(point.y)
+            val commands = path.commands()
+            output.writeInt(commands.size)
+            commands.forEach { output.writeByte(it.verb.ordinal) }
+            output.writeInt(commands.sumOf { it.serializedPairCount })
+            fun writePair(x: Float, y: Float) {
+                output.writeFloat(x)
+                output.writeFloat(y)
+            }
+            commands.forEach { command ->
+                when (command) {
+                    is PathCommand.Move -> writePair(command.point.x, command.point.y)
+                    is PathCommand.Line -> writePair(command.endpoint.x, command.endpoint.y)
+                    is PathCommand.Quad -> {
+                        writePair(command.control.x, command.control.y)
+                        writePair(command.endpoint.x, command.endpoint.y)
+                    }
+                    is PathCommand.Cubic -> {
+                        writePair(command.control1.x, command.control1.y)
+                        writePair(command.control2.x, command.control2.y)
+                        writePair(command.endpoint.x, command.endpoint.y)
+                    }
+                    is PathCommand.ArcTo -> {
+                        writePair(command.radius.x, command.radius.y)
+                        writePair(command.xAxisRotation, if (command.largeArc) 1f else 0f)
+                        writePair(if (command.sweep) 1f else 0f, 0f)
+                        writePair(command.endpoint.x, command.endpoint.y)
+                    }
+                    PathCommand.Close -> Unit
+                }
             }
         }
 
@@ -164,43 +186,58 @@ class CustomTypeface private constructor(
             val path = Path()
             path.fillType = FillType.entries[input.readInt()]
             val verbs = List(input.readInt()) { PathVerb.entries[input.readUnsignedByte()] }
-            val points = List(input.readInt()) { org.graphiks.kanvas.types.Point(input.readFloat(), input.readFloat()) }
+            val values = FloatArray(input.readInt() * 2) { input.readFloat() }
             var pointIndex = 0
+            fun nextPair(): Pair<Float, Float> {
+                require(pointIndex + 1 < values.size) { "Malformed custom typeface glyph path." }
+                val pair = values[pointIndex] to values[pointIndex + 1]
+                pointIndex += 2
+                return pair
+            }
             verbs.forEach { verb ->
                 when (verb) {
-                    PathVerb.MOVE -> points[pointIndex++].let { path.moveTo(it.x, it.y) }
-                    PathVerb.LINE -> points[pointIndex++].let { path.lineTo(it.x, it.y) }
+                    PathVerb.MOVE -> nextPair().let { (x, y) -> path.moveTo(x, y) }
+                    PathVerb.LINE -> nextPair().let { (x, y) -> path.lineTo(x, y) }
                     PathVerb.QUAD -> {
-                        val control = points[pointIndex++]
-                        val end = points[pointIndex++]
-                        path.quadTo(control.x, control.y, end.x, end.y)
+                        val (controlX, controlY) = nextPair()
+                        val (endX, endY) = nextPair()
+                        path.quadTo(controlX, controlY, endX, endY)
                     }
                     PathVerb.CUBIC -> {
-                        val control1 = points[pointIndex++]
-                        val control2 = points[pointIndex++]
-                        val end = points[pointIndex++]
-                        path.cubicTo(control1.x, control1.y, control2.x, control2.y, end.x, end.y)
+                        val (control1X, control1Y) = nextPair()
+                        val (control2X, control2Y) = nextPair()
+                        val (endX, endY) = nextPair()
+                        path.cubicTo(control1X, control1Y, control2X, control2Y, endX, endY)
                     }
                     PathVerb.ARC_TO -> {
-                        val radius = points[pointIndex++]
-                        val rotationAndLargeArc = points[pointIndex++]
-                        val sweep = points[pointIndex++]
-                        val end = points[pointIndex++]
+                        val (radiusX, radiusY) = nextPair()
+                        val (rotation, largeArcValue) = nextPair()
+                        val (sweepValue, _) = nextPair()
+                        val (endX, endY) = nextPair()
                         path.arcTo(
-                            radius.x,
-                            radius.y,
-                            rotationAndLargeArc.x,
-                            rotationAndLargeArc.y > 0f,
-                            sweep.x > 0f,
-                            end.x,
-                            end.y,
+                            radiusX,
+                            radiusY,
+                            rotation,
+                            largeArcValue > 0f,
+                            sweepValue > 0f,
+                            endX,
+                            endY,
                         )
                     }
                     PathVerb.CLOSE -> path.close()
                 }
             }
-            require(pointIndex == points.size) { "Malformed custom typeface glyph path." }
+            require(pointIndex == values.size) { "Malformed custom typeface glyph path." }
             return path
         }
+
+        private val PathCommand.serializedPairCount: Int
+            get() = when (this) {
+                is PathCommand.Move, is PathCommand.Line -> 1
+                is PathCommand.Quad -> 2
+                is PathCommand.Cubic -> 3
+                is PathCommand.ArcTo -> 4
+                PathCommand.Close -> 0
+            }
     }
 }

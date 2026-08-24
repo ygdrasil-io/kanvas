@@ -10,7 +10,7 @@ import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.glyph.A8GlyphMask
 import org.graphiks.kanvas.glyph.GlyphMaskBlurKey
 import org.graphiks.kanvas.glyph.GlyphMaskBlurStyle
@@ -1602,16 +1602,39 @@ private fun GPUPreparedTextStrokePath.exactInventoryIdentity(): String {
 
     val exactPath = path
     encoder.string("path.fillType", exactPath.fillType.name)
-    val verbs = exactPath.verbs()
-    encoder.int("path.verbCount", verbs.size)
-    verbs.forEachIndexed { index, verb ->
-        encoder.string("path.verb[$index]", verb.name)
+    val pathCommands = exactPath.commands()
+    encoder.int("path.verbCount", pathCommands.size)
+    pathCommands.forEachIndexed { index, command ->
+        encoder.string("path.verb[$index]", command.verb.name)
     }
-    val points = exactPath.points()
-    encoder.int("path.pointCount", points.size)
-    points.forEachIndexed { index, point ->
-        encoder.float("path.point[$index].x", point.x)
-        encoder.float("path.point[$index].y", point.y)
+    encoder.int("path.pointCount", pathCommands.sumOf { it.serializedPairCount })
+    var pointIndex = 0
+    fun encodePoint(x: Float, y: Float) {
+        encoder.float("path.point[$pointIndex].x", x)
+        encoder.float("path.point[$pointIndex].y", y)
+        pointIndex++
+    }
+    pathCommands.forEach { command ->
+        when (command) {
+            is PathCommand.Move -> encodePoint(command.point.x, command.point.y)
+            is PathCommand.Line -> encodePoint(command.endpoint.x, command.endpoint.y)
+            is PathCommand.Quad -> {
+                encodePoint(command.control.x, command.control.y)
+                encodePoint(command.endpoint.x, command.endpoint.y)
+            }
+            is PathCommand.Cubic -> {
+                encodePoint(command.control1.x, command.control1.y)
+                encodePoint(command.control2.x, command.control2.y)
+                encodePoint(command.endpoint.x, command.endpoint.y)
+            }
+            is PathCommand.ArcTo -> {
+                encodePoint(command.radius.x, command.radius.y)
+                encodePoint(command.xAxisRotation, if (command.largeArc) 1f else 0f)
+                encodePoint(if (command.sweep) 1f else 0f, 0f)
+                encodePoint(command.endpoint.x, command.endpoint.y)
+            }
+            PathCommand.Close -> Unit
+        }
     }
 
     val transform = draw.transform
@@ -1921,26 +1944,19 @@ private fun Path.toOutlineRepresentation(glyphId: Int): OutlineGlyphRepresentati
         "Prepared A8 glyph outlines require non-zero winding."
     }
     val commands = ArrayList<String>()
-    val pathPoints = points()
-    var pointIndex = 0
-    verbs().forEach { verb ->
-        fun point(): org.graphiks.kanvas.types.Point = pathPoints[pointIndex++]
-        commands += when (verb) {
-            PathVerb.MOVE -> point().let { "M ${it.x} ${it.y}" }
-            PathVerb.LINE -> point().let { "L ${it.x} ${it.y}" }
-            PathVerb.QUAD -> {
-                val control = point()
-                val end = point()
-                "Q ${control.x} ${control.y} ${end.x} ${end.y}"
+    commands().forEach { command ->
+        commands += when (command) {
+            is PathCommand.Move -> "M ${command.point.x} ${command.point.y}"
+            is PathCommand.Line -> "L ${command.endpoint.x} ${command.endpoint.y}"
+            is PathCommand.Quad -> {
+                "Q ${command.control.x} ${command.control.y} ${command.endpoint.x} ${command.endpoint.y}"
             }
-            PathVerb.CUBIC -> {
-                val first = point()
-                val second = point()
-                val end = point()
-                "C ${first.x} ${first.y} ${second.x} ${second.y} ${end.x} ${end.y}"
+            is PathCommand.Cubic -> {
+                "C ${command.control1.x} ${command.control1.y} " +
+                    "${command.control2.x} ${command.control2.y} ${command.endpoint.x} ${command.endpoint.y}"
             }
-            PathVerb.ARC_TO -> error("Exact font outlines must not contain arc verbs.")
-            PathVerb.CLOSE -> "Z"
+            is PathCommand.ArcTo -> error("Exact font outlines must not contain arc verbs.")
+            PathCommand.Close -> "Z"
         }
     }
     return OutlineGlyphRepresentation(
@@ -1949,6 +1965,15 @@ private fun Path.toOutlineRepresentation(glyphId: Int): OutlineGlyphRepresentati
         windingRule = "nonZero",
     )
 }
+
+private val PathCommand.serializedPairCount: Int
+    get() = when (this) {
+        is PathCommand.Move, is PathCommand.Line -> 1
+        is PathCommand.Quad -> 2
+        is PathCommand.Cubic -> 3
+        is PathCommand.ArcTo -> 4
+        PathCommand.Close -> 0
+    }
 
 private fun artifactRefused(
     code: String,

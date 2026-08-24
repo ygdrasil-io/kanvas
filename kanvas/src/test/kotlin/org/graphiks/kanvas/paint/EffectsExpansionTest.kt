@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.paint
 
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.*
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -30,29 +33,29 @@ class EffectsExpansionTest {
     // Gradients with interpolation parameter
     @Test fun `LinearGradient has interpolation default`() {
         val s = Shader.LinearGradient(
-            start = Point(0f, 0f), end = Point(100f, 0f),
+            start = Point2F32(0f, 0f), end = Point2F32(100f, 0f),
             stops = listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
         )
         assertEquals(ColorSpaceInterpolation.SRGB, s.interpolation)
     }
     @Test fun `RadialGradient has interpolation default`() {
         val s = Shader.RadialGradient(
-            center = Point(50f, 50f), radius = 80f,
+            center = Point2F32(50f, 50f), radius = 80f,
             stops = listOf(GradientStop(0f, Color.GREEN), GradientStop(1f, Color.TRANSPARENT)),
         )
         assertEquals(ColorSpaceInterpolation.SRGB, s.interpolation)
     }
     @Test fun `SweepGradient has interpolation default`() {
         val s = Shader.SweepGradient(
-            center = Point(50f, 50f),
+            center = Point2F32(50f, 50f),
             stops = listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
         )
         assertEquals(ColorSpaceInterpolation.SRGB, s.interpolation)
     }
     @Test fun `ConicalGradient has interpolation default`() {
         val s = Shader.ConicalGradient(
-            start = Point(0f, 0f), startRadius = 0f,
-            end = Point(100f, 0f), endRadius = 50f,
+            start = Point2F32(0f, 0f), startRadius = 0f,
+            end = Point2F32(100f, 0f), endRadius = 50f,
             stops = listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
         )
         assertEquals(ColorSpaceInterpolation.SRGB, s.interpolation)
@@ -111,27 +114,27 @@ class EffectsExpansionTest {
         assertTrue(f is ImageFilter)
     }
     @Test fun `DistantLitDiffuse constructs`() {
-        val f = ImageFilter.DistantLitDiffuse(Point(0f, 0f), Color.WHITE, 1f, 1f, null)
+        val f = ImageFilter.DistantLitDiffuse(Vector2F32(0f, 0f), Color.WHITE, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `PointLitDiffuse constructs`() {
-        val f = ImageFilter.PointLitDiffuse(Point(0f, 0f), Color.WHITE, 1f, 1f, null)
+        val f = ImageFilter.PointLitDiffuse(Point2F32(0f, 0f), Color.WHITE, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `SpotLitDiffuse constructs`() {
-        val f = ImageFilter.SpotLitDiffuse(Point(0f, 0f), Point(1f, 1f), 10f, 30f, Color.WHITE, 1f, 1f, null)
+        val f = ImageFilter.SpotLitDiffuse(Point2F32(0f, 0f), Point2F32(1f, 1f), 10f, 30f, Color.WHITE, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `DistantLitSpecular constructs`() {
-        val f = ImageFilter.DistantLitSpecular(Point(0f, 0f), Color.WHITE, 1f, 1f, 10f, null)
+        val f = ImageFilter.DistantLitSpecular(Vector2F32(0f, 0f), Color.WHITE, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `PointLitSpecular constructs`() {
-        val f = ImageFilter.PointLitSpecular(Point(0f, 0f), Color.WHITE, 1f, 1f, 10f, null)
+        val f = ImageFilter.PointLitSpecular(Point2F32(0f, 0f), Color.WHITE, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `SpotLitSpecular constructs`() {
-        val f = ImageFilter.SpotLitSpecular(Point(0f, 0f), Point(1f, 1f), 10f, 30f, Color.WHITE, 1f, 1f, 10f, null)
+        val f = ImageFilter.SpotLitSpecular(Point2F32(0f, 0f), Point2F32(1f, 1f), 10f, 30f, Color.WHITE, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `Offset constructs`() {
@@ -155,7 +158,7 @@ class EffectsExpansionTest {
         assertTrue(f is ImageFilter)
     }
     @Test fun `MatrixConvolution constructs`() {
-        val f = ImageFilter.MatrixConvolution(Size(3f, 3f), FloatArray(9), 1f, 0f, Point(1f, 1f), TileMode.CLAMP, true, null)
+        val f = ImageFilter.MatrixConvolution(Size(3f, 3f), FloatArray(9), 1f, 0f, Vector2F32(1f, 1f), TileMode.CLAMP, true, null)
         assertTrue(f is ImageFilter)
     }
 

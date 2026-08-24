@@ -1,7 +1,8 @@
 package org.graphiks.kanvas.geometry
 
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.MutablePoint2F32
+import org.graphiks.math.vector.MutableVector2F32
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.sqrt
@@ -75,63 +76,55 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         get() = contours.getOrNull(contourIndex)?.closed ?: false
 
     init {
-        var pi = 0
-        val pathVerbs = path.verbs()
-        val pathPoints = path.points()
+        val pathCommands = path.commands()
 
         var i = 0
-        while (i < pathVerbs.size) {
-            if (pathVerbs[i] != PathVerb.MOVE) {
-                // Defensive: advance pi by the point count for this non-MOVE verb
-                pi += pointCountFor(pathVerbs[i])
-                i++; continue
-            }
+        while (i < pathCommands.size) {
+            val move = pathCommands[i] as? PathCommand.Move
+            if (move == null) { i++; continue }
             val segs = mutableListOf<ContourSegment>()
-            var prevX = pathPoints[pi].x; var prevY = pathPoints[pi].y
+            var prevX = move.point.x; var prevY = move.point.y
             val firstX = prevX; val firstY = prevY
-            pi++
             val contourStart = i
             i++
 
-            while (i < pathVerbs.size && pathVerbs[i] != PathVerb.MOVE) {
-                val verb = pathVerbs[i]
-                when (verb) {
-                    PathVerb.LINE -> {
-                        val x = pathPoints[pi].x; val y = pathPoints[pi].y
+            while (i < pathCommands.size && pathCommands[i] !is PathCommand.Move) {
+                when (val command = pathCommands[i]) {
+                    is PathCommand.Line -> {
+                        val x = command.endpoint.x; val y = command.endpoint.y
                         segs.add(ContourSegment(PathVerb.LINE, prevX, prevY, 0f, 0f, 0f, 0f, x, y))
-                        prevX = x; prevY = y; pi++
+                        prevX = x; prevY = y
                     }
-                    PathVerb.QUAD -> {
-                        val cx = pathPoints[pi].x; val cy = pathPoints[pi].y
-                        val x = pathPoints[pi + 1].x; val y = pathPoints[pi + 1].y
+                    is PathCommand.Quad -> {
+                        val cx = command.control.x; val cy = command.control.y
+                        val x = command.endpoint.x; val y = command.endpoint.y
                         segs.add(ContourSegment(PathVerb.QUAD, prevX, prevY, cx, cy, 0f, 0f, x, y))
-                        prevX = x; prevY = y; pi += 2
+                        prevX = x; prevY = y
                     }
-                    PathVerb.CUBIC -> {
-                        val cx1 = pathPoints[pi].x; val cy1 = pathPoints[pi].y
-                        val cx2 = pathPoints[pi + 1].x; val cy2 = pathPoints[pi + 1].y
-                        val x = pathPoints[pi + 2].x; val y = pathPoints[pi + 2].y
+                    is PathCommand.Cubic -> {
+                        val cx1 = command.control1.x; val cy1 = command.control1.y
+                        val cx2 = command.control2.x; val cy2 = command.control2.y
+                        val x = command.endpoint.x; val y = command.endpoint.y
                         segs.add(ContourSegment(PathVerb.CUBIC, prevX, prevY, cx1, cy1, cx2, cy2, x, y))
-                        prevX = x; prevY = y; pi += 3
+                        prevX = x; prevY = y
                     }
-                    PathVerb.ARC_TO -> {
-                        val x = pathPoints[pi + 3].x; val y = pathPoints[pi + 3].y
+                    is PathCommand.ArcTo -> {
+                        val x = command.endpoint.x; val y = command.endpoint.y
                         segs.add(ContourSegment(PathVerb.LINE, prevX, prevY, 0f, 0f, 0f, 0f, x, y))
-                        prevX = x; prevY = y; pi += 4
+                        prevX = x; prevY = y
                     }
-                    PathVerb.CLOSE -> {
+                    PathCommand.Close -> {
                         if (prevX != firstX || prevY != firstY) {
                             segs.add(ContourSegment(PathVerb.LINE, prevX, prevY, 0f, 0f, 0f, 0f, firstX, firstY))
                             prevX = firstX; prevY = firstY
                         }
                     }
-                    PathVerb.MOVE -> {} // unreachable
+                    is PathCommand.Move -> Unit // loop condition excludes this case
                 }
                 i++
             }
 
-            val contourVerbs = pathVerbs.drop(contourStart).takeWhile { it != PathVerb.MOVE }
-            val hasClose = contourVerbs.lastOrNull() == PathVerb.CLOSE
+            val hasClose = pathCommands.subList(contourStart, i).lastOrNull() is PathCommand.Close
             val closed = hasClose || forceClosed
 
             if (closed && segs.isNotEmpty()) {
@@ -151,7 +144,7 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         }
     }
 
-    fun getPosition(distance: Float, position: Point?, tangent: Point?): Boolean {
+    fun getPosition(distance: Float, position: MutablePoint2F32?, tangent: MutableVector2F32?): Boolean {
         val contour = contours.getOrNull(contourIndex) ?: return false
         val cl = contour.cumulativeLengths
         if (cl.isEmpty()) return false
@@ -218,8 +211,8 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         if (s > e) { val tmp = s; s = e; e = tmp }
         if (s >= e) return false
 
-        val startPos = Point(0f, 0f)
-        val endPos = Point(0f, 0f)
+        val startPos = MutablePoint2F32(0f, 0f)
+        val endPos = MutablePoint2F32(0f, 0f)
         if (!getPosition(s, startPos, null)) return false
         if (!getPosition(e, endPos, null)) return false
 
@@ -229,7 +222,7 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
     }
 
     fun getMatrix(distance: Float, matrix: Matrix3x3F32, flags: Int = POSITION_MATRIX_FLAG or TANGENT_MATRIX_FLAG): Boolean {
-        val tan = Point(0f, 0f)
+        val tan = MutableVector2F32(0f, 0f)
         if (!getPosition(distance, null, tan)) return false
         // Matrix3x3F32 is immutable; the caller should use getPosition() directly for
         // full control. getMatrix provides the tangent orientation only.
@@ -247,13 +240,5 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
     companion object {
         const val POSITION_MATRIX_FLAG = 1
         const val TANGENT_MATRIX_FLAG = 2
-
-        private fun pointCountFor(verb: PathVerb): Int = when (verb) {
-            PathVerb.MOVE, PathVerb.LINE -> 1
-            PathVerb.QUAD -> 2
-            PathVerb.CUBIC -> 3
-            PathVerb.ARC_TO -> 4
-            PathVerb.CLOSE -> 0
-        }
     }
 }

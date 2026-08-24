@@ -7,17 +7,6 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class Matrix3x3F32KanvasExtensionsTest {
     @Test
-    fun `maps a Kanvas point with homogeneous perspective division`() {
-        val matrix = Matrix3x3F32.of(
-            sx = 1f, kx = 0f, tx = 0f,
-            ky = 0f, sy = 1f, ty = 0f,
-            persp0 = 0.5f, persp1 = 0f, persp2 = 1f,
-        )
-
-        assertEquals(Point(1f, 2f), matrix.mapPoint(Point(2f, 4f)))
-    }
-
-    @Test
     fun `maps an axis aligned rrect and preserves asymmetric mirrored corners`() {
         val matrix = Matrix3x3F32.translation(10f, 5f) * Matrix3x3F32.scaling(-2f, 3f)
         val rrect = RRect(

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -60,8 +60,8 @@ class ComposeShaderAlphaGm : SkiaGm {
 
     private fun makeShader(mode: BlendMode): Shader {
         val shaderA = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(100f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(100f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f, Color.BLUE),
@@ -69,8 +69,8 @@ class ComposeShaderAlphaGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val shaderB = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(0f, 100f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(0f, 100f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0f, 0f, 0f, 1f)),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 0f, 0x80 / 255f)),

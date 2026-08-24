@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextFilterBoundaryTest {
@@ -77,7 +77,7 @@ class GPUPreparedTextFilterBoundaryTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(36u),
-                    positions = listOf(Point(0f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f)),
                     fontSize = 16f,
                 ),
             ),

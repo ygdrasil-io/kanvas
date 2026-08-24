@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/skbug_8955.cpp` (100 × 100).
@@ -32,7 +32,7 @@ class Skbug8955Gm : SkiaGm {
 
         val gid = typeface.glyphIdForCodepoint('+'.code).toUShort()
         val blob = TextBlob(
-            glyphRuns = listOf(KanvasGlyphRun(listOf(gid), listOf(Point(0f, 0f)))),
+            glyphRuns = listOf(KanvasGlyphRun(listOf(gid), listOf(Point2F32(0f, 0f)))),
             typeface = typeface,
             fontSize = font.size,
         )

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -62,7 +62,7 @@ class HighContrastFilterGm : SkiaGm {
         c.drawRect(Rect.fromLTRB(0.1f, 0.8f, 0.9f, 1.0f), Paint(color = argb(255, 0xcc, 0xcc, 0xff)))
         c.drawString("Z", 0.75f, 0.95f, font, Paint(color = argb(255, 0x88, 0x88, 0xbb)))
 
-        val pts = arrayOf(Point(0f, 0f), Point(1f, 0f))
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(1f, 0f))
         val pos = floatArrayOf(0.2f, 0.8f)
 
         var gradPaint = Paint(

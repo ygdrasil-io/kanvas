@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -83,7 +83,7 @@ class Crbug224618Gm : SkiaGm {
         val surface = Surface(400, 400)
         surface.canvas {
             val shader = Shader.RadialGradient(
-                center = Point(200f, 200f),
+                center = Point2F32(200f, 200f),
                 radius = 25f,
                 stops = listOf(
                     GradientStop(0f, Color.TRANSPARENT),

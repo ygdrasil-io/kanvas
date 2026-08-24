@@ -57,7 +57,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 
@@ -141,7 +141,7 @@ class GPUPreparedTextLowererTest {
     @Test
     fun `lowerer snapshots exact positioned glyphs and paint state`() {
         val glyphs = mutableListOf(5.toUShort(), 9.toUShort())
-        val positions = mutableListOf(Point(1.25f, 2f), Point(7.5f, 2f))
+        val positions = mutableListOf(Point2F32(1.25f, 2f), Point2F32(7.5f, 2f))
         val variations = linkedMapOf("wght" to 500f)
         val stops = mutableListOf(
             GradientStop(0f, Color.RED),
@@ -177,8 +177,8 @@ class GPUPreparedTextLowererTest {
             paint = Paint.fill(Color.WHITE).copy(
                 color = Color.fromRGBA(1f, 1f, 1f, 0.5f),
                 shader = Shader.LinearGradient(
-                    start = Point(0f, 0f),
-                    end = Point(32f, 0f),
+                    start = Point2F32(0f, 0f),
+                    end = Point2F32(32f, 0f),
                     stops = stops,
                     tileMode = TileMode.CLAMP,
                 ),
@@ -223,7 +223,7 @@ class GPUPreparedTextLowererTest {
         assertTrue(ready.draw.representationPolicy.representations.isNotEmpty())
 
         glyphs[0] = 10u
-        positions[0] = Point(99f, 99f)
+        positions[0] = Point2F32(99f, 99f)
         stops[0] = GradientStop(0f, Color.GREEN)
         clipOps.clear()
         variations["wght"] = 700f
@@ -741,7 +741,7 @@ class GPUPreparedTextLowererTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = listOf(2u),
-                        positions = listOf(Point(8f, 32f)),
+                        positions = listOf(Point2F32(8f, 32f)),
                         fontSize = 48f,
                     ),
                 ),
@@ -1027,7 +1027,7 @@ class GPUPreparedTextLowererTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(5.toUShort()),
-                    positions = listOf(Point(2f, 3f)),
+                    positions = listOf(Point2F32(2f, 3f)),
                     fontSize = 16f,
                 ),
             ),

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -36,7 +36,7 @@ class AlternateLumaGm : SkiaGm {
         val gChannelSplat = effect.makeColorFilter(UniformBlock {})
 
         val gradient = Shader.LinearGradient(
-            Point(0f, 0f), Point(width.toFloat(), height.toFloat()),
+            Point2F32(0f, 0f), Point2F32(width.toFloat(), height.toFloat()),
             listOf(
                 GradientStop(0f, Color(0xFFFF0000u)),
                 GradientStop(0.25f, Color(0xFF00FF00u)),

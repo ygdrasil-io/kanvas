@@ -38,7 +38,7 @@ import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 import org.graphiks.kanvas.types.a
@@ -51,9 +51,9 @@ class GPUMaterialMapperTest {
     @Test
     fun `legacy unsupported blend falls back to source while prepared mapping preserves blend`() {
         val dst = Shader.ConicalGradient(
-            start = Point(0f, 0f),
+            start = Point2F32(0f, 0f),
             startRadius = 0f,
-            end = Point(10f, 10f),
+            end = Point2F32(10f, 10f),
             endRadius = 10f,
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
@@ -97,8 +97,8 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared gradient mapping retains source alpha and separates caller modulation`() {
         val gradient = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(10f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(10f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 0.25f)),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0.75f)),
@@ -120,7 +120,7 @@ class GPUMaterialMapperTest {
         val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
             Paint(
                 shader = Shader.RadialGradient(
-                    center = Point(10f, 20f),
+                    center = Point2F32(10f, 20f),
                     radius = 30f,
                     stops = threeGradientStops(),
                     tileMode = TileMode.CLAMP,
@@ -146,7 +146,7 @@ class GPUMaterialMapperTest {
         val descriptor = assertIs<GPUMaterialDescriptor.SweepGradient>(
             Paint(
                 shader = Shader.SweepGradient(
-                    center = Point(10f, 20f),
+                    center = Point2F32(10f, 20f),
                     startAngle = 15f,
                     endAngle = 300f,
                     stops = threeGradientStops(),
@@ -172,23 +172,23 @@ class GPUMaterialMapperTest {
     fun `prepared empty gradient stops return a typed refusal without throwing`() {
         val cases = listOf(
             Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(10f, 0f),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(10f, 0f),
                 stops = emptyList(),
             ) to GPUMaterialKind.LinearGradient,
             Shader.RadialGradient(
-                center = Point(0f, 0f),
+                center = Point2F32(0f, 0f),
                 radius = 10f,
                 stops = emptyList(),
             ) to GPUMaterialKind.RadialGradient,
             Shader.SweepGradient(
-                center = Point(0f, 0f),
+                center = Point2F32(0f, 0f),
                 stops = emptyList(),
             ) to GPUMaterialKind.SweepGradient,
             Shader.ConicalGradient(
-                start = Point(0f, 0f),
+                start = Point2F32(0f, 0f),
                 startRadius = 0f,
-                end = Point(10f, 10f),
+                end = Point2F32(10f, 10f),
                 endRadius = 10f,
                 stops = emptyList(),
             ) to GPUMaterialKind.TwoPointConical,
@@ -212,12 +212,12 @@ class GPUMaterialMapperTest {
         )
         listOf(
             Shader.RadialGradient(
-                center = Point(10f, 20f),
+                center = Point2F32(10f, 20f),
                 radius = 30f,
                 stops = threeGradientStops(),
             ) to GPUMaterialKind.RadialGradient,
             Shader.SweepGradient(
-                center = Point(10f, 20f),
+                center = Point2F32(10f, 20f),
                 stops = threeGradientStops(),
             ) to GPUMaterialKind.SweepGradient,
         ).forEach { (shader, kind) ->
@@ -248,7 +248,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.WithLocalMatrix(
                     Shader.WithLocalMatrix(
                         Shader.RadialGradient(
-                            center = Point(10f, 20f),
+                            center = Point2F32(10f, 20f),
                             radius = 30f,
                             stops = threeGradientStops(),
                         ),
@@ -307,7 +307,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.WithLocalMatrix(
                     Shader.WithLocalMatrix(
                         Shader.RadialGradient(
-                            center = Point(10f, 20f),
+                            center = Point2F32(10f, 20f),
                             radius = 30f,
                             stops = threeGradientStops(),
                         ),
@@ -331,7 +331,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.WithColorFilter(
                     shader = Shader.WithWorkingColorSpace(
                         Shader.RadialGradient(
-                            center = Point(10f, 20f),
+                            center = Point2F32(10f, 20f),
                             radius = 30f,
                             stops = threeGradientStops(),
                         ),
@@ -358,7 +358,7 @@ class GPUMaterialMapperTest {
             Paint(
                 shader = Shader.WithLocalMatrix(
                     Shader.RadialGradient(
-                        center = Point(10f, 20f),
+                        center = Point2F32(10f, 20f),
                         radius = 30f,
                         stops = threeGradientStops(),
                     ),
@@ -384,12 +384,12 @@ class GPUMaterialMapperTest {
         )
         listOf(
             Shader.RadialGradient(
-                center = Point(10f, 20f),
+                center = Point2F32(10f, 20f),
                 radius = 30f,
                 stops = threeGradientStops(),
             ) to GPUMaterialKind.RadialGradient,
             Shader.SweepGradient(
-                center = Point(10f, 20f),
+                center = Point2F32(10f, 20f),
                 stops = threeGradientStops(),
             ) to GPUMaterialKind.SweepGradient,
         ).forEach { (shader, kind) ->
@@ -404,7 +404,7 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared gradient wrappers preserve outer refusal precedence for unsupported sources`() {
         val nonSrgb = Shader.RadialGradient(
-            center = Point(10f, 20f),
+            center = Point2F32(10f, 20f),
             radius = 30f,
             stops = threeGradientStops(),
             interpolation = ColorSpaceInterpolation.LINEAR,
@@ -431,7 +431,7 @@ class GPUMaterialMapperTest {
             Paint(
                 shader = Shader.WithWorkingColorSpace(
                     Shader.RadialGradient(
-                        center = Point(10f, 20f),
+                        center = Point2F32(10f, 20f),
                         radius = 30f,
                         stops = threeGradientStops(),
                     ),
@@ -457,7 +457,7 @@ class GPUMaterialMapperTest {
                 shader = Shader.WithColorFilter(
                     shader = Shader.WithLocalMatrix(
                         Shader.SweepGradient(
-                            center = Point(10f, 20f),
+                            center = Point2F32(10f, 20f),
                             stops = threeGradientStops(),
                         ),
                         Matrix3x3F32.translation(3f, 4f),
@@ -629,8 +629,8 @@ class GPUMaterialMapperTest {
     @Test
     fun `prepared mapping refuses every unimplemented semantic boundary with typed reasons`() {
         val gradient = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(1f, 1f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(1f, 1f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(1f, Color.BLUE),
@@ -933,8 +933,8 @@ class GPUMaterialMapperTest {
             assertIs(
                 Paint(
                     shader = Shader.LinearGradient(
-                        start = Point(0f, 0f),
-                        end = Point(10f, 0f),
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(10f, 0f),
                         stops = listOf(
                             GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 0.25f)),
                             GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0.75f)),

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.Point2F32
+
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -49,7 +51,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawPoints emits DrawPoints op`() {
         val (canvas, buffer) = testCanvas()
-        canvas.drawPoints(PointMode.LINES, listOf(Point(0f, 0f), Point(10f, 10f)), Paint.fill(Color.RED))
+        canvas.drawPoints(PointMode.LINES, listOf(Point2F32(0f, 0f), Point2F32(10f, 10f)), Paint.fill(Color.RED))
         val op = buffer.ops().first() as DisplayOp.DrawPoints
         assertEquals(PointMode.LINES, op.mode)
         assertEquals(2, op.points.size)
@@ -149,7 +151,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawVertices emits DrawVertices op`() {
         val (canvas, buffer) = testCanvas()
-        val positions = listOf(Point(0f, 0f), Point(100f, 0f), Point(50f, 100f))
+        val positions = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(50f, 100f))
         val vertices = Vertices(VertexMode.TRIANGLES, positions)
         canvas.drawVertices(vertices, Paint.fill(Color.RED))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
@@ -160,7 +162,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawVertices with colors and indices emits DrawVertices op`() {
         val (canvas, buffer) = testCanvas()
-        val positions = listOf(Point(0f, 0f), Point(100f, 0f), Point(50f, 100f))
+        val positions = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(50f, 100f))
         val colors = listOf(Color.RED, Color.GREEN, Color.BLUE)
         val indices = listOf(0, 1, 2)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors, indices = indices)
@@ -209,9 +211,9 @@ class ScaffoldCanvasTest {
     fun `drawPatch emits DrawVertices op`() {
         val (canvas, buffer) = testCanvas()
         val cubics = listOf(
-            Point(0f, 0f), Point(33f, 0f), Point(66f, 0f), Point(100f, 0f),
-            Point(100f, 33f), Point(100f, 66f), Point(100f, 100f), Point(100f, 100f),
-            Point(66f, 100f), Point(33f, 100f), Point(0f, 100f), Point(0f, 100f),
+            Point2F32(0f, 0f), Point2F32(33f, 0f), Point2F32(66f, 0f), Point2F32(100f, 0f),
+            Point2F32(100f, 33f), Point2F32(100f, 66f), Point2F32(100f, 100f), Point2F32(100f, 100f),
+            Point2F32(66f, 100f), Point2F32(33f, 100f), Point2F32(0f, 100f), Point2F32(0f, 100f),
         )
         canvas.drawPatch(cubics, paint = Paint.fill(Color.GREEN))
         val op = buffer.ops().first() as DisplayOp.DrawVertices
@@ -223,9 +225,9 @@ class ScaffoldCanvasTest {
     fun `drawPatch with colors emits DrawVertices`() {
         val (canvas, buffer) = testCanvas()
         val cubics = listOf(
-            Point(0f, 0f), Point(33f, 0f), Point(66f, 0f), Point(100f, 0f),
-            Point(100f, 33f), Point(100f, 66f), Point(100f, 100f), Point(100f, 100f),
-            Point(66f, 100f), Point(33f, 100f), Point(0f, 100f), Point(0f, 100f),
+            Point2F32(0f, 0f), Point2F32(33f, 0f), Point2F32(66f, 0f), Point2F32(100f, 0f),
+            Point2F32(100f, 33f), Point2F32(100f, 66f), Point2F32(100f, 100f), Point2F32(100f, 100f),
+            Point2F32(66f, 100f), Point2F32(33f, 100f), Point2F32(0f, 100f), Point2F32(0f, 100f),
         )
         val colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE)
         canvas.drawPatch(cubics, colors = colors, paint = Paint.fill(Color.GREEN))
@@ -236,7 +238,7 @@ class ScaffoldCanvasTest {
     @Test
     fun `drawPatch with fewer than 12 points throws exception`() {
         val (canvas, _) = testCanvas()
-        val short = listOf(Point(0f, 0f), Point(100f, 0f), Point(100f, 100f), Point(0f, 100f))
+        val short = listOf(Point2F32(0f, 0f), Point2F32(100f, 0f), Point2F32(100f, 100f), Point2F32(0f, 100f))
         assertFailsWith<IndexOutOfBoundsException> {
             canvas.drawPatch(short, paint = Paint.fill(Color.RED))
         }

@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -74,7 +74,7 @@ class DrawRegionModesGm : SkiaGm {
         paint = Paint(
             style = PaintStyle.FILL,
             shader = Shader.LinearGradient(
-                Point(50f, 50f), Point(150f, 150f),
+                Point2F32(50f, 50f), Point2F32(150f, 150f),
                 listOf(GradientStop(0f, Color.BLUE), GradientStop(1f, Color(0xFFFFFF00u))),
             ),
         )

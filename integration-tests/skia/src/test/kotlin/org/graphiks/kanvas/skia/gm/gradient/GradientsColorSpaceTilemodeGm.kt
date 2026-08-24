@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -43,7 +43,7 @@ class GradientsColorSpaceTilemodeGm : SkiaGm {
         for ((i, tileMode) in tileModes.withIndex()) {
             val paint = Paint(
                 shader = Shader.LinearGradient(
-                    start = Point(20f, 0f), end = Point(120f, 0f),
+                    start = Point2F32(20f, 0f), end = Point2F32(120f, 0f),
                     stops = listOf(
                         GradientStop(0f, Color.BLUE),
                         GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),

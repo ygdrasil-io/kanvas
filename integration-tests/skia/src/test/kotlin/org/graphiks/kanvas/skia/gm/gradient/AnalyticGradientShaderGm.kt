@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -29,8 +29,8 @@ class AnalyticGradientShaderGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val points = arrayOf(
-            Point(0f, 0f),
-            Point(RECT_WIDTH.toFloat(), 0f),
+            Point2F32(0f, 0f),
+            Point2F32(RECT_WIDTH.toFloat(), 0f),
         )
 
         for (cellRow in 0 until NUM_ROWS) {

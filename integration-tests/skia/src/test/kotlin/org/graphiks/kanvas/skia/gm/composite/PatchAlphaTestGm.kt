@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/patch.cpp::patch_alpha_test`
@@ -56,11 +56,11 @@ class PatchAlphaTestGm : SkiaGm {
     }
 
     private companion object {
-        private val GCubics: List<Point> = listOf(
-            Point(100f, 100f), Point(150f, 50f), Point(250f, 150f), Point(300f, 100f),
-            Point(250f, 150f), Point(350f, 250f),
-            Point(300f, 300f), Point(250f, 250f), Point(150f, 350f), Point(100f, 300f),
-            Point(50f, 250f), Point(150f, 150f),
+        private val GCubics: List<Point2F32> = listOf(
+            Point2F32(100f, 100f), Point2F32(150f, 50f), Point2F32(250f, 150f), Point2F32(300f, 100f),
+            Point2F32(250f, 150f), Point2F32(350f, 250f),
+            Point2F32(300f, 300f), Point2F32(250f, 250f), Point2F32(150f, 350f), Point2F32(100f, 300f),
+            Point2F32(50f, 250f), Point2F32(150f, 150f),
         )
     }
 }

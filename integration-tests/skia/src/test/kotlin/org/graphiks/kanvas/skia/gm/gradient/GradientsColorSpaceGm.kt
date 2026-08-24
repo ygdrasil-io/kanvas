@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -41,7 +41,7 @@ class GradientsColorSpaceGm : SkiaGm {
         
         for (i in 0..9) {
             val paint = Paint(shader = Shader.LinearGradient(
-                start = Point(5f, 0f), end = Point(260f, 0f),
+                start = Point2F32(5f, 0f), end = Point2F32(260f, 0f),
                 stops = stops, tileMode = TileMode.CLAMP,
             ))
             canvas.drawRect(

@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
@@ -51,8 +51,8 @@ class ScaledTiling2Gm : SkiaGm {
     }
 
     private fun makeGrad(tx: TileMode, ty: TileMode): Shader {
-        val pts = arrayOf(Point(0f, 0f), Point(G_WIDTH.toFloat(), G_HEIGHT.toFloat()))
-        val center = Point(G_WIDTH / 2f, G_HEIGHT / 2f)
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(G_WIDTH.toFloat(), G_HEIGHT.toFloat()))
+        val center = Point2F32(G_WIDTH / 2f, G_HEIGHT / 2f)
         val rad = G_WIDTH / 2f
         val stops = listOf(
             GradientStop(0f, Color.RED),

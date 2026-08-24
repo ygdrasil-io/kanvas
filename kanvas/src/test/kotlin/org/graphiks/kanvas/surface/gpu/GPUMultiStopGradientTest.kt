@@ -5,7 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
@@ -33,8 +33,8 @@ class GPUMultiStopGradientTest {
     @Test
     fun `LinearGradient with 3 stops populates allStopPositions and allStopColors`() {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(100f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(100f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
                 GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
@@ -67,7 +67,7 @@ class GPUMultiStopGradientTest {
     @Test
     fun `RadialGradient with 3 stops populates allStopPositions and allStopColors`() {
         val shader = Shader.RadialGradient(
-            center = Point(50f, 50f),
+            center = Point2F32(50f, 50f),
             radius = 100f,
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
@@ -100,7 +100,7 @@ class GPUMultiStopGradientTest {
     @Test
     fun `SweepGradient with 3 stops populates allStopPositions and allStopColors`() {
         val shader = Shader.SweepGradient(
-            center = Point(50f, 50f),
+            center = Point2F32(50f, 50f),
             startAngle = 0f,
             endAngle = 360f,
             stops = listOf(
@@ -134,8 +134,8 @@ class GPUMultiStopGradientTest {
     @Test
     fun `LinearGradient with 2 stops populates allStopPositions with 2 entries`() {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(100f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(100f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
@@ -175,8 +175,8 @@ class GPUMultiStopGradientTest {
     @Test
     fun `toMaterial preserves ConicalGradient descriptor stops`() {
         val shader = Shader.ConicalGradient(
-            start = Point(0f, 0f), startRadius = 0f,
-            end = Point(100f, 0f), endRadius = 50f,
+            start = Point2F32(0f, 0f), startRadius = 0f,
+            end = Point2F32(100f, 0f), endRadius = 50f,
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),

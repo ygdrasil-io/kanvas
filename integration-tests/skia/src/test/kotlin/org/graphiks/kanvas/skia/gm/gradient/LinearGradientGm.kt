@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -35,8 +35,8 @@ class LinearGradientGm : SkiaGm {
         val green = Color.fromRGBA(0f, 0.3216f, 0f, 1f)
 
         for (i in 0 until kCount) {
-            val p0 = Point(0f, 0f)
-            val p1 = Point(500f + i * kWidthBump, 0f)
+            val p0 = Point2F32(0f, 0f)
+            val p1 = Point2F32(500f + i * kWidthBump, 0f)
             val currentWidth = kMinWidth + i * kWidthBump
             val unitPos = floatArrayOf(0f, 50f, 70f, 500f, 540f)
             val pos = FloatArray(6)

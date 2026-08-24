@@ -13,7 +13,8 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 
@@ -41,7 +42,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
             -1f, -1f, -1f,
         )
         val edgeDetector: ImageFilter = ImageFilter.MatrixConvolution(
-            Size(3f, 3f), kernel, 1f, 0f, Point(1f, 1f),
+            Size(3f, 3f), kernel, 1f, 0f, Vector2F32(1f, 1f),
             org.graphiks.kanvas.paint.TileMode.CLAMP, false, null,
         )
 
@@ -73,7 +74,7 @@ class ImageFiltersEffectOrderGm : SkiaGm {
         canvas.restore()
 
         val alphaMaskShader = Shader.RadialGradient(
-            Point(128f, 128f), 128f,
+            Point2F32(128f, 128f), 128f,
             listOf(GradientStop(0.4f, Color.BLACK), GradientStop(0.9f, Color.TRANSPARENT)),
         )
         val maskFilter = MaskFilter.Shader(alphaMaskShader)

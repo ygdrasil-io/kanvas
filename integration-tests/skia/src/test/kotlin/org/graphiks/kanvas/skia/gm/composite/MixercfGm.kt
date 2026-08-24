@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -31,7 +31,7 @@ class MixercfGm : SkiaGm {
         val tileCount = 5
 
         val sweep = Shader.SweepGradient(
-            Point(tileSize / 2f, tileHeight / 2f),
+            Point2F32(tileSize / 2f, tileHeight / 2f),
             stops = listOf(
                 GradientStop(0f, Color.RED),
                 GradientStop(0.33f, Color.GREEN),

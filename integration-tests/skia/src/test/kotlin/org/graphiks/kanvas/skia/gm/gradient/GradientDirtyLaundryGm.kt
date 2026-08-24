@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -42,7 +42,7 @@ class GradientDirtyLaundryGm : SkiaGm {
         canvas.save()
 
         val linearPaint = Paint(shader = Shader.LinearGradient(
-            start = Point(0f, 0f), end = Point(100f, 100f),
+            start = Point2F32(0f, 0f), end = Point2F32(100f, 100f),
             stops = stops, tileMode = TileMode.CLAMP,
         ))
         canvas.drawRect(r, linearPaint)
@@ -51,14 +51,14 @@ class GradientDirtyLaundryGm : SkiaGm {
         val cx = 50f
         val cy = 50f
         val radialPaint = Paint(shader = Shader.RadialGradient(
-            center = Point(cx, cy), radius = cx,
+            center = Point2F32(cx, cy), radius = cx,
             stops = stops, tileMode = TileMode.CLAMP,
         ))
         canvas.drawRect(r, radialPaint)
         canvas.translate(0f, 120f)
 
         val sweepPaint = Paint(shader = Shader.SweepGradient(
-            center = Point(cx, cy),
+            center = Point2F32(cx, cy),
             stops = stops, tileMode = TileMode.CLAMP,
         ))
         canvas.drawRect(r, sweepPaint)

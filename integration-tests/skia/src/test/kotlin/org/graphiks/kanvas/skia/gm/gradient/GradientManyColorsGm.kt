@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -27,7 +27,7 @@ class GradientManyColorsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val procs = listOf(::make0, ::make1, ::make2, ::make3)
-        val pts = arrayOf(Point(0f, 0f), Point(K_W.toFloat(), 0f))
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(K_W.toFloat(), 0f))
         val r = Rect(0f, 0f, K_W.toFloat(), 30f)
 
         canvas.translate(40f, 20f)

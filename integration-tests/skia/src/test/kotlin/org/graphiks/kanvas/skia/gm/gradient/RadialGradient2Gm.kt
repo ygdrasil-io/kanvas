@@ -5,7 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -46,7 +46,7 @@ class RadialGradient2Gm : SkiaGm {
         val cx = 200f
         val cy = 200f
         val radius = 150f
-        val center = Point(cx, cy)
+        val center = Point2F32(cx, cy)
         val tm = TileMode.CLAMP
 
         val sweepStops = sweepColors.indices.map { i ->

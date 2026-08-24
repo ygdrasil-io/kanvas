@@ -38,7 +38,7 @@ import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -88,7 +88,7 @@ class GPUPreparedVerticesLowererTest {
 
     @Test
     fun `vertices snapshot geometry transform clip and paint before publication`() {
-        val positions = mutableListOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f))
+        val positions = mutableListOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f))
         val transform = Matrix3x3F32.translation(3f, 4f)
         val operation = DisplayOp.DrawVertices(
             Vertices(VertexMode.TRIANGLES, positions),
@@ -98,7 +98,7 @@ class GPUPreparedVerticesLowererTest {
         )
 
         val draw = lower(operation).ready().draw
-        positions[0] = Point(99f, 99f)
+        positions[0] = Point2F32(99f, 99f)
 
         assertEquals(0f, draw.artifact.vertexBytesForUpload().let { java.nio.ByteBuffer.wrap(it).order(java.nio.ByteOrder.LITTLE_ENDIAN).float })
         assertEquals(3f, draw.transform.tx)
@@ -108,7 +108,7 @@ class GPUPreparedVerticesLowererTest {
     @Test
     fun `every packer refusal retains canonical code operation index and deterministic facts`() {
         val operation = DisplayOp.DrawVertices(
-            Vertices(VertexMode.TRIANGLES, listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f))),
+            Vertices(VertexMode.TRIANGLES, listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))),
             Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen,
         )
 
@@ -125,8 +125,8 @@ class GPUPreparedVerticesLowererTest {
         val attributes = listOf(
             null to null,
             listOf(Color.RED, Color.GREEN, Color.BLUE) to null,
-            null to listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
-            listOf(Color.RED, Color.GREEN, Color.BLUE) to listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            null to listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
+            listOf(Color.RED, Color.GREEN, Color.BLUE) to listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
         )
         attributes.forEachIndexed { index, (colors, texCoords) ->
             val draw = lower(DisplayOp.DrawVertices(
@@ -139,7 +139,7 @@ class GPUPreparedVerticesLowererTest {
 
         val fan = lower(DisplayOp.DrawVertices(
             Vertices(VertexMode.TRIANGLE_FAN, listOf(
-                Point(0f, 0f), Point(2f, 0f), Point(2f, 2f), Point(0f, 2f),
+                Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(2f, 2f), Point2F32(0f, 2f),
             )), Paint.fill(Color.WHITE), Matrix3x3F32.Identity, ClipStack.WideOpen,
         )).ready().draw
         assertEquals(6, fan.artifact.indexCount)
@@ -211,13 +211,13 @@ class GPUPreparedVerticesLowererTest {
         )
 
         cases.forEach { case ->
-            val points = listOf(Point(0f, 0f), Point(2f, 0f), Point(2f, 2f), Point(0f, 2f))
+            val points = listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(2f, 2f), Point2F32(0f, 2f))
                 .take(case.vertexCount)
             val colors = if ("color" in case.layout.attributes) {
                 listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE).take(case.vertexCount)
             } else null
             val uvs = if ("texcoord" in case.layout.attributes) {
-                listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)).take(case.vertexCount)
+                listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(1f, 1f), Point2F32(0f, 1f)).take(case.vertexCount)
             } else null
             val sourceIndices = if (!case.indexed) null else when (case.mode) {
                 VertexMode.TRIANGLES -> listOf(2, 0, 1)
@@ -435,13 +435,13 @@ class GPUPreparedVerticesLowererTest {
             MeshChildren.of("blend" to BlenderChild(Blender.Arithmetic(0f, 0f, 0f, 0f))))
         val cases: Map<String, () -> GPUPreparedVerticesLowering.Refused> = mapOf(
             GPUPreparedVerticesRefusalCodes.PositionCount to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, emptyList()), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
-            GPUPreparedVerticesRefusalCodes.AttributeCount to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, vertices().positions, texCoords = listOf(Point.ZERO)), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
-            GPUPreparedVerticesRefusalCodes.NonFinite to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f))), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.AttributeCount to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, vertices().positions, texCoords = listOf(Point2F32.Origin)), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.NonFinite to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f))), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.IndexOutOfRange to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, vertices().positions, indices = listOf(0, 1, 9)), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
-            GPUPreparedVerticesRefusalCodes.IndexFormat to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(65538) { Point(it.toFloat(), 0f) }, indices = listOf(65537, 0, 1)), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.IndexFormat to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(65538) { Point2F32(it.toFloat(), 0f) }, indices = listOf(65537, 0, 1)), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.Transform to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix3x3F32.of(1f,0f,0f,0f,1f,0f,.1f,0f,1f), ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.Material to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED).copy(shader = hostileShader()), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
-            GPUPreparedVerticesRefusalCodes.Budget to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(1_000_002) { Point(it.toFloat(), 0f) }), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.Budget to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(1_000_002) { Point2F32(it.toFloat(), 0f) }), Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen)).refused() },
             GPUPreparedVerticesRefusalCodes.MeshBounds to { lower(meshOperation(program = registeredMeshProgram()).copy(mesh = Mesh(vertices(), registeredMeshProgram(), Rect(Float.NaN,0f,1f,1f)))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to { lower(meshOperation(program = MeshProgram(effect("missing")))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("cpu", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable) }).refused() },
@@ -764,7 +764,7 @@ class GPUPreparedVerticesLowererTest {
 
     @Test
     fun `mesh snapshots vertices and clips before resolver can mutate caller objects`() {
-        val positions = mutableListOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f))
+        val positions = mutableListOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f))
         val clip = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 4f, 4f), antiAlias = false)
         val operation = meshOperation(program = registeredMeshProgram()).copy(
             mesh = Mesh(
@@ -775,7 +775,7 @@ class GPUPreparedVerticesLowererTest {
             clip = clip,
         )
         val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
-            positions[0] = Point(99f, 99f)
+            positions[0] = Point2F32(99f, 99f)
             org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver()
                 .resolve(effectId, version)
         }
@@ -822,7 +822,7 @@ class GPUPreparedVerticesLowererTest {
 
     private fun vertices(): Vertices = Vertices(
         VertexMode.TRIANGLES,
-        listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+        listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
     )
 
     private fun registeredMeshProgram(

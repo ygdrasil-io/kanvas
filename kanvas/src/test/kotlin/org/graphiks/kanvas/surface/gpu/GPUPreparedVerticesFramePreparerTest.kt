@@ -16,7 +16,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -53,7 +53,7 @@ class GPUPreparedVerticesFramePreparerTest {
         val invalid = verticesOp(1f).copy(
             vertices = Vertices(
                 VertexMode.TRIANGLES,
-                listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
+                listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
             ),
         )
 
@@ -210,7 +210,7 @@ class GPUPreparedVerticesFramePreparerTest {
     private fun verticesOp(scale: Float) = DisplayOp.DrawVertices(
         Vertices(
             VertexMode.TRIANGLES,
-            listOf(Point(0f, 0f), Point(2f * scale, 0f), Point(0f, 2f * scale)),
+            listOf(Point2F32(0f, 0f), Point2F32(2f * scale, 0f), Point2F32(0f, 2f * scale)),
         ),
         Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen,
     )

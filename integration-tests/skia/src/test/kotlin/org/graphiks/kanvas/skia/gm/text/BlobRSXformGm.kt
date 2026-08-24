@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.PI
 import kotlin.math.sin
@@ -43,10 +43,10 @@ class BlobRSXformGm : SkiaGm {
 
         // Build per-glyph xforms: scale varies sinusoidally
         var xAccum = 0f
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         for (i in 0 until len) {
             val scale = (sin(i * PI / (len - 1).toDouble()) * 0.75 + 0.5).toFloat()
-            positions.add(Point(xAccum, 0f))
+            positions.add(Point2F32(xAccum, 0f))
             val advance = typeface.getAdvance(glyphIds[i].toInt(), font.size)
             xAccum += advance * scale
         }

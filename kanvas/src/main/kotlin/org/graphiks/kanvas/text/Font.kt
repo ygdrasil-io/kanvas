@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.text
 
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 interface FontMetricsProvider {
     fun getMetrics(size: Float): FontMetrics?
@@ -52,12 +52,12 @@ data class Font(
 
     fun toTextBlob(str: String, originX: Float, originY: Float): TextBlob {
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = originX
         for (cp in str.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(cursorX, originY))
+            positions.add(Point2F32(cursorX, originY))
             cursorX += typeface.getAdvance(gid, size, variationCoordinates)
         }
         return TextBlob(

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -89,7 +89,7 @@ class TilemodeDecalGm : SkiaGm {
                 canvas.save(); canvas.rotate(4f)
                 canvas.drawRect(r, bgPaint)
                 val grad = Shader.LinearGradient(
-                    Point(0f, 0f), Point(imgW, imgH),
+                    Point2F32(0f, 0f), Point2F32(imgW, imgH),
                     listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
                     pair.tx,
                 )
@@ -100,7 +100,7 @@ class TilemodeDecalGm : SkiaGm {
             run {
                 canvas.save(); canvas.rotate(4f)
                 canvas.drawRect(r, bgPaint)
-                val center = Point(imgW * 0.5f, imgW * 0.5f)
+                val center = Point2F32(imgW * 0.5f, imgW * 0.5f)
                 val rad = imgW * 0.5f
                 val grad = Shader.RadialGradient(
                     center, rad,

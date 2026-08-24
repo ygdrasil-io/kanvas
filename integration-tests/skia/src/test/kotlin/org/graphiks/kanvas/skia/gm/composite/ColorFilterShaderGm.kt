@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -38,8 +38,8 @@ class ColorFilterShaderGm : SkiaGm {
             shMakeLinearGradient0(),
             shMakeLinearGradient1(),
             Shader.ConicalGradient(
-                start = Point(0f, 0f), startRadius = 50f,
-                end = Point(0f, 0f), endRadius = 150f,
+                start = Point2F32(0f, 0f), startRadius = 50f,
+                end = Point2F32(0f, 0f), endRadius = 150f,
                 stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
                 tileMode = TileMode.CLAMP,
             ),
@@ -86,8 +86,8 @@ class ColorFilterShaderGm : SkiaGm {
         ColorFilter.Blend(color, BlendMode.SRC)
 
     private fun shMakeLinearGradient0(): Shader = Shader.LinearGradient(
-        start = Point(0f, 0f),
-        end = Point(100f, 100f),
+        start = Point2F32(0f, 0f),
+        end = Point2F32(100f, 100f),
         stops = listOf(
             GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
             GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 1f)),
@@ -97,8 +97,8 @@ class ColorFilterShaderGm : SkiaGm {
     )
 
     private fun shMakeLinearGradient1(): Shader = Shader.LinearGradient(
-        start = Point(0f, 0f),
-        end = Point(100f, 100f),
+        start = Point2F32(0f, 0f),
+        end = Point2F32(100f, 100f),
         stops = listOf(
             GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
             GradientStop(0.5f, Color.fromRGBA(0f, 1f, 0f, 0f)),

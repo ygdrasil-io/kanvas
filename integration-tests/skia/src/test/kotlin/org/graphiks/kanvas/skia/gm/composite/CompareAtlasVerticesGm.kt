@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -81,7 +81,7 @@ class CompareAtlasVerticesGm : SkiaGm {
     }
 
     private fun makeVertices(r: Rect, color: Color): Vertices {
-        val pos = listOf(Point(r.left, r.top), Point(r.right, r.top), Point(r.right, r.bottom), Point(r.left, r.bottom))
+        val pos = listOf(Point2F32(r.left, r.top), Point2F32(r.right, r.top), Point2F32(r.right, r.bottom), Point2F32(r.left, r.bottom))
         val colors = List(4) { color }
         return Vertices(mode = VertexMode.TRIANGLE_FAN, positions = pos, texCoords = pos, colors = colors)
     }

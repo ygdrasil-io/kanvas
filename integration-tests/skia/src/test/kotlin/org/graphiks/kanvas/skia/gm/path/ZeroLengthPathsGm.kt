@@ -12,7 +12,7 @@ import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.toImage
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 internal enum class ZeroLengthPathVerb(val hasVerb: Boolean) {
@@ -32,8 +32,8 @@ internal object ZeroLengthPathLayout {
     const val cellWidth = 50
     const val cellHeight = 20
     const val cellPad = 2f
-    val firstContourAnchor = Point(9.5f, 9.5f)
-    val secondContourAnchor = Point(40.5f, 9.5f)
+    val firstContourAnchor = Point2F32(9.5f, 9.5f)
+    val secondContourAnchor = Point2F32(40.5f, 9.5f)
 
     fun expectedCaps(
         cap: StrokeCap,
@@ -82,7 +82,7 @@ abstract class ZeroLengthPathsGm(
                     val seconds = if (doubleContour) verbs else listOf<ZeroLengthPathVerb?>(null)
                     for (second in seconds) {
                         val path = if (second == null) {
-                            zeroLengthPath(first, Point(24.5f, 9.5f))
+                            zeroLengthPath(first, Point2F32(24.5f, 9.5f))
                         } else {
                             Path { }.apply {
                                 addPath(zeroLengthPath(first, ZeroLengthPathLayout.firstContourAnchor))
@@ -106,7 +106,7 @@ abstract class ZeroLengthPathsGm(
     }
 }
 
-private fun zeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point): Path = Path {
+private fun zeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point2F32): Path = Path {
     moveTo(anchor.x, anchor.y)
     when (verb) {
         ZeroLengthPathVerb.MOVE -> Unit

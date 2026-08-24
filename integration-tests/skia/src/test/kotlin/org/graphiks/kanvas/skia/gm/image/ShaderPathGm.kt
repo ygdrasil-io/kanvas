@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.geometry.Path
 
@@ -90,13 +90,13 @@ class ShaderPathGm : SkiaGm {
             )
 
             val paint = Paint(shader = Shader.LinearGradient(
-                start = Point(0f, 0f), end = Point(w, w),
+                start = Point2F32(0f, 0f), end = Point2F32(w, w),
                 stops = colors0, tileMode = TileMode.CLAMP,
             ))
             drawRect(Rect(0f, 0f, w, w), paint)
 
             val paint2 = Paint(shader = Shader.LinearGradient(
-                start = Point(w / 2, 0f), end = Point(w / 2, w),
+                start = Point2F32(w / 2, 0f), end = Point2F32(w / 2, w),
                 stops = colors1, tileMode = TileMode.CLAMP,
             ))
             drawRect(Rect(0f, 0f, w, w), paint2)

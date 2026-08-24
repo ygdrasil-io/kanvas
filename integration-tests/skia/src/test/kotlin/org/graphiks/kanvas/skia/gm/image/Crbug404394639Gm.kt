@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -32,8 +32,8 @@ class Crbug404394639Gm : SkiaGm {
         val surf = Surface(sourceWidth, sourceHeight)
         surf.canvas {
             val shader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(0f, sourceHeight.toFloat()),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(0f, sourceHeight.toFloat()),
                 stops = listOf(
                     GradientStop(0f, Color(0xFF00FFFFu)),
                     GradientStop(1f, Color(0xFFFF00FFu)),

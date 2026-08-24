@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.math.geometry.Point2F32
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.text.FontTypeface
@@ -199,7 +201,7 @@ class CanvasTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = listOf(1u),
-                        positions = listOf(Point.ZERO),
+                        positions = listOf(Point2F32.Origin),
                         fontSize = 32f,
                     ),
                 ),
@@ -222,7 +224,7 @@ class CanvasTest {
         glyphRuns = listOf(
             KanvasGlyphRun(
                 glyphs = listOf(glyphId.toUShort()),
-                positions = listOf(Point.ZERO),
+                positions = listOf(Point2F32.Origin),
                 fontSize = 32f,
             ),
         ),

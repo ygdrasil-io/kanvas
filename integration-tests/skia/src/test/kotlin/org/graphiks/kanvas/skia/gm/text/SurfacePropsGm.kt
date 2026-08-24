@@ -12,7 +12,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.paint.GradientStop
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/surface.cpp` (surface-props variant).
@@ -55,8 +55,8 @@ class SurfacePropsGm(
         val gradA = Color.fromRGBA(0.6f, 0.6f, 0.6f, 1f)
         val gradB = Color.fromRGBA(0.4f, 0.4f, 0.4f, 1f)
         return Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(W.toFloat(), H.toFloat()),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(W.toFloat(), H.toFloat()),
             stops = listOf(GradientStop(0f, gradA), GradientStop(1f, gradB)),
             tileMode = TileMode.CLAMP,
         )

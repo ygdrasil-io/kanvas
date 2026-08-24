@@ -54,7 +54,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTextTest {
@@ -556,8 +556,8 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         val operation = textOperation().copy(
             paint = Paint.fill(Color.WHITE).copy(
                 shader = Shader.LinearGradient(
-                    start = Point(0f, 0f),
-                    end = Point(32f, 0f),
+                    start = Point2F32(0f, 0f),
+                    end = Point2F32(32f, 0f),
                     stops = listOf(
                         GradientStop(0f, Color.RED),
                         GradientStop(1f, Color.BLUE),
@@ -630,7 +630,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = listOf(spaceGlyph.toUShort()),
-                        positions = listOf(Point(0f, 0f)),
+                        positions = listOf(Point2F32(0f, 0f)),
                         fontSize = 16f,
                     ),
                 ),
@@ -943,7 +943,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(36u, 37u),
-                    positions = listOf(Point(0f, 0f), Point(18f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f), Point2F32(18f, 0f)),
                     fontSize = fontSize,
                 ),
             ),
@@ -1024,7 +1024,7 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
                 glyphRuns = listOf(
                     KanvasGlyphRun(
                         glyphs = listOf(2u),
-                        positions = listOf(Point(8f, 32f)),
+                        positions = listOf(Point2F32(8f, 32f)),
                         fontSize = fontSize,
                     ),
                 ),

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 
@@ -42,7 +42,7 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
             GradientStop(1f, violet),
         )
         val radial = Shader.RadialGradient(
-            center = Point(250f, 250f),
+            center = Point2F32(250f, 250f),
             radius = 280f,
             stops = stops,
             tileMode = TileMode.CLAMP,
@@ -62,7 +62,7 @@ class DrawLinesWithLocalMatrixGm : SkiaGm {
         )
 
         fun drawLine(x0: Float, y0: Float, x1: Float, y1: Float, w: Float) {
-            val pts = listOf(Point(x0, y0), Point(x1, y1))
+            val pts = listOf(Point2F32(x0, y0), Point2F32(x1, y1))
             canvas.drawPoints(PointMode.LINES, pts, white.copy(
                 style = PaintStyle.STROKE,
                 strokeWidth = w,

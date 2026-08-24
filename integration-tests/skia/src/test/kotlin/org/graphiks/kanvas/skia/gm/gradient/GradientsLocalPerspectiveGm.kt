@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/gradients.cpp` (local perspective variant).
@@ -27,7 +27,7 @@ class GradientsLocalPerspectiveGm : SkiaGm {
     override val height = 815
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val pts = arrayOf(Point(0f, 0f), Point(100f, 100f))
+        val pts = arrayOf(Point2F32(0f, 0f), Point2F32(100f, 100f))
         val r = Rect(0f, 0f, 100f, 100f)
         var paint = Paint(antiAlias = true)
 
@@ -59,16 +59,16 @@ class GradientsLocalPerspectiveGm : SkiaGm {
             for (j in 0 until 5) {
                 val shader: Shader? = when (j) {
                     0 -> Shader.LinearGradient(pts[0], pts[1], gd, TileMode.CLAMP)
-                    1 -> Shader.RadialGradient(Point(50f, 50f), 50f, gd, TileMode.CLAMP)
-                    2 -> Shader.SweepGradient(Point(50f, 50f), stops = gd, tileMode = TileMode.CLAMP)
+                    1 -> Shader.RadialGradient(Point2F32(50f, 50f), 50f, gd, TileMode.CLAMP)
+                    2 -> Shader.SweepGradient(Point2F32(50f, 50f), stops = gd, tileMode = TileMode.CLAMP)
                     3 -> Shader.ConicalGradient(
-                        Point(50f, 50f), 20f,
-                        Point(50f + 60f, 50f + 25f), 50f,
+                        Point2F32(50f, 50f), 20f,
+                        Point2F32(50f + 60f, 50f + 25f), 50f,
                         gd, TileMode.CLAMP,
                     )
                     4 -> Shader.ConicalGradient(
-                        Point(50f + 10f, 50f + 10f), 10f,
-                        Point(100f - 33.33f, 100f - 33.33f), 33.33f,
+                        Point2F32(50f + 10f, 50f + 10f), 10f,
+                        Point2F32(100f - 33.33f, 100f - 33.33f), 33.33f,
                         gd, TileMode.CLAMP,
                     )
                     else -> null

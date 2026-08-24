@@ -8,7 +8,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 
@@ -38,7 +39,7 @@ class ImageFilterConvolveSubsetGm : SkiaGm {
             kernel = kernel,
             gain = 1f,
             bias = 0.3f,
-            kernelOffset = Point(1f, 1f),
+            kernelOffset = Vector2F32(1f, 1f),
             tileMode = TileMode.CLAMP,
             convolveAlpha = true,
             input = null,

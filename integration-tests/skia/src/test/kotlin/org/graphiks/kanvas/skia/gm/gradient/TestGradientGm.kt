@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
@@ -37,8 +37,8 @@ class TestGradientGm : SkiaGm {
             antiAlias = true,
             strokeWidth = 4f,
             shader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(256f, 256f),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(256f, 256f),
                 stops = listOf(
                     GradientStop(0f, Color.BLUE),
                     GradientStop(1f, Color(0xFFFFFF00u)),

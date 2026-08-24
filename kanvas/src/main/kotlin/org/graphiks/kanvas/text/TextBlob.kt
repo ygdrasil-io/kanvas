@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.text
 
-import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * A contiguous run of glyphs from a single font, together with their
@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Rect
  */
 data class KanvasGlyphRun(
     val glyphs: List<UShort>,
-    val positions: List<Point>,
+    val positions: List<Point2F32>,
     val fontSize: Float = 12f,
 )
 

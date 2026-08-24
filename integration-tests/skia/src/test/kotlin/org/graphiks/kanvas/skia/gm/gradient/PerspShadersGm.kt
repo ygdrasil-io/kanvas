@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -31,7 +31,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
 
     private var bitmapImage: Image = createCheckerboardImage(kCellSize, kCellSize, Color.BLUE, Color.fromRGBA(1f, 1f, 0f), kCellSize / 10)
     private val linearGrad1 = Shader.LinearGradient(
-        start = Point(0f, 0f), end = Point(kCellSize.toFloat(), kCellSize.toFloat()),
+        start = Point2F32(0f, 0f), end = Point2F32(kCellSize.toFloat(), kCellSize.toFloat()),
         stops = listOf(
             GradientStop(0f, Color.RED), GradientStop(0.25f, Color.GREEN),
             GradientStop(0.5f, Color.RED), GradientStop(0.75f, Color.GREEN),
@@ -40,7 +40,7 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
         tileMode = TileMode.CLAMP,
     )
     private val linearGrad2 = Shader.LinearGradient(
-        start = Point(0f, 0f), end = Point(0f, kCellSize.toFloat()),
+        start = Point2F32(0f, 0f), end = Point2F32(0f, kCellSize.toFloat()),
         stops = listOf(
             GradientStop(0f, Color.RED), GradientStop(0.25f, Color.GREEN),
             GradientStop(0.5f, Color.RED), GradientStop(0.75f, Color.GREEN),

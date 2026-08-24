@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -45,10 +45,10 @@ class MeshUpdateGm : SkiaGm {
         val bottom0 = yOffset + 110f
 
         val positions = listOf(
-            Point(leftUpdated, yOffset),
-            Point(rightUpdated, yOffset),
-            Point(leftStart, bottom0),
-            Point(rightStart, bottom0),
+            Point2F32(leftUpdated, yOffset),
+            Point2F32(rightUpdated, yOffset),
+            Point2F32(leftStart, bottom0),
+            Point2F32(rightStart, bottom0),
         )
         val indices = if (indexSwap) listOf(0, 2, 1, 1, 2, 3) else listOf(0, 1, 2, 1, 3, 2)
 

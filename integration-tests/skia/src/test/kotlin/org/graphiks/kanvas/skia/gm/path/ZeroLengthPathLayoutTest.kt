@@ -4,7 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.RenderCost
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -35,7 +35,7 @@ class ZeroLengthPathLayoutTest {
 
     @Test
     fun `zero length forms construct Skia-compatible verbs and points`() {
-        val anchor = Point(24.5f, 9.5f)
+        val anchor = Point2F32(24.5f, 9.5f)
         val expectedPaths = mapOf(
             ZeroLengthPathVerb.MOVE to ExpectedPath(listOf(PathVerb.MOVE), listOf(anchor)),
             ZeroLengthPathVerb.CLOSE to ExpectedPath(listOf(PathVerb.MOVE, PathVerb.CLOSE), listOf(anchor)),
@@ -112,9 +112,9 @@ class ZeroLengthPathLayoutTest {
         }
     }
 
-    private fun buildZeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point): Path {
+    private fun buildZeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point2F32): Path {
         val method = Class.forName("org.graphiks.kanvas.skia.gm.path.ZeroLengthPathsGmKt")
-            .getDeclaredMethod("zeroLengthPath", ZeroLengthPathVerb::class.java, Point::class.java)
+            .getDeclaredMethod("zeroLengthPath", ZeroLengthPathVerb::class.java, Point2F32::class.java)
         method.isAccessible = true
         return method.invoke(null, verb, anchor) as Path
     }
@@ -127,14 +127,14 @@ class ZeroLengthPathLayoutTest {
         }
 
     @Suppress("UNCHECKED_CAST")
-    private fun pathPoints(path: Path): List<Point> =
+    private fun pathPoints(path: Path): List<Point2F32> =
         Path::class.java.getDeclaredField("points").run {
             isAccessible = true
-            (get(path) as List<Point>).toList()
+            (get(path) as List<Point2F32>).toList()
         }
 
     private data class ExpectedPath(
         val verbs: List<PathVerb>,
-        val points: List<Point>,
+        val points: List<Point2F32>,
     )
 }

@@ -60,7 +60,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -79,7 +79,7 @@ class GPUFramePathApiInventoryTest {
                 blob = TextBlob(
                     glyphRuns = listOf(
                         KanvasGlyphRun(
-                            glyphs = listOf(36u), positions = listOf(Point(0f, 0f)),
+                            glyphs = listOf(36u), positions = listOf(Point2F32(0f, 0f)),
                             fontSize = 12f,
                         ),
                     ),
@@ -91,14 +91,14 @@ class GPUFramePathApiInventoryTest {
             DisplayOp.DrawVertices(
                 Vertices(
                     VertexMode.TRIANGLES,
-                    listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+                    listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
                 ),
                 Paint.fill(Color.RED), Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
             DisplayOp.DrawVertices(
                 Vertices(
                     VertexMode.TRIANGLES,
-                    listOf(Point(0f, 0f), Point(3f, 0f), Point(0f, 3f)),
+                    listOf(Point2F32(0f, 0f), Point2F32(3f, 0f), Point2F32(0f, 3f)),
                 ),
                 Paint.fill(Color.BLUE), Matrix3x3F32.Identity, ClipStack.WideOpen,
             ),
@@ -125,7 +125,7 @@ class GPUFramePathApiInventoryTest {
         val vertices = DisplayOp.DrawVertices(
             Vertices(
                 VertexMode.TRIANGLES,
-                listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+                listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
             ),
             Paint.fill(Color.RED),
             Matrix3x3F32.Identity,
@@ -191,7 +191,7 @@ class GPUFramePathApiInventoryTest {
         fun vertices(clip: ClipStack) = DisplayOp.DrawVertices(
             Vertices(
                 VertexMode.TRIANGLES,
-                listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+                listOf(Point2F32(0f, 0f), Point2F32(2f, 0f), Point2F32(0f, 2f)),
             ),
             Paint.fill(Color.RED), Matrix3x3F32.Identity, clip,
         )
@@ -199,7 +199,7 @@ class GPUFramePathApiInventoryTest {
             blob = TextBlob(
                 glyphRuns = listOf(
                     KanvasGlyphRun(
-                        glyphs = listOf(36u), positions = listOf(Point(0f, 0f)),
+                        glyphs = listOf(36u), positions = listOf(Point2F32(0f, 0f)),
                         fontSize = 12f,
                     ),
                 ),
@@ -658,7 +658,7 @@ class GPUFramePathApiInventoryTest {
             )
             drawPoints(
                 PointMode.LINES,
-                listOf(Point(10f, 10f), Point(30f, 10f)),
+                listOf(Point2F32(10f, 10f), Point2F32(30f, 10f)),
                 Paint.stroke(Color.BLUE, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = true),
             )
         }
@@ -702,7 +702,7 @@ class GPUFramePathApiInventoryTest {
     fun `drawPoints points mode lowers every positive butt point as a width sized square`() {
         val operation = DisplayOp.DrawPoints(
             PointMode.POINTS,
-            listOf(Point(5f, 5f), Point(15f, 10f)),
+            listOf(Point2F32(5f, 5f), Point2F32(15f, 10f)),
             Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.BUTT, antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
@@ -739,7 +739,7 @@ class GPUFramePathApiInventoryTest {
     fun `drawPoints round points refuse with a stable geometry diagnostic`() {
         val inventory = inventoryFor(DisplayOp.DrawPoints(
             PointMode.POINTS,
-            listOf(Point(5f, 5f), Point(15f, 10f)),
+            listOf(Point2F32(5f, 5f), Point2F32(15f, 10f)),
             Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.ROUND),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
@@ -1157,8 +1157,8 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `non solid core material becomes a stable refusal instead of an exception`() {
         val gradient = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(16f, 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(16f, 0f),
             stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
         )
         val inventory = inventoryFor(DisplayOp.DrawRect(
@@ -1254,7 +1254,7 @@ class GPUFramePathApiInventoryTest {
     fun `stroked path uses canonical stroke outline and retains all stroke facts`() {
         val semantic = semanticFor(DisplayOp.DrawPoints(
             PointMode.LINES,
-            listOf(Point(4f, 8f), Point(24f, 8f)),
+            listOf(Point2F32(4f, 8f), Point2F32(24f, 8f)),
             Paint.stroke(Color.RED, 4f).copy(
                 strokeCap = StrokeCap.SQUARE,
                 strokeJoin = StrokeJoin.BEVEL,
@@ -1347,7 +1347,7 @@ class GPUFramePathApiInventoryTest {
             )
             drawPoints(
                 PointMode.LINES,
-                listOf(Point(3f, 4f), Point(14f, 9f)),
+                listOf(Point2F32(3f, 4f), Point2F32(14f, 9f)),
                 Paint.stroke(Color.RED, 2f),
             )
             drawRect(Rect.fromLTRB(4f, 11f, 14f, 20f), Paint.fill(Color.GREEN))
@@ -1593,7 +1593,7 @@ class GPUFramePathApiInventoryTest {
             drawPoint(1f, 1f, Paint.fill(Color.GREEN).copy(antiAlias = false))
             drawPoints(
                 PointMode.LINES,
-                listOf(Point(2f, 2f), Point(8f, 8f)),
+                listOf(Point2F32(2f, 2f), Point2F32(8f, 8f)),
                 Paint.stroke(Color.BLUE, 2f),
             )
             drawRect(Rect.fromLTRB(3f, 4f, 10f, 12f), Paint.fill(Color.RED))
@@ -2266,7 +2266,7 @@ class GPUFramePathApiInventoryTest {
         val families = listOf<(BlendMode) -> DisplayOp>(
             { mode -> DisplayOp.DrawColor(Color.RED, mode, Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawPoint(2f, 2f, paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
-            { mode -> DisplayOp.DrawPoints(PointMode.LINES, listOf(Point(1f, 1f), Point(5f, 5f)), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
+            { mode -> DisplayOp.DrawPoints(PointMode.LINES, listOf(Point2F32(1f, 1f), Point2F32(5f, 5f)), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawRect(Rect.fromLTRB(1f, 1f, 7f, 7f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawRRect(RRect(Rect.fromLTRB(1f, 1f, 7f, 7f), radius = 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
             { mode -> DisplayOp.DrawDRRect(RRect(Rect.fromLTRB(1f, 1f, 8f, 8f), 1f), RRect(Rect.fromLTRB(3f, 3f, 6f, 6f), 1f), paint(mode), Matrix3x3F32.Identity, org.graphiks.kanvas.canvas.ClipStack.WideOpen) },

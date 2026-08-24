@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
@@ -82,13 +82,13 @@ class HitTestPathGm : SkiaGm {
         val paint = Paint(color = Color.RED)
         canvas.drawPath(path, paint)
 
-        val hits = ArrayList<Point>()
+        val hits = ArrayList<Point2F32>()
         var y = r.top + 0.5f - margin
         while (y < r.bottom + margin) {
             var x = r.left + 0.5f - margin
             while (x < r.right + margin) {
-                if (path.contains(Point(x, y))) {
-                    hits.add(Point(x, y))
+                if (path.contains(Point2F32(x, y))) {
+                    hits.add(Point2F32(x, y))
                 }
                 x += 1f
             }

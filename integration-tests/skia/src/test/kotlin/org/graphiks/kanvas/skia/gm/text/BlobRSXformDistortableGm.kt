@@ -10,7 +10,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.PI
 import kotlin.math.sin
@@ -43,10 +43,10 @@ class BlobRSXformDistortableGm : SkiaGm {
 
         // Sinusoidal per-glyph xform
         var x = 0f
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         for (i in 0 until len) {
             val scale = (sin(i * PI / (len - 1).toDouble()) * 0.75 + 0.5).toFloat()
-            positions.add(Point(x, 0f))
+            positions.add(Point2F32(x, 0f))
             x += 50f * scale
         }
 

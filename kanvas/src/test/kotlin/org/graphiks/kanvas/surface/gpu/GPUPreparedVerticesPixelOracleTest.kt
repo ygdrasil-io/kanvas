@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.math.geometry.Point2F32
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

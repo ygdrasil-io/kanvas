@@ -4,10 +4,10 @@ import org.graphiks.kanvas.dsl.PathScope
 import org.graphiks.kanvas.types.Line
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.Vector2F32
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -19,30 +19,37 @@ import kotlin.math.sqrt
 class Path internal constructor() {
     var fillType: FillType = FillType.WINDING
 
-    private val verbs = mutableListOf<PathVerb>()
-    private val points = mutableListOf<Point>()
+    private val commands = mutableListOf<PathCommand>()
 
     fun moveTo(x: Float, y: Float): Path {
-        verbs.add(PathVerb.MOVE); points.add(Point(x, y)); return this
+        commands.add(PathCommand.Move(Point2F32(x, y)))
+        return this
     }
     fun lineTo(x: Float, y: Float): Path {
-        verbs.add(PathVerb.LINE); points.add(Point(x, y)); return this
+        commands.add(PathCommand.Line(Point2F32(x, y)))
+        return this
     }
     fun quadTo(cx: Float, cy: Float, x: Float, y: Float): Path {
-        verbs.add(PathVerb.QUAD); points.add(Point(cx, cy)); points.add(Point(x, y)); return this
+        commands.add(PathCommand.Quad(Point2F32(cx, cy), Point2F32(x, y)))
+        return this
     }
     fun cubicTo(cx1: Float, cy1: Float, cx2: Float, cy2: Float, x: Float, y: Float): Path {
-        verbs.add(PathVerb.CUBIC)
-        points.add(Point(cx1, cy1)); points.add(Point(cx2, cy2)); points.add(Point(x, y))
+        commands.add(PathCommand.Cubic(Point2F32(cx1, cy1), Point2F32(cx2, cy2), Point2F32(x, y)))
         return this
     }
     fun arcTo(rx: Float, ry: Float, xAxisRotation: Float, largeArc: Boolean, sweep: Boolean, x: Float, y: Float): Path {
-        verbs.add(PathVerb.ARC_TO)
-        points.add(Point(rx, ry)); points.add(Point(xAxisRotation, if (largeArc) 1f else 0f))
-        points.add(Point(if (sweep) 1f else 0f, 0f)); points.add(Point(x, y))
+        commands.add(
+            PathCommand.ArcTo(
+                radius = Vector2F32(rx, ry),
+                xAxisRotation = xAxisRotation,
+                largeArc = largeArc,
+                sweep = sweep,
+                endpoint = Point2F32(x, y),
+            ),
+        )
         return this
     }
-    fun close(): Path { verbs.add(PathVerb.CLOSE); return this }
+    fun close(): Path { commands.add(PathCommand.Close); return this }
 
     fun addRect(rect: Rect): Path {
         moveTo(rect.left, rect.top)
@@ -117,90 +124,59 @@ class Path internal constructor() {
         CornerRadii(x * scale, y * scale)
 
     fun addPath(path: Path): Path {
-        verbs.addAll(path.verbs)
-        points.addAll(path.points)
+        commands.addAll(path.commands)
         return this
     }
 
     fun reverseAddPath(src: Path): Path {
-        val sVerbs = src.verbs
-        val sPoints = src.points
-
-        var vi = 0
-        var pi = 0
-
-        val ptCounts = mapOf(
-            PathVerb.MOVE to 1, PathVerb.LINE to 1,
-            PathVerb.QUAD to 2, PathVerb.CUBIC to 3,
-            PathVerb.ARC_TO to 4, PathVerb.CLOSE to 0,
-        )
-
-        while (vi < sVerbs.size) {
-            if (sVerbs[vi] != PathVerb.MOVE) { vi++; pi++; continue }
-
-            val segVerbs = mutableListOf<PathVerb>()
-            val segPtStart = mutableListOf<Int>()
-            val segPtCount = mutableListOf<Int>()
-
-            var v = vi
-            var p = pi
-            while (v < sVerbs.size && (v == vi || sVerbs[v] != PathVerb.MOVE)) {
-                val c = ptCounts[sVerbs[v]]!!
-                segVerbs.add(sVerbs[v])
-                segPtStart.add(p)
-                segPtCount.add(c)
-                p += c
-                v++
+        var contourStart = 0
+        while (contourStart < src.commands.size) {
+            val move = src.commands[contourStart] as? PathCommand.Move
+            if (move == null) {
+                contourStart++
+                continue
             }
+            var contourEnd = contourStart + 1
+            while (contourEnd < src.commands.size && src.commands[contourEnd] !is PathCommand.Move) {
+                contourEnd++
+            }
+            val contour = src.commands.subList(contourStart, contourEnd)
+            val hasClose = contour.lastOrNull() is PathCommand.Close
+            val drawable = if (hasClose) contour.dropLast(1) else contour
+            val lastEnd = drawable.lastOrNull()?.endpoint ?: move.point
+            moveTo(lastEnd.x, lastEnd.y)
 
-            val hasClose = segVerbs.last() == PathVerb.CLOSE
-            val lastReal = if (hasClose) segVerbs.size - 2 else segVerbs.size - 1
-
-            val (lastEndX, lastEndY) = segmentEndPoint(segVerbs[lastReal], sPoints, segPtStart[lastReal])
-            moveTo(lastEndX, lastEndY)
-
-            for (si in lastReal downTo 1) {
-                val startX: Float
-                val startY: Float
-                if (si > 1) {
-                    val p = segmentEndPoint(segVerbs[si - 1], sPoints, segPtStart[si - 1])
-                    startX = p.first; startY = p.second
-                } else {
-                    startX = sPoints[segPtStart[0]].x
-                    startY = sPoints[segPtStart[0]].y
-                }
-
-                val verb = segVerbs[si]
-                val base = segPtStart[si]
-                when (verb) {
-                    PathVerb.LINE -> lineTo(startX, startY)
-                    PathVerb.QUAD -> quadTo(sPoints[base].x, sPoints[base].y, startX, startY)
-                    PathVerb.CUBIC -> cubicTo(
-                        sPoints[base + 1].x, sPoints[base + 1].y,
-                        sPoints[base].x, sPoints[base].y,
-                        startX, startY,
+            for (index in drawable.lastIndex downTo 1) {
+                val command = drawable[index]
+                val start = drawable[index - 1].endpoint ?: move.point
+                when (command) {
+                    is PathCommand.Line -> lineTo(start.x, start.y)
+                    is PathCommand.Quad -> quadTo(command.control.x, command.control.y, start.x, start.y)
+                    is PathCommand.Cubic -> cubicTo(
+                        command.control2.x, command.control2.y,
+                        command.control1.x, command.control1.y,
+                        start.x, start.y,
                     )
-                    PathVerb.ARC_TO -> {
-                        val rx = sPoints[base].x; val ry = sPoints[base].y
-                        val axisRot = sPoints[base + 1].x
-                        val largeArc = sPoints[base + 1].y > 0f
-                        val sweep = !(sPoints[base + 2].x > 0f)
-                        arcTo(rx, ry, axisRot, largeArc, sweep, startX, startY)
-                    }
-                    else -> {}
+                    is PathCommand.ArcTo -> arcTo(
+                        command.radius.x,
+                        command.radius.y,
+                        command.xAxisRotation,
+                        command.largeArc,
+                        !command.sweep,
+                        start.x,
+                        start.y,
+                    )
+                    else -> Unit
                 }
             }
-
             if (hasClose) close()
-
-            vi = v
-            pi = p
+            contourStart = contourEnd
         }
 
         return this
     }
 
-    fun isEmpty(): Boolean = verbs.isEmpty()
+    fun isEmpty(): Boolean = commands.isEmpty()
 
     /**
      * Returns a conservative axis-aligned bound for the path's drawable
@@ -208,52 +184,54 @@ class Path internal constructor() {
      * included, so the result contains the ink even when it is not tight.
      */
     fun computeBounds(): Rect? {
-        var pointIndex = 0
         var minX = Float.POSITIVE_INFINITY
         var minY = Float.POSITIVE_INFINITY
         var maxX = Float.NEGATIVE_INFINITY
         var maxY = Float.NEGATIVE_INFINITY
-        fun include(point: Point) {
+        fun include(point: Point2F32) {
             minX = minOf(minX, point.x)
             minY = minOf(minY, point.y)
             maxX = maxOf(maxX, point.x)
             maxY = maxOf(maxY, point.y)
         }
-        for (verb in verbs) {
-            when (verb) {
-                PathVerb.MOVE, PathVerb.LINE -> include(points[pointIndex++])
-                PathVerb.QUAD -> {
-                    include(points[pointIndex++])
-                    include(points[pointIndex++])
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move, is PathCommand.Line -> include(command.endpoint!!)
+                is PathCommand.Quad -> {
+                    include(command.control)
+                    include(command.endpoint)
                 }
-                PathVerb.CUBIC -> repeat(3) { include(points[pointIndex++]) }
-                // Arc metadata is not a drawable point; include its endpoint.
-                PathVerb.ARC_TO -> {
-                    pointIndex += 3
-                    include(points[pointIndex++])
+                is PathCommand.Cubic -> {
+                    include(command.control1)
+                    include(command.control2)
+                    include(command.endpoint)
                 }
-                PathVerb.CLOSE -> Unit
+                is PathCommand.ArcTo -> include(command.endpoint)
+                PathCommand.Close -> Unit
             }
         }
         return if (minX.isFinite()) Rect.fromLTRB(minX, minY, maxX, maxY) else null
     }
 
     fun isRect(rect: Rect? = null): Boolean {
-        val v = verbs
-        if (v.size < 5) return false
-        if (v[0] != PathVerb.MOVE) return false
-        val hasClose = v.last() == PathVerb.CLOSE
-        val lineCount = if (hasClose) v.size - 2 else v.size - 1
+        if (commands.size < 5) return false
+        val move = commands[0] as? PathCommand.Move ?: return false
+        val hasClose = commands.last() is PathCommand.Close
+        val lineCount = if (hasClose) commands.size - 2 else commands.size - 1
         if (lineCount < 3 || lineCount > 4) return false
-        val endIdx = if (hasClose) v.size - 1 else v.size
+        val endIdx = if (hasClose) commands.size - 1 else commands.size
         for (i in 1 until endIdx) {
-            if (v[i] != PathVerb.LINE) return false
+            if (commands[i] !is PathCommand.Line) return false
         }
-        val p = points
-        val corners = listOf(p[0], p[1], p[2], p[3])
-        val closePt = if (lineCount == 4) p[4] else p[0]
+        val corners = listOf(
+            move.point,
+            (commands[1] as PathCommand.Line).endpoint,
+            (commands[2] as PathCommand.Line).endpoint,
+            (commands[3] as PathCommand.Line).endpoint,
+        )
+        val closePt = if (lineCount == 4) (commands[4] as PathCommand.Line).endpoint else move.point
         // Verify the path is closed: last point must match first point
-        if (lineCount == 4 && (closePt.x != p[0].x || closePt.y != p[0].y)) return false
+        if (lineCount == 4 && closePt != move.point) return false
         for (i in 0..3) {
             val next = if (i == 3) closePt else corners[i + 1]
             val dx = next.x - corners[i].x
@@ -273,24 +251,26 @@ class Path internal constructor() {
     }
 
     fun isOval(bounds: Rect? = null): Boolean {
-        val v = verbs
-        if (v.size < 5) return false
-        if (v[0] != PathVerb.MOVE) return false
-        val hasClose = v.last() == PathVerb.CLOSE
-        val cubicCount = v.size - 1 - (if (hasClose) 1 else 0)
+        if (commands.size < 5) return false
+        val move = commands[0] as? PathCommand.Move ?: return false
+        val hasClose = commands.last() is PathCommand.Close
+        val cubicCount = commands.size - 1 - (if (hasClose) 1 else 0)
         if (cubicCount != 4) return false
-        for (i in 1 until v.size - (if (hasClose) 1 else 0)) {
-            if (v[i] != PathVerb.CUBIC) return false
+        for (i in 1 until commands.size - (if (hasClose) 1 else 0)) {
+            if (commands[i] !is PathCommand.Cubic) return false
         }
-        val p = points
-        // Compute bounds from all 5 endpoints: p[0], p[3], p[6], p[9], p[12]
-        val endIndices = listOf(0, 3, 6, 9, 12)
-        if (p.size <= endIndices.last()) return false
+        val endpoints = listOf(
+            move.point,
+            (commands[1] as PathCommand.Cubic).endpoint,
+            (commands[2] as PathCommand.Cubic).endpoint,
+            (commands[3] as PathCommand.Cubic).endpoint,
+            (commands[4] as PathCommand.Cubic).endpoint,
+        )
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
-        for (idx in endIndices) {
-            minX = minOf(minX, p[idx].x); minY = minOf(minY, p[idx].y)
-            maxX = maxOf(maxX, p[idx].x); maxY = maxOf(maxY, p[idx].y)
+        for (point in endpoints) {
+            minX = minOf(minX, point.x); minY = minOf(minY, point.y)
+            maxX = maxOf(maxX, point.x); maxY = maxOf(maxY, point.y)
         }
         val cx = (minX + maxX) / 2f; val cy = (minY + maxY) / 2f
         val rx = (maxX - minX) / 2f; val ry = (maxY - minY) / 2f
@@ -302,24 +282,17 @@ class Path internal constructor() {
     }
 
     fun isRRect(rrect: RRect? = null): Boolean {
-        val v = verbs
-        if (v.size < 9) return false
-        if (v[0] != PathVerb.MOVE) return false
-        val hasClose = v.last() == PathVerb.CLOSE
-        val checkCount = if (hasClose) v.size - 1 else v.size
+        if (commands.size < 9) return false
+        if (commands[0] !is PathCommand.Move) return false
+        val hasClose = commands.last() is PathCommand.Close
+        val checkCount = if (hasClose) commands.size - 1 else commands.size
         if (checkCount != 9) return false
-        val expected = listOf(
-            PathVerb.MOVE, PathVerb.LINE, PathVerb.ARC_TO,
-            PathVerb.LINE, PathVerb.ARC_TO,
-            PathVerb.LINE, PathVerb.ARC_TO,
-            PathVerb.LINE, PathVerb.ARC_TO,
-        )
-        for (i in expected.indices) {
-            if (v[i] != expected[i]) return false
+        for (i in 1 until checkCount) {
+            if (i % 2 == 1 && commands[i] !is PathCommand.Line) return false
+            if (i % 2 == 0 && commands[i] !is PathCommand.ArcTo) return false
         }
         if (rrect != null) {
-            val p = points
-            val pts = listOf(p[0], p[1], p[3], p[5])
+            val pts = commands.mapNotNull { it.endpoint }
             var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
             var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
             for (pt in pts) {
@@ -333,36 +306,30 @@ class Path internal constructor() {
     }
 
     fun isLine(line: Line? = null): Boolean {
-        val v = verbs
-        if (v.size != 2) return false
-        if (v[0] != PathVerb.MOVE || v[1] != PathVerb.LINE) return false
+        if (commands.size != 2) return false
+        val start = commands[0] as? PathCommand.Move ?: return false
+        val end = commands[1] as? PathCommand.Line ?: return false
         line?.let {
-            it.p1 = Point(points[0].x, points[0].y)
-            it.p2 = Point(points[1].x, points[1].y)
+            it.p1 = start.point
+            it.p2 = end.endpoint
         }
         return true
     }
 
     fun isConvex(): Boolean {
-        val poly = mutableListOf<Point>()
-        var firstPt: Point? = null
+        val poly = mutableListOf<Point2F32>()
+        var firstPt: Point2F32? = null
         var contourCount = 0
-        var pi = 0
-        for (verb in verbs) {
-            when (verb) {
-                PathVerb.MOVE -> {
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move -> {
                     if (contourCount > 0 && poly.size >= 3) return false // multi-contour: cannot determine convexity
-                    poly.clear(); firstPt = points[pi]
-                    poly.add(points[pi]); pi++; contourCount++
+                    poly.clear(); firstPt = command.point
+                    poly.add(command.point); contourCount++
                 }
-                PathVerb.LINE -> { poly.add(points[pi]); pi++ }
-                PathVerb.CLOSE -> firstPt?.let { poly.add(it) }
-                else -> {
-                    pi += when (verb) {
-                        PathVerb.QUAD -> 2; PathVerb.CUBIC -> 3
-                        PathVerb.ARC_TO -> 4; else -> 0
-                    }
-                }
+                is PathCommand.Line -> poly.add(command.endpoint)
+                PathCommand.Close -> firstPt?.let { poly.add(it) }
+                else -> Unit
             }
         }
         if (poly.size < 3) return true
@@ -383,7 +350,7 @@ class Path internal constructor() {
     }
 
     fun isInterpolatable(other: Path): Boolean {
-        val v1 = verbs; val v2 = other.verbs
+        val v1 = verbs(); val v2 = other.verbs()
         if (v1.size != v2.size) return false
         for (i in v1.indices) {
             if (v1[i] != v2[i]) return false
@@ -391,8 +358,8 @@ class Path internal constructor() {
         return true
     }
 
-    fun contains(point: Point): Boolean {
-        if (verbs.isEmpty()) return false
+    fun contains(point: Point2F32): Boolean {
+        if (commands.isEmpty()) return false
         val px = point.x; val py = point.y
         var winding = 0
         val segments = collectSegments()
@@ -412,10 +379,10 @@ class Path internal constructor() {
     }
 
     fun conservativelyContainsRect(rect: Rect): Boolean {
-        val tl = Point(rect.left, rect.top)
-        val tr = Point(rect.right, rect.top)
-        val bl = Point(rect.left, rect.bottom)
-        val br = Point(rect.right, rect.bottom)
+        val tl = Point2F32(rect.left, rect.top)
+        val tr = Point2F32(rect.right, rect.top)
+        val bl = Point2F32(rect.left, rect.bottom)
+        val br = Point2F32(rect.right, rect.bottom)
         return contains(tl) && contains(tr) && contains(bl) && contains(br)
     }
 
@@ -427,43 +394,41 @@ class Path internal constructor() {
     fun transform(matrix: Matrix3x3F32): Path {
         val result = Path()
         result.fillType = fillType
-        var pi = 0
-        for (verb in verbs) {
-            result.verbs.add(verb)
-            when (verb) {
-                PathVerb.MOVE, PathVerb.LINE -> {
-                    result.points.add(matrix.mapPoint(points[pi]))
-                    pi++
-                }
-                PathVerb.QUAD -> {
-                    result.points.add(matrix.mapPoint(points[pi]))
-                    result.points.add(matrix.mapPoint(points[pi + 1]))
-                    pi += 2
-                }
-                PathVerb.CUBIC -> {
-                    result.points.add(matrix.mapPoint(points[pi]))
-                    result.points.add(matrix.mapPoint(points[pi + 1]))
-                    result.points.add(matrix.mapPoint(points[pi + 2]))
-                    pi += 3
-                }
-                PathVerb.ARC_TO -> {
-                    val radius = points[pi]
-                    val rotationAndLargeArc = points[pi + 1]
-                    val sweep = points[pi + 2]
-                    val endpoint = points[pi + 3]
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move -> result.commands.add(PathCommand.Move(matrix.transform(command.point)))
+                is PathCommand.Line -> result.commands.add(PathCommand.Line(matrix.transform(command.endpoint)))
+                is PathCommand.Quad -> result.commands.add(
+                    PathCommand.Quad(
+                        matrix.transform(command.control),
+                        matrix.transform(command.endpoint),
+                    ),
+                )
+                is PathCommand.Cubic -> result.commands.add(
+                    PathCommand.Cubic(
+                        matrix.transform(command.control1),
+                        matrix.transform(command.control2),
+                        matrix.transform(command.endpoint),
+                    ),
+                )
+                is PathCommand.ArcTo -> {
                     val transformedArc = transformArcMetadata(
-                        radius = radius,
-                        xAxisRotation = rotationAndLargeArc.x,
-                        sweep = sweep,
+                        radius = command.radius,
+                        xAxisRotation = command.xAxisRotation,
+                        sweep = command.sweep,
                         matrix = matrix,
                     )
-                    result.points.add(Point(transformedArc.rx, transformedArc.ry))
-                    result.points.add(Point(transformedArc.xAxisRotation, rotationAndLargeArc.y))
-                    result.points.add(Point(transformedArc.sweepFlag, 0f))
-                    result.points.add(matrix.mapPoint(endpoint))
-                    pi += 4
+                    result.commands.add(
+                        PathCommand.ArcTo(
+                            radius = Vector2F32(transformedArc.rx, transformedArc.ry),
+                            xAxisRotation = transformedArc.xAxisRotation,
+                            largeArc = command.largeArc,
+                            sweep = transformedArc.sweep,
+                            endpoint = matrix.transform(command.endpoint),
+                        ),
+                    )
                 }
-                PathVerb.CLOSE -> {}
+                PathCommand.Close -> result.commands.add(PathCommand.Close)
             }
         }
         return result
@@ -473,13 +438,13 @@ class Path internal constructor() {
         val rx: Float,
         val ry: Float,
         val xAxisRotation: Float,
-        val sweepFlag: Float,
+        val sweep: Boolean,
     )
 
     private fun transformArcMetadata(
-        radius: Point,
+        radius: Vector2F32,
         xAxisRotation: Float,
-        sweep: Point,
+        sweep: Boolean,
         matrix: Matrix3x3F32,
     ): TransformedArcMetadata {
         val angle = xAxisRotation.toDouble() * PI / 180.0
@@ -526,61 +491,56 @@ class Path internal constructor() {
             Triple(sqrt(major), sqrt(minor), transformedRotation)
         }
         val determinant = matrix.sx * matrix.sy - matrix.kx * matrix.ky
-        val sweepFlag = if (determinant < 0f) {
-            if (sweep.x > 0f) 0f else 1f
-        } else {
-            sweep.x
-        }
+        val transformedSweep = if (determinant < 0f) !sweep else sweep
         return TransformedArcMetadata(
             rx = transformedRx.toFloat(),
             ry = transformedRy.toFloat(),
             xAxisRotation = transformedRotation.toFloat(),
-            sweepFlag = sweepFlag,
+            sweep = transformedSweep,
         )
     }
 
-    internal fun verbs(): List<PathVerb> = verbs.toList()
-    internal fun points(): List<Point> = points.toList()
+    internal fun commands(): List<PathCommand> = commands.toList()
+    internal fun verbs(): List<PathVerb> = commands.map { it.verb }
 
     private data class Segment(val x1: Float, val y1: Float, val x2: Float, val y2: Float)
 
     private fun collectSegments(): List<Segment> {
         val result = mutableListOf<Segment>()
-        var pi = 0
         var prevX = 0f; var prevY = 0f
         var firstX = 0f; var firstY = 0f
         var hasPrev = false
-        for (verb in verbs) {
-            when (verb) {
-                PathVerb.MOVE -> {
-                    firstX = points[pi].x; firstY = points[pi].y
+        for (command in commands) {
+            when (command) {
+                is PathCommand.Move -> {
+                    firstX = command.point.x; firstY = command.point.y
                     prevX = firstX; prevY = firstY
-                    hasPrev = true; pi++
+                    hasPrev = true
                 }
-                PathVerb.LINE -> {
-                    val x = points[pi].x; val y = points[pi].y
+                is PathCommand.Line -> {
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     result.add(Segment(prevX, prevY, x, y))
-                    prevX = x; prevY = y; pi++
+                    prevX = x; prevY = y
                 }
-                PathVerb.QUAD -> {
-                    val cx = points[pi].x; val cy = points[pi].y
-                    val x = points[pi + 1].x; val y = points[pi + 1].y
+                is PathCommand.Quad -> {
+                    val cx = command.control.x; val cy = command.control.y
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     linearizeQuad(prevX, prevY, cx, cy, x, y, result)
-                    prevX = x; prevY = y; pi += 2
+                    prevX = x; prevY = y
                 }
-                PathVerb.CUBIC -> {
-                    val cx1 = points[pi].x; val cy1 = points[pi].y
-                    val cx2 = points[pi + 1].x; val cy2 = points[pi + 1].y
-                    val x = points[pi + 2].x; val y = points[pi + 2].y
+                is PathCommand.Cubic -> {
+                    val cx1 = command.control1.x; val cy1 = command.control1.y
+                    val cx2 = command.control2.x; val cy2 = command.control2.y
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     linearizeCubic(prevX, prevY, cx1, cy1, cx2, cy2, x, y, result)
-                    prevX = x; prevY = y; pi += 3
+                    prevX = x; prevY = y
                 }
-                PathVerb.ARC_TO -> {
-                    val x = points[pi + 3].x; val y = points[pi + 3].y
+                is PathCommand.ArcTo -> {
+                    val x = command.endpoint.x; val y = command.endpoint.y
                     result.add(Segment(prevX, prevY, x, y))
-                    prevX = x; prevY = y; pi += 4
+                    prevX = x; prevY = y
                 }
-                PathVerb.CLOSE -> {
+                PathCommand.Close -> {
                     if (hasPrev && (prevX != firstX || prevY != firstY)) {
                         result.add(Segment(prevX, prevY, firstX, firstY))
                         prevX = firstX; prevY = firstY
@@ -628,19 +588,48 @@ class Path internal constructor() {
             }
         }
 
-        private fun segmentEndPoint(
-            verb: PathVerb, points: List<Point>, ptBase: Int,
-        ): Pair<Float, Float> {
-            val idx = when (verb) {
-                PathVerb.MOVE, PathVerb.LINE -> ptBase
-                PathVerb.QUAD -> ptBase + 1
-                PathVerb.CUBIC -> ptBase + 2
-                PathVerb.ARC_TO -> ptBase + 3
-                else -> ptBase
-            }
-            return points[idx].x to points[idx].y
-        }
     }
 }
 
 enum class PathVerb { MOVE, LINE, QUAD, CUBIC, ARC_TO, CLOSE }
+
+internal sealed interface PathCommand {
+    val verb: PathVerb
+    val endpoint: Point2F32?
+
+    data class Move(val point: Point2F32) : PathCommand {
+        override val verb: PathVerb = PathVerb.MOVE
+        override val endpoint: Point2F32 = point
+    }
+
+    data class Line(override val endpoint: Point2F32) : PathCommand {
+        override val verb: PathVerb = PathVerb.LINE
+    }
+
+    data class Quad(val control: Point2F32, override val endpoint: Point2F32) : PathCommand {
+        override val verb: PathVerb = PathVerb.QUAD
+    }
+
+    data class Cubic(
+        val control1: Point2F32,
+        val control2: Point2F32,
+        override val endpoint: Point2F32,
+    ) : PathCommand {
+        override val verb: PathVerb = PathVerb.CUBIC
+    }
+
+    data class ArcTo(
+        val radius: Vector2F32,
+        val xAxisRotation: Float,
+        val largeArc: Boolean,
+        val sweep: Boolean,
+        override val endpoint: Point2F32,
+    ) : PathCommand {
+        override val verb: PathVerb = PathVerb.ARC_TO
+    }
+
+    data object Close : PathCommand {
+        override val verb: PathVerb = PathVerb.CLOSE
+        override val endpoint: Point2F32? = null
+    }
+}

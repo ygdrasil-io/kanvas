@@ -38,7 +38,7 @@ class LocalmatrixOrderGm : SkiaGm {
         val rotatedMandrill = Shader.WithLocalMatrix(mandrillShader, rotM)
 
         val gradShader = Shader.RadialGradient(
-            center = org.graphiks.kanvas.types.Point(128f, 128f), radius = 128f,
+            center = org.graphiks.math.geometry.Point2F32(128f, 128f), radius = 128f,
             stops = listOf(
                 org.graphiks.kanvas.paint.GradientStop(0f, Color.WHITE),
                 org.graphiks.kanvas.paint.GradientStop(1f, Color.BLACK),

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -30,7 +30,7 @@ class ImageDitherGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val gradientShader = Shader.LinearGradient(
-            start = Point(0f, 0f), end = Point(100f, 100f),
+            start = Point2F32(0f, 0f), end = Point2F32(100f, 100f),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(0.333f, 0.333f, 0.333f, 1f)),
                 GradientStop(1f, Color.fromRGBA(0.267f, 0.267f, 0.267f, 1f)),

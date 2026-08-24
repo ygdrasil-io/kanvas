@@ -7,7 +7,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.math.color.ColorARGB
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -62,8 +62,8 @@ class GmCanvasTest {
 
         val setClip = surface.snapshotOps().filterIsInstance<DisplayOp.SetClip>().single()
         val pathOp = (setClip.clip as ClipStack.Complex).ops.single() as ClipStackOp.PathOp
-        assertTrue(pathOp.path.contains(Point(13f, 24f)))
-        assertFalse(pathOp.path.contains(Point(3f, 4f)))
+        assertTrue(pathOp.path.contains(Point2F32(13f, 24f)))
+        assertFalse(pathOp.path.contains(Point2F32(3f, 4f)))
     }
 
     @Test

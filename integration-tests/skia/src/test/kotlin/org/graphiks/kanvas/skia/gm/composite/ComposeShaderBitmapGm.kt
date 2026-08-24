@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -43,8 +43,8 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
         val colorBmShader = Shader.Image(colorImage, TileMode.REPEAT, TileMode.REPEAT)
         val a8BmShader = Shader.Image(alpha8Image, TileMode.REPEAT, TileMode.REPEAT)
         val grad = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(SQUARE_LENGTH.toFloat(), 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(SQUARE_LENGTH.toFloat(), 0f),
             stops = listOf(
                 GradientStop(0f, Color.BLUE),
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0f)),

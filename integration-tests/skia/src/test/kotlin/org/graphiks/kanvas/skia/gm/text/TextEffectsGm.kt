@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/texteffects.cpp::fancyblobunderline`
@@ -68,11 +68,11 @@ class TextEffectsGm : SkiaGm {
 
     private fun makeFancyBlob(font: Font, text: String): TextBlob {
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         for (cp in text.codePoints()) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point.ZERO)
+            positions.add(Point2F32.Origin)
         }
 
         val glyphCount = glyphIds.size
@@ -81,14 +81,14 @@ class TextEffectsGm : SkiaGm {
         }
 
         val allGlyphIds = mutableListOf<UShort>()
-        val allPositions = mutableListOf<Point>()
+        val allPositions = mutableListOf<Point2F32>()
         var glyphIndex = 0
         var advance = 0f
 
         val defaultRunLen = glyphCount / 3
         for (i in 0 until defaultRunLen) {
             allGlyphIds.add(glyphIds[glyphIndex + i])
-            allPositions.add(Point(advance, 0f))
+            allPositions.add(Point2F32(advance, 0f))
         }
         for (i in 0 until defaultRunLen) {
             advance += widths[glyphIndex++]
@@ -97,7 +97,7 @@ class TextEffectsGm : SkiaGm {
         val horizontalRunLen = glyphCount / 3
         for (i in 0 until horizontalRunLen) {
             allGlyphIds.add(glyphIds[glyphIndex + i])
-            allPositions.add(Point(advance, 0f))
+            allPositions.add(Point2F32(advance, 0f))
         }
         for (i in 0 until horizontalRunLen) {
             advance += widths[glyphIndex++]
@@ -106,7 +106,7 @@ class TextEffectsGm : SkiaGm {
         val fullRunLen = glyphCount - glyphIndex
         for (i in 0 until fullRunLen) {
             allGlyphIds.add(glyphIds[glyphIndex + i])
-            allPositions.add(Point(advance, 0f))
+            allPositions.add(Point2F32(advance, 0f))
         }
 
         return TextBlob(

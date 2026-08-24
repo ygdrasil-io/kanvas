@@ -37,7 +37,7 @@ import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -221,7 +221,7 @@ class GPUAlphaImageMaterialTest {
             paint = Paint(
                 shader = Shader.WithLocalMatrix(
                     shader = Shader.RadialGradient(
-                        center = Point(4f, 4f),
+                        center = Point2F32(4f, 4f),
                         radius = 4f,
                         stops = listOf(
                             GradientStop(0f, Color.RED),

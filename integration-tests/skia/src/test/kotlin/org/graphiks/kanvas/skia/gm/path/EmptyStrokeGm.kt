@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/emptypath.cpp` (EmptyStrokeGM).
@@ -61,6 +61,6 @@ class EmptyStrokeGm : SkiaGm {
     }
 
     private companion object {
-        val kPts = listOf(Point(40f, 40f), Point(80f, 40f), Point(120f, 40f))
+        val kPts = listOf(Point2F32(40f, 40f), Point2F32(80f, 40f), Point2F32(120f, 40f))
     }
 }

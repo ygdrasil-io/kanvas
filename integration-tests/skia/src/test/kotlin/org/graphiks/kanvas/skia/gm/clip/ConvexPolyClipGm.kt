@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.PI
 import kotlin.math.cos
@@ -108,7 +108,7 @@ class ConvexPolyClipGm : SkiaGm {
         val sin23 = sin(Math.toRadians(23.0)).toFloat()
         clips.add(Clip().apply {
             setPath(Path {
-                val pts = listOf(Point(10f, 12f), Point(80f, 12f), Point(80f, 86f), Point(10f, 86f))
+                val pts = listOf(Point2F32(10f, 12f), Point2F32(80f, 12f), Point2F32(80f, 86f), Point2F32(10f, 86f))
                 val cx = 45f; val cy = 49f
                 for ((i, pt) in pts.withIndex()) {
                     val dx = pt.x - cx; val dy = pt.y - cy
@@ -125,7 +125,7 @@ class ConvexPolyClipGm : SkiaGm {
         val surface = Surface(w, h)
         surface.canvas {
             val wF = w.toFloat(); val hF = h.toFloat()
-            val pt = Point(wF / 2f, hF / 2f)
+            val pt = Point2F32(wF / 2f, hF / 2f)
             val radius = 3f * maxOf(wF, hF)
             val colors = listOf(Color.fromRGBA(0.5f, 0.5f, 0.5f), Color.fromRGBA(0.133f, 0.133f, 0.333f),
                 Color.fromRGBA(0.2f, 0.075f, 0.2f), Color.fromRGBA(0.533f, 0.267f, 0.133f),

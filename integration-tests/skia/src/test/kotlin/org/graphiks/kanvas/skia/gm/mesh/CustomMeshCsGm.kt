@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -37,8 +37,8 @@ class CustomMeshCsGm : SkiaGm {
         val rectW = RECT_W
         val rectH = RECT_H
         val shader = Shader.LinearGradient(
-            start = Point(X0, 0f),
-            end = Point(X0 + rectW / 2f, 0f),
+            start = Point2F32(X0, 0f),
+            end = Point2F32(X0 + rectW / 2f, 0f),
             stops = listOf(
                 GradientStop(0f, Color.WHITE),
                 GradientStop(1f, Color.TRANSPARENT),
@@ -70,10 +70,10 @@ class CustomMeshCsGm : SkiaGm {
         private const val RECT_W = 100f
         private const val RECT_H = 100f
         private val colorSpacePoints = listOf(
-            Point(X0, Y0),
-            Point(X0 + RECT_W, Y0),
-            Point(X0, Y0 + RECT_H),
-            Point(X0 + RECT_W, Y0 + RECT_H),
+            Point2F32(X0, Y0),
+            Point2F32(X0 + RECT_W, Y0),
+            Point2F32(X0, Y0 + RECT_H),
+            Point2F32(X0 + RECT_W, Y0 + RECT_H),
         )
         // Unpremul RGBA: red, green(alpha=0), yellow(alpha=0), blue
         private val srcColors = listOf(

@@ -11,7 +11,7 @@ import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -124,29 +124,29 @@ class TextBlobGm : SkiaGm {
                 when (cfg.pos) {
                     kDefaultPos -> {
                         val runGlyphs = mutableListOf<UShort>()
-                        val runPositions = mutableListOf<Point>()
+                        val runPositions = mutableListOf<Point2F32>()
                         for (i in 0 until count) {
                             runGlyphs.add(glyphIds[currentGlyph + i])
-                            runPositions.add(Point(offsetX + i * advanceX, offsetY))
+                            runPositions.add(Point2F32(offsetX + i * advanceX, offsetY))
                         }
                         allRuns.add(KanvasGlyphRun(runGlyphs, runPositions))
                     }
                     kScalarPos -> {
                         val runGlyphs = mutableListOf<UShort>()
-                        val runPositions = mutableListOf<Point>()
+                        val runPositions = mutableListOf<Point2F32>()
                         for (i in 0 until count) {
                             runGlyphs.add(glyphIds[currentGlyph + i])
-                            runPositions.add(Point(offsetX + i * advanceX, offsetY))
+                            runPositions.add(Point2F32(offsetX + i * advanceX, offsetY))
                         }
                         allRuns.add(KanvasGlyphRun(runGlyphs, runPositions))
                     }
                     kPointPos -> {
                         val runGlyphs = mutableListOf<UShort>()
-                        val runPositions = mutableListOf<Point>()
+                        val runPositions = mutableListOf<Point2F32>()
                         for (i in 0 until count) {
                             runGlyphs.add(glyphIds[currentGlyph + i])
                             runPositions.add(
-                                Point(
+                                Point2F32(
                                     offsetX + i * advanceX,
                                     offsetY + i * (advanceY / count.toFloat()),
                                 ),

@@ -46,8 +46,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
-import org.graphiks.kanvas.types.mapPoint
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
@@ -193,12 +192,12 @@ internal object GPUPreparedDrawImageLowerer {
         val dy1 = dst.bottom
 
         val corners = listOf(
-            Point(dx0, dy0),
-            Point(dx1, dy0),
-            Point(dx1, dy1),
-            Point(dx0, dy1),
+            Point2F32(dx0, dy0),
+            Point2F32(dx1, dy0),
+            Point2F32(dx1, dy1),
+            Point2F32(dx0, dy1),
         )
-        val transformedCorners = corners.map(operation.transform::mapPoint)
+        val transformedCorners = corners.map { operation.transform.transform(it) }
 
         val imageW = image.width.toFloat()
         val imageH = image.height.toFloat()

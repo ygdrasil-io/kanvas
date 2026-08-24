@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -39,8 +39,8 @@ class SmallColorStopGm : SkiaGm {
             GradientStop(1f, Color.fromRGBA(1f, 1f, 0f, 1f)),
         )
         val shader = Shader.ConicalGradient(
-            start = Point(200f, 25f), startRadius = 20f,
-            end = Point(200f, 25f), endRadius = 10f,
+            start = Point2F32(200f, 25f), startRadius = 20f,
+            end = Point2F32(200f, 25f), endRadius = 10f,
             stops = stops, tileMode = TileMode.CLAMP,
         )
         canvas.drawRect(rect, Paint(shader = shader))

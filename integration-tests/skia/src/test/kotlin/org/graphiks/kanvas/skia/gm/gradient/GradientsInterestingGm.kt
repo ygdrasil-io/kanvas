@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -44,8 +44,8 @@ class GradientsInterestingGm : SkiaGm {
         val modes = listOf(TileMode.CLAMP, TileMode.REPEAT, TileMode.MIRROR)
 
         val cellSize = 200f
-        val p0 = Point(cellSize / 3f, cellSize / 3f)
-        val p1 = Point(cellSize * 2f / 3f, cellSize * 2f / 3f)
+        val p0 = Point2F32(cellSize / 3f, cellSize / 3f)
+        val p1 = Point2F32(cellSize * 2f / 3f, cellSize * 2f / 3f)
 
         for (cfg in configs) {
             canvas.save()

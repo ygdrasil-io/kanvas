@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -37,7 +37,7 @@ class VerticesPerspectiveGm : SkiaGm {
         val paint = Paint(shader = checker)
 
         val pos = listOf(
-            Point(0f, 0f), Point(128f, 0f), Point(128f, 128f), Point(0f, 128f),
+            Point2F32(0f, 0f), Point2F32(128f, 0f), Point2F32(128f, 128f), Point2F32(0f, 128f),
         )
         val verts = Vertices(
             mode = VertexMode.TRIANGLE_FAN,

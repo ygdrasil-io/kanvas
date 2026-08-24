@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /**
  * Port of Skia's `gm/crbug_1073670.cpp::crbug_1073670`.
@@ -27,8 +27,8 @@ class Crbug1073670Gm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(0f, 250f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(0f, 250f),
             stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
         )
         val paint = Paint(shader = shader)

@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/gradients_degenerate.cpp`.
@@ -106,6 +106,6 @@ class DegenerateGradientGm : SkiaGm {
         val TILE_NAMES = arrayOf("decal", "repeat", "mirror", "clamp")
         const val TILE_SIZE = 100
         const val TILE_GAP = 10
-        val CENTER = Point((TILE_SIZE / 2).toFloat(), (TILE_SIZE / 2).toFloat())
+        val CENTER = Point2F32((TILE_SIZE / 2).toFloat(), (TILE_SIZE / 2).toFloat())
     }
 }

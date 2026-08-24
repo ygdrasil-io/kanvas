@@ -9,7 +9,8 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.MutablePoint2F32
+import org.graphiks.math.vector.MutableVector2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -51,8 +52,8 @@ class OverStrokeGm : SkiaGm {
         var accum = 0f
         val meas = PathMeasure(path)
         val length = meas.length
-        val pos = Point(0f, 0f)
-        val tan = Point(0f, 0f)
+        val pos = MutablePoint2F32(0f, 0f)
+        val tan = MutableVector2F32(0f, 0f)
         while (accum < length) {
             if (meas.getPosition(accum, pos, tan)) {
                 val sx = tan.x * 250f

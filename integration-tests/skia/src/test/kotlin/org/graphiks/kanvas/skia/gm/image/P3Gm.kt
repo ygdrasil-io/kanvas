@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /** Port of Skia's `gm/p3.cpp`.
@@ -53,7 +53,7 @@ class P3Gm : SkiaGm {
         canvas.drawRect(
             Rect(10f, 10f, 70f, 70f),
             Paint(shader = Shader.LinearGradient(
-                start = Point(10.5f, 10.5f), end = Point(10.5f, 69.5f),
+                start = Point2F32(10.5f, 10.5f), end = Point2F32(10.5f, 69.5f),
                 stops = listOf(
                     GradientStop(0f, blue),
                     GradientStop(0.5f, green),
@@ -90,7 +90,7 @@ class P3Gm : SkiaGm {
         c.drawRect(
             Rect(10f, 10f, 70f, 70f),
             Paint(shader = Shader.LinearGradient(
-                start = Point(10.5f, 10.5f), end = Point(69.5f, 69.5f),
+                start = Point2F32(10.5f, 10.5f), end = Point2F32(69.5f, 69.5f),
                 stops = listOf(GradientStop(0f, c0), GradientStop(1f, c1)),
             )),
         )

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
@@ -28,8 +28,8 @@ class MeshWithPaintImageGm : SkiaGm {
 
     private var colorWheelShader: Shader? = null
     private var time = 0.0
-    private var positions: List<Point> = emptyList()
-    private var uvs: List<Point> = emptyList()
+    private var positions: List<Point2F32> = emptyList()
+    private var uvs: List<Point2F32> = emptyList()
     private val indices: List<Int> = buildIndices()
 
     override fun onOnceBeforeDraw(canvas: GmCanvas) {
@@ -65,7 +65,7 @@ class MeshWithPaintImageGm : SkiaGm {
             val yf = y.toFloat() / (kMeshSize - 1)
             (0 until kMeshSize).map { x ->
                 val xf = x.toFloat() / (kMeshSize - 1)
-                Point(
+                Point2F32(
                     kRect.left + xf * kRect.width + xOff[y].toFloat(),
                     kRect.top + yf * kRect.height + yOff[x].toFloat())
             }
@@ -74,7 +74,7 @@ class MeshWithPaintImageGm : SkiaGm {
             val yf = y.toFloat() / (kMeshSize - 1)
             (0 until kMeshSize).map { x ->
                 val xf = x.toFloat() / (kMeshSize - 1)
-                Point(kUv.left + xf * kUv.width, kUv.top + yf * kUv.height)
+                Point2F32(kUv.left + xf * kUv.width, kUv.top + yf * kUv.height)
             }
         }
     }

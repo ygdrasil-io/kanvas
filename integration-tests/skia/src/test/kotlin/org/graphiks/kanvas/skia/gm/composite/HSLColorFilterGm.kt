@@ -11,7 +11,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.abs
 import kotlin.math.max
@@ -49,7 +49,7 @@ class HSLColorFilterGm : SkiaGm {
                 GradientStop(i.toFloat() / (n - 1).toFloat(), argbToColor(c))
             }
             fShaders.add(Shader.SweepGradient(
-                center = Point(K_WHEEL_SIZE / 2f, K_WHEEL_SIZE / 2f),
+                center = Point2F32(K_WHEEL_SIZE / 2f, K_WHEEL_SIZE / 2f),
                 startAngle = -90f, endAngle = 270f,
                 stops = stops,
                 tileMode = TileMode.REPEAT,

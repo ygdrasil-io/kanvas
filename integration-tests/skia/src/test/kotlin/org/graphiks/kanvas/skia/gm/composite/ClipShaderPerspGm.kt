@@ -15,7 +15,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
@@ -35,12 +35,12 @@ class ClipShaderPerspGm : SkiaGm {
     override val height = 1030
 
     companion object {
-        private fun perspTransformPoint(matrix: Matrix3x3F32, p: Point): Point {
+        private fun perspTransformPoint(matrix: Matrix3x3F32, p: Point2F32): Point2F32 {
             val w = matrix.persp0 * p.x + matrix.persp1 * p.y + matrix.persp2
-            if (w == 0f) return Point(0f, 0f)
+            if (w == 0f) return Point2F32(0f, 0f)
             val x = (matrix.sx * p.x + matrix.kx * p.y + matrix.tx) / w
             val y = (matrix.ky * p.x + matrix.sy * p.y + matrix.ty) / w
-            return Point(x, y)
+            return Point2F32(x, y)
         }
 
         private fun computePerspectiveMatrix(w: Float, h: Float): Matrix3x3F32 {
@@ -149,7 +149,7 @@ class ClipShaderPerspGm : SkiaGm {
 
         val gradLM = config.localMatrix == LocalMatrix.GRADIENT_WITH_LOCAL_MATRIX ||
             config.localMatrix == LocalMatrix.BOTH_WITH_LOCAL_MATRIX
-        val gradCenter = Point(0.5f * img.width, 0.5f * img.height)
+        val gradCenter = Point2F32(0.5f * img.width, 0.5f * img.height)
         val gradColors = listOf(
             GradientStop(0f, Color.BLACK),
             GradientStop(1f, Color.fromRGBA(0.5f, 0.5f, 0.5f, 0.5f)),
@@ -223,10 +223,10 @@ class ClipShaderPerspGm : SkiaGm {
 
     private fun computeBoundingBox(m: Matrix3x3F32, r: Rect): Rect {
         val corners = listOf(
-            perspTransformPoint(m, Point(r.left, r.top)),
-            perspTransformPoint(m, Point(r.right, r.top)),
-            perspTransformPoint(m, Point(r.right, r.bottom)),
-            perspTransformPoint(m, Point(r.left, r.bottom)),
+            perspTransformPoint(m, Point2F32(r.left, r.top)),
+            perspTransformPoint(m, Point2F32(r.right, r.top)),
+            perspTransformPoint(m, Point2F32(r.right, r.bottom)),
+            perspTransformPoint(m, Point2F32(r.left, r.bottom)),
         )
         val xs = corners.map { it.x }
         val ys = corners.map { it.y }

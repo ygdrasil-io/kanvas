@@ -19,7 +19,7 @@ import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -418,7 +418,7 @@ class PictureTest {
 
     @Test
     fun `walkTextBlobs deduplicates by reference and invokes action once per distinct blob`() {
-        val glyphRuns = listOf(KanvasGlyphRun(listOf(65u, 66u), listOf(Point(10f, 10f), Point(30f, 10f))))
+        val glyphRuns = listOf(KanvasGlyphRun(listOf(65u, 66u), listOf(Point2F32(10f, 10f), Point2F32(30f, 10f))))
         val tf = KanvasTypeface("test-font")
         val blob1 = TextBlob(glyphRuns, tf, 16f)
         val blob2 = TextBlob(glyphRuns, tf, 16f) // structurally equal but different reference

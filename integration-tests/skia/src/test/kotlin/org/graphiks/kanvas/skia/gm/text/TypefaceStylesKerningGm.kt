@@ -9,7 +9,7 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 
 /** Tests typeface styles with kerning — draws text blobs with various
  *  font styles to verify kerning behaviour across typeface variants.
@@ -44,12 +44,12 @@ class TypefaceStylesKerningGm : SkiaGm {
     private fun buildKernText(text: String, x: Float, y: Float, font: Font): TextBlob {
         val codepoints = text.codePoints().toArray()
         val glyphIds = mutableListOf<UShort>()
-        val positions = mutableListOf<Point>()
+        val positions = mutableListOf<Point2F32>()
         var cursorX = x
         for (cp in codepoints) {
             val gid = typeface.glyphIdForCodepoint(cp)
             glyphIds.add(gid.toUShort())
-            positions.add(Point(cursorX, y))
+            positions.add(Point2F32(cursorX, y))
             cursorX += typeface.getAdvance(gid, font.size)
         }
         return TextBlob(

@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -41,8 +41,8 @@ class PaintTest {
     fun `Paint copy with shader`() {
         val p = Paint.fill(Color.RED).copy(
             shader = Shader.LinearGradient(
-                start = Point(0f, 0f),
-                end = Point(100f, 0f),
+                start = Point2F32(0f, 0f),
+                end = Point2F32(100f, 0f),
                 stops = listOf(GradientStop(0f, Color.WHITE), GradientStop(1f, Color.BLACK)),
             ),
             blendMode = BlendMode.MULTIPLY,

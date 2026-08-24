@@ -6,7 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -41,10 +41,10 @@ class GradientsDupColorStopsGm : SkiaGm {
         )
 
         val factories: List<(List<GradientStop>) -> Shader> = listOf(
-            { stops -> Shader.LinearGradient(start = Point(30f, 30f), end = Point(SIZE - 30f, SIZE - 30f), stops = stops, tileMode = TileMode.CLAMP) },
-            { stops -> Shader.RadialGradient(center = Point(half, half), radius = half - 10f, stops = stops, tileMode = TileMode.CLAMP) },
-            { stops -> Shader.ConicalGradient(start = Point(half, half), startRadius = 20f, end = Point(half, half), endRadius = half - 10f, stops = stops, tileMode = TileMode.CLAMP) },
-            { stops -> Shader.SweepGradient(center = Point(half, half), stops = stops, tileMode = TileMode.CLAMP) },
+            { stops -> Shader.LinearGradient(start = Point2F32(30f, 30f), end = Point2F32(SIZE - 30f, SIZE - 30f), stops = stops, tileMode = TileMode.CLAMP) },
+            { stops -> Shader.RadialGradient(center = Point2F32(half, half), radius = half - 10f, stops = stops, tileMode = TileMode.CLAMP) },
+            { stops -> Shader.ConicalGradient(start = Point2F32(half, half), startRadius = 20f, end = Point2F32(half, half), endRadius = half - 10f, stops = stops, tileMode = TileMode.CLAMP) },
+            { stops -> Shader.SweepGradient(center = Point2F32(half, half), stops = stops, tileMode = TileMode.CLAMP) },
         )
 
         val rect = Rect.fromXYWH(0f, 0f, SIZE.toFloat(), SIZE.toFloat())

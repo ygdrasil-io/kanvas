@@ -48,7 +48,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -314,7 +314,7 @@ class GPUPreparedSurfaceProductRouterTest {
                 DisplayOp.DrawVertices(
                     vertices = Vertices(
                         VertexMode.TRIANGLES,
-                        listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
+                        listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
                     ),
                     paint = paint,
                     transform = Matrix3x3F32.Identity,
@@ -386,7 +386,7 @@ class GPUPreparedSurfaceProductRouterTest {
         val refused = DisplayOp.DrawVertices(
             vertices = Vertices(
                 VertexMode.TRIANGLES,
-                listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
+                listOf(Point2F32(Float.NaN, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
             ),
             paint = Paint.fill(Color.RED).copy(antiAlias = false),
             transform = Matrix3x3F32.Identity,
@@ -596,7 +596,7 @@ class GPUPreparedSurfaceProductRouterTest {
 
     private fun verticesTriangle() = Vertices(
         VertexMode.TRIANGLES,
-        listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+        listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f)),
     )
 
     private fun diagnostic(code: String, message: String) = GPUDiagnostic(

@@ -9,7 +9,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -52,8 +52,8 @@ class ColorFiltersGm : SkiaGm {
 
     private fun makeShader(bounds: Rect): Shader {
         return Shader.LinearGradient(
-            start = Point(bounds.left, bounds.top),
-            end = Point(bounds.right, bounds.bottom),
+            start = Point2F32(bounds.left, bounds.top),
+            end = Point2F32(bounds.right, bounds.bottom),
             stops = listOf(
                 GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),   // red
                 GradientStop(1f/6f, Color.fromRGBA(0f, 1f, 0f, 1f)),   // green

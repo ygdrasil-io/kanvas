@@ -7,7 +7,7 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 
@@ -36,10 +36,10 @@ class CustomMeshUniformsGm : SkiaGm {
         val rectB = 220f
 
         val positions = listOf(
-            Point(rectL, rectT),
-            Point(rectR, rectT),
-            Point(rectL, rectB),
-            Point(rectR, rectB),
+            Point2F32(rectL, rectT),
+            Point2F32(rectR, rectT),
+            Point2F32(rectL, rectB),
+            Point2F32(rectR, rectB),
         )
 
         // Uniform = (0.8, 0.35, 0.9, 0.85) multiplied with per-vertex colors

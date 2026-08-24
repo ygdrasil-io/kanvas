@@ -44,8 +44,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.mapPoint
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedDrawImageLowererTest {
@@ -969,10 +968,10 @@ class GPUPreparedDrawImageLowererTest {
 
         val positions = geometry.vertices.map { it.x to it.y }
         val srcBbox = Rect.fromLTRB(10f, 10f, 30f, 20f)
-        val expectedCorner1 = skew.mapPoint(Point(srcBbox.left, srcBbox.top))
-        val expectedCorner2 = skew.mapPoint(Point(srcBbox.right, srcBbox.top))
-        val expectedCorner3 = skew.mapPoint(Point(srcBbox.right, srcBbox.bottom))
-        val expectedCorner4 = skew.mapPoint(Point(srcBbox.left, srcBbox.bottom))
+        val expectedCorner1 = skew.transform(Point2F32(srcBbox.left, srcBbox.top))
+        val expectedCorner2 = skew.transform(Point2F32(srcBbox.right, srcBbox.top))
+        val expectedCorner3 = skew.transform(Point2F32(srcBbox.right, srcBbox.bottom))
+        val expectedCorner4 = skew.transform(Point2F32(srcBbox.left, srcBbox.bottom))
         assertEquals(expectedCorner1.x, positions[0].first, 0.001f)
         assertEquals(expectedCorner1.y, positions[0].second, 0.001f)
         assertEquals(expectedCorner2.x, positions[1].first, 0.001f)

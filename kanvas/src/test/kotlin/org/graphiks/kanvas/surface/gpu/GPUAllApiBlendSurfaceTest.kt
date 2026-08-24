@@ -33,7 +33,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -320,7 +320,7 @@ class GPUAllApiBlendSurfaceTest {
         }
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
-            positions = listOf(Point(6f, 6f), Point(26f, 6f), Point(16f, 26f)),
+            positions = listOf(Point2F32(6f, 6f), Point2F32(26f, 6f), Point2F32(16f, 26f)),
         )
         val textTypeface = FontTypeface(
             javaClass.classLoader
@@ -332,13 +332,13 @@ class GPUAllApiBlendSurfaceTest {
         val legacyTextBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
 
         return listOf(
-            BlendCase("DrawRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
+            BlendCase("DrawRect", Point2F32(16f, 16f), Point2F32(7f, 16f), Point2F32(12f, 16f)) { mode ->
                 drawRect(SOURCE_RECT, shapePaint(mode))
             },
-            BlendCase("DrawRRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
+            BlendCase("DrawRRect", Point2F32(16f, 16f), Point2F32(7f, 16f), Point2F32(12f, 16f)) { mode ->
                 drawRRect(RRect(SOURCE_RECT, radius = 3f), shapePaint(mode))
             },
-            BlendCase("DrawPath", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
+            BlendCase("DrawPath", Point2F32(16f, 16f), Point2F32(10f, 10f), Point2F32(16f, 12f)) { mode ->
                 drawPath(
                     Path { moveTo(6f, 6f); lineTo(26f, 6f); lineTo(16f, 26f); close() },
                     shapePaint(mode),
@@ -346,39 +346,39 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase(
                 "DrawImage",
-                Point(16f, 16f),
-                Point(7f, 16f),
-                Point(12f, 16f),
+                Point2F32(16f, 16f),
+                Point2F32(7f, 16f),
+                Point2F32(12f, 16f),
                 legacySaveLayerDraw = { mode -> drawImage(legacyImage, SOURCE_RECT, imagePaint(mode)) },
             ) { mode -> drawImage(image, SOURCE_RECT, imagePaint(mode)) },
             BlendCase(
                 "DrawText",
-                Point(17f, 14f),
-                Point(17f, 10f),
-                Point(17f, 12f),
+                Point2F32(17f, 14f),
+                Point2F32(17f, 10f),
+                Point2F32(17f, 12f),
                 legacySaveLayerDraw = { mode -> drawText(legacyTextBlob, 0f, 0f, textPaint(mode)) },
             ) { mode -> drawText(preparedTextBlob, 0f, 0f, preparedTextPaint(mode)) },
-            BlendCase("DrawColor", Point(16f, 16f), Point(4f, 16f), Point(12f, 16f)) { mode ->
+            BlendCase("DrawColor", Point2F32(16f, 16f), Point2F32(4f, 16f), Point2F32(12f, 16f)) { mode ->
                 drawColor(SOURCE, mode)
             },
             // Canvas.clear has no BlendMode parameter. It is still instantiated for every mode so
             // the inventory cannot silently omit this visual API; the mode is intentionally ignored.
-            BlendCase("Clear", Point(16f, 16f), composition = Composition.CLEAR) { _ ->
+            BlendCase("Clear", Point2F32(16f, 16f), composition = Composition.CLEAR) { _ ->
                 clear(SOURCE)
             },
-            BlendCase("DrawPoint", Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)) { mode ->
+            BlendCase("DrawPoint", Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)) { mode ->
                 drawPoint(16f, 16f, shapePaint(mode))
                 drawPoint(10f, 16f, shapePaint(mode))
                 drawPoint(12f, 16f, shapePaint(mode))
             },
-            BlendCase("DrawPoints", Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)) { mode ->
+            BlendCase("DrawPoints", Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)) { mode ->
                 drawPoints(
                     PointMode.POINTS,
-                    listOf(Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)),
+                    listOf(Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)),
                     shapePaint(mode),
                 )
             },
-            BlendCase("DrawDRRect", Point(22f, 16f), Point(7f, 16f), Point(22f, 12f)) { mode ->
+            BlendCase("DrawDRRect", Point2F32(22f, 16f), Point2F32(7f, 16f), Point2F32(22f, 12f)) { mode ->
                 drawDRRect(
                     RRect(Rect(4f, 4f, 28f, 28f), radius = 2f),
                     RRect(Rect(10f, 10f, 22f, 22f), radius = 2f),
@@ -387,18 +387,18 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase(
                 "DrawImageNine",
-                Point(16f, 16f),
-                Point(7f, 16f),
-                Point(16f, 12f),
+                Point2F32(16f, 16f),
+                Point2F32(7f, 16f),
+                Point2F32(16f, 12f),
                 legacySaveLayerDraw = { mode ->
                     drawImageNine(legacyImage, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
                 },
             ) { mode -> drawImageNine(image, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode)) },
             BlendCase(
                 "DrawImageLattice",
-                Point(16f, 16f),
-                Point(7f, 16f),
-                Point(16f, 12f),
+                Point2F32(16f, 16f),
+                Point2F32(7f, 16f),
+                Point2F32(16f, 12f),
                 legacySaveLayerDraw = { mode ->
                     drawImageLattice(
                         legacyImage,
@@ -416,14 +416,14 @@ class GPUAllApiBlendSurfaceTest {
                 )
             },
             drawPictureCase(),
-            BlendCase("DrawVertices", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
+            BlendCase("DrawVertices", Point2F32(16f, 16f), Point2F32(10f, 10f), Point2F32(16f, 12f)) { mode ->
                 drawVertices(triangle, shapePaint(mode))
             },
             BlendCase(
                 name = "DrawMesh(program=null)",
-                sample = Point(16f, 16f),
-                clipExcludedSample = Point(10f, 10f),
-                alphaMaskEdgeSample = Point(16f, 12f),
+                sample = Point2F32(16f, 16f),
+                clipExcludedSample = Point2F32(10f, 10f),
+                alphaMaskEdgeSample = Point2F32(16f, 12f),
                 // The public no-program form is intentionally normalized to the DrawVertices adapter.
                 destinationReadRouteOperations = setOf("DrawVertices"),
             ) { mode ->
@@ -435,9 +435,9 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase(
                 "DrawAtlas",
-                Point(17f, 17f),
-                Point(9f, 17f),
-                Point(17f, 12f),
+                Point2F32(17f, 17f),
+                Point2F32(9f, 17f),
+                Point2F32(17f, 12f),
                 legacySaveLayerDraw = { mode -> drawAtlasFixture(legacyImage, mode) },
             ) { mode -> drawAtlasFixture(image, mode) },
         )
@@ -452,7 +452,7 @@ class GPUAllApiBlendSurfaceTest {
             glyphRuns = listOf(
                 KanvasGlyphRun(
                     glyphs = listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()),
-                    positions = listOf(Point(0f, 0f)),
+                    positions = listOf(Point2F32(0f, 0f)),
                     fontSize = 48f,
                 ),
             ),
@@ -461,8 +461,8 @@ class GPUAllApiBlendSurfaceTest {
         )
         val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
         val shader = Shader.LinearGradient(
-            start = Point(0f, 0f),
-            end = Point(SURFACE_SIZE.toFloat(), 0f),
+            start = Point2F32(0f, 0f),
+            end = Point2F32(SURFACE_SIZE.toFloat(), 0f),
             stops = listOf(
                 GradientStop(0f, shaderColor),
                 GradientStop(1f, shaderColor),
@@ -470,7 +470,7 @@ class GPUAllApiBlendSurfaceTest {
         )
         return BlendCase(
             name = "DrawTextPartialAlpha",
-            sample = Point(16f, 14f),
+            sample = Point2F32(16f, 14f),
         ) { mode ->
             drawText(
                 blob = blob,
@@ -504,8 +504,8 @@ class GPUAllApiBlendSurfaceTest {
     private fun drawPictureCase(): BlendCase =
         BlendCase(
             name = "DrawPicture",
-            sample = Point(16f, 16f),
-            clipExcludedSample = Point(10f, 16f),
+            sample = Point2F32(16f, 16f),
+            clipExcludedSample = Point2F32(10f, 16f),
             alphaMaskEdgeSample = ALPHA_MASK_EDGE,
             // The public DrawPicture paint is rendered atomically at synthetic-layer restore.
             destinationReadRouteOperations = setOf("saveLayer"),
@@ -731,12 +731,12 @@ class GPUAllApiBlendSurfaceTest {
         }
     }.toUByteArray()
 
-    private fun readPixel(result: RenderResult, sample: Point): UByteArray {
+    private fun readPixel(result: RenderResult, sample: Point2F32): UByteArray {
         val offset = (sample.y.toInt() * SURFACE_SIZE + sample.x.toInt()) * 4
         return result.pixels.copyOfRange(offset, offset + 4)
     }
 
-    private fun axisAlignedRectCoverage(rect: Rect, pixel: Point): Float {
+    private fun axisAlignedRectCoverage(rect: Rect, pixel: Point2F32): Float {
         val overlapWidth = (min(rect.right, pixel.x + 1f) - max(rect.left, pixel.x)).coerceAtLeast(0f)
         val overlapHeight = (min(rect.bottom, pixel.y + 1f) - max(rect.top, pixel.y)).coerceAtLeast(0f)
         return overlapWidth * overlapHeight
@@ -965,9 +965,9 @@ class GPUAllApiBlendSurfaceTest {
 
     private data class BlendCase(
         val name: String,
-        val sample: Point,
-        val clipExcludedSample: Point? = null,
-        val alphaMaskEdgeSample: Point? = null,
+        val sample: Point2F32,
+        val clipExcludedSample: Point2F32? = null,
+        val alphaMaskEdgeSample: Point2F32? = null,
         val composition: Composition = Composition.BLEND,
         /** Exact route operations allowed to emit this API's advanced-blend formula diagnostic. */
         val destinationReadRouteOperations: Set<String> = setOf(name),
@@ -1024,7 +1024,7 @@ class GPUAllApiBlendSurfaceTest {
         val SOURCE_RECT = Rect(6f, 6f, 26f, 26f)
         val CLIP_RECT = Rect(12f, 12f, 24f, 24f)
         val ALPHA_MASK_RECT = Rect(12.5f, 12.5f, 23.5f, 23.5f)
-        val ALPHA_MASK_EDGE = Point(12f, 16f)
+        val ALPHA_MASK_EDGE = Point2F32(12f, 16f)
         val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)
         val PARTIAL_ALPHA_EFFECTIVE_SOURCE = Color.fromRGBA(1f, 0f, 0f, 0.3f)

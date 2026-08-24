@@ -2,7 +2,7 @@ package org.graphiks.kanvas.paint
 
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 
@@ -11,19 +11,19 @@ enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 sealed interface Shader {
     data class SolidColor(val color: Color) : Shader
     data class LinearGradient(
-        val start: Point, val end: Point,
+        val start: Point2F32, val end: Point2F32,
         val stops: List<GradientStop>,
         val tileMode: TileMode = TileMode.CLAMP,
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,
     ) : Shader
     data class RadialGradient(
-        val center: Point, val radius: Float,
+        val center: Point2F32, val radius: Float,
         val stops: List<GradientStop>,
         val tileMode: TileMode = TileMode.CLAMP,
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,
     ) : Shader
     data class SweepGradient(
-        val center: Point,
+        val center: Point2F32,
         val startAngle: Float = 0f,
         val endAngle: Float = 360f,
         val stops: List<GradientStop>,
@@ -31,8 +31,8 @@ sealed interface Shader {
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,
     ) : Shader
     data class ConicalGradient(
-        val start: Point, val startRadius: Float,
-        val end: Point, val endRadius: Float,
+        val start: Point2F32, val startRadius: Float,
+        val end: Point2F32, val endRadius: Float,
         val stops: List<GradientStop>,
         val tileMode: TileMode = TileMode.CLAMP,
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -39,10 +39,10 @@ class SharedCornersGm : SkiaGm {
         canvas.save()
 
         drawTriangleBoxes(canvas, fillPaint, wirePaint, listOf(
-            Point(0f, 0f), Point(40f, 0f), Point(80f, 0f), Point(120f, 0f),
-            Point(0f, 20f), Point(40f, 20f), Point(80f, 20f), Point(120f, 20f),
-            Point(40f, 40f), Point(80f, 40f),
-            Point(40f, 60f), Point(80f, 60f),
+            Point2F32(0f, 0f), Point2F32(40f, 0f), Point2F32(80f, 0f), Point2F32(120f, 0f),
+            Point2F32(0f, 20f), Point2F32(40f, 20f), Point2F32(80f, 20f), Point2F32(120f, 20f),
+            Point2F32(40f, 40f), Point2F32(80f, 40f),
+            Point2F32(40f, 60f), Point2F32(80f, 60f),
         ), listOf(
             intArrayOf(0, 1, 4), intArrayOf(1, 5, 4),
             intArrayOf(5, 1, 6), intArrayOf(1, 2, 6),
@@ -52,11 +52,11 @@ class SharedCornersGm : SkiaGm {
         ))
 
         drawTriangleBoxes(canvas, fillPaint, wirePaint, listOf(
-            Point(0f, 0f), Point(10f, 0f), Point(20f, 0f),
-            Point(0f, 2f), Point(20f, 2f),
-            Point(10f, 4f),
-            Point(0f, 6f), Point(20f, 6f),
-            Point(0f, 8f), Point(10f, 8f), Point(20f, 8f),
+            Point2F32(0f, 0f), Point2F32(10f, 0f), Point2F32(20f, 0f),
+            Point2F32(0f, 2f), Point2F32(20f, 2f),
+            Point2F32(10f, 4f),
+            Point2F32(0f, 6f), Point2F32(20f, 6f),
+            Point2F32(0f, 8f), Point2F32(10f, 8f), Point2F32(20f, 8f),
         ), listOf(
             intArrayOf(3, 1, 4), intArrayOf(4, 5, 3), intArrayOf(6, 5, 7), intArrayOf(7, 9, 6),
             intArrayOf(0, 1, 3), intArrayOf(1, 2, 4),
@@ -68,17 +68,17 @@ class SharedCornersGm : SkiaGm {
         canvas.translate(((kBoxSize + kPadSize) * 4).toFloat(), 0f)
 
         drawTriangleBoxes(canvas, fillPaint, wirePaint, listOf(
-            Point(0f, 0f), Point(-1f, 0f), Point(0f, -1f), Point(1f, 0f), Point(0f, 1f),
+            Point2F32(0f, 0f), Point2F32(-1f, 0f), Point2F32(0f, -1f), Point2F32(1f, 0f), Point2F32(0f, 1f),
         ), listOf(
             intArrayOf(0, 1, 2), intArrayOf(0, 2, 3), intArrayOf(0, 3, 4), intArrayOf(0, 4, 1),
         ))
 
         val rand = Random(42)
-        val pts = mutableListOf(Point(0f, 0f))
+        val pts = mutableListOf(Point2F32(0f, 0f))
         val tris = mutableListOf<IntArray>()
         var theta = 0f
         while (theta < 2f * PI.toFloat()) {
-            pts.add(Point(cos(theta), sin(theta)))
+            pts.add(Point2F32(cos(theta), sin(theta)))
             if (pts.size > 2) {
                 tris.add(intArrayOf(0, pts.size - 2, pts.size - 1))
             }
@@ -92,7 +92,7 @@ class SharedCornersGm : SkiaGm {
         canvas: GmCanvas,
         fillPaint: Paint,
         wirePaint: Paint,
-        points: List<Point>,
+        points: List<Point2F32>,
         triangles: List<IntArray>,
     ) {
         val path = Path {
@@ -136,7 +136,7 @@ class SharedCornersGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun computeBounds(points: List<Point>): Quadruple {
+    private fun computeBounds(points: List<Point2F32>): Quadruple {
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
         for (p in points) {
@@ -154,9 +154,9 @@ class SharedCornersGm : SkiaGm {
         const val kPadSize = 20
         const val kBoxSize = 100
         val kJitters = listOf(
-            Point(0f, 0f),
-            Point(0.5f, 0.5f),
-            Point(2f / 3f, 1f / 3f),
+            Point2F32(0f, 0f),
+            Point2F32(0.5f, 0.5f),
+            Point2F32(2f / 3f, 1f / 3f),
         )
     }
 }

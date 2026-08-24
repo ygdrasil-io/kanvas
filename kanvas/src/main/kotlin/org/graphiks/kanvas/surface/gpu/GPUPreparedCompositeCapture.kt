@@ -4,6 +4,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.PathCommand
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterLowerer
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
@@ -27,7 +28,6 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import java.nio.ByteBuffer
@@ -663,7 +663,28 @@ internal object GPUPreparedCompositeCapturer {
         }
 
         private fun Path.toSnapshot(operationIndex: Int): GPUPreparedGeometrySnapshot.PathGeometry {
-            val pointSnapshots = points().map { it.toSnapshot(operationIndex) }
+            val pointSnapshots = commands().flatMap { command ->
+                when (command) {
+                    is PathCommand.Move -> listOf(command.point.toSnapshot(operationIndex))
+                    is PathCommand.Line -> listOf(command.endpoint.toSnapshot(operationIndex))
+                    is PathCommand.Quad -> listOf(
+                        command.control.toSnapshot(operationIndex),
+                        command.endpoint.toSnapshot(operationIndex),
+                    )
+                    is PathCommand.Cubic -> listOf(
+                        command.control1.toSnapshot(operationIndex),
+                        command.control2.toSnapshot(operationIndex),
+                        command.endpoint.toSnapshot(operationIndex),
+                    )
+                    is PathCommand.ArcTo -> listOf(
+                        snapshotPoint(command.radius.x, command.radius.y, operationIndex),
+                        snapshotPoint(command.xAxisRotation, if (command.largeArc) 1f else 0f, operationIndex),
+                        snapshotPoint(if (command.sweep) 1f else 0f, 0f, operationIndex),
+                        command.endpoint.toSnapshot(operationIndex),
+                    )
+                    PathCommand.Close -> emptyList()
+                }
+            }
             return GPUPreparedGeometrySnapshot.PathGeometry(
                 fill = when (fillType) {
                     FillType.WINDING -> GPUPreparedPathFillSnapshot.Winding
@@ -685,7 +706,15 @@ internal object GPUPreparedCompositeCapturer {
             )
         }
 
-        private fun Point.toSnapshot(operationIndex: Int): GPUPreparedPointSnapshot {
+        private fun org.graphiks.math.geometry.Point2F32.toSnapshot(
+            operationIndex: Int,
+        ): GPUPreparedPointSnapshot = snapshotPoint(x, y, operationIndex)
+
+        private fun snapshotPoint(
+            x: Float,
+            y: Float,
+            operationIndex: Int,
+        ): GPUPreparedPointSnapshot {
             if (!x.isFinite() || !y.isFinite()) {
                 refuse(
                     GPUPreparedCompositeRefusalCodes.OPERATION,

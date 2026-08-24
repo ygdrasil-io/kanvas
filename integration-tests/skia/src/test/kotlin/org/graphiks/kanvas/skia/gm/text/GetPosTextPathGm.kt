@@ -13,7 +13,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import kotlin.random.Random
 
 /**
@@ -47,13 +47,13 @@ class GetPosTextPathGm : SkiaGm {
         val glyphs = textToGlyphs(font, text)
         val count = glyphs.size
         val widths = FloatArray(count) { i -> typeface.getAdvance(glyphs[i], font.size) }
-        val pos = Array(count) { Point.ZERO }
+        val pos = Array(count) { Point2F32.Origin }
 
         val rng = Random(42)
         var cx = 20f
         val cy = 100f
         for (i in 0 until count) {
-            pos[i] = Point(cx, cy + rng.nextFloat() * 24f - 12f)
+            pos[i] = Point2F32(cx, cy + rng.nextFloat() * 24f - 12f)
             cx += widths[i]
         }
 
@@ -61,7 +61,7 @@ class GetPosTextPathGm : SkiaGm {
 
         val blob = run {
             val glyphIds = mutableListOf<UShort>()
-            val positions = mutableListOf<Point>()
+            val positions = mutableListOf<Point2F32>()
             for (i in 0 until count) {
                 glyphIds.add(glyphs[i].toUShort())
                 positions.add(pos[i])
@@ -85,7 +85,7 @@ class GetPosTextPathGm : SkiaGm {
         )
     }
 
-    private fun getTextPath(font: Font, text: String, positions: Array<Point>?): Path {
+    private fun getTextPath(font: Font, text: String, positions: Array<Point2F32>?): Path {
         val path = Path { }
         var advance = 0f
         for (i in text.indices) {

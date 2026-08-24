@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.geometry
 
 import org.graphiks.kanvas.types.*
+import org.graphiks.math.geometry.MutablePoint2F32
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.vector.MutableVector2F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
@@ -57,12 +60,12 @@ class GeometryTest {
 
     @Test
     fun `contains point inside rect path`() {
-        assertTrue(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point(50f, 50f)))
+        assertTrue(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(50f, 50f)))
     }
 
     @Test
     fun `contains point outside rect path`() {
-        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point(150f, 150f)))
+        assertFalse(Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f)).contains(Point2F32(150f, 150f)))
     }
 
     @Test
@@ -80,13 +83,17 @@ class GeometryTest {
     }
 
     @Test
-    fun `pathMeasure getPosition at 50 percent of line`() {
+    fun `pathMeasure writes a location and a direction to their semantic mutable outputs`() {
         val path = Path().apply { moveTo(0f, 0f); lineTo(100f, 0f) }
         val pm = PathMeasure(path)
-        val pos = Point(0f, 0f)
-        assertTrue(pm.getPosition(50f, pos, null))
-        assertEquals(50f, pos.x, 1e-4f)
-        assertEquals(0f, pos.y, 1e-4f)
+        val position = MutablePoint2F32(0f, 0f)
+        val tangent = MutableVector2F32(0f, 0f)
+
+        assertTrue(pm.getPosition(50f, position, tangent))
+        assertEquals(50f, position.x, 1e-4f)
+        assertEquals(0f, position.y, 1e-4f)
+        assertEquals(1f, tangent.x, 1e-4f)
+        assertEquals(0f, tangent.y, 1e-4f)
     }
 
     @Test
@@ -255,7 +262,7 @@ class GeometryTest {
         val result = PathOps.op(p1, p2, PathOp.UNION)
         assertNotNull(result)
         assertFalse(result!!.isEmpty())
-        assertTrue(result.contains(Point(50f, 40f)))
+        assertTrue(result.contains(Point2F32(50f, 40f)))
     }
 
     @Test
@@ -273,7 +280,7 @@ class GeometryTest {
         val inner = Path().addCircle(50f, 50f, 20f)
         val result = PathOps.op(outer, inner, PathOp.DIFFERENCE)
         assertNotNull(result)
-        assertFalse(result!!.contains(Point(50f, 50f)))
+        assertFalse(result!!.contains(Point2F32(50f, 50f)))
     }
 
     @Test

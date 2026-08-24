@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.types.Mesh
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -42,7 +42,7 @@ class GPUPreparedSurfaceFrameGateTest {
     fun `DrawVertices and DrawMesh enter the prepared candidate`() {
         val vertices = Vertices(
             VertexMode.TRIANGLES,
-            listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
         )
         listOf(
             DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP),
@@ -161,7 +161,7 @@ class GPUPreparedSurfaceFrameGateTest {
         val image = Image.placeholder(2, 2)
         val vertices = Vertices(
             VertexMode.TRIANGLES,
-            listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
         )
         val path = Path().addRect(RECT)
         val visual = Expected.Candidate
@@ -179,7 +179,7 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawColor(Color.RED, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Clear(Color.RED), visual),
             Fixture(DisplayOp.DrawPoint(1f, 1f, PAINT, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(1f, 1f)), PAINT, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point2F32(1f, 1f)), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawDRRect(RRect(RECT, radius = 1f), RRect(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), visual),

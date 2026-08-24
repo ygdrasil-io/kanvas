@@ -13,7 +13,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.types.Rect
 
 /**
@@ -85,8 +85,8 @@ class Tiling2BitmapGm : SkiaGm {
             val surf = Surface(w, h)
             surf.canvas {
                 val paint = Paint(shader = Shader.LinearGradient(
-                    start = Point(0f, 0f),
-                    end = Point(w.toFloat(), h.toFloat()),
+                    start = Point2F32(0f, 0f),
+                    end = Point2F32(w.toFloat(), h.toFloat()),
                     stops = listOf(
                         GradientStop(0f, Color.RED),
                         GradientStop(0.5f, Color.GREEN),

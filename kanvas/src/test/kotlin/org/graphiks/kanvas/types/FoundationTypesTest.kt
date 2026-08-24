@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.graphiks.math.geometry.Point2F32
 
 class FoundationTypesTest {
     @Test
@@ -14,7 +15,7 @@ class FoundationTypesTest {
 
     @Test
     fun `Vertices minimal construction`() {
-        val v = Vertices(VertexMode.TRIANGLES, listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)))
+        val v = Vertices(VertexMode.TRIANGLES, listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)))
         assertEquals(VertexMode.TRIANGLES, v.mode)
         assertEquals(3, v.positions.size)
         assertNull(v.texCoords)
@@ -26,8 +27,8 @@ class FoundationTypesTest {
     fun `Vertices with all fields`() {
         val v = Vertices(
             VertexMode.TRIANGLE_STRIP,
-            listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f), Point(1f, 1f)),
-            texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f), Point(1f, 1f)),
+            listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f), Point2F32(1f, 1f)),
+            texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f), Point2F32(1f, 1f)),
             colors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE),
             indices = listOf(0, 1, 2, 1, 3, 2),
         )
