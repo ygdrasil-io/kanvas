@@ -14,6 +14,9 @@ import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLowerin
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLoweringResult
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -62,21 +65,30 @@ internal object GPUPreparedStrokeRectLowerer {
                 mapOf("pathEffect" to paint.pathEffect::class.simpleName.orEmpty()),
             )
         }
-        if (paint.shader != null || paint.maskFilter != null || paint.imageFilter != null ||
-            paint.blender != null || !paint.hasFoldableSolidColorFilter()
-        ) {
+        if (paint.maskFilter != null || paint.imageFilter != null || paint.blender != null) {
             return refused(
                 "unsupported.stroke.rect_material",
                 operationIndex,
                 materialRefusalFacts(operation),
             )
         }
-        val finalMaterial = paint.toMaterial() as? GPUMaterialDescriptor.SolidColor
-            ?: return refused(
-                "unsupported.stroke.rect_material",
-                operationIndex,
-                materialRefusalFacts(operation),
-            )
+        val finalMaterial = when (val shader = paint.shader) {
+            null -> {
+                if (!paint.hasFoldableSolidColorFilter()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
+                paint.toMaterial() as? GPUMaterialDescriptor.SolidColor
+                    ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+            }
+            is Shader.LinearGradient -> {
+                if (paint.colorFilter != null || !shader.isAdmittedStrokeGradient()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
+                paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient
+                    ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+            }
+            else -> return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+        }
 
         val deviceRect = when (val admission = operation.strokeRectDeviceBounds(target)) {
             is StrokeRectDeviceBounds.Admitted -> admission.bounds
@@ -142,6 +154,7 @@ internal object GPUPreparedStrokeRectLowerer {
                 val fillPaint = paint.copy(
                     color = ColorARGB.Transparent,
                     colorFilter = null,
+                    shader = null,
                     style = PaintStyle.FILL,
                     strokeWidth = 0f,
                 )
@@ -271,6 +284,17 @@ private fun materialRefusalFacts(operation: DisplayOp.DrawRect): Map<String, Str
 private fun org.graphiks.kanvas.paint.Paint.hasFoldableSolidColorFilter(): Boolean =
     colorFilter?.isFoldableSolidColorFilter() ?: true
 
+/** The four-band route deliberately accepts only the exact material ABI executed by the prepared frame. */
+private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean =
+    tileMode == TileMode.CLAMP &&
+        interpolation == ColorSpaceInterpolation.SRGB &&
+        start.x.isFinite() && start.y.isFinite() && end.x.isFinite() && end.y.isFinite() &&
+        stops.size in 1..16 && stops.all { stop ->
+            stop.position.isFinite() &&
+                stop.color.r.isFinite() && stop.color.g.isFinite() &&
+                stop.color.b.isFinite() && stop.color.a.isFinite()
+        }
+
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {
     is ColorFilter.Matrix -> matrix.toFloatArray().all(Float::isFinite)
@@ -310,7 +334,7 @@ private val foldableSolidColorBlendModes = setOf(
 
 private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     provenance: GPUFrameProvenance,
-    material: GPUMaterialDescriptor.SolidColor,
+    material: GPUMaterialDescriptor,
 ): GPUFramePathVisualCommand = copy(
     normalized = when (val command = normalized) {
         is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> command.copy(

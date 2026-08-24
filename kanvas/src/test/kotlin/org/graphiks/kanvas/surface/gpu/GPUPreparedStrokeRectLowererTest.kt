@@ -96,6 +96,51 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `clamp srgb linear gradient stroke preserves one device descriptor across all four bands`() {
+        val gradient = Shader.LinearGradient(
+            start = Point2F32(8.5f, 32.5f),
+            end = Point2F32(55.5f, 32.5f),
+            stops = listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+            ),
+            tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
+            GPUPreparedStrokeRectLowerer.lower(
+                operation = strokeRect(
+                    bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = gradient, antiAlias = false),
+                ),
+                firstCommandId = GPUDrawCommandID(0),
+                firstPaintOrder = 0,
+                provenance = GPUFrameProvenance.None,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+            ),
+        )
+
+        val fills = lowered.commands.map { assertIs<NormalizedDrawCommand.FillRect>(it.normalized) }
+        assertEquals(
+            listOf(
+                GPUPixelBounds(6, 14, 58, 18),
+                GPUPixelBounds(6, 46, 58, 50),
+                GPUPixelBounds(6, 18, 10, 46),
+                GPUPixelBounds(54, 18, 58, 46),
+            ),
+            fills.map { fill -> GPUPixelBounds(fill.rect.left.toInt(), fill.rect.top.toInt(), fill.rect.right.toInt(), fill.rect.bottom.toInt()) },
+        )
+        val materials = fills.map { assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(it.material) }
+        assertTrue(materials.drop(1).all { it === materials.first() })
+        assertEquals(8.5f, materials.first().startX)
+        assertEquals(32.5f, materials.first().startY)
+        assertEquals(55.5f, materials.first().endX)
+        assertEquals(32.5f, materials.first().endY)
+        assertEquals("clamp", materials.first().tileMode)
+    }
+
+    @Test
     fun `bounded stroke inputs refuse before generic path lowering with stable codes`() {
         val cases = listOf(
             "anti alias" to strokeRect(paint = strokePaint.copy(antiAlias = true)) to
@@ -135,6 +180,30 @@ class GPUPreparedStrokeRectLowererTest {
                         end = Point2F32(1f, 0f),
                         stops = emptyList(),
                     ),
+                ),
+            ) to "unsupported.stroke.rect_material",
+            "radial gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(
+                    shader = Shader.RadialGradient(Point2F32(32f, 32f), 16f, gradientStops()),
+                ),
+            ) to "unsupported.stroke.rect_material",
+            "sweep gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(
+                    shader = Shader.SweepGradient(Point2F32(32f, 32f), stops = gradientStops()),
+                ),
+            ) to "unsupported.stroke.rect_material",
+            "repeat gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(shader = linearGradient(org.graphiks.kanvas.paint.TileMode.REPEAT)),
+            ) to "unsupported.stroke.rect_material",
+            "mirror gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(shader = linearGradient(org.graphiks.kanvas.paint.TileMode.MIRROR)),
+            ) to "unsupported.stroke.rect_material",
+            "decal gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(shader = linearGradient(org.graphiks.kanvas.paint.TileMode.DECAL)),
+            ) to "unsupported.stroke.rect_material",
+            "local matrix gradient stroke material" to strokeRect(
+                paint = strokePaint.copy(
+                    shader = Shader.WithLocalMatrix(linearGradient(), Matrix3x3F32.translation(1f, 0f)),
                 ),
             ) to "unsupported.stroke.rect_material",
             "unsupported color filter" to strokeRect(
@@ -265,6 +334,39 @@ class GPUPreparedStrokeRectLowererTest {
         assertTrue(mapping.visualCommands.none { it.normalized is NormalizedDrawCommand.FillPath })
     }
 
+    @Test
+    fun `public frame preparation expands the admitted gradient stroke into four fill commands`() {
+        val mapping = GPUOpMapper.mapOperations(
+            operations = listOf(
+                strokeRect(
+                    bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                            listOf(
+                                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                            ),
+                            org.graphiks.kanvas.paint.TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(null, mapping.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), mapping.visualCommands.map { it.normalized.commandId.value })
+        val materials = mapping.visualCommands.map {
+            assertIs<NormalizedDrawCommand.FillRect>(it.normalized).material
+        }
+        assertTrue(materials.all { it is org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient })
+        assertTrue(materials.drop(1).all { it === materials.first() })
+    }
+
     private fun strokeRect(
         bounds: RectF32 = RectF32.ofLTRB(16f, 16f, 48f, 48f),
         paint: Paint = strokePaint,
@@ -300,6 +402,14 @@ class GPUPreparedStrokeRectLowererTest {
         ),
         rendererFeatures = setOf(GPURendererFeature.RenderPass),
     )
+
+    private fun gradientStops() = listOf(
+        org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+        org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+    )
+
+    private fun linearGradient(tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP) =
+        Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), gradientStops(), tileMode)
 
     private companion object {
         val strokePaint: Paint = Paint.stroke(ColorARGB.Red, 6f).copy(antiAlias = false)

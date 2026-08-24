@@ -7,6 +7,28 @@ import kotlin.test.assertFailsWith
 
 class SurfaceSrgbGradientCpuOracleTest {
     @Test
+    fun `stroke band oracle keeps horizontal and vertical gradient samples while leaving its center transparent`() {
+        val pixels = SurfaceSrgbLinearGradientStrokeBandsCpuOracle(
+            listOf(
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(55.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(0.0, 255, 56, 56),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(1.0, 56, 112, 255),
+        ).render(64, 64)
+
+        assertPixel(pixels, 64, 8, 16, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 55, 16, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 8, 32, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 55, 32, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 32, 32, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `linear repeat wraps hand derived negative and post-first-cycle samples unlike clamp`() {
         val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 4f, 1f)
         val start = SurfaceSrgbGradientCpuOracle.Point(1.5f, .5f)

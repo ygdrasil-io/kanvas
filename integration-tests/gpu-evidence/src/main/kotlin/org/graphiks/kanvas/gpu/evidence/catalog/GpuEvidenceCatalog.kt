@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSeparableMaskBlurCpuOr
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -26,11 +27,11 @@ object GpuEvidenceCatalog {
         affineSolidRect(),
         scissoredRadialGradient(),
         repeatGradientRendered(),
+        gradientStrokeRefusal(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
-        gradientStrokeRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -273,7 +274,27 @@ object GpuEvidenceCatalog {
             listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56), SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255)),
         ),
     )
-    private fun gradientStrokeRefusal() = surfaceRefusal("gradient-stroke-refusal", "Gradient stroke refusal", "Public Kanvas Surface gradient stroke rectangle refuses before submission.", setOf("stroke-rect", "linear-gradient", "refusal", "kanvas-surface"), "unsupported.stroke.rect_material", KanvasScenePrograms.gradientStrokeRefusal())
+    private fun gradientStrokeRefusal() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("gradient-stroke-refusal"), "Gradient stroke rectangle", "Public Kanvas Surface clamp linear-gradient rectangle stroke rendered as four analytic bands.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band coverage with device-coordinate clamp linear-gradient sampling and one-LSB RGBA8 tolerance."), emptySet(),
+        ),
+        KanvasScenePrograms.gradientStrokeRefusal(),
+        SurfaceSrgbLinearGradientStrokeBandsCpuOracle(
+            listOf(
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(55.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(0.0, 255, 56, 56),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(1.0, 56, 112, 255),
+        ),
+    )
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
         EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 16, 16, 1L, tags, EvidenceExpectation.ShouldRefuse(code), OraclePolicy.StableRefusal, null, emptySet()), program, null,
     )

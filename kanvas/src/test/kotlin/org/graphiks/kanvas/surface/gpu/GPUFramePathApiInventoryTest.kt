@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -94,6 +95,50 @@ class GPUFramePathApiInventoryTest {
         assertTrue(inventory.visualCommands.none { visual ->
             (visual.normalized as? NormalizedDrawCommand.FillPath)?.pathKey?.contains("rect-stroke") == true
         })
+    }
+
+    @Test
+    fun `public frame preparation retains one clamp gradient descriptor across four stroke bands`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertEquals(null, inventory.preparedRefusal)
+        val materials = inventory.visualCommands.map {
+            assertIs<NormalizedDrawCommand.FillRect>(it.normalized).material
+        }
+        assertTrue(materials.all { it is org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient })
+        assertTrue(materials.drop(1).all { it === materials.first() })
+        assertEquals(
+            listOf(
+                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(6, 14, 58, 18),
+                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(6, 46, 58, 50),
+                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(6, 18, 10, 46),
+                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(54, 18, 58, 46),
+            ),
+            inventory.visualCommands.map { visual ->
+                val fill = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(
+                    fill.rect.left.toInt(), fill.rect.top.toInt(), fill.rect.right.toInt(), fill.rect.bottom.toInt(),
+                )
+            },
+        )
     }
 
     @Test

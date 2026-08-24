@@ -62,6 +62,39 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `public Surface render paints clamp gradient stroke annulus and preserves transparent center`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val surface = Surface(width = 64, height = 64)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                        listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
+                    ),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(4, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertTrue(rgba(result.pixels, 8, 16, 64)[3] > 0)
+            assertTrue(rgba(result.pixels, 55, 47, 64)[3] > 0)
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 4, 4, 64))
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `public Surface render submits bounded linear radial and sweep CorePrimitive gradients`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)

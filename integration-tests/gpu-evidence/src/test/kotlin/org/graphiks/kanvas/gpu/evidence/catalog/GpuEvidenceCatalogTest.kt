@@ -27,7 +27,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates thirteen public surface renders from three refusals`() {
+    fun `catalog separates fourteen public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -40,10 +40,9 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal",
+                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
-                "gradient-stroke-refusal",
             ),
             cases.map { it.descriptor.id.value },
         )
@@ -57,12 +56,12 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal",
+                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "gradient-stroke-refusal"),
+            listOf("custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -70,7 +69,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(13) { "kanvas.surface.render" },
+            List(14) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -123,7 +122,7 @@ class GpuEvidenceCatalogTest {
         assertIs<KanvasSurfaceProgram>(strokeRect.program)
         assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(strokeRect.program).routeId)
 
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
             assertEquals(64, evidenceCase.descriptor.width)
             assertEquals(64, evidenceCase.descriptor.height)
@@ -144,8 +143,9 @@ class GpuEvidenceCatalogTest {
                 "sweep-gradient-partial-angle" to "surface-srgb-gradient-sweep-clamp",
                 "scissored-radial-gradient" to "surface-srgb-gradient-radial-clamp",
                 "repeat-gradient-refusal" to "surface-srgb-gradient-linear-repeat",
+                "gradient-stroke-refusal" to "surface-srgb-gradient-linear-clamp-stroke-bands",
             ),
-            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").associateWith { id ->
+            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
                 (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
             },
         )
@@ -161,13 +161,6 @@ class GpuEvidenceCatalogTest {
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)
         assertEquals(null, budget.oracle)
-        mapOf("gradient-stroke-refusal" to "unsupported.stroke.rect_material").forEach { (id, code) ->
-            val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
-            assertIs<KanvasSurfaceProgram>(evidenceCase.program)
-            assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId)
-            assertEquals(code, assertIs<EvidenceExpectation.ShouldRefuse>(evidenceCase.descriptor.expectation).stableReasonCode)
-            assertEquals(OraclePolicy.StableRefusal, evidenceCase.descriptor.oracle); assertEquals(null, evidenceCase.oracle)
-        }
     }
 
     @Test
@@ -181,7 +174,7 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
-            "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal",
+            "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
         )
         assertEquals(
             expectedRenderIds.associateWith { "kanvas.surface.render" },
@@ -198,7 +191,7 @@ class GpuEvidenceCatalogTest {
                 evidenceCase.descriptor.id.value to assertIs<RoutedSceneProgram>(evidenceCase.program).routeId
             },
         )
-        assertEquals(mapOf("gradient-stroke-refusal" to "kanvas.surface.render"), GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { it.descriptor.id.value to assertIs<KanvasSurfaceProgram>(it.program).routeId })
+        assertTrue(GpuEvidenceCatalog.refusalCases.none { it.program is KanvasSurfaceProgram })
 
         assertEquals(
             mapOf(
@@ -215,6 +208,7 @@ class GpuEvidenceCatalogTest {
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
                 "scissored-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "repeat-gradient-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-repeat", 2),
+                "gradient-stroke-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-stroke-bands", 1),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -235,12 +229,34 @@ class GpuEvidenceCatalogTest {
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
                 "scissored-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "repeat-gradient-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "gradient-stroke-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent four-band coverage with device-coordinate clamp linear-gradient sampling and one-LSB RGBA8 tolerance."),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
             },
         )
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.oracle == OraclePolicy.StableRefusal && it.oracle == null })
+    }
+
+    @Test
+    fun `gradient stroke public case is a 64 pixel clamp annulus with an independent oracle`() {
+        val evidenceCase = assertNotNull(
+            GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == "gradient-stroke-refusal" },
+        )
+        assertEquals(64, evidenceCase.descriptor.width)
+        assertEquals(64, evidenceCase.descriptor.height)
+        assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
+        assertEquals(
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-stroke-bands", 1),
+            evidenceCase.descriptor.oracle,
+        )
+        assertEquals(1, evidenceCase.descriptor.comparison?.perChannelTolerance)
+        val pixels = assertNotNull(evidenceCase.oracle).render(64, 64)
+
+        assertTrue(rgba(pixels, 8, 16, 64)[3] > 0)
+        assertTrue(rgba(pixels, 55, 47, 64)[3] > 0)
+        assertEquals(listOf(0, 0, 0, 0), rgba(pixels, 32, 32, 64))
+        assertEquals(listOf(0, 0, 0, 0), rgba(pixels, 4, 4, 64))
     }
 
     @Test
@@ -424,7 +440,7 @@ class GpuEvidenceCatalogTest {
                 ),
                 Matrix3x3F32.Identity, ClipStack.WideOpen,
             )),
-            refusalOps("gradient-stroke-refusal"),
+            ops("gradient-stroke-refusal"),
         )
     }
 
@@ -434,10 +450,9 @@ class GpuEvidenceCatalogTest {
         return session.snapshotOps()
     }
 
-    private fun refusalOps(id: String): List<DisplayOp> {
-        val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.refusalCases.first { it.descriptor.id.value == id }.program)
-        val session = assertIs<KanvasSurfaceRecordedSession>(program.openSession(16, 16))
-        return session.snapshotOps()
+    private fun rgba(pixels: ByteArray, x: Int, y: Int, width: Int): List<Int> {
+        val offset = (y * width + x) * 4
+        return (0..3).map { pixels[offset + it].toInt() and 0xff }
     }
 
     @Test
