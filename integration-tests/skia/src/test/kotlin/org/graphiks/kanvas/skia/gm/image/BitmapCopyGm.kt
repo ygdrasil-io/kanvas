@@ -7,6 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.math.color.ColorARGB
@@ -58,7 +59,7 @@ class BitmapCopyGm : SkiaGm {
 
             canvas.translate(0f, vertOffset)
             val tx = (cellW - 40f) / 2f
-            val img = dstBms[i].toImage()
+            val img = dstBms[i].toImageForGm()
             canvas.drawImage(img, RectF32(tx, 0f, tx + 40f, 40f))
             canvas.restore()
 

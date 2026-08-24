@@ -6,6 +6,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
@@ -36,15 +37,15 @@ class Format4444Gm : SkiaGm {
         val bm = Bitmap(1, 1, ColorType.ARGB_4444)
 
         bm.eraseColor(ColorARGB.Red)
-        canvas.drawImage(bm.toImage(), RectF32(0f, 0f, 1f, 1f))
+        canvas.drawImage(bm.toImageForGm(), RectF32(0f, 0f, 1f, 1f))
 
         bm.eraseColor(ColorARGB.Blue)
-        canvas.drawImage(bm.toImage(), RectF32(1f, 1f, 2f, 2f))
+        canvas.drawImage(bm.toImageForGm(), RectF32(1f, 1f, 2f, 2f))
 
         bm.setPixel(0, 0, ColorARGB.Red)
-        canvas.drawImage(bm.toImage(), RectF32(2f, 2f, 3f, 3f))
+        canvas.drawImage(bm.toImageForGm(), RectF32(2f, 2f, 3f, 3f))
 
         bm.setPixel(0, 0, ColorARGB.fromRGBA(0f, 0f, 1f, 1f))
-        canvas.drawImage(bm.toImage(), RectF32(3f, 3f, 4f, 4f))
+        canvas.drawImage(bm.toImageForGm(), RectF32(3f, 3f, 4f, 4f))
     }
 }

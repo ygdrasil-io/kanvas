@@ -32,8 +32,8 @@ class Strokes3Gm : SkiaGm {
         canvas.translate(20f, 80f)
 
         val bounds = RectF32.ofOriginSize(0f, 0f, 50f, 50f)
-        val dx = bounds.width * 4f / 3f
-        val dy = bounds.height * 5f
+        val dx = bounds.width() * 4f / 3f
+        val dy = bounds.height() * 5f
 
         for (i in 0 until 6) {
             val orig = makeProc(i, bounds)
@@ -57,19 +57,19 @@ class Strokes3Gm : SkiaGm {
         3 -> Path { }.apply { addOval(bounds); addOval(insetRect(bounds)); fillType = FillType.EVEN_ODD }
         4 -> {
             val r = RectF32.ofLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
-            val ir = r.let { RectF32.ofLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
+            val ir = r.let { RectF32.ofLTRB(it.left + it.width() / 10f, it.top - it.height() / 10f, it.right - it.width() / 10f, it.bottom + it.height() / 10f) }
             Path { }.apply { addRect(bounds); addOval(ir) }
         }
         else -> {
             val r = RectF32.ofLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom)
-            val ir = r.let { RectF32.ofLTRB(it.left + it.width / 10f, it.top - it.height / 10f, it.right - it.width / 10f, it.bottom + it.height / 10f) }
+            val ir = r.let { RectF32.ofLTRB(it.left + it.width() / 10f, it.top - it.height() / 10f, it.right - it.width() / 10f, it.bottom + it.height() / 10f) }
             Path { }.apply { addRect(bounds); addOval(ir); fillType = FillType.EVEN_ODD }
         }
     }
 
     private fun insetRect(r: RectF32): RectF32 {
-        val dw = r.width / 10f
-        val dh = r.height / 10f
+        val dw = r.width() / 10f
+        val dh = r.height() / 10f
         return RectF32.ofLTRB(r.left + dw, r.top + dh, r.right - dw, r.bottom - dh)
     }
 }

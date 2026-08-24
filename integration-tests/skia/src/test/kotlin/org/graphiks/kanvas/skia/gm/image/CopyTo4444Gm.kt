@@ -7,6 +7,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -38,7 +39,7 @@ class CopyTo4444Gm : SkiaGm {
         canvas.drawImage(image, RectF32(0f, 0f, image.width.toFloat(), image.height.toFloat()))
 
         val bm4444 = copyTo4444(image)
-        val image4444 = bm4444.toImage()
+        val image4444 = bm4444.toImageForGm()
         canvas.drawImage(
             image4444,
             RectF32(

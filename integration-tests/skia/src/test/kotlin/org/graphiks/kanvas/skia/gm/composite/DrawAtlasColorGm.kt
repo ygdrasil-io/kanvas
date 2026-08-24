@@ -8,6 +8,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.math.color.ColorARGB
@@ -83,7 +84,7 @@ class DrawAtlasColorGm : SkiaGm {
                 bitmap.setPixel(x, y, ColorARGB.Transparent)
             }
         }
-        return bitmap.toImage()
+        return bitmap.toImageForGm()
     }
 
     private companion object {

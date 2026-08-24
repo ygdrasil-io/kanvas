@@ -9,6 +9,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.toImageForGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontEdging
@@ -34,7 +35,7 @@ class NotNative32BitmapConfigGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         drawCheckerboard(canvas)
-        canvas.drawImage(makeNotNative32ColorWheel().toImage(), RectF32.ofOriginSize(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
+        canvas.drawImage(makeNotNative32ColorWheel().toImageForGm(), RectF32.ofOriginSize(0f, 0f, SCALE.toFloat(), SCALE.toFloat()))
     }
 
     private fun drawCheckerboard(canvas: GmCanvas) {

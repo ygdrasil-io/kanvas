@@ -72,7 +72,7 @@ class RectPolyStrokeGm : SkiaGm {
                     canvas.save()
                     for ((proc, color) in procs) {
                         canvas.save()
-                        val pivot = Matrix3x3F32.translation(r.center.x, r.center.y) * Matrix3x3F32.rotation(angle) * Matrix3x3F32.translation(-r.center.x, -r.center.y)
+                        val pivot = Matrix3x3F32.translation(r.center().x, r.center().y) * Matrix3x3F32.rotation(angle) * Matrix3x3F32.translation(-r.center().x, -r.center().y)
                         canvas.concat(pivot)
                         paint = paint.copy(strokeWidth = THICKNESS, color = color)
                         proc(canvas, r, paint)
