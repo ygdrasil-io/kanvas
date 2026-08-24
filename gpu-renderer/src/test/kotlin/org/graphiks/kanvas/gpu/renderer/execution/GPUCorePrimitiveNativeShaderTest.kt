@@ -152,7 +152,8 @@ class GPUCorePrimitiveNativeShaderTest {
                 assertContains(source, "let distance = length(position - center);")
             } else {
                 assertContains(source, "let angle = atan2(position.y - center.y, position.x - center.x);")
-                assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
+                assertContains(source, "let normalized_start_angle = fract(start_angle / 6.28318530718);")
+                assertContains(source, "var normalized_angle = fract(angle / 6.28318530718);")
             }
             assertContains(source, "clamp(t_raw, 0.0, 1.0)")
             assertContains(source, "sample_stops_at")
@@ -181,18 +182,30 @@ class GPUCorePrimitiveNativeShaderTest {
     }
 
     @Test
-    fun `sweep gradient shader normalizes negative angles before span math`() {
-        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
-            buildCorePrimitiveGradientNativeShader(
-                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
-            ),
-        ).plan.wgslSource
+    fun `direct and analytic sweep shaders normalize absolute turns and unfold zero crossings`() {
+        listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
+        ).forEach { variant ->
+            val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+                buildCorePrimitiveGradientNativeShader(variant),
+            )
+            val source = ready.plan.wgslSource
 
-        assertContains(source, "let start_angle = gradient.angle_range.x * 0.0174532925199433;")
-        assertContains(source, "let end_angle = gradient.angle_range.y * 0.0174532925199433;")
-        assertContains(source, "let normalized_angle = fract((angle - start_angle) / 6.28318530718);")
-        assertFalse(source.contains("normalized_angle = normalized_angle + 1.0"))
-        assertContains(source, "let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);")
+            assertTrue(requireNotNull(ready.plan.wgslReflection).report.validation.success)
+            assertContains(source, "let start_angle = gradient.angle_range.x * 0.0174532925199433;")
+            assertContains(source, "let end_angle = gradient.angle_range.y * 0.0174532925199433;")
+            assertContains(source, "let normalized_start_angle = fract(start_angle / 6.28318530718);")
+            assertContains(source, "let normalized_end_angle = fract(end_angle / 6.28318530718);")
+            assertContains(source, "var normalized_angle = fract(angle / 6.28318530718);")
+            assertContains(
+                source,
+                "if ((normalized_end_angle < normalized_start_angle || span >= 1.0) && normalized_angle < normalized_start_angle) {",
+            )
+            assertContains(source, "normalized_angle = normalized_angle + 1.0;")
+            assertContains(source, "let t_raw = (normalized_angle - normalized_start_angle) / span;")
+            assertFalse(source.contains("fract((angle - start_angle) / 6.28318530718)"))
+        }
     }
 
     @Test

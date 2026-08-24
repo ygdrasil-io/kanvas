@@ -303,9 +303,14 @@ private fun corePrimitiveGradientNativeWgsl(
         let start_angle = gradient.angle_range.x * 0.0174532925199433;
         let end_angle = gradient.angle_range.y * 0.0174532925199433;
         let angle = atan2(position.y - center.y, position.x - center.x);
-        let normalized_angle = fract((angle - start_angle) / 6.28318530718);
         let span = max((end_angle - start_angle) / 6.28318530718, 0.000001);
-        let t_raw = normalized_angle / span;
+        let normalized_start_angle = fract(start_angle / 6.28318530718);
+        let normalized_end_angle = fract(end_angle / 6.28318530718);
+        var normalized_angle = fract(angle / 6.28318530718);
+        if ((normalized_end_angle < normalized_start_angle || span >= 1.0) && normalized_angle < normalized_start_angle) {
+            normalized_angle = normalized_angle + 1.0;
+        }
+        let t_raw = (normalized_angle - normalized_start_angle) / span;
         """.trimIndent()
     }
     val shapeFields = if (analytic) {
