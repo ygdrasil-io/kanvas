@@ -134,7 +134,7 @@ class SurfaceSrgbGradientCpuOracle private constructor(
             require(sweep in 0.0..360.0) { "sweep span must be in [0, 360] degrees" }
             val startDegrees = positiveDegrees(startAngle.toDouble())
             val endDegrees = positiveDegrees(endAngle.toDouble())
-            val wrapsZero = sweep > 0.0 && endDegrees < startDegrees
+            val wrapsZero = sweep == 360.0 || (sweep > 0.0 && endDegrees < startDegrees)
             return SurfaceSrgbGradientCpuOracle(drawBounds, stops.toList()) { x, y ->
                 if (sweep == 0.0 || (x == center.x.toDouble() && y == center.y.toDouble())) 0.0 else {
                     var degrees = positiveDegrees(atan2(y - center.y, x - center.x) * 180.0 / PI)

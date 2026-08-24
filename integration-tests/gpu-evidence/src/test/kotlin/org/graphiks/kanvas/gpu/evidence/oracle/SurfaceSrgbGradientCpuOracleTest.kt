@@ -104,6 +104,31 @@ class SurfaceSrgbGradientCpuOracleTest {
     }
 
     @Test
+    fun `shifted full-turn sweeps unwrap angles below their normalized starts`() {
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 5f, 5f)
+        val center = SurfaceSrgbGradientCpuOracle.Point(2.5f, 2.5f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 0, 0),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 0, 0, 255),
+        )
+
+        val fortyFiveToFourOhFive = SurfaceSrgbGradientCpuOracle.sweep(bounds, center, 45f, 405f, stops).render(5, 5)
+        // East is below the normalized 45° start and unfolds to 360°; south
+        // and north are cardinal interpolations on the same full turn.
+        assertPixel(fortyFiveToFourOhFive, 5, 3, 2, intArrayOf(99, 0, 240, 255))
+        assertPixel(fortyFiveToFourOhFive, 5, 2, 3, intArrayOf(240, 0, 99, 255))
+        assertPixel(fortyFiveToFourOhFive, 5, 2, 1, intArrayOf(165, 0, 207, 255))
+
+        val minusNinetyToTwoSeventy = SurfaceSrgbGradientCpuOracle.sweep(bounds, center, -90f, 270f, stops).render(5, 5)
+        // North is the start; east crosses zero to 360°, then south and west
+        // are the literal quarter, half, and three-quarter cardinal samples.
+        assertPixel(minusNinetyToTwoSeventy, 5, 2, 1, intArrayOf(255, 0, 0, 255))
+        assertPixel(minusNinetyToTwoSeventy, 5, 3, 2, intArrayOf(225, 0, 137, 255))
+        assertPixel(minusNinetyToTwoSeventy, 5, 2, 3, intArrayOf(188, 0, 188, 255))
+        assertPixel(minusNinetyToTwoSeventy, 5, 1, 2, intArrayOf(137, 0, 225, 255))
+    }
+
+    @Test
     fun `sweep accepts only spans from zero through one full turn`() {
         val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 1f, 1f)
         val center = SurfaceSrgbGradientCpuOracle.Point(0.5f, 0.5f)
