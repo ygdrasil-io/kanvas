@@ -234,9 +234,14 @@ enum class GPUPreparedMaterialUnsupportedReason(
     ),
 }
 
-/** Returns the prepared-material refusal reason for radial/sweep facts not consumed by dispatch. */
+/** Returns the prepared-material refusal reason for gradient facts not consumed by dispatch. */
 fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
+        is GPUMaterialDescriptor.LinearGradient -> when {
+            interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
+            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            else -> null
+        }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
             localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
@@ -668,8 +673,8 @@ sealed interface GPUMaterialDescriptor {
         override fun hashCode(): Int = 31 * interpolation.hashCode() + localMatrix.hashCode()
     }
 
-    /** Linear gradient descriptor with start/end colors and tile mode for the first GPU expansion slice. */
-    data class LinearGradient(
+    /** Linear gradient descriptor with immutable stop and interpolation facts. */
+    class LinearGradient private constructor(
         val startX: Float,
         val startY: Float,
         val endX: Float,
@@ -682,12 +687,145 @@ sealed interface GPUMaterialDescriptor {
         val endG: Float,
         val endB: Float,
         val endA: Float,
-        val tileMode: String = "clamp",
-        val allStopPositions: FloatArray? = null,
-        val allStopColors: FloatArray? = null,
+        val tileMode: String,
+        stopPositions: FloatArray?,
+        stopColors: FloatArray?,
         val snippetSourceHash: String? = null,
         val fragmentEntryPoint: String? = null,
+        private val gradientFactsSnapshot: GradientFacts,
     ) : GPUMaterialDescriptor {
+        private val allStopPositionsSnapshot: FloatArray? = stopPositions?.copyOf()
+        private val allStopColorsSnapshot: FloatArray? = stopColors?.copyOf()
+
+        val allStopPositions: FloatArray?
+            get() = allStopPositionsSnapshot?.copyOf()
+
+        val allStopColors: FloatArray?
+            get() = allStopColorsSnapshot?.copyOf()
+
+        constructor(
+            startX: Float,
+            startY: Float,
+            endX: Float,
+            endY: Float,
+            startR: Float,
+            startG: Float,
+            startB: Float,
+            startA: Float,
+            endR: Float,
+            endG: Float,
+            endB: Float,
+            endA: Float,
+            tileMode: String = "clamp",
+            allStopPositions: FloatArray? = null,
+            allStopColors: FloatArray? = null,
+            snippetSourceHash: String? = null,
+            fragmentEntryPoint: String? = null,
+        ) : this(
+            startX, startY, endX, endY,
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+            tileMode, allStopPositions, allStopColors, snippetSourceHash, fragmentEntryPoint,
+            GradientFacts(),
+        )
+
+        val interpolation: String
+            get() = gradientFactsSnapshot.interpolation
+
+        val localMatrix: List<Float>
+            get() = gradientFactsSnapshot.localMatrix
+
+        fun withGradientFacts(facts: GradientFacts): LinearGradient = LinearGradient(
+            startX, startY, endX, endY,
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+            tileMode, allStopPositionsSnapshot, allStopColorsSnapshot, snippetSourceHash, fragmentEntryPoint,
+            GradientFacts(facts.interpolation, facts.localMatrix),
+        )
+
+        fun copy(
+            startX: Float = this.startX,
+            startY: Float = this.startY,
+            endX: Float = this.endX,
+            endY: Float = this.endY,
+            startR: Float = this.startR,
+            startG: Float = this.startG,
+            startB: Float = this.startB,
+            startA: Float = this.startA,
+            endR: Float = this.endR,
+            endG: Float = this.endG,
+            endB: Float = this.endB,
+            endA: Float = this.endA,
+            tileMode: String = this.tileMode,
+            allStopPositions: FloatArray? = allStopPositionsSnapshot,
+            allStopColors: FloatArray? = allStopColorsSnapshot,
+            snippetSourceHash: String? = this.snippetSourceHash,
+            fragmentEntryPoint: String? = this.fragmentEntryPoint,
+        ): LinearGradient = LinearGradient(
+            startX, startY, endX, endY,
+            startR, startG, startB, startA,
+            endR, endG, endB, endA,
+            tileMode, allStopPositions, allStopColors, snippetSourceHash, fragmentEntryPoint,
+            gradientFactsSnapshot,
+        )
+
+        operator fun component1(): Float = startX
+        operator fun component2(): Float = startY
+        operator fun component3(): Float = endX
+        operator fun component4(): Float = endY
+        operator fun component5(): Float = startR
+        operator fun component6(): Float = startG
+        operator fun component7(): Float = startB
+        operator fun component8(): Float = startA
+        operator fun component9(): Float = endR
+        operator fun component10(): Float = endG
+        operator fun component11(): Float = endB
+        operator fun component12(): Float = endA
+        operator fun component13(): String = tileMode
+        operator fun component14(): FloatArray? = allStopPositions
+        operator fun component15(): FloatArray? = allStopColors
+        operator fun component16(): String? = snippetSourceHash
+        operator fun component17(): String? = fragmentEntryPoint
+
+        override fun equals(other: Any?): Boolean = this === other || (
+            other is LinearGradient &&
+                startX.rawBitsEqual(other.startX) && startY.rawBitsEqual(other.startY) &&
+                endX.rawBitsEqual(other.endX) && endY.rawBitsEqual(other.endY) &&
+                startR.rawBitsEqual(other.startR) && startG.rawBitsEqual(other.startG) &&
+                startB.rawBitsEqual(other.startB) && startA.rawBitsEqual(other.startA) &&
+                endR.rawBitsEqual(other.endR) && endG.rawBitsEqual(other.endG) &&
+                endB.rawBitsEqual(other.endB) && endA.rawBitsEqual(other.endA) &&
+                tileMode == other.tileMode &&
+                allStopPositionsSnapshot.contentEqualsRawBitsNullable(other.allStopPositionsSnapshot) &&
+                allStopColorsSnapshot.contentEqualsRawBitsNullable(other.allStopColorsSnapshot) &&
+                snippetSourceHash == other.snippetSourceHash &&
+                fragmentEntryPoint == other.fragmentEntryPoint &&
+                gradientFactsSnapshot == other.gradientFactsSnapshot
+            )
+
+        override fun hashCode(): Int {
+            var result = startX.toRawBits()
+            result = 31 * result + startY.toRawBits()
+            result = 31 * result + endX.toRawBits()
+            result = 31 * result + endY.toRawBits()
+            result = 31 * result + startR.toRawBits()
+            result = 31 * result + startG.toRawBits()
+            result = 31 * result + startB.toRawBits()
+            result = 31 * result + startA.toRawBits()
+            result = 31 * result + endR.toRawBits()
+            result = 31 * result + endG.toRawBits()
+            result = 31 * result + endB.toRawBits()
+            result = 31 * result + endA.toRawBits()
+            result = 31 * result + tileMode.hashCode()
+            result = 31 * result + (allStopPositionsSnapshot?.rawBitsContentHashCode() ?: 0)
+            result = 31 * result + (allStopColorsSnapshot?.rawBitsContentHashCode() ?: 0)
+            result = 31 * result + (snippetSourceHash?.hashCode() ?: 0)
+            result = 31 * result + (fragmentEntryPoint?.hashCode() ?: 0)
+            return 31 * result + gradientFactsSnapshot.hashCode()
+        }
+
+        override fun toString(): String = GPUMaterialDescriptorCanonicalizer().text(this)
+
         override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
     }
 
@@ -2171,10 +2309,7 @@ private class GPUMaterialDescriptorSnapshotter {
         snapshotCount += 1
         val result = when (descriptor) {
             is GPUMaterialDescriptor.SolidColor -> descriptor.copy()
-            is GPUMaterialDescriptor.LinearGradient -> descriptor.copy(
-                allStopPositions = descriptor.allStopPositions?.copyOf(),
-                allStopColors = descriptor.allStopColors?.copyOf(),
-            )
+            is GPUMaterialDescriptor.LinearGradient -> descriptor.copy()
             is GPUMaterialDescriptor.RadialGradient -> descriptor.copy(
                 allStopPositions = descriptor.allStopPositions?.copyOf(),
                 allStopColors = descriptor.allStopColors?.copyOf(),
@@ -2307,10 +2442,7 @@ private class GPUMaterialDescriptorEquality {
                 left == right
             left is GPUMaterialDescriptor.LinearGradient &&
                 right is GPUMaterialDescriptor.LinearGradient ->
-                left.copy(allStopPositions = null, allStopColors = null) ==
-                    right.copy(allStopPositions = null, allStopColors = null) &&
-                    left.allStopPositions.contentEqualsRawBitsNullable(right.allStopPositions) &&
-                    left.allStopColors.contentEqualsRawBitsNullable(right.allStopColors)
+                left == right
             left is GPUMaterialDescriptor.RadialGradient &&
                 right is GPUMaterialDescriptor.RadialGradient ->
                 left.copy(allStopPositions = null, allStopColors = null) ==
@@ -2430,14 +2562,7 @@ private class GPUMaterialDescriptorHasher {
         hashes[descriptor]?.let { return it }
         val result = when (descriptor) {
             is GPUMaterialDescriptor.SolidColor -> descriptor.hashCode()
-            is GPUMaterialDescriptor.LinearGradient ->
-                31 * (
-                    31 * descriptor.copy(
-                        allStopPositions = null,
-                        allStopColors = null,
-                    ).hashCode() +
-                        (descriptor.allStopPositions?.rawBitsContentHashCode() ?: 0)
-                    ) + (descriptor.allStopColors?.rawBitsContentHashCode() ?: 0)
+            is GPUMaterialDescriptor.LinearGradient -> descriptor.hashCode()
             is GPUMaterialDescriptor.RadialGradient ->
                 31 * (
                     31 * descriptor.copy(
@@ -2571,6 +2696,8 @@ private class GPUMaterialDescriptorCanonicalizer {
                     "tileMode=${descriptor.tileMode.canonicalValue()}, " +
                     "positions=${descriptor.allStopPositions.canonicalValue()}, " +
                     "colors=${descriptor.allStopColors.canonicalValue()}, " +
+                    "interpolation=${descriptor.interpolation.canonicalValue()}, " +
+                    "localMatrix=${descriptor.localMatrix.canonicalFloatList()}, " +
                     "snippetSourceHash=${descriptor.snippetSourceHash.canonicalNullableValue()}, " +
                     "fragmentEntryPoint=${descriptor.fragmentEntryPoint.canonicalNullableValue()}" +
                     ")"
@@ -2815,7 +2942,7 @@ private fun GPUMaterialDescriptor.ConicalGradient.endColorCanonicalValue(): Stri
         "${endB.canonicalValue()},${endA.canonicalValue()})"
 
 private fun Float.canonicalValue(): String =
-    Integer.toUnsignedString(java.lang.Float.floatToIntBits(this), 16)
+    Integer.toUnsignedString(toRawBits(), 16)
         .padStart(8, '0')
 
 private fun FloatArray?.canonicalValue(): String =

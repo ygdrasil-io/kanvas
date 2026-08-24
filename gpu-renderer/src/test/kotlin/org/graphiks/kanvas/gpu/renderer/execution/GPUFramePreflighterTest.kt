@@ -98,12 +98,15 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -123,6 +126,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveGradientBindingLayoutHash
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveClipProducerPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDepthStencilByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
@@ -537,6 +541,216 @@ class GPUFramePreflighterTest {
             )
             assertTrue(events.isEmpty(), "pure validation side effects: $events")
         }
+    }
+
+    @Test
+    fun `gradient core semantic envelopes admit only matching radial and sweep steps`() {
+        val accepted = listOf(
+            "radial.gradient.fill" to radialGradientMaterial(),
+            "sweep.gradient.fill" to sweepGradientMaterial(),
+        )
+        accepted.forEach { (renderStepIdentity, material) ->
+            val result = preflightPreparedGradientEnvelope(
+                material = material,
+                renderStepIdentity = renderStepIdentity,
+            )
+            assertIs<GPUFramePreflightResult.Prepared>(
+                result,
+                (result as? GPUFramePreflightResult.Refused)?.diagnostic.toString(),
+            )
+        }
+
+        val radial = coreSemantic(material = radialGradientMaterial())
+        val sweep = coreSemantic(material = sweepGradientMaterial())
+        listOf(
+            "rect.fill.coverage" to radial,
+            "linear.gradient.fill" to radial,
+            "radial.gradient.fill" to sweep,
+            "sweep.gradient.fill" to radial,
+            "radial.gradient.fill" to radial.withPayloadRenderStepIdentity("forged.gradient.step"),
+        ).forEach { (renderStepIdentity, semantic) ->
+            val result = preflightGradientEnvelope(semantic, renderStepIdentity)
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `radial and sweep gradient steps require core semantic envelopes before side effects`() {
+        val gradients = listOf(
+            "radial.gradient.fill" to radialGradientMaterial(),
+            "sweep.gradient.fill" to sweepGradientMaterial(),
+        )
+        gradients.forEach { (renderStepIdentity, material) ->
+            val missingEvents = mutableListOf<String>()
+            val missing = preflighter(
+                RecordingResourceProvider(missingEvents),
+                RecordingCompletionProvider(missingEvents),
+                RecordingSurfaceProvider(missingEvents),
+            ).preflight(
+                framePlan(listOf(prepareScene(), coreRenderStep(null, renderStepIdentity = renderStepIdentity))),
+            )
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_payload_missing",
+                assertIs<GPUFramePreflightResult.Refused>(missing).diagnostic.code.value,
+            )
+            assertTrue(missingEvents.isEmpty(), "missing $renderStepIdentity semantic produced side effects")
+
+            val render = coreRenderStep(
+                coreSemantic(material = material),
+                renderStepIdentity = renderStepIdentity,
+            )
+            val original = render.drawPackets.single()
+            val wrongType = cloneCorePacket(
+                original,
+                semanticPayload = solidSemantic(commandId = original.commandIdValue),
+            )
+            val wrongTypeEvents = mutableListOf<String>()
+            val wrongTypeResult = preflighter(
+                RecordingResourceProvider(wrongTypeEvents),
+                RecordingCompletionProvider(wrongTypeEvents),
+                RecordingSurfaceProvider(wrongTypeEvents),
+            ).preflight(
+                framePlan(listOf(prepareScene(), render)).replacingCorePacket(original, wrongType),
+            )
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                assertIs<GPUFramePreflightResult.Refused>(wrongTypeResult).diagnostic.code.value,
+            )
+            assertTrue(wrongTypeEvents.isEmpty(), "wrong $renderStepIdentity semantic produced side effects")
+        }
+    }
+
+    @Test
+    fun `split radial and sweep direct gradients retain one global slab then exact scope slices`() {
+        val capabilities = gradientCapabilities(radialGradientMaterial(), sweepGradientMaterial())
+        val plan = preparedSplitGradientFramePlan(capabilities)
+        val renders = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(2, renders.size)
+        val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val frameSeal = requireNotNull(packets.first().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertEquals(2, frameSeal.plan.slots.size)
+        assertEquals(packets.map { it.commandIdValue }, frameSeal.commandIds)
+        assertTrue(frameSeal.plan.slots.all { it.payloadBytes == CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toLong() })
+        packets.forEach { packet ->
+            assertSame(frameSeal, packet.corePrimitivePreparedAuthority?.uniformSlabSeal)
+        }
+
+        val result = preflightGradientPlan(plan, capabilities)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}"
+            },
+        ).frame
+        renders.forEach { render ->
+            val scope = prepared.encoderPlan.scopes.single { scope ->
+                scope.sourceStepIndex == plan.steps.indexOf(render)
+            }
+            val scopeSeal = requireNotNull(
+                assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                    scope.corePrimitiveDirectNativeRouteSeal,
+                ).preparedPassSeal?.uniformSlabSeal,
+            )
+            assertEquals(render.drawPackets.map { it.commandIdValue }, scopeSeal.commandIds)
+            assertEquals(1, scopeSeal.plan.slots.size)
+            assertEquals(0L, scopeSeal.plan.slots.single().alignedOffset)
+            assertEquals(
+                CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toLong(),
+                scopeSeal.plan.slots.single().payloadBytes,
+            )
+        }
+
+        val forged = listOf(
+            GPUCorePrimitiveUniformSlabSeal(
+                frameSeal.plan,
+                frameSeal.commandIds.reversed(),
+                frameSeal.packedBytesSnapshot(),
+            ),
+            GPUCorePrimitiveUniformSlabSeal(
+                frameSeal.plan.copyForTest(
+                    slots = frameSeal.plan.slots.mapIndexed { index, slot ->
+                        slot.copy(slotLabel = "forged-slot-$index")
+                    },
+                ),
+                frameSeal.commandIds,
+                frameSeal.packedBytesSnapshot(),
+            ),
+            GPUCorePrimitiveUniformSlabSeal(
+                frameSeal.plan.copyForTest(sourceLabel = "forged-gradient-plan"),
+                frameSeal.commandIds,
+                frameSeal.packedBytesSnapshot(),
+            ),
+            GPUCorePrimitiveUniformSlabSeal(
+                frameSeal.plan,
+                frameSeal.commandIds,
+                frameSeal.packedBytesSnapshot().apply { this[0] = (this[0].toInt() xor 1).toByte() },
+            ),
+        )
+        forged.forEach { seal ->
+            val forgedPlan = packets.fold(plan) { current, packet ->
+                current.replacingCorePacket(packet, cloneCorePacket(packet, uniformSlabSeal = seal))
+            }
+            val refused = assertIs<GPUFramePreflightResult.Refused>(
+                preflightGradientPlan(forgedPlan, capabilities),
+            ).diagnostic
+            assertEquals(
+                "invalid.preflight.core_primitive_direct_geometry_resources",
+                refused.code.value,
+            )
+            assertEquals(
+                "Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.",
+                refused.message,
+            )
+        }
+    }
+
+    @Test
+    fun `mixed direct solid and radial retain one global legacy slab then exact scope slices`() {
+        val capabilities = gradientCapabilities(radialGradientMaterial())
+        val plan = preparedMixedSolidRadialFramePlan(capabilities)
+        val renders = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(2, renders.size)
+        val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val frameSeal = requireNotNull(packets.first().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertEquals(packets.map { it.commandIdValue }, frameSeal.commandIds)
+        assertEquals(2, frameSeal.plan.slots.size)
+        assertEquals(32L, frameSeal.plan.slots[0].payloadBytes)
+        assertEquals(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toLong(), frameSeal.plan.slots[1].payloadBytes)
+        packets.forEach { packet ->
+            assertSame(frameSeal, packet.corePrimitivePreparedAuthority?.uniformSlabSeal)
+        }
+
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            preflightGradientPlan(plan, capabilities),
+        ).frame
+        renders.forEach { render ->
+            val scope = prepared.encoderPlan.scopes.single { scope ->
+                scope.sourceStepIndex == plan.steps.indexOf(render)
+            }
+            val scopeSeal = requireNotNull(
+                assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                    scope.corePrimitiveDirectNativeRouteSeal,
+                ).preparedPassSeal?.uniformSlabSeal,
+            )
+            assertEquals(render.drawPackets.map { it.commandIdValue }, scopeSeal.commandIds)
+            assertEquals(1, scopeSeal.plan.slots.size)
+            assertEquals(0L, scopeSeal.plan.slots.single().alignedOffset)
+        }
+
+        val forged = GPUCorePrimitiveUniformSlabSeal(
+            frameSeal.plan,
+            frameSeal.commandIds.reversed(),
+            frameSeal.packedBytesSnapshot(),
+        )
+        val forgedPlan = packets.fold(plan) { current, packet ->
+            current.replacingCorePacket(packet, cloneCorePacket(packet, uniformSlabSeal = forged))
+        }
+        assertIs<GPUFramePreflightResult.Refused>(
+            preflightGradientPlan(forgedPlan, capabilities),
+        )
     }
 
     @Test
@@ -5112,9 +5326,7 @@ class GPUFramePreflighterTest {
         )
         val uniform80PreflightValidation = directPreflight
             .substringAfter("Analytic shape packets must share one exact uniform80 slab plan.")
-            .substringBefore(
-                "val analyticClipSteps =",
-            )
+            .substringBefore("val legacyUniformLayouts =")
         assertFalse(
             uniform80PreflightValidation.contains("GPUUniformSlabPayload("),
             "uniform80 preflight must not create a second payload snapshot per draw",
@@ -5122,6 +5334,76 @@ class GPUFramePreflighterTest {
         assertFalse(
             uniform80PreflightValidation.contains(".hasExactPayloads("),
             "uniform80 preflight must validate exact bytes without repeating planner SHA-256 per draw",
+        )
+        val legacyPreflightValidation = directPreflight
+            .substringAfter("val legacyUniformLayouts =")
+            .substringBefore("val gradientAcceptedIndices =")
+        assertFalse(
+            legacyPreflightValidation.contains(".map {"),
+            "legacy slab preflight must not allocate a per-draw command or payload list",
+        )
+        assertFalse(
+            legacyPreflightValidation.contains(".toByteArray()"),
+            "legacy slab preflight must not rebuild packed uniform bytes",
+        )
+        assertFalse(
+            legacyPreflightValidation.contains("GPUUniformSlabPayload("),
+            "legacy slab preflight must not reconstruct planner payloads",
+        )
+        assertFalse(
+            legacyPreflightValidation.contains(".hasExactPayloads("),
+            "legacy slab preflight must not rehash a planner payload sequence",
+        )
+        assertFalse(
+            legacyPreflightValidation.contains(".indexOf("),
+            "legacy slab preflight must preindex accepted packets before gradient scope validation",
+        )
+        assertTrue(
+            legacyPreflightValidation.contains("legacyUniformAcceptedIndices"),
+            "legacy direct uniform validation must cover solid32 and gradient592 packets in one frame order",
+        )
+        assertTrue(
+            legacyPreflightValidation.contains("legacyUniformSlotByAcceptedIndex"),
+            "legacy direct uniform validation must preindex accepted packet slots once",
+        )
+        assertTrue(
+            legacyPreflightValidation.contains("seal.hasExactPayload("),
+            "legacy direct uniform validation must compare each immutable payload against its sealed packed range",
+        )
+        assertTrue(
+            legacyPreflightValidation.contains("seal.commandIds[slotIndex]"),
+            "legacy direct uniform validation must authenticate the complete frame command order before scope slicing",
+        )
+        val legacyAndGradientPreflightValidation = directPreflight
+            .substringAfter("val legacyUniformLayouts =")
+            .substringBefore("val analyticGradientSteps =")
+        assertEquals(
+            1,
+            Regex("""seal\.hasExactPayload\(""")
+                .findAll(legacyAndGradientPreflightValidation)
+                .count(),
+            "legacy gradient scope validation must reuse the frame seal authentication without rescanning payload bytes",
+        )
+        assertEquals(
+            2,
+            Regex("""hasCorePrimitiveSemanticEnvelopeIntegrity\(""")
+                .findAll(preflight)
+                .count(),
+            "one declaration and the global envelope gate must be the only full CorePrimitive semantic authentications",
+        )
+        val coverageMatrixValidation = preflight
+            .substringAfter("private fun validateCorePrimitiveCoverageSampleMatrix(")
+            .substringBefore("private fun validateCorePrimitiveSemanticEnvelopes(")
+        assertFalse(
+            coverageMatrixValidation.contains("hasCorePrimitiveSemanticEnvelopeIntegrity("),
+            "coverage validation must reuse the immutable envelope authority already authenticated for this frame",
+        )
+        val perPacketSemanticValidation = preflight
+            .substringAfter("private fun validateCorePrimitiveSemanticPayload(")
+            .substringBefore("private fun validateSolidRectSemanticPayload(")
+        assertFalse(
+            perPacketSemanticValidation.contains("hasCorePrimitiveSemanticEnvelopeIntegrity("),
+            "per-packet semantic validation must reuse the immutable envelope authority already authenticated for this frame",
         )
         assertTrue(
             builder.contains("val coverageMaskConsumerCommandIds ="),
@@ -8126,6 +8408,47 @@ class GPUFramePreflighterTest {
         diagnostics = diagnostics,
     )
 
+    private fun GPUTaskList.withCorePacketRenderStep(
+        commandId: Int,
+        renderStepIdentity: String,
+    ): GPUTaskList = GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks.map { task ->
+            if (task !is GPUTask.Render) return@map task
+            val packets = task.drawPackets.map { packet ->
+                if (packet.commandIdValue == commandId) {
+                    cloneCorePacket(packet, renderStepId = GPURenderStepID(renderStepIdentity))
+                } else {
+                    packet
+                }
+            }
+            GPUTask.Render(
+                task.taskId,
+                task.recordingId,
+                task.phase,
+                task.target,
+                task.loadStore,
+                task.samplePlan,
+                task.resourceUses,
+                task.provisionalSegmentKey,
+                packets,
+                packets.associate { packet ->
+                    packet.packetId to requireNotNull(task.batchEligibilityByPacketId[packet.packetId])
+                },
+                task.sampleContinuationKey,
+                task.compositeMembership,
+                task.depthStencilLoadStore,
+            )
+        },
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+    )
+
     private fun GPUTaskList.mergeCoreRenderTasks(): GPUTaskList {
         val renders = tasks.filterIsInstance<GPUTask.Render>()
         require(renders.isNotEmpty() && renders.size == tasks.size)
@@ -8272,6 +8595,7 @@ class GPUFramePreflighterTest {
         role: GPUDrawPacketRole = packet.role,
         commandIdValue: Int = packet.commandIdValue,
         analysisRecordId: String = packet.analysisRecordId,
+        renderStepId: GPURenderStepID = packet.renderStepId,
         blendPlan: GPUBlendPlan? = packet.blendPlan,
         renderPipelineKey: GPURenderPipelineKey = requireNotNull(packet.renderPipelineKey),
         scissorBoundsHash: String? = packet.scissorBoundsHash,
@@ -8308,7 +8632,7 @@ class GPUFramePreflighterTest {
             insertionReasonCode = packet.insertionReasonCode,
             sortKey = packet.sortKey,
             sortKeyPreimage = packet.sortKeyPreimage,
-            renderStepId = packet.renderStepId,
+            renderStepId = renderStepId,
             renderStepVersion = packet.renderStepVersion,
             role = role,
             blendPlan = blendPlan,
@@ -8669,6 +8993,7 @@ class GPUFramePreflighterTest {
         packetCommandIdValue: Int? = null,
         sampleContinuation: org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest? = null,
         depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
+        renderStepIdentity: String = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
     ): GPUFrameStep.RenderPassStep {
         val packet = GPUDrawPacket(
             packetId = GPUDrawPacketID(packetId),
@@ -8680,7 +9005,7 @@ class GPUFramePreflighterTest {
             insertionReasonCode = "ordered",
             sortKey = 1L,
             sortKeyPreimage = "paint-order:1",
-            renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
+            renderStepId = GPURenderStepID(renderStepIdentity),
             renderStepVersion = renderStepVersion,
             role = role,
             blendPlan = blendPlan,
@@ -9122,6 +9447,7 @@ class GPUFramePreflighterTest {
         geometry: GPUCorePrimitiveGeometryInput = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 3f, 3f),
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
         blendPlan: GPUBlendPlan? = null,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val blend = blendPlan ?: coreBlend(blendMode)
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
@@ -9130,6 +9456,7 @@ class GPUFramePreflighterTest {
                 sourceFamily = sourceFamily,
                 geometry = geometry,
                 premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                material = material,
                 targetBounds = GPUPixelBounds(0, 0, 4, 4),
                 scissorBounds = GPUPixelBounds(0, 0, 4, 4),
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
@@ -9165,6 +9492,245 @@ class GPUFramePreflighterTest {
             ),
         )
     }
+
+    private fun preflightGradientEnvelope(
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+        renderStepIdentity: String,
+    ): GPUFramePreflightResult {
+        val structuralKey = corePrimitiveRenderPipelineStructuralKey(
+            semantic,
+            GPUClipExecutionPlan.NoClip,
+            coreBlend(GPUBlendMode.SRC_OVER),
+            1,
+            GPUColorFormat.RGBA8Unorm.corePrimitiveStructuralColorFormat(),
+        )
+        val events = mutableListOf<String>()
+        return preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    coreDirectPrepare(uniformBytes = 1024L),
+                    coreRenderStep(
+                        semantic = semantic,
+                        bindingLayoutHash = requireNotNull(
+                            corePrimitiveGradientBindingLayoutHash(structuralKey.shader),
+                        ),
+                        renderStepIdentity = renderStepIdentity,
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private fun preflightPreparedGradientEnvelope(
+        material: GPUCorePrimitiveMaterialPayload,
+        renderStepIdentity: String,
+    ): GPUFramePreflightResult {
+        val plan = preparedGradientFramePlan(material, renderStepIdentity)
+        val packet = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single()
+            .drawPackets
+            .single()
+        val seal = requireNotNull(packet.corePrimitivePreparedAuthority?.uniformSlabSeal)
+        assertEquals(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES.toLong(), seal.plan.slots.single().payloadBytes)
+        return preflightGradientPlan(plan, gradientCapabilities(material))
+    }
+
+    private fun preflightGradientPlan(
+        plan: GPUFramePlan,
+        capabilities: GPUCapabilities,
+    ): GPUFramePreflightResult {
+        val events = mutableListOf<String>()
+        return preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = capabilities,
+        ).preflight(plan)
+    }
+
+    private fun preparedGradientFramePlan(
+        material: GPUCorePrimitiveMaterialPayload,
+        renderStepIdentity: String,
+    ): GPUFramePlan {
+        val commandId = 142
+        val capabilities = gradientCapabilities(material)
+        val base = GPURecorder(
+            GPURecordingID("recording.preflight.gradient.$commandId"),
+            GPUFrameID(142),
+            capabilities,
+        ).apply {
+            record(pathBuilderCommand(commandId, 0))
+        }.close().taskList
+            .withCoreClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip))
+            .withCorePacketRenderStep(commandId, renderStepIdentity)
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val prepared = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            GPUCorePrimitivePreparedFrameRequest(
+                baseTaskList = base,
+                capabilities = capabilities,
+                target = GPUFrameTargetRef("target.scene"),
+                targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                semanticsByCommandId = mapOf(
+                    commandId to coreSemantic(commandIdValue = commandId, material = material),
+                ),
+            ),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            prepared,
+            (prepared as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan ->
+            check(!plan.atomicallyRefused) { plan.diagnostics.joinToString { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}"
+            } }
+        }
+    }
+
+    private fun preparedSplitGradientFramePlan(capabilities: GPUCapabilities): GPUFramePlan {
+        val commands = listOf(
+            142 to ("radial.gradient.fill" to radialGradientMaterial()),
+            143 to ("sweep.gradient.fill" to sweepGradientMaterial()),
+        )
+        val base = GPURecorder(
+            GPURecordingID("recording.preflight.gradient-split"),
+            GPUFrameID(143),
+            capabilities,
+        ).apply {
+            commands.forEachIndexed { paintOrder, (commandId, _) ->
+                record(pathBuilderCommand(commandId, paintOrder))
+            }
+        }.close().taskList
+            .withCoreClipPlans(commands.associate { (commandId, _) -> commandId to GPUClipExecutionPlan.NoClip })
+            .let { taskList ->
+                commands.fold(taskList) { current, (commandId, routeAndMaterial) ->
+                    current.withCorePacketRenderStep(commandId, routeAndMaterial.first)
+                }
+            }
+        val prepared = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            GPUCorePrimitivePreparedFrameRequest(
+                baseTaskList = base,
+                capabilities = capabilities,
+                target = GPUFrameTargetRef("target.scene"),
+                targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                semanticsByCommandId = commands.associate { (commandId, routeAndMaterial) ->
+                    commandId to coreSemantic(
+                        commandIdValue = commandId,
+                        material = routeAndMaterial.second,
+                    )
+                },
+            ),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            prepared,
+            (prepared as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan ->
+            check(!plan.atomicallyRefused) { plan.diagnostics.joinToString { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}"
+            } }
+        }
+    }
+
+    private fun preparedMixedSolidRadialFramePlan(capabilities: GPUCapabilities): GPUFramePlan {
+        val commands = listOf(
+            142 to (CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY to GPUCorePrimitiveMaterialPayload.SolidColor(
+                listOf(0.25f, 0.5f, 0.75f, 1f),
+            )),
+            143 to ("radial.gradient.fill" to radialGradientMaterial()),
+        )
+        val base = GPURecorder(
+            GPURecordingID("recording.preflight.solid-radial-split"),
+            GPUFrameID(144),
+            capabilities,
+        ).apply {
+            commands.forEachIndexed { paintOrder, (commandId, _) ->
+                record(pathBuilderCommand(commandId, paintOrder))
+            }
+        }.close().taskList
+            .withCoreClipPlans(commands.associate { (commandId, _) -> commandId to GPUClipExecutionPlan.NoClip })
+            .let { taskList ->
+                commands.fold(taskList) { current, (commandId, routeAndMaterial) ->
+                    current.withCorePacketRenderStep(commandId, routeAndMaterial.first)
+                }
+            }
+        val prepared = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            GPUCorePrimitivePreparedFrameRequest(
+                baseTaskList = base,
+                capabilities = capabilities,
+                target = GPUFrameTargetRef("target.scene"),
+                targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                semanticsByCommandId = commands.associate { (commandId, routeAndMaterial) ->
+                    commandId to coreSemantic(
+                        commandIdValue = commandId,
+                        material = routeAndMaterial.second,
+                    )
+                },
+            ),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            prepared,
+            (prepared as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan ->
+            check(!plan.atomicallyRefused) { plan.diagnostics.joinToString { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}"
+            } }
+        }
+    }
+
+    private fun gradientCapabilities(vararg materials: GPUCorePrimitiveMaterialPayload): GPUCapabilities =
+        pathCapabilities().copy(
+            facts = pathCapabilities().facts + materials.map { material -> GPUCapabilityFact(
+                when (material) {
+                    is GPUCorePrimitiveMaterialPayload.LinearGradient ->
+                        "first_slice.linear_gradient.native"
+                    is GPUCorePrimitiveMaterialPayload.RadialGradient ->
+                        "first_slice.radial_gradient.native"
+                    is GPUCorePrimitiveMaterialPayload.SweepGradient ->
+                        "first_slice.sweep_gradient.native"
+                    is GPUCorePrimitiveMaterialPayload.SolidColor ->
+                        error("Gradient preflight fixture requires a gradient material")
+                },
+                "unit-test",
+                "supported",
+                true,
+                "preflight",
+            ) },
+        )
+
+    private fun radialGradientMaterial() = GPUCorePrimitiveMaterialPayload.RadialGradient(
+        centerX = 2f,
+        centerY = 2f,
+        radius = 2f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun sweepGradientMaterial() = GPUCorePrimitiveMaterialPayload.SweepGradient(
+        centerX = 2f,
+        centerY = 2f,
+        startAngle = 0f,
+        endAngle = 360f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
 
     private fun pathCoreSemantic(
         commandIdValue: Int = 72,
@@ -9218,6 +9784,27 @@ class GPUFramePreflighterTest {
         targetBounds: GPUPixelBounds,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
         payloadRef = payloadRef,
+        sourceFamily = sourceFamily,
+        geometry = geometry,
+        premultipliedRgba = premultipliedRgba,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        frameProvenance = frameProvenance,
+        coverageMode = coverageMode,
+        analysisRecordId = analysisRecordId,
+        analysisCommandFamily = analysisCommandFamily,
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
+    )
+
+    private fun GPUDrawSemanticPayload.CorePrimitive.withPayloadRenderStepIdentity(
+        renderStepIdentity: String,
+    ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
+        payloadRef = payloadRef.copy(renderStepIdentity = renderStepIdentity),
         sourceFamily = sourceFamily,
         geometry = geometry,
         premultipliedRgba = premultipliedRgba,

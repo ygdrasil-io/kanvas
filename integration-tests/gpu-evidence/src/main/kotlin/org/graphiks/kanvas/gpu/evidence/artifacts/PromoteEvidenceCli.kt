@@ -186,8 +186,8 @@ class PromoteEvidenceCliRunner internal constructor(
             return
         }
         require(entries.isNotEmpty()) { "rebaseline requires a non-empty promoted catalog" }
-        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", promoted.toString(), "--allow-historical-commit")) == 0) {
-            "existing promoted evidence is not an exact verified catalog"
+        require(VerifyEvidenceCliRunner(stdout, stderr).verifyHistoricalSubset(promoted) == 0) {
+            "existing promoted evidence is not a verified current-catalog subset"
         }
     }
 

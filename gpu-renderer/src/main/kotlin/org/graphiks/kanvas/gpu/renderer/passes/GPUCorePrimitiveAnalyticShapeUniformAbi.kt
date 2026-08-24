@@ -166,12 +166,13 @@ internal fun buildCorePrimitiveGradientAnalyticShapeUniform(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
 ): GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult {
-    if (semantic.material !is GPUCorePrimitiveMaterialPayload.RadialGradient &&
+    if (semantic.material !is GPUCorePrimitiveMaterialPayload.LinearGradient &&
+        semantic.material !is GPUCorePrimitiveMaterialPayload.RadialGradient &&
         semantic.material !is GPUCorePrimitiveMaterialPayload.SweepGradient
     ) {
         return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused(
             "invalid.native-core-primitive.gradient-analytic-shape.material",
-            "Gradient analytic-shape uniform construction requires a radial or sweep material.",
+            "Gradient analytic-shape uniform construction requires a linear, radial, or sweep material.",
         )
     }
     val analyticShape = when (val result = buildCorePrimitiveAnalyticShapeUniform(semantic, semanticAuthority)) {

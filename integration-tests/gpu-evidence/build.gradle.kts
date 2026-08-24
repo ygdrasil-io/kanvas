@@ -4,7 +4,10 @@ plugins {
 }
 
 val sourceCommit = providers.gradleProperty("sourceCommit")
+val scene = providers.gradleProperty("scene")
 val sourceSets = the<org.gradle.api.tasks.SourceSetContainer>()
+
+fun optionalSceneArgument(): List<String> = scene.orNull?.let { listOf("--scene", it) }.orEmpty()
 
 dependencies {
     implementation(kotlin("stdlib"))
@@ -37,7 +40,7 @@ val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
         require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
     }
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
-        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get())
+        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + optionalSceneArgument()
     })
     outputs.upToDateWhen { false }
 }
@@ -56,7 +59,7 @@ tasks.register<JavaExec>("gpuEvidencePerformance") {
         require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
         require(warmupFrames.get().toInt() == 10 && measuredFrames.get().toInt() == 90) { "warmupFrames and measuredFrames must be exactly 10 and 90" }
     }
-    argumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get(), "--warmup-frames", warmupFrames.get(), "--measured-frames", measuredFrames.get()) })
+    argumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get(), "--warmup-frames", warmupFrames.get(), "--measured-frames", measuredFrames.get()) + optionalSceneArgument() })
     outputs.upToDateWhen { false }
 }
 

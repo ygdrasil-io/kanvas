@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveDirectClipAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.classifyCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -453,6 +454,63 @@ class GPUCorePrimitiveNativeRouteTest {
         )
     }
 
+    @Test
+    fun `linear gradients close unsupported sample clip and destination read before native work`() {
+        val linear = semantic(
+            GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
+            material = linearMaterial(),
+        )
+        val analyticClip = GPUClipExecutionPlan.AnalyticCoverage(
+            GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
+            TARGET,
+            antiAlias = false,
+        )
+        val destinationRead = GPUBlendPlan.ShaderBlendWithDstRead(
+            mode = GPUBlendMode.LIGHTEN,
+            formulaId = "lighten@v1",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+        )
+        val layerDestinationRead = GPUBlendPlan.LayerCompositeBlend(
+            child = destinationRead,
+            layerOrderingToken = "test.linear.dst-read-layer",
+        )
+
+        val cases = listOf(
+            classifyCorePrimitiveDirectNativeRoute(
+                linear,
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.MultisampleFrame(4),
+                "rgba8unorm",
+            ) to "unsupported.native-core-primitive.sample-plan",
+            classifyCorePrimitiveDirectNativeRoute(
+                linear,
+                analyticClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ) to "unsupported.native-core-primitive.clip",
+            classifyCorePrimitiveDirectNativeRoute(
+                linear,
+                GPUClipExecutionPlan.NoClip,
+                destinationRead,
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ) to "unsupported.native-core-primitive.blend",
+            classifyCorePrimitiveDirectNativeRoute(
+                linear,
+                GPUClipExecutionPlan.NoClip,
+                layerDestinationRead,
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ) to "unsupported.native-core-primitive.blend",
+        )
+
+        cases.forEach { (result, code) ->
+            assertEquals(code, assertIs<GPUCorePrimitiveDirectNativeRoute.Refused>(result).code)
+        }
+    }
+
     private fun semantic(
         geometry: GPUCorePrimitiveGeometryInput,
         sourceFamily: GPUCorePrimitiveSourceFamily = GPUCorePrimitiveSourceFamily.Rect,
@@ -506,6 +564,18 @@ class GPUCorePrimitiveNativeRouteTest {
         centerX = 4f,
         centerY = 4f,
         radius = 4f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun linearMaterial() = GPUCorePrimitiveMaterialPayload.LinearGradient(
+        startX = 1f,
+        startY = 1f,
+        endX = 8f,
+        endY = 8f,
         localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         interpolation = "srgb",
         tileMode = "clamp",

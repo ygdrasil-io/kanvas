@@ -124,14 +124,16 @@ internal fun buildCorePrimitiveGradientNativeShader(
     validator: (sourceId: String, wgslSource: String) -> GPUColorWgslValidation = ::validateColorWgsl,
 ): GPUCorePrimitiveNativeShaderResult {
     val source = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient,
         -> corePrimitiveGradientNativeWgsl(variant)
         else -> return GPUCorePrimitiveNativeShaderResult.Rejected(
             "unsupported_core-primitive.gradient.shader",
-            "The gradient shader builder only accepts radial and sweep gradient variants.",
+            "The gradient shader builder only accepts linear, radial, and sweep gradient variants.",
         )
     }
     val sourceId = corePrimitiveGradientNativeShaderIdentity(variant)
@@ -159,10 +161,14 @@ internal fun buildCorePrimitiveGradientNativeShader(
 internal fun corePrimitiveGradientNativeShaderIdentity(
     variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): String = when (variant) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+        "core-primitive-gradient-linear-direct-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
         "core-primitive-gradient-radial-direct-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
         "core-primitive-gradient-sweep-direct-wgsl-v1"
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+        "core-primitive-gradient-linear-analytic-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
         "core-primitive-gradient-radial-analytic-wgsl-v1"
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
@@ -197,10 +203,14 @@ private fun gradientReflectionInvalidMessage(
         return "Gradient executable WGSL must expose exactly one uniform binding at group 0 binding 0."
     }
     val expectedStructName = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+            "CorePrimitiveLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
             "CorePrimitiveRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
             "CorePrimitiveSweepGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+            "CorePrimitiveAnalyticLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
             "CorePrimitiveAnalyticRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
@@ -223,17 +233,21 @@ private fun gradientReflectionInvalidMessage(
 private fun gradientExpectedMembers(
     variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): List<Pair<String, Pair<Int, Int>>> {
-    val geometryMember = if (variant.name.contains("Radial")) {
-        "radius" to (24 to 4)
+    val geometryMembers = if (variant.name.contains("Linear")) {
+        listOf(
+            "start" to (16 to 8),
+            "end" to (24 to 8),
+        )
+    } else if (variant.name.contains("Radial")) {
+        listOf("center" to (16 to 8), "radius" to (24 to 4))
     } else {
-        "angle_range" to (24 to 8)
+        listOf("center" to (16 to 8), "angle_range" to (24 to 8))
     }
     val members = mutableListOf(
         "target_size" to (0 to 8),
         "material_kind" to (8 to 4),
         "stop_count" to (12 to 4),
-        "center" to (16 to 8),
-        geometryMember,
+        *geometryMembers.toTypedArray(),
         "local_matrix0" to (32 to 16),
         "local_matrix1" to (48 to 16),
         "local_matrix2" to (64 to 16),
@@ -257,14 +271,26 @@ private fun gradientExpectedMembers(
 private fun corePrimitiveGradientNativeWgsl(
     variant: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): String {
+    val linear = variant.name.contains("Linear")
     val radial = variant.name.contains("Radial")
     val analytic = variant.name.startsWith("Analytic")
-    val geometryField = if (radial) {
+    val geometryField = if (linear) {
+        "start: vec2<f32>,\n        end: vec2<f32>,"
+    } else if (radial) {
         "radius: f32,\n        padding0: u32,"
     } else {
         "angle_range: vec2<f32>,"
     }
-    val gradientBody = if (radial) {
+    val gradientBody = if (linear) {
+        """
+        let axis = gradient.end - gradient.start;
+        let axis_length_squared = dot(axis, axis);
+        var t_raw = 0.0;
+        if (axis_length_squared > 0.0) {
+            t_raw = dot(position - gradient.start, axis) / axis_length_squared;
+        }
+        """.trimIndent()
+    } else if (radial) {
         """
         let distance = length(position - center);
         var t_raw = 0.0;
@@ -355,26 +381,35 @@ private fun corePrimitiveGradientNativeWgsl(
         """.trimIndent()
     }
     val structName = when (variant) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+            "CorePrimitiveLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
             "CorePrimitiveRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
             "CorePrimitiveSweepGradientBlock"
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+            "CorePrimitiveAnalyticLinearGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
             "CorePrimitiveAnalyticRadialGradientBlock"
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
             "CorePrimitiveAnalyticSweepGradientBlock"
         else -> error("Not a gradient shader variant: $variant")
     }
-    val position = """
-        let position = gradient_position(fragment_position.xy);
-        let center = gradient.center;
-    """.trimIndent()
+    val position = if (linear) {
+        "let position = gradient_position(fragment_position.xy);"
+    } else {
+        """
+            let position = gradient_position(fragment_position.xy);
+            let center = gradient.center;
+        """.trimIndent()
+    }
+    val anchorField = if (linear) "" else "center: vec2<f32>,"
     return """
         struct $structName {
             target_size: vec2<f32>,
             material_kind: u32,
             stop_count: u32,
-            center: vec2<f32>,
+            $anchorField
             $geometryField
             local_matrix0: vec4<f32>,
             local_matrix1: vec4<f32>,

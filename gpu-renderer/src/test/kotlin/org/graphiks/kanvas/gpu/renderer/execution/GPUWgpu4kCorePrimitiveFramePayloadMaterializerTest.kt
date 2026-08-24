@@ -84,6 +84,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -100,6 +101,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
@@ -192,6 +194,175 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
         assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(mismatch)
         assertEquals(nativeEventCount, fixture.native.events.size)
+        fixture.close()
+    }
+
+    @Test
+    fun `linear gradients materialize exact direct and analytic slabs with distinct binding components`() {
+        fun assertLinearMaterialization(
+            routeShape: RouteShape,
+            expectedBytes: ULong,
+            expectedShader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
+        ) {
+            val fixture = fixture(
+                routeShape = routeShape,
+                useRealPreflight = true,
+                linearGradient = true,
+            )
+            val materialized = fixture.materializeCore()
+            val packets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .single().drawPackets
+            val slab = requireNotNull(packets.first().corePrimitivePreparedAuthority?.uniformSlabSeal)
+
+            assertTrue(packets.all {
+                it.corePrimitivePreparedAuthority?.structuralPipelineKey?.shader == expectedShader
+            })
+            assertTrue(packets.all {
+                it.corePrimitivePreparedAuthority?.uniformSlabSeal === slab
+            })
+            assertTrue(slab.plan.slots.all { it.payloadBytes == expectedBytes.toLong() })
+            assertEquals(
+                expectedBytes,
+                fixture.native.bindGroupLayoutDescriptors.single { descriptor ->
+                    requireNotNull(descriptor.entries.single().buffer).minBindingSize == expectedBytes
+                }.entries.single().buffer?.minBindingSize,
+            )
+            val upload = fixture.native.writeBufferCalls.single {
+                it.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+            }
+            assertEquals(slab.plan.totalBytes.toULong(), upload.dataBytes)
+            assertContentEquals(slab.packedBytesForUpload(), upload.snapshot)
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+            fixture.close()
+        }
+
+        assertLinearMaterialization(
+            RouteShape.Direct,
+            592uL,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+        )
+        assertLinearMaterialization(
+            RouteShape.AnalyticShape,
+            656uL,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient,
+        )
+    }
+
+    @Test
+    fun `forged linear direct route component is refused before native materialization`() {
+        val fixture = fixture(
+            routeShape = RouteShape.Direct,
+            useRealPreflight = true,
+            linearGradient = true,
+        )
+        val scope = fixture.encoderPlan.scopes.single()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val pass = assertIs<GPUCorePrimitiveDirectPreparedPassSeal>(requireNotNull(routes.preparedPassSeal))
+        val forged = GPUCorePrimitiveDirectPreparedPassSeal(
+            structuralPipelineKey = pass.structuralPipelineKey.copy(
+                shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            ),
+            uniformSlabSeal = pass.uniformSlabSeal,
+        )
+        setPrivateField(
+            scope,
+            "corePrimitiveDirectNativeRouteSeal",
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(routes.routesByPacketId, forged),
+        )
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+        val cacheBefore = fixture.cache.counters()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+
+        assertTrue(refused.code.startsWith("invalid.native-core-primitive."))
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `forged linear analytic 656 route component is refused before native materialization`() {
+        val fixture = fixture(
+            routeShape = RouteShape.AnalyticShape,
+            useRealPreflight = true,
+            linearGradient = true,
+        )
+        val scope = fixture.encoderPlan.scopes.single()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val pass = assertIs<GPUCorePrimitiveDirectPreparedPassSeal>(requireNotNull(routes.preparedPassSeal))
+        val forged = GPUCorePrimitiveDirectPreparedPassSeal(
+            structuralPipelineKey = pass.structuralPipelineKey.copy(
+                shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient,
+            ),
+            uniformSlabSeal = pass.uniformSlabSeal,
+        )
+        setPrivateField(
+            scope,
+            "corePrimitiveDirectNativeRouteSeal",
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(routes.routesByPacketId, forged),
+        )
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+        val cacheBefore = fixture.cache.counters()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+
+        assertTrue(refused.code.startsWith("invalid.native-core-primitive."))
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `forged linear destination read structural seal refuses before native materialization`() {
+        val fixture = fixture(
+            routeShape = RouteShape.Direct,
+            useRealPreflight = true,
+            linearGradient = true,
+        )
+        val scope = fixture.encoderPlan.scopes.single()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val pass = assertIs<GPUCorePrimitiveDirectPreparedPassSeal>(requireNotNull(routes.preparedPassSeal))
+        val forged = GPUCorePrimitiveDirectPreparedPassSeal(
+            structuralPipelineKey = pass.structuralPipelineKey.copy(
+                blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                    mode = GPUBlendMode.LIGHTEN,
+                    formulaId = "lighten@v1",
+                    sourceCoverage = GPUSourceCoverageEncoding.None,
+                ),
+            ),
+            uniformSlabSeal = pass.uniformSlabSeal,
+        )
+        setPrivateField(
+            scope,
+            "corePrimitiveDirectNativeRouteSeal",
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(routes.routesByPacketId, forged),
+        )
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+        val cacheBefore = fixture.cache.counters()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+
+        assertEquals("unsupported.native-core-primitive.blend", refused.code)
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
         fixture.close()
     }
 
@@ -3102,6 +3273,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertFalse(source.contains("SHA-256"))
         assertFalse(source.contains("step !in renderEntries.map(RenderEntry::render)"))
         assertTrue(source.contains("retainedCoverageMaskRenderSteps"))
+        val directPacketAuthorityValidation = source
+            .substringAfter("val acceptedGeometries = semanticPackets.mapIndexed")
+            .substringBefore("if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)")
+        assertTrue(
+            directPacketAuthorityValidation.contains("semantic.hasStructuralIntegrity()"),
+            "materialization remains an independent semantic-integrity boundary",
+        )
+        assertFalse(
+            directPacketAuthorityValidation.contains("corePrimitiveUniformBytes("),
+            "materialization must not recompose a second direct uniform payload after structural integrity authenticated it",
+        )
         val analyticShapeValidation = source.balancedBlockAfter(
             anchor = "val acceptedGeometries = semanticPackets.mapIndexed",
             blockCondition = "if (uniformLayout == " +
@@ -5076,6 +5258,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         destinationReadCommandIds: Set<Int> = emptySet(),
         copyBytesPerRowAlignment: Long = 256L,
         minUniformBufferOffsetAlignment: Long = 256L,
+        linearGradient: Boolean = false,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         require(!dstRead || routeShape == RouteShape.Direct)
@@ -5092,6 +5275,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val capabilities = capabilities(
             sampleCount,
             includeRRect = routeShape == RouteShape.AnalyticSplit,
+            includeLinearGradient = linearGradient,
             copyBytesPerRowAlignment = copyBytesPerRowAlignment,
             minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
         )
@@ -5159,6 +5343,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         order,
                         GPURect(1f + order, 1f, 5f + order, 5f),
                         targetFormat,
+                        material = if (linearGradient) {
+                            linearGradientDescriptor()
+                        } else {
+                            GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f)
+                        },
                     ),
                 )
             }
@@ -5239,6 +5428,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             } else {
                 taskList
             }
+        }.let { taskList ->
+            if (linearGradient) taskList.withPacketRouteIdentity("linear.gradient.fill") else taskList
         }
         if (dstRead || multiRenderDstRead || destinationReadCommandIds.isNotEmpty()) {
             // The recorder only plans fixed-function SRC_OVER rects; promote the destination
@@ -5296,6 +5487,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     } else {
                         TARGET
                     },
+                    material = if (linearGradient) linearGradientMaterial() else null,
                 )
             }
         }
@@ -5769,6 +5961,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         packet: GPUDrawPacket,
         scissorBounds: GPUPixelBounds = TARGET,
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+        material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -5776,6 +5969,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Rect,
                 geometry = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 5f, 5f),
                 premultipliedRgba = listOf(0.5f, 0f, 0f, 0.5f),
+                material = material,
                 targetBounds = TARGET,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
@@ -5998,11 +6192,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         order: Int,
         rect: GPURect,
         targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+        material: GPUMaterialDescriptor = GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f),
     ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(id),
         rect = rect,
         target = GPUTargetFacts(TARGET.width, TARGET.height, targetFormat.value),
-        material = GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f),
+        material = material,
         clip = GPUClipFacts(
             kind = GPUClipKind.WideOpen,
             bounds = GPUBounds(0f, 0f, 16f, 16f),
@@ -6010,6 +6205,35 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
         paintOrder = order,
         source = GPUCommandSource("unit-test", "core-proxy", GPUFrameProvenance.GmContent),
+    )
+
+    private fun linearGradientDescriptor() = GPUMaterialDescriptor.LinearGradient(
+        startX = 0f,
+        startY = 0f,
+        endX = 8f,
+        endY = 0f,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+        allStopPositions = floatArrayOf(0f, 1f),
+        allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun linearGradientMaterial() = GPUCorePrimitiveMaterialPayload.LinearGradient(
+        startX = 0f,
+        startY = 0f,
+        endX = 8f,
+        endY = 0f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )
 
     private fun fixedClearBlend() = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
@@ -6033,6 +6257,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     private fun capabilities(
         sampleCount: Int = 1,
         includeRRect: Boolean = false,
+        includeLinearGradient: Boolean = false,
         copyBytesPerRowAlignment: Long = 256L,
         minUniformBufferOffsetAlignment: Long = 256L,
     ) = GPUCapabilities(
@@ -6040,7 +6265,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         facts = listOf(
             GPUCapabilityFact("first_slice.fill_rect.native", "unit", "supported", true, "core"),
             GPUCapabilityFact("first_slice.scissor.native", "unit", "supported", true, "core"),
-        ) + if (includeRRect) {
+        ) + if (includeLinearGradient) {
+            listOf(GPUCapabilityFact("first_slice.linear_gradient.native", "unit", "supported", true, "core"))
+        } else {
+            emptyList()
+        } + if (includeRRect) {
             listOf(GPUCapabilityFact("first_slice.fill_rrect.native", "unit", "supported", true, "core"))
         } else {
             emptyList()
@@ -6233,12 +6462,51 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         diagnostics,
     )
 
+    private fun GPUTaskList.withPacketRouteIdentity(renderStepIdentity: String): GPUTaskList = GPUTaskList(
+        frameId,
+        capabilitySeal,
+        recordingSeals,
+        expectedReplayKeyHash,
+        tasks.map { task ->
+            if (task !is GPUTask.Render) return@map task
+            val packets = task.drawPackets.map { packet ->
+                packet.withRouteIdentity(renderStepIdentity)
+            }
+            GPUTask.Render(
+                task.taskId,
+                task.recordingId,
+                task.phase,
+                task.target,
+                task.loadStore,
+                task.samplePlan,
+                task.resourceUses,
+                task.provisionalSegmentKey,
+                packets,
+                task.batchEligibilityByPacketId,
+                task.sampleContinuationKey,
+                task.compositeMembership,
+            )
+        },
+        dependencies,
+        phaseOrder,
+        memoryBudget,
+        diagnostics,
+    )
+
     private fun GPUDrawPacket.withClipPlan(plan: GPUClipExecutionPlan) = GPUDrawPacket(
         packetId, commandIdValue, analysisRecordId, passId, layerId, bindingListId,
         insertionReasonCode, sortKey, sortKeyPreimage, renderStepId, renderStepVersion, role,
         blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
         semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
         resourceGeneration, frameProvenance, clipCoveragePlan, plan, diagnostics,
+    )
+
+    private fun GPUDrawPacket.withRouteIdentity(renderStepIdentity: String) = GPUDrawPacket(
+        packetId, commandIdValue, analysisRecordId, passId, layerId, bindingListId,
+        insertionReasonCode, sortKey, sortKeyPreimage, GPURenderStepID(renderStepIdentity), renderStepVersion, role,
+        blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
+        semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
+        resourceGeneration, frameProvenance, clipCoveragePlan, clipExecutionPlan, diagnostics,
     )
 
     private fun GPUDrawPacket.withSemantic(semantic: GPUDrawSemanticPayload.CorePrimitive) = GPUDrawPacket(

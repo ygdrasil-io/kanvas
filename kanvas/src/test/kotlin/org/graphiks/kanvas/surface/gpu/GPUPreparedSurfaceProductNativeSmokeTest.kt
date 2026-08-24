@@ -22,10 +22,12 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
@@ -42,6 +44,60 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     @AfterTest
     fun disposeSharedRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `public Surface linear gradient submits one real native frame`() {
+        val start = ColorARGB.of(alpha = 160, red = 40, green = 120, blue = 208)
+        val end = ColorARGB.of(alpha = 96, red = 224, green = 72, blue = 48)
+        val surface = Surface(width = 64, height = 64, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(64f, 0f),
+                        stops = listOf(GradientStop(0f, start), GradientStop(1f, end)),
+                    ),
+                ).copy(antiAlias = false),
+            )
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceNativeBackendPortFactory,
+            ),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            decisions.single(),
+            decisions.single().toString(),
+        ).evidence
+        val expected = linearGradientPremulSrgbOracle(width = 64, height = 64, start = start, end = end)
+        val actualPixels = result.pixels.toByteArray()
+        val maxChannelDelta = GPUPreparedImagePixelOracle.maxChannelDelta(actualPixels, expected)
+        assertTrue(
+            GPUPreparedImagePixelOracle.matchesWithinOneLsb(actualPixels, expected),
+            "linear gradient 64x64 maxChannelDelta=$maxChannelDelta",
+        )
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertEquals(1L, evidence.submits)
+        assertEquals(1L, evidence.readbackCopies)
+        assertEquals(1, decisions.size)
+        val runtime = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        println(
+            "task5.linear-native adapter=${runtime.adapterInfo} submits=${evidence.submits} " +
+                "readbacks=${evidence.readbackCopies} pixels=${actualPixels.size / 4} " +
+                "maxChannelDelta=$maxChannelDelta telemetry=${runtime.runtimeTelemetry}",
+        )
     }
 
     @Test
@@ -1006,6 +1062,57 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             "pixel ($x,$y) expected=$expected actual=${actual.map { it.toInt() and 0xff }}",
         )
     }
+
+    private fun linearGradientPremulSrgbOracle(
+        width: Int,
+        height: Int,
+        start: ColorARGB,
+        end: ColorARGB,
+    ): ByteArray = ByteArray(width * height * 4).also { bytes ->
+        val startPremul = srgbPremulLinear(start)
+        val endPremul = srgbPremulLinear(end)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val t = (x + 0.5).toDouble() / width.toDouble()
+                val offset = (y * width + x) * 4
+                bytes[offset] = quantize8(encodeSrgb(interpolate(startPremul.red, endPremul.red, t))).toByte()
+                bytes[offset + 1] = quantize8(encodeSrgb(interpolate(startPremul.green, endPremul.green, t))).toByte()
+                bytes[offset + 2] = quantize8(encodeSrgb(interpolate(startPremul.blue, endPremul.blue, t))).toByte()
+                bytes[offset + 3] = quantize8(interpolate(startPremul.alpha, endPremul.alpha, t)).toByte()
+            }
+        }
+    }
+
+    private fun srgbPremulLinear(color: ColorARGB): PremulLinearRgba {
+        val alpha = color.alpha.toDouble() / 255.0
+        return PremulLinearRgba(
+            red = decodeSrgb(color.red.toDouble() / 255.0) * alpha,
+            green = decodeSrgb(color.green.toDouble() / 255.0) * alpha,
+            blue = decodeSrgb(color.blue.toDouble() / 255.0) * alpha,
+            alpha = alpha,
+        )
+    }
+
+    private fun decodeSrgb(encoded: Double): Double =
+        if (encoded <= 0.04045) {
+            encoded / 12.92
+        } else {
+            Math.pow((encoded + 0.055) / 1.055, 2.4)
+        }
+
+    private fun encodeSrgb(linear: Double): Double =
+        if (linear <= 0.0031308) linear * 12.92 else 1.055 * Math.pow(linear, 1.0 / 2.4) - 0.055
+
+    private fun interpolate(start: Double, end: Double, t: Double): Double = start + (end - start) * t
+
+    private fun quantize8(value: Double): Int = (value.coerceIn(0.0, 1.0) * 255.0 + 0.5).toInt()
+
+    private data class PremulLinearRgba(
+        val red: Double,
+        val green: Double,
+        val blue: Double,
+        val alpha: Double,
+    )
 
     private class StaticDisplayListBuffer(
         private val operations: List<DisplayOp>,

@@ -11,6 +11,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -24,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -189,6 +191,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
                 is GPUMaterialDescriptor.SweepGradient -> descriptor.localMatrix
             }
             val semanticMatrix = when (val material = semantic.material) {
+                is GPUCorePrimitiveMaterialPayload.LinearGradient -> material.localMatrix
                 is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.localMatrix
                 is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.localMatrix
                 is GPUCorePrimitiveMaterialPayload.SolidColor ->
@@ -199,6 +202,97 @@ class GPUCorePrimitiveSemanticBuilderTest {
             assertTrue(semantic.canonicalHash.isNotBlank())
             assertNotNull(semantic.payloadRef.uniformBlock)
         }
+    }
+
+    @Test
+    fun `core builder admits bounded linear material without collapsing it to solid`() {
+        val descriptor = linearDescriptor()
+
+        val result = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(gatherMaterial(descriptor))
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(result.semantics.getValue(0))
+        val material = assertIs<GPUCorePrimitiveMaterialPayload.LinearGradient>(semantic.material)
+
+        assertEquals(descriptor.startX, material.startX)
+        assertEquals(descriptor.startY, material.startY)
+        assertEquals(descriptor.endX, material.endX)
+        assertEquals(descriptor.endY, material.endY)
+        assertEquals("clamp", material.tileMode)
+        assertEquals("srgb", material.interpolation)
+    }
+
+    @Test
+    fun `core builder refuses unsupported linear gradient facts before semantic payload creation`() {
+        val cases = listOf(
+            linearDescriptor(tileMode = "repeat") to "unsupported.core_primitive.material.tile_mode",
+            linearDescriptor(tileMode = "mirror") to "unsupported.core_primitive.material.tile_mode",
+            linearDescriptor(tileMode = "decal") to "unsupported.core_primitive.material.tile_mode",
+            linearDescriptor(interpolation = "linear") to "unsupported.core_primitive.material.interpolation",
+            linearDescriptor(localMatrix = listOf(1f, 0f, 1f, 0f, 1f, 0f, 0f, 0f, 1f)) to
+                "unsupported.core_primitive.material.matrix",
+            linearDescriptor(startX = Float.NaN) to "unsupported.core_primitive.material.non_finite",
+            linearDescriptor(endX = 0f, endY = 4f) to "unsupported.core_primitive.material.linear.axis",
+            linearDescriptor(startX = -Float.MAX_VALUE, endX = 0f, startY = 0f, endY = 0f) to
+                "unsupported.core_primitive.material.linear.axis",
+            linearDescriptor(startX = 0f, endX = Float.MIN_VALUE, startY = 0f, endY = 0f) to
+                "unsupported.core_primitive.material.linear.axis",
+            linearDescriptor(positions = floatArrayOf(0f, Float.NaN)) to "unsupported.core_primitive.material.stops",
+        )
+
+        cases.forEach { (material, expectedCode) ->
+            val refusal = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(gatherMaterial(material))
+            assertEquals(expectedCode, refusal.code)
+            assertEquals(GPUMaterialKind.LinearGradient.name, refusal.facts["materialKind"])
+        }
+    }
+
+    @Test
+    fun `core builder refuses linear path stencil before creating a semantic payload`() {
+        val path = Path().apply {
+            moveTo(2f, 2f)
+            lineTo(20f, 2f)
+            lineTo(8f, 9f)
+            lineTo(20f, 20f)
+            lineTo(2f, 20f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path = path,
+                    paint = Paint(shader = Shader.LinearGradient(
+                        start = Point2F32(2f, 2f),
+                        end = Point2F32(20f, 20f),
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
+                        ),
+                    )).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption.StencilCoverage1x,
+            inventory.visualCommands.single().geometryCoverage,
+        )
+
+        val refusal = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                visualCommands = inventory.visualCommands,
+                recording = inventory.recording,
+                targetBounds = GPUPixelBounds(0, 0, 32, 24),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+
+        assertEquals("unsupported.core_primitive.material.path_stencil", refusal.code)
+        assertEquals(GPUMaterialKind.LinearGradient.name, refusal.facts["materialKind"])
+        assertEquals("0", refusal.facts["commandId"])
+        assertEquals("drawPath", refusal.facts["source"])
     }
 
     @Test
@@ -259,20 +353,6 @@ class GPUCorePrimitiveSemanticBuilderTest {
     @Test
     fun `core builder keeps the legacy refusal for unsupported material families`() {
         val materials = listOf<GPUMaterialDescriptor>(
-            GPUMaterialDescriptor.LinearGradient(
-                startX = 0f,
-                startY = 0f,
-                endX = 8f,
-                endY = 8f,
-                startR = 1f,
-                startG = 0f,
-                startB = 0f,
-                startA = 1f,
-                endR = 0f,
-                endG = 0f,
-                endB = 1f,
-                endA = 1f,
-            ),
             GPUMaterialDescriptor.ConicalGradient(
                 startX = 0f,
                 startY = 0f,
@@ -406,5 +486,38 @@ class GPUCorePrimitiveSemanticBuilderTest {
         allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     ).withGradientFacts(
         GPUMaterialDescriptor.GradientFacts(localMatrix = localMatrix),
+    )
+
+    private fun linearDescriptor(
+        startX: Float = 0f,
+        startY: Float = 4f,
+        endX: Float = 8f,
+        endY: Float = 4f,
+        tileMode: String = "clamp",
+        interpolation: String = "srgb",
+        localMatrix: List<Float> = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        positions: FloatArray = floatArrayOf(0f, 1f),
+        colors: FloatArray = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    ) = GPUMaterialDescriptor.LinearGradient(
+        startX = startX,
+        startY = startY,
+        endX = endX,
+        endY = endY,
+        startR = 1f,
+        startG = 0f,
+        startB = 0f,
+        startA = 1f,
+        endR = 0f,
+        endG = 0f,
+        endB = 1f,
+        endA = 1f,
+        tileMode = tileMode,
+        allStopPositions = positions,
+        allStopColors = colors,
+    ).withGradientFacts(
+        GPUMaterialDescriptor.GradientFacts(
+            interpolation = interpolation,
+            localMatrix = localMatrix,
+        ),
     )
 }

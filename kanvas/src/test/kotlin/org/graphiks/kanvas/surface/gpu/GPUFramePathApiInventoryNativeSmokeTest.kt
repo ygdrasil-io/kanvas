@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -18,12 +19,81 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
-import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class GPUFramePathApiInventoryNativeSmokeTest {
+    @Test
+    fun `public Surface render expands one bounded stroke rect in one native frame`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val surface = Surface(width = 64, height = 64)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(16f, 16f, 48f, 48f),
+                Paint.stroke(ColorARGB.Red, 6f).copy(antiAlias = false),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(4, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertEquals(4, result.stats.drawCallCount)
+            assertEquals(1L, requireNotNull(GPUBackendRuntimeNativeFactory.createOrNull()).runtimeTelemetry.submissions)
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 32, 16, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 32, 47, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 16, 32, 64))
+            assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 47, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 8, 8, 64))
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `public Surface render submits bounded linear radial and sweep CorePrimitive gradients`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val surface = Surface(width = 48, height = 16)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(1f, 1f, 15f, 15f),
+                Paint(shader = Shader.LinearGradient(Point2F32(1f, 8f), Point2F32(15f, 8f), stops)).copy(antiAlias = false),
+            )
+            drawRect(
+                RectF32.ofLTRB(17f, 1f, 31f, 15f),
+                Paint(shader = Shader.RadialGradient(Point2F32(24f, 8f), 7f, stops)).copy(antiAlias = false),
+            )
+            drawRect(
+                RectF32.ofLTRB(33f, 1f, 47f, 15f),
+                Paint(shader = Shader.SweepGradient(Point2F32(40f, 8f), stops = stops)).copy(antiAlias = false),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(3, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertTrue(result.stats.drawCallCount >= 3)
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
     @Test
     fun `display ops traverse inventory into one canonical native frame`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
@@ -120,5 +190,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val offset = (y * 32 + x) * 4
         val actual = (0..3).map { bytes[offset + it].toInt() and 0xff }
         assertEquals(expected, actual, "pixel ($x,$y)")
+    }
+
+    private fun rgba(bytes: UByteArray, x: Int, y: Int, width: Int): List<Int> {
+        val offset = (y * width + x) * 4
+        return (0..3).map { channel -> bytes[offset + channel].toInt() }
     }
 }

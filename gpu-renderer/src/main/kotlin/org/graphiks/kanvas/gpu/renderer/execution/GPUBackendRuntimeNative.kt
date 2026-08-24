@@ -202,6 +202,20 @@ internal fun preparedTextResourceGenerations(
     return generations.toMap()
 }
 
+/** Native CorePrimitive facts that do not depend on adapter features or session configuration. */
+internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = listOf(
+    GPUCapabilityFact("first_slice.fill_rect.native", "runtime", "supported", true, "core-primitive-direct-native"),
+    GPUCapabilityFact("first_slice.fill_rrect.native", "runtime", "supported", true, "core-primitive-direct-native"),
+    supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, "runtime", "core-primitive-direct-native"),
+    supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE, "runtime", "core-primitive-bounded-clip-native"),
+    supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER, "runtime", "core-primitive-path-stencil-native"),
+    GPUCapabilityFact("first_slice.mask_blur.native", "runtime", "supported", true, "prepared-top-level-mask-blur"),
+    GPUCapabilityFact("first_slice.fill_rect.affine.native", "runtime", "supported", true, "core-primitive-direct-native"),
+    GPUCapabilityFact("first_slice.linear_gradient.native", "runtime", "supported", true, "core-primitive-gradient-linear-native"),
+    GPUCapabilityFact("first_slice.radial_gradient.native", "runtime", "supported", true, "core-primitive-gradient-radial-native"),
+    GPUCapabilityFact("first_slice.sweep_gradient.native", "runtime", "supported", true, "core-primitive-gradient-sweep-native"),
+)
+
 /** Preserves every representable adapter limit and saturates wider native values without overflow. */
 internal fun observedMaxBufferSize(value: ULong): Long? = when {
     value == 0uL -> null
@@ -1192,51 +1206,8 @@ private class WgpuBackendSession(
                 adapterName = adapterSummary,
                 deviceName = "gpu-device",
             ),
-            facts = backendLimits.capabilityFacts(evidenceLabel = "runtime") + listOf(
-                GPUCapabilityFact(
-                    name = "first_slice.fill_rect.native",
-                    source = "runtime",
-                    value = "supported",
-                    affectsValidity = true,
-                    evidenceLabel = "core-primitive-direct-native",
-                ),
-                GPUCapabilityFact(
-                    name = "first_slice.fill_rrect.native",
-                    source = "runtime",
-                    value = "supported",
-                    affectsValidity = true,
-                    evidenceLabel = "core-primitive-direct-native",
-                ),
-                supportedGPUCapabilityFact(
-                    name = GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
-                    source = "runtime",
-                    evidenceLabel = "core-primitive-direct-native",
-                ),
-                supportedGPUCapabilityFact(
-                    name = GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
-                    source = "runtime",
-                    evidenceLabel = "core-primitive-bounded-clip-native",
-                ),
-                supportedGPUCapabilityFact(
-                    name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
-                    source = "runtime",
-                    evidenceLabel = "core-primitive-path-stencil-native",
-                ),
-                GPUCapabilityFact(
-                    name = "first_slice.mask_blur.native",
-                    source = "runtime",
-                    value = "supported",
-                    affectsValidity = true,
-                    evidenceLabel = "prepared-top-level-mask-blur",
-                ),
-                GPUCapabilityFact(
-                    name = "first_slice.fill_rect.affine.native",
-                    source = "runtime",
-                    value = "supported",
-                    affectsValidity = true,
-                    evidenceLabel = "core-primitive-direct-native",
-                ),
-            ),
+            facts = backendLimits.capabilityFacts(evidenceLabel = "runtime") +
+                nativeCorePrimitiveCapabilityFacts(),
             snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
             // Color formats that may use the broad color/copy/texture-binding usage set below.

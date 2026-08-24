@@ -28,11 +28,66 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUCorePrimitiveSessionNativeCacheTest {
+    @Test
+    fun `linear gradient components own distinct direct and analytic dynamic uniform layouts`() {
+        val direct = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+        )
+        val analytic = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+        )
+
+        assertEquals(592uL, requireNotNull(direct.entries.single().buffer).minBindingSize)
+        assertEquals(656uL, requireNotNull(analytic.entries.single().buffer).minBindingSize)
+        assertTrue(requireNotNull(direct.entries.single().buffer).hasDynamicOffset)
+        assertTrue(requireNotNull(analytic.entries.single().buffer).hasDynamicOffset)
+        assertNotEquals(
+            PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+        )
+    }
+
+    @Test
+    fun `gradient cache acquires and reuses isolated direct and analytic linear components`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val keys = listOf(
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticLinearGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticRadialGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+            ),
+            productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticSweepGradient).copy(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_COMPONENT_IDENTITY,
+            ),
+        )
+
+        val acquired = keys.map { key -> cache.acquire(key).acquiredHandles() }
+        val reused = keys.map { key -> cache.acquire(key.copy()).acquiredHandles() }
+
+        acquired.zip(reused).forEach { (first, second) -> assertSame(first, second) }
+        assertEquals(6, acquired.map { it.componentIdentity }.distinct().size)
+        assertEquals(6, acquired.map { it.pipeline }.distinctBy(System::identityHashCode).size)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(6, 6, 0), cache.counters())
+        cache.close()
+    }
+
     @Test
     fun `analytic shape component exposes exact uniform80 dynamic binding`() {
         val descriptor = corePrimitiveBindGroupLayoutDescriptor(

@@ -1,0 +1,307 @@
+package org.graphiks.kanvas.surface.gpu
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
+
+class GPUPreparedStrokeRectLowererTest {
+    @Test
+    fun `eligible public stroke rect expands to four device fill bands with contiguous identity`() {
+        val clip = ClipStack.DeviceRect(RectF32.ofLTRB(12f, 14f, 54f, 54f), antiAlias = false)
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
+            GPUPreparedStrokeRectLowerer.lower(
+                operation = strokeRect(
+                    paint = strokePaint.copy(
+                        colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.SRC),
+                        blendMode = org.graphiks.kanvas.paint.BlendMode.SRC,
+                    ),
+                    transform = Matrix3x3F32.translation(2f, 4f),
+                    clip = clip,
+                ),
+                firstCommandId = GPUDrawCommandID(4),
+                firstPaintOrder = 4,
+                provenance = GPUFrameProvenance.GmContent,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+            ),
+        )
+
+        val commands = lowered.commands
+        assertEquals(4, commands.size)
+        assertEquals(listOf(4, 5, 6, 7), commands.map { it.normalized.commandId.value })
+        assertEquals(listOf(4, 5, 6, 7), commands.map { it.normalized.ordering.paintOrder })
+        assertEquals(
+            listOf(
+                GPUPixelBounds(15, 17, 53, 23),
+                GPUPixelBounds(15, 49, 53, 55),
+                GPUPixelBounds(15, 23, 21, 49),
+                GPUPixelBounds(47, 23, 53, 49),
+            ),
+            commands.map { command ->
+                val fill = assertIs<NormalizedDrawCommand.FillRect>(command.normalized)
+                assertEquals(false, fill.stroke)
+                assertEquals("Identity", fill.transform.type.name)
+                assertEquals("drawRect.stroke.analytic-four-band", fill.source.operation)
+                assertEquals(GPUBlendMode.SRC, command.blendPlan.mode)
+                assertEquals(clip.toGPUClipFacts(target()).kind, fill.clip.kind)
+                assertEquals(clip.toGPUClipFacts(target()).bounds, fill.clip.bounds)
+                GPUPixelBounds(
+                    fill.rect.left.toInt(), fill.rect.top.toInt(),
+                    fill.rect.right.toInt(), fill.rect.bottom.toInt(),
+                )
+            },
+        )
+        assertTrue(commands.all { it.provenance == GPUFrameProvenance.GmContent })
+        assertTrue(commands.all { it.geometryRefusal == null })
+        val materials = commands.map {
+            assertIs<NormalizedDrawCommand.FillRect>(it.normalized).material
+        }
+        assertTrue(materials.drop(1).all { it === materials.first() })
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor(0f, 0f, 1f, 1f),
+            materials.first(),
+        )
+        assertFailsWith<UnsupportedOperationException> {
+            (commands as MutableList<GPUFramePathVisualCommand>).clear()
+        }
+        assertEquals(4, lowered.commands.size)
+    }
+
+    @Test
+    fun `bounded stroke inputs refuse before generic path lowering with stable codes`() {
+        val cases = listOf(
+            "anti alias" to strokeRect(paint = strokePaint.copy(antiAlias = true)) to
+                "unsupported.stroke.rect_anti_alias",
+            "invalid width" to strokeRect(paint = strokePaint.copy(strokeWidth = 0f)) to
+                "unsupported.stroke.width_invalid",
+            "odd width" to strokeRect(paint = strokePaint.copy(strokeWidth = 5f)) to
+                "unsupported.stroke.rect_subpixel_first_slice",
+            "fractional translation" to strokeRect(transform = Matrix3x3F32.translation(0.5f, 0f)) to
+                "unsupported.stroke.rect_transform",
+            "scale" to strokeRect(transform = Matrix3x3F32.scaling(2f, 1f)) to
+                "unsupported.stroke.rect_transform",
+            "skew" to strokeRect(transform = Matrix3x3F32(kx = 0.5f)) to
+                "unsupported.stroke.rect_transform",
+            "perspective" to strokeRect(transform = Matrix3x3F32(persp0 = 0.25f)) to
+                "unsupported.stroke.rect_transform",
+            "singular" to strokeRect(transform = Matrix3x3F32.scaling(0f, 1f)) to
+                "unsupported.stroke.rect_transform",
+            "non finite transform" to strokeRect(transform = Matrix3x3F32(tx = Float.NaN)) to
+                "unsupported.stroke.rect_transform",
+            "square cap" to strokeRect(paint = strokePaint.copy(strokeCap = StrokeCap.SQUARE)) to
+                "unsupported.stroke.cap",
+            "round join" to strokeRect(paint = strokePaint.copy(strokeJoin = StrokeJoin.ROUND)) to
+                "unsupported.stroke.join",
+            "small miter" to strokeRect(paint = strokePaint.copy(strokeMiter = 1f)) to
+                "unsupported.stroke.rect_miter_limit",
+            "path effect" to strokeRect(
+                paint = strokePaint.copy(pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))),
+            ) to "unsupported.stroke.rect_path_effect",
+            "shader material" to strokeRect(
+                paint = strokePaint.copy(shader = Shader.SolidColor(ColorARGB.Blue)),
+            ) to "unsupported.stroke.rect_material",
+            "malformed shader material" to strokeRect(
+                paint = strokePaint.copy(
+                    shader = Shader.LinearGradient(
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(1f, 0f),
+                        stops = emptyList(),
+                    ),
+                ),
+            ) to "unsupported.stroke.rect_material",
+            "unsupported color filter" to strokeRect(
+                paint = strokePaint.copy(colorFilter = ColorFilter.HighContrast),
+            ) to "unsupported.stroke.rect_material",
+            "non foldable blend color filter" to strokeRect(
+                paint = strokePaint.copy(colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.MULTIPLY)),
+            ) to "unsupported.stroke.rect_material",
+            "blender" to strokeRect(
+                paint = strokePaint.copy(blender = Blender.Mode(org.graphiks.kanvas.paint.BlendMode.SRC)),
+            ) to "unsupported.stroke.rect_material",
+            "negative bounds" to strokeRect(bounds = RectF32.ofLTRB(-16f, 16f, 48f, 48f)) to
+                "unsupported.stroke.rect_target_overflow",
+            "outside target bounds" to strokeRect(bounds = RectF32.ofLTRB(16f, 16f, 80f, 48f)) to
+                "unsupported.stroke.rect_target_overflow",
+            "inverted bounds" to strokeRect(bounds = RectF32.ofLTRB(48f, 16f, 16f, 48f)) to
+                "unsupported.stroke.rect_inner_degenerate",
+            "target overflow" to strokeRect(bounds = RectF32.ofLTRB(2f, 16f, 48f, 48f)) to
+                "unsupported.stroke.rect_target_overflow",
+            "inner degenerate" to strokeRect(bounds = RectF32.ofLTRB(16f, 16f, 20f, 48f)) to
+                "unsupported.stroke.rect_inner_degenerate",
+        )
+
+        cases.forEach { (namedOperation, expected) ->
+            val (name, operation) = namedOperation
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation = operation,
+                    firstCommandId = GPUDrawCommandID(12),
+                    firstPaintOrder = 12,
+                    provenance = GPUFrameProvenance.None,
+                    target = target(),
+                    config = RenderConfig.DEFAULT,
+                    capabilities = capabilities(),
+                    operationIndex = 9,
+                ),
+                name,
+            )
+            assertEquals(expected, refused.code, name)
+            assertEquals(9, refused.operationIndex, name)
+            assertEquals("drawRect.stroke", refused.facts["operation"], name)
+            if (name == "shader material") assertEquals("SolidColor", refused.facts["shader"])
+            if (name == "unsupported color filter") {
+                assertEquals("HighContrast", refused.facts["colorFilter"])
+            }
+            if (name == "non foldable blend color filter") {
+                assertEquals("Blend", refused.facts["colorFilter"])
+            }
+            if (name == "blender") assertEquals("Mode", refused.facts["blender"])
+            if (name == "invalid width") assertEquals("0.0", refused.facts["strokeWidth"])
+            if (name == "square cap") assertEquals("SQUARE", refused.facts["cap"])
+            if (name == "round join") assertEquals("ROUND", refused.facts["join"])
+            if (name == "small miter") assertEquals("1.0", refused.facts["miter"])
+            if (name == "target overflow") {
+                assertEquals("2,16,48,48", refused.facts["pathBounds"])
+                assertEquals("64x64", refused.facts["target"])
+            }
+        }
+    }
+
+    @Test
+    fun `foldable blend color filter is preserved as the lowered fill material`() {
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
+            GPUPreparedStrokeRectLowerer.lower(
+                operation = strokeRect(
+                    paint = strokePaint.copy(
+                        colorFilter = ColorFilter.Blend(ColorARGB.Blue, org.graphiks.kanvas.paint.BlendMode.SRC),
+                    ),
+                ),
+                firstCommandId = GPUDrawCommandID(0),
+                firstPaintOrder = 0,
+                provenance = GPUFrameProvenance.None,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+            ),
+        )
+
+        val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor>(
+            assertIs<NormalizedDrawCommand.FillRect>(lowered.commands.first().normalized).material,
+        )
+        assertEquals(0f, material.r)
+        assertEquals(0f, material.g)
+        assertEquals(1f, material.b)
+        assertEquals(1f, material.a)
+    }
+
+    @Test
+    fun `invalid command allocation and immutable refusal facts terminate before lowering`() {
+        listOf(
+            GPUDrawCommandID(Int.MAX_VALUE) to 0,
+            GPUDrawCommandID(0) to -1,
+            GPUDrawCommandID(0) to Int.MAX_VALUE,
+        ).forEach { (commandId, paintOrder) ->
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation = strokeRect(),
+                    firstCommandId = commandId,
+                    firstPaintOrder = paintOrder,
+                    provenance = GPUFrameProvenance.None,
+                    target = target(),
+                    config = RenderConfig.DEFAULT,
+                    capabilities = capabilities(),
+                ),
+            )
+            assertEquals("unsupported.stroke.rect_command_range", refused.code)
+            assertEquals("GPUPreparedStrokeRectLowerer", refused.facts["authority"])
+            assertEquals("drawRect.stroke", refused.facts["operation"])
+            assertFailsWith<UnsupportedOperationException> {
+                (refused.facts as MutableMap<String, String>).clear()
+            }
+        }
+    }
+
+    @Test
+    fun `public mapper records all four analytic fill command ids for one stroke operation`() {
+        val mapping = GPUOpMapper.mapOperations(
+            operations = listOf(strokeRect()),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(null, mapping.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), mapping.visualCommands.map { it.normalized.commandId.value })
+        assertEquals(setOf(0, 1, 2, 3), mapping.commandIdsByOperationIndex.getValue(0))
+        assertTrue(mapping.visualCommands.all { it.normalized is NormalizedDrawCommand.FillRect })
+        assertTrue(mapping.visualCommands.none { it.normalized is NormalizedDrawCommand.FillPath })
+    }
+
+    private fun strokeRect(
+        bounds: RectF32 = RectF32.ofLTRB(16f, 16f, 48f, 48f),
+        paint: Paint = strokePaint,
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
+        clip: ClipStack = ClipStack.WideOpen,
+    ) = DisplayOp.DrawRect(
+        bounds,
+        paint,
+        transform,
+        clip,
+    )
+
+    private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
+
+    private fun capabilities() = GPUCapabilities(
+        implementation = GPUImplementationIdentity(
+            facadeName = "test", implementationName = "fake", adapterName = "mock", deviceName = "mock",
+        ),
+        facts = listOf(
+            GPUCapabilityFact(
+                name = "first_slice.fill_rect.native", source = "test", value = "supported",
+                affectsValidity = true, evidenceLabel = "test:fill-rect",
+            ),
+        ),
+        knownUnsupportedFacts = emptyList(),
+        snapshotId = "stroke-rect-lowerer-test",
+        limits = GPULimits(
+            maxTextureDimension2D = 8192,
+            copyBytesPerRowAlignment = 256,
+            minUniformBufferOffsetAlignment = 256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        ),
+        rendererFeatures = setOf(GPURendererFeature.RenderPass),
+    )
+
+    private companion object {
+        val strokePaint: Paint = Paint.stroke(ColorARGB.Red, 6f).copy(antiAlias = false)
+    }
+}

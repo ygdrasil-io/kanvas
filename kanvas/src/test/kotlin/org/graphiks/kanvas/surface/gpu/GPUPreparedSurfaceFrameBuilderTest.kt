@@ -68,6 +68,133 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
+    fun `public DrawRect stroke records four ordinary fill visuals with one source operation ownership`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(8f, 8f, 24f, 20f),
+                        Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.facts}"
+            },
+        )
+        assertEquals(4, ready.visualOperationCount)
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(listOf(0, 1, 2, 3), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(4, packets.size)
+    }
+
+    @Test
+    fun `public DrawRRect linear gradient records the analytic 656 byte CorePrimitive program`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRRect(
+                        RRectF32.of(RectF32.ofLTRB(2f, 3f, 30f, 21f), radius = 4f),
+                        Paint(
+                            shader = Shader.LinearGradient(
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
+                                listOf(
+                                    GradientStop(0f, ColorARGB.of(160, 40, 120, 208)),
+                                    GradientStop(1f, ColorARGB.of(96, 224, 72, 48)),
+                                ),
+                            ),
+                        ).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                capabilitiesWithLinearFact(),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(result)
+        val packet = ready.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        assertEquals(
+            "layout.core-primitive.dynamic-uniform656-gradient-analytic-linear-v1",
+            packet.bindingLayoutHash,
+        )
+    }
+
+    @Test
+    fun `public DrawRect with injected LinearGradient fact records the direct 592 byte CorePrimitive program`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 3f, 30f, 21f),
+                        Paint(
+                            shader = Shader.LinearGradient(
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
+                                listOf(
+                                    GradientStop(0f, ColorARGB.of(160, 40, 120, 208)),
+                                    GradientStop(1f, ColorARGB.of(96, 224, 72, 48)),
+                                ),
+                            ),
+                        ).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                capabilitiesWithLinearFact(),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(result)
+        val packet = ready.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        assertEquals(
+            "layout.core-primitive.dynamic-uniform592-gradient-linear-v1",
+            packet.bindingLayoutHash,
+        )
+    }
+
+    @Test
+    fun `public LinearGradient with destination read blend closes before prepared task publication`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 3f, 30f, 21f),
+                        Paint(
+                            shader = Shader.LinearGradient(
+                                Point2F32(2f, 3f),
+                                Point2F32(30f, 21f),
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                        ).copy(antiAlias = false, blendMode = BlendMode.MULTIPLY),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.native-core-primitive.blend",
+            assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `prepared vertices semantic-only draw plans an executable render task`() {
         val base = request(listOf(rect()))
         val result = GPUPreparedSurfaceFrameBuilder.build(
@@ -628,7 +755,36 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `refusal matrix preserves true diagnostics while sRGB translucent solid is ready`() {
+    fun `bounded radial and sweep Canvas materials build CorePrimitive frames when facts are present`() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                RectF32.ofLTRB(2f, 2f, 14f, 14f),
+                Paint(shader = Shader.RadialGradient(Point2F32(8f, 8f), 8f, stops)).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                RectF32.ofLTRB(16f, 2f, 30f, 14f),
+                Paint(shader = Shader.SweepGradient(Point2F32(23f, 8f), stops = stops)).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(request(operations)),
+        )
+        val materials = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .map { assertIs<GPUDrawSemanticPayload.CorePrimitive>(it.semanticPayload).material }
+
+        assertTrue(materials.any { it is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.RadialGradient })
+        assertTrue(materials.any { it is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SweepGradient })
+    }
+
+    @Test
+    fun `refusal matrix preserves true diagnostics while sRGB translucent solid and bounded linear are ready`() {
         val gradient = Shader.LinearGradient(
             Point2F32(0f, 0f),
             Point2F32(8f, 8f),
@@ -657,9 +813,20 @@ class GPUPreparedSurfaceFrameBuilderTest {
             translucentPackets.map(GPUDrawPacket::targetStateHash).toSet(),
         )
 
+        val linearReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(rect().copy(paint = Paint.fill(ColorARGB.White).copy(shader = gradient)))),
+            ),
+        )
+        val linearMaterial = linearReady.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .map { assertIs<GPUDrawSemanticPayload.CorePrimitive>(it.semanticPayload).material }
+            .single()
+        assertIs<org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.LinearGradient>(
+            linearMaterial,
+        )
+
         val cases = listOf(
-            request(listOf(rect().copy(paint = Paint.fill(ColorARGB.White).copy(shader = gradient)))) to
-                "unsupported.core_primitive.material.non_solid",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(2f, 2f), Point2F32(12f, 2f)),
@@ -1280,6 +1447,21 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 add(GPURendererFeature.RenderPass)
                 if (readback) add(GPURendererFeature.Readback)
             },
+        )
+    }
+
+    private fun capabilitiesWithLinearFact(): GPUCapabilities {
+        val base = capabilities()
+        return GPUCapabilities(
+            implementation = base.implementation,
+            facts = base.facts.filterNot { it.name == "first_slice.linear_gradient.native" } +
+                capability("first_slice.linear_gradient.native"),
+            knownUnsupportedFacts = base.knownUnsupportedFacts,
+            snapshotId = "${base.snapshotId}:linear-fact-injected",
+            limits = base.limits,
+            textureFormatSampleSupport = base.textureFormatSampleSupport,
+            rendererFeatures = base.rendererFeatures,
+            copyAsDrawCapability = base.copyAsDrawCapability,
         )
     }
 

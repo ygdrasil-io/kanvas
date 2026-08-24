@@ -51,7 +51,7 @@ class EvidenceBundleSchemaSerializationTest {
                 outcome = "rendered",
                 encodedScopeKinds = listOf("clip", "layer"),
                 structuralEvents = listOf(StructuralEventEvidence("draw", "record", "first-draw")),
-                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 1L),
+                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 4L),
                 runtimeTelemetryDelta = telemetry,
             ),
             diagnostics = listOf("diagnostic-a", "diagnostic-b"),
@@ -106,7 +106,7 @@ class EvidenceBundleSchemaSerializationTest {
         val event = route["structuralEvents"]!!.jsonArray.single().jsonObject
         assertEquals(setOf("kind", "phase", "label"), event.keys); assertEquals("draw", event.string("kind")); assertEquals("record", event.string("phase")); assertEquals("first-draw", event.string("label"))
         val counters = route["structuralCounters"]!!.jsonObject
-        assertEquals(mapOf("clips" to 2L, "draws" to 3L, "queue.submit" to 1L), counters.mapValues { it.value.jsonPrimitive.long })
+        assertEquals(mapOf("clips" to 2L, "draws" to 3L, "queue.submit" to 4L), counters.mapValues { it.value.jsonPrimitive.long })
         val telemetryJson = route["runtimeTelemetryDelta"]!!.jsonObject
         assertEquals(TELEMETRY, telemetryJson.mapValues { it.value.jsonPrimitive.long })
 

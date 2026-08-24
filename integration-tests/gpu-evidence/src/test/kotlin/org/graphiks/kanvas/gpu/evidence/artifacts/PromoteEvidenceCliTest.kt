@@ -5,6 +5,8 @@ import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.io.IOException
+import java.security.MessageDigest
+import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -27,6 +29,7 @@ import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.test.ComparisonUtils
 import org.junit.jupiter.api.io.TempDir
 
 class PromoteEvidenceCliTest {
@@ -144,6 +147,165 @@ class PromoteEvidenceCliTest {
         assertEquals(true, json["rebaseline"]!!.jsonPrimitive.boolean)
         assertEquals("old=100.0", json["priorComparison"]!!.jsonPrimitive.content)
         assertEquals("new=99.9", json["newComparison"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `rebaseline promotes a verified historical seven scene subset to the current ten scene catalog`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        assertEquals(7, sceneDirectories(promotedRoot(repository)).size)
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertEquals(0, result)
+        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline accepts coherent historical route and oracle identities`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val solid = promotedRoot(repository).resolve("solid-card-stack")
+        val solidCase = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }
+        val historicalPixels = ByteArray(solidCase.descriptor.width * solidCase.descriptor.height * 4) { index -> (index * 17 + 3).toByte() }
+        writePng(solid.resolve("cpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
+        writePng(solid.resolve("gpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
+        refreshHash(solid, "cpu.png")
+        refreshHash(solid, "gpu.png")
+        val currentExpected = EvidenceVerificationExpectation.fromCase(
+            solidCase,
+            COMMIT,
+            expectedRgba = requireNotNull(solidCase.oracle).render(solidCase.descriptor.width, solidCase.descriptor.height),
+        )
+        val currentVerification = EvidenceBundleVerifier.verify(solid, currentExpected)
+        assertTrue(currentVerification is EvidenceBundleVerification.Invalid)
+        assertTrue((currentVerification as EvidenceBundleVerification.Invalid).errors.any { it.contains("CPU PNG does not match expected oracle pixels") })
+        rewriteHistoricalIdentity(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val stderr = ByteArrayOutputStream()
+        val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertEquals(0, result, "historical route/oracle identities must not be compared to current catalog semantics: ${stderr}")
+        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects an unknown historical oracle kind before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        rewriteHistoricalIdentity(promotedRoot(repository))
+        val manifest = promotedRoot(repository).resolve("solid-card-stack/manifest.json")
+        Files.writeString(manifest, Files.readString(manifest).replaceFirst("\"oracleKind\":\"generated-cpu\"", "\"oracleKind\":\"unknown\""))
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects a refusal with an image oracle before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val manifest = promotedRoot(repository).resolve("aggregate-memory-budget-refusal/manifest.json")
+        Files.writeString(
+            manifest,
+            Files.readString(manifest)
+                .replaceFirst("\"oracleKind\":\"stable-refusal\"", "\"oracleKind\":\"generated-cpu\"")
+                .replaceFirst("\"oracleId\":\"stable-refusal\"", "\"oracleId\":\"historical-refusal-cpu\"")
+                .replaceFirst("\"oracleProvenance\":\"stable-refusal\"", "\"oracleProvenance\":\"generated-cpu\""),
+        )
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects refusal structural submission without runtime submission before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val directory = promotedRoot(repository).resolve("aggregate-memory-budget-refusal")
+        val route = directory.resolve("route.json")
+        Files.writeString(route, Files.readString(route).replaceFirst("\"structuralCounters\":{}", "\"structuralCounters\":{\"queue.submit\":1}"))
+        refreshHash(directory, "route.json")
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects a tampered known scene in a historical subset before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        val gpu = promotedRoot(repository).resolve("solid-card-stack/gpu.png")
+        val tampered = Files.readAllBytes(gpu)
+        tampered[0] = (tampered[0].toInt() xor 0x01).toByte()
+        Files.write(gpu, tampered)
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `rebaseline rejects a historical subset missing promotion metadata before mutation`() {
+        writeAllBundles(repository, COMMIT)
+        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
+        Files.delete(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
+        val before = snapshot(promotedRoot(repository))
+
+        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
+                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        val leftovers = Files.list(promotedRoot(repository).parent).use { stream ->
+            stream.iterator().asSequence().filter { it.fileName.toString().startsWith(".promoted.staged-") }.toList()
+        }
+        assertTrue(leftovers.isEmpty())
     }
 
     @Test
@@ -296,6 +458,58 @@ class PromoteEvidenceCliTest {
     private fun snapshot(root: Path): Map<String, List<Byte>> = if (!Files.exists(root)) emptyMap() else Files.walk(root).use { stream ->
         stream.iterator().asSequence().filter(Files::isRegularFile).associate { root.relativize(it).toString() to Files.readAllBytes(it).toList() }
     }
+
+    private fun removeScene(root: Path, sceneId: String) {
+        Files.walk(root.resolve(sceneId)).sorted(Comparator.reverseOrder()).forEach(Files::delete)
+    }
+
+    private fun rewriteHistoricalIdentity(root: Path) {
+        mapOf(
+            "solid-card-stack" to "product.solid-rect",
+            "translucent-card-overlap" to "product.solid-rect",
+            "scissor-overlay" to "product.solid-rect",
+            "stroke-rect-outline" to "product.stroke-rect",
+            "separable-blur-rect" to "product.separable-blur-rect",
+        ).forEach { (sceneId, routeId) ->
+            val directory = root.resolve(sceneId)
+            val route = directory.resolve("route.json")
+            Files.writeString(route, Files.readString(route).replaceFirst(Regex("\\\"routeId\\\":\\\"[^\\\"]+\\\""), "\\\"routeId\\\":\\\"$routeId\\\""))
+            refreshHash(directory, "route.json")
+        }
+        mapOf(
+            "translucent-card-overlap" to ("reference-raster-translucent-src-over" to 1),
+            "separable-blur-rect" to ("separable-blur-transparent-decal" to 1),
+        ).forEach { (sceneId, oracle) ->
+            val manifest = root.resolve(sceneId).resolve("manifest.json")
+            val text = Files.readString(manifest)
+                .replaceFirst(Regex("\\\"oracleId\\\":\\\"[^\\\"]+\\\""), "\\\"oracleId\\\":\\\"${oracle.first}\\\"")
+                .replaceFirst(Regex("\\\"oracleVersion\\\":\\d+"), "\\\"oracleVersion\\\":${oracle.second}")
+            Files.writeString(manifest, text)
+        }
+    }
+
+    private fun refreshHash(directory: Path, name: String) {
+        val manifest = directory.resolve("manifest.json")
+        val hash = sha256(Files.readAllBytes(directory.resolve(name)))
+        val text = Files.readString(manifest)
+        val key = "\"$name\":\""
+        val start = text.indexOf(key) + key.length
+        require(start >= key.length)
+        val end = text.indexOf('"', start)
+        Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end))
+    }
+
+    private fun writePng(path: Path, rgba: ByteArray, width: Int, height: Int) {
+        val temporary = Files.createTempFile("historical-pixels-", ".png")
+        try {
+            ComparisonUtils.saveRgbaAsPng(rgba, width, height, temporary.toFile())
+            Files.move(temporary, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     companion object {
         private const val COMMIT = "0123456789abcdef0123456789abcdef01234567"

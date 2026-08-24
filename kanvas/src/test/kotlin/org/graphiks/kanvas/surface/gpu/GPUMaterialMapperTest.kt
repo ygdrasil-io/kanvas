@@ -114,6 +114,119 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `linear descriptor snapshots gradient facts without mutable escape`() {
+        val positions = floatArrayOf(0f, 1f)
+        val colors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f)
+        val descriptor = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 8f, endY = 0f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = positions,
+            allStopColors = colors,
+        )
+
+        positions[0] = 0.25f
+        colors[0] = 0.25f
+
+        assertEquals(listOf(0f, 1f), descriptor.allStopPositions?.toList())
+        assertEquals(listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f), descriptor.allStopColors?.toList())
+        assertEquals("srgb", descriptor.interpolation)
+        assertEquals(listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), descriptor.localMatrix)
+
+        val (_, _, _, _, _, _, _, _, _, _, _, _, _, componentPositions, componentColors,
+            componentSnippet, componentEntryPoint) = descriptor
+        assertEquals(listOf(0f, 1f), componentPositions?.toList())
+        assertEquals(listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f), componentColors?.toList())
+        assertEquals(null, componentSnippet)
+        assertEquals(null, componentEntryPoint)
+
+        val nonSrgb = descriptor.withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(interpolation = "linear"),
+        )
+        assertEquals("linear", nonSrgb.interpolation)
+        assertNotEquals(descriptor, nonSrgb)
+        assertNotEquals(descriptor.hashCode(), nonSrgb.hashCode())
+
+        val escaped = requireNotNull(descriptor.allStopPositions)
+        escaped[0] = 0.75f
+        val escapedColors = requireNotNull(descriptor.allStopColors)
+        escapedColors[0] = 0.75f
+        assertEquals(listOf(0f, 1f), descriptor.allStopPositions?.toList())
+        assertEquals(listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f), descriptor.allStopColors?.toList())
+
+        val copied = nonSrgb.copy()
+        assertEquals("linear", copied.interpolation)
+        assertEquals(nonSrgb.localMatrix, copied.localMatrix)
+        assertEquals(listOf(0f, 1f), copied.allStopPositions?.toList())
+        assertEquals(listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f), copied.allStopColors?.toList())
+
+        fun nanDescriptor(bits: Int) = GPUMaterialDescriptor.LinearGradient(
+            startX = Float.fromBits(bits), startY = 0f, endX = 1f, endY = 0f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+        )
+        val firstNan = nanDescriptor(0x7fc00001)
+        val secondNan = nanDescriptor(0x7fc00002)
+        assertNotEquals(firstNan, secondNan)
+        assertNotEquals(firstNan.hashCode(), secondNan.hashCode())
+        assertNotEquals(firstNan.toString(), secondNan.toString())
+    }
+
+    @Test
+    fun `linear wrappers retain source facts while prepared mapping refuses unsupported facts`() {
+        val gradient = Shader.LinearGradient(
+            start = Point2F32(1f, 2f),
+            end = Point2F32(9f, 2f),
+            stops = threeGradientStops(),
+        )
+        val localMatrix = Matrix3x3F32.translation(3f, 4f)
+
+        val legacyMatrix = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(shader = Shader.WithLocalMatrix(gradient, localMatrix)).toMaterial(),
+        )
+        assertEquals(
+            listOf(1f, 0f, 3f, 0f, 1f, 4f, 0f, 0f, 1f),
+            legacyMatrix.localMatrix,
+        )
+        assertEquals("srgb", legacyMatrix.interpolation)
+        val preparedMatrix = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(shader = Shader.WithLocalMatrix(gradient, localMatrix))
+                .toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, preparedMatrix.reason)
+        assertEquals(GPUMaterialKind.LinearGradient, preparedMatrix.originalKind)
+        assertEquals(
+            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            assertIs<GPUMaterialDescriptor.LinearGradient>(preparedMatrix.source).localMatrix,
+        )
+
+        val legacyWorkingSpace = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.WithWorkingColorSpace(
+                    gradient,
+                    ColorSpaceInterpolation.LINEAR,
+                ),
+            ).toMaterial(),
+        )
+        assertEquals("linear", legacyWorkingSpace.interpolation)
+        assertEquals(
+            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            legacyWorkingSpace.localMatrix,
+        )
+        val preparedWorkingSpace = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithWorkingColorSpace(
+                    gradient,
+                    ColorSpaceInterpolation.LINEAR,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE, preparedWorkingSpace.reason)
+        assertEquals(GPUMaterialKind.LinearGradient, preparedWorkingSpace.originalKind)
+        assertEquals(legacyWorkingSpace, preparedWorkingSpace.source)
+    }
+
+    @Test
     fun `prepared radial mapping retains normalized stops interpolation tile mode and identity facts`() {
         val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
             Paint(

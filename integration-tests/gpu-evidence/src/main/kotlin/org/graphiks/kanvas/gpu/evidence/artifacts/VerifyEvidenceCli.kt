@@ -115,6 +115,47 @@ class VerifyEvidenceCliRunner(
         return if (results.all { it }) 0 else 1
     }
 
+    /** Internal-only preflight for an existing promoted root during rebaseline. */
+    internal fun verifyHistoricalSubset(root: Path): Int {
+        return try {
+            require(Files.isDirectory(root, NOFOLLOW_LINKS)) { "historical evidence root must be a directory" }
+            require(!Files.isSymbolicLink(root)) { "historical evidence root cannot be a symlink" }
+            val expectedById = GpuEvidenceCatalog.cases.associateBy { it.descriptor.id.value }
+            require(expectedById.size == GpuEvidenceCatalog.cases.size) { "catalog contains duplicate scene ids" }
+            val entries = Files.list(root).use { stream -> stream.iterator().asSequence().toList() }
+            require(entries.isNotEmpty()) { "historical evidence root must be non-empty" }
+            require(entries.none { Files.isSymbolicLink(it) }) { "historical evidence root contains a symlink" }
+            require(entries.all { Files.isDirectory(it, NOFOLLOW_LINKS) }) { "historical evidence root contains a non-directory entry" }
+            val names = entries.map { it.fileName.toString() }.toSet()
+            require(names.all { it in expectedById }) { "historical evidence root contains unknown scene ids: ${names - expectedById.keys}" }
+            val commit = commonManifestCommit(entries)
+            val results = entries.map { directory ->
+                val sceneId = directory.fileName.toString()
+                requireNotNull(expectedById[sceneId])
+                val promotion = directory.resolve("promotion.json")
+                require(Files.isRegularFile(promotion, NOFOLLOW_LINKS) && !Files.isSymbolicLink(promotion)) {
+                    "$sceneId: historical bundle requires a regular promotion.json"
+                }
+                when (val result = EvidenceBundleVerifier.verifyRecorded(directory, commit)) {
+                    is EvidenceBundleVerification.Invalid -> {
+                        stderr.println("$sceneId: invalid (${result.errors.joinToString("; ")})")
+                        false
+                    }
+                    is EvidenceBundleVerification.Verified -> {
+                        val passed = result.verdict is EvidenceVerdict.Pass
+                        stdout.println("$sceneId: ${result.verdict.kind()}")
+                        if (!passed) stderr.println("$sceneId: ${result.verdict.reason()}")
+                        passed
+                    }
+                }
+            }
+            if (results.all { it }) 0 else 1
+        } catch (failure: Exception) {
+            stderr.println("gpu historical evidence verification failed: ${failure.message}")
+            1
+        }
+    }
+
     private fun commonManifestCommit(entries: List<Path>): String {
         val commits = entries.map { path ->
             val manifestPath = path.resolve("manifest.json")

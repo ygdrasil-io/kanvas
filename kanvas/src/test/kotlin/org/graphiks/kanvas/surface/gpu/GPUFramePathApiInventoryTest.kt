@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
@@ -68,6 +69,33 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
+    @Test
+    fun `public stroke rect inventory reports analytic four band fills without a path key`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(8f, 8f, 24f, 20f),
+                    Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertEquals(null, inventory.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), inventory.visualCommands.map { it.normalized.commandId.value })
+        assertTrue(inventory.visualCommands.all { visual ->
+            visual.normalized is NormalizedDrawCommand.FillRect &&
+                visual.normalized.source.operation == "drawRect.stroke.analytic-four-band"
+        })
+        assertTrue(inventory.visualCommands.none { visual ->
+            (visual.normalized as? NormalizedDrawCommand.FillPath)?.pathKey?.contains("rect-stroke") == true
+        })
+    }
+
     @Test
     fun `public inventory path prepares vertices with text and maps the snapshot once`() {
         val operations = listOf(
@@ -1155,7 +1183,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `non solid core material becomes a stable refusal instead of an exception`() {
+    fun `linear core material without its capability stays fail closed during semantic gathering`() {
         val gradient = Shader.LinearGradient(
             start = Point2F32(0f, 0f),
             end = Point2F32(16f, 0f),
@@ -1170,8 +1198,193 @@ class GPUFramePathApiInventoryTest {
 
         val refused = gatherRefusal(inventory)
 
-        assertEquals("unsupported.core_primitive.material.non_solid", refused.code)
-        assertEquals("LinearGradient", refused.facts["materialKind"])
+        assertEquals("unsupported.core_primitive.rect.analysis_authority_missing", refused.code)
+        assertEquals("analysis.fill_rect.0", refused.facts["analysisRecordId"])
+    }
+
+    @Test
+    fun `bounded linear radial and sweep public materials reach core primitive semantics when facts are injected`() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val shaders = listOf(
+            Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(32f, 0f), stops),
+            Shader.RadialGradient(Point2F32(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point2F32(16f, 16f), stops = stops),
+        )
+
+        shaders.forEach { shader ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(
+                    FILL_RECT_CAPABILITY,
+                    "first_slice.linear_gradient.native",
+                    "first_slice.radial_gradient.native",
+                    "first_slice.sweep_gradient.native",
+                ),
+            )
+
+            assertTrue(inventory.recording.routeDiagnostics.none { it.startsWith("refused:") })
+            val gatheredResult = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            )
+            val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+                gatheredResult,
+                gatheredResult.toString(),
+            )
+            val material = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                gathered.semantics.values.single(),
+            ).material
+            when (shader) {
+                is Shader.LinearGradient -> assertIs<GPUCorePrimitiveMaterialPayload.LinearGradient>(material)
+                is Shader.RadialGradient -> assertIs<GPUCorePrimitiveMaterialPayload.RadialGradient>(material)
+                is Shader.SweepGradient -> assertIs<GPUCorePrimitiveMaterialPayload.SweepGradient>(material)
+                else -> error("unexpected shader")
+            }
+        }
+    }
+
+    @Test
+    fun `antialiased radial and sweep public materials refuse before analytic recording`() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val shaders = listOf(
+            Shader.RadialGradient(Point2F32(16f, 16f), 16f, stops),
+            Shader.SweepGradient(Point2F32(16f, 16f), stops = stops),
+        )
+
+        shaders.forEach { shader ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = true),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(
+                    FILL_RECT_CAPABILITY,
+                    "first_slice.radial_gradient.native",
+                    "first_slice.sweep_gradient.native",
+                ),
+            )
+
+            assertEquals(
+                listOf("refused:unsupported.material.gradient_antialias"),
+                inventory.recording.routeDiagnostics,
+            )
+            assertTrue(
+                inventory.recording.taskList.tasks
+                    .filterIsInstance<GPUTask.Render>()
+                    .flatMap(GPUTask.Render::drawPackets)
+                    .isEmpty(),
+            )
+        }
+    }
+
+    @Test
+    fun `antialiased bounded linear public material reaches analytic core primitive semantics with injected fact`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                    Paint(
+                        shader = Shader.LinearGradient(
+                            Point2F32(0f, 0f),
+                            Point2F32(32f, 0f),
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                    ).copy(antiAlias = true),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.linear_gradient.native"),
+        )
+
+        assertTrue(inventory.recording.routeDiagnostics.none { it.startsWith("refused:") })
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertEquals(1, gathered.semantics.size)
+    }
+
+    @Test
+    fun `removing either gradient fact preserves exact planner refusal and no render packets`() {
+        val fixtures = listOf(
+            "first_slice.linear_gradient.native" to
+                Shader.LinearGradient(
+                    Point2F32(0f, 0f), Point2F32(32f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+            "first_slice.radial_gradient.native" to
+                Shader.RadialGradient(
+                    Point2F32(16f, 16f), 16f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+            "first_slice.sweep_gradient.native" to
+                Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+        )
+
+        fixtures.forEach { (missing, shader) ->
+            val allCapabilities = capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                "first_slice.linear_gradient.native",
+                "first_slice.radial_gradient.native",
+                "first_slice.sweep_gradient.native",
+            )
+            val capabilities = GPUCapabilities(
+                implementation = allCapabilities.implementation,
+                facts = allCapabilities.facts.filterNot { it.name == missing },
+                knownUnsupportedFacts = allCapabilities.knownUnsupportedFacts,
+                snapshotId = "${allCapabilities.snapshotId}:without-$missing",
+                limits = allCapabilities.limits,
+            )
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities,
+            )
+
+            val expected = when {
+                missing.contains("linear") -> "unsupported.material.linear_gradient_capability_missing"
+                missing.contains("radial") -> "unsupported.material.radial_gradient_capability_missing"
+                else -> "unsupported.material.sweep_gradient_capability_missing"
+            }
+            assertEquals(listOf("refused:$expected"), inventory.recording.routeDiagnostics)
+            assertTrue(
+                inventory.recording.taskList.tasks
+                    .filterIsInstance<GPUTask.Render>()
+                    .flatMap { it.drawPackets }
+                    .isEmpty(),
+            )
+        }
     }
 
     @Test

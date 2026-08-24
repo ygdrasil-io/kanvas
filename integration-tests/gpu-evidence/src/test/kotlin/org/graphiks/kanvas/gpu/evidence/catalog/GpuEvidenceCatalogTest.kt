@@ -9,6 +9,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceRecordedSession
+import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -19,9 +20,9 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.Point
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
@@ -95,6 +96,9 @@ class GpuEvidenceCatalogTest {
         assertNotNull(blur.oracle)
         assertEquals(2, blur.descriptor.comparison?.perChannelTolerance)
         assertEquals(99.0, blur.descriptor.comparison?.minimumSimilarityPercent)
+        assertEquals(1, blur.descriptor.comparison?.version)
+        assertEquals("surface-srgb-mask-blur-normal-decal", (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId)
+        assertEquals(2, (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).version)
 
         listOf("translucent-card-overlap", "scissor-overlay", "stroke-rect-outline").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
@@ -105,8 +109,16 @@ class GpuEvidenceCatalogTest {
             assertNotNull(evidenceCase.descriptor.comparison)
         }
         assertEquals(1, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.perChannelTolerance)
+        assertEquals(100.0, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.minimumSimilarityPercent)
+        assertEquals(1, cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.comparison?.version)
+        val translucentOracle = cases.first { it.descriptor.id.value == "translucent-card-overlap" }.descriptor.oracle as OraclePolicy.GeneratedCpu
+        assertEquals("surface-srgb-linear-premul-src-over", translucentOracle.oracleId)
+        assertEquals(2, translucentOracle.version)
         assertEquals(0, cases.first { it.descriptor.id.value == "scissor-overlay" }.descriptor.comparison?.perChannelTolerance)
-        assertEquals(0, cases.first { it.descriptor.id.value == "stroke-rect-outline" }.descriptor.comparison?.perChannelTolerance)
+        val strokeRect = cases.first { it.descriptor.id.value == "stroke-rect-outline" }
+        assertEquals(0, strokeRect.descriptor.comparison?.perChannelTolerance)
+        assertIs<KanvasSurfaceProgram>(strokeRect.program)
+        assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(strokeRect.program).routeId)
 
         listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
@@ -120,6 +132,24 @@ class GpuEvidenceCatalogTest {
             assertEquals(100.0, evidenceCase.descriptor.comparison?.minimumSimilarityPercent)
             assertEquals(1, evidenceCase.descriptor.comparison?.version)
         }
+        assertEquals(
+            mapOf(
+                "linear-gradient-lanes" to "surface-srgb-gradient-linear-clamp",
+                "radial-swatch" to "surface-srgb-gradient-radial-clamp",
+                "sweep-disk" to "surface-srgb-gradient-sweep-clamp",
+            ),
+            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").associateWith { id ->
+                (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
+            },
+        )
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { id ->
+            val oracle = cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu
+            assertEquals(2, oracle.version)
+            assertEquals(
+                "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage.",
+                cases.first { it.descriptor.id.value == id }.descriptor.comparison?.rationale,
+            )
+        }
 
         val budget = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "aggregate-memory-budget-refusal" })
         assertEquals("unsupported.frame_memory.aggregate_budget_exceeded", assertIs<EvidenceExpectation.ShouldRefuse>(budget.descriptor.expectation).stableReasonCode)
@@ -127,20 +157,81 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
+    fun `catalog locks exact product routes policies and oracle identities`() {
+        val expectedRenderIds = listOf(
+            "solid-card-stack",
+            "separable-blur-rect",
+            "translucent-card-overlap",
+            "scissor-overlay",
+            "stroke-rect-outline",
+            "linear-gradient-lanes",
+            "radial-swatch",
+            "sweep-disk",
+        )
+        assertEquals(
+            expectedRenderIds.associateWith { "kanvas.surface.render" },
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
+            },
+        )
+        assertEquals(
+            mapOf(
+                "custom-runtime-effect-unregistered-refusal" to "product.runtime-effect.custom",
+                "aggregate-memory-budget-refusal" to "product.solid-rect",
+            ),
+            GpuEvidenceCatalog.refusalCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to assertIs<RoutedSceneProgram>(evidenceCase.program).routeId
+            },
+        )
+
+        assertEquals(
+            mapOf(
+                "solid-card-stack" to OraclePolicy.GeneratedCpu("reference-raster-rect-src-over", 1),
+                "separable-blur-rect" to OraclePolicy.GeneratedCpu("surface-srgb-mask-blur-normal-decal", 2),
+                "translucent-card-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
+                "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
+                "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
+                "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
+                "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
+                "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
+            ),
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
+            },
+        )
+        assertEquals(
+            mapOf(
+                "solid-card-stack" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from opaque SrcOver rectangles."),
+                "separable-blur-rect" to ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the independently quantized vertical mask stage."),
+                "translucent-card-overlap" to ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."),
+                "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),
+                "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
+                "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+            ),
+            GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
+            },
+        )
+        assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.oracle == OraclePolicy.StableRefusal && it.oracle == null })
+    }
+
+    @Test
     fun `public surface programs record only the requested Canvas operations`() {
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 56f, 34f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(14f, 38f, 50f, 54f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 10f, 56f, 34f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(14f, 38f, 50f, 54f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("solid-card-stack"),
         )
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(16f, 16f, 48f, 48f),
-                    Paint(color = Color.fromRGBA(0.18f, 0.42f, 0.76f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f), antiAlias = false),
+                    RectF32.ofLTRB(16f, 16f, 48f, 48f),
+                    Paint(color = ColorARGB.fromRGBA(0.18f, 0.42f, 0.76f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 3f), antiAlias = false),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
                 ),
@@ -149,37 +240,37 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 10f, 44f, 42f), Paint.fill(Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(24f, 22f, 56f, 54f), Paint.fill(Color.fromRGBA(0.5f, 0.25f, 0.125f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 10f, 44f, 42f), Paint.fill(ColorARGB.fromRGBA(0.25f, 0.5f, 0.75f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(24f, 22f, 56f, 54f), Paint.fill(ColorARGB.fromRGBA(0.5f, 0.25f, 0.125f, 0.5f)), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("translucent-card-overlap"),
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
-                DisplayOp.DrawRect(Rect.fromLTRB(8f, 8f, 56f, 56f), Paint.fill(Color.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(16f, 16f, 40f, 40f), false)),
-                DisplayOp.SetClip(ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
-                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 56f, 56f), Paint.fill(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(Rect.fromLTRB(24f, 24f, 48f, 48f), false)),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.SetClip(ClipStack.DeviceRect(RectF32.ofLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.DrawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(RectF32.ofLTRB(16f, 16f, 40f, 40f), false)),
+                DisplayOp.SetClip(ClipStack.DeviceRect(RectF32.ofLTRB(24f, 24f, 48f, 48f), false)),
+                DisplayOp.DrawRect(RectF32.ofLTRB(16f, 16f, 56f, 56f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)), Matrix3x3F32.Identity, ClipStack.DeviceRect(RectF32.ofLTRB(24f, 24f, 48f, 48f), false)),
             ),
             ops("scissor-overlay"),
         )
         assertEquals(
             listOf(
-                DisplayOp.DrawColor(Color.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
-                DisplayOp.DrawRect(Rect.fromLTRB(16f, 16f, 48f, 48f), Paint.stroke(Color.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRect(RectF32.ofLTRB(16f, 16f, 48f, 48f), Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
             ops("stroke-rect-outline"),
         )
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 16f, 56f, 48f),
+                    RectF32.ofLTRB(8f, 16f, 56f, 48f),
                     Paint(
                         shader = Shader.LinearGradient(
-                            Point(8.5f, 32.5f), Point(55.5f, 32.5f),
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 56, 56)), GradientStop(1f, Color.fromArgb(255, 56, 112, 255))),
+                            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,
@@ -193,11 +284,11 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    RectF32.ofLTRB(8f, 8f, 56f, 56f),
                     Paint(
                         shader = Shader.RadialGradient(
-                            Point(32.5f, 32.5f), 23.5f,
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 232, 72)), GradientStop(1f, Color.fromArgb(255, 48, 80, 192))),
+                            Point2F32(32.5f, 32.5f), 23.5f,
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 232, 72)), GradientStop(1f, ColorARGB.of(255, 48, 80, 192))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,
@@ -211,11 +302,11 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
-                    Rect.fromLTRB(8f, 8f, 56f, 56f),
+                    RectF32.ofLTRB(8f, 8f, 56f, 56f),
                     Paint(
                         shader = Shader.SweepGradient(
-                            Point(32.5f, 32.5f), 0f, 360f,
-                            listOf(GradientStop(0f, Color.fromArgb(255, 255, 64, 64)), GradientStop(1f, Color.fromArgb(255, 64, 208, 255))),
+                            Point2F32(32.5f, 32.5f), 0f, 360f,
+                            listOf(GradientStop(0f, ColorARGB.of(255, 255, 64, 64)), GradientStop(1f, ColorARGB.of(255, 64, 208, 255))),
                             TileMode.CLAMP,
                         ),
                         antiAlias = false,

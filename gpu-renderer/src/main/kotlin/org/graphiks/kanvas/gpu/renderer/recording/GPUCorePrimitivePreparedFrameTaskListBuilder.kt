@@ -142,10 +142,14 @@ const val CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform160-analytic-clip-intersection4-v1"
 const val CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform592-gradient-radial-v1"
+const val CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform592-gradient-linear-v1"
 const val CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform592-gradient-sweep-v1"
 const val CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform656-gradient-analytic-radial-v1"
+const val CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform656-gradient-analytic-linear-v1"
 const val CORE_PRIMITIVE_ANALYTIC_SWEEP_GRADIENT_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform656-gradient-analytic-sweep-v1"
 const val CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH =
@@ -180,10 +184,14 @@ internal fun corePrimitiveTargetStateHash(
 internal fun corePrimitiveGradientBindingLayoutHash(
     shader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader,
 ): String? = when (shader) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+        CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
         CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
         CORE_PRIMITIVE_DIRECT_SWEEP_GRADIENT_BINDING_LAYOUT_HASH
+    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient ->
+        CORE_PRIMITIVE_ANALYTIC_LINEAR_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRadialGradient ->
         CORE_PRIMITIVE_ANALYTIC_RADIAL_GRADIENT_BINDING_LAYOUT_HASH
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticSweepGradient ->
@@ -228,6 +236,30 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
     samplePlan: GPUSamplePlan,
     targetFormat: String,
 ): GPUCorePrimitiveDirectNativeRoute {
+    if (semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient) {
+        if (samplePlan != GPUSamplePlan.SingleSampleFrame) {
+            return GPUCorePrimitiveDirectNativeRoute.Refused(
+                "unsupported.native-core-primitive.sample-plan",
+                "Linear-gradient CorePrimitive native geometry is single-sample only.",
+            )
+        }
+        if (clipExecutionPlan !is GPUClipExecutionPlan.NoClip &&
+            clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly
+        ) {
+            return GPUCorePrimitiveDirectNativeRoute.Refused(
+                "unsupported.native-core-primitive.clip",
+                "Linear-gradient CorePrimitive native geometry accepts only no clip or an exact scissor.",
+            )
+        }
+        if (blendPlan?.destinationReadRequirement ==
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        ) {
+            return GPUCorePrimitiveDirectNativeRoute.Refused(
+                "unsupported.native-core-primitive.blend",
+                "Linear-gradient CorePrimitive native geometry does not admit destination-read blending.",
+            )
+        }
+    }
     val exactClipScissor = (corePrimitiveDirectClipAuthority(
         clipExecutionPlan,
         semantic.targetBounds,
@@ -685,8 +717,14 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
             return analysisRecordId == semantic.analysisRecordId &&
                 semantic.analysisRecordId == "analysis.fill_rrect.$commandIdValue" &&
                 semantic.analysisCommandFamily == "FillRRect" &&
-                renderStepId.value == CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY &&
-                semantic.geometry is GPUCorePrimitiveGeometry.RRect
+                semantic.geometry is GPUCorePrimitiveGeometry.RRect &&
+                when (renderStepId.value) {
+                    CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY ->
+                        semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
+                    "linear.gradient.fill" ->
+                        semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient
+                    else -> false
+                }
         }
         if (semantic.analysisRecordId != null || semantic.analysisCommandFamily != null ||
             semantic.rectRouteAuthority != null || semantic.rectGeometryAuthority != null ||
@@ -709,10 +747,24 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
     return when (renderStepId.value) {
         CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY ->
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
-                semantic.geometry is GPUCorePrimitiveGeometry.Rect
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
+        "linear.gradient.fill" ->
+            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient
+        "radial.gradient.fill" ->
+            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient
+        "sweep.gradient.fill" ->
+            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
         CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY -> {
             val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
                 capabilities.facts.any { fact ->
                 fact.name == CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY &&
                     fact.value == "supported" && fact.affectsValidity
@@ -732,8 +784,15 @@ private fun directCorePrimitiveGeometryBytes(
     acceptedClipStencilPlan: GPUClipExecutionPlan.StencilCoverage? = null,
     acceptedCoverageMaskPlan: GPUClipExecutionPlan.CoverageMask? = null,
 ): GPUCorePrimitiveDirectGeometryBytes? {
-    val gradientMaterial = semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient ||
+    val gradientMaterial = semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient ||
+        semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient ||
         semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
+    if (semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
+        ((packet.clipExecutionPlan !is GPUClipExecutionPlan.NoClip &&
+            packet.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly) ||
+            packet.blendPlan?.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired)
+    ) return null
     if (packet.role != GPUDrawPacketRole.Shading ||
         (semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor && !gradientMaterial) ||
         packet.blendPlan?.isCorePrimitiveDirectLaneBlend() != true ||
@@ -1493,6 +1552,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused(
                 "invalid.recording.core_primitive_semantics",
                 "Every accepted base packet requires exactly one gathered semantic payload and clip plan.",
+            )
+        }
+        basePackets.firstOrNull { packet ->
+            packet.renderStepId.value == CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY &&
+                request.coreSemantics().getValue(packet.commandIdValue).material !is
+                GPUCorePrimitiveMaterialPayload.SolidColor
+        }?.let {
+            return refused(
+                "invalid.recording.core_primitive_semantic_authority",
+                "Affine FillRect recording accepts only the sealed solid-color material authority.",
             )
         }
         basePackets.firstOrNull { packet ->

@@ -277,12 +277,20 @@ class GPUFirstRoutePlanner(
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
+        val isRadialGradient = command.material is GPUMaterialDescriptor.RadialGradient
+        val isSweepGradient = command.material is GPUMaterialDescriptor.SweepGradient
+        val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
-        val rectRouteAuthority = (command.material as? GPUMaterialDescriptor.SolidColor)?.let {
-            command.rectRouteAuthority()
+        val rectRouteAuthority = when (command.material) {
+            is GPUMaterialDescriptor.SolidColor,
+            is GPUMaterialDescriptor.LinearGradient,
+            is GPUMaterialDescriptor.RadialGradient,
+            is GPUMaterialDescriptor.SweepGradient,
+            -> command.rectRouteAuthority()
+            else -> null
         }
-        val isAffineSolid =
+        val isAffineSolid = command.material is GPUMaterialDescriptor.SolidColor &&
             rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val pipelineKey: String
@@ -298,13 +306,36 @@ class GPUFirstRoutePlanner(
             routeLabel = "native.fill_rect.affine.solid"
             materialKeyHash = "pending.material.solid"
             capabilityName = CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
-        } else if (isLinearGradient) {
-            pipelineKey =
-                "pending.pipeline.fill_rect.linear_gradient.${command.layer.target.colorFormat}.src_over"
-            renderStep = linearGradientRenderStep
-            routeLabel = "native.fill_rect.linear_gradient"
-            materialKeyHash = "pending.material.linear_gradient"
-            capabilityName = firstLinearGradientCapabilityName
+        } else if (isSimpleGradient) {
+            when (command.material) {
+                is GPUMaterialDescriptor.LinearGradient -> {
+                    pipelineKey =
+                        "pending.pipeline.fill_rect.linear_gradient.${command.layer.target.colorFormat}.src_over"
+                    renderStep = linearGradientRenderStep
+                    routeLabel = "native.fill_rect.linear_gradient"
+                    materialKeyHash = "pending.material.linear_gradient"
+                    capabilityName = firstLinearGradientCapabilityName
+                }
+
+                is GPUMaterialDescriptor.RadialGradient -> {
+                    pipelineKey =
+                        "pending.pipeline.fill_rect.radial_gradient.${command.layer.target.colorFormat}.src_over"
+                    renderStep = radialGradientRenderStep
+                    routeLabel = "native.fill_rect.radial_gradient"
+                    materialKeyHash = "pending.material.radial_gradient"
+                    capabilityName = firstRadialGradientCapabilityName
+                }
+
+                is GPUMaterialDescriptor.SweepGradient -> {
+                    pipelineKey =
+                        "pending.pipeline.fill_rect.sweep_gradient.${command.layer.target.colorFormat}.src_over"
+                    renderStep = sweepGradientRenderStep
+                    routeLabel = "native.fill_rect.sweep_gradient"
+                    materialKeyHash = "pending.material.sweep_gradient"
+                    capabilityName = firstSweepGradientCapabilityName
+                }
+
+            }
         } else {
             pipelineKey =
                 "pending.pipeline.fill_rect.solid.${command.layer.target.colorFormat}.src_over"
@@ -327,15 +358,26 @@ class GPUFirstRoutePlanner(
             corePrimitiveRectRouteAuthority = rectRouteAuthority,
             corePrimitiveRectGeometryAuthority = rectGeometryAuthority,
         )
-        val routeDecision: GPURouteDecision.Native = if (isLinearGradient) {
-            GPUFirstRouteDecisionBuilder.nativeLinearGradientRect(
+        val routeDecision: GPURouteDecision.Native = when {
+            isLinearGradient -> GPUFirstRouteDecisionBuilder.nativeLinearGradientRect(
                 commandIdValue = command.commandId.value,
                 pipelinePreimageHash = pipelineKey,
                 renderStepIdentity = renderStep,
                 requirements = listOf(capabilityName),
             )
-        } else {
-            GPUFirstRouteDecisionBuilder.nativeFillRect(
+            isRadialGradient -> GPUFirstRouteDecisionBuilder.nativeRadialGradientRect(
+                commandIdValue = command.commandId.value,
+                pipelinePreimageHash = pipelineKey,
+                renderStepIdentity = renderStep,
+                requirements = listOf(capabilityName),
+            )
+            isSweepGradient -> GPUFirstRouteDecisionBuilder.nativeSweepGradientRect(
+                commandIdValue = command.commandId.value,
+                pipelinePreimageHash = pipelineKey,
+                renderStepIdentity = renderStep,
+                requirements = listOf(capabilityName),
+            )
+            else -> GPUFirstRouteDecisionBuilder.nativeFillRect(
                 commandIdValue = command.commandId.value,
                 pipelinePreimageHash = pipelineKey,
                 renderStepIdentity = renderStep,
@@ -364,7 +406,7 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
-            batchKind = if (isLinearGradient) {
+            batchKind = if (isSimpleGradient) {
                 org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SimpleGradient
             } else {
                 org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
@@ -1623,6 +1665,10 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.SweepGradient &&
                 !capabilities.hasFact(firstSweepGradientCapabilityName) ->
                 "unsupported.material.sweep_gradient_capability_missing"
+            material is GPUMaterialDescriptor.RadialGradient && antiAlias ->
+                "unsupported.material.gradient_antialias"
+            material is GPUMaterialDescriptor.SweepGradient && antiAlias ->
+                "unsupported.material.gradient_antialias"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
             blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
@@ -2005,6 +2051,12 @@ class GPUFirstRoutePlanner(
 
         /** Render step identity for linear gradient fill routes. */
         const val linearGradientRenderStep = "linear.gradient.fill"
+
+        /** Render step identity for radial gradient fill routes. */
+        const val radialGradientRenderStep = "radial.gradient.fill"
+
+        /** Render step identity for sweep gradient fill routes. */
+        const val sweepGradientRenderStep = "sweep.gradient.fill"
 
         /** Required capability fact for the radial gradient material route. */
         const val firstRadialGradientCapabilityName = "first_slice.radial_gradient.native"

@@ -538,6 +538,10 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
             tileMode = tileMode,
             allStopPositions = allPos, allStopColors = allCol,
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = this.interpolation.toDescriptorInterpolation(),
+            ),
         )
         if (GradientWgslShaderProvider.canHandle(desc)) {
             val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
@@ -732,6 +736,15 @@ private fun GPUMaterialDescriptor.invalidGradientLocalMatrix(): GPUMaterialDescr
 
 private fun GPUMaterialDescriptor.withGradientLocalMatrix(matrix: Matrix3x3F32): GPUMaterialDescriptor =
     when (this) {
+        is GPUMaterialDescriptor.LinearGradient ->
+            localMatrix.composeGradientLocalMatrix(matrix)?.let { composed ->
+                copy().withGradientFacts(
+                    GPUMaterialDescriptor.GradientFacts(
+                        interpolation = interpolation,
+                        localMatrix = composed,
+                    ),
+                )
+            } ?: invalidGradientLocalMatrix()
         is GPUMaterialDescriptor.RadialGradient ->
             localMatrix.composeGradientLocalMatrix(matrix)?.let { composed ->
                 copy().withGradientFacts(
@@ -756,6 +769,13 @@ private fun GPUMaterialDescriptor.withGradientLocalMatrix(matrix: Matrix3x3F32):
 private fun GPUMaterialDescriptor.withGradientInterpolation(
     interpolation: ColorSpaceInterpolation,
 ): GPUMaterialDescriptor = when (this) {
+    is GPUMaterialDescriptor.LinearGradient ->
+        copy().withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                interpolation = interpolation.toDescriptorInterpolation(),
+                localMatrix = localMatrix,
+            ),
+        )
     is GPUMaterialDescriptor.RadialGradient ->
         copy().withGradientFacts(
             GPUMaterialDescriptor.GradientFacts(
@@ -774,6 +794,7 @@ private fun GPUMaterialDescriptor.withGradientInterpolation(
 }
 
 private fun GPUMaterialDescriptor.gradientInterpolationOrNull(): String? = when (this) {
+    is GPUMaterialDescriptor.LinearGradient -> interpolation
     is GPUMaterialDescriptor.RadialGradient -> interpolation
     is GPUMaterialDescriptor.SweepGradient -> interpolation
     else -> null
@@ -924,6 +945,7 @@ private fun Shader.toPreparedMaterial(
                 )
             }
             val gradient = when (source) {
+                is GPUMaterialDescriptor.LinearGradient,
                 is GPUMaterialDescriptor.RadialGradient,
                 is GPUMaterialDescriptor.SweepGradient -> source.withGradientInterpolation(interpolation)
                 else -> null
