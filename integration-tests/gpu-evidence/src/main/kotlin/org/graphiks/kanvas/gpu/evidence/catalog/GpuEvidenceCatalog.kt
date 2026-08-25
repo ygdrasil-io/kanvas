@@ -38,6 +38,9 @@ object GpuEvidenceCatalog {
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
+        windingPathHole(),
+        inverseWindingTrianglePath(),
+        inverseEvenOddPathHole(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
@@ -453,6 +456,61 @@ object GpuEvidenceCatalog {
         fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.EvenOdd,
     )
 
+    private fun windingPathHole() = pathFillCase(
+        id = "winding-path-hole",
+        title = "Winding path hole",
+        description = "Public Kanvas Surface non-AA winding path with an oppositely oriented rectangular hole.",
+        tags = setOf("path-fill", "winding", "hole", "kanvas-surface"),
+        program = KanvasScenePrograms.windingPathHole(),
+        fill = intArrayOf(31, 115, 209, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f),
+            )),
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(22f, 44f), point(44f, 44f), point(44f, 20f), point(22f, 20f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun inverseWindingTrianglePath() = pathFillCase(
+        id = "inverse-winding-triangle-path",
+        title = "Inverse winding triangle path",
+        description = "Public Kanvas Surface non-AA inverse winding triangle path.",
+        tags = setOf("path-fill", "inverse-winding", "kanvas-surface"),
+        program = KanvasScenePrograms.inverseWindingTrianglePath(),
+        fill = intArrayOf(242, 135, 46, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(8f, 55f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.InverseWinding,
+        oracleVersion = 2,
+        comparisonRationale = "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership.",
+    )
+
+    private fun inverseEvenOddPathHole() = pathFillCase(
+        id = "inverse-even-odd-path-hole",
+        title = "Inverse even-odd path hole",
+        description = "Public Kanvas Surface non-AA inverse even-odd path with a rectangular hole.",
+        tags = setOf("path-fill", "inverse-even-odd", "kanvas-surface"),
+        program = KanvasScenePrograms.inverseEvenOddPathHole(),
+        fill = intArrayOf(56, 220, 120, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f),
+            )),
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(22f, 20f), point(44f, 20f), point(44f, 44f), point(22f, 44f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.InverseEvenOdd,
+        oracleVersion = 2,
+        comparisonRationale = "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership.",
+    )
+
     private fun pathFillCase(
         id: String,
         title: String,
@@ -462,11 +520,13 @@ object GpuEvidenceCatalog {
         fill: IntArray,
         contours: List<SurfaceSrgbPathFillCpuOracle.Contour>,
         fillRule: SurfaceSrgbPathFillCpuOracle.FillRule,
+        oracleVersion: Int = 1,
+        comparisonRationale: String = "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership.",
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title, description, 64, 64, 1L, tags, EvidenceExpectation.ShouldRender,
-            OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."), emptySet(),
+            OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", oracleVersion),
+            ComparisonPolicy(0, 100.0, 1, comparisonRationale), emptySet(),
         ),
         program,
         SurfaceSrgbPathFillCpuOracle(intArrayOf(13, 20, 33, 255), fill, contours, fillRule),
