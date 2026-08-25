@@ -98,6 +98,44 @@ class GpuEvidenceCatalogOracleTest {
         assertEquals(1692, fillPixelCount(drrect, blue))
     }
 
+    @Test
+    fun `advanced rrect oracles preserve independent corner coverage and fill counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val asymmetric = oracle("asymmetric-solid-rrect")
+        val ellipse = oracle("ellipse-solid-rrect")
+        val drrect = oracle("asymmetric-solid-drrect-hole")
+
+        assertPixel(asymmetric, 64, 64, 10, 8, background)
+        assertPixel(asymmetric, 64, 64, 11, 8, orange)
+        assertPixel(asymmetric, 64, 64, 50, 8, orange)
+        assertPixel(asymmetric, 64, 64, 51, 8, background)
+        assertPixel(asymmetric, 64, 64, 10, 55, background)
+        assertPixel(asymmetric, 64, 64, 11, 55, orange)
+        assertPixel(asymmetric, 64, 64, 49, 55, orange)
+        assertPixel(asymmetric, 64, 64, 50, 55, background)
+        assertEquals(2265, fillPixelCount(asymmetric, orange))
+
+        assertPixel(ellipse, 64, 64, 25, 20, background)
+        assertPixel(ellipse, 64, 64, 26, 20, blue)
+        assertPixel(ellipse, 64, 64, 37, 20, blue)
+        assertPixel(ellipse, 64, 64, 38, 20, background)
+        assertPixel(ellipse, 64, 64, 12, 32, blue)
+        assertPixel(ellipse, 64, 64, 52, 32, background)
+        assertEquals(764, fillPixelCount(ellipse, blue))
+
+        assertPixel(drrect, 64, 64, 20, 20, blue)
+        assertPixel(drrect, 64, 64, 21, 20, background)
+        assertPixel(drrect, 64, 64, 41, 20, background)
+        assertPixel(drrect, 64, 64, 42, 20, blue)
+        assertPixel(drrect, 64, 64, 20, 43, blue)
+        assertPixel(drrect, 64, 64, 21, 43, background)
+        assertPixel(drrect, 64, 64, 41, 43, background)
+        assertPixel(drrect, 64, 64, 42, 43, blue)
+        assertEquals(1889, fillPixelCount(drrect, blue))
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)

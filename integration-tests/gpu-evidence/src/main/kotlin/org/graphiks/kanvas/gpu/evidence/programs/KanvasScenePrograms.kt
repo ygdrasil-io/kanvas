@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
@@ -167,6 +168,53 @@ object KanvasScenePrograms {
         drawDRRect(
             RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
             RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+    })
+
+    fun asymmetricSolidRRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawRRect(
+            RRectF32.of(
+                RectF32.ofLTRB(8f, 8f, 56f, 56f),
+                topLeft = CornerRadiiF32.of(4f, 8f),
+                topRight = CornerRadiiF32.of(10f, 4f),
+                bottomRight = CornerRadiiF32.of(8f, 12f),
+                bottomLeft = CornerRadiiF32.of(6f, 3f),
+            ),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+    })
+
+    fun ellipseSolidRRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        val ellipseRadius = CornerRadiiF32.of(20f, 12f)
+        drawRRect(
+            RRectF32.of(
+                RectF32.ofLTRB(12f, 20f, 52f, 44f),
+                ellipseRadius, ellipseRadius, ellipseRadius, ellipseRadius,
+            ),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+    })
+
+    fun asymmetricSolidDRRectHole() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawDRRect(
+            RRectF32.of(
+                RectF32.ofLTRB(6f, 8f, 58f, 56f),
+                CornerRadiiF32.of(4f, 8f),
+                CornerRadiiF32.of(10f, 4f),
+                CornerRadiiF32.of(8f, 12f),
+                CornerRadiiF32.of(6f, 3f),
+            ),
+            RRectF32.of(
+                RectF32.ofLTRB(20f, 20f, 44f, 44f),
+                CornerRadiiF32.of(2f, 4f),
+                CornerRadiiF32.of(6f, 2f),
+                CornerRadiiF32.of(4f, 6f),
+                CornerRadiiF32.of(3f, 2f),
+            ),
             Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
         )
     })
