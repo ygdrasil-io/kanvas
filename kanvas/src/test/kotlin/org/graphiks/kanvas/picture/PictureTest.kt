@@ -14,6 +14,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -31,7 +32,7 @@ import kotlin.test.assertTrue
 
 class PictureTest {
     @Test
-    fun `format 6 preserves expanded text provenance through round trip and playback`() {
+    fun `format 7 preserves expanded text and clip provenance through round trip and playback`() {
         val path = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
             paint = Paint.fill(ColorARGB.Red),
@@ -42,7 +43,7 @@ class PictureTest {
         val original = Picture(RectF32.ofLTRB(0f, 0f, 8f, 8f), listOf(path))
 
         val encoded = original.toByteArray()
-        assertEquals(6, encoded.readBigEndianInt(offset = 4))
+        assertEquals(7, encoded.readBigEndianInt(offset = 4))
         val restored = requireNotNull(Picture.fromByteArray(encoded))
         assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
 
@@ -234,6 +235,39 @@ class PictureTest {
         assertNotNull(restored)
         assertEquals(original.cullRect, restored.cullRect)
         assertEquals(original.approximateOpCount(), restored.approximateOpCount())
+    }
+
+    @Test
+    fun `roundtrip preserves transformed path clip provenance`() {
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.PathOp(
+                    path = Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)),
+                    op = ClipOp.INTERSECT,
+                    antiAlias = false,
+                    transformClass = "affine",
+                ),
+            ),
+        )
+        val original = Picture(
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
+            listOf(
+                DisplayOp.DrawRect(
+                    rect = RectF32.ofLTRB(0f, 0f, 8f, 8f),
+                    paint = Paint.fill(ColorARGB.Red),
+                    transform = Matrix3x3F32.Identity,
+                    clip = clip,
+                ),
+            ),
+        )
+
+        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
+        val restoredClip = assertIs<DisplayOp.DrawRect>(restored.ops.single()).clip
+        assertEquals(
+            "affine",
+            assertIs<ClipStackOp.PathOp>(assertIs<ClipStack.Complex>(restoredClip).ops.single())
+                .transformClass,
+        )
     }
 
     @Test

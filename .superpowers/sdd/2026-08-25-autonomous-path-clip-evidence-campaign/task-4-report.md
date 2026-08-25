@@ -51,7 +51,7 @@ in this task; those remain capture/promotion work for the parent Wave 3 flow.
 Production correction and focused prepared-frame tests:
 
 ```text
-299623222 fix(gpu): partition hard path clip scopes
+edb7b0cd7 fix(gpu): partition hard path clip scopes
 ```
 
 ## Concerns / capture gate
@@ -86,3 +86,29 @@ Follow-up verification:
 - `GPUClipCoverageSurfaceTest`: PASS, including public transformed hard clip refusal;
 - `GPUClipCoverageContractsTest`: PASS;
 - `git diff --check`: PASS.
+
+## Sol review round 2 / TDD follow-up
+
+Two additional RED regressions were added before the production edits:
+
+- `native path clip refuses destination read and layer background prefixes` first exposed that
+  the direct background prefix was not independently guarded against destination reads and
+  layer composition (the pre-fix result was the generic
+  `unsupported.recording.core_primitive_clip_stencil_mixed_geometry` refusal);
+- `roundtrip preserves transformed path clip provenance` first observed that picture replay
+  silently restored an affine path clip as `identity` (the pre-fix assertion was
+  `expected <affine>, actual <identity>`).
+
+The correction now rejects `ShaderBlendWithDstRead` and `LayerCompositeBlend` on the one allowed
+direct prefix with `unsupported.recording.core_primitive_clip_stencil_prefix`. Picture format 7
+serializes `ClipStackOp.PathOp.transformClass`; readers of formats 1–6 retain the historical
+identity default, while format 7 preserves non-identity provenance so transformed hard clips
+remain fail-closed after serialization and replay.
+
+Round 2 verification:
+
+- `:gpu-renderer:test --tests ...GPUCorePrimitivePreparedFrameTaskListBuilderTest` — PASS (70
+  tests, including the new prefix guards);
+- `:kanvas:test --tests org.graphiks.kanvas.picture.PictureTest` — PASS;
+- focused public/native clip smoke and API inventory suites — PASS;
+- `git diff --check` — PASS.

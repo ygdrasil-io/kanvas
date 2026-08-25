@@ -2124,6 +2124,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 basePackets.drop(firstConsumerIndex).any { packet ->
                     packet.clipExecutionPlan?.canonicalIdentity() != nativeClipStencilPlan.canonicalIdentity()
                 }
+            if (prefix.singleOrNull()?.let { packet ->
+                    packet.blendPlan?.destinationReadRequirement != GPUBlendDestinationReadRequirement.None ||
+                        packet.blendPlan is GPUBlendPlan.LayerCompositeBlend
+                } == true
+            ) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_prefix",
+                    "The hard path clip background prefix must be direct and non-layer, without destination read.",
+                )
+            }
             val validDirectPrefix = prefix.all { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&

@@ -2163,6 +2163,44 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip refuses destination read and layer background prefixes`() {
+        val prefixBlends = listOf(
+            GPUBlendPlan.ShaderBlendWithDstRead(
+                mode = GPUBlendMode.LIGHTEN,
+                formulaId = "lighten@v1",
+                sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+            ),
+            GPUBlendPlan.LayerCompositeBlend(
+                child = GPUBlendPlan.ShaderBlendNoDstRead(
+                    mode = GPUBlendMode.SRC_OVER,
+                    formulaId = "src-over@v1",
+                    sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+                ),
+                layerOrderingToken = "test.clip.prefix-layer",
+            ),
+        )
+        prefixBlends.forEachIndexed { index, blend ->
+            val commandId = 345 + index
+            val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+            val base = recording(command(commandId, 0), command(340, 7)).taskList
+                .withClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip, 340 to plan))
+                .withPacketBlend(commandId, blend)
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            )
+
+            assertEquals(
+                "unsupported.recording.core_primitive_clip_stencil_prefix",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+                "blend=$blend",
+            )
+        }
+    }
+
+    @Test
     fun `native path clip refuses transformed clip provenance`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "affine")
         val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
