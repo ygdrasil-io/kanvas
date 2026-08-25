@@ -17,6 +17,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -169,6 +170,81 @@ class GPUClipCoverageSurfaceTest {
         assertEquals(1128, result.pixels.asList().chunked(4).count { pixel ->
             pixel.map { it.toInt() } != listOf(13, 20, 33, 255)
         })
+    }
+
+    @Test
+    fun `public clamp linear gradient FillRect renders inside one hard path clip stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val red = ColorARGB.of(255, 255, 0, 0)
+        val blue = ColorARGB.of(255, 0, 0, 255)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f),
+                        Point2F32(56f, 8f),
+                        listOf(GradientStop(0f, red), GradientStop(1f, blue)),
+                    ),
+                ).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 9, 9, ColorARGB.of(255, 251, 0, 49))
+        assertRgbaNear(result.pixels, 64, 53, 9, ColorARGB.of(255, 65, 0, 249))
+        assertRgbaNear(result.pixels, 64, 54, 9, background)
+    }
+
+    @Test
+    fun `public translated hard path clip preserves clamp linear gradient device coordinates`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save(); translate(2f, 0f)
+            clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }, ClipOp.INTERSECT, false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint(shader = Shader.LinearGradient(
+                Point2F32(8f, 8f), Point2F32(56f, 8f), listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+            )).copy(antiAlias = false)); restore()
+        }
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 11, 9, ColorARGB.of(255, 251, 0, 49))
+        assertRgbaNear(result.pixels, 64, 9, 9, ColorARGB.of(255, 13, 20, 33))
+    }
+
+    @Test
+    fun `public uniform scaled hard path clip preserves clamp linear gradient device coordinates`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save(); translate(8f, 4f); scale(0.75f, 0.75f)
+            clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }, ClipOp.INTERSECT, false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint(shader = Shader.LinearGradient(
+                Point2F32(8f, 8f), Point2F32(56f, 8f), listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+            )).copy(antiAlias = false)); restore()
+        }
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        // The pixel center x=15.5 is 1.5/36 along the transformed [14, 50] axis;
+        // interpolation is linear-light before sRGB8 encoding.
+        assertRgbaNear(result.pixels, 64, 15, 11, ColorARGB.of(255, 250, 0, 57))
+        assertRgbaNear(result.pixels, 64, 13, 11, ColorARGB.of(255, 13, 20, 33))
     }
 
     @Test

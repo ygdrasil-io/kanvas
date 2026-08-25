@@ -186,9 +186,9 @@ internal data class GPUCorePrimitiveClipStencilPreparedUniformSlice(
 ) {
     init {
         require(resourceGeneration >= 0L && commandId >= 0 && alignedOffset >= 0L &&
-            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes == 32L &&
+            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes in setOf(32L, 592L) &&
             allocatedBytes >= payloadBytes
-        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32 slot" }
+        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32 or uniform592 slot" }
     }
 }
 

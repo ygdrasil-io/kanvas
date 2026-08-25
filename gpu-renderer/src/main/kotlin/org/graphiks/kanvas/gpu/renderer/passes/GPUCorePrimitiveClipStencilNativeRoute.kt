@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 
 /** Logical attachment identity carried by the pure route; it deliberately contains no native handle. */
 internal data class GPUCorePrimitiveClipStencilAttachmentAuthority(
@@ -37,6 +38,7 @@ internal data class GPUCorePrimitiveClipStencilConsumerInput(
     val commandId: Int,
     val sourceOrder: Int,
     val geometry: GPUCorePrimitiveGeometry,
+    val material: GPUCorePrimitiveMaterialPayload,
     val coverageMode: GPUCorePrimitiveCoverageMode,
     val blendPlan: GPUBlendPlan,
     val inverseFill: Boolean,
@@ -230,6 +232,10 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
             "Only Rect and DirectTriangles consumers are accepted.",
         )
+        val shader = corePrimitiveClipStencilConsumerShaderOrNull(consumer.material) ?: return refused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-material",
+            "Only solid colors and clamp linear gradients are accepted by the bounded clip-stencil route.",
+        )
         if (consumer.inverseFill != path.inverseFill || consumer.scissor != stencil.consumer.scissor) return refused(
             "invalid.native-core-primitive.clip-stencil.consumer-authority",
             "Consumer fill and scissor facts must match the clip plan.",
@@ -243,6 +249,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         val consumerKey = corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
             inverseFill = consumer.inverseFill,
             blendPlan = consumer.blendPlan,
+            shader = shader,
             sampleCount = stencil.sampleCount,
             colorFormat = request.colorFormat.corePrimitiveStructuralColorFormat(),
         )

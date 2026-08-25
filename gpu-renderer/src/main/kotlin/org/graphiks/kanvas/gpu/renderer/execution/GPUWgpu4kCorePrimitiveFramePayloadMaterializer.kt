@@ -3750,16 +3750,29 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 deviceGeneration = generationSeal.deviceGeneration.takeIf { isMsaa4x },
                 targetGeneration = generationSeal.targetGeneration.takeIf { isMsaa4x },
             )
+            val bindGroupComponentIdentities = acquiredByStructural.values
+                .map(GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired::componentIdentity)
+                .filter { identity ->
+                    identity.bindingPolicy == GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired
+                }
+                .toSet()
+            val primaryBindGroupComponentIdentity = bindGroupComponentIdentities.firstOrNull()
+                ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-bindings",
+                    "Clip-stencil consumers require one dynamic-uniform bind-group component.",
+                )
             frameLease = when (val checkout = sessionCache.acquireFrame(
                 GPUWgpu4kCorePrimitiveFramePoolRequirements(
                     deviceGeneration = generationSeal.deviceGeneration,
                     vertexBytes = vertexBytes,
                     indexBytes = indexBytes,
                     uniformBytes = uniformSeal.plan.totalBytes,
-                    componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                    componentIdentity = primaryBindGroupComponentIdentity,
                     clipDepthStencil = clipRequirement,
                     sampleCount = sampleCount,
                     msaaColor = msaaColorRequirement,
+                    additionalComponentIdentities = bindGroupComponentIdentities -
+                        primaryBindGroupComponentIdentity,
                 ),
             )) {
                 is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
@@ -3835,11 +3848,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 GPUPreparedNativeOperandOwnership.Borrowed,
                 pooled.capacities.indexBytes,
             )
-            val bindGroupOperand = GPUPreparedNativeBindGroupOperand(
-                pooled.handles.bindGroup,
-                generationSeal.deviceGeneration,
-                GPUPreparedNativeOperandOwnership.Borrowed,
-            )
+            fun bindGroupOperandFor(structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey) =
+                GPUPreparedNativeBindGroupOperand(
+                    requireNotNull(pooled.handles.bindGroupsByComponentIdentity[
+                        acquiredByStructural.getValue(structuralKey).componentIdentity
+                    ]),
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
             val pipelineOperands = acquiredByStructural.mapValues { (_, acquired) ->
                 GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
                     acquired,
@@ -3859,7 +3875,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 if (dynamicOffset != null) {
                     add(GPUPreparedNativeRenderCommand.SetBindGroup(
                         0,
-                        bindGroupOperand,
+                        bindGroupOperandFor(structuralKey),
                         listOf(dynamicOffset),
                     ))
                 }
@@ -4005,7 +4021,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     ),
                     GPUPreparedNativeRenderCommand.SetBindGroup(
                         0,
-                        bindGroupOperand,
+                        bindGroupOperandFor(structuralKey),
                         listOf(uniformSlot.alignedOffset),
                     ),
                     GPUPreparedNativeRenderCommand.SetVertexBuffer(

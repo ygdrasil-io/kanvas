@@ -95,6 +95,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
             commandId = packet.commandIdValue,
             sourceOrder = packet.originalPaintOrder,
             geometry = semantic.geometry,
+            material = semantic.material,
             coverageMode = semantic.coverageMode,
             blendPlan = blendPlan,
             inverseFill = path.inverseFill,

@@ -337,6 +337,7 @@ private const val MAX_MASK_BLUR_TEXTURE_DIMENSION = 4096
 
 private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
     colorTransform: GPUCorePrimitiveColorTransform,
+    deviceGradientTransform: GPUTransformFacts? = null,
 ): Pair<GPUCorePrimitiveMaterialPayload, List<Float>> = when (this) {
     is GPUMaterialDescriptor.SolidColor -> {
         val alpha = a
@@ -387,11 +388,13 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         ) {
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }
+        val deviceStart = deviceGradientTransform?.map(startX, startY) ?: (startX to startY)
+        val deviceEnd = deviceGradientTransform?.map(endX, endY) ?: (endX to endY)
         GPUCorePrimitiveMaterialPayload.LinearGradient(
-            startX = startX,
-            startY = startY,
-            endX = endX,
-            endY = endY,
+            startX = deviceStart.first,
+            startY = deviceStart.second,
+            endX = deviceEnd.first,
+            endY = deviceEnd.second,
             localMatrix = localMatrix,
             interpolation = interpolation,
             tileMode = tileMode,
@@ -538,7 +541,10 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
-    val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(colorTransform)
+    val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(
+        colorTransform = colorTransform,
+        deviceGradientTransform = nativeHardPathClipLinearGradientTransformOrNull(),
+    )
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
@@ -711,6 +717,41 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
     )
 }
+
+/**
+ * Keeps the direct gradient device-coordinate conversion local to the bounded hard-path-clip
+ * route. Other material classes, tile modes, and transforms retain their existing refusals.
+ */
+private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformOrNull(): GPUTransformFacts? {
+    val fillRect = normalized as? NormalizedDrawCommand.FillRect ?: return null
+    val gradient = fillRect.material as? GPUMaterialDescriptor.LinearGradient ?: return null
+    val stencilClip = clipExecutionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
+        ?: return null
+    if (gradient.tileMode != "clamp" || fillRect.antiAlias ||
+        geometryCoverage != GPUCoverageConsumption.FullOrScissor ||
+        stencilClip.sampleCount != 1 ||
+        stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
+    ) return null
+    return fillRect.transform.takeIf(GPUTransformFacts::isNativeHardPathClipGradientTransform)
+}
+
+private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean = when (type) {
+    GPUTransformType.Identity,
+    GPUTransformType.Translate,
+    -> skewX == 0f && skewY == 0f && scaleX == 1f && scaleY == 1f
+    GPUTransformType.Scale,
+    GPUTransformType.Affine,
+    -> skewX == 0f && skewY == 0f && scaleX > 0f && scaleX == scaleY
+    GPUTransformType.Perspective,
+    GPUTransformType.Singular,
+    -> false
+}
+
+private val HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES = setOf(
+    "identity",
+    "translate",
+    "uniform-positive-scale-translate",
+)
 
 private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (this) {
     GPUCorePrimitiveColorTransform.Identity -> channel

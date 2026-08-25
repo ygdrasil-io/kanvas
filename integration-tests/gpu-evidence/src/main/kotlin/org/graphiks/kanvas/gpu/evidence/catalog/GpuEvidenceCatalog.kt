@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBa
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -46,6 +47,9 @@ object GpuEvidenceCatalog {
         clipPathTranslatedTriangleSolid(),
         clipPathUniformScaledTriangleSolid(),
         clipPathUniformScaledTriangleTwoBands(),
+        clipPathTriangleLinearGradient(),
+        clipPathTranslatedTriangleLinearGradient(),
+        clipPathUniformScaledTriangleLinearGradient(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -577,6 +581,47 @@ object GpuEvidenceCatalog {
             SurfaceSrgbClipPathCpuOracle.OpaqueRect(32f, 4f, 56f, 52f, intArrayOf(242, 135, 46, 255)),
         ),
     )
+
+    private fun clipPathTriangleLinearGradient() = clipPathLinearGradientCase(
+        "clip-path-triangle-linear-gradient", "Clamp linear gradient hard triangle path clip",
+        KanvasScenePrograms.clipPathTriangleLinearGradient(),
+        listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
+        0f, 0f, 64f, 64f, 8f, 8f, 56f, 8f,
+    )
+
+    private fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradientCase(
+        "clip-path-translated-triangle-linear-gradient", "Translated clamp linear gradient hard triangle path clip",
+        KanvasScenePrograms.clipPathTranslatedTriangleLinearGradient(),
+        listOf(clipPoint(10f, 8f), clipPoint(58f, 8f), clipPoint(10f, 55f)),
+        2f, 0f, 66f, 64f, 10f, 8f, 58f, 8f,
+    )
+
+    private fun clipPathUniformScaledTriangleLinearGradient() = clipPathLinearGradientCase(
+        "clip-path-uniform-scaled-triangle-linear-gradient", "Uniformly scaled clamp linear gradient hard triangle path clip",
+        KanvasScenePrograms.clipPathUniformScaledTriangleLinearGradient(),
+        listOf(clipPoint(14f, 10f), clipPoint(50f, 10f), clipPoint(14f, 45.25f)),
+        8f, 4f, 56f, 52f, 14f, 10f, 50f, 10f,
+    )
+
+    private fun clipPathLinearGradientCase(
+        id: String, title: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        contour: List<SurfaceSrgbClipPathCpuOracle.Point>, left: Float, top: Float, right: Float, bottom: Float,
+        startX: Float, startY: Float, endX: Float, endY: Float,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title, "Public Kanvas Surface hard non-AA path clip with one direct clamp linear-gradient FillRect.",
+            64, 64, 1L, setOf("clip-path", "linear-gradient", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."), emptySet(),
+        ), program,
+        SurfaceSrgbClipPathLinearGradientCpuOracle(
+            intArrayOf(13, 20, 33, 255), contour, SurfaceSrgbGradientCpuOracle.Rect(left, top, right, bottom),
+            SurfaceSrgbGradientCpuOracle.Point(startX, startY), SurfaceSrgbGradientCpuOracle.Point(endX, endY),
+            intArrayOf(255, 0, 0, 255), intArrayOf(0, 0, 255, 255),
+        ),
+    )
+
+    private fun clipPoint(x: Float, y: Float) = SurfaceSrgbClipPathCpuOracle.Point(x, y)
 
     private fun clipPathCase(
         id: String,

@@ -74,6 +74,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerD
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerShaderOrNull
 import org.graphiks.kanvas.gpu.renderer.geometry.corePrimitiveClipStencilEdgeFan
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilNativePathOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilNdcVertices
@@ -803,8 +804,10 @@ private fun directCorePrimitiveGeometryBytes(
         semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient ||
         semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient
     if (semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
-        ((packet.clipExecutionPlan !is GPUClipExecutionPlan.NoClip &&
-            packet.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly) ||
+        (packet.clipExecutionPlan !is GPUClipExecutionPlan.NoClip &&
+            packet.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly &&
+            (acceptedClipStencilPlan == null ||
+                packet.clipExecutionPlan?.canonicalIdentity() != acceptedClipStencilPlan.canonicalIdentity()) ||
             packet.blendPlan?.destinationReadRequirement ==
                 GPUBlendDestinationReadRequirement.DestinationTextureRequired)
     ) return null
@@ -2108,16 +2111,22 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             staticNativeClipStencilConsumers.size in 1..2 &&
             staticNativeClipStencilConsumers.all { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                val clipStencilShader = corePrimitiveClipStencilConsumerShaderOrNull(semantic.material)
                 packet.role == GPUDrawPacketRole.Shading &&
-                    packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                    when (clipStencilShader) {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
+                            packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
+                            packet.renderStepId.value == "linear.gradient.fill"
+                        else -> false
+                    } &&
                     semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
-                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
             }
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two solid FillRect consumers.",
+                "The bounded clip-stencil scope accepts only one or two solid or clamp-linear-gradient FillRect consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan
@@ -4541,6 +4550,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
                 inverseFill = path.inverseFill,
                 blendPlan = requireNotNull(basePacket.blendPlan),
+                shader = requireNotNull(corePrimitiveClipStencilConsumerShaderOrNull(preparedSemantic.material)),
                 sampleCount = sampleCount,
                 colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )

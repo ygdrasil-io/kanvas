@@ -1746,7 +1746,8 @@ class GPUFirstRoutePlanner(
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
             transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
             transform.type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
-                material !is GPUMaterialDescriptor.SolidColor ->
+                material !is GPUMaterialDescriptor.SolidColor &&
+                !supportsHardPathClipClampLinearGradientUniformScale() ->
                 "unsupported.transform.affine_material"
             transform.isNonAxisAlignedAffine() && antiAlias ->
                 "unsupported.transform.affine_antialias"
@@ -1788,7 +1789,27 @@ class GPUFirstRoutePlanner(
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
-        }
+    }
+
+    /**
+     * The direct clamp-linear-gradient consumer may share a native hard path-clip stencil
+     * scope when its CTM is a positive uniform scale plus translation. The prepared Surface
+     * semantic lowers both the rect and the gradient axis into device space for this exact
+     * branch; every other non-solid affine material remains refused above.
+     */
+    private fun NormalizedDrawCommand.FillRect.supportsHardPathClipClampLinearGradientUniformScale(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
+        val stencilClip = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
+            ?: return false
+        return !antiAlias &&
+            gradient.tileMode == "clamp" &&
+            stencilClip.sampleCount == 1 &&
+            stencilClip.pathTransformClass == "uniform-positive-scale-translate" &&
+            transform.skewX == 0f &&
+            transform.skewY == 0f &&
+            transform.scaleX > 0f &&
+            transform.scaleX == transform.scaleY
+    }
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRRect.refusalCode(

@@ -118,7 +118,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 UniformLayout.AnalyticShapeUniform80V1
             role == Role.Shading && shader == Shader.AnalyticDRRect ->
                 UniformLayout.AnalyticDRRectUniform128V1
-            role == Role.Shading -> when (shader) {
+            role in setOf(Role.Shading, Role.ClipStencilConsumer) -> when (shader) {
                 Shader.DirectLinearGradient,
                 Shader.DirectLinearGradientRepeat,
                 Shader.DirectRadialGradient,
@@ -280,8 +280,10 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 }
             }
             Role.ClipStencilConsumer -> {
-                require(shader == Shader.DirectGeometry && depthStencil is DepthStencil.Stencil) {
-                    "CorePrimitive clip-stencil consumer requires direct geometry and stencil state"
+                require(shader in setOf(Shader.DirectGeometry, Shader.DirectLinearGradient) &&
+                    depthStencil is DepthStencil.Stencil
+                ) {
+                    "CorePrimitive clip-stencil consumer requires direct solid or linear-gradient geometry and stencil state"
                 }
                 require(clipStencilFillRule == null && clip == Clip.None) {
                     "CorePrimitive clip-stencil consumer keeps fill and dynamic clip facts outside its key"
@@ -605,11 +607,18 @@ internal fun corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
 internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
     inverseFill: Boolean,
     blendPlan: GPUBlendPlan,
+    shader: GPUCorePrimitiveRenderPipelineStructuralKey.Shader =
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
     sampleCount: Int = 1,
     colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
         GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
-    shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+    shader = shader.also {
+        require(it in setOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+        )) { "Clip-stencil consumers support only direct solid or clamp linear-gradient shaders" }
+    },
     topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
@@ -622,6 +631,17 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
     },
     sampleCount = sampleCount,
 )
+
+internal fun corePrimitiveClipStencilConsumerShaderOrNull(
+    material: GPUCorePrimitiveMaterialPayload,
+): GPUCorePrimitiveRenderPipelineStructuralKey.Shader? = when (material) {
+    is GPUCorePrimitiveMaterialPayload.SolidColor ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+    is GPUCorePrimitiveMaterialPayload.LinearGradient ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+            .takeIf { material.tileMode == "clamp" }
+    else -> null
+}
 
 private fun clipStencilState(
     front: GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace,
