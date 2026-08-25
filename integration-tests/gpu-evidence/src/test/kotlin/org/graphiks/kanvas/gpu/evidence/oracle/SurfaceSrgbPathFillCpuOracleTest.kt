@@ -25,10 +25,20 @@ class SurfaceSrgbPathFillCpuOracleTest {
         val pixels = concaveOracle().render(64, 64)
 
         assertPixel(pixels, 10, 10, BLUE)
+        assertPixel(pixels, 40, 10, BLUE)
         assertPixel(pixels, 40, 30, BACKGROUND)
+        assertPixel(pixels, 40, 34, BACKGROUND)
         assertPixel(pixels, 40, 44, BLUE)
         assertPixel(pixels, 4, 4, BACKGROUND)
         assertEquals(1920, count(pixels, BLUE))
+    }
+
+    @Test
+    fun `winding keeps nested same orientation contours filled`() {
+        val pixels = windingNestedOracle().render(64, 64)
+
+        assertPixel(pixels, 30, 30, GREEN)
+        assertPixel(pixels, 4, 4, BACKGROUND)
     }
 
     @Test
@@ -86,9 +96,23 @@ class SurfaceSrgbPathFillCpuOracleTest {
         listOf(
             SurfaceSrgbPathFillCpuOracle.Contour(
                 listOf(
-                    point(8f, 8f), point(32f, 8f), point(32f, 32f), point(48f, 32f),
-                    point(48f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f),
+                    point(8f, 8f), point(56f, 8f), point(56f, 24f), point(32f, 24f),
+                    point(32f, 40f), point(56f, 40f), point(56f, 56f), point(8f, 56f),
                 ),
+            ),
+        ),
+        SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun windingNestedOracle() = SurfaceSrgbPathFillCpuOracle(
+        BACKGROUND,
+        GREEN,
+        listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(
+                listOf(point(8f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f)),
+            ),
+            SurfaceSrgbPathFillCpuOracle.Contour(
+                listOf(point(22f, 20f), point(44f, 20f), point(44f, 44f), point(22f, 44f)),
             ),
         ),
         SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
