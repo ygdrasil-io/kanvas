@@ -1078,21 +1078,53 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `drrect paint effects stay out of the direct analytic route`() {
+    fun `drrect paint effects become stable exact semantic refusals`() {
         val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
         val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)
         val opaque = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
         val alphaMatrix = ColorMatrixF32.ofIdentity().apply {
             setScale(1f, 1f, 1f, 0.5f)
         }
+        data class PaintEffectCase(
+            val label: String,
+            val paint: Paint,
+            val refusalCode: String,
+            val refusalFact: String,
+        )
         val cases = listOf(
-            "color-filter-alpha" to opaque.copy(colorFilter = ColorFilter.Matrix(alphaMatrix)),
-            "image-filter" to opaque.copy(imageFilter = ImageFilter.Blur(1f, 1f)),
-            "path-effect" to opaque.copy(pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))),
-            "blender" to opaque.copy(blender = Blender.Mode(BlendMode.SRC)),
+            PaintEffectCase(
+                "color-filter-alpha",
+                opaque.copy(colorFilter = ColorFilter.Matrix(alphaMatrix)),
+                "unsupported.core_primitive.drrect.paint_effect.color_filter",
+                "color_filter",
+            ),
+            PaintEffectCase(
+                "color-filter-unevaluated",
+                opaque.copy(colorFilter = ColorFilter.HighContrast),
+                "unsupported.core_primitive.drrect.paint_effect.color_filter",
+                "color_filter",
+            ),
+            PaintEffectCase(
+                "image-filter",
+                opaque.copy(imageFilter = ImageFilter.Blur(1f, 1f)),
+                "unsupported.core_primitive.drrect.paint_effect.image_filter",
+                "image_filter",
+            ),
+            PaintEffectCase(
+                "path-effect",
+                opaque.copy(pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))),
+                "unsupported.core_primitive.drrect.paint_effect.path_effect",
+                "path_effect",
+            ),
+            PaintEffectCase(
+                "blender",
+                opaque.copy(blender = Blender.Mode(BlendMode.SRC)),
+                "unsupported.core_primitive.drrect.paint_effect.blender",
+                "blender",
+            ),
         )
 
-        cases.forEach { (label, paint) ->
+        cases.forEach { (label, paint, expectedRefusalCode, expectedRefusalFact) ->
             val inventory = inventoryFor(
                 DisplayOp.DrawDRRect(outer, inner, paint, Matrix3x3F32.Identity, ClipStack.WideOpen),
             )
@@ -1101,19 +1133,16 @@ class GPUFramePathApiInventoryTest {
                 inventory.normalizedCommands.single(),
                 "$label must not retain a direct FillDRRect command",
             )
-            when (val result = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
-                inventory,
-                GPUPixelBounds(0, 0, 32, 32),
-            )) {
-                is GPUCorePrimitiveSemanticGatherResult.Gathered -> assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
-                    assertIs<GPUDrawSemanticPayload.CorePrimitive>(result.semantics.values.single()).geometry,
-                    "$label must retain only the stable path fallback semantic",
-                )
-                is GPUCorePrimitiveSemanticGatherResult.Refused -> assertTrue(
-                    result.code.startsWith("unsupported.core_primitive."),
-                    "$label must retain a stable core-primitive refusal: ${result.code}",
-                )
-            }
+            val refusal = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(
+                GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                    inventory,
+                    GPUPixelBounds(0, 0, 32, 32),
+                ),
+                "$label must not gather a FillPath that drops its Paint effect",
+            )
+            assertEquals(expectedRefusalCode, refusal.code)
+            assertEquals("drawDRRect", refusal.facts["source"])
+            assertEquals(expectedRefusalFact, refusal.facts["paintEffect"])
         }
     }
 

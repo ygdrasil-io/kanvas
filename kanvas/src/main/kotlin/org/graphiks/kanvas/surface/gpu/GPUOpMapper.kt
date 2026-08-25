@@ -1106,6 +1106,7 @@ private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefus
 }
 
 private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    paintEffectRefusalOrNull()?.let { return it }
     val outerRect = outer.rect
     val innerRect = inner.rect
     if (!listOf(
@@ -1137,6 +1138,26 @@ private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveG
         return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.inner_outside_outer", emptyMap())
     }
     return null
+}
+
+private fun DisplayOp.DrawDRRect.paintEffectRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? = when {
+    paint.colorFilter != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.color_filter",
+        mapOf("paintEffect" to "color_filter"),
+    )
+    paint.imageFilter != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.image_filter",
+        mapOf("paintEffect" to "image_filter"),
+    )
+    paint.pathEffect != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.path_effect",
+        mapOf("paintEffect" to "path_effect"),
+    )
+    paint.blender != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.blender",
+        mapOf("paintEffect" to "blender"),
+    )
+    else -> null
 }
 
 private fun DisplayOp.coreSourceOperation(): String = when (this) {
@@ -1879,7 +1900,7 @@ private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMateria
     // a RuntimeEffect descriptor.
     val material = paint.toMaterial() as? GPUMaterialDescriptor.SolidColor ?: return null
     return material.takeIf {
-        !paint.isStroke() && !paint.antiAlias && paint.maskFilter == null &&
+        !paint.isStroke() && !paint.antiAlias && paint.colorFilter == null && paint.maskFilter == null &&
             paint.imageFilter == null && paint.pathEffect == null && paint.blender == null &&
             it.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
             transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
