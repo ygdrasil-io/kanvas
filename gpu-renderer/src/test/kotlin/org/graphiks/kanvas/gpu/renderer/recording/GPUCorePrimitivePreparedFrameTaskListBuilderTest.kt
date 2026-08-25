@@ -81,6 +81,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
@@ -2846,6 +2847,55 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `analytic rrect and drrect split into isolated uniform80 and uniform128 slabs`() {
+        val base = recording(command(142, 0), command(143, 1)).taskList.withClipPlans(
+            mapOf(142 to GPUClipExecutionPlan.NoClip, 143 to GPUClipExecutionPlan.NoClip),
+        ).withPacketRouteIdentity(
+            commandId = 142,
+            analysisRecordId = "analysis.fill_rrect.142",
+            renderStepIdentity = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
+        ).withPacketRouteIdentity(
+            commandId = 143,
+            analysisRecordId = "analysis.fill_drrect.143",
+            renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val outer = GPUCorePrimitiveGeometryInput.RRect(8f, 8f, 56f, 56f, List(8) { 8f })
+        val inner = GPUCorePrimitiveGeometryInput.RRect(20f, 20f, 44f, 44f, List(8) { 4f })
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(
+                    base,
+                    mapOf(
+                        142 to semantic(
+                            packets.single { it.commandIdValue == 142 },
+                            GPUCorePrimitiveGeometryInput.RRect(4f, 4f, 60f, 60f, List(8) { 6f }),
+                        ),
+                        143 to semantic(
+                            packets.single { it.commandIdValue == 143 },
+                            GPUCorePrimitiveGeometryInput.DRRect(outer, inner),
+                        ),
+                    ),
+                ),
+            ),
+        ).taskList
+
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(listOf(listOf(142), listOf(143)), renders.map { it.drawPackets.map(GPUDrawPacket::commandIdValue) })
+        val seals = renders.map { requireNotNull(it.drawPackets.single().corePrimitivePreparedAuthority?.analyticShapeUniformSeal) }
+        assertEquals(
+            listOf("core-primitive-analytic-shape-uniform-pass", "core-primitive-analytic-drrect-uniform-pass"),
+            seals.map { it.plan.sourceLabel },
+        )
+        assertEquals(listOf(80L, 128L), seals.map { it.payloadBytes })
+        assertTrue(seals[0].plan !== seals[1].plan)
+        val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        assertTrue(preparations.any { it.diagnosticLabel == "core-primitive.analytic-shape-uniforms" })
+        assertTrue(preparations.any { it.diagnosticLabel == "core-primitive.analytic-drrect-uniforms" })
+    }
+
+    @Test
     fun `multisample clip refuses before a partial depth stencil allocation can be planned`() {
         val plan = stencilPlan(bounds = GPUPixelBounds(2, 3, 10, 11)).copy(sampleCount = 4)
         val base = recording(command(34, 0)).taskList.withClipPlans(mapOf(34 to plan))
@@ -3339,6 +3389,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
             is GPUCorePrimitiveGeometryInput.RRect -> GPUCorePrimitiveSourceFamily.RRect
+            is GPUCorePrimitiveGeometryInput.DRRect -> GPUCorePrimitiveSourceFamily.DRRect
             is GPUCorePrimitiveGeometryInput.TriangulatedPath -> GPUCorePrimitiveSourceFamily.Path
         }
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
@@ -3357,11 +3408,13 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 analysisRecordId = when (resolvedSourceFamily) {
                     GPUCorePrimitiveSourceFamily.Rect -> packet.analysisRecordId
                     GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.${packet.commandIdValue}"
+                    GPUCorePrimitiveSourceFamily.DRRect -> "analysis.fill_drrect.${packet.commandIdValue}"
                     else -> null
                 },
                 analysisCommandFamily = when (resolvedSourceFamily) {
                     GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
                     GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                    GPUCorePrimitiveSourceFamily.DRRect -> "FillDRRect"
                     else -> null
                 },
                 rectRouteAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
@@ -3376,6 +3429,16 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 },
                 rrectGeometryAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
                     rrectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.RRect)
+                } else {
+                    null
+                },
+                drrectOuterGeometryAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.DRRect) {
+                    rrectGeometryAuthorityFixture((geometry as GPUCorePrimitiveGeometryInput.DRRect).outer)
+                } else {
+                    null
+                },
+                drrectInnerGeometryAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.DRRect) {
+                    rrectGeometryAuthorityFixture((geometry as GPUCorePrimitiveGeometryInput.DRRect).inner)
                 } else {
                     null
                 },

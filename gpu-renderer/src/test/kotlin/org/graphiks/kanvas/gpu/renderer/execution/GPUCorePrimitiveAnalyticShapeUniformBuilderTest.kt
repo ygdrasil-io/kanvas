@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 
@@ -81,7 +82,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
                 GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
             ),
         )
-        val packed = accepted.block.packedBytes()
+        val packed = accepted.bytes
         val bytes = ByteBuffer.wrap(packed).order(ByteOrder.LITTLE_ENDIAN)
 
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES, packed.size)
@@ -98,7 +99,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
                 hardSemantic,
                 GPUCorePrimitivePreparedSemanticAuthority.capture(hardSemantic),
             ),
-        ).block.packedBytes()
+        ).bytes
         assertEquals(0, ByteBuffer.wrap(hardPacked).order(ByteOrder.LITTLE_ENDIAN).getInt(8))
     }
 
@@ -116,7 +117,7 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
                 GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
             ),
         )
-        val first = accepted.block.packedBytes()
+        val first = accepted.bytes
         val bytes = ByteBuffer.wrap(first).order(ByteOrder.LITTLE_ENDIAN)
 
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES, first.size)
@@ -127,8 +128,50 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         first.fill(0)
         assertContentEquals(
             listOf(9f, 3f, 6f, 3f, 3f, 9f, 3f, 9f),
-            ByteBuffer.wrap(accepted.block.packedBytes()).order(ByteOrder.LITTLE_ENDIAN).floatsAt(48, 8),
+            ByteBuffer.wrap(accepted.bytes).order(ByteOrder.LITTLE_ENDIAN).floatsAt(48, 8),
         )
+    }
+
+    @Test
+    fun `prepared solid drrect seals outer and inner geometry into the exact uniform128 ABI`() {
+        val semantic = drrectSemantic()
+
+        val packed = assertIs<GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted>(
+            buildCorePrimitiveAnalyticShapeUniform(
+                semantic,
+                GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+            ),
+        ).bytes
+        val bytes = ByteBuffer.wrap(packed).order(ByteOrder.LITTLE_ENDIAN)
+
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES, packed.size)
+        assertContentEquals(listOf(32f, 24f), bytes.floatsAt(0, 2))
+        assertEquals(0, bytes.getInt(8), "DRRect is a hard-edge only route")
+        assertContentEquals(COLOR, bytes.floatsAt(16, 4))
+        assertContentEquals(listOf(2f, 2f, 26f, 22f), bytes.floatsAt(32, 4))
+        assertContentEquals(List(8) { 4f }, bytes.floatsAt(48, 8))
+        assertContentEquals(listOf(8f, 8f, 20f, 16f), bytes.floatsAt(80, 4))
+        assertContentEquals(List(8) { 2f }, bytes.floatsAt(96, 8))
+    }
+
+    @Test
+    fun `prepared drrect refuses transplanted sealed outer or inner geometry authority`() {
+        val semantic = drrectSemantic()
+        val outerAuthority = requireNotNull(semantic.drrectOuterGeometryAuthority)
+        val innerAuthority = requireNotNull(semantic.drrectInnerGeometryAuthority)
+
+        listOf(
+            semantic.forged(drrectOuterGeometryAuthority = innerAuthority),
+            semantic.forged(drrectInnerGeometryAuthority = outerAuthority),
+        ).forEach { forged ->
+            val refusal = assertIs<GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused>(
+                buildCorePrimitiveAnalyticShapeUniform(
+                    forged,
+                    GPUCorePrimitivePreparedSemanticAuthority.capture(forged),
+                ),
+            )
+            assertEquals("invalid.native-core-primitive.analytic-drrect.geometry-authority", refusal.code)
+        }
     }
 
     @Test
@@ -239,6 +282,35 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         )
     }
 
+    private fun drrectSemantic(): GPUDrawSemanticPayload.CorePrimitive {
+        fun authority(rect: GPURRect): GPUCorePrimitiveRRectGeometryAuthority {
+            val normalized = assertIs<GPURRectNormalizationResult.Accepted>(GPURRectNormalizer.normalize(rect))
+            return assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+                corePrimitiveRRectGeometryAuthority(rect, normalized, GPUTransformFacts.identity()),
+            ).authority
+        }
+        val outer = authority(GPURRect(
+            rect = GPURect(2f, 2f, 26f, 22f),
+            topLeft = GPURRectCornerRadii(4f, 4f), topRight = GPURRectCornerRadii(4f, 4f),
+            bottomRight = GPURRectCornerRadii(4f, 4f), bottomLeft = GPURRectCornerRadii(4f, 4f),
+        ))
+        val inner = authority(GPURRect(
+            rect = GPURect(8f, 8f, 20f, 16f),
+            topLeft = GPURRectCornerRadii(2f, 2f), topRight = GPURRectCornerRadii(2f, 2f),
+            bottomRight = GPURRectCornerRadii(2f, 2f), bottomLeft = GPURRectCornerRadii(2f, 2f),
+        ))
+        return gatheredSemantic(
+            geometry = GPUCorePrimitiveGeometryInput.DRRect(
+                outer.sealedDeviceGeometryInput(),
+                inner.sealedDeviceGeometryInput(),
+            ),
+            sourceFamily = GPUCorePrimitiveSourceFamily.DRRect,
+            coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+            drrectOuterGeometryAuthority = outer,
+            drrectInnerGeometryAuthority = inner,
+        )
+    }
+
     private fun gatheredSemantic(
         geometry: GPUCorePrimitiveGeometryInput,
         sourceFamily: GPUCorePrimitiveSourceFamily,
@@ -247,6 +319,8 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
         material: GPUCorePrimitiveMaterialPayload? = null,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUCorePrimitivePayloadGatherer().gatherSemantic(
         GPUCorePrimitivePayloadInput(
@@ -263,16 +337,20 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
             analysisRecordId = when (sourceFamily) {
                 GPUCorePrimitiveSourceFamily.Rect -> "analysis.fill_rect.$COMMAND_ID"
                 GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.$COMMAND_ID"
+                GPUCorePrimitiveSourceFamily.DRRect -> "analysis.fill_drrect.$COMMAND_ID"
                 else -> null
             },
             analysisCommandFamily = when (sourceFamily) {
                 GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
                 GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                GPUCorePrimitiveSourceFamily.DRRect -> "FillDRRect"
                 else -> null
             },
             rectRouteAuthority = rectRouteAuthority,
             rectGeometryAuthority = rectGeometryAuthority,
             rrectGeometryAuthority = rrectGeometryAuthority,
+            drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+            drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
             material = material,
         ),
     )
@@ -282,6 +360,8 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         coverageMode: GPUCorePrimitiveCoverageMode = this.coverageMode,
         rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = this.rectGeometryAuthority,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.rrectGeometryAuthority,
+        drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.drrectInnerGeometryAuthority,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
         payloadRef = payloadRef,
         sourceFamily = sourceFamily,
@@ -299,6 +379,8 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
     )
 
     private fun ByteBuffer.floatsAt(offset: Int, count: Int): List<Float> =

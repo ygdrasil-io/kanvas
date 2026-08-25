@@ -23,7 +23,7 @@ combinaison hors périmètre est conservée comme refus stable.
 | Sous-famille | Scènes rendables à viser | Limites/refus à fixer |
 | --- | --- | --- |
 | `drawRect` | Rectangles opaques et alpha partiel, bords négatifs, hors surface, chevauchement de trois draws, coordonnées entières et fractionnaires. | Rectangle vide, NaN/Inf, transform non représentable ou budget dépassé ; aucune image partielle. |
-| `drawRRect` / `drawDRRect` | Rayons uniformes et par coin, rayons égaux aux demi-dimensions, rrect inclus et trou DRRect. | Rayons/path AA/transform non supportés doivent exposer le refus du lowerer. |
+| `drawRRect` / `drawDRRect` | Preuve publique `Surface` bornée pour `drawRRect` solide non-AA sous scale `(2,1)` et `drawDRRect` solide non-AA identité avec trou; restent à viser les rayons par coin, les rayons égaux aux demi-dimensions et les rrect imbriqués. | Rayons/path AA/transform non supportés doivent exposer le refus du lowerer. |
 | État/matrices | `save`/`restore` imbriqués, `restoreToCount`, translate, scale, rotate avec pivot, skew, concat, set/reset matrix. | `restoreToCount` hors plage, perspective ou matrice non finie : état inchangé ou refus explicite selon le code. |
 | Clip rect | Intersections, clip vide, clip transformé, clip imbriqué, alpha AA activé/désactivé. | Clip impossible, AA/transform sans route native, profondeur dépassée ; zéro pixel et zéro submission de draw quand requis. |
 | Clear/snapshot/annotation | `drawColor`, `clear`, `flushAndSnapshot`, annotation avant/après draw et replay. | Bounds vides/hors surface, annotation non visuelle, snapshot sans duplication ou réordonnancement. |

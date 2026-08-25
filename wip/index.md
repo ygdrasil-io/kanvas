@@ -7,8 +7,6 @@
 
 ## Règle de lecture
 
-[current-test-inventory.md](current-test-inventory.md) décrit l'état observé
-sur `master` au commit de départ, y compris la route réelle de chaque cas. La
 [coverage-map.md](coverage-map.md) est la liste source-derived des APIs et
 sous-types publics à classer, avec un unique lot propriétaire. Les briefs
 numérotés détaillent les groupes de tests. Ils n'autorisent jamais à annoncer
@@ -32,8 +30,8 @@ diff/statistiques et politique de fallback vérifiée.
 
 Un lot est un inventaire de travail et non l'autorisation d'ajouter des scènes,
 du code ou des captures. Tout travail ultérieur est découpé en petites vagues
-explicitement approuvées, avec IDs de cas exacts et preuves d'acceptation. Il
-n'existe actuellement aucune vague de catalogue autorisée.
+explicitement approuvées, avec IDs de cas exacts et preuves d'acceptation.
+Aucun lot ne constitue, à lui seul, une autorisation de vague.
 
 ## Graphe de dépendances
 
@@ -53,23 +51,7 @@ lire ou à écrire les tests de refus. Par exemple, `20` et `60` peuvent ajouter
 leurs cas de refus dès la première vague ; leurs captures de rendu attendent
 le lowerer et l'oracle correspondants.
 
-## État observé et contraintes de session
-
-Le catalogue promu courant contient 16 cas : 14 rendus `Surface` et 2 refus
-`RoutedSceneProgram` internes. La preuve correctness promue a été capturée
-depuis `226674870ee09e080beee62b8d2935704f4b3331`, puis le travail a été
-fusionné dans `origin/master` par
-`116ce6ec3547c1d367e4c51881597a351eb285c4`. Les 122 hashes de manifest et
-les bundles promus vivent sous `reports/gpu-renderer/evidence/`.
-
-Cette session n'écrit pas dans `gpu-renderer-scenes` et ne lance aucune vague
-de catalogue. Elle applique Subagent-Driven execution : modèles abordables
-pour l'implémentation/capture et Sol seulement pour les revues. La promotion
-correctness et la capture de performance sont deux gates humaines séparées.
-Une baseline performance locale non promue ne devient jamais une preuve de
-release par simple reformulation documentaire.
-
-### Stop points humains non transférables
+## Stop points humains non transférables
 
 1. Avant une promotion correctness transactionnelle, arrêter après la
    vérification du catalogue generated complet et obtenir une autorisation

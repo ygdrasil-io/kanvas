@@ -83,6 +83,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.mapAxisAligned
 import org.graphiks.math.matrix.mapAxisAlignedRect
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.color.ColorARGB
@@ -762,14 +763,14 @@ internal object GPUOpMapper {
             ).toPathCommand(commandId, target, config).copy(
                 stroke = operation.mode != PointMode.POINTS,
             )
-            is DisplayOp.DrawDRRect -> {
-                DisplayOp.DrawPath(
-                    operation.toPath(),
-                    operation.paint,
-                    operation.transform,
-                    operation.clip,
-                ).toPathCommand(commandId, target, config)
-            }
+            is DisplayOp.DrawDRRect -> operation.analyticSolidDRRectMaterialOrNull()?.let { material ->
+                operation.toNormalizedCommand(commandId, target, material)
+            } ?: DisplayOp.DrawPath(
+                operation.toPath(),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).toPathCommand(commandId, target, config)
                 else -> null
             }
         } catch (failure: IllegalStateException) {
@@ -814,6 +815,7 @@ internal object GPUOpMapper {
         return when (command) {
             is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
             is NormalizedDrawCommand.FillRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillDRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
             is NormalizedDrawCommand.FillPath -> command.copy(
                 bounds = targetBounds,
                 ordering = ordering,
@@ -1104,6 +1106,7 @@ private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefus
 }
 
 private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    paintEffectRefusalOrNull()?.let { return it }
     val outerRect = outer.rect
     val innerRect = inner.rect
     if (!listOf(
@@ -1135,6 +1138,26 @@ private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveG
         return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.inner_outside_outer", emptyMap())
     }
     return null
+}
+
+private fun DisplayOp.DrawDRRect.paintEffectRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? = when {
+    paint.colorFilter != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.color_filter",
+        mapOf("paintEffect" to "color_filter"),
+    )
+    paint.imageFilter != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.image_filter",
+        mapOf("paintEffect" to "image_filter"),
+    )
+    paint.pathEffect != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.path_effect",
+        mapOf("paintEffect" to "path_effect"),
+    )
+    paint.blender != null -> GPUCorePrimitiveGeometryRefusal(
+        "unsupported.core_primitive.drrect.paint_effect.blender",
+        mapOf("paintEffect" to "blender"),
+    )
+    else -> null
 }
 
 private fun DisplayOp.coreSourceOperation(): String = when (this) {
@@ -1174,6 +1197,7 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
     } else {
         GPUCoverageConsumption.FullOrScissor
     }
+    is NormalizedDrawCommand.FillDRRect -> GPUCoverageConsumption.FullOrScissor
     is NormalizedDrawCommand.FillRect -> if (antiAlias) {
         GPUCoverageConsumption.ScalarCoverage
     } else {
@@ -1190,6 +1214,9 @@ private fun NormalizedDrawCommand.withClipPlans(
         clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
     )
     is NormalizedDrawCommand.FillRRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillDRRect -> copy(
         clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
     )
     is NormalizedDrawCommand.FillPath -> copy(
@@ -1217,6 +1244,7 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
 private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
     is NormalizedDrawCommand.FillRect -> maskFilter != null
     is NormalizedDrawCommand.FillRRect -> maskFilter != null
+    is NormalizedDrawCommand.FillDRRect -> maskFilter != null
     is NormalizedDrawCommand.FillPath -> maskFilter != null
     else -> false
 }
@@ -1866,6 +1894,52 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
     )
 }
 
+private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMaterialDescriptor.SolidColor? {
+    // Keep one mapped material instance for admission and the typed command. Source paint fields
+    // alone are insufficient: color filters can turn an opaque paint into a translucent solid or
+    // a RuntimeEffect descriptor.
+    val material = paint.toMaterial() as? GPUMaterialDescriptor.SolidColor ?: return null
+    return material.takeIf {
+        !paint.isStroke() && !paint.antiAlias && paint.colorFilter == null && paint.maskFilter == null &&
+            paint.imageFilter == null && paint.pathEffect == null && paint.blender == null &&
+            it.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
+            transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
+            exactLoweringRefusalOrNull() == null
+    }
+}
+
+internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+    material: GPUMaterialDescriptor,
+): NormalizedDrawCommand.FillDRRect {
+    fun RRectF32.toGpuRRect() = GPURRect(
+        GPURect(rect.left, rect.top, rect.right, rect.bottom),
+        GPURRectCornerRadii(topLeft.x, topLeft.y),
+        GPURRectCornerRadii(topRight.x, topRight.y),
+        GPURRectCornerRadii(bottomRight.x, bottomRight.y),
+        GPURRectCornerRadii(bottomLeft.x, bottomLeft.y),
+    )
+    val outer = outer.toGpuRRect()
+    val inner = inner.toGpuRRect()
+    return NormalizedDrawCommand.FillDRRect(
+        commandId = cmdId,
+        outer = outer,
+        inner = inner,
+        transform = transform.toGPUTransformFacts(),
+        clip = clip.toGPUClipFacts(target),
+        layer = GPULayerFacts.root(target),
+        material = material,
+        blend = paint.blendMode.toGpuBlendFacts(),
+        bounds = GPUBounds(outer.rect.left, outer.rect.top, outer.rect.right, outer.rect.bottom),
+        ordering = GPUOrderingFacts(0, false, false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawDRRect"),
+        stroke = false,
+        antiAlias = false,
+        maskFilter = null,
+    )
+}
+
 internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
     val mode = when (this) {
         BlendMode.CLEAR -> GPUBlendMode.CLEAR
@@ -1946,6 +2020,14 @@ internal fun GPUBlendMode.canonicalFixedFunctionState(
 internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
     if (hasPerspective()) return GPUTransformFacts.perspective()
     if (this == Matrix3x3F32.Identity) return GPUTransformFacts.identity()
+    val determinant = sx * sy
+    if (
+        kx.toRawBits() == 0 && ky.toRawBits() == 0 &&
+        tx.toRawBits() == 0 && ty.toRawBits() == 0 &&
+        determinant.isFinite() && determinant != 0f
+    ) {
+        return GPUTransformFacts.scale(sx, sy)
+    }
     return GPUTransformFacts.affine(
         scaleX = this.sx,
         skewX = this.kx,

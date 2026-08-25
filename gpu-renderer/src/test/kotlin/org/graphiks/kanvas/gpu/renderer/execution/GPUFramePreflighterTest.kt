@@ -49,6 +49,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
@@ -56,6 +57,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
@@ -3849,6 +3851,76 @@ class GPUFramePreflighterTest {
         assertTrue(passSeal.analyticClipUniformSeals.isEmpty())
         assertTrue(passSeal.analyticIntersectionUniformSeals.isEmpty())
         assertTrue(events.isNotEmpty(), "accepted preflight should materialize declared resources")
+    }
+
+    @Test
+    fun `analytic rrect and drrect preflight retain distinct uniform80 and uniform128 slabs`() {
+        val plan = preparedAnalyticFramePlan(
+            plans = mapOf(
+                181 to GPUClipExecutionPlan.NoClip,
+                182 to GPUClipExecutionPlan.NoClip,
+            ),
+            geometries = mapOf(
+                181 to GPUCorePrimitiveGeometryInput.RRect(
+                    0.25f, 0.25f, 3.75f, 3.75f,
+                    List(8) { 0.5f },
+                ),
+                182 to GPUCorePrimitiveGeometryInput.DRRect(
+                    GPUCorePrimitiveGeometryInput.RRect(
+                        0.5f, 0.5f, 3.5f, 3.5f,
+                        List(8) { 0.75f },
+                    ),
+                    GPUCorePrimitiveGeometryInput.RRect(
+                        1.25f, 1.25f, 2.75f, 2.75f,
+                        List(8) { 0.25f },
+                    ),
+                ),
+            ),
+        )
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(includeRRect = true),
+        ).preflight(plan)
+
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).frame
+        val renders = prepared.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(2, renders.size)
+        val slabLabels = renders.map { render ->
+            val seal = requireNotNull(
+                requireNotNull(render.drawPackets.single().corePrimitivePreparedAuthority)
+                    .analyticShapeUniformSeal,
+            )
+            seal.plan.slots[seal.slotIndex].slotLabel
+        }
+        assertEquals(
+            listOf(
+                "analytic-shape-draw-181",
+                "analytic-drrect-draw-182",
+            ),
+            slabLabels,
+        )
+        assertEquals(
+            listOf(80L, 128L),
+            renders.map { render ->
+                val seal = requireNotNull(
+                    requireNotNull(render.drawPackets.single().corePrimitivePreparedAuthority)
+                        .analyticShapeUniformSeal,
+                )
+                seal.plan.slots[seal.slotIndex].payloadBytes
+            },
+        )
+        assertEquals(2, prepared.encoderPlan.scopes.size)
+        assertTrue(events.isNotEmpty(), "accepted preflight should materialize both isolated slabs")
     }
 
     @Test
@@ -8120,6 +8192,8 @@ class GPUFramePreflighterTest {
                     when (val geometry = geometries[commandId]) {
                         is GPUCorePrimitiveGeometryInput.RRect ->
                             rrectBuilderCommand(commandId, paintOrder, geometry)
+                        is GPUCorePrimitiveGeometryInput.DRRect ->
+                            drrectBuilderCommand(commandId, paintOrder, geometry)
                         else -> pathBuilderCommand(commandId, paintOrder)
                     },
                 )
@@ -8134,6 +8208,7 @@ class GPUFramePreflighterTest {
                 sourceFamily = when (geometry) {
                     is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
                     is GPUCorePrimitiveGeometryInput.RRect -> GPUCorePrimitiveSourceFamily.RRect
+                    is GPUCorePrimitiveGeometryInput.DRRect -> GPUCorePrimitiveSourceFamily.DRRect
                     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> GPUCorePrimitiveSourceFamily.Path
                 },
                 geometry = geometry,
@@ -8285,6 +8360,35 @@ class GPUFramePreflighterTest {
         source = GPUCommandSource("unit-test", "fillRRect", GPUFrameProvenance.GmContent),
     )
 
+    private fun drrectBuilderCommand(
+        commandId: Int,
+        paintOrder: Int,
+        geometry: GPUCorePrimitiveGeometryInput.DRRect,
+    ): NormalizedDrawCommand.FillDRRect = NormalizedDrawCommand.FillDRRect(
+        commandId = GPUDrawCommandID(commandId),
+        outer = geometry.outer.toSourceRRect(),
+        inner = geometry.inner.toSourceRRect(),
+        transform = GPUTransformFacts.identity(),
+        clip = GPUClipFacts(
+            kind = GPUClipKind.WideOpen,
+            bounds = GPUCommandBounds(0f, 0f, 4f, 4f),
+            coveragePlan = GPUClipCoveragePlan.NoClip,
+        ),
+        layer = org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts.root(
+            GPUTargetFacts(4, 4, "rgba8unorm"),
+        ),
+        material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+        bounds = GPUCommandBounds(
+            geometry.outer.left,
+            geometry.outer.top,
+            geometry.outer.right,
+            geometry.outer.bottom,
+        ),
+        ordering = GPUOrderingFacts(paintOrder, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource("unit-test", "fillDRRect", GPUFrameProvenance.GmContent),
+        antiAlias = false,
+    )
+
     private fun pathCapabilities(includeRRect: Boolean = false): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
         facts = listOf(
@@ -8294,6 +8398,13 @@ class GPUFramePreflighterTest {
             listOf(
                 GPUCapabilityFact(
                     "first_slice.fill_rrect.native",
+                    "unit-test",
+                    "supported",
+                    true,
+                    "preflight",
+                ),
+                GPUCapabilityFact(
+                    "first_slice.fill_drrect.native",
                     "unit-test",
                     "supported",
                     true,
@@ -9467,11 +9578,13 @@ class GPUFramePreflighterTest {
                 analysisRecordId = when (sourceFamily) {
                     GPUCorePrimitiveSourceFamily.Rect -> "analysis.fill_rect.$commandIdValue"
                     GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.$commandIdValue"
+                    GPUCorePrimitiveSourceFamily.DRRect -> "analysis.fill_drrect.$commandIdValue"
                     else -> null
                 },
                 analysisCommandFamily = when (sourceFamily) {
                     GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
                     GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                    GPUCorePrimitiveSourceFamily.DRRect -> "FillDRRect"
                     else -> null
                 },
                 rectRouteAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
@@ -9486,6 +9599,16 @@ class GPUFramePreflighterTest {
                 },
                 rrectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
                     rrectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.RRect)
+                } else {
+                    null
+                },
+                drrectOuterGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.DRRect) {
+                    rrectGeometryAuthorityFixture((geometry as GPUCorePrimitiveGeometryInput.DRRect).outer)
+                } else {
+                    null
+                },
+                drrectInnerGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.DRRect) {
+                    rrectGeometryAuthorityFixture((geometry as GPUCorePrimitiveGeometryInput.DRRect).inner)
                 } else {
                     null
                 },

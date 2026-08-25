@@ -185,6 +185,23 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds the bounded native FillDRRect analytic-hole decision. */
+    fun nativeFillDRRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.fill_drrect.$commandIdValue",
+                consumerKind = "native.fill_drrect.solid_analytic_hole",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
     /**
      * Builds a native DrawTextRun decision only after analysis has validated
      * A8 atlas route facts.

@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -28,6 +29,8 @@ object GpuEvidenceCatalog {
         scissoredRadialGradient(),
         repeatGradientRendered(),
         gradientStrokeRefusal(),
+        scaledSolidRRect(),
+        solidDRRectHole(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
@@ -293,6 +296,37 @@ object GpuEvidenceCatalog {
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(55.5, 32.5),
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(0.0, 255, 56, 56),
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(1.0, 56, 112, 255),
+        ),
+    )
+
+    private fun scaledSolidRRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scaled-solid-rrect"), "Scaled solid rounded rectangle", "Public Kanvas Surface non-AA solid rounded rectangle under a pure axis scale.",
+            64, 64, 1L, setOf("solid-rrect", "scale", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent analytic pixel-center RRect membership."), emptySet(),
+        ),
+        KanvasScenePrograms.scaledSolidRRect(),
+        SurfaceSrgbRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            fill = intArrayOf(242, 135, 46, 255),
+            outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(16f, 16f, 48f, 48f, 8f, 4f),
+        ),
+    )
+
+    private fun solidDRRectHole() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("solid-drrect-hole"), "Solid double rounded rectangle hole", "Public Kanvas Surface non-AA solid double rounded rectangle with an inner hole.",
+            64, 64, 1L, setOf("solid-drrect", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent analytic pixel-center RRect membership."), emptySet(),
+        ),
+        KanvasScenePrograms.solidDRRectHole(),
+        SurfaceSrgbRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            fill = intArrayOf(31, 115, 209, 255),
+            outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(8f, 8f, 56f, 56f, 8f, 8f),
+            inner = SurfaceSrgbRRectCpuOracle.DeviceRRect(20f, 20f, 44f, 44f, 4f, 4f),
         ),
     )
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(

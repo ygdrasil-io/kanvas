@@ -1601,6 +1601,18 @@ object GPUFirstRoutePassBuilder {
             code = code,
         )
 
+    /** Builds an empty refused FillDRRect pass so analytic-hole admission cannot emit draw work. */
+    fun refusedFillDRRect(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        refusedFillRect(
+            commandIdValue = commandIdValue,
+            targetStateHash = targetStateHash,
+            code = code,
+        )
+
     /**
      * Builds an accepted DrawTextRun/A8 pass with invocation identity but no
      * concrete resource or binding slots.

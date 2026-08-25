@@ -206,6 +206,7 @@ internal fun preparedTextResourceGenerations(
 internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = listOf(
     GPUCapabilityFact("first_slice.fill_rect.native", "runtime", "supported", true, "core-primitive-direct-native"),
     GPUCapabilityFact("first_slice.fill_rrect.native", "runtime", "supported", true, "core-primitive-direct-native"),
+    supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.FILL_DRRECT_NATIVE, "runtime", "core-primitive-direct-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, "runtime", "core-primitive-direct-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE, "runtime", "core-primitive-bounded-clip-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER, "runtime", "core-primitive-path-stencil-native"),

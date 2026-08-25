@@ -140,6 +140,7 @@ internal fun validateCorePrimitiveDirectNativeRoute(
         is GPUCorePrimitiveGeometry.RRect ->
             semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
                 semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        is GPUCorePrimitiveGeometry.DRRect -> semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
     }
     if (sampleCount == 4 && analyticShape) {
@@ -153,6 +154,8 @@ internal fun validateCorePrimitiveDirectNativeRoute(
         is GPUCorePrimitiveGeometry.RRect,
         -> semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
             semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        is GPUCorePrimitiveGeometry.DRRect ->
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
         is GPUCorePrimitiveGeometry.TriangulatedPath ->
             semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
     }
@@ -214,6 +217,11 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             clipScissor = exactScissor,
             accepted = ::accepted,
             refused = ::refused,
+        )
+        is GPUCorePrimitiveGeometry.DRRect -> analyticShapeRoute(
+            geometry.outerBounds[0], geometry.outerBounds[1], geometry.outerBounds[2], geometry.outerBounds[3],
+            antiAlias = false, targetBounds = semantic.targetBounds, clipScissor = exactScissor,
+            accepted = ::accepted, refused = ::refused,
         )
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when {
             geometry.inverseFill -> refused(

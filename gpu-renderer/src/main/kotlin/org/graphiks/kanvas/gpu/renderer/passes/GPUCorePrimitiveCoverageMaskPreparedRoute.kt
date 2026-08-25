@@ -743,6 +743,7 @@ private fun GPUCorePrimitiveGeometry.coverageMaskDirectSnapshotOrNull():
         null
     }
     is GPUCorePrimitiveGeometry.RRect -> null
+    is GPUCorePrimitiveGeometry.DRRect -> null
     is GPUCorePrimitiveGeometry.TriangulatedPath -> if (
         geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles && !inverseFill &&
         strokeStyle == null

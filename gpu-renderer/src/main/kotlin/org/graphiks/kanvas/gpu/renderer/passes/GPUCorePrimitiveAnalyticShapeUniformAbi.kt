@@ -14,13 +14,17 @@ import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES = 80
+internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES = 128
 internal const val CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES = 656
 
 /** Pure, handle-free result of sealing one prepared Rect/RRect into uniform80 bytes. */
 internal sealed interface GPUCorePrimitiveAnalyticShapeUniformBuildResult {
-    class Accepted internal constructor(
-        val block: GPUCorePrimitiveAnalyticShapeUniformBlock,
-    ) : GPUCorePrimitiveAnalyticShapeUniformBuildResult
+    class Accepted internal constructor(bytes: ByteArray) : GPUCorePrimitiveAnalyticShapeUniformBuildResult {
+        private val bytesSnapshot = bytes.copyOf()
+
+        val bytes: ByteArray
+            get() = bytesSnapshot.copyOf()
+    }
 
     data class Refused(
         val code: String,
@@ -53,6 +57,8 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
     val geometry = semantic.geometry
     val signedBounds: List<Float>
     val signedRadii: List<Float>
+    var innerBounds: List<Float>? = null
+    var innerRadii: List<Float>? = null
     when (semantic.sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
             val rect = geometry as? GPUCorePrimitiveGeometry.Rect ?: return refused(
@@ -112,9 +118,38 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
             signedBounds = listOf(signed.left, signed.top, signed.right, signed.bottom)
             signedRadii = signed.radii
         }
+        GPUCorePrimitiveSourceFamily.DRRect -> {
+            val drrect = geometry as? GPUCorePrimitiveGeometry.DRRect ?: return refused(
+                "invalid.native-core-primitive.analytic-drrect.source",
+                "Analytic DRRect uniform construction requires typed DRRect device geometry.",
+            )
+            val outerAuthority = semantic.drrectOuterGeometryAuthority
+            val innerAuthority = semantic.drrectInnerGeometryAuthority
+            if (semantic.analysisRecordId != "analysis.fill_drrect.$commandId" ||
+                semantic.analysisCommandFamily != "FillDRRect" ||
+                outerAuthority == null || innerAuthority == null ||
+                !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    outerAuthority,
+                    drrect.rrectGeometry(outer = true),
+                ) ||
+                !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    innerAuthority,
+                    drrect.rrectGeometry(outer = false),
+                )
+            ) return refused(
+                "invalid.native-core-primitive.analytic-drrect.geometry-authority",
+                "Analytic DRRect uniform construction requires both exact signed geometry authorities.",
+            )
+            val sealedOuter = outerAuthority.sealedDeviceGeometryInput()
+            val sealedInner = innerAuthority.sealedDeviceGeometryInput()
+            signedBounds = listOf(sealedOuter.left, sealedOuter.top, sealedOuter.right, sealedOuter.bottom)
+            signedRadii = sealedOuter.radii
+            innerBounds = listOf(sealedInner.left, sealedInner.top, sealedInner.right, sealedInner.bottom)
+            innerRadii = sealedInner.radii
+        }
         else -> return refused(
             "invalid.native-core-primitive.analytic-shape.source",
-            "Analytic shape uniform construction accepts only Rect and RRect sources.",
+            "Analytic shape uniform construction accepts only Rect, RRect, and DRRect sources.",
         )
     }
 
@@ -135,7 +170,7 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
             "Analytic shape uniform construction requires a zero-origin target.",
         )
     }
-    val block = try {
+    val bytes = try {
         GPUCorePrimitiveAnalyticShapeUniformBlock(
             targetWidth = semantic.targetBounds.width.toFloat(),
             targetHeight = semantic.targetBounds.height.toFloat(),
@@ -143,14 +178,36 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
             premultipliedRgba = semantic.premultipliedRgba,
             deviceBounds = signedBounds,
             normalizedRadii = signedRadii,
-        )
+        ).let { outer ->
+            if (innerBounds == null) outer.packedBytes() else drrectUniformBytes(
+                targetWidth = semantic.targetBounds.width.toFloat(),
+                targetHeight = semantic.targetBounds.height.toFloat(),
+                premultipliedRgba = semantic.premultipliedRgba,
+                outerBounds = signedBounds,
+                outerRadii = signedRadii,
+                innerBounds = requireNotNull(innerBounds),
+                innerRadii = requireNotNull(innerRadii),
+            )
+        }
     } catch (_: IllegalArgumentException) {
         return refused(
             "invalid.native-core-primitive.analytic-shape.semantic",
             "Analytic shape semantic values do not satisfy the uniform80 ABI.",
         )
     }
-    return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(block)
+    return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(bytes)
+}
+
+private fun GPUCorePrimitiveGeometry.DRRect.rrectGeometry(outer: Boolean): GPUCorePrimitiveGeometry.RRect {
+    val bounds = if (outer) outerBounds else innerBounds
+    val radii = if (outer) outerRadii else innerRadii
+    return GPUCorePrimitiveGeometry.RRect(
+        left = bounds[0],
+        top = bounds[1],
+        right = bounds[2],
+        bottom = bounds[3],
+        radii = radii,
+    )
 }
 
 internal sealed interface GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult {
@@ -176,7 +233,7 @@ internal fun buildCorePrimitiveGradientAnalyticShapeUniform(
         )
     }
     val analyticShape = when (val result = buildCorePrimitiveAnalyticShapeUniform(semantic, semanticAuthority)) {
-        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> result.block.packedBytes()
+        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> result.bytes
         is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused ->
             return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Refused(
                 result.code,
@@ -199,6 +256,27 @@ internal fun buildCorePrimitiveGradientAnalyticShapeUniform(
     analyticShape.copyInto(bytes, destinationOffset = 592, startIndex = 32, endIndex = 80)
     analyticShape.copyInto(bytes, destinationOffset = 640, startIndex = 8, endIndex = 12)
     return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted(bytes)
+}
+
+private fun drrectUniformBytes(
+    targetWidth: Float,
+    targetHeight: Float,
+    premultipliedRgba: List<Float>,
+    outerBounds: List<Float>,
+    outerRadii: List<Float>,
+    innerBounds: List<Float>,
+    innerRadii: List<Float>,
+): ByteArray {
+    require(outerBounds.size == 4 && innerBounds.size == 4 && outerRadii.size == 8 && innerRadii.size == 8)
+    require(outerBounds.all(Float::isFinite) && innerBounds.all(Float::isFinite) &&
+        outerRadii.all { it.isFinite() && it >= 0f } && innerRadii.all { it.isFinite() && it >= 0f }
+    )
+    return ByteBuffer.allocate(CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(targetWidth); putFloat(targetHeight); putInt(0); putInt(0)
+        premultipliedRgba.forEach(::putFloat)
+        outerBounds.forEach(::putFloat); outerRadii.forEach(::putFloat)
+        innerBounds.forEach(::putFloat); innerRadii.forEach(::putFloat)
+    }.array()
 }
 
 /**

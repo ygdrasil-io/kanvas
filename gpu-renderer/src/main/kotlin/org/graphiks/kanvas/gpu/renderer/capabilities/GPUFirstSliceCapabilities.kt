@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 
 /** Canonical handle-free names for the first native clip and path-fill slice. */
 object GPUFirstSliceCapabilityName {
+    const val FILL_DRRECT_NATIVE = "first_slice.fill_drrect.native"
     const val SCISSOR_NATIVE = "first_slice.scissor.native"
     const val BOUNDED_CLIP_NATIVE = "first_slice.bounded_clip.native"
     const val PATH_FILL_STENCIL_COVER = "first_slice.path_fill.stencil_cover"

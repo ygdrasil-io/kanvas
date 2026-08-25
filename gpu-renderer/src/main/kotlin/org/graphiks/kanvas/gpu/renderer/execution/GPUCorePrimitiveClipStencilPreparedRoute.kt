@@ -55,6 +55,7 @@ private fun GPUCorePrimitiveClipStencilNativeRoute.ConsumerSeal.geometrySnapshot
             sealedGeometry.indices.toIntArray(),
         )
     is GPUCorePrimitiveGeometry.RRect -> error("The pure route rejects RRect consumers")
+    is GPUCorePrimitiveGeometry.DRRect -> error("The pure route rejects DRRect consumers")
 }
 
 internal data class GPUCorePrimitiveClipStencilPreparedFrameRouteKey(

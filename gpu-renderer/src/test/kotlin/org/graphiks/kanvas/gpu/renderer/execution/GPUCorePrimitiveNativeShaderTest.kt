@@ -12,10 +12,41 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslValidationSummary
 
 class GPUCorePrimitiveNativeShaderTest {
+    @Test
+    fun `analytic drrect shader reflects its exact uniform128 ABI and entry points`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticDRRectNativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+        val block = reflection.layouts.single { it.structName == "CorePrimitiveAnalyticDRRectBlock" }
+
+        assertTrue(reflection.validation.success)
+        assertEquals(
+            setOf("vs_main" to "vertex", "fs_main" to "fragment"),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        assertEquals(listOf(0 to 0), reflection.bindings.map { it.group to it.binding })
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES, reflection.bindings.single().minBindingSize)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES, block.size)
+        assertEquals(
+            listOf(
+                "target_size" to (0 to 8), "anti_alias" to (8 to 4), "padding0" to (12 to 4),
+                "premul_rgba" to (16 to 16), "outer_bounds" to (32 to 16),
+                "outer_radii0" to (48 to 16), "outer_radii1" to (64 to 16),
+                "inner_bounds" to (80 to 16), "inner_radii0" to (96 to 16),
+                "inner_radii1" to (112 to 16),
+            ),
+            block.members.map { it.name to (it.offset to it.size) },
+        )
+        assertContains(ready.plan.wgslSource, "inside_rrect(position, drrect.inner_bounds")
+        assertContains(ready.plan.wgslSource, "discard;")
+    }
+
     @Test
     fun `linear repeat shaders are parser validated and wrap positive and negative raw coordinates`() {
         listOf(

@@ -69,6 +69,14 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
             "Analytic RRect coverage is promoted only by the exact single-sample B3.5b route.",
         )
     }
+    if (geometry is GPUCorePrimitiveGeometry.DRRect &&
+        samplePlan != GPUSamplePlan.SingleSampleFrame
+    ) {
+        return refused(
+            "unsupported.core_primitive.coverage_sample.drrect_not_promoted",
+            "Analytic DRRect coverage is promoted only by the exact single-sample route.",
+        )
+    }
     if (coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA &&
         (geometry is GPUCorePrimitiveGeometry.Rect || geometry is GPUCorePrimitiveGeometry.RRect) &&
         samplePlan != GPUSamplePlan.SingleSampleFrame
@@ -80,8 +88,9 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
     }
     val geometryCoverageCompatible = when (coverageMode) {
         GPUCorePrimitiveCoverageMode.FullOrScissor ->
-            geometry is GPUCorePrimitiveGeometry.Rect ||
+                geometry is GPUCorePrimitiveGeometry.Rect ||
                 geometry is GPUCorePrimitiveGeometry.RRect ||
+                geometry is GPUCorePrimitiveGeometry.DRRect ||
                 geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
                 geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles
         GPUCorePrimitiveCoverageMode.Stencil1x,

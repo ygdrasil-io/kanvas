@@ -69,6 +69,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class Shader {
         DirectGeometry,
         AnalyticShape,
+        AnalyticDRRect,
         DirectLinearGradient,
         DirectLinearGradientRepeat,
         DirectRadialGradient,
@@ -97,6 +98,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class UniformLayout(val stableIdentity: String) {
         DynamicUniform32V2("dynamic-uniform32-v2"),
         AnalyticShapeUniform80V1("dynamic-uniform80-analytic-shape-v1"),
+        AnalyticDRRectUniform128V1("dynamic-uniform128-analytic-drrect-v1"),
         GradientUniform592V1("dynamic-uniform592-gradient-v1"),
         GradientAnalyticShape656V1("dynamic-uniform656-gradient-analytic-shape-v1"),
         AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
@@ -114,6 +116,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             role == Role.CoverageMaskConsumer -> UniformLayout.CoverageMaskConsumerUniform64V1
             role == Role.Shading && shader == Shader.AnalyticShape ->
                 UniformLayout.AnalyticShapeUniform80V1
+            role == Role.Shading && shader == Shader.AnalyticDRRect ->
+                UniformLayout.AnalyticDRRectUniform128V1
             role == Role.Shading -> when (shader) {
                 Shader.DirectLinearGradient,
                 Shader.DirectLinearGradientRepeat,
@@ -700,6 +704,8 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
         }
         is GPUCorePrimitiveGeometry.RRect ->
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape
+        is GPUCorePrimitiveGeometry.DRRect ->
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when (geometry.geometryMode) {
             GPUCorePrimitiveGeometryMode.DirectTriangles ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
@@ -747,6 +753,8 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
         is GPUCorePrimitiveGeometry.Rect ->
             GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
         is GPUCorePrimitiveGeometry.RRect ->
+            GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
+        is GPUCorePrimitiveGeometry.DRRect ->
             GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when (geometry.geometryMode) {
             GPUCorePrimitiveGeometryMode.DirectTriangles ->
@@ -1339,24 +1347,32 @@ internal class GPUCorePrimitiveAnalyticShapeUniformSeal(
     val deviceGeneration: Long get() = plan.deviceGeneration
 
     init {
+        val isDRRect = structuralPipelineKey.shader ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
         require(commandId >= 0) { "Analytic shape uniform seal command id must be non-negative" }
-        require(plan.sourceLabel == "core-primitive-analytic-shape-uniform-pass" &&
-            slot.slotLabel == "analytic-shape-draw-$commandId"
+        require(plan.sourceLabel == (if (isDRRect) "core-primitive-analytic-drrect-uniform-pass"
+            else "core-primitive-analytic-shape-uniform-pass") &&
+            slot.slotLabel == (if (isDRRect) "analytic-drrect-draw-$commandId"
+            else "analytic-shape-draw-$commandId")
         ) { "Analytic shape uniform seal requires its exact pass and slot labels" }
         require(!renderScissor.isEmpty) { "Analytic shape render scissor must not be empty" }
         require(structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
-            structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape &&
-            structuralPipelineKey.uniformLayout ==
-            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
-        ) { "Analytic shape uniform seal requires the uniform80 shading structural ABI" }
+            structuralPipelineKey.shader in setOf(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
+            ) && structuralPipelineKey.uniformLayout == if (isDRRect)
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
+            else GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+        ) { "Analytic shape uniform seal requires its exact shading structural ABI" }
         require(bindingLayoutHash.isNotBlank()) {
             "Analytic shape binding layout hash must not be blank"
         }
         require(resourceGeneration >= 0L) {
             "Analytic shape resource generation must be non-negative"
         }
-        require(slot.payloadBytes == 80L && payloadBytesSnapshot.size == 80) {
-            "Analytic shape uniform seal requires exactly 80 payload bytes"
+        val expectedBytes = if (isDRRect) 128 else 80
+        require(slot.payloadBytes == expectedBytes.toLong() && payloadBytesSnapshot.size == expectedBytes) {
+            "Analytic shape uniform seal requires exact ABI payload bytes"
         }
     }
 
@@ -1366,7 +1382,7 @@ internal class GPUCorePrimitiveAnalyticShapeUniformSeal(
     fun payloadBytesSnapshot(): ByteArray = payloadBytesSnapshot.copyOf()
 
     internal fun hasExactPayload(expected: ByteArray): Boolean =
-        expected.size == 80 && payloadBytesSnapshot.contentEquals(expected)
+        expected.size == payloadBytesSnapshot.size && payloadBytesSnapshot.contentEquals(expected)
 
     internal fun hasExactPayloadAt(source: ByteArray, sourceOffset: Int): Boolean {
         if (sourceOffset < 0 || sourceOffset > source.size - payloadBytesSnapshot.size) return false

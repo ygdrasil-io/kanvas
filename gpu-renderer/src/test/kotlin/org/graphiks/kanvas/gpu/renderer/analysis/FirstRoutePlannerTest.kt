@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
@@ -1138,6 +1139,78 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `solid fill drrect keeps its dedicated route and analytic-hole diagnostic identities`() {
+        val outer = GPURRect(GPURect(2f, 2f, 26f, 22f), radiusX = 4f, radiusY = 4f)
+        val command = NormalizedDrawCommand.FillDRRect(
+            commandId = GPUDrawCommandID(141),
+            outer = outer,
+            inner = GPURRect(GPURect(8f, 8f, 20f, 16f), radiusX = 2f, radiusY = 2f),
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(GPUBounds(2f, 2f, 26f, 22f)),
+            layer = GPULayerFacts.root(GPUTargetFacts(32, 24, "rgba8unorm")),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            bounds = GPUBounds(2f, 2f, 26f, 22f),
+            ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillDRRect"),
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities()).plan(command)
+        val route = assertIs<GPURouteDecision.Native>(plan.routeDecision).route
+
+        assertEquals("analysis.fill_drrect.141", plan.analysisRecord.recordId)
+        assertEquals("native.fill_drrect.solid_analytic_hole", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_drrect.solid_analytic_hole", assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision).routeDecisionLabel)
+        assertEquals("route.fill_drrect.141", route.routeId)
+        assertEquals("native.fill_drrect.solid_analytic_hole", route.consumerKind)
+        assertEquals(listOf("first_slice.fill_drrect.native"), route.requirements)
+    }
+
+    @Test
+    fun `drrect refuses non solid translucent and runtime-effect materials without throwing`() {
+        val cases = listOf(
+            GPUMaterialDescriptor.ImageDraw(imageSourceId = "not-solid") to
+                "unsupported.core_primitive.drrect.analytic_material",
+            GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 0.5f) to
+                "unsupported.core_primitive.drrect.analytic_alpha",
+            GPUMaterialDescriptor.RuntimeEffect("runtime.not_admitted") to
+                "unsupported.core_primitive.drrect.analytic_material",
+        )
+
+        cases.forEachIndexed { index, (material, expectedCode) ->
+            val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities())
+                .plan(analyticDRRectCommand(commandId = 145 + index, material = material))
+
+            assertEquals(expectedCode, assertIs<GPUDrawAnalysisDecision.Refuse>(plan.analysisDecision).diagnostic.code)
+            assertEquals(expectedCode, assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+            assertEquals(expectedCode, plan.pass.diagnostics.single().code)
+            assertTrue(plan.pass.invocations.isEmpty())
+            assertTrue(plan.pass.pipelineKeys.isEmpty())
+        }
+    }
+
+    @Test
+    fun `drrect requires its dedicated native capability fact`() {
+        val capabilitiesWithoutDRRect = firstSliceRRectCapabilities().copy(
+            facts = firstSliceRRectCapabilities().facts.filterNot {
+                it.name == "first_slice.fill_drrect.native"
+            },
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = capabilitiesWithoutDRRect)
+            .plan(analyticDRRectCommand(commandId = 149))
+
+        assertEquals(
+            "unsupported.pipeline.capability_missing",
+            assertIs<GPUDrawAnalysisDecision.Refuse>(plan.analysisDecision).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.pipeline.capability_missing",
+            assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `fill rrect seals raw source normalized geometry and transform in one opaque authority`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val command = GPUFillRRectCommandBuilder.build(
@@ -1202,7 +1275,7 @@ class FirstRoutePlannerTest {
     }
 
     @Test
-    fun `valid refused rrect retains geometry authority while malformed rrect does not`() {
+    fun `valid scaled rrect retains geometry authority while malformed rrect does not`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val validRefused = firstRRectRouteCommand(
             target = target,
@@ -1215,13 +1288,46 @@ class FirstRoutePlannerTest {
             ),
         )
 
-        val validRefusedPlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(validRefused.command)
+        val validScalePlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(
+            validRefused.command.copy(antiAlias = false, maskFilter = null),
+        )
         val malformedPlan = GPUFirstRoutePlanner(malformed.capabilities).plan(malformed.command)
 
-        assertIs<GPURouteDecision.Refused>(validRefusedPlan.routeDecision)
-        assertNotNull(validRefusedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+        assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
+        assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
         assertIs<GPURouteDecision.Refused>(malformedPlan.routeDecision)
         assertNull(malformedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+    }
+
+    @Test
+    fun `scaled rrect remains refused outside the solid non aa unfiltered route`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val solid = firstRRectRouteCommand(
+            target = target,
+            transform = GPUTransformFacts.scale(2f, 3f),
+        ).command.copy(antiAlias = false, maskFilter = null)
+        val linearGradient = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 16f, endY = 16f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+        )
+        val cases = listOf(
+            "anti-alias" to solid.copy(antiAlias = true),
+            "linear-gradient" to solid.copy(material = linearGradient),
+            "mask-blur" to solid.copy(
+                maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 2f),
+            ),
+        )
+
+        cases.forEach { (label, command) ->
+            val plan = GPUFirstRoutePlanner(firstSliceRRectWithLinearGradientCapabilities()).plan(command)
+
+            assertEquals(
+                "unsupported.transform.rrect_scale_unproven",
+                assertIs<GPURouteDecision.Refused>(plan.routeDecision, label).diagnostic.code,
+                label,
+            )
+        }
     }
 
     @Test
@@ -1368,11 +1474,11 @@ class FirstRoutePlannerTest {
             target,
             transform = GPUTransformFacts.scale(2f, 3f),
         )
-        val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(validScale.command)
-        assertEquals(
-            "unsupported.transform.rrect_scale_unproven",
-            assertIs<GPURouteDecision.Refused>(validScalePlan.routeDecision).diagnostic.code,
+        val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(
+            validScale.command.copy(antiAlias = false, maskFilter = null),
         )
+        val routeDecision = assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
+        assertEquals("native.fill_rrect.solid", routeDecision.route.consumerKind)
         assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
     }
 
@@ -1590,10 +1696,6 @@ class FirstRoutePlannerTest {
             "unsupported.geometry.rrect_radii_negative" to firstRRectRouteCommand(
                 target = target,
                 rrect = firstRouteRRect.copy(bottomRight = firstRouteRRect.bottomRight.copy(x = -1f)),
-            ),
-            "unsupported.transform.rrect_scale_unproven" to firstRRectRouteCommand(
-                target = target,
-                transform = GPUTransformFacts.scale(x = 2f, y = 2f),
             ),
             "unsupported.transform.rrect_affine_unproven" to firstRRectRouteCommand(
                 target = target,
@@ -2771,6 +2873,13 @@ class FirstRoutePlannerTest {
                     evidenceLabel = "rrect-route-fixture",
                 ),
                 GPUCapabilityFact(
+                    name = "first_slice.fill_drrect.native",
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "drrect-route-fixture",
+                ),
+                GPUCapabilityFact(
                     name = "first_slice.mask_blur.native",
                     source = "unit-test",
                     value = "supported",
@@ -2780,6 +2889,28 @@ class FirstRoutePlannerTest {
             ),
             snapshotId = "rrect-route-test",
         )
+
+    private fun analyticDRRectCommand(
+        commandId: Int,
+        material: GPUMaterialDescriptor = GPUMaterialDescriptor.SolidColor(
+            r = 1f,
+            g = 0.25f,
+            b = 0.5f,
+            a = 1f,
+        ),
+    ): NormalizedDrawCommand.FillDRRect = NormalizedDrawCommand.FillDRRect(
+        commandId = GPUDrawCommandID(commandId),
+        outer = GPURRect(GPURect(2f, 2f, 26f, 22f), radiusX = 4f, radiusY = 4f),
+        inner = GPURRect(GPURect(8f, 8f, 20f, 16f), radiusX = 2f, radiusY = 2f),
+        transform = GPUTransformFacts.identity(),
+        clip = GPUClipFacts.wideOpen(GPUBounds(2f, 2f, 26f, 22f)),
+        layer = GPULayerFacts.root(GPUTargetFacts(32, 24, "rgba8unorm")),
+        material = material,
+        bounds = GPUBounds(2f, 2f, 26f, 22f),
+        ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "unit-test", operation = "fillDRRect"),
+        antiAlias = false,
+    )
 
     /** Capability snapshot that enables the FillRect route plus the scissor clip. */
     private fun firstSliceWithScissorCapabilities(): GPUCapabilities =
