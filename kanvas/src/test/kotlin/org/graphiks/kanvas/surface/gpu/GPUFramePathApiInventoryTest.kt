@@ -27,6 +27,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -2428,6 +2429,28 @@ class GPUFramePathApiInventoryTest {
                 GPUPixelBounds(0, 0, 32, 32),
             ),
         )
+    }
+
+    @Test
+    fun `public translated FillPath remains a candidate for the native stencil cover route`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            translate(4f, 5f)
+            drawPath(triangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
+        }
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        assertTrue(plan.recording.taskList.tasks.none { it is GPUTask.Refused })
+        assertEquals(GPUTransformType.Translate, plan.visualCommands.single().normalized.transform.type)
     }
 
     @Test

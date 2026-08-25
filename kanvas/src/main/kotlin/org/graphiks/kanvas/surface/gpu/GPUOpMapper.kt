@@ -2020,6 +2020,9 @@ internal fun GPUBlendMode.canonicalFixedFunctionState(
 internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
     if (hasPerspective()) return GPUTransformFacts.perspective()
     if (this == Matrix3x3F32.Identity) return GPUTransformFacts.identity()
+    if (sx == 1f && sy == 1f && kx.toRawBits() == 0 && ky.toRawBits() == 0) {
+        return GPUTransformFacts.translation(tx, ty)
+    }
     val determinant = sx * sy
     if (
         kx.toRawBits() == 0 && ky.toRawBits() == 0 &&

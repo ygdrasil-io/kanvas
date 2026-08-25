@@ -72,14 +72,11 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
-    fun `matrix transform facts classify only coherent pure scales as Scale`() {
+    fun `matrix transform facts classify coherent pure scales as Scale`() {
         val cases = listOf(
             Triple("identity", Matrix3x3F32.Identity, GPUTransformType.Identity),
             Triple("positive-scale", Matrix3x3F32(sx = 2f, sy = 3f), GPUTransformType.Scale),
             Triple("reflected-scale", Matrix3x3F32(sx = -2f, sy = 3f), GPUTransformType.Scale),
-            Triple("translation", Matrix3x3F32(tx = 4f), GPUTransformType.Affine),
-            Triple("scale-translation", Matrix3x3F32(sx = 2f, sy = 3f, tx = 4f), GPUTransformType.Affine),
-            Triple("skew", Matrix3x3F32(kx = 0.25f), GPUTransformType.Affine),
             Triple("singular", Matrix3x3F32(sx = 0f, sy = 1f), GPUTransformType.Affine),
             Triple(
                 "non-finite-determinant",
@@ -92,6 +89,19 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 GPUTransformType.Affine,
             ),
             Triple("perspective", Matrix3x3F32(persp0 = 0.25f), GPUTransformType.Perspective),
+        )
+
+        cases.forEach { (label, matrix, expectedType) ->
+            assertEquals(expectedType, matrix.toGPUTransformFacts().type, label)
+        }
+    }
+
+    @Test
+    fun `matrix transform facts classify pure translation separately from scale translation and skew`() {
+        val cases = listOf(
+            Triple("pure-translation", Matrix3x3F32(tx = 4f, ty = 5f), GPUTransformType.Translate),
+            Triple("scale-translation", Matrix3x3F32(sx = 2f, sy = 3f, tx = 4f, ty = 5f), GPUTransformType.Affine),
+            Triple("skew", Matrix3x3F32(kx = 0.25f), GPUTransformType.Affine),
         )
 
         cases.forEach { (label, matrix, expectedType) ->
