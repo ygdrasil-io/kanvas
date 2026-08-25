@@ -53,6 +53,12 @@ class SurfaceSrgbRRectCpuOracleTest {
             SurfaceSrgbRRectCpuOracle(BACKGROUND, FILL_RRECT, SurfaceSrgbRRectCpuOracle.DeviceRRect(Float.NaN, 0f, 4f, 4f, 1f, 1f))
         }
         assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbRRectCpuOracle(BACKGROUND, FILL_RRECT, SurfaceSrgbRRectCpuOracle.DeviceRRect(4f, 0f, 4f, 4f, 0f, 1f))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbRRectCpuOracle(BACKGROUND, FILL_RRECT, SurfaceSrgbRRectCpuOracle.DeviceRRect(0f, 4f, 4f, 4f, 1f, 0f))
+        }
+        assertFailsWith<IllegalArgumentException> {
             SurfaceSrgbRRectCpuOracle(BACKGROUND, FILL_RRECT, SurfaceSrgbRRectCpuOracle.DeviceRRect(0f, 0f, 4f, 4f, -1f, 1f))
         }
         assertFailsWith<IllegalArgumentException> {
