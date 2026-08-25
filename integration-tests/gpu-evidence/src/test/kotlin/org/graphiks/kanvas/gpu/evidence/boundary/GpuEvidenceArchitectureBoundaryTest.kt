@@ -94,6 +94,7 @@ class GpuEvidenceArchitectureBoundaryTest {
             "SurfaceSrgbSrcOverCpuOracle.kt",
             "SurfaceSrgbSeparableMaskBlurCpuOracle.kt",
             "SurfaceSrgbGradientCpuOracle.kt",
+            "SurfaceSrgbClipPathCpuOracle.kt",
         )
         requiredSurfaceOracles.forEach { name ->
             assertTrue(oracleRoot.resolve(name).isFile, "missing required Surface sRGB oracle: $name")

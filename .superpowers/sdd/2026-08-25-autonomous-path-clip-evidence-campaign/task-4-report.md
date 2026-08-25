@@ -112,3 +112,37 @@ Round 2 verification:
 - `:kanvas:test --tests org.graphiks.kanvas.picture.PictureTest` — PASS;
 - focused public/native clip smoke and API inventory suites — PASS;
 - `git diff --check` — PASS.
+
+## Catalog/oracle follow-up / TDD
+
+The independent oracle RED test was added before its production source. The initial focused
+compile failed because `SurfaceSrgbClipPathCpuOracle` did not exist. The GREEN implementation
+uses only literal polygon contours, an explicit winding-number test with point-on-segment
+membership, and ordered opaque half-open rectangles; it does not import Kanvas `Path`, GPU clip
+plans, tessellation, or WGSL. Its regressions lock the required counts and edge/notch samples:
+
+- triangle orange: `1128` pixels;
+- concave blue: `1920` pixels, with the notch clear;
+- two bands: blue `852`, orange `276`, with the `x=32` half-open band boundary checked.
+
+The catalog now contains exactly the three public `KanvasSurfaceProgram` scenes required by the
+brief. Each records `drawColor`, `save`, one identity hard winding `clipPath` intersect, one or
+two opaque non-AA rectangle consumers in order, and `restore`. Contract tests verify the literal
+clip operation, route `kanvas.surface.render`, no-AA policy, oracle identity, exact comparison
+policy, and the `36 = 34 rendered + 2 refused` inventory.
+
+Catalog verification:
+
+- `SurfaceSrgbClipPathCpuOracleTest` — PASS (4 tests);
+- catalog, oracle, invariant, and architecture-boundary focused suites — PASS;
+- `git diff --check` — PASS.
+
+The catalog source is capture-pending only; no evidence was generated, promoted, or modified in
+the evidence report directories.
+
+Final catalog verification after the source commit:
+
+- `:integration-tests:gpu-evidence:test --rerun-tasks --no-build-cache --console=plain` — PASS
+  (245 tests, 1 skipped).
+- `git diff --check` — PASS.
+- Worktree is clean at the catalog commit; native capture remains intentionally pending.

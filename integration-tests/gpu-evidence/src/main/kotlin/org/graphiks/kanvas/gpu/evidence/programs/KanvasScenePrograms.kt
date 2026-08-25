@@ -91,6 +91,62 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathConcaveSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(56f, 24f); lineTo(32f, 24f)
+                lineTo(32f, 40f); lineTo(56f, 40f); lineTo(56f, 56f); lineTo(8f, 56f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathTriangleTwoBands() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        drawRect(
+            RectF32.ofLTRB(32f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun strokeRectOutline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         drawRect(
