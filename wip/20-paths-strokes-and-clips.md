@@ -37,7 +37,7 @@ les clips (`clipPath`, `clipRRect` ou interactions de clip).
 
 | Sous-famille | Scènes et oracles | Limites/refus contractuels |
 | --- | --- | --- |
-| Fills path | `solid-triangle-path`, `solid-concave-path` et `even-odd-path-hole` : fills solides non-AA, `WINDING`/`EVEN_ODD`, fermeture implicite et oracle pixel-center. | Aucun autre contour ou fill path n'est revendiqué ; notamment lignes, courbes quadratiques/cubiques, auto-intersection et inverse fills. |
+| Fills path | `solid-triangle-path`, `solid-concave-path` et `even-odd-path-hole` : fills solides non-AA, `WINDING`/`EVEN_ODD`, contours explicitement fermés et oracle pixel-center. | Aucun autre contour ou fill path n'est revendiqué ; notamment lignes, courbes quadratiques/cubiques, auto-intersection et inverse fills. |
 | Coverage AA | Aucun cas revendiqué. | Arêtes et positions AA, petites primitives et superpositions restent non revendiquées sans coverage mesurable. |
 | Strokes | Aucun cas revendiqué. | Caps, joins, miter, dash, hairline et path effects restent non revendiqués. |
 | `clipPath` / `clipRRect` | Aucun cas revendiqué. | Intersections, clips imbriqués/AA/transformés, clips vides et clips avec rayons distincts restent non revendiqués. |
