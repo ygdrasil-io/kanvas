@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
@@ -71,6 +72,34 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
+    fun `matrix transform facts classify only coherent pure scales as Scale`() {
+        val cases = listOf(
+            Triple("identity", Matrix3x3F32.Identity, GPUTransformType.Identity),
+            Triple("positive-scale", Matrix3x3F32(sx = 2f, sy = 3f), GPUTransformType.Scale),
+            Triple("reflected-scale", Matrix3x3F32(sx = -2f, sy = 3f), GPUTransformType.Scale),
+            Triple("translation", Matrix3x3F32(tx = 4f), GPUTransformType.Affine),
+            Triple("scale-translation", Matrix3x3F32(sx = 2f, sy = 3f, tx = 4f), GPUTransformType.Affine),
+            Triple("skew", Matrix3x3F32(kx = 0.25f), GPUTransformType.Affine),
+            Triple("singular", Matrix3x3F32(sx = 0f, sy = 1f), GPUTransformType.Affine),
+            Triple(
+                "non-finite-determinant",
+                Matrix3x3F32(sx = Float.MAX_VALUE, sy = Float.MAX_VALUE),
+                GPUTransformType.Affine,
+            ),
+            Triple(
+                "signed-zero-translation",
+                Matrix3x3F32(sx = 2f, sy = 3f, tx = -0f),
+                GPUTransformType.Affine,
+            ),
+            Triple("perspective", Matrix3x3F32(persp0 = 0.25f), GPUTransformType.Perspective),
+        )
+
+        cases.forEach { (label, matrix, expectedType) ->
+            assertEquals(expectedType, matrix.toGPUTransformFacts().type, label)
+        }
+    }
+
+    @Test
     fun `public axis scaled solid DrawRRect records sealed device geometry`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
@@ -106,6 +135,40 @@ class GPUPreparedSurfaceFrameBuilderTest {
         assertEquals(48f, geometry.right)
         assertEquals(48f, geometry.bottom)
         assertEquals(listOf(8f, 4f, 8f, 4f, 8f, 4f, 8f, 4f), geometry.radii)
+    }
+
+    @Test
+    fun `public scaled aa and linear gradient DrawRRect refuse without prepared packets`() {
+        fun scaledRRect(paint: Paint) = DisplayOp.DrawRRect(
+            RRectF32.of(RectF32.ofLTRB(8f, 16f, 24f, 48f), radius = 4f),
+            paint,
+            Matrix3x3F32(sx = 2f, sy = 1f),
+            ClipStack.WideOpen,
+        )
+        val linearGradient = Paint.fill(ColorARGB.Transparent).copy(
+            shader = Shader.LinearGradient(
+                Point2F32(8f, 16f),
+                Point2F32(24f, 48f),
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+            ),
+            antiAlias = false,
+        )
+        val cases = listOf(
+            "anti-alias" to Paint.fill(ColorARGB.of(255, 255, 165, 0)).copy(antiAlias = true),
+            "linear-gradient" to linearGradient,
+        )
+
+        cases.forEach { (label, paint) ->
+            val result = GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(scaledRRect(paint)), capabilitiesWithLinearFact()).copy(
+                    targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                    targetBounds = GPUPixelBounds(0, 0, 64, 64),
+                ),
+            )
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result, label)
+
+            assertEquals("unsupported.transform.rrect_scale_unproven", refused.diagnostic.code.value, label)
+        }
     }
 
     @Test

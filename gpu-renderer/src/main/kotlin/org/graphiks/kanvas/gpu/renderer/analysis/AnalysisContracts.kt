@@ -1693,6 +1693,9 @@ class GPUFirstRoutePlanner(
         } ?: material.analysisRefusalCodeOrNull() ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.type == GPUTransformType.Scale &&
+                (material.kind != GPUMaterialKind.SolidColor || antiAlias || maskFilter != null) ->
+                "unsupported.transform.rrect_scale_unproven"
             transform.type == GPUTransformType.Affine -> "unsupported.transform.rrect_affine_unproven"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"

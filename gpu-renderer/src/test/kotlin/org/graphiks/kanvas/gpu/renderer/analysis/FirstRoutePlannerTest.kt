@@ -1215,13 +1215,46 @@ class FirstRoutePlannerTest {
             ),
         )
 
-        val validScalePlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(validRefused.command)
+        val validScalePlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(
+            validRefused.command.copy(antiAlias = false, maskFilter = null),
+        )
         val malformedPlan = GPUFirstRoutePlanner(malformed.capabilities).plan(malformed.command)
 
         assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
         assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
         assertIs<GPURouteDecision.Refused>(malformedPlan.routeDecision)
         assertNull(malformedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+    }
+
+    @Test
+    fun `scaled rrect remains refused outside the solid non aa unfiltered route`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val solid = firstRRectRouteCommand(
+            target = target,
+            transform = GPUTransformFacts.scale(2f, 3f),
+        ).command.copy(antiAlias = false, maskFilter = null)
+        val linearGradient = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 16f, endY = 16f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+        )
+        val cases = listOf(
+            "anti-alias" to solid.copy(antiAlias = true),
+            "linear-gradient" to solid.copy(material = linearGradient),
+            "mask-blur" to solid.copy(
+                maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 2f),
+            ),
+        )
+
+        cases.forEach { (label, command) ->
+            val plan = GPUFirstRoutePlanner(firstSliceRRectWithLinearGradientCapabilities()).plan(command)
+
+            assertEquals(
+                "unsupported.transform.rrect_scale_unproven",
+                assertIs<GPURouteDecision.Refused>(plan.routeDecision, label).diagnostic.code,
+                label,
+            )
+        }
     }
 
     @Test
@@ -1368,7 +1401,9 @@ class FirstRoutePlannerTest {
             target,
             transform = GPUTransformFacts.scale(2f, 3f),
         )
-        val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(validScale.command)
+        val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(
+            validScale.command.copy(antiAlias = false, maskFilter = null),
+        )
         val routeDecision = assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
         assertEquals("native.fill_rrect.solid", routeDecision.route.consumerKind)
         assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
